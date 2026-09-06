@@ -105,7 +105,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -562,16 +562,24 @@ async def records(
 
     handler = registry.get(matching[0].name).handler
     try:
-        # In a thread because the row plane is synchronous and this process is not.
-        # `brain.tools.startup` sets out why that mismatch has not been resolved and what each
-        # resolution costs; running the reader off the event loop is the part that is this
-        # module's business.
-        raw = await asyncio.to_thread(
-            handler,
+        # Awaited directly. This was `asyncio.to_thread` until 2026-09-07, because the row
+        # plane was synchronous and this process is not; making `RowSource` awaitable removed
+        # the mismatch and the thread hop with it. A thread per concurrent row query was the
+        # cheaper of the two things that hop cost: the other was that a reader could not use
+        # the pool the application already had.
+        #
+        # Awaited through a check rather than a cast, because the registry holds handlers of
+        # both kinds and will go on doing so: `brain.tools.run_skill.handler` is synchronous
+        # and has no reason not to be, since it runs a script in a sandbox rather than
+        # touching a pool. A row handler is awaitable and this is where that is established,
+        # in the same register as `require_typed_result` below: a boundary check on what a
+        # tool handed back, not an assumption about what it promised.
+        answered = handler(
             RowRequest(filters=narrowing, limit=limit),
             entitlement=asked.reach,
             now=asked.now,
         )
+        raw = await answered if inspect.isawaitable(answered) else answered
         # The boundary check rather than a cast. A handler that returned a dictionary is
         # refused here, where it is a contract violation by a tool, rather than being walked.
         result = require_typed_result(raw)

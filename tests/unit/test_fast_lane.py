@@ -24,11 +24,13 @@ Task ids: M6.1.1, M6.1.2, M6.1.3, M6.1.4
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import importlib.util
 import inspect
 import io
 from collections.abc import Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -58,18 +60,39 @@ from brain.gate.fast_lane import (
     FastLaneAnswer,
     FastLaneError,
     FastPathRule,
+    RowReader,
     RuleMatch,
     assert_reaches_no_tool_and_no_model,
     assert_rules_are_never_compiled,
     entities_served,
     match_rule,
-    respond,
     rules_from_rows,
+)
+from brain.gate.fast_lane import (
+    respond as _respond,
 )
 from brain.knowledge.columns import ColumnRule, TableClassification
 from brain.knowledge.rows import RowQuery, RowTool, assert_no_sql_is_built_by_interpolation
 from brain.ops.migration_policy import check_all, check_file
 from brain.tables.fast_lane import FastPathRuleRow
+
+
+def respond(
+    question: str,
+    *,
+    rules: Sequence[FastPathRule],
+    readers: Mapping[tuple[str, str], RowReader],
+    entitlement: EntitlementSet,
+    now: datetime | None = None,
+) -> FastLaneAnswer | None:
+    """`brain.gate.fast_lane.respond`, run to completion from a synchronous test.
+
+    See `tests/unit/test_row_plane.py` for why this is `asyncio.run` and not a plugin.
+    """
+    return asyncio.run(
+        _respond(question, rules=rules, readers=readers, entitlement=entitlement, now=now)
+    )
+
 
 REPO = Path(__file__).resolve().parents[2]
 VERSIONS = REPO / "migrations" / "versions"
@@ -155,7 +178,7 @@ class RecordingSource:
         self.returns = list(returns)
         self.queries: list[RowQuery] = []
 
-    def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
         self.queries.append(query)
         return self.returns
 

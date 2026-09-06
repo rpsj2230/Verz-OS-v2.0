@@ -76,7 +76,7 @@ from __future__ import annotations
 import ast
 import inspect
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import ModuleType
@@ -201,9 +201,21 @@ class RowSource(Protocol):
     one `brain.ops.limits` and `brain.ops.limit_store` are built on: the interesting cases
     here are the empty ones, and a query builder that opens a socket cannot be tested on
     them.
+
+    **Awaitable, and that is what let the application register a row tool at all.** It was
+    synchronous until 2026-09-07, and `brain.session` builds an `AsyncEngine`, so nothing
+    could implement this against the pool the application already had. `brain.tools.startup`
+    named the three ways out and deferred the choice pending a measurement of connection
+    headroom; the measurement said 91 of 100 connections were spare, so the resource
+    objection to the other two options fell away and what was left was that they both add a
+    permanent second pool, and one of them a thread per concurrent query, to preserve the
+    only synchronous island in an application that is otherwise async from the socket down.
+
+    A stand-in in a test is `async def rows` returning a list. Nothing about the empty cases
+    got harder to reach, which was the reason for the protocol in the first place.
     """
 
-    def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]: ...
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]: ...
 
 
 # ------------------------------------------------------------------- the request
@@ -403,22 +415,26 @@ class RowTool:
             source=self.source,
         )
 
-    def reader(self, records: RowSource) -> Callable[..., TypedResult[RowRecord]]:
+    def reader(self, records: RowSource) -> Callable[..., Awaitable[TypedResult[RowRecord]]]:
         """The handler a registry registers, bound to where the rows come from.
 
         A closure rather than a method, so that the signature a registry inspects carries
         only what a model may pass. `RowSource` and the tool itself are wiring: they are
         supplied by whoever builds the registry, never by a caller and never by a model, and
         a parameter a model cannot reach is a parameter that cannot carry a fragment.
+
+        Awaitable, because `RowSource.rows` is. The caller awaits the handler rather than
+        handing it to a thread, which is what `brain.api_routes` used to do and no longer
+        needs to.
         """
 
-        def read(
+        async def read(
             request: RowRequest,
             *,
             entitlement: EntitlementSet,
             now: datetime | None = None,
         ) -> TypedResult[RowRecord]:
-            return read_rows(self, request, entitlement=entitlement, records=records, now=now)
+            return await read_rows(self, request, entitlement=entitlement, records=records, now=now)
 
         return read
 
@@ -533,7 +549,7 @@ def _compile_filters(
     return compile_where(request.filters, ROW_LAYOUT, param_prefix=FILTER_PREFIX)
 
 
-def read_rows(
+async def read_rows(
     tool: RowTool,
     request: RowRequest,
     *,
@@ -553,7 +569,9 @@ def read_rows(
     told what the compiler already knew.
     """
     query = compile_row_query(tool, request, entitlement=entitlement, now=now)
-    fetched: Sequence[Mapping[str, Any]] = () if query.certainly_empty else records.rows(query)
+    fetched: Sequence[Mapping[str, Any]] = (
+        () if query.certainly_empty else await records.rows(query)
+    )
     built = tuple(
         RowRecord(
             entity=query.entity,

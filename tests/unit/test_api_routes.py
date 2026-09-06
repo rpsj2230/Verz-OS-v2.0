@@ -235,7 +235,7 @@ class UnfilteredRows:
         self.asked = 0
         self.seen: list[RowQuery] = []
 
-    def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
         self.asked += 1
         self.seen.append(query)
         return SEEDED_ROWS

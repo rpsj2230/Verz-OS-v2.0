@@ -10,8 +10,10 @@ Task ids: M15.1.1, M15.1.2, M15.1.3, M15.1.4
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import importlib.util
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -34,16 +36,42 @@ from brain.knowledge.rows import (
     RECORD,
     RowPlaneError,
     RowQuery,
+    RowRecord,
     RowRequest,
+    RowSource,
     RowTool,
     assert_no_sql_is_built_by_interpolation,
     assert_takes_no_sql,
     compile_projection,
     compile_row_query,
-    read_rows,
     row_scope_for,
 )
+from brain.knowledge.rows import (
+    read_rows as _read_rows,
+)
 from brain.tools.registry import ToolRegistry
+
+
+def read_rows(
+    tool: RowTool,
+    request: RowRequest,
+    *,
+    entitlement: EntitlementSet,
+    records: RowSource,
+    now: datetime | None = None,
+) -> TypedResult[RowRecord]:
+    """`brain.knowledge.rows.read_rows`, run to completion from a synchronous test.
+
+    The row plane became awaitable on 2026-09-07 so that a reader could use the pool the
+    application already has. This repository has no `pytest-asyncio` and
+    `tests/unit/test_cache.py` already drives an async function with `asyncio.run`, so that is
+    the convention followed here rather than adding a plugin as a side effect of a refactor.
+
+    Wrapped at the import so every call below reads as it did, and the diff shows the change
+    to the row plane rather than an edit to each assertion.
+    """
+    return asyncio.run(_read_rows(tool, request, entitlement=entitlement, records=records, now=now))
+
 
 #: A PostgreSQL dialect to render statements against. Taken from an engine rather than from
 #: `postgresql.dialect()` because that constructor is untyped and mypy runs strict here.
@@ -126,7 +154,7 @@ class Rows:
         self.records = list(records)
         self.asked = 0
 
-    def rows(self, query: RowQuery) -> list[dict[str, Any]]:
+    async def rows(self, query: RowQuery) -> list[dict[str, Any]]:
         self.asked += 1
         return self.records
 
@@ -134,7 +162,7 @@ class Rows:
 class Refuses:
     """A `RowSource` that fails if it is ever asked."""
 
-    def rows(self, query: RowQuery) -> list[dict[str, Any]]:
+    async def rows(self, query: RowQuery) -> list[dict[str, Any]]:
         raise AssertionError("a statement that cannot return a row was sent to the database")
 
 
@@ -684,3 +712,46 @@ def test_a_row_tool_needs_the_source_it_reads() -> None:
     discovered as "the tool returns no rows" rather than as the missing pin it is."""
     with pytest.raises(RowPlaneError, match="source"):
         RowTool(source="", classification=TICKETS, description="Read a ticket.")
+
+
+def test_the_clock_a_caller_passes_is_the_clock_the_expiry_is_judged_against() -> None:
+    """**Written because a mutation survived, and it is the same shape as a defect found in
+    the answer cache this morning.**
+
+    `read_rows` forwards `now` to `compile_row_query`, which forwards it to `scope_for`, which
+    is what refuses a principal past their time bound. Replacing that `now` with `None` made
+    the row plane judge expiry against the wall clock instead of the caller's, and every test
+    here passed, because none of them had a contractor and a clock that disagreed.
+
+    A contractor is the sharpest case: the grants are unchanged, the person is still in the
+    directory, and the only thing that moved is a date. The two clocks below straddle the
+    bound and differ from the real one in both directions, so a version reading the wall clock
+    gets both answers wrong rather than one.
+
+    Delete this and the row plane can stop honouring the clock it was given, which is
+    invisible until a contractor's last day and then invisible again the day after."""
+    bound_at = datetime(2026, 9, 7, 12, 0, tzinfo=UTC)
+    contractor = EntitlementSet(
+        principal_id="p_contractor",
+        grants=tuple(Grant(capability=Capability(value=c), scope=Scope()) for c in SEES_SUBJECT),
+        not_after=bound_at,
+    )
+    row = {ENTITY_KEY: "ticket", ID_KEY: "t_1", "subject": "Form broken"}
+
+    before = read_rows(
+        TICKET_TOOL,
+        RowRequest(),
+        entitlement=contractor,
+        records=Rows(row),
+        now=bound_at - timedelta(minutes=1),
+    )
+    after = read_rows(
+        TICKET_TOOL,
+        RowRequest(),
+        entitlement=contractor,
+        records=Rows(row),
+        now=bound_at + timedelta(minutes=1),
+    )
+
+    assert before.records, "a contractor inside their bound was refused"
+    assert not after.records, "a contractor past their bound was answered"

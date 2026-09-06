@@ -41,7 +41,7 @@ class _Rows:
     """A `RowSource` that answers nothing. What it returns is not what these tests are about;
     that it can be supplied at all is."""
 
-    def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
         del query
         return ()
 

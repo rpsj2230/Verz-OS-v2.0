@@ -113,7 +113,8 @@ def main() -> int:
     from brain.core.entitlement import Capability, EntitlementSet, Grant
     from brain.core.field_policy import Classification
     from brain.core.scope import Scope
-    from brain.gate.fast_lane import FastPathRule, respond
+    from brain.gate.fast_lane import FastLaneAnswer, FastPathRule
+    from brain.gate.fast_lane import respond as _respond
     from brain.knowledge.columns import ColumnRule, TableClassification
     from brain.knowledge.rows import RowQuery, RowTool
 
@@ -150,17 +151,53 @@ def main() -> int:
         ),
     )
 
+    def respond(**named: Any) -> FastLaneAnswer | None:
+        """`fast_lane.respond`, driven to completion without an event loop.
+
+        **`asyncio.run` cannot be used here, and finding that out is why this is long.** On
+        Windows it builds a `ProactorEventLoop`, which opens a self-pipe socket before running
+        anything, so the audit hook fires on the loop rather than on the code under test and
+        the probe reports that the fast lane reached the network. It had not. A zero-network
+        proof cannot begin by opening a socket.
+
+        So the coroutine is driven by hand. `send(None)` runs it to its first suspension, and
+        the fast lane never suspends: the readers below are `async def` and return without
+        awaiting anything, so the coroutine finishes on the first step and raises
+        `StopIteration` carrying its result. If it ever does suspend this raises, because a
+        probe reporting success on a coroutine it had not finished would be worse than none.
+
+        That makes the proof stronger than it was. The claim is no longer that the fast lane
+        answers without touching a socket; it is that it answers with no event loop in the
+        process at all.
+        """
+        coroutine = _respond(**named)
+        try:
+            coroutine.send(None)
+        except StopIteration as finished:
+            # `StopIteration.value` is untyped, so the result is named before it is
+            # returned. The annotation is the boundary: what a coroutine carried out is not
+            # something the type system knows, and this is where it is stated.
+            answered: FastLaneAnswer | None = finished.value
+            return answered
+        coroutine.close()
+        msg = (
+            "the fast lane suspended, so it awaited something real; this probe drives the "
+            "coroutine by hand because an event loop opens a socket on Windows, and it "
+            "cannot drive one that yields"
+        )
+        raise AssertionError(msg)
+
     class LocalRows:
         """Rows from this process. Nothing here is fetched from anywhere."""
 
-        def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+        async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
             del query
             return [{"entity": "client", "id": "c_447", "name": "Acme", "hours_remaining": "12"}]
 
     class DiallingRows:
         """A reader that reaches the network, so the hook can be caught doing its job."""
 
-        def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+        async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
             del query
             socket.getaddrinfo("example.invalid", 80)
             return []
@@ -172,7 +209,7 @@ def main() -> int:
     _armed = True
     try:
         answer = respond(
-            "hours left on Acme",
+            question="hours left on Acme",
             rules=[rule],
             readers=readers,
             entitlement=entitlement,
@@ -188,7 +225,7 @@ def main() -> int:
         }
         try:
             respond(
-                "hours left on Acme",
+                question="hours left on Acme",
                 rules=[rule],
                 readers=dialling,
                 entitlement=entitlement,

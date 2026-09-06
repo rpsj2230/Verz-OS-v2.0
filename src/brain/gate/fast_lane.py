@@ -80,7 +80,7 @@ from __future__ import annotations
 
 import ast
 import inspect
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Awaitable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import ModuleType
@@ -419,6 +419,12 @@ class RowReader(Protocol):
     protocol here so that nothing in this module has to import a tool to describe one. What
     matters about the signature is that `entitlement` is required and keyword-only: there is
     no spelling of this call that reads a row without saying whose reach it is read under.
+
+    Written as a call returning an awaitable rather than as `async def __call__`, which is
+    the narrower spelling and refuses things that are perfectly good readers. `RowTool.reader`
+    hands back a closure, and a closure returning a coroutine satisfies "something you call
+    and await" without being a coroutine function itself. What this protocol is for is the
+    shape of the call, not how the callee was declared.
     """
 
     def __call__(
@@ -427,7 +433,7 @@ class RowReader(Protocol):
         *,
         entitlement: EntitlementSet,
         now: datetime | None = ...,
-    ) -> TypedResult[RowRecord]: ...
+    ) -> Awaitable[TypedResult[RowRecord]]: ...
 
 
 @dataclass(frozen=True)
@@ -456,7 +462,7 @@ class FastLaneAnswer:
         return bool(self.result.records)
 
 
-def respond(
+async def respond(
     question: str,
     *,
     rules: Sequence[FastPathRule],
@@ -498,7 +504,7 @@ def respond(
         filters=Scope(clauses=(Clause(field=match.rule.match_field, op=Op.EQ, value=match.value),)),
         limit=FAST_LANE_ROW_LIMIT,
     )
-    result = reader(request, entitlement=entitlement, now=now)
+    result = await reader(request, entitlement=entitlement, now=now)
     if len(result.records) > 1:
         log.warning("fast_lane.two_records_matched", rule=match.rule.rule_id)
         return None
