@@ -202,6 +202,24 @@ fast filter, not the gate.
 **`ruff` reads the word "noqa" inside an ordinary comment as a directive.** Reword rather than
 explain a suppression using that word.
 
+**WBS task ids are positional, so a group is appended and never inserted.** `M27.5.5` means
+"the fifth leaf of the fifth task group of M27", and nothing anchors it to a name. Adding
+`Install screens` as M27's fifth group on 2026-09-07 silently repointed every `M27.5.x` claim
+in `brain/console/reads.py` at four leaves about backups. The traceability sweep caught only
+the one id that fell off the end (`M27.5.5`, reported as naming a group); the other four
+matched real leaves and would have shipped as a correct-looking, wrong claim. The same edit to
+M1 moved `Entitlement system` from `M1.4` to `M1.5`. Append a new group to the end of `tasks`,
+append a new leaf to the end of `s`, and run `node docs/wbs/export.js`, `node docs/wbs/render.js`
+and the traceability sweep afterwards, reading the "names a group" note rather than only the
+`ok:` line.
+
+**Mutation testing is not safe in a working tree another agent is reading.** The harness writes
+a deliberately broken source file, runs pytest and restores it. On 2026-09-07 a second agent
+read `ops/telemetry.py` inside that window, saw the mutant, concluded a stray mutation had
+survived, wrote a test whose docstring said so, and wrote the mutant line back into the module.
+Both agents were behaving correctly. Run mutations in a throwaway worktree
+(`git worktree add` at HEAD), which is the same technique the push gates already use.
+
 ---
 
 ## Layout

@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**6 items are open: 32, 33, 34, 35, 36 and 37.** 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
+**8 items are open: 32 to 39.** 39 and 38 are the newest and neither blocks anything. 39 needs two short answers about where the Verz staff list really lives and whether that source may set roles as well as list people. 38 is the console screen list, now thirty-four screens rather than nine, with four design decisions in it worth disagreeing with before they are built. 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
 the console and a working sign-in. 33 is one sentence from you about what "shadow-pinned
 thirty days" means, and it decides a safety property rather than a feature. 34 blocks local
 embedding: the model we chose produces vectors of one width and the corpus column holds
@@ -44,6 +44,86 @@ in.
 ---
 
 # Open
+
+## 39. Which staff list is the real one, and may it set roles
+
+**Nothing is blocked today. This decides what gets built first and it needs two short
+answers.** You asked for the staff list to be pluggable: spreadsheet, Google Sheet, Google
+Workspace, Microsoft, Lark, or anything else. That is designed and in the plan as M1.6, twelve
+leaves. Building all six adapters before we know which one you use is a month spent on five we
+may never run.
+
+**Question one: where does the Verz staff list actually live today?** Not where it could live.
+Where the current, correct list of who works there is: the one somebody updates when a person
+joins. A Google Sheet is a perfectly good answer.
+
+**Question two, and this one has a security consequence.** A source declares what it is
+trusted to assert, and there are three things it can assert: that a person exists, which
+department they are in, and what platform role they hold. By default a spreadsheet or a Google
+Sheet may assert **only that a person exists**.
+
+A sheet anybody with the link can edit is a fine answer to "who works here" and a catastrophic
+answer to "who is a Super Admin": one edit to one cell and somebody has appointed themselves,
+with the edit history in a document nobody reviews. A Workspace group is different, because
+changing it needs the admin console and leaves a trail there.
+
+So if your staff list is a sheet, the consequence is: **people arrive automatically, and their
+department and role are set by you in the console.** A few clicks per joiner rather than none.
+
+**Your options.**
+
+- **A. Keep the default.** The sheet lists people; roles are set in the console. Safest, and
+  the extra work is per joiner rather than ongoing.
+- **B. Trust the sheet with departments too, but not roles.** Reasonable if the sheet has a
+  department column that is kept accurate. Departments bound what people can see, so this is a
+  real widening, though a much smaller one than roles.
+- **C. Trust the sheet with roles as well.** Only sensible if the sheet is locked to two or
+  three named editors. Say so and I will configure it that way and write down who those
+  editors are, so an auditor can see the argument.
+
+The default is A and it is what will be built if you say nothing. It can change later, per
+source, without a migration.
+
+## 38. The console will have thirty-four screens, and four of them are decisions
+
+**Nothing is blocked. This is a design record to disagree with now rather than after it is
+built.** You said the nine screens I described could not be the whole console, and you were
+right. The plan named eighteen and the code had four. It is now thirty-four, declared in
+`brain/console/screens.py` with tests holding every one of them to the rules below, and the
+roadmap under M27 lists them all.
+
+Your five specific asks were already in the plan at M33 and had reached neither the screen list
+nor any code. They are now in both: company overview, everything filterable by department and
+person, all activity, budget and spend, and a global stop button.
+
+**Four things there are decisions rather than mechanics.**
+
+**One: budget is separate from usage, and budget is a limit.** "Usage and tokens" tells you
+what was spent. "Budget and spend" is a ceiling with something that happens when it is
+reached. What should happen? Warn the person and carry on; warn their department admin; refuse
+further questions until the next period; or refuse only the expensive lanes and leave cheap
+answers working. **My recommendation is the last**, because a hard stop at a budget turns a
+cost control into an outage. Nothing is built until you pick.
+
+**Two: the stop button stops instantly and needs nobody's approval.** One capability, no
+confirmation dialogue, no second signature, because a stop button that can fail is not one. The
+paperwork sits on the *resume*: restarting a system somebody halted needs a written reason, and
+it says out loud when one person is overriding another. A halt also survives a restart and has
+no expiry, so it ends when a person ends it and never on its own. Tell me if you want that
+reversed anywhere.
+
+**Three: four screens do not exist for a department admin.** Their rows are narrower
+everywhere, which is automatic. But four screens are about the deployment rather than the work
+in it, and at a department's scope each is either empty or a leak: backup and recovery, this
+install, rate limits, and capacity. Department admins keep everything else, including a stop
+button for their own department.
+
+**Four: a filter dropdown is a disclosure and is treated as one.** Every screen can be narrowed
+by department and by person, as you asked. That means every screen carries a department
+dropdown, and filled from the department table it would name every department in the company to
+somebody whose rows were carefully scoped. The options are intersected with what the reader can
+already reach. You may find you cannot filter by a department you know exists. That is this,
+working.
 
 ## 37. Keycloak is unpleasant to administer, and the reason is a screen we have not built
 
