@@ -387,14 +387,47 @@ def test_the_lite_profile_and_the_deployed_compose_do_not_drift() -> None:
     )
 
 
-def test_the_lite_profile_says_why_there_is_no_full_one() -> None:
-    """A missing file reads as an oversight. The full profile adds a worker and a
-    session-mode pooler beside it, and there is no worker process yet for it to serve, so a
-    full profile today would declare a container with no command."""
+def test_the_lite_profile_says_why_there_is_no_full_one_and_says_it_currently() -> None:
+    """A missing file reads as an oversight, so the file that exists explains the one that
+    does not. **The explanation went stale before anybody noticed**, which is why this test is
+    no longer a substring search: it said `full` was this stack plus a worker and a
+    session-mode pooler and that no worker process existed, and by then `brain.ops.worker`
+    was written, `docker-compose.worker.yml` was running it, and `full` had grown to twelve
+    components. Both assertions still passed, because both words were still on the page.
+
+    So every figure and every name in that paragraph is compared against
+    `brain.ops.compose`, which computes them from the compose files. A header that stops
+    matching the repository fails here rather than being read by the next person.
+
+    Delete this and the explanation drifts again, in the one direction that matters: a
+    paragraph saying a leaf is blocked, after it has stopped being."""
+    import yaml
+
+    from brain.ops.compose import (
+        FULL_PROFILE_FILES,
+        components_with_no_service,
+        databases_nothing_creates,
+        host_mib_for,
+        relative_bind_mounts,
+    )
+
     repo = Path(__file__).resolve().parents[2]
     lite = (repo / "docker-compose.lite.yml").read_text(encoding="utf-8")
+    files = {
+        name: yaml.safe_load((repo / name).read_text(encoding="utf-8"))
+        for name in FULL_PROFILE_FILES
+    }
+
+    assert not (repo / "docker-compose.full.yml").exists(), (
+        "the full profile is a file now, so this paragraph in docker-compose.lite.yml is "
+        "describing a repository that no longer exists and has to be rewritten"
+    )
     assert "docker-compose.full.yml" in lite
-    assert "worker" in lite
+    assert f"{host_mib_for('full', files)} MiB" in lite
+    assert f"{len(relative_bind_mounts(files))} services take something" in lite
+    for line in components_with_no_service("full", files):
+        assert line.split("'")[1] in lite, "the header names the component that has no service"
+    assert databases_nothing_creates(files), "the header claims a database nothing creates"
 
 
 # ------------------------------------------------ staging shares nothing (M38.1.4.2)

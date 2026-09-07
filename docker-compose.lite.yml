@@ -19,12 +19,31 @@
 # cache. It is not a cut-down or development configuration; it is what a client without
 # background automation runs, and it is what is running in production today.
 #
-# **There is no `docker-compose.full.yml` yet, and that is not an oversight.** The full
-# profile adds a worker and a session-mode pooler beside it, because LISTEN/NOTIFY binds to
-# a session and a transaction pooler silently stops delivering notifications (see
-# `src/brain/session.py`). `make_worker_engine` exists for that. What does not exist is a
-# worker process for it to serve, so a full profile today would declare a container with no
-# command. M0.4.2 is deliberately not claimed until there is something for the worker to do.
+# **There is no `docker-compose.full.yml`, and the reason has changed since this last said
+# so.** It used to say that `full` was this stack plus a worker and a session-mode pooler,
+# and that there was no worker process for the pooler to serve. There is one now:
+# `docker-compose.worker.yml` runs `python -m brain.ops.worker`, and it goes straight to
+# Postgres rather than through a session-mode pooler, which is what LISTEN needs and is why
+# no such pooler is deployed anywhere. Meanwhile `full` has come to mean something larger:
+# twelve components in `brain.ops.wiring`, deployed by eight compose files, nineteen
+# containers between them.
+#
+# **It is not the memory arithmetic, and that is worth saying because it was the previous
+# answer to this question.** `budget_breaches("full")` compares wave 2 against a cap measured
+# on one machine, and this repository is the product rather than that machine: a client with
+# a larger server runs `full`, which is what the profile is for. What the file would owe its
+# reader is the size of host it needs, and `brain.ops.compose.host_mib_for` computes that at
+# 12864 MiB, which is more than the measured machine holds in total.
+#
+# Four things stop the file being written, every one of them a fact about the product rather
+# than about anybody's server, every one computed by `brain.ops.compose` and pinned by
+# `tests/unit/test_compose.py` so that fixing one fails a test rather than going unnoticed:
+# `presidio-analyzer` is budgeted at 512 MiB and no compose file declares a service by that
+# name, `seaweedfs` is declared twice with bodies that disagree so which one runs depends on
+# the order of the -f flags, 4 services take something they need at startup from a bind mount
+# that a stored compose resolves to nothing, and the trace ledger connects to a database that
+# nothing in those eight files creates. M0.4.2 stays unclaimed until they are closed, and
+# `THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET` is this paragraph with the figures in it.
 
 # The stack Coolify deploys.
 #
