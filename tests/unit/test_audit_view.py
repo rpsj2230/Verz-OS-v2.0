@@ -10,7 +10,7 @@ Note the file name. These three modules were built together as the last of M24.1
 one test file per layer; `verify.py` and `record.py` have no test module of their own, which
 is worth fixing when somebody next opens this directory.
 
-Task ids: M24.1.2, M24.1.3, M24.1.5
+Task ids: M24.1.2, M24.1.3, M24.1.5, M33.4.1.1
 """
 
 from __future__ import annotations
@@ -818,3 +818,65 @@ def test_the_reason_survives_redaction_where_prose_would_not() -> None:
         reason_code="offboarding",
     )
     assert chain.entries[-1].details["reason_code"] == "offboarding"
+
+
+# --- no actor is exempt from the trail (M33.4.1.1) ---------------------------------------------
+
+
+def test_the_trail_a_reader_sees_includes_what_the_most_privileged_actor_did() -> None:
+    """**M33.4.1.1 asks for the full audit trail "including Super Admin activity", and nothing
+    asserted it.** The property held, which is not the same as being kept: `_may_see` decides
+    on the entry's subject and the reader's grants, and an exemption for a privileged actor
+    would be one branch away and would look like a reasonable feature request.
+
+    An audit trail that quietly omits the most powerful actor is worse than no audit trail. It
+    reads as complete, so nobody looks elsewhere, and the omission is exactly where the
+    interesting entries are.
+
+    Asserted from both sides: the ledger really does contain entries by an actor who breaks
+    glass and changes leashes, and a reader entitled to those subject kinds sees them with the
+    actor named. Without the first half this passes on a ledger that has no privileged
+    activity in it, which is every ledger on the first day.
+
+    Delete this and an exemption can be added for the actor whose actions matter most, and
+    every other test in this file still passes."""
+    ledger = a_ledger()
+    privileged = "u_rupash"
+
+    performed = [one for one in ledger.entries if one.actor_id == privileged]
+    assert len(performed) >= 2, "the fixture has no privileged activity, so this proves nothing"
+    assert {one.subject.partition(":")[0] for one in performed} == {"agent", "session"}
+
+    view = a_view(reader("u_auditor", "read:audit.agent", "read:audit.session"), ledger.entries)
+    rows = view.page(limit=MAX_PAGE_SIZE).rows
+
+    assert {one.actor_id for one in rows} == {privileged}
+    assert len(rows) == len(performed)
+
+
+def test_nothing_in_the_view_decides_visibility_from_who_performed_the_action() -> None:
+    """The structural half, and the one that survives a refactor.
+
+    The test above would still pass if somebody added an exemption for a *different* actor
+    than the fixture happens to use, so this asserts the shape instead: the function that
+    decides whether a reader may see an entry never reads `actor_id` at all. Visibility is a
+    property of the entry's subject and the reader's grants, and an actor-based branch is a
+    different rule wearing the same name.
+
+    Read off the source of `_may_see` rather than from a docstring, because a docstring saying
+    it does not consult the actor is the thing that would still be there afterwards.
+
+    `AuditFilter` reads `actor_id` and must: that is the reader narrowing their own view, which
+    can only ever show them less than they are entitled to. The two are different questions and
+    this checks only the second.
+
+    Delete this and "hide administrator actions from the audit screen" becomes a one-line
+    change that no test refuses."""
+    body = inspect.getsource(AuditView._may_see)
+
+    assert "actor" not in body, "visibility is being decided from who performed the action"
+    assert "subject" in body, "the source no longer decides on the subject, so this checks nothing"
+
+    # And the filter does read it, so the absence above is a property of this function rather
+    # than of the module having no notion of an actor at all.
+    assert "actor" in inspect.getsource(AuditFilter.matches)
