@@ -1,7 +1,7 @@
 """An agent as a record: who may see it, what it may reach, and why those are two things.
 
 An agent is a lens. `E_run(caller, agent) = E(caller) ∩ agent_ceiling` is computed by
-`brain.gate.invoke.invoke`, which calls `EntitlementSet.intersect`, and nothing in this
+`brain.gate.leash.decide`, which calls `EntitlementSet.intersect`, and nothing in this
 module recomputes it. What is here is the record that intersection is made from, and the
 two producers that hand it to the gate in the shapes the gate already takes.
 

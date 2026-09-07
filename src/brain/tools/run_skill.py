@@ -51,7 +51,7 @@ and its output is discarded rather than returned late.
 
 **The invariant this leaf exists for: a skill script runs at the caller's reach and can
 never widen it.** `E_run(caller, agent) = E(caller) ∩ agent_ceiling`, computed by calling
-`EntitlementSet.intersect` and by nothing else, exactly as `brain.gate.invoke.invoke` and
+`EntitlementSet.intersect` and by nothing else, exactly as `brain.gate.leash.decide` and
 `brain.ops.automation.flow_reach` do. The script itself receives no capability at all: it
 holds no credential, reaches no network and is handed no registry, so it cannot call a tool.
 The intersection is still computed and recorded on the run, because the day somebody adds a

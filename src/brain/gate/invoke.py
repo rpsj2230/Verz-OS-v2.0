@@ -17,6 +17,16 @@ be got wrong, and refuses to proceed when one of them says no. A second opinion 
 may reach what would be a second answer, and the day the two disagree the permissive one
 wins silently.
 
+**In particular, the run reach is not computed here, and ten documents said it was.**
+`E_run(caller, agent) = E(caller) intersect agent_ceiling` is computed in `brain.gate.leash`,
+in `decide` and again in `resume`. This module has never contained that call. The claim was
+in `CLAUDE.md`, in three other source modules, in a named constant, in two test docstrings
+and in the invariant test guarding the rule, each copied from the last, and it was corrected
+on 2026-09-08. The sentence is repeated here because this is where somebody following one of
+those claims arrives, and arriving at a module that quietly does not do the thing is how the
+claim survived. `tests/invariants/test_single_implementation.py` reads the call sites out of
+the source and pins them, which is the only reason this stays true.
+
 **An empty catalogue is a refusal, not an empty call.** A model handed no tools does not
 stop: it answers from whatever it already has in context and from its own training, and
 that answer looks exactly like a researched one. The abstention path exists for this and is

@@ -9,7 +9,7 @@ may be shown when those are put on one page together, and that is the only quest
 **An agent is a lens, so its workspace is read through the caller and never through the
 agent.** `E_run(caller, agent) = E(caller) ∩ agent_ceiling`. Two people opening the same
 agent see different workspaces, and neither sees anything the ceiling excludes. Nothing in
-this module computes that intersection: `brain.gate.invoke` and `brain.ops.automation`
+this module computes that intersection: `brain.gate.leash` and `brain.ops.automation`
 already call the one `EntitlementSet.intersect` there is, `brain.console.reads.audience` is
 the console's own call into it, and a third would be a third place for the central rule to
 be subtly wrong. `workspace_gaps` parses this module's own source through `intersections_in`
@@ -102,7 +102,7 @@ from brain.ops.spend import Actual, Dimension, spend_by, total_minor
 #: Why no function here intersects two entitlement sets.
 THE_WORKSPACE_NARROWS_NOTHING_AND_IS_HANDED_A_REACH: Final = (
     "E_run(caller, agent) = E(caller) intersect agent_ceiling is computed in one place, by "
-    "EntitlementSet.intersect, which brain.gate.invoke and brain.ops.automation.flow_reach "
+    "EntitlementSet.intersect, which brain.gate.leash.decide and ops.automation.flow_reach "
     "both call and neither reimplements. A workspace that worked out its own reach would be "
     "a third copy of the central rule, and the copy that is subtly wrong is the one in "
     "production. Everything here is handed a reach and filters at it, and intersections_in "

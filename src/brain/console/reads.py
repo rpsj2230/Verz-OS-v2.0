@@ -252,9 +252,9 @@ def audience(caller: EntitlementSet, report: EntitlementSet) -> EntitlementSet:
 
     The intersection, by the same `EntitlementSet.intersect` the gate uses. There is one
     implementation of it in this repository and a second is forbidden, so this calls it
-    rather than comparing grants itself. This paragraph said "exactly two implementations"
-    until 2026-09-08, which counted call sites and called them implementations, and there
-    are five of those rather than two.
+    rather than comparing grants itself. This paragraph claimed there were exactly two
+    implementations until 2026-09-08, which counted call sites and called them
+    implementations. There is one, and there are sixteen call sites.
 
     See `A_REPORT_TITLED_FOR_A_DEPARTMENT_IS_STILL_READ_BY_ONE_PERSON` for why the union is
     the mistake worth naming: it is one character away and it reads like the feature.

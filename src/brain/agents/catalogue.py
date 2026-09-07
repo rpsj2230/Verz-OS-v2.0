@@ -45,7 +45,7 @@ days" and "become autonomous after thirty days" are different products and only 
 is a guardrail. `docs/needs-rupash.md` carries the question.
 
 **A template reaches nothing.** `authority` is a ceiling, and `E_run = E(caller) ∩ ceiling`
-is computed by the one `intersect` in `brain.gate.invoke`. Every capability written below
+is computed by the one `intersect` there is, in `brain.gate.leash`. Every capability below
 narrows; none grants. A template published to the catalogue does not thereby give anybody
 anything, which is the same argument `AUDIENCE_IS_NOT_AUTHORITY` makes one module over.
 

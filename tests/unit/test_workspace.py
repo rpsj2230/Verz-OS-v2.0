@@ -1107,7 +1107,7 @@ def test_a_projection_at_the_first_instant_of_a_month_projects_what_was_spent() 
 
 def test_the_workspace_intersects_no_entitlement_sets_of_its_own() -> None:
     """**The invariant's structural half.** `E_run(caller, agent)` is computed by one
-    `EntitlementSet.intersect`, which `brain.gate.invoke` and `brain.ops.automation.flow_reach`
+    `EntitlementSet.intersect`, which `brain.gate.leash.decide` and `ops.automation.flow_reach`
     both call and neither reimplements. A third copy is a third place for the central rule to
     be subtly wrong, and the wrong copy is the one in production.
 

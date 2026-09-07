@@ -18,7 +18,7 @@ until the first person who needs to, whereas a type with no field for one cannot
 
 **The reach is `E(caller) intersected with the flow's ceiling, and it is computed by
 calling `flow_reach`.** Not reimplemented, not approximated, not "the same arithmetic".
-`brain.gate.invoke.invoke` and `brain.ops.automation.flow_reach` both reach
+`brain.gate.leash.decide` and `brain.ops.automation.flow_reach` both reach
 `EntitlementSet.intersect` and neither writes the set arithmetic itself; a third copy
 would be a third place for the platform's central rule to be subtly wrong, and this one
 would be the copy running underneath code a client's own staff assembled. So the only

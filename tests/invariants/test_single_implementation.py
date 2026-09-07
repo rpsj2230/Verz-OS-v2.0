@@ -137,8 +137,8 @@ def test_intersect_is_defined_only_where_a_type_owns_its_own_meaning() -> None:
     doing the set arithmetic themselves. Delete this and a fourth `intersect` looks like it
     belongs.
 
-    This docstring named `gate.invoke` until 2026-09-08 and that module has no `intersect`
-    call in it. See the test below, which reads the call sites rather than naming them."""
+    This docstring named the wrong module until 2026-09-08, along with five others and a
+    named constant. See the test below, which reads the call sites out of the source."""
     owners = set(_definitions("intersect"))
 
     assert owners == {
@@ -149,11 +149,14 @@ def test_intersect_is_defined_only_where_a_type_owns_its_own_meaning() -> None:
 
 
 def test_the_reach_is_computed_where_this_file_says_and_nowhere_else() -> None:
-    """**Four documents said the gate computes the run reach in `brain.gate.invoke.invoke`,
-    and that module has no `intersect` call in it at all.** CLAUDE.md said it, `console/reads.py`
-    said it, `console/reach_view.py` said it, and the docstring above said it. They agreed with
-    one another because each was copied from the last, and none agreed with the code. The gate
-    computes it in `gate/leash.py`, in `decide` and again in `resume`.
+    """**Ten documents said the gate computes the run reach in `brain.gate.invoke.invoke`,
+    and that module has never contained that call.** CLAUDE.md said it, `console/reads.py` and
+    `console/reach_view.py` said it, the docstring above said it, and once those four were
+    corrected an agent reading the source found six more: `agents/catalogue.py`,
+    `agents/model.py`, `ops/automation_piece.py`, `tools/run_skill.py`, a named constant in
+    `console/workspace.py` and its own test. They agreed with one another because each was
+    copied from the last, and none agreed with the code. The gate computes it in
+    `gate/leash.py`, in `decide` and again in `resume`.
 
     `reads.py` had additionally turned "two call sites" into "two implementations", and that
     is the drift worth catching rather than the wrong module name: a document saying there are
