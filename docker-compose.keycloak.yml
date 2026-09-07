@@ -153,9 +153,21 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
-      # The bootstrap administrator, used once to create a real one and then removed. It is
-      # required rather than defaulted, because a Keycloak that comes up with a known
-      # password is an identity provider anybody can take over.
+      # The bootstrap administrator. Required rather than defaulted, because a Keycloak that
+      # comes up with a known password is an identity provider anybody can take over.
+      #
+      # **Rotate this after the first real administrator exists; do not unset it.** Both of
+      # these use `:?`, so removing either from the deployment fails the next deploy with
+      # "set KEYCLOAK_ADMIN" and nothing running to explain it. The earlier comment here said
+      # the bootstrap admin was "used once and then removed", which described the account and
+      # read as advice about the variable, and following it would have broken the stack.
+      #
+      # Keycloak only consults these when the realm has no administrator at all, so once a
+      # real one exists the value grants nothing while it sits there. That makes it a
+      # break-glass rather than dead weight: delete every administrator by accident and the
+      # next restart recreates one from this. Which is exactly why it should be a fresh
+      # random value stored in a password manager once bootstrap is done, rather than the one
+      # somebody typed into a browser on the first day.
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN}
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
       # Behind the Coolify proxy, which terminates TLS. Without this Keycloak builds its
