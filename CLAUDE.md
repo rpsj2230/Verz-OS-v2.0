@@ -89,14 +89,52 @@ that refuses everything. Every refusal test needs a sibling proving the thing st
 This is the practice that matters most here and it is not optional for anything with a guard
 in it. Running the suite proves the tests pass. It does not prove they would fail.
 
-For each guard you add or change:
+**Use `brain.ops.mutation`, not a shell loop.** Every one of the rules below is enforced by
+that module, and every one of them was learned by getting it wrong here first:
 
-1. Break it deliberately in the source.
+```python
+from pathlib import Path
+from brain.ops.mutation import Mutation, verify
+
+report = verify(
+    [
+        Mutation(
+            label="role rules on an untrusted source are filtered, not refused",
+            path="src/brain/identity/staff_source.py",
+            before="if rules and Asserts.ROLE not in roster.asserts:",
+            after="if False:",
+            tests=("tests/unit/test_staff_source.py",),
+        )
+    ],
+    repo=Path("."),
+    carry=(),   # name anything not committed yet; mutated files are carried already
+)
+print(report.table())
+assert not report.survivors
+```
+
+It creates its own throwaway worktree at a commit, copies the files in, mutates *there* and
+removes it afterwards. There is deliberately **no parameter naming a directory**, so it cannot
+be pointed at this tree. `carry` is how uncommitted files get in; note that the worktree is at
+a *commit*, so a test depending on an uncommitted `pyproject.toml` change has to carry that
+too, or it fails collection rather than failing the mutation.
+
+`report.table()` is the table to paste into the commit message.
+
+If you must do it by hand, these are the four rules the module encodes:
+
+1. Break it deliberately in the source, **in a `git worktree`, never in this tree**.
 2. Run `PYTHONDONTWRITEBYTECODE=1 uv run pytest <the test file> --no-header --disable-warnings`.
-3. Confirm the **specific named test** fails. Not "something failed".
+3. Confirm the **specific named test** fails, by a `FAILED path::name` line. Not "something
+   failed", and not a non-zero exit: a broken import, a collection error and a syntax error all
+   exit non-zero for *every* mutation, so a harness reading exit codes reports a perfect score
+   at the moment it stops testing anything.
 4. Restore the file **byte-identically** and verify with an md5 comparison.
 
-Report the result as a table: the mutation, whether it was caught, and which test caught it.
+And run the named tests **before** mutating. A test that was already red fails after the
+mutation too, and the row says caught by a test that was never watching. One contaminated row
+in a table of thirty is worse than no table, because the table is what gets quoted in the
+commit message and nobody re-derives it.
 
 **A surviving mutation means one of two things.** Either a test is missing, in which case write
 it, or the mutation is genuinely equivalent, in which case say so plainly and do not invent a
@@ -217,8 +255,8 @@ and the traceability sweep afterwards, reading the "names a group" note rather t
 a deliberately broken source file, runs pytest and restores it. On 2026-09-07 a second agent
 read `ops/telemetry.py` inside that window, saw the mutant, concluded a stray mutation had
 survived, wrote a test whose docstring said so, and wrote the mutant line back into the module.
-Both agents were behaving correctly. Run mutations in a throwaway worktree
-(`git worktree add` at HEAD), which is the same technique the push gates already use.
+Both agents were behaving correctly. This is now closed by construction: `brain.ops.mutation`
+owns its worktree and has no parameter you could point at this tree. Use it.
 
 ---
 

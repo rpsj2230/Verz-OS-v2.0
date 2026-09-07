@@ -15,6 +15,7 @@ Task ids: M0.1.6
 from __future__ import annotations
 
 import inspect
+import re
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
@@ -401,6 +402,36 @@ def test_a_run_whose_tests_were_already_failing_is_refused_rather_than_reported(
             repo=REPO,
             carry=(str(PROBE_TEST).replace("\\", "/"),),
         )
+
+
+def test_the_worked_example_in_claude_md_names_code_that_exists() -> None:
+    """**Written because the first version of that example did not.** It named
+    `src/brain/core/entitlement.py`, a line `if not scope.predicate:` and a
+    `tests/unit/test_entitlement.py`, and not one of the three existed. An example that cannot
+    be run is worse than no example: it is a promise that costs whoever tries it the time to
+    work out that the file is missing rather than that they have misunderstood.
+
+    Checked as the harness itself checks a mutation, which is the same property from the other
+    side: the file exists, the test file exists, and the `before` text appears exactly once.
+    Zero means the code moved underneath the documentation; twice means the example would break
+    a line nobody chose.
+
+    Delete this and the example rots the first time anybody renames a function, silently,
+    because documentation has no tests unless somebody writes them."""
+    guidance = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
+    block = guidance[guidance.index("from brain.ops.mutation import") :]
+    block = block[: block.index("```")]
+
+    quoted = dict(re.findall(r'(\w+)="([^"]*)"', block))
+    watched = re.search(r'tests=\(\s*"([^"]*)"', block)
+
+    assert watched is not None, "the example no longer passes a tests tuple"
+    named = REPO / quoted["path"]
+    watching = REPO / watched.group(1)
+
+    assert named.is_file(), f"CLAUDE.md's example names {quoted['path']}, which does not exist"
+    assert watching.is_file(), f"and {watched.group(1)}, which does not exist either"
+    assert named.read_text(encoding="utf-8").count(quoted["before"]) == 1
 
 
 def test_the_harness_has_no_parameter_naming_where_the_work_happens() -> None:
