@@ -173,13 +173,17 @@ THE_TWO_FOLDINGS_ARE_NOT_PROVEN_TO_AGREE = (
     "and it falls on Nordic and Central European names rather than at random."
 )
 
-#: The gap this module does not close, kept as a constant so it has to be deleted.
+#: What is installed and what is still not, kept as a constant so a change has to edit it.
 NOTHING_HERE_IS_INSTALLED_IN_POSTGRES = (
-    "IMMUTABLE_UNACCENT_SQL is a string in a Python module. No migration creates that "
-    "function, no index is declared over it, no column stores a key this module computed, and "
-    "the match cascade that would consume these keys (M14.3) is not built. Everything here is "
-    "callable and nothing calls it yet. That is said in a constant rather than in a comment "
-    "so that a later claim to the contrary requires deleting the sentence that contradicts it."
+    "Migration 0021 installs IMMUTABLE_UNACCENT_SQL and builds one expression index over it, "
+    "so the wrapper is no longer only a string in a Python module. Three things are still not "
+    "installed and the distinction matters. No column anywhere stores a key this module "
+    "computed, so the fold that runs at write time is still Python's and the fold in the index "
+    "is still Postgres's, which is the divergence THE_TWO_FOLDINGS_ARE_NOT_PROVEN_TO_AGREE "
+    "describes. No query in this repository uses that index, because the match cascade has no "
+    "caller. And no deployment has run the migration, so the IMMUTABLE label has been checked "
+    "by a table in this file rather than by a server. That is said in a constant rather than "
+    "in a comment so that a later claim to the contrary requires deleting the sentence."
 )
 
 #: Why the check character of a UEN is not validated.
@@ -262,6 +266,166 @@ STRICT
 PARALLEL SAFE
 AS $$ SELECT public.unaccent('public.unaccent'::regdictionary, $1) $$;
 """
+
+
+class Volatility(enum.StrEnum):
+    """PostgreSQL's three volatility categories, spelled as `pg_proc.provolatile` spells them.
+
+    A `StrEnum` over the catalogue's own single letters rather than over readable words, so the
+    day somebody checks this table against a running server the comparison is against the value
+    the server returns and not against a translation of it.
+    """
+
+    IMMUTABLE = "i"
+    STABLE = "s"
+    VOLATILE = "v"
+
+
+#: What PostgreSQL declares about each function an index expression here may name, keyed by the
+#: name and the number of arguments it was called with.
+#:
+#: **Keyed by arity because the arity is the whole trap.** `to_tsvector('english', body)` takes
+#: a `regconfig` and is IMMUTABLE; `to_tsvector(body)` reads `default_text_search_config` and is
+#: only STABLE, so PostgreSQL refuses it in a generated column outright. 0009 is the migration
+#: that hit this and its header records both halves. A table keyed by name alone would give one
+#: answer for two functions that behave differently, and the answer it gave would be the
+#: permissive one for whichever form was written down.
+#:
+#: **`unaccent` is STABLE in both forms and that is deliberate on PostgreSQL's part**, because
+#: the dictionary behind it can be reloaded while the server runs. That is the fact this whole
+#: section exists for, it is what 0009 says makes `to_tsvector('english', unaccent(body))`
+#: refused, and it is why `IMMUTABLE_UNACCENT_SQL` exists at all.
+#:
+#: Written down rather than queried, because a unit test has no server. That is a real limit
+#: and it is the one `NOTHING_HERE_IS_INSTALLED_IN_POSTGRES` names: this table is a copy of the
+#: catalogue and nothing has compared the two. What makes it more than an opinion is that
+#: `indexable` is run over the expressions migration 0021 actually indexes, and over the
+#: expression 0009 independently records as refused, so the table has to agree with a statement
+#: made elsewhere in this repository rather than only with itself.
+PG_VOLATILITY: Mapping[tuple[str, int], Volatility] = MappingProxyType(
+    {
+        ("er.immutable_unaccent", 1): Volatility.IMMUTABLE,
+        ("lower", 1): Volatility.IMMUTABLE,
+        ("upper", 1): Volatility.IMMUTABLE,
+        ("btrim", 1): Volatility.IMMUTABLE,
+        ("to_tsvector", 2): Volatility.IMMUTABLE,
+        ("to_tsvector", 1): Volatility.STABLE,
+        ("unaccent", 1): Volatility.STABLE,
+        ("unaccent", 2): Volatility.STABLE,
+        ("public.unaccent", 1): Volatility.STABLE,
+        ("public.unaccent", 2): Volatility.STABLE,
+        ("now", 0): Volatility.STABLE,
+        ("random", 0): Volatility.VOLATILE,
+    }
+)
+
+#: A function call inside a SQL expression: an optionally schema-qualified lowercase name
+#: followed by an open bracket. The lookbehind is what stops the tail of a qualified name being
+#: read as a second call of its own.
+_CALL_RE: Final = re.compile(r"(?<![A-Za-z0-9_.])([a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*)\s*\(")
+
+
+def _argument_count(expression: str, open_at: int) -> int:
+    """How many arguments the bracket at `open_at` encloses.
+
+    Commas at depth one, plus one, and nought for an empty bracket. Quoted literals are skipped
+    whole, because a comma inside `'a,b'` is not an argument separator and counting it would
+    give a function the wrong arity, which is how a STABLE function gets looked up as its
+    IMMUTABLE namesake.
+    """
+    depth = 1
+    commas = 0
+    seen_content = False
+    index = open_at + 1
+    while index < len(expression) and depth > 0:
+        character = expression[index]
+        if character == "'":
+            seen_content = True
+            index += 1
+            while index < len(expression):
+                if expression[index] == "'":
+                    if index + 1 < len(expression) and expression[index + 1] == "'":
+                        index += 2
+                        continue
+                    break
+                index += 1
+        elif character == "(":
+            depth += 1
+            seen_content = True
+        elif character == ")":
+            depth -= 1
+        elif character == "," and depth == 1:
+            commas += 1
+        elif not character.isspace():
+            seen_content = True
+        index += 1
+    return commas + 1 if seen_content else 0
+
+
+def calls_in(expression: str) -> tuple[tuple[str, int], ...]:
+    """Every function call in a SQL expression, as a name and an arity, outermost first.
+
+    Scanned rather than parsed with a SQL grammar, which is a real limit: this understands
+    brackets, quotes and names, and would read a cast written as `cast(x as text)` as a call to
+    something named `cast`. That failure is in the safe direction, because a name this module
+    has no volatility for is refused rather than assumed immutable.
+    """
+    found: list[tuple[str, int]] = []
+    index = 0
+    while index < len(expression):
+        if expression[index] == "'":
+            index += 1
+            while index < len(expression):
+                if expression[index] == "'":
+                    if index + 1 < len(expression) and expression[index + 1] == "'":
+                        index += 2
+                        continue
+                    break
+                index += 1
+            index += 1
+            continue
+        match = _CALL_RE.match(expression, index)
+        if match is None:
+            index += 1
+            continue
+        open_at = match.end() - 1
+        found.append((match.group(1).lower(), _argument_count(expression, open_at)))
+        index = open_at + 1
+    return tuple(found)
+
+
+def indexable(expression: str) -> tuple[str, ...]:
+    """Every reason PostgreSQL would refuse to index this expression (M14.2.4).
+
+    An expression index and a stored generated column both require every function in the
+    expression to be IMMUTABLE, and that requirement is the reason this module has a wrapper at
+    all. The check is written against `PG_VOLATILITY`, which is what the server declares, rather
+    than against the wrapper, so it refuses `unaccent` and admits `er.immutable_unaccent` for
+    the reason PostgreSQL does and not because one of them is ours.
+
+    An unlisted function is refused. Assuming immutability for an unknown name is the failure
+    this whole check exists to prevent, and the cost of refusing is that somebody adding a
+    function to an index has to add a line here saying what the server thinks of it.
+
+    Empty for an expression with no function calls in it at all: a bare column is indexable and
+    always was. See `AN_IMMUTABLE_WRAPPER_IS_A_PROMISE_THE_SERVER_DOES_NOT_CHECK` for what the
+    wrapper does not buy.
+    """
+    findings: list[str] = []
+    for name, arity in calls_in(expression):
+        declared = PG_VOLATILITY.get((name, arity))
+        if declared is None:
+            findings.append(
+                f"{name} with {arity} argument(s) has no declared volatility here, and an "
+                "unlisted function is refused rather than assumed immutable"
+            )
+        elif declared is not Volatility.IMMUTABLE:
+            findings.append(
+                f"{name} with {arity} argument(s) is {declared.name}, and an index expression "
+                "requires IMMUTABLE; wrap it in a function that declares itself so, and treat "
+                "the wrapped behaviour as part of the schema"
+            )
+    return tuple(findings)
 
 
 def accent_fold(text: str) -> str:

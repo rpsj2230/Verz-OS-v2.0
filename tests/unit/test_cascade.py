@@ -78,6 +78,7 @@ from brain.resolution.guardrails import (
     strength_of,
 )
 from brain.resolution.normalise import MIN_KEY_CHARS, normalise_name
+from brain.resolution.query import weight_parameters
 
 PEPPER = "a-deployment-secret"
 
@@ -570,12 +571,14 @@ def test_a_pair_whose_names_cannot_be_measured_reaches_a_person_when_something_e
 
 # ------------------------------------------------------------- the weight table (M14.3.5)
 def test_a_weight_table_cannot_claim_calibration_without_naming_the_export() -> None:
-    """**M14.3.5 says "exported from offline calibration" and no calibration exists.**
+    """**M14.3.5 says "exported from offline calibration" and this table is not one.**
 
-    M14.4 is the job that would produce an export and it is not built, so every figure in the
-    declared table was chosen by an author. `calibrated` is a property derived from
-    `calibration_ref` rather than a field, so there is no boolean to set to True and claiming
-    calibration means naming the export that produced it.
+    `brain.resolution.calibration` can now produce an export and nothing has run it against
+    real data, so every figure in the declared table was still chosen by an author.
+    `calibrated` is a property derived from `calibration_ref` rather than a field, so there is
+    no boolean to set to True and claiming calibration means naming the export that produced
+    it. `tests/unit/test_resolution_calibration.py` holds the other end of that: an export is
+    the only route in this repository that sets the reference.
 
     Both halves matter: the structural one says there is no field, and the positive one says a
     table that does name an export reports itself as calibrated, so the property is not simply
@@ -738,7 +741,8 @@ def _evaluate_rendered_sql(
             ["r", *_row(right, dm_from_key=dm_from_key)],
         )
         query = f"SELECT {body} FROM rec l, rec r WHERE l.side = 'l' AND r.side = 'r'"  # noqa: S608
-        rows = connection.execute(query, {"upper": DECLARED_THRESHOLDS.upper}).fetchall()
+        bound = {**weight_parameters(), "upper": DECLARED_THRESHOLDS.upper}
+        rows = connection.execute(query, bound).fetchall()
     finally:
         connection.close()
     return float(rows[0][0])

@@ -50,9 +50,13 @@ punctuation and held-down keys; the free-mail *domain* list is a different list 
 
 **The score is additive over comparisons so that it can be one SQL expression (M14.3.6).**
 Every term is a weight times a boolean, the boolean is a comparison between two columns or a
-conjunction of them, and the total is a sum. `sql_score_expression` renders exactly that from
-the same weight table the Python scorer sums, so the two cannot drift into two different
-scoring rules. The conjunctions are what make that true rather than nearly true: the name
+conjunction of them, and the total is a sum. `sql_score_expression` renders exactly that over
+the same feature vocabulary the Python scorer sums, with every weight bound as a parameter
+rather than written into the text, so the two cannot drift into two different scoring rules and
+the statement does not change when a calibration does. `brain.resolution.query` is what binds
+them and wraps the expression into something executable, because a statement needs a table name
+and nothing here knows one. The conjunctions are what make that true rather than nearly true:
+the name
 features are mutually exclusive in `compare`, and three unguarded equalities in SQL would score
 a pair of identical names three times over, which is the double-count this module refuses one
 paragraph below and would have shipped in the rendered half. Nothing in this module imports
@@ -231,9 +235,11 @@ THE_SCORE_IS_ADDITIVE_SO_IT_CAN_BE_ONE_SQL_EXPRESSION = (
     "columns or a conjunction of such comparisons, and the total is a sum. That is a CASE WHEN "
     "per feature inside one SELECT, which is what M14.3.6 means by millisecond online cost: no "
     "round trip per candidate, no per-pair Python, and no object that had to be trained. "
-    "sql_score_expression renders that expression from the same table score() sums, so the "
-    "online query and the offline reasoning cannot become two different scoring rules that "
-    "agree today. A conjunction rather than a bare equality on three of the name terms, "
+    "sql_score_expression renders that expression over the same feature vocabulary score() "
+    "sums, and binds each weight as a parameter rather than rendering it, so the online query "
+    "and the offline reasoning cannot become two different scoring rules and a re-calibration "
+    "is a different argument list rather than a different statement. A conjunction rather than "
+    "a bare equality on three of the name terms, "
     "because compare() reports at most one name feature for a pair and three unguarded "
     "equalities report three: two identical names satisfy name_collapsed, name_key and the "
     "similarity threshold at once, so the rendered expression would have scored one fact three "
@@ -1309,16 +1315,31 @@ SQL_PREDICATES: Mapping[Feature, str] = MappingProxyType(
 )
 
 
-def sql_score_expression(weights: WeightTable = DECLARED_WEIGHTS) -> str:
-    """The additive score as one SQL expression, rendered from the same table `score` sums.
+#: What each weight binds under in the rendered expression: this prefix and the feature's
+#: machine name. Declared here rather than in `brain.resolution.query`, because the renderer
+#: below writes the placeholder and that module binds it, and a prefix declared on both sides
+#: is a statement that fails on a missing parameter the first time the two disagree.
+WEIGHT_PARAM_PREFIX: Final = "w_"
 
-    Rendered rather than written out, so the online query and the Python scorer cannot become
-    two scoring rules that agree today and diverge on the next weight change. A caller pastes
-    this into a SELECT over a self join and gets one number per candidate pair with no round
-    trip, which is what M14.3.6 means by millisecond online cost.
 
-    Every term is `CASE WHEN <comparison> THEN <weight> ELSE 0 END`, and the terms are added.
-    There is no function call, no subquery and no window in any of them except pg_trgm's
+def sql_score_expression() -> str:
+    """The additive score as one SQL expression, with every weight bound rather than written in.
+
+    One scoring rule and not two: the terms come from `SQL_PREDICATES`, which `cascade_gaps`
+    holds exhaustive over `Feature`, and each term's weight arrives as a parameter that
+    `brain.resolution.query.weight_parameters` binds from the same `WeightTable` `score` sums.
+    A caller pastes this into a SELECT over a self join and gets one number per candidate pair
+    with no round trip, which is what M14.3.6 means by millisecond online cost.
+
+    **Bound rather than rendered, and that is not a matter of style.** A weight written into the
+    text makes every re-calibration a different statement: prepared statements and plan caches
+    turn over, and a figure a job fitted has become part of the query rather than an input to
+    it. M14.4.4 schedules that job weekly, so the difference is a new argument list against a
+    new query, every week. The weight table's version is not rendered here for the same reason;
+    `query.ScoreQuery` carries it as a field, where it can be written onto a link.
+
+    Every term is `CASE WHEN <comparison> THEN <bound weight> ELSE 0 END`, and the terms are
+    added. There is no function call, no subquery and no window in any of them except pg_trgm's
     `similarity`, which is an operator with an index behind it rather than a computation. See
     `WHAT_WOULD_BREAK_THE_SQL_SHAPE`, and note that no migration here creates the columns this
     names.
@@ -1327,11 +1348,11 @@ def sql_score_expression(weights: WeightTable = DECLARED_WEIGHTS) -> str:
     `compare`'s agreements rather than a larger one. See `SQL_PREDICATES`.
     """
     terms = [
-        f"  CASE WHEN {SQL_PREDICATES[feature]} THEN {weights.weight_for(feature)} ELSE 0 END"
+        f"  CASE WHEN {SQL_PREDICATES[feature]} "
+        f"THEN :{WEIGHT_PARAM_PREFIX}{feature.value} ELSE 0 END"
         for feature in Feature
     ]
-    joined = "\n+ ".join(terms)
-    return f"-- weight table {weights.version}, calibrated: {weights.calibrated}\n{joined}"
+    return "\n+ ".join(terms)
 
 
 # ------------------------------------------------------------------- the cascade itself

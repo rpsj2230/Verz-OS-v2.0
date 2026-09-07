@@ -363,23 +363,30 @@ def test_the_immutable_wrapper_names_its_dictionary_explicitly() -> None:
     assert "'public.unaccent'::regdictionary" in IMMUTABLE_UNACCENT_SQL
 
 
-def test_nothing_in_this_repository_installs_the_immutable_wrapper() -> None:
-    """The module claims the wrapper is written down and not installed. This checks the claim.
+def test_exactly_one_migration_installs_the_immutable_wrapper() -> None:
+    """The module used to claim nothing installed the wrapper, and this test failed on the day
+    0021 did, which is exactly what it was for.
 
-    A claim about what is not built is the kind that rots first, because the day somebody does
-    build it there is no reason for them to go back and correct a docstring. This fails on that
-    day instead, which is when the sentence needs changing.
+    What it holds now is the other half of the same property: the wrapper is created in one
+    place. Two migrations creating `er.immutable_unaccent` would mean two definitions of one
+    fold, and a `CREATE OR REPLACE` in the second silently repoints every index built on the
+    first without rebuilding any of them, which is
+    `AN_IMMUTABLE_WRAPPER_IS_A_PROMISE_THE_SERVER_DOES_NOT_CHECK` happening inside this
+    repository rather than in an operator's `unaccent.rules`.
 
-    Delete this and the module can go on saying nothing is installed long after something
-    is."""
+    `tests/unit/test_resolution_indexing.py` holds what the migration actually emits. This one
+    is only about there being one of it.
+
+    Delete this and a second migration redefines the fold, and every index built on the first
+    goes stale without an error anywhere."""
     migrations = REPO / "migrations"
-    installed = [
-        path
+    installers = sorted(
+        path.name
         for path in migrations.rglob("*.py")
-        if "immutable_unaccent" in path.read_text(encoding="utf-8")
-    ]
+        if "CREATE OR REPLACE FUNCTION er.immutable_unaccent" in path.read_text(encoding="utf-8")
+    )
 
-    assert installed == [], f"the wrapper is installed by {installed}, so the docstring is wrong"
+    assert installers == ["0021_accent_fold_index.py"], installers
 
 
 # ------------------------------------------------- the minimum length (M14.2.5)
