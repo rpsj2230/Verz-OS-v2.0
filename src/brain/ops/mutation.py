@@ -180,6 +180,13 @@ class Verdict:
     #: Set when the run produced no named failure and no clean pass: an import broke, or
     #: collection did. Not a catch, and worth seeing rather than scoring.
     crashed: bool = False
+    #: The tail of what pytest printed, kept only for a crash.
+    #:
+    #: **Added because a crashed verdict with nothing attached is a dead end.** The row says
+    #: the mutation did not compile or did not import and gives you no way to find out which,
+    #: in a worktree that has already been removed. A caught or surviving mutation needs no
+    #: output: the named tests are the answer in one case and the absence of them in the other.
+    output: str = ""
 
     def row(self, width: int = 0) -> str:
         """One line of the table, for a commit message."""
@@ -296,7 +303,13 @@ def verify(
             )
             raise MutationError(msg)
         if clean.returncode != 0:
-            msg = f"the unmutated tests did not run cleanly:\n{clean.stdout[-2000:]}"
+            # Both streams, because the first version printed stdout alone and a collection
+            # error writes to stderr: the message came out as the sentence below with nothing
+            # after it, which is a diagnostic saying only that a diagnostic exists.
+            msg = (
+                "the unmutated tests did not run cleanly, so nothing below would be evidence"
+                f"\n--- stdout\n{clean.stdout[-2000:]}\n--- stderr\n{clean.stderr[-2000:]}"
+            )
             raise MutationError(msg)
 
         verdicts: list[Verdict] = []
@@ -327,6 +340,11 @@ def verify(
                     caught=bool(caught),
                     by=caught,
                     crashed=not caught and run.returncode != 0,
+                    output=(
+                        ""
+                        if caught or run.returncode == 0
+                        else run.stdout[-1500:] + "\n" + run.stderr[-500:]
+                    ),
                 )
             )
         return Report(verdicts=tuple(verdicts), baselines=baselines)

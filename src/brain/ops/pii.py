@@ -195,10 +195,18 @@ THE_BUDGET_IS_NOT_MEASURED_ON_THE_MACHINE_IT_IS_ABOUT: Final = (
     "taken anywhere else is a measurement of it. What has been taken is one run of "
     "measure_scrub over the whole of scrub on the build machine, which is recorded with the "
     "processor named and the date on it and is not the same claim. What has not been taken "
-    "is anything at all on the target hardware, and anything at all about the GLiNER leg, "
-    "which is a call to another container and is bounded by a timeout rather than by a rate "
-    "per kibibyte. budget_gaps reports both absences on every call and will keep reporting "
-    "the first of them until somebody runs the harness where the software is installed."
+    "is anything at all on the target hardware, and anything at all about the out-of-process "
+    "legs: GLiNER and Presidio are both calls to containers that do not run here, bounded by "
+    "a timeout rather than by a rate per kibibyte. The two absences are recorded in two "
+    "different places and this sentence used to say they were recorded in one. budget_gaps "
+    "returns the first of them on every call, and will until somebody runs the harness where "
+    "the software is installed; the second is a required field on the cost itself, "
+    "ScrubCost.excludes, because a figure that cannot be constructed without saying what it "
+    "leaves out cannot come to be read as the cost of a whole scrub. Claiming budget_gaps "
+    "reported both was the same overstatement this repository keeps finding elsewhere, a "
+    "check credited with applying a rule it does not apply, and it mattered here because "
+    "budget_gaps returning empty is the shape of the edit that closes M32.2.2.4: a permanent "
+    "second finding would mean the leaf could never be seen to close."
 )
 
 
@@ -961,7 +969,7 @@ MINIMUM_TIMED_SAMPLES: Final = math.ceil(1 / (1 - SCRUB_PERCENTILE))
 #: them are the worked examples the test suite already uses.
 BENCHMARK_PARAGRAPH: Final = (
     "Following up on ticket 44821 for Nur Aisyah binti Abdullah, NRIC S1234567D, on "
-    "9123 4567 or nur.aisyah@example.com.sg. The entity is UEN 201512345K and the older "
+    "9123 4567 or nur.aisyah@example.com. The entity is UEN 201512345K and the older "
     "reference is 53112233B. R. Kumar in accounts and Tan Wei Ling both reviewed it. "
     "Please confirm by Monday whether the credit was raised against the correct company, "
     "and copy Ravi s/o Muthusamy on the reply so that the thread stays in one place. "

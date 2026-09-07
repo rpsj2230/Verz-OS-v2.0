@@ -21,6 +21,41 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 
+#: The build pages' palette and faces, in one place and taking the accent from the install.
+#:
+#: **Two things were wrong here and the independence sweep found both.** The pages linked a
+#: stylesheet from `fonts.googleapis.com`, so every staff member opening a build page inside
+#: the client's own network told Google their address and which page they were on, for three
+#: typefaces on an internal status board. And `--brand` was `#F47936`, which is one company's
+#: orange written into the product four times over.
+#:
+#: The faces are now a system stack, which costs a little polish on a page whose job is to be
+#: current rather than beautiful, and buys a page that renders identically with no network at
+#: all. The accent comes from `INSTALL_ACCENT_COLOUR`, so a client sees their own.
+#:
+#: Read at request time rather than at import, because a value read through a module-level
+#: import cannot be changed without a restart and cannot be tested at more than one setting.
+SANS = "system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif"
+MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"
+
+
+def palette(panel: bool = True) -> str:
+    """The `:root` custom properties for a build page, with the installation's accent.
+
+    Single braces, because the callers are f-strings and an f-string interpolates a value
+    verbatim rather than formatting it again. The doubling in the templates around this is for
+    the literal CSS braces they contain themselves, which is the trap: the two look the same
+    on the page and are escaped at different times.
+    """
+    from brain.install import value_of
+
+    extra = "--panel:#fff;" if panel else ""
+    return (
+        f":root{{--brand:{value_of('INSTALL_ACCENT_COLOUR')};--ink:#231F20;"
+        f"--ground:#F6F4F1;{extra}--line:#E3DDD7;--dim:#7A716C;--ok:#14724A}}"
+    )
+
+
 router = APIRouter(tags=["docs"])
 
 
@@ -119,31 +154,30 @@ async def build_status(request: Request) -> HTMLResponse:
     return HTMLResponse(f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Company Brain · build status</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Poppins:wght@600&display=swap">
 <style>
-:root{{--brand:#F47936;--ink:#231F20;--ground:#F6F4F1;--panel:#fff;--line:#E3DDD7;--dim:#7A716C;--ok:#14724A}}
+{palette()}
 @media(prefers-color-scheme:dark){{:root{{--ground:#14110F;--panel:#1D1916;--line:#332C25;--ink:#F5F1ED;--dim:#948A83;--ok:#57BE8C}}}}
 *{{box-sizing:border-box}}
-body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 "IBM Plex Sans",system-ui,sans-serif}}
+body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 {SANS}}}
 .w{{max-width:860px;margin:0 auto;padding:44px 22px 80px}}
-h1{{font-family:Poppins,sans-serif;font-size:34px;margin:0 0 4px;letter-spacing:-.02em}}
-.sub{{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}}
+h1{{font-family:{SANS};font-size:34px;margin:0 0 4px;letter-spacing:-.02em}}
+.sub{{font-family:{MONO};font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--brand)}}
 .big{{display:flex;align-items:baseline;gap:14px;margin:26px 0 6px}}
 .big .p{{font-size:64px;font-weight:600;line-height:1;letter-spacing:-.03em;font-variant-numeric:tabular-nums}}
-.big .c{{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim)}}
+.big .c{{font-family:{MONO};font-size:12px;color:var(--dim)}}
 .track{{height:8px;background:var(--line);border-radius:99px;overflow:hidden;margin:10px 0 22px}}
 .track>span{{display:block;height:100%;background:var(--brand);border-radius:99px}}
 table{{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:26px}}
-th{{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 8px 5px 0;border-bottom:1px solid var(--line)}}
+th{{font-family:{MONO};font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 8px 5px 0;border-bottom:1px solid var(--line)}}
 td{{padding:7px 8px 7px 0;border-bottom:1px solid var(--line)}}
-td.n{{font-family:"IBM Plex Mono",monospace;text-align:right;font-variant-numeric:tabular-nums}}
+td.n{{font-family:{MONO};text-align:right;font-variant-numeric:tabular-nums}}
 td.b{{width:150px}}
 td.b>span{{display:block;height:5px;background:var(--ok);border-radius:99px}}
 a.btn{{display:inline-block;border:1px solid var(--line);background:var(--panel);border-radius:4px;padding:9px 15px;margin:0 8px 8px 0;color:var(--ink);text-decoration:none;font-weight:600;font-size:13.5px}}
 a.btn.pri{{background:var(--brand);border-color:var(--brand);color:#231F20}}
 ul{{padding-left:18px;font-size:13px;color:var(--dim)}}
-code{{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--brand)}}
-.note{{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--dim);border-left:2px solid var(--brand);padding-left:11px;margin-top:30px;line-height:1.7}}
+code{{font-family:{MONO};font-size:11.5px;color:var(--brand)}}
+.note{{font-family:{MONO};font-size:10.5px;color:var(--dim);border-left:2px solid var(--brand);padding-left:11px;margin-top:30px;line-height:1.7}}
 </style></head><body><div class="w">
 <div class="sub">Verz Company Brain · build status</div>
 <h1>{current_name}</h1>
@@ -158,9 +192,9 @@ commit {s.get("commit", "?")}{shipped}</span></div>
 <a class="btn" href="/build/screens">Key screens</a>
 <a class="btn" href="/build/needs-rupash">Needs you ({needs})</a>
 <a class="btn" href="/api/status.json">status.json</a>
-<h3 style="font-family:Poppins,sans-serif;font-size:15px;margin:30px 0 6px">Recently closed</h3>
+<h3 style="font-family:{SANS};font-size:15px;margin:30px 0 6px">Recently closed</h3>
 <ul>{recent}</ul>
-<h3 style="font-family:Poppins,sans-serif;font-size:15px;margin:24px 0 6px">Next up</h3>
+<h3 style="font-family:{SANS};font-size:15px;margin:24px 0 6px">Next up</h3>
 <ul>{upcoming}</ul>
 <p class="note">Every figure here is computed from commits merged to main, never entered by
 hand. A task counts as done when a commit naming its id is on main and CI passed, so this
@@ -201,18 +235,17 @@ def _placeholder(path: str) -> HTMLResponse:
     return HTMLResponse(
         f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>{name} - not built yet</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Poppins:wght@600&display=swap">
 <style>
-:root{{--brand:#F47936;--ink:#231F20;--ground:#F6F4F1;--line:#E3DDD7;--dim:#7A716C}}
+{palette(panel=False)}
 @media(prefers-color-scheme:dark){{:root{{--ground:#14110F;--line:#332C25;--ink:#F5F1ED;--dim:#948A83}}}}
-body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 "IBM Plex Sans",system-ui,sans-serif}}
+body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 {SANS}}}
 .w{{max-width:620px;margin:0 auto;padding:14vh 22px 60px}}
-.eyebrow{{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}}
-h1{{font-family:Poppins,sans-serif;font-size:32px;margin:8px 0 14px;letter-spacing:-.02em}}
+.eyebrow{{font-family:{MONO};font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}}
+h1{{font-family:{SANS};font-size:32px;margin:8px 0 14px;letter-spacing:-.02em}}
 p{{color:var(--dim);max-width:52ch}}
 .bar{{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:20px 0 8px}}
 .bar>span{{display:block;height:100%;background:var(--brand);border-radius:99px;width:{pct}%}}
-.n{{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--dim)}}
+.n{{font-family:{MONO};font-size:12px;color:var(--dim)}}
 a{{color:var(--brand);font-weight:600}}
 </style></head><body><div class="w">
 <div class="eyebrow">Not built yet</div>
@@ -254,24 +287,23 @@ async def root() -> HTMLResponse:
     s = _read_status()
     return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Verz Company Brain</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Poppins:wght@600&display=swap">
 <style>
-:root{{--brand:#F47936;--ink:#231F20;--ground:#F6F4F1;--panel:#fff;--line:#E3DDD7;--dim:#7A716C}}
+{palette()}
 @media(prefers-color-scheme:dark){{:root{{--ground:#14110F;--panel:#1D1916;--line:#332C25;--ink:#F5F1ED;--dim:#948A83}}}}
 *{{box-sizing:border-box}}
-body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 "IBM Plex Sans",system-ui,sans-serif}}
+body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.6 {SANS}}}
 .w{{max-width:680px;margin:0 auto;padding:11vh 22px 70px}}
-.eyebrow{{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}}
-h1{{font-family:Poppins,sans-serif;font-size:36px;margin:8px 0 12px;letter-spacing:-.025em}}
+.eyebrow{{font-family:{MONO};font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--brand)}}
+h1{{font-family:{SANS};font-size:36px;margin:8px 0 12px;letter-spacing:-.025em}}
 p{{color:var(--dim);max-width:56ch}}
 table{{width:100%;border-collapse:collapse;font-size:13.5px;margin:26px 0 10px}}
-th{{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 10px 5px 0;border-bottom:1px solid var(--line)}}
+th{{font-family:{MONO};font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 10px 5px 0;border-bottom:1px solid var(--line)}}
 td{{padding:9px 10px 9px 0;border-bottom:1px solid var(--line)}}
 td a{{color:var(--ink);font-weight:600;text-decoration:none}}
 td a:hover{{color:var(--brand)}}
-.tag{{font-family:"IBM Plex Mono",monospace;font-size:9.5px;padding:2px 6px;border-radius:2px;background:var(--line);color:var(--dim);white-space:nowrap}}
+.tag{{font-family:{MONO};font-size:9.5px;padding:2px 6px;border-radius:2px;background:var(--line);color:var(--dim);white-space:nowrap}}
 .tag.on{{background:var(--brand);color:#231F20;font-weight:600}}
-.n{{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--dim);margin-top:26px;border-left:2px solid var(--brand);padding-left:11px;line-height:1.8}}
+.n{{font-family:{MONO};font-size:11px;color:var(--dim);margin-top:26px;border-left:2px solid var(--brand);padding-left:11px;line-height:1.8}}
 </style></head><body><div class="w">
 <div class="eyebrow">Verz Design</div>
 <h1>Company Brain</h1>
@@ -383,22 +415,21 @@ async def needs_rupash() -> HTMLResponse:
         html_body += "</div>"
     return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Needs Rupash</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Poppins:wght@600&display=swap">
 <style>
-:root{{--brand:#F47936;--ink:#231F20;--ground:#F6F4F1;--line:#E3DDD7;--dim:#7A716C}}
+{palette(panel=False)}
 @media(prefers-color-scheme:dark){{:root{{--ground:#14110F;--line:#332C25;--ink:#F5F1ED;--dim:#948A83}}}}
-body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.65 "IBM Plex Sans",system-ui,sans-serif}}
+body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.65 {SANS}}}
 .w{{max-width:760px;margin:0 auto;padding:48px 22px 80px}}
-h1{{font-family:Poppins,sans-serif;font-size:32px;margin:0 0 10px;letter-spacing:-.02em}}
-h2{{font-family:Poppins,sans-serif;font-size:19px;margin:34px 0 8px;letter-spacing:-.01em;border-left:3px solid var(--brand);padding-left:11px}}
+h1{{font-family:{SANS};font-size:32px;margin:0 0 10px;letter-spacing:-.02em}}
+h2{{font-family:{SANS};font-size:19px;margin:34px 0 8px;letter-spacing:-.01em;border-left:3px solid var(--brand);padding-left:11px}}
 p{{color:var(--dim);max-width:64ch}}
 details.past{{margin-top:44px;border-top:1px solid var(--line);padding-top:18px}}
-details.past>summary{{cursor:pointer;font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}}
+details.past>summary{{cursor:pointer;font-family:{MONO};font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}}
 details.past[open]>summary{{margin-bottom:10px}}
 details.past h2{{font-size:16px}}
 hr{{border:0;border-top:1px solid var(--line);margin:26px 0}}
 table{{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0 18px}}
-th{{font-family:"IBM Plex Mono",monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:7px 12px 6px 0;border-bottom:1px solid var(--line)}}
+th{{font-family:{MONO};font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:7px 12px 6px 0;border-bottom:1px solid var(--line)}}
 td{{padding:8px 12px 8px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink)}}
 a{{color:var(--brand);font-weight:600}}
 </style></head><body><div class="w">{html_body}
