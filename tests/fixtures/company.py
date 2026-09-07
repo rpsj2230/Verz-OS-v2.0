@@ -26,6 +26,7 @@ Task ids: M0.6.1, M0.6.2, M0.6.3, M0.6.7
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 
@@ -275,7 +276,76 @@ def build_company() -> dict[str, Person]:
             forbidden=("client.contract_value", "client.name", "hr.salary"),
         ),
     ]
-    return {p.principal.id: p for p in people}
+    return {p.principal.id: p for p in reaching_their_own_rows(people)}
+
+
+def record_grants(held: Sequence[Grant]) -> tuple[Grant, ...]:
+    """The `read:<entity>` grants implied by a set of `read:<entity>.<field>` grants.
+
+    **Reaching a row and reading a column are two separate grants**, and
+    `brain.knowledge.rows.entity_capability` is explicit that `Capability.covers` deliberately
+    does not let `read:client.*` confer `read:client`. That separation is what lets the scope
+    on the row grant be the WHERE clause while the field grants are the SELECT list, and it is
+    a good design.
+
+    This fixture granted columns and never records, so `row_scope_for` answered None for every
+    persona and `compile_row_query` short-circuited to a statement it already knew was empty.
+    Nobody in the company could read anything. It went unnoticed because the tests of this
+    corpus check the corpus's own shape, and every row-plane test builds its entitlement
+    inline rather than taking a persona, so the fixture and the row plane were never in one
+    test until `tests/invariants/test_golden_through_the_gate.py` on 2026-09-07. Measured
+    afterwards: all twenty golden questions produced one identical answer stream, so the
+    harness's canary check passed because no answer ever contained data.
+
+    **Derived rather than written out**, so a persona given a new field grant reaches the rows
+    it is about without anybody remembering this function exists. A field grant with no record
+    grant is dead configuration: the column could never be selected, so the grant could never
+    be exercised.
+
+    **One record grant per field grant, at that field grant's own scope**, and the narrowing
+    that produces is `EntitlementSet.scope_for`'s rather than this function's: several grants
+    of one capability intersect there, deliberately, because holding a capability twice must
+    never be wider than holding it once.
+
+    That matters for the person this fixture exists to make awkward. `u_dual` holds
+    `read:client.name` across sales and web and `read:client.contract_value` in sales alone.
+    The intersection scopes their row grant to sales, and `compile_projection` then admits
+    both columns, because a column grant narrower than the row grant would be a per-row column
+    decision it refuses to make. Measured rather than reasoned: with the row grant at the
+    wider scope the projection is `('name',)` and the contract value is absent everywhere,
+    which is not the person the corpus describes.
+    """
+    implied: list[Grant] = []
+    for grant in held:
+        verb, _, rest = grant.capability.value.partition(":")
+        entity, dot, _field = rest.partition(".")
+        # No branch for a wildcard entity, and that is checked rather than assumed:
+        # `Capability` refuses `read:*.name` outright, so `entity` can never be `*` here and a
+        # guard for it would be a branch no mutation could reach. `read:*` has no dot and is
+        # skipped by the first condition.
+        if not dot or not entity:
+            continue
+        implied.append(Grant(capability=cap(f"{verb}:{entity}"), scope=grant.scope))
+    return tuple(implied)
+
+
+def reaching_their_own_rows(people: Sequence[Person]) -> list[Person]:
+    """Every person, with the record grants their field grants imply.
+
+    Applied here rather than inside `Person.entitlement`, so `Person.grants` and the
+    entitlement built from it hold the same set. A derivation visible through only one of the
+    two would be a fixture whose grants disagree with its own reach, which is a smaller
+    version of the thing this function was written to remove.
+    """
+    return [
+        Person(
+            principal=one.principal,
+            grants=(*one.grants, *record_grants(one.grants)),
+            note=one.note,
+            forbidden=one.forbidden,
+        )
+        for one in people
+    ]
 
 
 def everyone() -> dict[str, Person]:

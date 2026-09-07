@@ -332,12 +332,32 @@ def test_the_ledger_records_an_entitlement_hash_and_never_the_capabilities() -> 
     assert entry.ent_hash == entitlement.ent_hash()
     assert len(entry.ent_hash) == 32
 
-    dumped = entry.model_dump_json()
-    named = {"read:client.contract_value"}
-    for grant in entitlement.grants:
-        if grant.capability.value in named:
-            continue  # deliberately the subject of this entry
-        assert grant.capability.value not in dumped, f"{grant.capability.value} reached the ledger"
+    # Compared as whole values against the parsed entry rather than as substrings of its
+    # JSON, and the difference is not cosmetic. The substring version passed only while no
+    # persona held a capability that is a prefix of another; on 2026-09-07 the company
+    # fixture gained the `read:client` record grants its field grants imply, and
+    # `read:client` is a substring of the `read:client.contract_value` this entry legitimately
+    # records. It failed on a leak that had not happened, which is the trap CLAUDE.md
+    # describes about asserting on text that also appears nearby.
+    #
+    # The parsed form is also the stronger claim. What must never be written down is the
+    # actor's whole reach, so what is checked is that every string anywhere in the entry is
+    # either not a capability at all or is the one capability this entry is about.
+    written = entry.model_dump()
+    named = "read:client.contract_value"
+    held = {grant.capability.value for grant in entitlement.grants}
+    assert len(held) > 1, "a persona holding one capability cannot show a reach was withheld"
+
+    strings = [one for one in written.values() if isinstance(one, str)]
+    strings.extend(str(one) for one in written["details"].values())
+
+    reached = {one for one in strings if one in held}
+
+    # At most the one this entry is about, and in this case not even that: the capability
+    # being granted is one the subject does not yet hold, which is what a grant is. The
+    # subset rather than the equality is what makes this true either way, so the test does
+    # not quietly become a statement about which persona was picked.
+    assert reached <= {named}, f"{reached - {named}} reached the ledger"
 
 
 def test_a_list_of_capabilities_is_still_refused() -> None:

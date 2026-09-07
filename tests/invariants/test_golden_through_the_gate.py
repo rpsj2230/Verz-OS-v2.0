@@ -431,62 +431,82 @@ def test_the_corpus_is_asked_of_the_gate_and_not_of_a_model() -> None:
         assert forbidden not in ("openai", "anthropic", "litellm"), forbidden
 
 
-def test_no_persona_in_the_synthetic_company_can_reach_a_row_at_all() -> None:
-    """**A finding, recorded as a test because it is the only form nobody deletes by
-    accident.** Asking the corpus of the real lane for the first time turned this up, and it
-    is why the quality baseline is zero: not because no rule matches, but because nobody in
-    the company can read a record.
+def test_the_personas_reach_rows_and_reach_different_ones() -> None:
+    """**This replaces the test that said nobody could reach a row, on the commit that fixed
+    it, and it is the test that one asked for by name.**
 
-    `brain.knowledge.rows.entity_capability` is explicit that `Capability.covers` deliberately
-    does not let `read:client.*` confer `read:client`: reaching a row and reading a column are
-    two separate grants, and that separation is what lets the scope on the row grant be the
-    WHERE clause while the field grants are the SELECT list. It is a good design.
+    Until 2026-09-07 the company fixture granted columns and never records, so `row_scope_for`
+    answered None for everybody and no persona could read anything. `record_grants` derives
+    the missing half now, and what this asserts is the property the corpus was written around:
+    not that people reach rows, but that they reach *different* ones.
 
-    `tests/fixtures/company.py` grants columns and never records. Every persona holds
-    `read:client.*` or `read:client.name` and not one holds `read:client`, for any entity. So
-    `row_scope_for` answers None for everybody, `compile_row_query` short-circuits to a
-    statement it knows is empty, and no row source is ever consulted. The golden corpus
-    expects `u_aaron` to be told a hosting expiry and a number of hours; through the real
-    system he is told what somebody with no grants is told.
+    Three claims, and the third is the one that makes the corpus load-bearing. Somebody
+    reaches client rows. Somebody else does not. And two people who both reach them see
+    different columns, which is the difference the golden set exists to observe and which was
+    observed zero times before this commit.
 
-    **Nothing noticed until now, and the reason is worth naming.**
-    `tests/invariants/test_golden_and_adversarial.py` validates that the corpus is well formed,
-    which is a property of the fixture. Every row-plane test builds its own entitlement inline
-    rather than taking a persona. So the fixture and the row plane have disagreed since the row
-    plane was written, and the two were never in the same test.
+    Delete this and the fixture can quietly lose its record grants again, and every canary
+    assertion in this file goes back to passing because no answer ever contains data."""
+    from brain.knowledge.rows import compile_projection, row_scope_for
 
-    This asserts the gap rather than fixing it, deliberately: adding record grants to the
-    company widens what every persona reaches, and roughly seven thousand tests take their
-    reach from that fixture. That is a change to make on its own, with its own mutation run,
-    not as a side effect of building an evaluation harness.
+    reaching = {
+        pid: row_scope_for("client", who.entitlement(), NOW) for pid, who in everyone().items()
+    }
 
-    Delete this and the finding goes back to being invisible, and the quality baseline of zero
-    reads as "the lane cannot answer" rather than "the fixture cannot be read"."""
+    assert any(scope is not None for scope in reaching.values()), (
+        "no persona reaches a client row, so the fixture has lost its record grants and "
+        "every permission assertion in this file passes for the wrong reason"
+    )
+    assert any(scope is None for scope in reaching.values()), (
+        "every persona reaches every row, which is not a company with departments in it"
+    )
+
+    columns = {
+        pid: compile_projection(
+            CLIENT, entitlement=everyone()[pid].entitlement(), rows=scope, now=NOW
+        )
+        for pid, scope in reaching.items()
+        if scope is not None
+    }
+
+    assert len(set(columns.values())) > 1, (
+        f"every persona who reaches a client sees the same columns {set(columns.values())}, "
+        "so the corpus is asking one question of one reach dressed as several"
+    )
+
+
+def test_a_record_grant_is_no_wider_than_the_column_grant_that_implied_it() -> None:
+    """**Written because a mutation survived, and it is the one that mattered.** Deriving every
+    record grant at an unrestricted scope leaves both assertions above green: somebody still
+    reaches rows, somebody still does not, and the projections still differ. What it silently
+    does is hand every persona with any field grant every row in every department.
+
+    So this asserts the scope rather than the reach. A persona whose client grants are all
+    bounded to one department must reach client rows only in that department, and the clause
+    that says so must survive into `row_scope_for`'s answer.
+
+    `u_aaron` is the case: Maintenance Department Admin, wide inside one department and
+    nowhere else, and the fixture's note says exactly that.
+
+    Delete this and the derivation can widen every persona to the whole company, and the only
+    thing that would notice is a person reading the fixture."""
     from brain.knowledge.rows import row_scope_for
 
-    reachable = [
-        (pid, entity)
-        for pid, who in everyone().items()
-        for entity in ("client", "ticket", "invoice", "price_list")
-        if row_scope_for(entity, who.entitlement(), NOW) is not None
-    ]
+    bounded = everyone()["u_aaron"]
+    scope = row_scope_for("client", bounded.entitlement(), NOW)
 
-    assert reachable == [], (
-        "a persona now reaches rows, so the fixture has been given record-level grants and "
-        "this test should be replaced by one asserting the golden answers actually arrive"
+    assert scope is not None, "the Maintenance admin reaches no client rows at all"
+    assert scope.clauses, (
+        "the Maintenance admin reaches client rows at an unrestricted scope, so the record "
+        "grant is wider than the column grant that implied it and they read every department"
     )
 
-    # The positive half, so this cannot be satisfied by a `row_scope_for` that always answers
-    # None. An entitlement holding the record grant reaches rows, which is what the personas
-    # are missing rather than what the function refuses.
-    from brain.core.entitlement import EntitlementSet, Grant
-    from brain.core.scope import Scope
-
-    holder = EntitlementSet(
-        principal_id="p_probe",
-        grants=(Grant(capability=Capability(value="read:client"), scope=Scope()),),
-    )
-    assert row_scope_for("client", holder, NOW) is not None
+    departments = {
+        value
+        for clause in scope.clauses
+        for value in (clause.value if isinstance(clause.value, tuple) else (clause.value,))
+    }
+    assert departments == {"maintenance"}, departments
 
 
 def test_the_lane_reaches_a_row_source_for_a_caller_who_holds_the_record_grant() -> None:
