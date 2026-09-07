@@ -335,7 +335,7 @@ def sweep_traceability() -> None:
     # `covered_modules` is non-empty the moment any test file exists, so the sweep passed
     # unconditionally and printed "all traceable" while checking nothing. It ran green in
     # CI and on every push for as long as it has existed.
-    #  already holds any malformed-line findings from above.
+    # `findings` already holds any malformed-line findings from above.
     for tid, src in sorted(claimed.items()):
         if tid in proven:
             continue

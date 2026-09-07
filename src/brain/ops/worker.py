@@ -117,6 +117,7 @@ from pathlib import Path
 from typing import Final
 
 from brain.gate.context import TrafficClass
+from brain.knowledge.embed_policy import policy_gaps
 from brain.knowledge.embed_queue import embed_batch_gaps
 from brain.knowledge.parse_budget import (
     PARSE_WORKER_COMPONENT,
@@ -479,6 +480,35 @@ def preflight(env: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(findings)
 
 
+def advisories() -> tuple[str, ...]:
+    """Everything wrong with this deployment that does not stop the process from starting.
+
+    **This exists because wiring one uncalled check exposed a distinction `preflight` never
+    had to make.** Everything in that function was fatal, so nothing forced the question, and
+    `policy_gaps` was the first check whose findings are real, actionable and not grounds for
+    refusing to boot: a corpus column that disagrees with the served model's width means every
+    embedding job fails at the insert, and it means nothing at all for the other work in the
+    queue. Both workers drain `system` and embedding is one job type among many.
+
+    A worker that refused to start over it would take the whole queue down to protect one leg,
+    and the operator's diagnosis would change from "no queue driver is installed", which is
+    the thing they can fix, to "misconfigured", which is a schema decision they cannot.
+
+    So the split is by what the finding costs and not by how serious it sounds.
+    `embed_batch_gaps` stays a refusal, because a batch that does not fit the slot is a
+    container the kernel kills; this is printed and the worker starts.
+
+    Findings are printed on every mode that prints the preflight, never swallowed. A check
+    that runs and is not shown is the state this function was created out of.
+
+    No environment parameter, unlike `preflight`. Nothing it asks reads one, and a
+    parameter accepted and ignored is the shape `tests/invariants/test_guards_that_can_fire.py`
+    exists to refuse: it reads as though the answer depends on the deployment when it does
+    not. Add it when the first advisory needs it.
+    """
+    return tuple(policy_gaps())
+
+
 # ------------------------------------------------------------------------- readiness
 def default_heartbeat_path() -> Path:
     """Where the heartbeat goes when nothing says otherwise.
@@ -583,6 +613,13 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         for finding in findings:
             print(f"  - {finding}", file=sys.stderr)
         return EXIT_MISCONFIGURED
+
+    # After the refusals and before anything starts. Printed rather than returned, and to
+    # stderr rather than stdout, because a worker with an advisory against it is a worker that
+    # runs: these lines sit in the log beside the plan, and the exit code stays whatever the
+    # start itself produces.
+    for advisory in advisories():
+        print(f"  ! {advisory}", file=sys.stderr)
 
     allocation, _ = declared_slots(environment)
     worker_component = declared_component(environment)

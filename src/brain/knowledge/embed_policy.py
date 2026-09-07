@@ -66,8 +66,10 @@ calls anything in this module. `embed_all` needs an `EmbeddingService`, and the 
 `brain.ops.inference_client`, which needs an address to an inference server that has no image;
 `question_batch` and `question_vector` need a retrieval path that embeds a question, and
 `brain.knowledge.search.vector_query` is still called with a vector nobody produces;
-`policy_gaps` is not called by `brain.ops.worker.preflight`, where it belongs beside
-`embed_batch_gaps`, because that file is being edited by somebody else today. So this is a
+`policy_gaps` is called by `brain.ops.worker.preflight` beside `embed_batch_gaps`, which it
+was not until 2026-09-07: the paragraph here said the file was being edited by somebody else
+that day and wiring it was one line, and that line then went unwritten for as long as anybody
+read the note as a record rather than a task. So this was a
 policy nothing consults, and saying so is worth more than a wire that looks live.
 
 Scope: domain logic. Nothing here opens a connection, loads a model or reads a clock.
@@ -595,9 +597,10 @@ def policy_gaps(
 ) -> tuple[str, ...]:
     """Every reason this deployment cannot embed, whatever the inference server is doing.
 
-    Nothing calls this. It belongs beside `embed_batch_gaps` in `brain.ops.worker.preflight`,
-    which is the process that would run these batches, and that file is being edited by
-    somebody else today; wiring it there is one line and is not claimed here.
+    Called by `brain.ops.worker.preflight` beside `embed_batch_gaps`, which is the process
+    that runs these batches. It went uncalled from the day it was written until 2026-09-07,
+    for the ordinary reason: the file it belonged in was busy, the omission was written down
+    honestly, and a written-down omission is not a check.
 
     Two checks, and they fail in opposite directions. The width is a refusal at the first
     insert, which is loud. The timeout is not a refusal at all: a request allowed to outlast

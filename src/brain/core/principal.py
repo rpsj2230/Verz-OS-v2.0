@@ -66,12 +66,15 @@ class Principal(BaseModel):
             raise ValueError(msg)
         return v
 
-    @field_validator("employment")
-    @classmethod
-    def _bounded_engagements(cls, v: Employment) -> Employment:
-        return v
-
     def model_post_init(self, _context: object, /) -> None:
+        """A bounded engagement must carry the date it ends on.
+
+        Here and not in a `field_validator`, and there was one: `_bounded_engagements` was
+        decorated `@field_validator("employment")` and its entire body was `return v`. It
+        could not have been anything else. A field validator sees one field, and this rule
+        needs `employment` and `not_after` together, so the check has always lived below and
+        the decorated shell above promised a guard that was not there.
+        """
         bounded = (Employment.CONTRACTOR, Employment.PARTNER)
         if self.employment in bounded and self.not_after is None:
             msg = f"{self.employment} principals must carry not_after"

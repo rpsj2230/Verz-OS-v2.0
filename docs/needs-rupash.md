@@ -237,6 +237,24 @@ figure of 1024 is from the published model card and has not been verified here, 
 weights have been pulled on this host; if it is wrong, the check reads the real width off the
 server's own response rather than believing what we asked for.
 
+**Update, 2026-09-07: the check that says this now runs, and it did not before.** The function
+comparing the two widths was written, correct and never called: its own docstring said so and
+named the place it belonged. It is wired in now, so `python -m brain.ops.worker --check` prints
+the disagreement, which means the answer to this question stops depending on somebody
+remembering the question.
+
+It prints and does not refuse, and that took a second change worth knowing about. Everything
+that check's new home reports is a reason a worker must not start, and this is not one: a
+column that disagrees with the model means every embedding job fails and means nothing at all
+for the rest of the queue. Refusing to boot over it would take the whole queue down to protect
+one leg, and would replace the operator's real problem, "no queue driver is installed", with a
+schema decision they cannot make at three in the morning. So the worker now has two lists: what
+stops it, and what is wrong that starting will not fix. This is the first entry in the second.
+
+Nothing here changes the decision or its cost. The one thing it changes is that the window
+where deciding is nearly free is now visible from the command line rather than only from this
+document.
+
 Three ways out, and the cost is different in each.
 
 - **Narrow the column to 1024 and re-embed.** A migration that alters the column and rebuilds

@@ -45,6 +45,7 @@ from brain.ops.worker import (
     EXIT_MISCONFIGURED,
     EXIT_NO_DRIVER,
     EXIT_NOT_READY,
+    advisories,
     declared_slots,
     is_ready,
     main,
@@ -145,6 +146,45 @@ def test_the_preflight_surfaces_a_queue_schema_gap_rather_than_swallowing_it(
     monkeypatch.setattr("brain.ops.worker.driver_schema_gaps", lambda: ("the schema moved",))
 
     assert "the schema moved" in preflight(_sound_environment())
+
+
+def test_a_deployment_that_cannot_embed_is_reported_and_still_starts() -> None:
+    """**The distinction wiring one uncalled check forced into the open.** `policy_gaps` was
+    written, argued and never called; its own docstring named `preflight` as where it belonged
+    and said wiring it was one line. Wired there, it stopped the worker, because everything in
+    `preflight` is fatal and this finding is not.
+
+    A corpus column that disagrees with the served model's width means every embedding job
+    fails at the insert and means nothing at all for the rest of the queue. Refusing to boot
+    over it takes the whole queue down to protect one leg, and it replaces the operator's real
+    diagnosis, "no queue driver is installed", with one they cannot act on.
+
+    This is a real finding today: `docs/needs-rupash.md` item 34 records the decision, which
+    interacts with two other open items and is nobody's to take here. So it is asserted as a
+    live value rather than patched in, and when item 34 is decided this test says so by
+    failing rather than by passing quietly on nothing.
+
+    Delete this and the check goes back to being uncalled, or worse, goes back into the
+    refusals where it stops a worker that could run."""
+    reported = advisories()
+
+    assert any("1024 dimensions" in one for one in reported), reported
+    assert preflight(_sound_environment()) == ()
+
+
+def test_an_advisory_is_never_a_reason_the_worker_will_not_start() -> None:
+    """The property that makes the split worth having rather than a second list of the same
+    thing. `preflight` answers "must this refuse to start"; `advisories` answers "what is
+    wrong that starting will not fix". A finding in both would make the second meaningless and
+    the first wrong.
+
+    Asserted as disjointness rather than as two separate emptiness checks, because the failure
+    is overlap and a membership check cannot see it.
+
+    Delete this and the next check added to `advisories` can be copied into `preflight` as
+    well, which turns an advisory into an outage."""
+    assert not set(advisories()) & set(preflight(_sound_environment()))
+    assert advisories(), "an advisory list that is empty proves nothing about the disjointness"
 
 
 def test_a_correctly_configured_worker_reports_nothing_to_fix() -> None:
@@ -374,6 +414,23 @@ def test_the_check_mode_reports_a_sound_configuration_as_sound() -> None:
     validate a worker's environment is to try to run it, which on this host means editing a
     compose file to find out."""
     assert main(["--check"], env=_sound_environment()) == 0
+
+
+def test_the_check_mode_prints_an_advisory_rather_than_swallowing_it(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An advisory that is computed and not shown is the state this whole surface was created
+    out of: `policy_gaps` was correct, argued and silent for as long as nothing called it, and
+    a check nobody sees is indistinguishable from one that was never written.
+
+    stderr rather than stdout, and after the refusals, so it sits in the container log beside
+    the plan without changing what a script reading stdout gets.
+
+    Delete this and `advisories()` can be called and its result dropped, which passes every
+    other test here because the exit code does not move."""
+    main(["--check"], env=_sound_environment())
+
+    assert "1024 dimensions" in capsys.readouterr().err
 
 
 def test_the_three_exit_codes_are_three_different_numbers() -> None:
