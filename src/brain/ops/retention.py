@@ -49,7 +49,7 @@ anybody weighing it. Rejected too: expressing retention as a bucket lifecycle ru
 which handles the object store and says nothing about the ten Postgres schemas where most
 of a person actually lives.
 
-Task ids: M25.1.1, M25.1.2, M25.1.3, M25.1.4, M25.1.5
+Task ids: M25.1.1, M25.1.2, M25.1.3, M25.1.4
 """
 
 from __future__ import annotations

@@ -64,7 +64,7 @@ Scope: domain logic. Nothing here opens a socket, reads a clock or holds a crede
 secret arrives as a parameter for the duration of one call, borrowed and revoked by
 `brain.ops.secrets.borrow`, and there is no attribute anywhere in this module that holds one.
 
-Task ids: M17.5.1, M17.5.2, M17.5.3
+Task ids: M17.5.2
 """
 
 from __future__ import annotations

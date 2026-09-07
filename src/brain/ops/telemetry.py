@@ -134,7 +134,7 @@ status at all. The ingress is buildable there and **not through `open_request`**
 runs, which `brain.api` reads back, so a route calling `open_request` would mint a second id
 for a request that already has one and file half its evidence under each.
 
-Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6
+Task ids: M27.1.1, M27.1.4, M27.1.6
 """
 
 from __future__ import annotations

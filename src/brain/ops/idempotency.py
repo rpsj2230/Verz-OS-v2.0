@@ -60,7 +60,7 @@ The cost of the other choice is paid once, by somebody's client, in a duplicated
 Scope: domain logic. Nothing here opens a connection, reads a clock or stores a row. Where the
 records live is a table this module does not name and `src/brain/tables/` does not yet hold.
 
-Task ids: M17.3.1, M17.3.2, M17.3.3, M17.3.4, M17.3.5
+Task ids: M17.3.2, M17.3.4, M17.3.5
 """
 
 from __future__ import annotations

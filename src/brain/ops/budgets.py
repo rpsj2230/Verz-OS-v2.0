@@ -59,7 +59,7 @@ somebody else kept, exactly as `limits.LimiterState` is. Said plainly because "v
 audited rows" reads as a table, and what is here is the shape a table would have to hold.
 `brain.ops.spend` is the enforcement half and holds no rows.
 
-Task ids: M21.1.1, M21.1.2, M21.1.3, M21.1.4, M21.1.5
+Task ids: M21.1.1, M21.1.2, M21.1.3, M21.1.4
 """
 
 from __future__ import annotations
