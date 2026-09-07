@@ -30,6 +30,11 @@ ARCHITECTURE = Path(__file__).resolve().parents[2] / "docs" / "architecture.html
 
 #: Words for the small numbers this sentence can plausibly carry. A count is written out in
 #: prose here rather than as a digit, so the test has to know both forms.
+#: The count is written as a word in the document, so this is how the two are compared.
+#:
+#: It stopped at ten, and the eleventh open question turned the comparison into a `KeyError`
+#: rather than a readable failure. A table that runs out is a check that stops working at a
+#: number nobody chose, and the failure it produces names the table rather than the drift.
 WORDS = {
     0: "none",
     1: "one",
@@ -42,6 +47,16 @@ WORDS = {
     8: "eight",
     9: "nine",
     10: "ten",
+    11: "eleven",
+    12: "twelve",
+    13: "thirteen",
+    14: "fourteen",
+    15: "fifteen",
+    16: "sixteen",
+    17: "seventeen",
+    18: "eighteen",
+    19: "nineteen",
+    20: "twenty",
 }
 
 

@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**10 items are open: 32 to 41.** 41 and 40 are the newest and neither blocks anything today. 41 is four services that would connect straight to the application's database with nothing budgeting them, which is the shape of the Keycloak outage on the database that holds the company records; none of the four is running yet, so it is a decision to take before they start. 40 is a second copy of the rule that decides who can see what, sitting unused in `core/`, and needs one sentence: delete it or keep it. 39 and 38 are the newest and neither blocks anything. 39 needs two short answers about where the Verz staff list really lives and whether that source may set roles as well as list people. 38 is the console screen list, now thirty-four screens rather than nine, with four design decisions in it worth disagreeing with before they are built. 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
+**11 items are open: 32 to 42.** 42 is the newest and blocks nothing today: the pipeline publishes each image and cannot tell the server about it, so a two-minute timer is the only thing deploying anything, and the workflow reports success either way. It needs three secrets set in GitHub and one of them is a token only you can create. 41 and 40 are the newest and neither blocks anything today. 41 is four services that would connect straight to the application's database with nothing budgeting them, which is the shape of the Keycloak outage on the database that holds the company records; none of the four is running yet, so it is a decision to take before they start. 40 is a second copy of the rule that decides who can see what, sitting unused in `core/`, and needs one sentence: delete it or keep it. 39 and 38 are the newest and neither blocks anything. 39 needs two short answers about where the Verz staff list really lives and whether that source may set roles as well as list people. 38 is the console screen list, now thirty-four screens rather than nine, with four design decisions in it worth disagreeing with before they are built. 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
 the console and a working sign-in. 33 is one sentence from you about what "shadow-pinned
 thirty days" means, and it decides a safety property rather than a feature. 34 blocks local
 embedding: the model we chose produces vectors of one width and the corpus column holds
@@ -44,6 +44,54 @@ in.
 ---
 
 # Open
+
+## 42. The pipeline cannot tell the server to deploy, and says so as a warning
+
+**Three secrets are missing from GitHub, and until they are set every deploy depends on a
+timer.**
+
+The Deploy workflow builds the image, publishes it, and then tries to call Coolify's API to
+say "there is a new image, pull it". That last call needs three values it does not have, so it
+prints:
+
+```
+no deploy: missing secret(s) COOLIFY_URL COOLIFY_TOKEN COOLIFY_SERVICE_UUID.
+The image is published; the server was not told.
+```
+
+**and the workflow still reports success**, because a warning is not a failure.
+
+Nothing is broken today. `brain-autodeploy.timer` on the server polls for a new image every
+two minutes and picks it up anyway, which is why production is current. The risk is the shape
+of the arrangement rather than its result: the only thing deploying anything is a timer nobody
+watches, the pipeline reports success whether or not the server ever hears, and the day the
+timer is disabled or the image tag changes, deploys stop with a green tick on every run.
+
+### What I need you to do
+
+Four values, then one paste each. All of it is in Coolify.
+
+1. Open Coolify at `http://194.233.66.89:8000`. It is firewalled off from the internet, so
+   open an SSH tunnel first: run `ssh -L 8000:localhost:8000 verz-vps` in a terminal and leave
+   it open, then use `http://localhost:8000` in your browser.
+2. **COOLIFY_URL** is `http://194.233.66.89:8000`. That is the value, exactly as written.
+3. **COOLIFY_SERVICE_UUID**: click into the Brain application in Coolify. The address bar ends
+   in a long code, for example `.../application/abc123def456`. The part after the last slash is
+   the value.
+4. **COOLIFY_TOKEN**: top right, your avatar, then **Keys & Tokens**, then **API tokens**.
+   Create one, give it a name like `github-deploy`, and give it permission to deploy. **Copy
+   it when it is shown; Coolify will not show it again.**
+5. Now go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
+6. Click **New repository secret**. Name it `COOLIFY_URL`, paste the value from step 2, save.
+7. Repeat for `COOLIFY_SERVICE_UUID` from step 3, and `COOLIFY_TOKEN` from step 4.
+
+That is all. The next push will call Coolify directly and the warning stops appearing.
+
+**I cannot do step 4 for you**, because it creates a credential, and I do not create or hold
+credentials on your behalf. Steps 2 and 3 are values I could read off the server, and I have
+left them for you as well so all four are in one place while you are in that screen.
+
+---
 
 ## 41. Four services connect straight to the application database and nothing budgets them
 
