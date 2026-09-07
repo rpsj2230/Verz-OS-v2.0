@@ -41,12 +41,14 @@ Scope: domain logic. Nothing here renders, opens a connection or reads a clock. 
 are declarations; `unregistered_tools` checks them against a registry handed in rather than
 importing one, so this module has no dependency on the tool layer and the check still exists.
 
-**This declares the screens and builds none of them**, which is why it claims no leaf. A
-registry entry for "People and grants" is not that screen: the tool behind it does not exist,
-`unregistered_tools` says so, and claiming M27.3.1 here would mean the traceability sweep
-counted a screen nobody can open. The leaves are claimed by whoever writes the tools.
+**This declares the screens and builds none of them**, so it claims no screen leaf. A registry
+entry for "People and grants" is not that screen: the tool behind it does not exist,
+`unregistered_tools` says so, and claiming M27.3.1 here would have the traceability sweep
+counting a screen nobody can open. Those leaves belong to whoever writes the tools. What is
+built here is the console security group's five rules about how a menu is computed, which is
+what the line below claims and what `tests/unit/test_screens.py` holds it to.
 
-Task ids: none
+Task ids: M27.5.6, M27.5.7, M27.5.8, M27.5.9, M27.5.10
 """
 
 from __future__ import annotations
@@ -238,7 +240,7 @@ def _screen(
 
     Department and person are added to whatever a screen declares rather than repeated on
     every entry, because the requirement is that they are on everything and a list repeated
-    thirty-five times is a list with an omission in it.
+    thirty-four times is a list with an omission in it.
     """
     return Screen(
         key=key,
@@ -777,7 +779,7 @@ def unregistered_tools(registered_tools: Iterable[str]) -> tuple[str, ...]:
 
     Separate from `screen_gaps` because this one is expected to be non-empty for a while:
     the screens are declared before the tools behind them exist, deliberately, so the shape
-    of the console can be argued about before thirty-five tools are written. A diagnostic
+    of the console can be argued about before thirty-four tools are written. A diagnostic
     that is red for a month is one somebody switches off, so the honest thing is to keep it
     apart from the ones that must always be green.
     """
