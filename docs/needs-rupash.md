@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open: 32, 33, 34, 35 and 36.** 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
+**6 items are open: 32, 33, 34, 35, 36 and 37.** 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
 the console and a working sign-in. 33 is one sentence from you about what "shadow-pinned
 thirty days" means, and it decides a safety property rather than a feature. 34 blocks local
 embedding: the model we chose produces vectors of one width and the corpus column holds
@@ -44,6 +44,60 @@ in.
 ---
 
 # Open
+
+## 37. Keycloak is unpleasant to administer, and the reason is a screen we have not built
+
+**Nothing is blocked and no work stops on this. You asked why we use Keycloak at all, having
+found it horrible to manage users and roles in. The honest answer has two halves.**
+
+**The half where you are right.** Keycloak's admin console is genuinely dense. Two realms that
+look alike, groups and roles and clients that overlap, and a layout that assumes you already
+know its vocabulary. Nobody enjoys it.
+
+**The half that matters more: you are not supposed to be in there.** The design was always
+that Keycloak is plumbing you open twice, once to bootstrap and once if you are ever locked
+out. Everything routine was meant to happen elsewhere:
+
+- Staff arrive from your existing directory rather than being typed in.
+  `brain.identity.directory` is written and tested for that and is wired to nothing.
+- Day-to-day people and grants happen on a Company Brain screen, M27.3.1, which does not
+  exist. The console has five pages and none of them is that one.
+- Joining, moving and leaving happen through `brain.identity.lifecycle`, written today, also
+  wired to nothing.
+
+So the pain you hit is real and it is pointing at three missing pieces of *our* system rather
+than at the wrong choice of dependency. Switching identity providers would not remove it,
+because the thing you were doing by hand in Keycloak is the thing that should not be done by
+hand anywhere.
+
+**Why an identity provider at all.** The whole permission model rests on knowing who is
+asking, provably, from a token the gate can check without calling anything. That is OIDC. The
+alternative is writing passwords, sessions, resets, lockout, multi-factor and their audit
+trail ourselves, which is a large security-critical surface and a bad trade at any size.
+
+**Why Keycloak specifically.** It is self-hosted, which your single-tenant client-hosted
+requirement needs. It has no per-seat cost, which matters at 126 staff and more later. It
+speaks OIDC and SAML and federates to LDAP and Active Directory, which is what a client with
+their own directory will ask for. And its whole configuration exports as one file, which is
+why `ops/keycloak/realm-export.json` is reviewed in the repository rather than clicked into
+existence.
+
+**The honest alternatives, if you want to reconsider.** Authentik has a considerably friendlier
+admin interface and is also self-hosted and free. Zitadel is lighter and has a better API.
+Both are younger with smaller communities, which for the component holding your credentials is
+a real consideration rather than a formality. Auth0, Clerk and WorkOS are far easier to run and
+break the client-hosted requirement while charging per seat.
+
+**My recommendation: keep Keycloak and build the screen.** The switch costs a few days and
+buys a nicer version of a console you should stop opening. The same few days spent on M27.3.1
+and wiring the directory sync removes the need to open any identity console at all, and that
+work is needed whichever provider sits underneath.
+
+**What I would want from you if you disagree**: say so and I will cost the migration properly
+rather than guess. I have not measured Authentik's footprint on your server and would not
+quote one without doing so.
+
+---
 
 ## 36. The WBS names promptfoo for evaluation and I used pytest - say if you want the tool
 
