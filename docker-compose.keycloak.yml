@@ -132,7 +132,22 @@ services:
       keycloak-realm:
         condition: service_completed_successfully
     # `start`, never `start-dev`. See the header.
-    command: ["start", "--optimized", "--import-realm"]
+    #
+    # **No `--optimized`, and the flag being wrong here was measured rather than reasoned.**
+    # `--optimized` tells Keycloak to skip its build step and use a configuration baked into
+    # the image, and the stock `quay.io/keycloak/keycloak:26.0` has no such build in it. It
+    # says so on every boot: "the following build time options have values that differ from
+    # what is persisted - the new values will NOT be used until another build is run: kc.db,
+    # kc.health-enabled". Those two are the database and the readiness endpoint, so the
+    # container came up on a development file store with nothing answering on 9000, the
+    # healthcheck below never passed, and it restart-looped on Rupash's server on 2026-09-07.
+    #
+    # Without the flag Keycloak runs its own build at startup, which is why `start_period` in
+    # the healthcheck is 90 seconds rather than 30. The faster arrangement is a two-stage
+    # Dockerfile that runs `kc build` with these options and then `start --optimized`, which
+    # is worth doing when there is a reason to care about boot time and is a second image to
+    # build and publish. There is no such reason yet.
+    command: ["start", "--import-realm"]
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
