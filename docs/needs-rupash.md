@@ -195,6 +195,15 @@ both workers exit because no queue driver is installed. So this is a decision to
 they start rather than a fault to fix. It is reported by a check with a test pinning the exact
 set, so a fifth cannot arrive unnoticed.
 
+**Two of the four are already bounded and merely undeclared, measured on 8 September.**
+`brain.session.make_worker_engine` keeps its own pool of five connections plus five overflow,
+so each worker process opens at most ten. That is a real limit already in the code; what is
+missing is a line in the budget saying so. I can add those two without asking you.
+
+The other two are Langfuse's, and they are the ones that need you: Prisma takes a
+`connection_limit` on the URL and nobody has chosen a number, and the same two services also
+point at a database nothing creates, which is number 2 of item 43. Those are one change.
+
 **What I need is a bound for each.** Prisma takes `connection_limit` on the URL; the workers
 take a pool size. I can pick numbers that fit the budget and write them in, and I have not,
 because the two worker figures interact with the slot allocation you already approved and the

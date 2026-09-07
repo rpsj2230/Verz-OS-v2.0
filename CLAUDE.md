@@ -156,7 +156,7 @@ too, or it fails collection rather than failing the mutation.
 If you must do it by hand, these are the four rules the module encodes:
 
 1. Break it deliberately in the source, **in a `git worktree`, never in this tree**.
-2. Run `PYTHONDONTWRITEBYTECODE=1 uv run pytest <the test file> --no-header --disable-warnings`.
+2. Run `PYTHONDONTWRITEBYTECODE=1 uv run python -m pytest <the test file> --no-header --disable-warnings`.
 3. Confirm the **specific named test** fails, by a `FAILED path::name` line. Not "something
    failed", and not a non-zero exit: a broken import, a collection error and a syntax error all
    exit non-zero for *every* mutation, so a harness reading exit codes reports a perfect score
@@ -229,7 +229,7 @@ anything containing a backslash, use the Write tool, or `chr(92)`.
 
 **`ruff format` is a push gate.** A file written by a script that does string replacement
 skips the habit of formatting, and the pre-push hook catches it after the commit. Run
-`uv run ruff format --check` before committing.
+`uv run python -m ruff format --check` before committing.
 
 **Python writes CRLF.** `Path.write_text` without `newline="\n"` inserts CRLF on this machine,
 which dirties a clean tree and has broken a shell script on the server.
@@ -265,7 +265,7 @@ summary line, so a green run prints no count at all.
 it is built to take seconds, and its own comment says so. CI runs the unit suite separately.
 So a green push can still be a red CI, and it has been: a change to `docs/needs-rupash.md`
 made five questions open while `docs/architecture.html` still said four, and
-`test_architecture_doc.py` is a unit test. Run `uv run pytest --no-header --disable-warnings`
+`test_architecture_doc.py` is a unit test. Run `uv run python -m pytest --no-header --disable-warnings`
 yourself before pushing anything that touches a document, a fixture or a count. The hook is a
 fast filter, not the gate.
 
@@ -317,11 +317,21 @@ you cannot test a window boundary through a module that opens a socket.
 
 ## Before you say something is done
 
-- `uv run pytest --no-header --disable-warnings`
-- `uv run mypy src`
-- `uv run ruff check src tests`
-- `uv run ruff format --check`
+- `uv run python -m pytest --no-header --disable-warnings`
+- `uv run python -m mypy`
+- `uv run python -m ruff check src tests`
+- `uv run python -m ruff format --check src tests migrations`
 - `uv run python -m brain.ops.sweeps traceability`
+
+**`uv run python -m <tool>`, not `uv run <tool>`, and the difference is not style.** `uv run
+mypy` spawns the console shim uv writes into the environment, and on this machine Windows
+Application Control intermittently refuses a freshly written unsigned executable in a
+temporary directory: `Failed to spawn: mypy ... (os error 4551)`. It is intermittent, which is
+worse than consistent, because it presents as a gate failing with no gate having an opinion.
+Running the interpreter uv already trusts and importing the tool as a module spawns nothing
+new. `brain.ops.mutation` and `ops/hooks/pre-push` both carry the same fix for the same
+reason, and the harness one presented as a flaky test in the module whose whole job is to be
+believed.
 
 And measure rather than assert. If you claim a thing is fixed, show the command and its output.
 If a test fails, say so and paste it. A report that rounds up is worse than no report.
