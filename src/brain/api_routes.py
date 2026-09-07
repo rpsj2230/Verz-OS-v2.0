@@ -109,15 +109,17 @@ import inspect
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, cast
 
 import structlog
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
+from brain.core.field_policy import FieldPolicy
 from brain.core.redaction import (
     ChannelPayload,
     LockedField,
@@ -126,11 +128,15 @@ from brain.core.redaction import (
 )
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.admission import admit
+from brain.gate.answer import answer_lane, frames_of
+from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.context import Channel
+from brain.gate.fast_lane import RowReader
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import VerifiedClaims
 from brain.knowledge.rows import DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT, RowRequest, row_scope_for
+from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
 
@@ -597,4 +603,200 @@ async def records(
         serialise_for_channel(
             result, entitlement=asked.reach, policy=classification.policy(), now=asked.now
         )
+    )
+
+
+# ------------------------------------------------------- the answer lane (SSE)
+
+#: The media type an event stream is served as. Not negotiable and not a preference: a
+#: client reads frames by this type, and anything else makes the body one long string.
+EVENT_STREAM: Final = "text/event-stream"
+
+#: Why the question is in a body and not in the path or the query string.
+A_QUESTION_IN_A_URL_IS_A_QUESTION_IN_EVERY_LOG: Final = (
+    "A URL is written to the proxy access log, kept in browser history, sent as a referer by "
+    "anything the page later links to, and shown in full by every screen-sharing tool. A "
+    "question is the most sensitive part of a request here: it names the client, the invoice "
+    "or the person somebody is asking about, and it does so before any entitlement has been "
+    "applied to it. None of those destinations is governed by the reach the answer was "
+    "computed at, so the question travels in the body, where it goes to the application and "
+    "nowhere else. That is also why this is a POST for something that writes nothing: the "
+    "verb follows where the question can safely live."
+)
+
+#: Why a streamed answer must not be stored by anything between here and the reader.
+AN_ANSWER_IS_COMPUTED_FOR_ONE_REACH_AND_CACHED_BY_NOBODY: Final = (
+    "Every answer here is computed at one caller's entitlements. A shared cache in front of "
+    "this route would key on the URL and the body and serve one person's answer to the next "
+    "person who asked the same question, which is the whole permission model defeated by an "
+    "intermediary nobody configured. brain.gate.answer_cache exists and keys on the "
+    "entitlement hash for exactly this reason; a proxy has no such key and must not try."
+)
+
+
+class Question(BaseModel):
+    """One question, bounded the way the cache bounds one.
+
+    The bound is `brain.gate.caches.MAX_QUESTION_CHARS` rather than a number chosen here, so
+    a question this route accepts is one the cache could key, and there is no length that is
+    answerable and uncacheable.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    question: Annotated[
+        str,
+        StringConstraints(min_length=1, max_length=MAX_QUESTION_CHARS, strip_whitespace=True),
+    ]
+
+
+def row_readers(registry: ToolRegistry) -> dict[tuple[str, str], RowReader]:
+    """Every row tool this process registered, keyed the way the fast lane looks one up.
+
+    **Every tool, not the ones this caller reaches.** Filtering here would be a second
+    permission decision, taken in a route, about a question `compile_projection` already
+    answers inside the query: a caller who reaches no column of an entity gets a statement the
+    compiler knows is empty and no rows come back. A route that filtered as well would be a
+    second answer to one question, and the day the two disagree the wrong one is whichever was
+    easier to change.
+
+    Both answers are the same sentence anyway. A rule excluded here matches nothing and a rule
+    left in fetches nothing, and `brain.gate.answer` gives both the same frames.
+    """
+    readers: dict[tuple[str, str], RowReader] = {}
+    for definition in registry.definitions():
+        if not definition.entity or not definition.source:
+            continue
+        # A cast at a boundary the registry keeps deliberately loose. It holds handlers of
+        # two shapes and will go on doing so: `brain.tools.run_skill.handler` is synchronous
+        # because it runs a script in a sandbox, and a row handler is awaitable. What selects
+        # the awaitable ones here is the pair of names above, which only a row tool sets, and
+        # the failure mode if that ever stops being true is an `await` on something that is
+        # not awaitable, which the broad except below turns into a refusal rather than into a
+        # wrong answer. The records route establishes the same fact at its own boundary with
+        # `inspect.isawaitable`; here the lane does the awaiting, so the check belongs there.
+        readers[(definition.source, definition.entity)] = cast(
+            RowReader, registry.get(definition.name).handler
+        )
+    return readers
+
+
+def reachable_sources(registry: ToolRegistry, asked: Asking) -> tuple[str, ...]:
+    """The sources this caller may be told about, for the scope statement.
+
+    `row_scope_for` and never a check written here, for the reason the records route gives: it
+    is the same function `read_rows` consults, so "does this caller reach rows of this kind"
+    has one answer.
+
+    Derived from reach and never from what answered, which is `SearchScope`'s own rule: a
+    statement assembled from the sources that ran would vary with whether a record existed,
+    and the variation is readable by asking the same question twice.
+    """
+    return tuple(
+        sorted(
+            {
+                definition.source
+                for definition in registry.definitions()
+                if definition.entity
+                and definition.source
+                and row_scope_for(definition.entity, asked.reach, asked.now) is not None
+            }
+        )
+    )
+
+
+def field_policies(registry: ToolRegistry) -> dict[str, FieldPolicy]:
+    """One field policy per classified entity, for the redaction the lane performs.
+
+    A mapping built before the question is read, so a policy cannot be chosen to fit the rows
+    that came back. `brain.gate.answer` takes a mapping rather than a callback for the same
+    reason.
+    """
+    policies: dict[str, FieldPolicy] = {}
+    for definition in registry.definitions():
+        classification = classification_for(definition.entity) if definition.entity else None
+        if classification is not None:
+            policies[definition.entity] = classification.policy()
+    return policies
+
+
+@router.post("/answer", responses=COMMON_RESPONSES)
+async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResponse:
+    """One question, answered as a stream of events, at this caller's reach.
+
+    **The first route in this application that answers a question rather than serving rows.**
+    It runs `brain.gate.answer.answer_lane`, which had no caller, over
+    `brain.gate.fast_lane`, which had none either, and writes the result through
+    `brain.gate.streaming`, which had none either. There is no model in it: see
+    `brain.gate.answer` for why, and for what goes where the abstention currently does.
+
+    A POST for something that writes nothing, because of where the question can safely live:
+    `A_QUESTION_IN_A_URL_IS_A_QUESTION_IN_EVERY_LOG`.
+
+    Every kind of nothing is one answer. No rule matched, two matched, the record does not
+    exist, and the caller may not read the column all produce the same frames, and the lane
+    rather than this route is where that is enforced.
+
+    The response is uncacheable by anything in front of it, which is a permission requirement
+    and not a performance note: see
+    `AN_ANSWER_IS_COMPUTED_FOR_ONE_REACH_AND_CACHED_BY_NOBODY`.
+    """
+    registry = getattr(request.app.state, "tools", None)
+    if not isinstance(registry, ToolRegistry):
+        # A process-level fault, identical for every caller and every question, so it
+        # discloses nothing about what exists. `brain.app.lifespan` builds one before it
+        # yields.
+        raise Failed("no tool registry on this process")
+
+    rules = getattr(request.app.state, "fast_path_rules", ())
+    sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
+
+    try:
+        answered = await answer_lane(
+            ask.question,
+            rules=rules,
+            readers=row_readers(registry),
+            entitlement=asked.reach,
+            policies=field_policies(registry),
+            reachable_sources=reachable_sources(registry, asked),
+            sink=sink,
+            now=asked.now,
+            # The answer cache is not read here yet. `brain.gate.answer_cache.lookup` needs an
+            # `AnswerStore` and this process installs none, so every question is computed. The
+            # lane's cache path is built and tested; what is missing is the store, and passing
+            # None with this said beside it is better than a None that reads as "no hit".
+            cached=None,
+        )
+    except BrainError:
+        # Already in the taxonomy, already has a public message, already maps to a status.
+        raise
+    except Exception as exc:
+        # Broad for the reason the records route gives about its own: whatever a driver raises
+        # would otherwise reach the response as FastAPI's default body, which is not
+        # `ErrorBody`, or as a message with a connection string in it.
+        raise Failed(f"answering: {type(exc).__name__}") from exc
+
+    # The reason, never the question and never the answer. An abstention reason is the audit
+    # half of the outcome and a log is an audit surface; the question is the caller's and the
+    # answer is theirs, and neither belongs in a stream governed by who can read logs.
+    log.info(
+        "answered",
+        principal=asked.caller.principal.id,
+        rules=len(rules),
+        abstained=answered.abstention.reason.value if answered.abstention else None,
+        from_cache=answered.from_cache,
+    )
+
+    return StreamingResponse(
+        frames_of(answered),
+        media_type=EVENT_STREAM,
+        headers={
+            # A permission requirement rather than a performance note. See the constant above.
+            "Cache-Control": "no-store",
+            # nginx buffers a proxied response by default, which turns a stream into one
+            # delivery at the end and makes every progress step arrive after the wait it was
+            # describing. Ignored by proxies that are not nginx, which is why it is a header
+            # and not a deployment note.
+            "X-Accel-Buffering": "no",
+        },
     )

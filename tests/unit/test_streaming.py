@@ -618,20 +618,35 @@ def test_every_step_has_a_label_and_no_label_belongs_to_no_step() -> None:
 # --- the honest gap -----------------------------------------------------------------------
 
 
-def test_nothing_yet_streams_an_answer_from_a_route() -> None:
-    """**The honest gap, asserted so it cannot be forgotten quietly.**
+def test_this_module_is_reached_by_the_application_that_is_actually_built() -> None:
+    """**This replaces the gap test that stood here, and it is the same test inverted.**
 
-    There is no answer-lane endpoint to stream from: `brain.gate.fast_lane.respond` and
-    `brain.gate.compose.compose` are reachable from no route today, so this module is correct,
-    tested, documented and not yet called by the running application. That is a recurring
-    shape in this repository and the difference here is that it says so in a test rather than
-    in a docstring nobody runs.
+    Until the answer route existed, this file asserted that nothing streamed an answer, with a
+    message naming what should replace it on the day somebody closed the gap. That day was the
+    same day. The replacement is the one the message asked for: the frames a person receives
+    carry their citations before the prose, asserted over a real HTTP response in
+    `tests/unit/test_answer_route.py`.
 
-    Delete this and the gap stops being visible, and the day somebody builds the endpoint they
-    write their own writer because they do not know this one exists."""
+    What is asserted here is only reachability, and it is asserted through the import graph
+    rather than by looking for a name in `api_routes`: the route imports
+    `brain.gate.answer`, which imports this module, so a check for the string "streaming" in
+    `dir(api_routes)` would have gone on passing while the gap closed underneath it. That is
+    exactly how a gap test rots into a test of nothing.
+
+    Delete this and the encoder can be swapped for an f-string in the lane, and every test in
+    this file goes on passing because they all call `encode` directly."""
+    import sys
+
     from brain import api_routes
 
-    assert "streaming" not in dir(api_routes), (
-        "the answer lane now has a route, so this test should be replaced by one asserting "
-        "that a streamed answer carries its citations before its prose"
-    )
+    assert api_routes is not None
+    assert "brain.gate.streaming" in sys.modules
+
+    from brain.gate import answer
+
+    # Through the module's own namespace rather than by attribute access, because mypy
+    # runs without implicit re-export here: `answer.AnswerStream` is an error even though
+    # it is exactly the fact worth asserting, which is that the lane holds this module's
+    # objects and not a second copy of them.
+    assert answer.__dict__["AnswerStream"] is AnswerStream
+    assert answer.__dict__["cache_hit"] is cache_hit

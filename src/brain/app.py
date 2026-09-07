@@ -32,10 +32,12 @@ from brain.api_routes import router as api_router
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
+from brain.gate.rule_store import load_rules, rule_ids
 from brain.identity.bearer import log_refusal, refusal_headers
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
+from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.wiring import DEFAULT_PROFILE
 from brain.routing_routes import router as routing_router
 from brain.session import (
@@ -223,6 +225,39 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "tool registry frozen",
         tools=len(app.state.tools),
         rows=records is not None,
+    )
+
+    # The answer lane's two remaining pieces, and both are decisions rather than plumbing.
+    #
+    # The rules are read once. A rule set fetched per request would put a database round trip
+    # in front of the lane whose entire purpose is answering without one, and refreshing on a
+    # timer would give two answers to one question inside a minute with nothing saying which
+    # rule set produced either. So a rule added or retired takes effect at the next restart,
+    # and the count below is where somebody wondering why their new rule does nothing finds
+    # out. See `rule_store.A_RULE_SET_THAT_CHANGES_MID_FLIGHT_GIVES_TWO_ANSWERS_TO_ONE_QUESTION`.
+    #
+    # The sink records that a trace happened and drops the payload, because the only
+    # destination available today is the application log and a post-redaction payload there is
+    # readable by whoever can read logs, which is not who could read the records. See
+    # `trace_sink.THE_LOG_IS_NOT_A_TRACE_STORE`. It is installed unconditionally, unlike the
+    # rules, because a lane with no sink cannot compose at all.
+    app.state.trace_sink = CountingTraceSink()
+    app.state.fast_path_rules = ()
+    if app.state.db_sessions:
+        try:
+            app.state.fast_path_rules = await load_rules(app.state.db_sessions)
+        except Exception as exc:
+            # A rule table that cannot be read is an empty rule set, not a dead process. The
+            # lane abstains for every question, which is the same answer it gives when no rule
+            # matches, and the log line says which of the two this is. Refusing to start would
+            # take down `/records` and `/me` as well, over configuration that only one route
+            # reads.
+            log.warning("fast path rules unavailable", error=type(exc).__name__)
+    log.info(
+        "fast path rules loaded",
+        rules=len(app.state.fast_path_rules),
+        ids=rule_ids(app.state.fast_path_rules),
+        refreshes="on restart",
     )
 
     try:
