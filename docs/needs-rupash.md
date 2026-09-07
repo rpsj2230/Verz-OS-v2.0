@@ -195,10 +195,16 @@ both workers exit because no queue driver is installed. So this is a decision to
 they start rather than a fault to fix. It is reported by a check with a test pinning the exact
 set, so a fifth cannot arrive unnoticed.
 
-**Two of the four are already bounded and merely undeclared, measured on 8 September.**
-`brain.session.make_worker_engine` keeps its own pool of five connections plus five overflow,
-so each worker process opens at most ten. That is a real limit already in the code; what is
-missing is a line in the budget saying so. I can add those two without asking you.
+**Part of this is already measured, and I stopped short of declaring it for a reason worth
+knowing.** `brain.session.make_worker_engine` keeps a pool of five connections plus five
+overflow, so the checkpointer half of each worker opens at most ten. That is a real limit
+already in the code.
+
+It is not the whole of a worker, though. Each one also holds a queue connection, and that pool
+belongs to the queue driver, which is not installed, so nobody can say what it opens. Writing
+"brain-worker: 10" into the budget would look complete and be an understatement, and an
+understated connection budget is precisely what caused the outage this item is about. So the
+measured half is recorded here and nothing is declared until the other half exists.
 
 The other two are Langfuse's, and they are the ones that need you: Prisma takes a
 `connection_limit` on the URL and nobody has chosen a number, and the same two services also
