@@ -1,4 +1,4 @@
-// ONE PHASE. Everything ships. 6 waves, 22 working days.
+// ONE PHASE. Everything ships. 7 waves, the last one after go-live.
 // Connectors are CODED against cassettes in-wave; real credentials are wired at go-live (W5).
 module.exports = {
   START:"2026-09-08", TRACK_CAP:10, LEAVES_PER_TRACK_DAY:14, INTEGRATION_DAYS:1,
@@ -16,7 +16,13 @@ module.exports = {
     // W4 doing, lifecycle, extensions
     M17:4, M40:4, M18:4, M21:4, M25:4, M26:4, M29:4, M34:4, M35:4,
     // W5 hands, delivery, scale, go-live
-    M19:5, M30:5, M36:5, M37:5
+    M19:5, M30:5, M36:5, M37:5,
+    // W6 the client template, and it is after go-live by definition: it packages a
+    // system that is finished, deployed, verified and stable, and proves the packaging
+    // by installing it somewhere else. Nothing in it can be done earlier except M41.1,
+    // which is a CI gate that has to start on day one or the final audit becomes a
+    // year of contamination cleaned in a panic.
+    M41:6
   },
   // Leaves whose module sits in one wave but whose own work cannot happen until a later
   // one. M38 is continuous delivery: the pipeline is wave 0, but "what is live after each
@@ -43,6 +49,6 @@ module.exports = {
   NAMES:{
     0:"Foundation", 1:"The gate", 2:"Data, channels, retrieval",
     3:"Agents, knowledge, console", 4:"Doing, lifecycle, extensions",
-    5:"Hands, delivery, go-live"
+    5:"Hands, delivery, go-live", 6:"Client template"
   }
 };
