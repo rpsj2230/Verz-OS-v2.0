@@ -65,7 +65,13 @@ services:
       - -c
       - max_connections=30
     volumes:
-      - keycloak-db:/var/lib/postgresql/data
+      # One level up from `data`, and `docker-compose.yml` learned this the hard way first.
+      # PostgreSQL 18 keeps its data in a major-version subdirectory so that `pg_upgrade
+      # --link` never crosses a mount boundary, and mounting the old path makes it refuse to
+      # start with a message about finding data in an "unused mount/volume", which reads like
+      # corruption and is only convention. Measured here on 2026-09-07: this container
+      # restart-looped on exactly that until the path moved.
+      - keycloak-db:/var/lib/postgresql
     networks:
       - identity
     healthcheck:

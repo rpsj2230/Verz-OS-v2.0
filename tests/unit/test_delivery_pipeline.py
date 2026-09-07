@@ -702,6 +702,59 @@ def test_the_realm_the_identity_stack_imports_ships_inside_the_image() -> None:
     )
 
 
+def test_every_postgres_18_mounts_its_volume_where_18_expects_it() -> None:
+    """**Written because the lesson was recorded in one compose file and missed in the next.**
+
+    PostgreSQL 18 keeps its data in a major-version subdirectory so `pg_upgrade --link` never
+    crosses a mount boundary, so its volume goes at `/var/lib/postgresql` and not at
+    `/var/lib/postgresql/data`. Mounting the old path makes it refuse to start with a message
+    about finding data in an "unused mount/volume", which reads like corruption and is only
+    convention.
+
+    `docker-compose.yml` has carried that explanation since it was written.
+    `docker-compose.keycloak.yml` was written afterwards, mounted the old path, and
+    restart-looped on the server on 2026-09-07 the first time anybody deployed it. A comment
+    in one file is not a check on another.
+
+    **Parsed, and version-aware, because the first version of this test was neither.** It
+    scanned the text for the old path and failed on the two files whose comments explain the
+    rule, which is the substring trap this repository has hit three times today. It also would
+    have condemned `docker-compose.automation.yml`, which runs `postgres:16-alpine` and is
+    correct exactly as it is: on 16 the data path is the right mount. The rule belongs to 18
+    and later, so the test reads the image and applies it only there.
+
+    Delete this and the next Postgres 18 added here repeats the first one's mistake, and the
+    symptom is a container that restarts for ever with a message about corruption."""
+    import yaml
+
+    checked = 0
+    for path in sorted(REPO.glob("docker-compose*.yml")):
+        compose = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for name, service in (compose.get("services") or {}).items():
+            image = str(service.get("image", ""))
+            # Both spellings this repository uses: `postgres:18-alpine` for Keycloak's own
+            # database and `pgvector/pgvector:pg18` for the application's, which carries the
+            # extension and puts the major after a `pg`.
+            version = re.search(r"(?:postgres|pgvector):(?:pg)?(\d+)", image)
+            if version is None or int(version.group(1)) < 18:
+                continue
+            checked += 1
+            mounts = [str(one) for one in (service.get("volumes") or [])]
+            assert not any(one.endswith(":/var/lib/postgresql/data") for one in mounts), (
+                f"{path.name} service {name} runs {image} and mounts its volume at "
+                "/var/lib/postgresql/data, which 18 refuses to start from"
+            )
+            assert any(one.endswith(":/var/lib/postgresql") for one in mounts), (
+                f"{path.name} service {name} runs {image} and mounts no data volume at "
+                "/var/lib/postgresql, so its database does not survive a restart"
+            )
+
+    assert checked >= 2, (
+        f"only {checked} Postgres 18 services were checked; this test is meant to cover the "
+        "application's database and Keycloak's, so a count below two means it found neither"
+    )
+
+
 def test_a_deploy_is_recorded_with_the_commit_the_running_process_reports() -> None:
     """What makes the record evidence rather than an intention. Recording the SHA the deployer
     asked for says what it tried to deploy; asking the container says what is serving.

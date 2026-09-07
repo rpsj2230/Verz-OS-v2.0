@@ -314,8 +314,23 @@ def record_grants(held: Sequence[Grant]) -> tuple[Grant, ...]:
     decision it refuses to make. Measured rather than reasoned: with the row grant at the
     wider scope the projection is `('name',)` and the contract value is absent everywhere,
     which is not the person the corpus describes.
+
+    **Deduplicated, because a persona usually holds several fields of one entity at one
+    scope.** `u_weiling` holds three client columns in her department, which produced three
+    identical `read:client` grants. In memory that is harmless: `scope_for` intersects them
+    and a scope intersected with itself is itself. Against a database it is not, because
+    `uq_capability_grant_principal_id_capability_live` refuses a principal holding one
+    capability twice, and the resolver tests that load this fixture into PostgreSQL failed in
+    CI with a unique violation. There is no PostgreSQL on the development laptop, so the whole
+    suite was green here and red there, which is the third time that pair has happened in this
+    repository.
+
+    Deduplicated on the capability *and* the scope, not the capability alone. Two field grants
+    at two different scopes must still produce two record grants, because that is the
+    intersection `u_dual` depends on.
     """
     implied: list[Grant] = []
+    seen: set[tuple[str, str]] = set()
     for grant in held:
         verb, _, rest = grant.capability.value.partition(":")
         entity, dot, _field = rest.partition(".")
@@ -325,7 +340,12 @@ def record_grants(held: Sequence[Grant]) -> tuple[Grant, ...]:
         # skipped by the first condition.
         if not dot or not entity:
             continue
-        implied.append(Grant(capability=cap(f"{verb}:{entity}"), scope=grant.scope))
+        record = f"{verb}:{entity}"
+        already = (record, str(grant.scope))
+        if already in seen:
+            continue
+        seen.add(already)
+        implied.append(Grant(capability=cap(record), scope=grant.scope))
     return tuple(implied)
 
 

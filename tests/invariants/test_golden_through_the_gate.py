@@ -516,6 +516,28 @@ def test_a_record_grant_is_no_wider_than_the_column_grant_that_implied_it() -> N
     assert departments == {"maintenance"}, departments
 
 
+def test_no_persona_holds_one_capability_twice_at_one_scope() -> None:
+    """**Written because CI found this and the laptop could not.**
+
+    The derived record grants were not deduplicated, so a persona holding three columns of one
+    entity in one department got three identical `read:client` grants. In memory that is
+    harmless, because `scope_for` intersects them and a scope intersected with itself is
+    itself, so the whole suite stayed green here. Loaded into PostgreSQL it violates
+    `uq_capability_grant_principal_id_capability_live`, and four resolver and audit tests
+    errored in CI on a constraint nothing local can enforce.
+
+    Asserted in memory over the fixture rather than against a database, so the check runs
+    where the mistake is made. The pair is the capability *and* the scope, because two grants
+    of one capability at two different scopes are legitimate and are what `u_dual` rests on.
+
+    Delete this and the derivation can go back to emitting a grant per field, and the only
+    thing that notices is a database nobody has on their laptop."""
+    for pid, who in everyone().items():
+        pairs = [(one.capability.value, str(one.scope)) for one in who.grants]
+        duplicated = {pair for pair in pairs if pairs.count(pair) > 1}
+        assert not duplicated, f"{pid} holds {sorted(duplicated)} more than once"
+
+
 def test_the_lane_reaches_a_row_source_for_a_caller_who_holds_the_record_grant() -> None:
     """The permission assertions in this file would be worth nothing if the lane abstained
     before reaching the projection: a rule that matched nothing produces the same refusal as a
