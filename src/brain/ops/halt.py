@@ -1,4 +1,4 @@
-"""The stop button, and the four ways a stop button lies.
+"""The stop button, and the five ways a stop button lies.
 
 Nothing in this system could be stopped before this module. There is a rate limiter, an
 admission controller, a lease, a budget and a queue, and every one of them is a *policy*: it
@@ -30,6 +30,16 @@ approval, no second signature, no confirmation step that could itself fail. The 
 attached to it. `admin:halt` stops, `admin:halt` with a stated reason resumes, and the
 asymmetry is the whole design: the cost of a wrong stop is an outage somebody can undo, and
 the cost of a wrong resume is the incident continuing.
+
+**A stop button nothing consults is the fifth lie, and it is the one this module shipped
+with.** Every paragraph above was true of a value class that no code path asked anything:
+halts could be declared, validated, stored, reloaded and rendered on a screen, and every
+request was admitted anyway. `brain.ops.admission.decide` now asks, before it looks up a
+budget row, because that is the one function every piece of work passes through before any
+of it starts, and it is where `Effect.REFUSE_NEW` means something. It is handed a connector
+and nothing else, so a halt on a department, an agent or a person is still enforced nowhere:
+`ENFORCED_AXES` says which axes are real and `halt_gaps` reports a halt declared on one of
+the others rather than letting an administrator watch a compromised account keep working.
 
 **Reading fails closed, which is the opposite of everything else here.** Every cache in this
 system treats "I could not tell" as "carry on", because a cache that fails closed turns a
@@ -111,6 +121,27 @@ A_HALT_DISCLOSES_NOTHING_ABOUT_WHAT_ANYBODY_MAY_SEE: Final = (
     "defect."
 )
 
+#: Why a value class describing a switch is not a switch.
+A_STOP_BUTTON_NOTHING_CONSULTS_IS_NOT_A_STOP_BUTTON: Final = (
+    "The other four lies are special cases of this one. A halt that is declared, validated, "
+    "stored, reloaded and shown on a screen, while every request is admitted anyway, is the "
+    "most complete version of a screen that says stopped over a system that is not. The "
+    "REFUSE_NEW effect lands in `brain.ops.admission.decide`, which is the function every "
+    "piece of work passes through before any of it starts, and it is asked before the "
+    "budget lookup so that a halted system refuses for the reason somebody halted it rather "
+    "than for the arithmetic underneath."
+)
+
+#: Why a halted request is turned away rather than handed a position and a time.
+A_HALTED_REQUEST_IS_TURNED_AWAY_RATHER_THAN_GIVEN_A_TIME: Final = (
+    "Admission hands a queue position and an expected wait to work nobody is waiting for, "
+    "and both numbers come out of budget arithmetic: how many units must depart before "
+    "there is room. A halt has no arithmetic. It ends when a person resumes it, so any time "
+    "offered here would be invented here and believed there, and the client would come back "
+    "into the same refusal having been told it would not. A halted request sheds, with no "
+    "position and no retry hint."
+)
+
 #: The capability that stops and resumes. One, deliberately: see the module docstring.
 HALT_CAPABILITY: Final = Capability(value="admin:halt")
 
@@ -165,6 +196,16 @@ class HaltScope(enum.StrEnum):
 TARGETED: Final[frozenset[HaltScope]] = frozenset(
     {HaltScope.DEPARTMENT, HaltScope.AGENT, HaltScope.CONNECTOR, HaltScope.PERSON}
 )
+
+#: The scopes something actually consults. Everything else is a halt that refuses nothing.
+#:
+#: `brain.ops.admission.decide` is the only call site, and an `AdmissionRequest` carries a
+#: resource, a lane, a traffic class and the connector the resource belongs to. It carries
+#: no principal, no department and no agent, so a halt on one of those axes can be declared
+#: and stored and in force and stop nothing at all. `halt_gaps` reports one, because the
+#: administrator declaring a halt on a compromised account is not in a position to go and
+#: read which call sites exist. Widen this set when a call site that knows the axis asks.
+ENFORCED_AXES: Final[frozenset[HaltScope]] = frozenset({HaltScope.EVERYTHING, HaltScope.CONNECTOR})
 
 
 @dataclass(frozen=True)
@@ -332,18 +373,29 @@ class HaltState:
         The unknown case gets its own sentence rather than borrowing a halt's, because
         claiming an administrator paused the system when nobody did would send whoever is
         on call looking for a halt that does not exist.
+
+        **Only a halt that refuses new work may produce a sentence here**, and the first
+        version of this took every covering halt instead. A halt carrying `SIGNAL_RUNNING`
+        alone stops what is running and admits more, so `admits` returned True while this
+        returned "your work has been paused", and the obvious way to use a function called
+        `refusal`, which is to refuse when it is not empty, refused work nothing had
+        stopped. Empty here and True from `admits` are now the same answer.
         """
         if not self.known:
             return (
                 "This system cannot confirm whether it has been paused, so it is not "
                 "starting new work. Nothing is being lost."
             )
-        blocking = self.blocking(
-            department=department, agent=agent, connector=connector, person=person
-        )
-        if not blocking:
+        refusing = [
+            one
+            for one in self.blocking(
+                department=department, agent=agent, connector=connector, person=person
+            )
+            if one.refuses_new()
+        ]
+        if not refusing:
             return ""
-        return blocking[0].refusal()
+        return refusing[0].refusal()
 
 
 def stop_everything(*, declared_by: str, at: datetime, reason: str) -> Halt:
@@ -452,6 +504,18 @@ def halt_gaps(halts: Sequence[Halt] = ()) -> tuple[str, ...]:
                 "and does not signal what is already running, so the screen reads stopped "
                 "while in-flight jobs keep writing"
             )
+        if not one.refuses_new():
+            gaps.append(
+                f"the {one.scope.value} halt {one.target or 'on everything'} signals what is "
+                "running and admits more of it, so whatever it stops is replaced by the next "
+                "request and an operator watching sees churn rather than a stop"
+            )
+        if one.scope not in ENFORCED_AXES:
+            gaps.append(
+                f"the {one.scope.value} halt {one.target or 'on everything'} is declared on "
+                "an axis nothing consults: admission is handed a connector and nothing else, "
+                "so this halt is in force in the store and refuses no request anywhere"
+            )
 
     return tuple(gaps)
 
@@ -465,3 +529,16 @@ def in_force(halts: Iterable[Halt]) -> HaltState:
     Handing that mistake a name it can be looked for is worth one function.
     """
     return HaltState(halts=tuple(halts), known=True)
+
+
+#: What a call site that did not ask the store gets. Nothing is halted, and we know it.
+#:
+#: A default exists at all because `brain.ops.admission.decide` had call sites before this
+#: module did, and a required parameter would have stopped those callers rather than the
+#: work they admit. The name is the point: omitting the argument is a claim, and this is the
+#: claim written down where somebody reading the call can see it being made.
+#:
+#: Deliberately not `HaltState.unknown()`. Failing every unconverted call site closed reads
+#: like the safe choice and is the opposite of one: it would halt the system permanently and
+#: from nowhere, which is the state this module exists to make deliberate and reversible.
+NOTHING_HALTED: Final = HaltState()

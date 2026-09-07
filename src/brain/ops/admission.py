@@ -34,6 +34,15 @@ alike. To an operator they must not: one says add capacity, the other says the p
 model is working. `RefusalKind` and `OPERATOR_ACTION` are how that survives into the logs,
 and `CapacityRefused` is deliberately not a subclass of `Denied` or of `Degraded`.
 
+**A halt is asked first, and it is none of those refusals.** The four properties above are
+policy about normal operation. `brain.ops.halt` is the switch for the moment operation is not
+normal, and `decide` consults it before it even looks up a budget row, so a halted system
+refuses because somebody stopped it rather than because the arithmetic said no. It arrives as
+`RefusalKind.HALTED` with its own operator action, because "add capacity" is exactly the
+wrong instruction to hand somebody who pressed the stop button themselves. Only the
+`REFUSE_NEW` half of a halt lands here; signalling work already in flight is the other half
+and belongs where `ADMISSION_DECIDES_BEFORE_WORK_STARTS` says it does.
+
 Everything here is a pure function of its arguments. `now` is a parameter, nothing sleeps,
 nothing spawns a thread and nothing counts anything itself: the caller passes a
 `CapacityState` snapshot. A controller that owned its own counters could not be tested for
@@ -72,6 +81,7 @@ from typing import assert_never
 from brain.core.errors import BrainError, Outcome
 from brain.core.lane import Lane
 from brain.gate.context import TrafficClass
+from brain.ops.halt import NOTHING_HALTED, HaltState
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why there is no mid-flight admission check, and why adding one would not help.
@@ -270,6 +280,10 @@ class RefusalKind(enum.StrEnum):
     #: exclusive: capacity says buy more, a dependency says repair the thing that is down.
     #: Folding the two together is how an outage gets answered by a bigger server.
     DEPENDENCY = "dependency"
+    #: Somebody stopped the system on purpose. Nothing is over its limit and nothing is
+    #: broken, so both of the actions above would send an operator to fix a machine that is
+    #: working exactly as the person holding `admin:halt` told it to.
+    HALTED = "halted"
 
 
 #: One action per kind, and no two the same. This is the whole of the "distinguishable to
@@ -280,6 +294,7 @@ OPERATOR_ACTION: Mapping[RefusalKind, str] = MappingProxyType(
         RefusalKind.CAPACITY: "add capacity or raise the budget row",
         RefusalKind.QUOTA: "raise this principal's limit, or leave it and let them wait",
         RefusalKind.DEPENDENCY: "restore the named dependency; nothing here is over its limit",
+        RefusalKind.HALTED: "somebody stopped this deliberately; resume it when the cause is fixed",
     }
 )
 
@@ -622,6 +637,10 @@ class AdmissionDecision:
     reason: str
     queue: QueuePlacement | None = None
     retry_after_seconds: float | None = None
+    #: True when a halt refused this, which no other field can say: an unbudgeted resource
+    #: sheds with no budget and no retry hint too, and the two want opposite instructions
+    #: from whoever is on call.
+    halted: bool = False
 
     @property
     def admitted(self) -> bool:
@@ -647,6 +666,16 @@ class AdmissionDecision:
         if self.verdict is Verdict.ADMITTED:
             msg = f"{self.request.trace_id} was admitted; there is no refusal to raise"
             raise ValueError(msg)
+        if self.halted:
+            # Still `CapacityRefused`, because the taxonomy in `core.errors` is five outcomes
+            # and a halt is FAILED like this one; a sixth exception class for a distinction
+            # already carried by `RefusalKind` would be the second place to keep it right.
+            # The public message is replaced, though. `reason` on a halted decision is
+            # `HaltState.refusal`, which names the scope and never the target, the declarer
+            # or the administrator's words, so it is safe to show and it is true. The class
+            # default says the system is busy, which during a halt is false and sends the
+            # caller straight back into the same refusal.
+            return CapacityRefused(self.reason, public_message=self.reason)
         return CapacityRefused(self.reason)
 
     def log_record(self) -> Mapping[str, str]:
@@ -662,6 +691,8 @@ class AdmissionDecision:
                 }
             )
         subject = f"{self.request.resource}/{self.request.key or '*'}"
+        if self.halted:
+            return refusal_record(RefusalKind.HALTED, subject=subject, detail=self.reason)
         return refusal_record(RefusalKind.CAPACITY, subject=subject, detail=self.reason)
 
 
@@ -733,24 +764,52 @@ def decide(
     state: CapacityState,
     *,
     now: datetime,
+    halts: HaltState = NOTHING_HALTED,
     jitter: float = 0.0,
 ) -> AdmissionDecision:
     """Admit, queue or shed. Pure, total, and taken before any work starts.
 
     The order is the rule:
 
-    1. no budget row at all means shed, because an unbudgeted resource is precisely the
+    1. a halt refuses outright, before a budget row is even looked up, because a halted
+       system is stopped rather than full and the two want different sentences for the
+       person and opposite instructions for whoever is on call;
+    2. no budget row at all means shed, because an unbudgeted resource is precisely the
        failure global budgets exist to prevent, and admitting into one is how a subsystem
        consumes until memory gives out;
-    2. within the class's share of the budget means admit;
-    3. otherwise, somebody waiting is told now and nobody waiting is given a position.
+    3. within the class's share of the budget means admit;
+    4. otherwise, somebody waiting is told now and nobody waiting is given a position.
 
-    There is no fourth branch that admits anyway under some condition, and adding one would
+    There is no fifth branch that admits anyway under some condition, and adding one would
     be the whole of the regression: a budget with an exception is a budget that binds on
     the days nothing was going to go wrong.
+
+    `halts` defaults to `NOTHING_HALTED` rather than being required, which is a compromise
+    and is named so that the compromise is visible at every call site that takes it. The
+    connector is the only halt axis a request carries; see `halt.ENFORCED_AXES` for what
+    that leaves unenforced and why it is reported rather than assumed.
     """
     workload = request.workload_class
     key = request.budget_key
+
+    if not halts.admits(connector=request.key):
+        return AdmissionDecision(
+            verdict=Verdict.SHED,
+            request=request,
+            workload_class=workload,
+            decided_at=now,
+            budget=None,
+            used=0,
+            ceiling=0,
+            # The halt's own sentence, which names the scope and never the target, the
+            # declarer or the administrator's words. See `A_HALT_DISCLOSES_NOTHING_...`.
+            reason=halts.refusal(connector=request.key),
+            # No position and no retry hint, whatever the class: see
+            # `A_HALTED_REQUEST_IS_TURNED_AWAY_RATHER_THAN_GIVEN_A_TIME`. Queueing would hand
+            # back a wait computed from budget arithmetic that nothing about a halt obeys.
+            halted=True,
+        )
+
     budget = budget_for(budgets, key)
 
     if budget is None:

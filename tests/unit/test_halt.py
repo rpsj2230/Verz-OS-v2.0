@@ -1,10 +1,15 @@
-"""The stop button, held to the four ways a stop button lies.
+"""The stop button, held to the five ways a stop button lies.
 
 Nothing in this system could be stopped before `brain.ops.halt`. There is a rate limiter, an
 admission controller, a lease and a budget, and every one of them is a policy about normal
 operation rather than a switch for the moment operation stops being normal. Every test here
-is one of the four failures that make a stop button worse than none, because a button that
+is one of the five failures that make a stop button worse than none, because a button that
 reports stopped and is not stopped is what somebody trusts during an incident.
+
+The fifth failure is the one the tests below the wiring heading exist for, and it is the one
+this module had: a halt that was declared, validated, ordered, rendered and asked nothing by
+anybody. Those tests reach into `brain.ops.admission.decide` on purpose. A test of the value
+class alone cannot tell a stop button from a dataclass.
 
 Task ids: none
 """
@@ -16,7 +21,24 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from brain.console.screens import screen
+from brain.core.lane import Lane
+from brain.gate.context import TrafficClass
+from brain.ops.admission import (
+    OPERATOR_ACTION,
+    AdmissionRequest,
+    CapacityState,
+    RefusalKind,
+    Resource,
+    Verdict,
+    decide,
+    seed_budgets,
+)
 from brain.ops.halt import (
+    ENFORCED_AXES,
+    HALT_CAPABILITY,
+    MINIMUM_REASON,
+    NOTHING_HALTED,
     Effect,
     Halt,
     HaltError,
@@ -31,13 +53,47 @@ from brain.ops.halt import (
 WHEN = datetime(2026, 9, 7, 11, 0, tzinfo=UTC)
 #: A reason long enough to pass the floor, naming something a reader could act on.
 BECAUSE = "hubspot connector returning other tenants rows"
+BUDGETS = seed_budgets()
 
 
 def everything() -> Halt:
     return stop_everything(declared_by="u_rupash", at=WHEN, reason=BECAUSE)
 
 
-# --- the four lies -------------------------------------------------------------------------
+def _model_request() -> AdmissionRequest:
+    """One ordinary interactive question, asking for the resource that saturates first."""
+    return AdmissionRequest(
+        trace_id="tr_1",
+        lane=Lane.ANSWER,
+        traffic_class=TrafficClass.HUMAN_INTERACTIVE,
+        resource=Resource.MODEL_CALLS,
+    )
+
+
+def _source_request(connector: str) -> AdmissionRequest:
+    """One call to a named connector, which is the only halt axis admission can see."""
+    return AdmissionRequest(
+        trace_id="tr_2",
+        lane=Lane.ANSWER,
+        traffic_class=TrafficClass.HUMAN_INTERACTIVE,
+        resource=Resource.SOURCE_CALLS,
+        key=connector,
+    )
+
+
+def _parse_request() -> AdmissionRequest:
+    """One document parse. Nobody is waiting for it, so admission queues it rather than
+    shedding it, which is what makes it the request that discriminates a halt from a
+    shortage."""
+    return AdmissionRequest(
+        trace_id="tr_3",
+        lane=Lane.TASK,
+        traffic_class=TrafficClass.SYSTEM,
+        resource=Resource.DOCUMENT_JOBS,
+    )
+
+
+# --- the five lies -------------------------------------------------------------------------
 
 
 def test_a_system_that_cannot_tell_whether_it_is_halted_refuses_work() -> None:
@@ -388,3 +444,323 @@ def test_a_state_built_from_a_store_is_known_and_the_constructor_default_is_not_
     assert in_force([everything()]).known is True
     assert in_force(()).known is True
     assert HaltState.unknown().known is False
+
+
+def test_the_refusal_sentence_is_empty_exactly_when_the_work_is_admitted() -> None:
+    """**The bug this file found.** `refusal` took the widest covering halt and spoke for it,
+    whether or not that halt refused anything. A halt carrying `SIGNAL_RUNNING` alone stops
+    what is running and admits more, so `admits` said yes while `refusal` said "your work has
+    been paused", and the obvious way to use a function called `refusal`, which is to refuse
+    when it returns something, refused work that nothing had stopped.
+
+    The last three lines are the sibling that stops the fix going too far: the signalling halt
+    is still in force and `blocking` still reports it, because a caller that has to tell a
+    running job to stop needs to find it. Filtering it out of `blocking` rather than out of
+    `refusal` would pass the first half of this test and lose the effect entirely.
+
+    Delete this and the two answers drift apart again, in a direction where a system that is
+    not halted tells people it is."""
+    signalling = Halt(
+        scope=HaltScope.CONNECTOR,
+        target="xero",
+        declared_by="u_rupash",
+        at=WHEN,
+        reason=BECAUSE,
+        effects=frozenset({Effect.SIGNAL_RUNNING}),
+    )
+    refusing = Halt(
+        scope=HaltScope.CONNECTOR,
+        target="xero",
+        declared_by="u_rupash",
+        at=WHEN,
+        reason=BECAUSE,
+        effects=frozenset({Effect.REFUSE_NEW}),
+    )
+
+    for state, axes in (
+        (in_force(()), {}),
+        (in_force([signalling]), {"connector": "xero"}),
+        (in_force([refusing]), {"connector": "xero"}),
+        (in_force([refusing]), {"connector": "freshdesk"}),
+        (in_force([everything()]), {}),
+        (HaltState.unknown(), {}),
+    ):
+        assert bool(state.refusal(**axes)) == (not state.admits(**axes)), (state, axes)
+
+    only_signalling = in_force([signalling])
+    assert only_signalling.admits(connector="xero") is True
+    assert only_signalling.refusal(connector="xero") == ""
+    assert only_signalling.blocking(connector="xero") == (signalling,)
+
+
+def test_a_halt_that_stops_running_work_and_admits_more_of_it_is_reported() -> None:
+    """The mirror of the half-halt above, and the worse of the two. A halt that signals what
+    is running and refuses nothing new kills a job and lets the next request start the same
+    work, so an operator watching sees churn rather than a stop and the connector somebody is
+    protecting is hit at the same rate by shorter jobs.
+
+    Reported rather than refused at construction, for the same reason as its mirror: the type
+    allows either effect on its own, and what must not happen is that either is silent.
+
+    Delete this and `halt_gaps` guards one of the two ways to build a halt that does nothing
+    useful, which is the more forgivable one."""
+    signalling = Halt(
+        scope=HaltScope.CONNECTOR,
+        target="xero",
+        declared_by="u_rupash",
+        at=WHEN,
+        reason=BECAUSE,
+        effects=frozenset({Effect.SIGNAL_RUNNING}),
+    )
+
+    found = halt_gaps([signalling])
+
+    assert len(found) == 1, found
+    assert "churn" in found[0]
+    assert not halt_gaps([everything()])
+
+
+def test_a_halt_on_an_axis_nothing_consults_is_reported_as_refusing_nothing() -> None:
+    """**A halt in force that stops nothing is the fifth lie in its purest form.** Admission
+    is handed a connector and nothing else, so a halt on a person, an agent or a department
+    is stored, listed, and obeyed by no code path at all. An administrator halting a
+    compromised account is not in a position to go and read which call sites exist, so the
+    arrangement says so itself.
+
+    The last three assertions are what stop this being decoration: the claim `ENFORCED_AXES`
+    makes is checked against what `decide` actually does, in both directions. A person halt
+    admits, a connector halt does not.
+
+    Delete this and `ENFORCED_AXES` becomes a comment, and a halt declared during an account
+    compromise reads as in force on the screen while the account keeps working."""
+    person = Halt(
+        scope=HaltScope.PERSON,
+        target="u_someone",
+        declared_by="u_rupash",
+        at=WHEN,
+        reason=BECAUSE,
+    )
+
+    found = halt_gaps([person])
+
+    assert len(found) == 1, found
+    assert "nothing consults" in found[0]
+
+    assert HaltScope.PERSON not in ENFORCED_AXES
+    assert HaltScope.CONNECTOR in ENFORCED_AXES
+
+    unreached = decide(
+        _source_request("xero"), BUDGETS, CapacityState(), now=WHEN, halts=in_force([person])
+    )
+    assert unreached.admitted is True
+
+
+def test_the_capability_that_stops_the_system_is_the_one_the_stop_screen_requires() -> None:
+    """A capability constant asserted against itself is green for every value it could hold,
+    so this asserts it against two things outside the module: the literal grant string, and
+    the console screen that offers the button.
+
+    The divergence is what matters. Repointed at any other admin grant, the module would want
+    one capability and the screen that presses it would require another, so whoever was given
+    the stop button could open the page and not be the person the halt path recognises. That
+    is discovered during an incident or not at all.
+
+    Delete this and `HALT_CAPABILITY` is free to drift to any string matching the grammar."""
+    assert HALT_CAPABILITY.value == "admin:halt"
+    assert screen("halt").read.requires == HALT_CAPABILITY
+
+
+def test_a_reason_shorter_than_the_words_that_are_not_reasons_is_refused() -> None:
+    """The floor is pinned against the words people actually type when they are in a hurry,
+    rather than against itself. `len(reason) < MINIMUM_REASON` compared with an imported
+    `MINIMUM_REASON` is true for every value the constant could hold.
+
+    Both directions. Dropped to four, "test" becomes a reason to stop the company. Raised to
+    something safe-looking, a real sentence somebody wrote at three in the morning is refused
+    and the halt does not happen at all, which is the worse of the two failures.
+
+    Delete this and the floor is a number nothing checks in either direction."""
+    for not_a_reason in ("x", "ok", "test", "resumed", "see slack"):
+        with pytest.raises(HaltError, match="is not a reason"):
+            stop_everything(declared_by="u_rupash", at=WHEN, reason=not_a_reason)
+
+    real = "hubspot is leaking rows"
+    assert stop_everything(declared_by="u_rupash", at=WHEN, reason=real).reason == real
+    assert len("resumed") < MINIMUM_REASON
+
+
+# --- the fifth lie: whether anything actually asks -------------------------------------------
+
+
+def test_the_admission_controller_refuses_every_request_while_the_system_is_halted() -> None:
+    """**The wiring, and the whole point of the module.** Everything above this line is true
+    of a value class that no code path consults, which is what this was: halts could be
+    declared, stored, reloaded, ordered and rendered, and every request was admitted anyway.
+
+    `brain.ops.admission.decide` is the call site because it is the one function every piece
+    of work passes through before any of it starts, which is exactly what `Effect.REFUSE_NEW`
+    means. The unknown state is asserted here too, because failing closed matters at the
+    point somebody is admitted, not in the type.
+
+    The admitted case is the sibling: a wiring that refused everything would pass the other
+    two assertions and stop the company.
+
+    Delete this and the halt goes back to being a dataclass with opinions."""
+    quiet = CapacityState()
+
+    admitted = decide(_model_request(), BUDGETS, quiet, now=WHEN)
+    assert admitted.verdict is Verdict.ADMITTED
+    assert admitted.halted is False
+
+    stopped = decide(_model_request(), BUDGETS, quiet, now=WHEN, halts=in_force([everything()]))
+    assert stopped.verdict is Verdict.SHED
+    assert stopped.admitted is False
+    assert stopped.halted is True
+
+    unreadable = decide(_model_request(), BUDGETS, quiet, now=WHEN, halts=HaltState.unknown())
+    assert unreadable.admitted is False
+    assert unreadable.halted is True
+
+    assert decide(_model_request(), BUDGETS, quiet, now=WHEN, halts=NOTHING_HALTED).admitted
+
+
+def test_a_halt_on_one_connector_refuses_that_connector_and_admits_the_others() -> None:
+    """The axis is passed, not assumed. A halt on one connector must reach the requests that
+    name it and no others, and the only way to tell a wiring that passes the connector from
+    one that asks "is anything halted" is to halt one connector and watch a second one work.
+
+    Delete this and `decide` can drop the axis, which turns every narrow halt into a full
+    stop, which is an outage caused by the tool built to prevent one and it looks like the
+    tool working."""
+    stopped = Halt(
+        scope=HaltScope.CONNECTOR,
+        target="xero",
+        declared_by="u_rupash",
+        at=WHEN,
+        reason=BECAUSE,
+    )
+    state = in_force([stopped])
+
+    refused = decide(_source_request("xero"), BUDGETS, CapacityState(), now=WHEN, halts=state)
+    served = decide(_source_request("freshdesk"), BUDGETS, CapacityState(), now=WHEN, halts=state)
+
+    assert refused.halted is True
+    assert refused.verdict is Verdict.SHED
+    assert served.halted is False
+    assert served.verdict is Verdict.ADMITTED
+
+
+def test_a_halted_request_is_never_given_a_queue_position_or_a_time_to_come_back() -> None:
+    """A queue position and an expected wait come out of budget arithmetic: how many units
+    must depart before there is room. A halt has none. It ends when a person resumes it, so
+    any time offered here would be invented here and believed by a client that would come
+    straight back into the same refusal having been told it would not be.
+
+    The parse request is the discriminating one. Nobody is waiting for it, so admission over
+    the ceiling hands it a position rather than shedding it, and the first half of this test
+    proves that still happens. The second half is the same request under a halt.
+
+    Delete this and the halt branch can fall through to the queue, and a stopped system hands
+    out wait estimates for a queue that is not moving."""
+    full = CapacityState(used={(Resource.DOCUMENT_JOBS, ""): 4})
+
+    queued = decide(_parse_request(), BUDGETS, full, now=WHEN)
+    assert queued.verdict is Verdict.QUEUED
+    assert queued.queue is not None
+    assert queued.retry_after_seconds is not None
+
+    halted = decide(_parse_request(), BUDGETS, full, now=WHEN, halts=in_force([everything()]))
+    assert halted.verdict is Verdict.SHED
+    assert halted.queue is None
+    assert halted.retry_after_seconds is None
+
+
+def test_a_halt_refuses_before_a_budget_row_is_looked_up_at_all() -> None:
+    """Order, and it is the rule rather than an implementation detail. A halted system refuses
+    because somebody stopped it, and it must say that whether or not the resource has a budget
+    row, whether or not the row is full, and without the arithmetic running first.
+
+    Both refusals are `SHED` with no budget, so the verdict cannot separate them: the reason
+    and the flag are what an operator has. Given the unbudgeted resource and no halt, the
+    sentence is still the one about the missing row.
+
+    Delete this and the halt check drifts below the budget branch, where a halted system
+    refuses an unbudgeted resource with a sentence about a configuration gap, and somebody
+    spends an incident adding a row that changes nothing."""
+    stopped = decide(
+        _model_request(), (), CapacityState(), now=WHEN, halts=in_force([everything()])
+    )
+    assert stopped.halted is True
+    assert "budget row" not in stopped.reason
+    assert "paused" in stopped.reason.lower()
+
+    unbudgeted = decide(_model_request(), (), CapacityState(), now=WHEN)
+    assert unbudgeted.halted is False
+    assert unbudgeted.verdict is Verdict.SHED
+    assert "budget row" in unbudgeted.reason
+
+
+def test_a_halted_refusal_tells_an_operator_something_other_than_add_capacity() -> None:
+    """Two refusals that read alike to the person asking and mean opposite things to whoever
+    is on call. Full says buy more or raise the row. Halted says a colleague pressed the stop
+    button and the machine is fine, so every minute spent on capacity is wasted.
+
+    The kinds are asserted as the literal strings that reach a log line rather than against
+    the enum members they came from, and the actions are asserted against each other, because
+    a mapping compared with itself is correct for every value it could hold.
+
+    Delete this and a halt is logged as a capacity refusal, and the first thing that happens
+    during a deliberate stop is somebody adding a server."""
+    halted = decide(
+        _model_request(), BUDGETS, CapacityState(), now=WHEN, halts=in_force([everything()])
+    ).log_record()
+    full = decide(
+        _model_request(), BUDGETS, CapacityState(used={(Resource.MODEL_CALLS, ""): 40}), now=WHEN
+    ).log_record()
+
+    assert halted["refusal_kind"] == "halted"
+    assert full["refusal_kind"] == "capacity"
+    assert halted["operator_action"] != full["operator_action"]
+    assert "add capacity" not in halted["operator_action"]
+    assert set(OPERATOR_ACTION) == set(RefusalKind)
+
+
+def test_nothing_the_administrator_wrote_reaches_the_person_who_was_refused() -> None:
+    """**The leak this wiring could produce.** A halt's reason is written by an administrator
+    for an administrator and routinely names a customer, a supplier or a defect. It travels
+    into `decide` inside the halt and must come out of nothing: not the decision's sentence,
+    not the operator record, not the exception a caller raises.
+
+    Each forbidden word is distinctive and appears nowhere else in the call, which is the trap
+    this repository has fallen into twice: asserting a substring absent while something nearby
+    supplies it.
+
+    The sibling is the last two lines. Going silent would be the other failure: a halt is not
+    a permission decision, so the person is told the system is paused rather than being sent
+    to report a bug that does not exist, and they are not told it is busy, which is false and
+    brings them straight back.
+
+    Delete this and the halt's reason reaches whoever asked a question the first time somebody
+    finds the refusal unhelpful."""
+    stopped = Halt(
+        scope=HaltScope.CONNECTOR,
+        target="xero",
+        declared_by="u_rupash",
+        at=WHEN,
+        reason="acme plc threatened to sue over the leaked margin column",
+    )
+
+    decision = decide(
+        _source_request("xero"), BUDGETS, CapacityState(), now=WHEN, halts=in_force([stopped])
+    )
+    said = [decision.reason, decision.as_error().public_message, *decision.log_record().values()]
+
+    for secret in ("acme", "sue", "margin", "u_rupash"):
+        for one in said:
+            assert secret not in one.lower(), (secret, one)
+
+    assert "xero" not in decision.reason.lower()
+    assert "xero" not in decision.as_error().public_message.lower()
+
+    assert "paused" in decision.as_error().public_message.lower()
+    assert "busy" not in decision.as_error().public_message.lower()
