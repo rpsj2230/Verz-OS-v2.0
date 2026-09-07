@@ -19,3 +19,6 @@ build/
 
 # generated in CI from git history immediately before the image is built
 docs/status.json
+
+# agent scratch: mutation harnesses and one-off scripts, never committed
+.scratch/
