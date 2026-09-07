@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**8 items are open: 32 to 39.** 39 and 38 are the newest and neither blocks anything. 39 needs two short answers about where the Verz staff list really lives and whether that source may set roles as well as list people. 38 is the console screen list, now thirty-four screens rather than nine, with four design decisions in it worth disagreeing with before they are built. 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
+**10 items are open: 32 to 41.** 41 and 40 are the newest and neither blocks anything today. 41 is four services that would connect straight to the application's database with nothing budgeting them, which is the shape of the Keycloak outage on the database that holds the company records; none of the four is running yet, so it is a decision to take before they start. 40 is a second copy of the rule that decides who can see what, sitting unused in `core/`, and needs one sentence: delete it or keep it. 39 and 38 are the newest and neither blocks anything. 39 needs two short answers about where the Verz staff list really lives and whether that source may set roles as well as list people. 38 is the console screen list, now thirty-four screens rather than nine, with four design decisions in it worth disagreeing with before they are built. 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
 the console and a working sign-in. 33 is one sentence from you about what "shadow-pinned
 thirty days" means, and it decides a safety property rather than a feature. 34 blocks local
 embedding: the model we chose produces vectors of one width and the corpus column holds
@@ -44,6 +44,77 @@ in.
 ---
 
 # Open
+
+## 41. Four services connect straight to the application database and nothing budgets them
+
+**This is the shape of the Keycloak outage, on the database that holds the company records.**
+
+On 2026-09-07 Keycloak opened every connection its database would give it and held all thirty
+idle. The next connection was refused, and the next connection was an administrator trying to
+find out why. The fix was a bounded pool and a budget that fails a test when a client's pool
+and a server's ceiling stop agreeing.
+
+That budget checks the clients we *declared*. It cannot see one nobody declared, and an
+undeclared client is exactly what saturated Keycloak's. Reading the compose files rather than
+the declaration turned up four:
+
+- `langfuse-web` and `langfuse-worker`, through Prisma, with no connection limit on the URL
+- `brain-worker`, through both its queue URL and its checkpointer URL
+- `brain-parse-worker`, through its queue URL
+
+Every one of them bypasses PgBouncer for a good reason: the queue needs LISTEN and the
+checkpointer needs server-side prepared statements, and the pooler in transaction mode
+supports neither. Which is what makes them the case that matters. **The services that most
+need budgeting are precisely the ones the pooler is not bounding.**
+
+The arithmetic today: `db` admits 97 connections, the declared demand is 20, and 77 are
+unbudgeted. Its declared ceiling costs 2112 MiB against a 2048 MiB container, and that is
+affordable only because PgBouncer holds real connections to twenty. These four are outside
+that.
+
+**Nothing is broken today** because none of the four is running: Langfuse is not deployed and
+both workers exit because no queue driver is installed. So this is a decision to take before
+they start rather than a fault to fix. It is reported by a check with a test pinning the exact
+set, so a fifth cannot arrive unnoticed.
+
+**What I need is a bound for each.** Prisma takes `connection_limit` on the URL; the workers
+take a pool size. I can pick numbers that fit the budget and write them in, and I have not,
+because the two worker figures interact with the slot allocation you already approved and the
+Langfuse ones interact with whether Langfuse is deployed at all, which is item 25.
+
+---
+
+## 40. A second copy of the rule that decides who can see what
+
+`brain.core.scope.Scope.to_sql` and `Clause.to_sql` render a scope into SQL. So does
+`brain.core.scope_sql.compile_where`, which is the one everything uses, and the repository has
+an invariant forbidding a second implementation of a central rule for a reason it states
+plainly: each copy is reasonable in isolation, they drift, and the one that drifts is
+discovered by a permission being wrong rather than by a test.
+
+The two already disagree. Measured:
+
+```
+Scope.to_sql   -> ("(row_data ->> 'department' = ANY(:s0))", {'s0': ['a', 'b', 'c']})
+compile_where  -> refused: department in: needs a tuple of strings; a bare string becomes one
+```
+
+`to_sql` also hard-codes `row_data ->> '<field>'`, so it cannot use a promoted column, and it
+never calls `assert_conjunctive`, which is the check that stops a scope widening rather than
+narrowing.
+
+The invariant did not catch it because it guards the *name* `compile_where`, and this one is
+called `to_sql`.
+
+**Nothing in the application calls it.** Only two test files do. So it is loaded rather than
+live, and the risk is the next person who needs scope SQL finding it first.
+
+**What I need is one sentence: delete it, or keep it.** Deleting it means changing the two
+test files that use it and widening the invariant to catch a renamed copy. Keeping it means
+saying what it is for, because right now it is a second answer to the most important question
+this system asks.
+
+---
 
 ## 39. Which staff list is the real one, and may it set roles
 
