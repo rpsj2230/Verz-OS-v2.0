@@ -47,7 +47,7 @@ declaration a source makes about whether its answer is the whole list, and a sou
 cannot promise that can add and can never remove. `brain.identity.directory.reconcile` does
 the removing and is handed only what a complete source produced.
 
-Task ids: none
+Task ids: M1.6.1, M1.6.2, M1.6.3, M1.6.7, M1.6.9, M1.6.10
 """
 
 from __future__ import annotations

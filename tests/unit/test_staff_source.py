@@ -12,7 +12,7 @@ and the agreement is the whole point: `brain.identity.directory.reconcile` is tw
 differences, so an assertion that is not equal to yesterday's identical one is a deletion and
 an insertion in the audit ledger.
 
-Task ids: none
+Task ids: M1.6.1, M1.6.2, M1.6.3, M1.6.7, M1.6.9, M1.6.10
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from brain.identity.staff_source import (
     GroupRule,
     Roster,
     StaffRecord,
+    StaffSource,
     StaffSourceError,
     assertions_from,
     departments_from,
@@ -180,6 +181,44 @@ def test_no_trust_level_anywhere_can_confer_a_capability() -> None:
         assert granted <= set(Asserts), source
 
     assert not any("capab" in one.value for one in Asserts)
+
+
+def test_a_staff_source_has_no_way_to_authenticate_anybody() -> None:
+    """**The axis this module exists to keep separate, asserted structurally.** A roster is a
+    list read on a schedule; a sign-in source is a live protocol that proves somebody is who
+    they say. Google, Microsoft and Lark can be both, which is why the two get conflated, and
+    designing for that makes the spreadsheet case impossible: there is nothing to
+    authenticate against.
+
+    So `StaffSource` has exactly one method, and it answers a question about a list. A second
+    one taking a credential is how the collapse arrives, and it would arrive looking like a
+    convenience: the Workspace connector has the tokens already, so why not ask it.
+
+    Asserted over the protocol's own members rather than over a name, because a method called
+    `verify` or `check` or `bind` is the same failure whatever it is called, and asserted by
+    absence of a credential-shaped parameter anywhere in the module's public functions for the
+    same reason.
+
+    Delete this and sign-in moves out of Keycloak one convenient method at a time, and the
+    first installation to notice is one whose staff list is a spreadsheet."""
+    import inspect
+
+    from brain.identity import staff_source
+
+    declared = {
+        name
+        for name, value in vars(StaffSource).items()
+        if not name.startswith("_") and callable(value)
+    }
+    assert declared == {"roster"}
+    assert inspect.signature(StaffSource.roster).parameters.keys() == {"self"}
+
+    secrets = ("password", "secret", "token", "credential", "authenticate")
+    for name, value in vars(staff_source).items():
+        if name.startswith("_") or not inspect.isfunction(value):
+            continue
+        parameters = " ".join(inspect.signature(value).parameters).casefold()
+        assert not any(one in parameters for one in secrets), f"{name} takes {parameters}"
 
 
 # --- absence is not deletion ---------------------------------------------------------------
