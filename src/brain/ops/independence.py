@@ -29,7 +29,7 @@ is about values the running system uses, so it reads string literals and assignm
 leaves docstrings and comments alone, which is also why it can be a hard gate rather than an
 advisory one.
 
-Task ids: M41.1.1
+Task ids: M41.1.1, M41.3.2
 """
 
 from __future__ import annotations
@@ -394,3 +394,99 @@ def independence_gaps(repo: Path, *, extra_allowed: Iterable[str] = ()) -> tuple
         for one in (*value_shaped_literals(repo), *second_readers(repo))
         if not any(f"'{name}'" in one.lower() for name in allowed)
     )
+
+
+#: Why a second copy of this repository is the failure that reports nothing.
+#:
+#: A fork, a vendored checkout and a submodule are three shapes of one thing: a version of
+#: this product that a fix has to be applied to twice. Nothing anywhere notices when it is
+#: applied once. Both copies keep passing their own tests, both deploy, and the client on the
+#: older one meets the bug that was fixed a month ago on the other. There is no error to read
+#: and no place the divergence appears, which is what separates this from an ordinary
+#: maintenance cost: the cost is not the second copy, it is that the second copy is silent.
+A_SECOND_COPY_IS_SILENT_UNTIL_A_CLIENT_MEETS_THE_BUG_THAT_WAS_FIXED: Final = (
+    "A per-client fork, a vendored checkout or a submodule is a version of this product that "
+    "every fix has to reach twice, and nothing reports when one of them is missed. Both "
+    "copies pass their own tests and both deploy. The client on the older one finds the "
+    "defect that was fixed elsewhere a month ago, and there is no error anywhere that would "
+    "have said so. An install is a release tag plus one environment file precisely so that "
+    "there is only ever one copy to fix."
+)
+
+#: What fetching a second repository looks like in a build input. A pattern rather than a
+#: list of tools, because the shape is stable and the tools are not: what matters is that the
+#: build reaches a repository other than the one it was started from.
+FETCHES_A_REPOSITORY: Final = re.compile(
+    r"\bgit\s+clone\b|\bgit\s+submodule\b|\bgit\+https?://|\bgh\s+repo\s+clone\b"
+)
+
+#: The files that decide what ends up in a running install. A second repository entering
+#: through any of them is in production, whatever the source tree looks like.
+BUILD_INPUTS: Final[tuple[str, ...]] = (
+    "Dockerfile",
+    "Makefile",
+    "pyproject.toml",
+    "docker-compose*.yml",
+    ".github/workflows/*.yml",
+    "ops/**/*.sh",
+)
+
+
+def build_inputs(repo: Path) -> tuple[Path, ...]:
+    """Every file whose contents decide what a built image contains, in declaration order.
+
+    Globbed rather than listed one by one so a ninth compose file or a second workflow is
+    covered on the day it is written. A pattern that matches nothing is not an error: this
+    repository has no `ops/**/*.sh` today and may never, and a check that refused a tree for
+    the absence of a shell script would be describing this checkout rather than the product.
+    """
+    found: list[Path] = []
+    for pattern in BUILD_INPUTS:
+        found.extend(sorted(one for one in repo.glob(pattern) if one.is_file()))
+    return tuple(found)
+
+
+def duplication_gaps(repo: Path) -> tuple[str, ...]:
+    """Every way a second copy of this repository has got into this one.
+
+    Three shapes, and they are found rather than declared. A nested `.git` is a checkout
+    somebody put inside the tree; a `.gitmodules` is a second repository whose version this
+    one pins; a build input that clones is a second repository that never appears in the
+    source tree at all and is in the image anyway. The third is the one a reader of the
+    directory listing would miss.
+
+    **What this cannot see is the fork on somebody else's account**, and saying so matters
+    because the leaf's words are "no duplicated repository anywhere". A copy of this
+    repository is by definition not in this repository. What is checkable here is that
+    nothing in the product creates one, which is the half that can be kept honest by a
+    machine; the other half is kept by `install.py` making a fork pointless, and that is
+    what M41.1 and M41.3.1 are.
+
+    The scan skips `.git` itself, because every path under it contains the string and the
+    repository's own object store is not a vendored checkout.
+
+    See `A_SECOND_COPY_IS_SILENT_UNTIL_A_CLIENT_MEETS_THE_BUG_THAT_WAS_FIXED`.
+    """
+    found: list[str] = []
+
+    for path in sorted(repo.rglob(".git")):
+        if path.parent == repo:
+            continue
+        where = str(path.parent.relative_to(repo)).replace(chr(92), "/")
+        found.append(f"{where}: a second checkout is vendored inside this repository")
+
+    if (repo / ".gitmodules").is_file():
+        found.append(".gitmodules: a submodule is a second repository this one pins a version of")
+
+    for path in build_inputs(repo):
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for number, line in enumerate(text.splitlines(), 1):
+            # Comments stripped first, following `A_COMMENT_CANNOT_BE_DEPLOYED`, which this
+            # module already argues for the other direction. A commented-out clone does not
+            # fetch anything, and a comment explaining that the build deliberately does not
+            # clone would otherwise be reported for containing the words it is about.
+            if FETCHES_A_REPOSITORY.search(COMMENT.sub("", line)):
+                where = str(path.relative_to(repo)).replace(chr(92), "/")
+                found.append(f"{where}:{number}: the build fetches a second repository")
+
+    return tuple(found)

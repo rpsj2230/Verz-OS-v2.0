@@ -749,13 +749,20 @@ def sweep_client_independence() -> None:
     A gate rather than an advisory, unlike the notes `sweep_traceability` prints, and it can
     be one because the tree is at zero findings today. That is the whole difference: a check
     that is red the day it lands is a check somebody switches off.
-    """
-    from brain.ops.independence import SEARCHED, independence_gaps
 
-    findings = independence_gaps(REPO)
+    **`duplication_gaps` runs here rather than getting a sweep of its own**, because a second
+    copy of this repository is the same failure as a client value in the source, arriving by
+    a different route: both end with a client on something that is not the product. Wiring it
+    in at the same time as writing it is deliberate. `policy_gaps` sat with no caller for a
+    fortnight in this repository, which is how a check gets written, passes its own tests,
+    and never runs.
+    """
+    from brain.ops.independence import SEARCHED, duplication_gaps, independence_gaps
+
+    findings = [*independence_gaps(REPO), *duplication_gaps(REPO)]
     if findings:
-        raise SweepFailure(list(findings))
-    print(f"ok: no client value and no second reader ({len(SEARCHED)} areas searched)")
+        raise SweepFailure(findings)
+    print(f"ok: no client value, no second reader and no second copy ({len(SEARCHED)} areas)")
 
 
 def sweep_install_from_empty() -> None:
