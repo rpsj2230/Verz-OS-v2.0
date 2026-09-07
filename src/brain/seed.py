@@ -80,6 +80,26 @@ CONFLICT_KEYS: dict[str, tuple[str, ...]] = {
 #: The column each table's demo rows are removed by. One column per table, and every value in
 #: it carries `brain.demo.DEMO_PREFIX`, which is what makes removal a predicate rather than an
 #: inventory. `gate.capability_grant` is removed by the principal it was granted to.
+#: Tables a trigger writes on the demo's behalf, and the column naming the demo's row.
+#:
+#: **Found by CI on 2026-09-07, and it could not have been found here.** Inserting a
+#: capability grant fires `gate.bump_grants_version`, which writes a `gate.grants_version` row
+#: keyed on the principal. The demo never declares that row, so removal never deleted it, and
+#: its foreign key to `auth.principal` is RESTRICT: deleting the demo's principals came back
+#: `update or delete on table "principal" violates RESTRICT setting of foreign key constraint
+#: "fk_grants_version_principal_id_principal"`.
+#:
+#: A laptop with no PostgreSQL enforces no foreign key and fires no trigger, so every test
+#: here passed while the demo could not actually be removed. That matters more than the bug:
+#: `brain.demo.A_DEMO_NOBODY_CAN_REMOVE_BECOMES_PRODUCTION_DATA` is the argument for having a
+#: demo at all, and it was false in the one place it is checked.
+#:
+#: Cleared before the ordinary walk rather than added to `demo.TABLES`, because these are not
+#: rows the demo wrote and listing them there would make `demo_rows` disagree with itself.
+TRIGGER_WRITTEN: dict[str, str] = {
+    "gate.grants_version": "principal_id",
+}
+
 REMOVAL_KEYS: dict[str, str] = {
     "auth.principal": "id",
     "gate.capability_grant": "principal_id",
@@ -240,7 +260,9 @@ def remove(executor: Executor) -> dict[str, int]:
     """Delete the demo company, and nothing else, in the reverse of the order it was written.
 
     Reverse order because the foreign key runs the other way: deleting principals first would
-    be refused while their grants still point at them.
+    be refused while their grants still point at them. Before any of it, the rows a trigger
+    wrote on the demo's behalf, which the demo does not know it created; see
+    `TRIGGER_WRITTEN`.
 
     Every statement is bounded by an explicit list of the identifiers `brain.demo` declares,
     not by a prefix match. A prefix match also catches a real person a client happened to give
@@ -250,6 +272,19 @@ def remove(executor: Executor) -> dict[str, int]:
     """
     identifiers = set(demo.demo_identifiers())
     removed: dict[str, int] = {}
+
+    # What a trigger wrote on the demo's behalf, first. See `TRIGGER_WRITTEN`.
+    principals = sorted({str(one["id"]) for one in demo.principal_rows()} & identifiers)
+    for table, column in TRIGGER_WRITTEN.items():
+        schema, _, name = table.partition(".")
+        for part in (schema, name, column):
+            if not _IDENTIFIER_RE.match(part):
+                msg = f"{part!r} is not an ordinary identifier"
+                raise ValueError(msg)
+        statement = f'DELETE FROM "{schema}"."{name}" WHERE {column} = ANY(:targets)'  # noqa: S608
+        executor.execute(text(statement), {"targets": principals})
+        removed[table] = len(principals)
+
     for table in reversed(demo.TABLES):
         schema, _, name = table.partition(".")
         column = REMOVAL_KEYS[table]

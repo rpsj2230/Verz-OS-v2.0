@@ -207,6 +207,10 @@ def test_removal_runs_in_the_reverse_of_the_order_the_load_used() -> None:
     recorder = _Recorder()
     seed_mod.remove(recorder)
     order = [statement for statement, _ in recorder.calls]
+    # The trigger-written tables are cleared first and are not the demo's own; see
+    # `seed.TRIGGER_WRITTEN`. This test is about the order of the demo's tables among
+    # themselves, so it starts after them.
+    order = order[len(seed_mod.TRIGGER_WRITTEN) :]
     for statement, table in zip(order, tuple(reversed(demo.TABLES)), strict=True):
         schema, _, name = table.partition(".")
         # The target is built separately from the verb, so this assertion is not itself a
@@ -532,3 +536,44 @@ def test_the_smoke_check_fails_on_a_migrated_install_that_was_never_seeded() -> 
     assert found is None
     assert expected
     assert question
+
+
+def test_what_a_trigger_wrote_is_deleted_before_the_principals_it_points_at() -> None:
+    """**CI found this and nothing here could have.** Inserting a capability grant fires
+    `gate.bump_grants_version`, which writes a `gate.grants_version` row keyed on the
+    principal. The demo never declares that row, so removal never deleted it, and the foreign
+    key is RESTRICT: deleting the demo's principals came back
+    `violates RESTRICT setting of foreign key constraint
+    fk_grants_version_principal_id_principal`.
+
+    A laptop with no PostgreSQL enforces no foreign key and fires no trigger, so every test in
+    this file passed while the demo could not be removed at all. That is worse than the bug:
+    `A_DEMO_NOBODY_CAN_REMOVE_BECOMES_PRODUCTION_DATA` is the reason there is a demo, and it
+    was false in the one place it is checked.
+
+    Asserted on the order and on the bound rather than by running it, because there is still
+    no PostgreSQL here. The end-to-end proof is the CI job, and this is what fails first and
+    on the right machine when somebody reorders the deletes.
+
+    Delete this and the demo becomes unremovable again, silently, everywhere except CI."""
+    recorder = _Recorder()
+    removed = seed_mod.remove(recorder)
+
+    assert seed_mod.TRIGGER_WRITTEN, "nothing declared, so this test proves nothing"
+
+    first = [statement for statement, _ in recorder.calls][: len(seed_mod.TRIGGER_WRITTEN)]
+    for statement, table in zip(first, seed_mod.TRIGGER_WRITTEN, strict=True):
+        schema, _, name = table.partition(".")
+        assert statement.startswith("DELETE FROM ")
+        assert f'"{schema}"."{name}"' in statement
+        assert removed[table] > 0
+
+    principals = {str(one["id"]) for one in demo.principal_rows()}
+    for _, parameters in recorder.calls[: len(seed_mod.TRIGGER_WRITTEN)]:
+        assert set(parameters["targets"]) == principals & set(demo.demo_identifiers())
+
+    # And the principals themselves come after, which is the whole point of the ordering.
+    tables_in_order = [statement for statement, _ in recorder.calls]
+    grants_version = next(i for i, one in enumerate(tables_in_order) if "grants_version" in one)
+    principal_delete = next(i for i, one in enumerate(tables_in_order) if '"principal"' in one)
+    assert grants_version < principal_delete
