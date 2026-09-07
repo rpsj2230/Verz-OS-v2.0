@@ -22,7 +22,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from brain.app import Settings, create_app
+from brain.app import TRACE_ID_RE, Settings, create_app
 from brain.core.errors import Absent, Degraded, Denied, Unresolved
 from brain.ops.release_manifest import ReleaseManifest
 
@@ -139,9 +139,63 @@ def test_a_trace_id_is_minted_when_the_caller_sends_none(client: TestClient) -> 
 
 
 def test_a_caller_supplied_trace_id_is_preserved(client: TestClient) -> None:
-    """So one id spans the channel adapter and the application."""
+    """So one id spans the channel adapter and the application.
+
+    Preserved only when it satisfies the audit ledger's grammar; see the two below."""
     r = client.get("/health/live", headers={"x-trace-id": "abc123"})
     assert r.headers["x-trace-id"] == "abc123"
+
+
+@pytest.mark.parametrize(
+    "proposed",
+    [
+        pytest.param("x" * 65, id="longer_than_the_ledger_column"),
+        pytest.param("id with spaces", id="space"),
+        pytest.param("a\nlevel=critical event=granted", id="a_second_log_line"),
+        pytest.param("../../etc/passwd", id="path_traversal_shaped"),
+        pytest.param("", id="empty"),
+    ],
+)
+def test_a_trace_id_the_ledger_would_refuse_is_replaced_rather_than_echoed(
+    client: TestClient, proposed: str
+) -> None:
+    """**A caller may propose a trace id and may not choose one.**
+
+    `x-trace-id` is on the CORS allow list because correlating a request across a caller's own
+    systems is a real thing to want. Until 2026-09-07 whatever arrived was taken verbatim,
+    bound to the log context for every line of the request, echoed in the response and
+    returned in `ErrorBody.trace_id`, with nothing checking it.
+
+    That is not untidiness. `AuditEntry.trace_id` is pattern-validated to sixty-four characters
+    of `[A-Za-z0-9_.-]`, so a caller sending anything outside that grammar chose an id under
+    which no audit entry for their own request could ever be written. Making your own request
+    unauditable should not be a header. The newline case is the other half: the same value
+    reached the structured log, where a newline is a second log line somebody else wrote.
+
+    Replaced rather than refused, because rejecting the request would turn a malformed header
+    into an outage and the caller loses nothing they were entitled to.
+
+    Delete this and the header goes back to being trusted, and the request that most needs an
+    audit row is the one that can be made not to have one."""
+    r = client.get("/health/live", headers={"x-trace-id": proposed})
+
+    got = r.headers["x-trace-id"]
+    assert got != proposed
+    assert TRACE_ID_RE.fullmatch(got), got
+    assert len(got) == 32
+
+
+def test_the_accepted_grammar_is_the_ledgers_own_and_not_a_second_spelling() -> None:
+    """A second spelling here would admit ids the ledger then refuses, which is exactly the
+    failure the check exists to close.
+
+    Delete this and the two drift, and the guard starts passing values that break the audit
+    write it was added to protect."""
+    from brain.audit.ledger import TRACE_ID
+
+    assert TRACE_ID_RE.pattern == TRACE_ID
+    assert TRACE_ID_RE.fullmatch("abc123")
+    assert not TRACE_ID_RE.fullmatch("x" * 65)
 
 
 def test_timing_is_reported(client: TestClient) -> None:

@@ -14,6 +14,7 @@ Task ids: M31.1.3.1, M31.1.3.2, M31.1.3.3, M31.1.3.4, M31.1.3.5
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -29,6 +30,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from brain.api import ErrorBody, TimeoutMiddleware
 from brain.api_routes import router as api_router
+from brain.audit.ledger import TRACE_ID
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
@@ -49,6 +51,14 @@ from brain.session import (
 from brain.tools.startup import build_registry
 
 log = structlog.get_logger()
+
+
+#: The grammar a trace id must satisfy to be accepted from a caller.
+#:
+#: The audit ledger's own, compiled once, imported rather than restated. A second spelling
+#: here would admit ids the ledger then refuses, which is the failure this guard exists to
+#: close: a request whose audit entry cannot be written.
+TRACE_ID_RE = re.compile(TRACE_ID)
 
 
 class Settings(BaseSettings):
@@ -329,9 +339,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         It has to exist before we know who is asking, or a request that fails during
         identification would have no id and could not be found in the ledger afterwards.
+
+        **A caller may propose one and may not choose one.** `x-trace-id` is on the CORS
+        allow list because correlating a request across a caller's own systems is a real
+        thing to want. Until 2026-09-07 whatever arrived in that header was taken verbatim,
+        bound to the log context for every line of the request, echoed back in the response
+        and returned in `ErrorBody.trace_id`, with nothing checking it at all.
+
+        That is not untidiness. `brain.audit.ledger.AuditEntry.trace_id` is pattern-validated
+        to sixty-four characters of `[A-Za-z0-9_.-]`, so a caller sending anything outside
+        that grammar chose an id under which **no audit entry for their own request can ever
+        be written**. Making your own request unauditable should not be a header. The same
+        value also reached the structured log unescaped, where a newline is a second log line
+        somebody else wrote.
+
+        So the header is accepted only when it satisfies the ledger's own grammar, imported
+        rather than restated, and anything else is replaced by a minted id rather than
+        rejected: refusing the request would turn a malformed header into an outage, and the
+        caller loses nothing they were entitled to.
+
+        `supplied` is bound alongside, because an id the caller chose is not evidence of
+        anything. Two requests can carry one id if two callers pick the same string, and an
+        auditor reading a trail needs to know which ids this system vouches for.
         """
-        trace_id = request.headers.get("x-trace-id") or uuid.uuid4().hex
-        structlog.contextvars.bind_contextvars(trace_id=trace_id, path=request.url.path)
+        proposed = request.headers.get("x-trace-id") or ""
+        supplied = bool(TRACE_ID_RE.fullmatch(proposed))
+        trace_id = proposed if supplied else uuid.uuid4().hex
+        structlog.contextvars.bind_contextvars(
+            trace_id=trace_id, path=request.url.path, trace_id_supplied=supplied
+        )
         started = time.perf_counter()
         try:
             response = await call_next(request)
