@@ -100,10 +100,15 @@ services:
         from pathlib import Path
         from brain.ops.realm_import import importable_realm
         out = Path("/out/realm-export.json")
-        out.write_text(importable_realm(Path("/in/realm-export.json")), encoding="utf-8")
+        out.write_text(
+            importable_realm(Path("/app/ops/keycloak/realm-export.json")), encoding="utf-8"
+        )
         print(f"wrote {out} for --import-realm")
     volumes:
-      - ./ops/keycloak/realm-export.json:/in/realm-export.json:ro
+      # Only the output. The reviewed realm arrives inside the image rather than through a
+      # bind mount, because this Coolify installation deploys a stored compose with no
+      # repository on disk beside it, so `./ops/...` resolves to nothing. Measured on the
+      # server on 2026-09-07, not assumed. See the Dockerfile line that copies it.
       - realm-import:/out
     networks:
       - identity

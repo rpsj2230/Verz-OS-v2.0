@@ -638,6 +638,46 @@ def test_a_local_build_still_works_without_a_manifest() -> None:
     assert source != "RELEASE.json", "a literal path makes a build without a manifest fail"
 
 
+def test_the_realm_the_identity_stack_imports_ships_inside_the_image() -> None:
+    """**Written after the identity stack turned out not to be deployable on this host.**
+
+    `docker-compose.keycloak.yml` used to bind-mount the realm from `./ops/keycloak/`, which
+    works when the compose file sits in a git working tree. This Coolify installation does not
+    do that: measured on the server on 2026-09-07, its resource directory holds a `.env`, a
+    `README.md` and a stored compose, with no repository anywhere near it. The relative path
+    resolved to nothing, and the first deploy would have failed with a message about a missing
+    file rather than about a missing checkout.
+
+    So the realm travels in the image, and this asserts both halves: the Dockerfile copies it,
+    and the compose reads it from where the Dockerfile puts it. Either alone is satisfied by a
+    pair that disagrees, which is a container that starts and a Keycloak with no realm in it,
+    where every sign-in fails with nothing near the login page to say why.
+
+    Delete this and the realm drops out of the image the next time somebody trims what the
+    build copies, and nothing notices until an identity deploy that has always been rare."""
+    dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8")
+    compose = (REPO / "docker-compose.keycloak.yml").read_text(encoding="utf-8")
+
+    copied = {
+        destination
+        for source, destination in re.findall(
+            r"^COPY\s+(?:--\S+\s+)*(\S+)\s+(\S+)\s*$", dockerfile, re.M
+        )
+        if source == "ops/keycloak/realm-export.json"
+    }
+    assert copied, "the Dockerfile does not copy the realm, so the import job has nothing to read"
+
+    inside = copied.pop()
+    assert inside in compose, (
+        f"the Dockerfile puts the realm at {inside} and the compose reads it from somewhere "
+        "else, so Keycloak starts with no realm and every sign-in fails"
+    )
+    assert "./ops/keycloak/realm-export.json:" not in compose, (
+        "the compose bind-mounts the realm from the working tree again, which is the thing "
+        "that does not exist where this is deployed"
+    )
+
+
 def test_a_deploy_is_recorded_with_the_commit_the_running_process_reports() -> None:
     """What makes the record evidence rather than an intention. Recording the SHA the deployer
     asked for says what it tried to deploy; asking the container says what is serving.

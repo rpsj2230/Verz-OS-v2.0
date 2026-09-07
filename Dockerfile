@@ -63,6 +63,20 @@ COPY --chown=brain:brain migrations /app/migrations
 # The tracker, architecture and the status computed from git at build time. Baking the
 # status in means the page can never disagree with the binary serving it.
 COPY --chown=brain:brain docs /app/docs
+# The realm, because the identity stack has to be deployable without a checkout.
+#
+# `docker-compose.keycloak.yml` used to bind-mount this from `./ops/keycloak/`, which works
+# when the compose file sits in a git working tree. This Coolify installation does not do
+# that: its resources are stored compose files written out at deploy time, and the directory
+# they land in holds a `.env`, a `README.md` and the compose, with no repository anywhere
+# near it. Measured on the server rather than assumed. A relative bind mount there resolves
+# to a path that does not exist, and the realm job would have failed at first deploy with a
+# message about a missing file rather than about a missing checkout.
+#
+# In the image instead, where the transform that reads it already lives. One file rather than
+# the whole of `ops/`, because the rest of that directory is runbooks and host scripts that
+# have no business in a container that serves requests.
+COPY --chown=brain:brain ops/keycloak/realm-export.json /app/ops/keycloak/realm-export.json
 
 USER brain
 EXPOSE 8000
