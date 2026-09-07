@@ -15,7 +15,7 @@ itself for an 11.7 GiB host it cannot have is the ceiling given to the process i
 units, and that is asserted here per service and asserted to sit strictly below the cgroup
 limit it lives under.
 
-Task ids: M32.1.1.2, M32.1.1.4
+Task ids: M32.1.1.1, M32.1.1.2, M32.1.1.4
 """
 
 from __future__ import annotations
@@ -29,6 +29,7 @@ import yaml
 
 from brain.ops.wiring import (
     A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING,
+    AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT,
     COMPONENTS,
     HOST_HEADROOM_MIB,
     HOST_RESERVE_MIB,
@@ -38,6 +39,7 @@ from brain.ops.wiring import (
     PROFILES,
     TRACE_DESTINATION_SETTINGS,
     TRACE_LEDGER,
+    TRACE_STACK_ROLES,
     Component,
     Wiring,
     WiringError,
@@ -51,10 +53,16 @@ from brain.ops.wiring import (
     set_cost_mib,
     spendable_mib,
     trace_config_conflicts,
+    trace_stack_gaps,
     wave_two_mib,
 )
+from brain.status import leaf_sentences
 
 REPO = Path(__file__).resolve().parents[2]
+
+#: Every leaf of the work breakdown by id, so a set declared here can be checked against
+#: the leaf that specifies it rather than against itself. See `status.leaf_sentences`.
+LEAF_SENTENCES = leaf_sentences(REPO / "docs" / "wbs.json")
 
 
 def _a_component(**overrides: Any) -> Component:
@@ -746,3 +754,126 @@ def test_an_empty_service_set_is_reported_rather_than_passing_as_a_fit() -> None
     assert len(found) == 1
     assert "no components in it" in found[0]
     assert set_cost_mib([]) == 0
+
+
+# --- the service set the leaf names (M32.1.1.1) -----------------------------------------------
+
+
+#: What each role in `TRACE_STACK_ROLES` is called in M32.1.1.1, which names technologies
+#: where the module names roles. Written down so the correspondence is checked rather than
+#: compared by eye: "the leaf says five and the module has five" is not the same claim as
+#: "the same five", and it is the claim a reader thinks they have made.
+ROLE_AS_THE_LEAF_SAYS_IT = {
+    "web": "web",
+    "worker": "worker",
+    "column store": "ClickHouse",
+    "cache": "Redis",
+    "object store": "S3-compatible store",
+}
+
+
+def test_the_trace_stack_names_a_role_for_every_service_the_leaf_lists() -> None:
+    """M32.1.1.1 lists five services and the module declares five roles, which is the easy
+    half. The half worth asserting is that they are the same five, read off the leaf rather
+    than counted: a module that dropped the object store and added a second cache would still
+    have five, and the count would agree while the stack lost its payload storage.
+
+    The leaf names technologies and the module names roles, deliberately, because `Redis` in
+    this deployment is Valkey and `S3-compatible store` is SeaweedFS. So the correspondence is
+    declared here and each of its words is looked for in the leaf's own sentence.
+
+    Delete this and the module's five roles can drift from the leaf's five services, and the
+    only thing that would notice is somebody reading both documents side by side."""
+    said = LEAF_SENTENCES["M32.1.1.1"]
+
+    assert set(ROLE_AS_THE_LEAF_SAYS_IT) == set(TRACE_STACK_ROLES)
+    for role, as_the_leaf_says_it in ROLE_AS_THE_LEAF_SAYS_IT.items():
+        assert as_the_leaf_says_it in said, f"the leaf no longer names a {role}"
+
+    # And every named component exists, so the mapping cannot name a container nobody runs.
+    declared = {c.name for c in COMPONENTS}
+    assert set(TRACE_STACK_ROLES.values()) <= declared
+
+
+def test_the_profile_that_runs_the_trace_ledger_runs_a_component_for_every_role() -> None:
+    """The positive case, and the one that must keep passing: `full` is the profile the trace
+    stack is deployed in, and a gap there is a Langfuse that comes up and loses payloads.
+
+    Asserted for every profile rather than for `full` alone, so a sixth profile cannot be
+    added with a half a stack in it and no test with an opinion.
+
+    Delete this and the refusal below is satisfied by a function that reports a gap for
+    everything, which is the state a check gets switched off from."""
+    for profile in PROFILES:
+        assert trace_stack_gaps(profile) == (), profile
+
+
+def test_a_profile_running_the_ledger_with_no_object_store_is_a_gap_and_names_it() -> None:
+    """**The gap cannot happen in `COMPONENTS` as they stand, which is exactly why the
+    function takes them.** The four ledger components are `full` only and the object store is
+    `standard` and `full`, so today every profile with a ledger has a store. That is
+    arithmetic over two frozensets that nobody wrote down as a rule, and a version of this
+    check reading the module's own components would be green for every profile and green
+    again with `return ()` in place of its body.
+
+    Langfuse 3 keeps event and media payloads in an S3-compatible store. Without one it comes
+    up, accepts traces, and drops what it was deployed to keep, which is the failure that
+    looks most like success.
+
+    The finding names the role and the container, because the fix is a one-word edit to a
+    frozenset and somebody has to know which one.
+
+    Delete this and the object store can leave `full` and no test will mention it."""
+    without_a_store = tuple(c for c in COMPONENTS if c.name != "seaweedfs")
+
+    found = trace_stack_gaps("full", components=without_a_store)
+
+    assert len(found) == 1
+    assert "object store" in found[0]
+    assert "seaweedfs" in found[0]
+
+    # The same component set is whole for a profile that runs no ledger, so the finding above
+    # is a property of the missing store and not of the set having been rebuilt at all.
+    assert trace_stack_gaps("lite", components=without_a_store) == ()
+
+
+def test_a_profile_that_runs_no_trace_ledger_reports_no_gap_rather_than_five() -> None:
+    """A lite install is missing all five roles and none of them is a finding. It is not
+    deploying a trace ledger, so there is nothing to lose payloads from, and a check that
+    reported five gaps for the profile production actually runs would be a check nobody
+    reads twice.
+
+    Asserted with the ledger's own components handed in as well, so this is the ledger test
+    and not an accident of `lite` being empty.
+
+    Delete this and the emptiness of lite becomes the reason this passes, and the first
+    profile that runs one ledger component reports four gaps it cannot act on."""
+    assert trace_stack_gaps("lite") == ()
+
+    # One ledger component in lite, and now the other four roles are real gaps.
+    one_component = tuple(
+        _a_component(name=c.name, profiles=frozenset({"lite"})) if c.name == "langfuse-web" else c
+        for c in COMPONENTS
+    )
+    found = trace_stack_gaps("lite", components=one_component)
+
+    assert len(found) == 4
+    assert not any("web" in one for one in found)
+
+
+def test_the_trace_stack_and_the_trace_ledger_differ_by_exactly_the_object_store() -> None:
+    """Two sets that overlap and are not the same, which is the kind of pair that gets
+    quietly unified by somebody tidying up. `TRACE_LEDGER` answers "what must a lite install
+    not run", and the object store is not the answer: `standard` runs it for original
+    documents and always did. `TRACE_STACK_ROLES` answers "what does the trace stack need in
+    front of it", and there the store is a member.
+
+    Pinned as an exact difference rather than as a subset, so neither set can gain a member
+    without this saying which.
+
+    Delete this and merging the two reads as a simplification, and a lite install starts
+    refusing an object store it needs for documents, or the ledger stops declaring the
+    dependency this file exists to write down."""
+    assert set(TRACE_STACK_ROLES.values()) - TRACE_LEDGER == {"seaweedfs"}
+    assert TRACE_LEDGER - set(TRACE_STACK_ROLES.values()) == set()
+    assert "seaweedfs" in AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT

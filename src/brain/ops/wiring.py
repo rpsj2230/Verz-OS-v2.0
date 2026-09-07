@@ -84,14 +84,15 @@ offer them. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`. So t
 blocked on which neighbour goes first; it is blocked on the three answers that paragraph above
 already names, and all three are Rupash's.
 
-Task ids: M32.1.1.4
+Task ids: M32.1.1.1, M32.1.1.4
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final, Literal
 
 #: The machine, in mebibytes, as `free -m` reports it. Measured 2026-09-06 on the live host.
@@ -421,6 +422,41 @@ LITE_KEEPS_THE_AUDIT_LEDGER = (
 )
 
 
+#: The five roles M32.1.1.1 names for the trace stack, against the component that fills each.
+#:
+#: **Roles rather than a list of container names, because one of the five is not the trace
+#: ledger's own.** The object store is `seaweedfs`, which `standard` already runs for original
+#: documents, and Langfuse 3 needs an S3-compatible store for event and media payloads. So the
+#: service set the leaf names and the component set `TRACE_LEDGER` names are different sets on
+#: purpose, and each is right for its own question: `TRACE_LEDGER` answers "what must a lite
+#: install not run", where the object store is not the answer, and this answers "what does the
+#: trace stack need in front of it", where it is.
+#:
+#: Read as a mapping so a missing role is named rather than counted. A tuple of four when the
+#: leaf says five is exactly the shape a reader skims past.
+TRACE_STACK_ROLES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "web": "langfuse-web",
+        "worker": "langfuse-worker",
+        "column store": "langfuse-clickhouse",
+        "cache": "langfuse-cache",
+        "object store": "seaweedfs",
+    }
+)
+
+#: Why the object store is a member of the trace stack and not of `TRACE_LEDGER`.
+AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT: Final = (
+    "The four components in TRACE_LEDGER are `full` only and seaweedfs is `standard` and "
+    "`full`, so every profile that runs the trace ledger has an object store today. That is "
+    "arithmetic over two frozensets that nobody wrote down as a rule, and it is the shape of "
+    "coupling that survives right up to the edit that breaks it: moving the ledger into "
+    "`standard`, or the store out of it, is a one-word change in one frozenset that no test "
+    "would have refused. Langfuse would come up, accept traces, and fail to persist event "
+    "and media payloads, which is a trace ledger that is running and losing the thing it was "
+    "deployed to keep."
+)
+
+
 def runs_trace_ledger(profile: str) -> bool:
     """Whether this profile runs somewhere for spans to go.
 
@@ -625,4 +661,37 @@ def pooler_misuse() -> tuple[str, ...]:
         "LISTEN/NOTIFY and session-level advisory locks do not survive transaction pooling"
         for c in COMPONENTS
         if c.needs_session_state and c.wiring is Wiring.POOLER
+    )
+
+
+def trace_stack_gaps(
+    profile: str,
+    *,
+    roles: Mapping[str, str] = TRACE_STACK_ROLES,
+    components: tuple[Component, ...] = COMPONENTS,
+) -> tuple[str, ...]:
+    """Roles of the trace stack that this profile runs no component for.
+
+    Empty for a profile that runs no trace stack at all, which is not the same answer as
+    empty for a profile that runs a complete one and is the reason the ledger is asked about
+    first: a lite install is missing all five roles and none of them is a finding, because a
+    lite install is not deploying a trace ledger to lose payloads from.
+
+    **Takes its roles and its components rather than reading the module's own.** The gap this
+    exists for cannot occur in `COMPONENTS` as they stand, so a version reading them directly
+    would be a refusal with nothing to fire on, green for every profile and green after
+    `return ()` replaced its body. That defect has been found three times in this repository
+    in a week. Both parameters carry the real values as defaults, so every caller sees the
+    real answer and only a test hands it a set with the store taken out.
+
+    See `AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT`.
+    """
+    assert_known_profile(profile)
+    running = {c.name for c in components if profile in c.profiles}
+    if not (running & TRACE_LEDGER):
+        return ()
+    return tuple(
+        f"the trace stack has no {role}: {name!r} is not in profile {profile!r}"
+        for role, name in sorted(roles.items())
+        if name not in running
     )
