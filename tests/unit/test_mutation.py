@@ -1,0 +1,435 @@
+"""The harness that verifies every other guard, held to the four ways it went wrong by hand.
+
+Each of these is a failure that actually happened in this repository before the procedure was
+a module: a mutant read by a second session, an exit code mistaken for a catch, a table row
+produced by a test that was already red, and a mutation that changed nothing.
+
+The expensive tests here really do create a worktree and really do run pytest inside it, and
+that is deliberate. The whole claim of this module is about what happens on disk in another
+directory, and a mock of `subprocess` would test the arrangement of the calls rather than the
+property. They are marked `slow` so a fast loop can skip them and CI cannot.
+
+Task ids: M0.1.6
+"""
+
+from __future__ import annotations
+
+import inspect
+import subprocess
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+
+from brain.ops.mutation import (
+    A_CRASH_IS_NOT_A_CAUGHT_MUTATION,
+    NO_BYTECODE,
+    Mutation,
+    MutationError,
+    Report,
+    Verdict,
+    failures_in,
+    verify,
+)
+
+REPO = Path(__file__).resolve().parents[2]
+
+
+def a_mutation(
+    *,
+    label: str = "a guard stops guarding",
+    path: str = "src/brain/ops/mutation.py",
+    before: str = "caught=bool(caught),",
+    after: str = "caught=True,",
+    tests: tuple[str, ...] = ("tests/unit/test_mutation.py",),
+) -> Mutation:
+    """One valid mutation, with a single field overridden per test.
+
+    Keyword defaults rather than a dict splat. A splat of `dict[str, object]` is a hole mypy
+    cannot see through, and this helper's whole job is to build values the constructor is
+    about to refuse, so the one place types would catch a slip is the place they were off.
+    """
+    return Mutation(label=label, path=path, before=before, after=after, tests=tests)
+
+
+# --- a mutation that cannot be trusted is refused before anything runs ----------------------
+
+
+def test_a_mutation_that_changes_nothing_cannot_be_constructed() -> None:
+    """`before == after` survives every test that exists and reads in the table as a missing
+    guard, which is how an afternoon goes into writing a test for a property already held.
+
+    Refused at construction rather than reported in the table, because by the time it is a row
+    somebody has already believed it.
+
+    Delete this and a copy-paste slip in a mutation list produces a survivor nobody can
+    explain."""
+    with pytest.raises(MutationError, match="changes nothing"):
+        a_mutation(before="x = 1", after="x = 1")
+
+
+def test_a_mutation_with_no_tests_watching_it_cannot_be_constructed() -> None:
+    """A mutation is a claim that some named test notices. With no tests it is a claim about
+    nothing, and it would be recorded as a survivor, which is the same word used for a real
+    missing guard.
+
+    Delete this and an empty `tests` tuple produces a table full of survivors and an afternoon
+    spent looking for guards that were never asked to fire."""
+    with pytest.raises(MutationError, match="names no tests"):
+        a_mutation(tests=())
+
+
+def test_a_mutation_with_no_label_cannot_be_constructed() -> None:
+    """The label is the table row, and the table is what goes in the commit message. A blank
+    one is a line somebody has to reconstruct from the diff.
+
+    Delete this and the report has a row that says nothing in the column that carries the
+    meaning."""
+    with pytest.raises(MutationError, match="no label"):
+        a_mutation(label="   ")
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/etc/passwd", "../outside.py", "src/../../escape.py"],
+    ids=["absolute", "parent", "through_the_middle"],
+)
+def test_a_mutation_pointing_outside_the_repository_cannot_be_constructed(path: str) -> None:
+    """The safety argument is that nothing outside the throwaway worktree is touched, and a
+    path with `..` in it or an absolute path walks straight out of it.
+
+    Three shapes rather than one, because a check for a leading slash misses `..` and a check
+    for a leading `..` misses one in the middle.
+
+    Delete this and the harness can write anywhere the process can, which is everywhere."""
+    with pytest.raises(MutationError, match="inside the repository"):
+        a_mutation(path=path)
+
+
+def test_a_mutation_naming_a_real_file_inside_the_tree_is_accepted() -> None:
+    """The positive sibling. Four refusals above are all satisfied by a constructor that
+    refuses everything, at which point no mutation can be written at all.
+
+    Delete this and the path check can tighten until it rejects ordinary paths, and the only
+    symptom is that nobody can use the harness."""
+    one = a_mutation()
+
+    assert one.path == "src/brain/ops/mutation.py"
+    assert one.tests == ("tests/unit/test_mutation.py",)
+
+
+# --- a catch is a named failure, never an exit code -----------------------------------------
+
+
+def test_a_crash_is_not_read_as_a_catch() -> None:
+    """**The trap that makes a broken harness report a perfect score.** A mutation that breaks
+    an import, a collection or the syntax of the file exits non-zero without a single test
+    having an opinion, and it does so for every mutation in the run.
+
+    So `failures_in` is asserted against output that has a non-zero exit written all over it
+    and no `FAILED` line: a collection error, an internal error, and a plain summary of errors.
+
+    Delete this and the definition of a catch widens to "something went wrong", which is true
+    of a harness that has stopped testing anything at all."""
+    crashes = [
+        "ERROR tests/unit/test_thing.py - ImportError: cannot import name 'gone'\n"
+        "!!!!!! Interrupted: 1 error during collection !!!!!!\n",
+        "INTERNALERROR> Traceback (most recent call last):\n",
+        "1 error in 0.31s\n",
+    ]
+
+    for output in crashes:
+        assert failures_in(output) == (), output
+
+    assert "named FAILED line" in A_CRASH_IS_NOT_A_CAUGHT_MUTATION
+
+
+def test_a_named_failure_is_read_as_a_catch_and_the_name_is_kept() -> None:
+    """The positive sibling, and the names matter as much as the count: a mutation caught by
+    the test written for it is the practice working, and one caught only by a distant test
+    usually means the guard is in the wrong place. A harness that reported "caught" without
+    saying by what would hide that.
+
+    Parametrised ids are kept whole, because `[space]` and `[a_second_log_line]` distinguish
+    the cases of a parametrised guard and dropping them merges three rows into one.
+
+    Delete this and the report loses the column that makes it worth reading."""
+    output = (
+        "FAILED tests/unit/test_app.py::test_a_trace_id_is_replaced[space] - AssertionError\n"
+        "FAILED tests/unit/test_app.py::test_a_trace_id_is_replaced[a_second_log_line]\n"
+        "FAILED tests/invariants/test_guards.py::test_no_validator_returns_its_argument\n"
+    )
+
+    assert failures_in(output) == (
+        "test_a_trace_id_is_replaced[space]",
+        "test_a_trace_id_is_replaced[a_second_log_line]",
+        "test_no_validator_returns_its_argument",
+    )
+
+
+def test_the_same_test_failing_twice_is_named_once() -> None:
+    """pytest prints a summary line per failure, and a parametrised test that fails on two
+    parameters with identical ids, or a rerun, would otherwise appear twice in a row whose
+    whole job is to be read at a glance.
+
+    Delete this and a table row grows a repeated name, which reads as two tests catching the
+    mutation when it is one."""
+    output = "FAILED a.py::test_one\nFAILED b.py::test_one\n"
+
+    assert failures_in(output) == ("test_one",)
+
+
+def test_a_verdict_prints_its_own_row_and_distinguishes_the_three_outcomes() -> None:
+    """Caught, survived and crashed are three different things and the middle one is the only
+    one that means "write a test". Collapsing crashed into survived sends somebody looking for
+    a missing guard when the file does not import.
+
+    Delete this and the table has two words for three states."""
+    caught = Verdict(label="a", caught=True, by=("test_x",))
+    survived = Verdict(label="a", caught=False)
+    crashed = Verdict(label="a", caught=False, crashed=True)
+
+    assert "caught" in caught.row() and "test_x" in caught.row()
+    assert "SURVIVED" in survived.row()
+    assert "CRASHED" in crashed.row()
+
+
+def test_a_report_names_its_survivors_rather_than_counting_them() -> None:
+    """CLAUDE.md is explicit that a survivor means a missing test or a genuinely equivalent
+    mutation, and that telling them apart needs a reader. A count cannot be read; a list can.
+
+    A crashed mutation counts as a survivor here, deliberately: it was not caught, and a run
+    that quietly set it aside would be the harness deciding something it cannot know.
+
+    Delete this and a survivor can be dropped from the table by rounding."""
+    report = Report(
+        verdicts=(
+            Verdict(label="caught one", caught=True, by=("test_x",)),
+            Verdict(label="survived one", caught=False),
+            Verdict(label="crashed one", caught=False, crashed=True),
+        )
+    )
+
+    assert [one.label for one in report.survivors] == ["survived one", "crashed one"]
+    assert "survived one" in report.table()
+    assert "crashed one" in report.table()
+
+
+def test_an_empty_run_says_so_rather_than_printing_an_empty_table() -> None:
+    """A table with no rows above a commit message reads as a run that found nothing wrong.
+
+    Delete this and `table()` on an empty report raises on `max()` of an empty sequence, in
+    the one place where the failure lands on somebody writing up work that is already done."""
+    assert verify([], repo=REPO).table() == "no mutations were run"
+
+
+# --- the worktree, which is the whole point -------------------------------------------------
+#
+# These three really do create a worktree and really do run pytest inside it, which costs about
+# twelve seconds each. That is the price of testing the claim rather than the arrangement of
+# the calls, and the claim is the only reason this module exists.
+#
+# They work against a probe pair written into the tree and deleted afterwards rather than
+# against this file. Two reasons, and the second was found by trying the obvious thing first.
+# A test file that mutates the module it is written in has to reason about which copy is
+# running. And the worktree is at a *commit*, so a test carrying itself also needs whatever
+# `pyproject.toml` it depends on: the first attempt failed with "'slow' not found in `markers`
+# configuration option", because the marker registration was uncommitted. A probe with no
+# markers and no imports outside the standard library depends on nothing that could be
+# uncommitted.
+
+
+PROBE_SOURCE = Path("src/brain/ops/_probe_for_test_mutation.py")
+PROBE_TEST = Path("tests/unit/test__probe_for_test_mutation.py")
+
+
+@pytest.fixture
+def probe() -> Iterator[None]:
+    """A source file with one guard in it, and a test that watches that guard.
+
+    Deleted in `finally`, because a probe left behind is collected by every later run and
+    `ruff` has an opinion about it.
+    """
+    (REPO / PROBE_SOURCE).write_text(
+        '"""A probe written and removed by test_mutation. Task ids: none"""\n\n\n'
+        "def loud(value: int) -> int:\n"
+        "    if value < 0:\n"
+        '        raise ValueError("negative")\n'
+        "    return value\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (REPO / PROBE_TEST).write_text(
+        '"""Watches the probe. Written and removed by test_mutation. Task ids: none"""\n\n'
+        "import pytest\n\n"
+        "from brain.ops._probe_for_test_mutation import loud\n\n\n"
+        "def test_a_negative_value_is_refused() -> None:\n"
+        '    """Delete this and the probe has no guard, which is the point of the probe."""\n'
+        '    with pytest.raises(ValueError, match="negative"):\n'
+        "        loud(-1)\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    try:
+        yield
+    finally:
+        (REPO / PROBE_SOURCE).unlink(missing_ok=True)
+        (REPO / PROBE_TEST).unlink(missing_ok=True)
+
+
+def worktrees_of_ours() -> list[str]:
+    """The harness's own worktrees, as `git worktree add` will see them."""
+    listed = subprocess.run(
+        ["git", "worktree", "list"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return [one for one in listed.stdout.splitlines() if "brain-mutate-" in one]
+
+
+@pytest.mark.slow
+@pytest.mark.usefixtures("probe")
+def test_a_mutation_runs_in_a_worktree_and_never_touches_the_file_it_names() -> None:
+    """**The failure this module was written for, and it was not a testing failure.** One
+    session wrote a broken `ops/telemetry.py`, ran pytest and restored it, which is the
+    procedure working. A second session read the file inside that window, concluded a stray
+    line had survived a commit, and wrote a test saying so. Both behaved correctly.
+
+    So this asserts the real property on real disk: the named file's bytes are identical before
+    and after, and the run reports a catch by the named test, which is how we know it was
+    genuinely mutated somewhere rather than skipped.
+
+    Not a mock of `subprocess`. A mock would assert the arrangement of the calls, and the claim
+    is about a file in another directory.
+
+    Delete this and the harness can quietly mutate in place, which is the state that cost two
+    sessions an afternoon and put a false paragraph in a commit message."""
+    before = (REPO / PROBE_SOURCE).read_bytes()
+
+    report = verify(
+        [
+            Mutation(
+                label="the probe stops refusing a negative value",
+                path=str(PROBE_SOURCE).replace("\\", "/"),
+                before="    if value < 0:",
+                after="    if False:",
+                tests=(str(PROBE_TEST).replace("\\", "/"),),
+            )
+        ],
+        repo=REPO,
+        carry=(str(PROBE_TEST).replace("\\", "/"),),
+    )
+
+    assert (REPO / PROBE_SOURCE).read_bytes() == before
+    assert report.verdicts[0].caught, report.table()
+    assert report.verdicts[0].by == ("test_a_negative_value_is_refused",)
+    assert report.survivors == ()
+
+
+@pytest.mark.slow
+@pytest.mark.usefixtures("probe")
+def test_a_mutation_whose_text_is_not_in_the_file_stops_the_run_and_cleans_up() -> None:
+    """A `before` matching nothing has been overtaken by an edit; one matching twice breaks a
+    line nobody chose. Both would otherwise produce a survivor, and a survivor is the word for
+    a missing guard.
+
+    The whole run stops rather than the row being skipped, because a table missing a row looks
+    exactly like a table written that way.
+
+    The cleanup is asserted here rather than in a test of its own because it is the same
+    twelve-second worktree: a run that raises must still leave nothing behind, or the failure
+    lands on the next person through `git worktree add` rather than on whoever caused it.
+    Asserted through `git worktree list`, which is the record `add` consults, rather than by
+    looking for a directory.
+
+    Delete this and a stale mutation list reports present guards as absent, and a failed run
+    poisons every run after it."""
+    before = worktrees_of_ours()
+
+    with pytest.raises(MutationError, match="matches 0 places"):
+        verify(
+            [
+                Mutation(
+                    label="text that is not in the probe",
+                    path=str(PROBE_SOURCE).replace("\\", "/"),
+                    before="this string is certainly not in the probe",
+                    after="nor is this one",
+                    tests=(str(PROBE_TEST).replace("\\", "/"),),
+                )
+            ],
+            repo=REPO,
+            carry=(str(PROBE_TEST).replace("\\", "/"),),
+        )
+
+    assert worktrees_of_ours() == before
+
+
+@pytest.mark.slow
+@pytest.mark.usefixtures("probe")
+def test_a_run_whose_tests_were_already_failing_is_refused_rather_than_reported() -> None:
+    """**One contaminated row is worse than no table.** A named test that fails before the
+    mutation fails after it, and the row says caught by a test that was never watching. The
+    table is what gets quoted in the commit message, and nobody re-derives it.
+
+    Provoked by breaking the probe's guard *before* the run, so the baseline is genuinely red
+    rather than made red by the harness itself. That is the real shape of the mistake: somebody
+    runs a mutation table on a tree that is already failing.
+
+    Delete this and a mutation table can be produced against a broken tree, which is precisely
+    when somebody is most likely to be running one."""
+    (REPO / PROBE_SOURCE).write_text(
+        '"""A probe written and removed by test_mutation. Task ids: none"""\n\n\n'
+        "def loud(value: int) -> int:\n"
+        "    return value\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+
+    with pytest.raises(MutationError, match="fail before any mutation"):
+        verify(
+            [
+                Mutation(
+                    label="anything at all, because nothing gets this far",
+                    path=str(PROBE_SOURCE).replace("\\", "/"),
+                    before="    return value",
+                    after="    return value + 1",
+                    tests=(str(PROBE_TEST).replace("\\", "/"),),
+                )
+            ],
+            repo=REPO,
+            carry=(str(PROBE_TEST).replace("\\", "/"),),
+        )
+
+
+def test_the_harness_has_no_parameter_naming_where_the_work_happens() -> None:
+    """**The design, asserted rather than described.** A harness that accepts a directory is a
+    harness somebody points at the repository on the day they are in a hurry, and the docstring
+    saying not to is the thing that did not work.
+
+    Over the signature rather than the prose, because a parameter called `cwd` or `workspace`
+    or `tree` is the same hole whatever it is called.
+
+    Delete this and "takes a throwaway worktree by construction" becomes "takes a throwaway
+    worktree by convention", which is what the leaf was written to rule out."""
+    names = set(inspect.signature(verify).parameters)
+
+    assert names == {"mutations", "repo", "commit", "carry"}
+    assert not any(one in names for one in ("cwd", "workspace", "tree", "directory", "target"))
+
+
+def test_bytecode_writing_is_switched_off_for_every_run() -> None:
+    """Back-to-back writes to one file let pytest import a stale `.pyc`, which produces false
+    survivals. It cannot produce a false catch, so earlier work stays sound, and it sends
+    somebody hunting for a guard that is already there.
+
+    Asserted as the value the environment actually gets rather than as a comment, because this
+    is one line that is easy to lose in a refactor of the subprocess call.
+
+    Delete this and a fast run reports survivors a slow one does not, which reads as flakiness
+    rather than as caching."""
+    assert NO_BYTECODE == {"PYTHONDONTWRITEBYTECODE": "1"}
+
+    source = (REPO / "src" / "brain" / "ops" / "mutation.py").read_text(encoding="utf-8")
+    assert "env={**os.environ, **NO_BYTECODE}" in source

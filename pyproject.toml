@@ -83,6 +83,7 @@ addopts = "-q --strict-markers --strict-config"
 markers = [
     "invariant: a rule the system must never break; failure blocks deploy",
     "needs_db: requires a live PostgreSQL; skipped when DATABASE_URL is unset",
+    "slow: creates a git worktree and runs pytest inside it; seconds rather than milliseconds, and it is the only way to test the mutation harness's central claim",
 ]
 
 [tool.coverage.run]
