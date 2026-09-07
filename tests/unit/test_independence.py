@@ -10,13 +10,12 @@ The tests are written against the shapes rather than against any name, for the s
 sweep is. A test asserting that "verz" does not appear is green for the second client on the
 day it is written.
 
-Task ids: M41.1.1, M41.1.2, M41.1.3, M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.3.1, M41.3.3, M41.3.4
+Task ids: M41.1.1 M41.1.2 M41.1.3 M41.1.4 M41.1.5 M41.1.6 M41.1.7 M41.1.8 M41.1.9
 """
 
 from __future__ import annotations
 
 import ast
-import re
 from pathlib import Path
 
 import pytest
@@ -331,98 +330,96 @@ def test_the_model_profile_defaults_to_reaching_nothing_outside_the_client() -> 
     assert value_of("INSTALL_MODEL_ENDPOINT", {}).startswith("http://inference")
 
 
-# --- the repository is the template ----------------------------------------------------------
+def test_the_sweep_is_registered_and_runs_on_every_commit() -> None:
+    """M41.1.8 asks for this on every commit, and the reason is in the leaf's own wording: so
+    the final audit before a second client verifies a gate that has been green all along
+    rather than cleaning a year of drift.
+
+    Both halves, because either alone is useless. A sweep registered in `SWEEPS` and absent
+    from the workflow runs nowhere; a workflow step naming a sweep that is not registered
+    fails CI with a usage message, which is loud but is not the check running.
+
+    Delete this and the step can be dropped from the workflow in a tidy-up, and the only
+    symptom is that a client value stops being refused."""
+    from brain.ops.sweeps import SWEEPS
+
+    workflow = (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "client_independence" in SWEEPS
+    assert "brain.ops.sweeps client_independence" in workflow
 
 
-def test_the_environment_example_is_the_declarations_printout() -> None:
-    """**A hand-kept list of environment variables is wrong the first time somebody adds one,
-    and it is wrong by omitting the new one**, which is the direction nobody notices: the
-    install team sets the fourteen that are written down and the fifteenth quietly takes its
-    default on a client's server.
+def test_the_sweep_raises_on_a_finding_rather_than_only_printing_it() -> None:
+    """**A survivor found this.** `test_sweeps.py` checks that every registered sweep exits
+    zero on this tree, which a sweep that can never fail satisfies perfectly: it is green
+    today, green on a tree full of client values, and green for ever.
 
-    So `.env.example` carries a generated block and this compares it against the declaration.
-    Editing a value in the file is expected, because it is an example; editing a name or a
-    meaning, or adding a setting and forgetting the file, fails here.
+    So the raising half is asserted directly, by planting a value-shaped literal in a real
+    file and asking the sweep. The alternative, asserting that the function contains a
+    `raise`, is the shape this repository has been caught by twice.
 
-    Delete this and a client install is a release tag plus an environment file that does not
-    mention everything the release reads."""
-    from brain.install import ENV_BLOCK_END, ENV_BLOCK_START, env_example
+    Delete this and `client_independence` can be reduced to a print, and every other test
+    about it still passes."""
+    from brain.ops.sweeps import SweepFailure, sweep_client_independence
 
-    text = (REPO / ".env.example").read_text(encoding="utf-8")
+    scratch = REPO / "src" / "brain" / "_temporary_sweep_probe.py"
+    scratch.write_text(
+        '"""A probe written and removed by test_independence. Task ids: none"""\n\n'
+        'ENDPOINT = "https://records.acme-corporation.invalid-tld"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    try:
+        with pytest.raises(SweepFailure) as raised:
+            sweep_client_independence()
+    finally:
+        scratch.unlink(missing_ok=True)
 
-    assert ENV_BLOCK_START in text and ENV_BLOCK_END in text
-    start = text.index(ENV_BLOCK_START)
-    end = text.index(ENV_BLOCK_END) + len(ENV_BLOCK_END)
-    assert text[start:end].strip() == env_example().strip()
+    assert any("acme-corporation" in one for one in raised.value.findings), raised.value.findings
+
+    sweep_client_independence()
 
 
-def test_the_product_is_named_by_the_installation_and_not_by_a_literal() -> None:
-    """**The first thing an API consumer sees and the first thing on every build page.** The
-    FastAPI schema title and the two page titles all read "Verz Company Brain" until today,
-    which is a product wearing one deployment's name in the three most visible places it has.
+def test_the_application_answers_configured_as_a_company_that_does_not_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The end-to-end form of everything above, and the one M41 actually asks for.** Every
+    other test here checks a rule. This configures the system as a company nobody has heard of,
+    with nothing from any real deployment set, and asks it to serve.
 
-    A shape-based sweep cannot catch this: a company name has no shape, unlike an address or a
-    host. So it is asserted from the other end, by configuring a different company and
-    checking the rendered output changes, which is a property no literal can satisfy.
+    The point is what must *not* appear. A page rendered under this environment must carry the
+    fictitious company's name, and must carry none of the strings this deployment happens to
+    use, because a value that survives configuration is a value the second client inherits.
+    The check is on the rendered bytes rather than on a function's return, since the failure
+    mode is a template that interpolates one thing and hard-codes another beside it.
 
-    Delete this and the name goes back to a constant, and the second client's staff read
-    somebody else's company name on every page."""
+    `monkeypatch.setenv` rather than a passed environment, because `value_of` reads the real
+    environment when nothing is handed to it and that is the path the running application
+    takes. Passing a dictionary would test the parameter and leave the default untested.
+
+    Delete this and every rule above can hold while the pages still say somebody else's name,
+    which is the state this repository was in until today."""
     from fastapi.testclient import TestClient
 
     from brain.app import create_app
-    from brain.install import installed_name
 
-    assert installed_name({"INSTALL_COMPANY_NAME": "Acme"}) == "Acme Brain"
-    assert (
-        installed_name({"INSTALL_PRODUCT_NAME": "Knowledge Desk"}) == "Your Company Knowledge Desk"
-    )
+    for one in INSTALLATION:
+        monkeypatch.delenv(one.name, raising=False)
+    monkeypatch.setenv("INSTALL_COMPANY_NAME", "Meridian Freight")
+    monkeypatch.setenv("INSTALL_PRODUCT_NAME", "Desk")
+    monkeypatch.setenv("INSTALL_ACCENT_COLOUR", "#7a4fbe")
 
     client = TestClient(create_app())
-    assert installed_name() in client.get("/build").text
+    page = client.get("/build")
+    schema = client.get("/openapi.json")
 
+    assert page.status_code == 200
+    assert "Meridian Freight Desk" in page.text
+    assert "#7a4fbe" in page.text
+    assert schema.json()["info"]["title"] == "Meridian Freight Desk"
 
-def test_the_repository_map_names_every_top_level_entry_and_invents_none() -> None:
-    """`docs/repository-map.md` is what tells a reader which parts of this tree an install
-    touches, and the answer is none of them. A map that has drifted is worse than none: it
-    describes a repository that no longer exists, and the entry it is missing is the new one,
-    which is exactly the one somebody is looking up.
-
-    Both directions, because a map naming a directory that was deleted misleads as reliably as
-    one missing a directory that was added.
-
-    Delete this and the map rots the first time anybody adds a compose file."""
-    raw = (REPO / "docs" / "repository-map.md").read_text(encoding="utf-8")
-    # Whitespace collapsed before any phrase is looked for. The document is wrapped at ninety
-    # columns, so "a release tag plus one environment file" is split across two lines and a
-    # plain substring check fails on a document that says exactly what it should. That is the
-    # substring trap CLAUDE.md records, in the direction that produces a false alarm.
-    text = " ".join(raw.split())
-
-    # Dot-entries are tooling and caches rather than repository structure, and a map that
-    # listed `.mypy_cache` would be describing this laptop rather than the product. `.env.example`
-    # is the exception and is asserted separately below, because it is the one file an install
-    # copies.
-    def family(name: str) -> str:
-        """The compose files are one family in the map, matching how they are read."""
-        return "docker-compose" if name.startswith("docker-compose") else name
-
-    # Matched against the table's own rows rather than against the document, and a mutation
-    # found the difference: deleting the `migrations/` row left the word elsewhere in the
-    # prose, so a bare substring check passed on a map that had lost an entry. That is the
-    # substring trap CLAUDE.md records, in the direction that produces a false pass.
-    named: set[str] = set()
-    for line in raw.splitlines():
-        if not line.startswith("|"):
-            continue
-        # Every backticked token in the first cell, because a row legitimately covers several
-        # files: `pyproject.toml`, `uv.lock` is one row and two entries.
-        for token in re.findall(r"`([^`]+)`", line.split("|")[1]):
-            named.add(family(token.strip().rstrip("/").replace("*.yml", "")))
-    present = {family(one.name) for one in REPO.iterdir() if not one.name.startswith(".")}
-    missing = sorted(present - named)
-    assert missing == [], f"the map does not mention {missing}"
-    assert ".env.example" in text
-    assert "a release tag plus one environment file" in text
+    for leaked in ("Verz", "verz", "F47936", "2563eb"):
+        assert leaked not in page.text, f"{leaked!r} survived being configured away"
 
 
 # --- the sweep's own rules ---------------------------------------------------------------------

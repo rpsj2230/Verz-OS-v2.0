@@ -128,6 +128,12 @@ jobs:
         # passed CI was refused at registration. This catches the next copy at the moment
         # somebody writes it rather than the day the two halves are asked the same thing.
         run: uv run python -m brain.ops.sweeps one_tool_grammar
+      - name: Client independence — no client value, and one reader
+        # M41.1.8. On every commit rather than once before a second client, so the final
+        # audit verifies a gate that has been green all along instead of cleaning a year of
+        # drift. A blocklist of the first client's names would pass for the second client;
+        # this refuses value shapes and second readers, which hold for a client nobody has met.
+        run: uv run python -m brain.ops.sweeps client_independence
       - name: Traceability — nothing claimed without a test id
         run: uv run python -m brain.ops.sweeps traceability
       - name: Slug collisions — one name means one thing
@@ -136,6 +142,12 @@ jobs:
         # reports success over an empty comparison is how `traceability` spent its whole
         # life green while checking nothing.
         run: uv run python -m brain.ops.sweeps slug_collisions
+      - name: An install from empty builds the whole schema and reads nothing else
+        # The half of M41.2.1 that needs no database: one revision chain reaching an empty
+        # database, every schema and extension `brain.db` declares created by some migration,
+        # and every table created with row-level security enabled in the same migration. The
+        # other half runs in the `install` job below, against a database this built.
+        run: uv run python -m brain.ops.sweeps install_from_empty
       - name: Migration policy
         # Autogenerate is very often nearly right, and nearly right passes review. These
         # are the three ways it is wrong that a diff does not show: a rename written as a

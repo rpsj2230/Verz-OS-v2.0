@@ -726,6 +726,45 @@ def sweep_slug_collisions() -> None:
         print("  note: no scope registry exists yet, so this sweep is not yet load-bearing")
 
 
+def sweep_client_independence() -> None:
+    """No client value, and no second reader, anywhere this repository ships.
+
+    `brain.ops.independence` holds the rules and the argument for why they are shapes rather
+    than one client's names. This is the entry point that makes them a gate: M41.1.8 asks for
+    the sweep to run in CI on every commit, so that the final audit before a second client
+    verifies something that has been green all along rather than cleaning a year of drift.
+
+    A gate rather than an advisory, unlike the notes `sweep_traceability` prints, and it can
+    be one because the tree is at zero findings today. That is the whole difference: a check
+    that is red the day it lands is a check somebody switches off.
+    """
+    from brain.ops.independence import SEARCHED, independence_gaps
+
+    findings = independence_gaps(REPO)
+    if findings:
+        raise SweepFailure(list(findings))
+    print(f"ok: no client value and no second reader ({len(SEARCHED)} areas searched)")
+
+
+def sweep_install_from_empty() -> None:
+    """The migrations build the whole schema from nothing, and nothing else is read to do it.
+
+    `brain.ops.install_from_empty` holds the rules and the argument. This is the entry point
+    that makes them a gate, and it deliberately does not skip when `DATABASE_URL` is unset:
+    every rule it applies is about what the repository declares, so it is exactly as
+    meaningful on a laptop as on a runner. `sweep_rls` is the one that needs a database, and
+    the two are complementary rather than duplicates: this one refuses a table created
+    without a policy in its own migration, that one refuses a table running without one.
+    """
+    from brain.ops.install_from_empty import install_gaps, read_plan
+
+    findings = install_gaps()
+    if findings:
+        raise SweepFailure(list(findings))
+    for line in read_plan().lines():
+        print(f"ok: {line}")
+
+
 SWEEPS = {
     "rls": sweep_rls,
     "grant_isolation": sweep_grant_isolation,
@@ -734,6 +773,8 @@ SWEEPS = {
     "traceability": sweep_traceability,
     "slug_collisions": sweep_slug_collisions,
     "dependencies": sweep_dependencies,
+    "client_independence": sweep_client_independence,
+    "install_from_empty": sweep_install_from_empty,
 }
 
 
