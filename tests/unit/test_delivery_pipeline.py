@@ -677,6 +677,30 @@ def test_the_realm_the_identity_stack_imports_ships_inside_the_image() -> None:
         "that does not exist where this is deployed"
     )
 
+    # **And the middle, which is where the first version of this went wrong.** Asserting the
+    # Dockerfile copies the realm and the compose reads it back proves the two ends agree and
+    # says nothing about whether the build can see the file at all. `.dockerignore` excluded
+    # `ops`, so the COPY failed on the build machine with "not found" while every test here
+    # passed. Docker is not installed on the development laptop, so this test is the only
+    # thing standing between that mistake and CI.
+    wanted = "ops/keycloak/realm-export.json"
+    excluded = False
+    for line in (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines():
+        rule = line.strip()
+        if not rule or rule.startswith("#"):
+            continue
+        negated = rule.startswith("!")
+        pattern = rule.removeprefix("!")
+        parts = wanted.split("/")
+        prefixes = ["/".join(parts[: n + 1]) for n in range(len(parts))]
+        if any(fnmatch.fnmatch(one, pattern) for one in prefixes):
+            excluded = not negated
+
+    assert not excluded, (
+        f".dockerignore excludes {wanted}, so the COPY above fails on the build machine with "
+        "a message about a missing file while every check in this test still passes"
+    )
+
 
 def test_a_deploy_is_recorded_with_the_commit_the_running_process_reports() -> None:
     """What makes the record evidence rather than an intention. Recording the SHA the deployer

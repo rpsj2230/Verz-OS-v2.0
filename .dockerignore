@@ -6,6 +6,11 @@ __pycache__
 .ruff_cache
 tests
 ops
+# The one file out of `ops` the image needs: the identity realm, which the Keycloak stack
+# imports and which cannot be bind-mounted where this is deployed. Everything else in `ops`
+# is runbooks and host scripts with no business in a container that serves requests, so the
+# exclusion above stays and this is a hole in it rather than a change of mind.
+!ops/keycloak/realm-export.json
 docs/wbs
 *.md
 !README.md
