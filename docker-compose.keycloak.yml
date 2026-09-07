@@ -63,6 +63,12 @@ services:
       - -c
       - shared_buffers=64MB
       - -c
+      # Written down rather than left to the server default, which is also 4MB. An unset
+      # setting is still a setting, and `brain.ops.connections` multiplies this by
+      # max_connections to check the ceiling against the container's memory limit. A budget
+      # that depends on somebody remembering a default is not a budget.
+      - work_mem=4MB
+      - -c
       - max_connections=30
     volumes:
       # One level up from `data`, and `docker-compose.yml` learned this the hard way first.
@@ -153,6 +159,23 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:?set KEYCLOAK_DB_PASSWORD}
+      # **Bounded, because an unbounded client runs at its server's ceiling for ever.**
+      # Keycloak's own default is 100 and this database admits 30, so before this line was
+      # here Keycloak opened every connection the server would give it and held all thirty
+      # idle within minutes of first boot. The next connection was refused, and the next
+      # connection was an administrator trying to find out why: "FATAL: sorry, too many
+      # clients already". The service reported healthy throughout, because for the one person
+      # signed in it was.
+      #
+      # Fifteen against thirty leaves fifteen spare for a backup, a migration, a second
+      # replica or a diagnosis. `brain.ops.connections` holds that arithmetic and a test
+      # fails when a client's pool and a server's ceiling stop agreeing, which is the part
+      # that was governed by nothing.
+      KC_DB_POOL_MAX_SIZE: "15"
+      # Two rather than zero, so the first sign-in of the day does not pay for opening a
+      # connection. Small enough that an idle Keycloak is not sitting on the reserve.
+      KC_DB_POOL_MIN_SIZE: "2"
+      KC_DB_POOL_INITIAL_SIZE: "2"
       # The bootstrap administrator. Required rather than defaulted, because a Keycloak that
       # comes up with a known password is an identity provider anybody can take over.
       #
