@@ -639,7 +639,60 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     pinned rather than counted, so a second importer fails here and has to be argued and given
     a sibling of that test rather than being absorbed into a number.
 
+    **`brain.console.own_things` is the second importer and it arrived on 2026-09-08**, for
+    M33.3.1.4, "their own memory with a delete control". It is the first caller of
+    `brain.memory.review` anywhere. The test below is its sibling and the argument is that it
+    is not a reach question at all: a personal memory tab is narrowed by authorship, so that
+    module takes no `EntitlementSet` and cannot be wired at the wrong reach because it has
+    none. What it does take is a principal, and the delete control refuses somebody else's.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
-    assert _callers_of("brain.memory.review") == []
-    assert _callers_of("brain.memory.digest") == ["brain.console.reach_view"]
+    assert _callers_of("brain.memory.review") == ["brain.console.own_things"]
+    assert _callers_of("brain.memory.digest") == [
+        "brain.console.own_things",
+        "brain.console.reach_view",
+    ]
+
+
+def test_the_personal_memory_tab_narrows_by_authorship_and_holds_no_reach_at_all() -> None:
+    """The sibling the test above demands, for the second importer of these shapes.
+
+    **The argument is an absence.** `brain.console.reach_view.separate_memory` reads an agent
+    tab and therefore has a reach to get right, which the test above holds it to.
+    `brain.console.own_things.own_memory` reads a person's own tab, and a person's own tab is
+    narrowed by who was asking when each memory formed, which is `Formation.principal_id`.
+    That field's own comment says it is recorded for the audit question and never permits a
+    recall, so the module takes no `EntitlementSet`: there is no parameter a reach could
+    arrive through and nothing to get wrong. Recall is still `formation.may_recall`.
+
+    Asserted on the signature as well as on the behaviour, because behaviour alone would keep
+    passing on the day somebody adds an entitlement parameter and starts filtering by it.
+
+    Delete this and the pin above can be widened to admit a caller nobody argued for, which
+    is the thing that pin exists to make impossible."""
+    import inspect
+
+    from brain.console.own_things import OwnThingsError, delete_own_memory, own_memory
+
+    for one in (own_memory, delete_own_memory):
+        taken = inspect.signature(one).parameters
+        assert "principal_id" in taken, one.__name__
+        assert not any("entitle" in name or name == "caller" for name in taken), one.__name__
+
+    theirs = learning("m_theirs")
+    mine = Learning(
+        memory_id="m_mine",
+        proposal=theirs.proposal,
+        formation=Formation(
+            principal_id="p_reader",
+            capabilities=theirs.formation.capabilities,
+            scope=theirs.formation.scope,
+            ent_hash=theirs.formation.ent_hash,
+            formed_at=theirs.formation.formed_at,
+        ),
+    )
+
+    assert own_memory([mine, theirs], principal_id="p_reader") == (mine,)
+    with pytest.raises(OwnThingsError, match="may not delete"):
+        delete_own_memory(theirs, principal_id="p_reader", at=NOW)
