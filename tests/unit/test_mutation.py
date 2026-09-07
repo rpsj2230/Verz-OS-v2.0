@@ -278,16 +278,35 @@ def probe() -> Iterator[None]:
         (REPO / PROBE_TEST).unlink(missing_ok=True)
 
 
-def worktrees_of_ours() -> list[str]:
-    """The harness's own worktrees, as `git worktree add` will see them."""
+def abandoned_worktrees() -> list[str]:
+    """Harness worktrees registered against a directory that is no longer there.
+
+    **Not "every harness worktree", and the difference is what makes this test usable.** The
+    first version compared the whole list before and after, which fails whenever another
+    session is running its own mutations at the same moment: theirs appears between the two
+    reads and is counted as ours. This repository is worked on by several sessions at once, so
+    that is not a rare race, and a flaky test in the module whose whole job is to be believed
+    is worse than no test.
+
+    A live worktree belonging to somebody else is not a hazard. What breaks the next run is a
+    registry entry whose directory is gone, which is exactly what a failed run that skipped
+    its cleanup leaves behind, and it is the thing `git worktree add` has an opinion about.
+    """
     listed = subprocess.run(
-        ["git", "worktree", "list"],
+        ["git", "worktree", "list", "--porcelain"],
         cwd=REPO,
         capture_output=True,
         text=True,
         check=False,
     )
-    return [one for one in listed.stdout.splitlines() if "brain-mutate-" in one]
+    found: list[str] = []
+    for line in listed.stdout.splitlines():
+        if not line.startswith("worktree "):
+            continue
+        path = line.removeprefix("worktree ").strip()
+        if "brain-mutate-" in path and not Path(path).is_dir():
+            found.append(path)
+    return found
 
 
 @pytest.mark.slow
@@ -347,7 +366,7 @@ def test_a_mutation_whose_text_is_not_in_the_file_stops_the_run_and_cleans_up() 
 
     Delete this and a stale mutation list reports present guards as absent, and a failed run
     poisons every run after it."""
-    before = worktrees_of_ours()
+    before = abandoned_worktrees()
 
     with pytest.raises(MutationError, match="matches 0 places"):
         verify(
@@ -364,7 +383,7 @@ def test_a_mutation_whose_text_is_not_in_the_file_stops_the_run_and_cleans_up() 
             carry=(str(PROBE_TEST).replace("\\", "/"),),
         )
 
-    assert worktrees_of_ours() == before
+    assert abandoned_worktrees() == before
 
 
 @pytest.mark.slow
