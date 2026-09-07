@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**4 items are open: 32, 33, 34 and 35.** 32 is three passwords, and it is what stands between
+**5 items are open: 32, 33, 34, 35 and 36.** 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
 the console and a working sign-in. 33 is one sentence from you about what "shadow-pinned
 thirty days" means, and it decides a safety property rather than a feature. 34 blocks local
 embedding: the model we chose produces vectors of one width and the corpus column holds
@@ -44,6 +44,47 @@ in.
 ---
 
 # Open
+
+## 36. The WBS names promptfoo for evaluation and I used pytest - say if you want the tool
+
+**Nothing is blocked. This is a deviation from your wording, flagged so it is your call rather
+than mine.**
+
+M28.1.1 reads "promptfoo driven through our gate, never against a bare model". I built the
+harness in Python, in `tests/invariants/test_golden_through_the_gate.py`, and did not use
+promptfoo.
+
+The reasoning. promptfoo drives a provider: you give it a thing that takes a prompt and
+returns a completion. What has to be driven here is not a provider, it is an entitled request
+pipeline that needs a different principal for every case, because the whole point of the
+corpus is that the same question asked by three people must produce three different answers.
+Wiring promptfoo to that means writing a custom provider in JavaScript that shells into
+Python once per case, which puts a second language and a subprocess between the corpus and
+the gate, and buys nothing the Python harness does not already do. The invariants suite is
+already its own CI step and CI already gates Deploy, so the blocking half of M28.1.4 came for
+free.
+
+What I kept is the part of the leaf that matters: the phrase "never against a bare model".
+Every question goes through `answer_lane`, which runs the projection, the row read at the
+caller's own reach, the redaction and the abstention classifier. A test asserts structurally
+that this module imports no model driver, so a faster path that asked a provider directly
+cannot be added quietly.
+
+**Say the word and I will add promptfoo as a second front end over the same harness.** The
+case for it is real: it is a tool your team may already know, and its report format is nicer
+than pytest's. The case against is a second thing to keep in step with the corpus.
+
+**One thing worth knowing that this turned up, and I am fixing it separately.** Asking the
+golden corpus of the real system for the first time showed that no persona in the synthetic
+company can read a record at all. Reaching a row needs `read:client` and reading a column
+needs `read:client.name`, and the two are deliberately separate grants; the fixture grants
+only columns. So the twenty golden questions have been describing a company nobody could read
+from, and nothing noticed because the only tests of the corpus checked the corpus's own shape.
+It is asserted as a test now so it cannot go quiet again. Fixing it widens what every persona
+reaches and about seven thousand tests take their reach from that fixture, so it is a change
+on its own rather than a side effect of building the harness.
+
+---
 
 ## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - which moves?
 
