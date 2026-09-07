@@ -190,6 +190,15 @@ the history is a failed deployment rather than an untidy log.
 **pytest addopts already contains `-q`.** Passing another one makes it `-qq` and suppresses the
 summary line, so a green run prints no count at all.
 
+**"pre-push: all gates green" does not mean the unit suite ran.** `ops/hooks/pre-push` runs
+`ruff`, `mypy`, `pytest tests/invariants` and the sweeps, and deliberately not `tests/unit`:
+it is built to take seconds, and its own comment says so. CI runs the unit suite separately.
+So a green push can still be a red CI, and it has been: a change to `docs/needs-rupash.md`
+made five questions open while `docs/architecture.html` still said four, and
+`test_architecture_doc.py` is a unit test. Run `uv run pytest --no-header --disable-warnings`
+yourself before pushing anything that touches a document, a fixture or a count. The hook is a
+fast filter, not the gate.
+
 **`ruff` reads the word "noqa" inside an ordinary comment as a directive.** Reword rather than
 explain a suppression using that word.
 
