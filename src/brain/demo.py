@@ -209,6 +209,49 @@ def _grant(capability: str, department: str) -> Grant:
     return Grant(capability=Capability(value=capability), scope=Scope.department(department))
 
 
+def record_grants(held: Sequence[Grant]) -> tuple[Grant, ...]:
+    """The `read:<entity>` grants implied by a set of `read:<entity>.<field>` grants.
+
+    **Reaching a row and reading a column are two separate grants.**
+    `brain.knowledge.rows.entity_capability` is explicit that `Capability.covers` deliberately
+    does not let `read:client.*` confer `read:client`, and that separation is the design: the
+    scope on the record grant becomes the WHERE clause while the field grants become the
+    SELECT list.
+
+    **This demo granted columns and never records, so nobody in it could reach a single row.**
+    `row_scope_for` answered None for every person, `compile_row_query` short-circuited to a
+    statement it already knew was empty, and the fast-path filter on `name` was refused as
+    outside the projection. Measured on 2026-09-08 while writing
+    `tests/invariants/test_wave_one_is_live.py`, which is the first test that ever put the
+    demo's people and the row plane in one place.
+
+    It went unnoticed because `brain.seed.ask` answers from the rules and records directly
+    with no caller at all, so the install-from-empty job proved a question could be answered
+    and never that a person could ask it. `tests/fixtures/company.py` had the identical bug
+    and the identical cause a day earlier; that is two of two, which is an argument for this
+    being derived rather than remembered.
+
+    **One grant per entity, scopes intersected here rather than at read time.** The unique
+    index `uq_capability_grant_principal_id_capability_live` is on principal and capability
+    with no scope column, so a person may hold one live grant of a capability and no more.
+    Emitting one record grant per field grant is correct in memory and unstorable.
+    """
+    scopes: dict[str, Scope] = {}
+    order: list[str] = []
+    for grant in held:
+        verb, _, rest = grant.capability.value.partition(":")
+        entity, dot, _field = rest.partition(".")
+        if not dot or not entity:
+            continue
+        record = f"{verb}:{entity}"
+        if record not in scopes:
+            scopes[record] = grant.scope
+            order.append(record)
+        else:
+            scopes[record] = scopes[record].intersect(grant.scope)
+    return tuple(Grant(capability=Capability(value=one), scope=scopes[one]) for one in order)
+
+
 def build_people() -> tuple[DemoPerson, ...]:
     """Eight invented people across four departments, and the service principal.
 
@@ -271,7 +314,17 @@ def build_people() -> tuple[DemoPerson, ...]:
             role="Department admin, People",
         ),
     ]
-    return tuple(people)
+    # The record grants their field grants imply, added here rather than written beside each
+    # person. See `record_grants`: without them nobody in this demo could reach a single row,
+    # which is what it was until 2026-09-08.
+    return tuple(
+        DemoPerson(
+            principal=one.principal,
+            grants=one.grants + record_grants(one.grants),
+            role=one.role,
+        )
+        for one in people
+    )
 
 
 def build_service_principal() -> Principal:

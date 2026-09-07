@@ -371,3 +371,130 @@ def test_every_seeded_row_is_identifiable_as_the_demo_and_can_be_removed() -> No
 
     for row in demo.record_rows():
         assert str(row["source_id"]).startswith("demo_"), row
+
+
+def test_every_person_who_may_read_a_column_can_reach_the_row_it_is_on() -> None:
+    """**Nobody in this demo could reach a single row until 2026-09-08.**
+
+    Reaching a row and reading a column are two separate grants:
+    `brain.knowledge.rows.entity_capability` is explicit that `read:client.*` deliberately
+    does not confer `read:client`. This demo handed out field grants and no record grants, so
+    `row_scope_for` answered None for every person and `compile_row_query` short-circuited to
+    a statement it already knew was empty. Every seeded record was unreachable through the
+    gate by everybody.
+
+    It went unnoticed because `brain.seed.ask` answers from the rules and records with no
+    caller at all, so the install-from-empty job proved a question could be answered and never
+    that a person could ask it. `tests/fixtures/company.py` had the identical bug for the
+    identical reason a day earlier, which is two of two.
+
+    Asserted through `row_scope_for`, the function the row plane actually calls, rather than
+    by looking for a capability string: the question is whether the reach resolves, not
+    whether a grant is present.
+
+    The negative half is as important. Somebody holding no field grant over an entity must
+    still reach nothing on it, or the derivation has widened rather than completed.
+
+    Delete this and the demo goes back to being data nobody can read."""
+    from brain.core.entitlement import EntitlementSet
+    from brain.knowledge.rows import row_scope_for
+
+    checked = 0
+    for one in demo.build_people():
+        held = EntitlementSet(
+            principal_id=one.principal.id,
+            grants=one.grants,
+            not_after=one.principal.not_after,
+        )
+        columns = {
+            grant.capability.value.split(":", 1)[1].split(".", 1)[0]
+            for grant in one.grants
+            if "." in grant.capability.value
+        }
+        for entity in columns:
+            assert row_scope_for(entity, held, None) is not None, (
+                f"{one.principal.id} may read a column of {entity} and reaches no row of it"
+            )
+            checked += 1
+        for entity in ("client", "job", "invoice", "person"):
+            if entity not in columns:
+                assert row_scope_for(entity, held, None) is None, (
+                    f"{one.principal.id} reaches {entity} rows and holds no column on it"
+                )
+
+    assert checked > 5, f"only {checked} entity reaches checked; the demo has shrunk"
+
+
+def test_a_record_grant_is_scoped_no_wider_than_the_field_grants_that_implied_it() -> None:
+    """The derivation must not widen. A record grant scoped wider than the field grants that
+    produced it would let somebody reach rows they hold no column on, which is a row they can
+    count without reading, and a count is the disclosure this platform refuses.
+
+    Asserted by intersecting each person's field-grant scopes per entity and comparing, rather
+    than by trusting the derivation to have done it.
+
+    Delete this and the derivation can be rewritten to grant the department scope
+    unconditionally, which is one line and reads as a simplification."""
+    for one in demo.build_people():
+        derived = {grant.capability.value: grant.scope for grant in demo.record_grants(one.grants)}
+        for capability, scope in derived.items():
+            entity = capability.split(":", 1)[1]
+            sources = [
+                grant.scope
+                for grant in one.grants
+                if grant.capability.value.startswith(f"read:{entity}.")
+            ]
+            assert sources, capability
+            expected = sources[0]
+            for extra in sources[1:]:
+                expected = expected.intersect(extra)
+            assert scope == expected, (one.principal.id, capability)
+
+
+def test_two_field_grants_on_one_entity_produce_one_record_grant_at_the_narrower_scope() -> None:
+    """**Two mutations survived until this existed, and neither branch was wrong.** No person
+    in this demo holds two field grants on one entity at different scopes, deliberately, so
+    the intersection and the one-grant-per-entity branches never fired and could both be
+    switched off with every test green.
+
+    They are the branches that matter most the day somebody adds such a person, and the
+    fixture already has one: `u_dual` holds `read:client.name` across two departments and
+    `read:client.contract_value` in one. The intersection is what scopes their row grant to
+    the narrower, because a column grant narrower than the row grant would be a per-row
+    column decision, which `compile_projection` refuses to make.
+
+    One grant per entity rather than one per field grant, because
+    `uq_capability_grant_principal_id_capability_live` is unique on principal and capability
+    with no scope column: a person may hold one live grant of a capability and no more, so
+    emitting two is correct in memory and unstorable.
+
+    Exercised on a constructed input rather than by inventing a demo person, for the reason
+    `brain.ops.starter.starter_gaps` takes its inputs: a function that can only be run against
+    the real data cannot be tested on the case the real data does not contain.
+
+    Delete this and both branches go back to being unreachable, and the demo's derivation is
+    wrong in the one shape a client's own data will certainly have."""
+    from brain.core.entitlement import Capability, Grant
+    from brain.core.scope import Scope
+
+    wide = Scope.department("projects")
+    narrow = Scope(clauses=(*wide.clauses, *Scope.department("projects").clauses))
+
+    held = (
+        Grant(capability=Capability(value="read:client.name"), scope=Scope.department("projects")),
+        Grant(
+            capability=Capability(value="read:client.contract_value"),
+            scope=Scope.department("accounts"),
+        ),
+        Grant(capability=Capability(value="read:job.summary"), scope=Scope.department("projects")),
+    )
+
+    derived = demo.record_grants(held)
+    by_capability = {one.capability.value: one.scope for one in derived}
+
+    assert sorted(by_capability) == ["read:client", "read:job"], derived
+    assert by_capability["read:client"] == Scope.department("projects").intersect(
+        Scope.department("accounts")
+    )
+    assert by_capability["read:job"] == Scope.department("projects")
+    assert narrow == wide  # a scope is normalised, so a repeated clause is not a narrowing
