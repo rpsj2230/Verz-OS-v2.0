@@ -38,7 +38,14 @@ corpus and the gate and buys nothing this file does not do. What M28.1.1 is for 
 property, and the property is that evaluation goes through the gate. `docs/needs-rupash.md`
 carries the choice as a decision somebody can overrule.
 
-Task ids: M28.1.1, M28.1.4
+M28.1.2 is claimed here rather than beside the corpus, and the reason is what the leaf asks
+for. `tests/fixtures/golden.py` holds twenty questions and claims M0.6.4 for holding them; a
+corpus nothing asks is a list. What M28.1.2 wants is a corpus *of real questions per persona*,
+and the per-persona half is only true if every persona it names can be asked as and if asking
+as two of them differs. Both are asserted below against the real entitlements, so the claim
+sits in the file that does the asking rather than in the one that holds the strings.
+
+Task ids: M28.1.1, M28.1.2, M28.1.4
 """
 
 from __future__ import annotations
