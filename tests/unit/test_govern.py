@@ -575,6 +575,171 @@ def test_an_admin_may_not_certify_a_grant_they_could_not_have_made() -> None:
     assert may_certify(holding_row, with_it, NOW)
 
 
+def test_an_admin_may_not_certify_a_grant_that_reaches_outside_their_own_scope() -> None:
+    """**A grant is placed somewhere and it also grants something somewhere, and those are two
+    different scopes.** Every check in `may_certify` asked about the first until 2026-09-08, so
+    a maintenance-only admin shown a company-wide grant that happens to sit on a maintenance
+    row could certify it: the round was theirs, the capability was theirs at that row, and the
+    grant they renewed reached the whole company.
+
+    Renewal is the quiet direction. Nothing new is written, no audit entry says a scope
+    widened, and the grant that stands afterwards is the one nobody re-read.
+
+    **Nothing caught this because every fixture in this file builds a grant whose scope is the
+    department it sits in**, which is `placed_grant`'s default and is the ordinary case. A
+    guard the fixtures cannot reach is a guard that can be deleted with the suite green, which
+    is the defect this repository has now found in six agent runs, and here it was found in
+    the absence of a guard rather than in a weak one.
+
+    Both directions, because a refusal of everything also passes the first half: the same
+    admin certifies the same capability when the grant's scope is their own department, and
+    the only difference between the two calls is what the grant reaches.
+
+    Delete this and recertification becomes a way to launder a company-wide grant through a
+    department admin once a year."""
+    reaching_everywhere = Placed(
+        record=SubjectGrant(
+            subject=principal_subject("u_1"),
+            capability=Capability(value=NAME),
+            scope=Scope(),
+            granted_by="u_admin",
+            reason="a grant that reaches the whole company",
+            granted_at=NOW - timedelta(days=30),
+        ),
+        where={"department": MAINTENANCE},
+    )
+    reaching_maintenance = placed_grant(NAME, subject_id="u_1")
+
+    # The round authority is company-wide and only the capability is narrow, which is what
+    # isolates this to the capability's own containment. A mutation found the reason: an admin
+    # whose `approve:grant` is also narrow is refused by the round check first, so the check
+    # this test exists for is never the one that decides, and replacing it with the row
+    # question passes. That is the shape of the original defect exactly.
+    admin = EntitlementSet(
+        principal_id="u_reader",
+        grants=(
+            Grant(capability=Capability(value="approve:grant"), scope=Scope()),
+            Grant(capability=Capability(value=NAME), scope=Scope.department(MAINTENANCE)),
+            Grant(capability=plane_capability(Plane.CONFIGURATION), scope=Scope()),
+        ),
+    )
+
+    assert reaching_everywhere.where == reaching_maintenance.where
+    assert reaching_everywhere.record.scope != reaching_maintenance.record.scope
+
+    assert not may_certify(reaching_everywhere, admin, NOW)
+    assert may_certify(reaching_maintenance, admin, NOW)
+
+
+def test_an_admin_whose_own_scope_is_the_whole_company_certifies_a_company_wide_grant() -> None:
+    """The check above is satisfied by refusing every unrestricted scope outright, which would
+    make the company-wide grant uncertifiable by anybody and quietly break the round for the
+    person the round exists for.
+
+    `scope_narrows` gives this without a case: an unrestricted scope is contained only by an
+    unrestricted holding, because every clause of the held scope must be entailed by some
+    clause of the proposed one and a scope with no clauses entails nothing.
+
+    Delete this and the fix for the leak above can be a blanket refusal, and the first person
+    to notice is the administrator who cannot recertify anything."""
+    reaching_everywhere = Placed(
+        record=SubjectGrant(
+            subject=principal_subject("u_1"),
+            capability=Capability(value=NAME),
+            scope=Scope(),
+            granted_by="u_admin",
+            reason="a grant that reaches the whole company",
+            granted_at=NOW - timedelta(days=30),
+        ),
+        where={"department": MAINTENANCE},
+    )
+    company_wide = holding("approve:grant", NAME)
+
+    assert may_certify(reaching_everywhere, company_wide, NOW)
+
+
+def test_a_grant_on_somebody_in_another_department_is_not_certifiable_however_narrow_it_is() -> (
+    None
+):
+    """**The row question is the one certification has and writing does not**, because a
+    review round is over people. The discriminating case is ordinary and no fixture had it:
+    a grant belonging to somebody in finance, conferring something scoped to maintenance.
+
+    A maintenance admin holds the conferred scope, so both containment checks pass. They still
+    may not certify it, because certifying renews *that person's* access and that person is
+    not theirs to decide about. Recertification is a statement about a holder as much as about
+    a permission.
+
+    Both directions, and the pair differs only in where the subject sits: the same admin, the
+    same capability, the same conferred scope, one row in maintenance and one in finance.
+    `placed_grant` sets the row and the conferred scope from one argument, which is the
+    ordinary case and is why nothing here could reach this until it was built by hand.
+
+    Delete this and the row check can go, and a department admin recertifies the access of
+    people they have never met, one narrow grant at a time."""
+    conferring_maintenance = SubjectGrant(
+        subject=principal_subject("u_2"),
+        capability=Capability(value=NAME),
+        scope=Scope.department(MAINTENANCE),
+        granted_by="u_admin",
+        reason="narrow enough for this admin to have written it",
+        granted_at=NOW - timedelta(days=30),
+    )
+    elsewhere = Placed(record=conferring_maintenance, where={"department": FINANCE})
+    here = Placed(record=conferring_maintenance, where={"department": MAINTENANCE})
+    admin = holding("approve:grant", NAME, scope=Scope.department(MAINTENANCE))
+
+    assert elsewhere.record.scope == here.record.scope
+    assert elsewhere.where != here.where
+
+    assert not may_certify(elsewhere, admin, NOW)
+    assert may_certify(here, admin, NOW)
+
+
+def test_an_admin_may_not_certify_a_grant_reaching_further_than_their_own_round_does() -> None:
+    """**A mutation asked for this.** The two containment questions are different questions:
+    one is about the authority to decide grants at all, the other about the capability being
+    granted, and an admin can hold them in different scopes.
+
+    An admin whose round authority covers maintenance and who happens to hold
+    `read:client.name` company-wide may not renew a company-wide grant of it. Their reach as a
+    reader is not their reach as a reviewer, and the round is the smaller of the two.
+
+    This is `may_grant`'s first check at the other moment, and without it the two moments of
+    one decision disagree, which is what `THE_ROW_FORM_AND_THE_PREDICATE_FORM_ARE_ONE_RULE`
+    forbids.
+
+    Delete this and the round authority is asked only about the row somebody sits in, so a
+    department reviewer renews company-wide access as long as the holder is one of theirs."""
+    company_wide = SubjectGrant(
+        subject=principal_subject("u_1"),
+        capability=Capability(value=NAME),
+        scope=Scope(),
+        granted_by="u_admin",
+        reason="a grant that reaches the whole company",
+        granted_at=NOW - timedelta(days=30),
+    )
+    placed_here = Placed(record=company_wide, where={"department": MAINTENANCE})
+
+    # Two capabilities at two different scopes, which `holding` cannot express because it
+    # puts every capability it is given in one scope. That difference is the whole test.
+    def reviewer(round_scope: Scope) -> EntitlementSet:
+        return EntitlementSet(
+            principal_id="u_reader",
+            grants=(
+                Grant(capability=Capability(value="approve:grant"), scope=round_scope),
+                Grant(capability=Capability(value=NAME), scope=Scope()),
+                Grant(capability=plane_capability(Plane.CONFIGURATION), scope=Scope()),
+            ),
+        )
+
+    narrow_round = reviewer(Scope.department(MAINTENANCE))
+    wide_round = reviewer(Scope())
+
+    assert not may_certify(placed_here, narrow_round, NOW)
+    assert may_certify(placed_here, wide_round, NOW)
+
+
 def test_an_admin_without_the_rounds_own_capability_certifies_nothing() -> None:
     """M27.3.6. The other half of the pair: holding the capability a grant names is not being
     entitled to run the round. Delete this and anybody who happens to hold `read:client.name`

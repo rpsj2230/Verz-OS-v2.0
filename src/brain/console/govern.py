@@ -756,10 +756,40 @@ def may_certify(
     it, because `EntitlementSet.scope_for` already expands a trailing `.*` through
     `Capability.covers`: an admin holding `read:client.*` may certify a grant of
     `read:client.name`, and one holding only the narrow capability may not certify the wide one.
+
+    **The third check is the scope the grant carries, and it was missing until 2026-09-08.**
+    A grant is placed somewhere and it also grants something somewhere, and those are two
+    different scopes. Both checks above asked about `holding.where`, the row the grant sits
+    in, and nothing asked about `holding.record.scope`, what the grant actually confers. So a
+    maintenance-only admin, shown a company-wide grant that happens to sit on a row in
+    maintenance, could certify it: the round was theirs, the capability was theirs at that
+    row, and the grant they renewed reached the whole company. Renewal is the quiet direction,
+    because nothing new is written and the grant that stands is the one nobody re-read.
+
+    `within_reach` is the same predicate `scoped_authority.may_grant` uses to refuse writing
+    such a grant in the first place, imported rather than restated: certifying a grant and
+    writing one are one decision at two moments, and the moment that had no check was the one
+    where the grant already existed.
+
+    **So the two containment questions here are `may_grant`'s two, and the row question is the
+    one certification has that writing does not.** A review round is over people, so whether
+    this subject is in this admin's round is a real question with no counterpart in a write.
+    What is not a separate question is the grant's capability at the subject's row, which was
+    asked here until a mutation showed nothing could reach it. Where it is reachable it
+    refuses a grant `may_grant` would have permitted: an admin with company-wide round
+    authority and a maintenance-scoped capability could write a maintenance-scoped grant for
+    somebody in finance and then not be allowed to renew it. Two moments of one decision
+    disagreeing is the failure `THE_ROW_FORM_AND_THE_PREDICATE_FORM_ARE_ONE_RULE` names, and
+    the check asked a mixture of the other two rather than a third thing.
     """
-    if not _in_reach(entitlement, screen("access_review").read.requires, holding.where, now):
+    from brain.console.scoped_authority import within_reach
+
+    authority = screen("access_review").read.requires
+    if not _in_reach(entitlement, authority, holding.where, now):
         return False
-    return _in_reach(entitlement, holding.record.capability, holding.where, now)
+    if not within_reach(entitlement, authority, holding.record.scope, now):
+        return False
+    return within_reach(entitlement, holding.record.capability, holding.record.scope, now)
 
 
 def recertifiable(
