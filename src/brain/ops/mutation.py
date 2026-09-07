@@ -230,7 +230,19 @@ def _digest(path: Path) -> str:
 
 def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603  arguments come from a Mutation, which validates them
-        ["uv", "run", "pytest", *tests, "--no-header", "--disable-warnings"],  # noqa: S607
+        # `python -m pytest` rather than `pytest`, and the difference is not stylistic.
+        #
+        # **Measured on this machine on 2026-09-07.** `uv run pytest` spawns the `pytest.exe`
+        # console shim that uv has just written into the worktree's brand-new `.venv`, and
+        # Windows Application Control blocks a freshly created unsigned executable in a
+        # temporary directory: `Failed to spawn: pytest ... (os error 4551)`. It is
+        # intermittent, which is worse than consistent, because it presents as a flaky test in
+        # a harness whose entire job is to be believed.
+        #
+        # `python -m pytest` runs the interpreter uv already trusts and imports pytest as a
+        # module, so no new executable is spawned and there is nothing for the policy to
+        # refuse. Same interpreter, same environment, same result, one fewer moving part.
+        ["uv", "run", "python", "-m", "pytest", *tests, "--no-header", "--disable-warnings"],  # noqa: S607
         cwd=cwd,
         capture_output=True,
         text=True,
