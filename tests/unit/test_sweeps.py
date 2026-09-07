@@ -829,17 +829,20 @@ def test_a_broken_claim_in_a_test_docstring_is_reported_and_not_only_one_in_sour
             del kwargs
             return f"Task ids: {invented}\n"
 
+    def _one_test_file() -> list[Any]:
+        return [_Claiming()]
+
     original_src = sweeps.SRC
     original_tests = sweeps._test_sources
     original_reader = status_module.closed_task_ids
     try:
         sweeps.SRC = _NoFiles()  # type: ignore[assignment]
-        sweeps._test_sources = lambda: [_Claiming()]  # type: ignore[assignment, return-value]
+        sweeps._test_sources = _one_test_file
         status_module.closed_task_ids = lambda *a, **k: (set(), [])
         reported = set(sweeps._claims_that_name_no_leaf())
     finally:
         sweeps.SRC = original_src
-        sweeps._test_sources = original_tests  # type: ignore[assignment]
+        sweeps._test_sources = original_tests
         status_module.closed_task_ids = original_reader
 
     assert invented in reported, "a broken claim made only in a test docstring was not reported"

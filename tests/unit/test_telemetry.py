@@ -52,7 +52,6 @@ from brain.ops.telemetry import (
     status_for,
     telemetry_gaps,
 )
-from brain.status import leaf_sentences
 from brain.ops.tracing import (
     PAYLOAD_ROLE,
     SAFE_ATTRIBUTES,
@@ -63,6 +62,7 @@ from brain.ops.tracing import (
     TracingError,
     retention_for,
 )
+from brain.status import leaf_sentences
 
 #: Every leaf of the work breakdown by id, so a constant claiming to match a leaf can be
 #: checked against the leaf rather than against itself. See `status.leaf_sentences`.
