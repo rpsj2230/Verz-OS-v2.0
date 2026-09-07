@@ -28,8 +28,11 @@ legitimate staff sources and they must not be able to assert the same things.
 
 So a source declares what it may assert, `assertions_from` refuses rules that ask it for more,
 and the refusal happens when the sync is wired rather than quietly on the night it runs. See
-`A_SPREADSHEET_IS_A_ROSTER_AND_NEVER_AN_AUTHORITY`. This is M33.5.4, "set permission-sync
-capability per connector", arriving one layer earlier than the connector.
+`A_SPREADSHEET_IS_A_ROSTER_AND_NEVER_AN_AUTHORITY`. It is the same decision M33.5.1.3 asks
+for per connector, "set permission-sync capability per connector", arriving one layer earlier
+and so not claimed here: that leaf is about a connector's credential custody and this is about
+a roster's trust. The id in this paragraph read `M33.5.4` until 2026-09-07, which is not a leaf
+in this tree at all, because task ids under M33 are four levels deep.
 
 **What a source may never assert, whatever its trust.** No capability, ever. A group maps to a
 `Role` and to nothing else, which is `brain.identity.directory`'s rule and the reason it gives:
