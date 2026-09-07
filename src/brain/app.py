@@ -34,6 +34,7 @@ from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
 from brain.identity.bearer import log_refusal, refusal_headers
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
+from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.wiring import DEFAULT_PROFILE
 from brain.routing_routes import router as routing_router
@@ -197,27 +198,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # lifespan handles a failure, and deliberately: an unreachable database leaves an
     # instance that answers what it can, whereas a catalogue that failed its own checks is
     # a set of tools nobody validated being offered to a model.
-    # **This check says the catalogue is valid, and it does not say there is anything in
-    # it.** Measured on production on 2026-09-06: `tools=0` in the log beside
-    # `/health/ready` returning `{"tools": true}`. Both are accurate and together they read
-    # as something that is not true, because this module's own docstring defines readiness
-    # as "can this process answer a question correctly" and a process with no tools cannot
-    # answer anything.
+    # **The registry has row tools in it now, and until 2026-09-07 it could not.** This
+    # paragraph used to explain why `tools=0` sat in the log beside `/health/ready` reporting
+    # `{"tools": true}`: `build_registry` was called with no `records=`, because
+    # `RowSource.rows` was synchronous and this application has an `AsyncEngine`, so nothing
+    # could implement the protocol against the pool already here. The row plane is awaitable
+    # now and `SessionRowSource` is that implementation, using this engine and adding no
+    # second pool.
     #
-    # The emptiness is expected and disclosed: `build_registry` is called with no
-    # `records=`, because `RowSource.rows` is synchronous and this application has an
-    # `AsyncEngine`. `brain.tools.startup` sets out the three ways to resolve that and why
-    # each one changes the deployed connection profile and therefore deserves its own
-    # measurement rather than riding along here.
+    # A source only when there is a database. Without one there is nothing to read, and a row
+    # tool present and unable to answer is worse than one missing: `brain.tools.startup`
+    # argues it, and the short version is that a missing tool is a gap somebody notices and
+    # an empty answer is a fact somebody believes.
     #
-    # It is left reporting True rather than flipped, deliberately. Nothing asks this
-    # instance a question yet, there is no route to ask through, and a readiness check that
-    # fails on a known and intended state is a container restart loop rather than a signal.
-    # What is refused is leaving it undocumented: the day somebody passes a row source, the
-    # test named below fails and this paragraph has to be rewritten by whoever does it.
-    app.state.tools = build_registry(source=settings.tool_source)
+    # `ready["tools"]` is still True in both cases and still means "the catalogue is valid"
+    # rather than "there is something in it". That is now a smaller overstatement than it
+    # was, and it is still one: a lite install with no database registers nothing and reports
+    # the same True. What would fix it is readiness knowing which profile it is in, which is
+    # a change to what the check means rather than to this line.
+    records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
+    app.state.tools = build_registry(source=settings.tool_source, records=records)
     app.state.ready["tools"] = True
-    log.info("tool registry frozen", tools=len(app.state.tools))
+    log.info(
+        "tool registry frozen",
+        tools=len(app.state.tools),
+        rows=records is not None,
+    )
 
     try:
         yield

@@ -430,11 +430,22 @@ def test_readiness_reports_tools_ready_while_the_catalogue_is_empty() -> None:
 
 def test_the_gap_between_a_valid_catalogue_and_a_useful_one_is_written_down() -> None:
     """The guard on the test above. That one pins behaviour; this one pins the explanation,
-    because a future reader meeting `ready["tools"] = True` beside `tools=0` needs the reason
-    at the line rather than in a commit message nobody will find.
+    because a future reader meeting `ready["tools"] = True` needs the reason at the line
+    rather than in a commit message nobody will find.
 
-    Matched on whitespace-collapsed source so re-wrapping the paragraph does not fail it, and
-    on a phrase that carries the argument rather than on a word that could appear anywhere.
+    **The gap this pins has narrowed and has not closed, and the phrases moved with it.** It
+    used to pin the explanation of `tools=0`: the row plane was synchronous, nothing could
+    implement `RowSource` against an `AsyncEngine`, and the registry was therefore built with
+    no source. That was fixed on 2026-09-07 and the paragraph was rewritten, exactly as its
+    own last sentence said it would have to be.
+
+    What is left is smaller and real: a lite install with no database registers no row tool
+    and reports the same `True`, because the check means "the catalogue is valid" rather than
+    "there is something in it". Closing that means readiness knowing which profile it is in,
+    which is a change to what the check means.
+
+    Matched on whitespace-collapsed source so re-wrapping does not fail it, and on phrases
+    carrying the argument rather than words that could appear anywhere.
 
     Delete this and the paragraph can be removed as noise by somebody tidying comments."""
     import inspect
@@ -448,8 +459,9 @@ def test_the_gap_between_a_valid_catalogue_and_a_useful_one_is_written_down() ->
     prose = " ".join(line.lstrip().lstrip("#").strip() for line in raw.splitlines())
     source = " ".join(prose.split())
 
-    assert "does not say there is anything in it" in source
-    assert "restart loop rather than a signal" in source
+    assert "the catalogue is valid" in source
+    assert "registers nothing and reports the same True" in source
+    assert "a missing tool is a gap somebody notices" in source
 
 
 def test_the_error_body_carries_no_field_that_varies_with_the_outcome() -> None:
