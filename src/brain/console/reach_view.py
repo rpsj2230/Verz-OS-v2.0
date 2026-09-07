@@ -429,9 +429,10 @@ def run_reach(caller: EntitlementSet, record: AgentRecord) -> EntitlementSet:
     """`E_run(caller, agent) = E(caller) intersect agent_ceiling`, for the pair block.
 
     One line, calling `EntitlementSet.intersect`, which is the platform's single
-    implementation and the same one `brain.gate.invoke.invoke` and
-    `brain.ops.automation.flow_reach` call. A third would be a third place for the central
-    rule to be subtly wrong, and the wrong copy is the one on a screen somebody trusts.
+    implementation and the same one `brain.gate.leash.decide` and
+    `brain.ops.automation.flow_reach` call. A second would be a second place for the
+    central rule to be subtly wrong, and the wrong copy is the one on a screen somebody
+    trusts.
 
     Note the direction: the agent's declaration is a ceiling and never a grant, so a caller
     holding nothing comes out holding nothing however wide the ceiling is.

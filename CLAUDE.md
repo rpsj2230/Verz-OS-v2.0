@@ -49,10 +49,20 @@ E_run(caller, agent) = E(caller) ∩ agent_ceiling
 ```
 
 An agent is a **lens**, never a principal. It cannot see anything its caller cannot see, and
-its own ceiling can only narrow that further. `brain.gate.invoke.invoke` and
-`brain.ops.automation.flow_reach` both compute it by calling the same `intersect`, and
-neither reimplements it. Do not add a third implementation. A second copy of the central rule
-is a second place for it to be subtly wrong, and the wrong copy is the one in production.
+its own ceiling can only narrow that further. `EntitlementSet.intersect` is the one
+implementation and everything needing a run reach calls it: `brain.gate.leash.decide` and
+`brain.gate.leash.resume` on the request path, `brain.ops.automation.flow_reach` for work
+with nobody present, and two console modules for what a screen may show. Do not add a second
+implementation. A second copy of the central rule is a second place for it to be subtly
+wrong, and the wrong copy is the one in production.
+
+**This paragraph named `brain.gate.invoke.invoke` until 2026-09-08, and that module has no
+`intersect` call in it at all.** The sentence had been copied into `console/reads.py`,
+`console/reach_view.py` and the invariant test that guards the rule, so four documents agreed
+with each other and none of them with the code. `reads.py` had additionally turned "two call
+sites" into "two implementations", which is the drift that matters: it makes a second
+implementation sound like the status quo. `tests/invariants/test_single_implementation.py`
+now reads the call sites out of the source, because nothing else would have caught it.
 
 **Entitlements are additive only.** There is no deny list anywhere and there must not be one.
 Revocation is the deletion of a grant. A second source of grants (the directory sync, say)

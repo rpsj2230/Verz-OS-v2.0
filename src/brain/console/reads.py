@@ -42,9 +42,9 @@ it to be noticed by its absence from a redaction trace nobody reads.
 in the surface where it is hardest to keep, because a report titled "Maintenance" reads as
 though it should show the whole department, and the code that would do that is
 `caller | department` rather than `caller & department`. `audience` calls
-`EntitlementSet.intersect`, which is one of exactly two implementations in this repository and
-a third is forbidden. There is no parameter here that could widen a reach and
-`console_gaps` fails if one appears.
+`EntitlementSet.intersect`, which is the one implementation in this repository and a second
+is forbidden. There is no parameter here that could widen a reach and `console_gaps` fails
+if one appears.
 
 **A self-grant is a grant whose actor is its subject** (M27.5.5), and it is detected from the
 entry rather than declared by whoever wrote it. A separate `AuditAction` member was the
@@ -250,9 +250,11 @@ def permitted(read: ConsoleRead, entitlement: EntitlementSet, now: Any = None) -
 def audience(caller: EntitlementSet, report: EntitlementSet) -> EntitlementSet:
     """The reach one person reads one report at: `E(caller) intersect E(report)`.
 
-    The intersection, by the same `EntitlementSet.intersect` the gate uses. There are exactly
-    two implementations of that in this repository and a third is forbidden, so this calls
-    one rather than comparing grants itself.
+    The intersection, by the same `EntitlementSet.intersect` the gate uses. There is one
+    implementation of it in this repository and a second is forbidden, so this calls it
+    rather than comparing grants itself. This paragraph said "exactly two implementations"
+    until 2026-09-08, which counted call sites and called them implementations, and there
+    are five of those rather than two.
 
     See `A_REPORT_TITLED_FOR_A_DEPARTMENT_IS_STILL_READ_BY_ONE_PERSON` for why the union is
     the mistake worth naming: it is one character away and it reads like the feature.

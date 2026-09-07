@@ -95,6 +95,34 @@ def test_a_central_rule_is_implemented_exactly_once(name: str, expected: tuple[s
     assert found == [home], f"{name} should exist once, in {home}, because {why}. Found: {found}"
 
 
+def _intersections() -> dict[str, tuple[str, ...]]:
+    """Every function in the source that intersects anything, by module.
+
+    Parsed rather than grepped, for the same reason `_definitions` is: a docstring saying a
+    module calls `intersect` is precisely what this exists to disbelieve, and one did.
+
+    Deliberately not narrowed to entitlement sets. Filtering on the enclosing function's
+    return annotation gives a tidier list of four and drops `gate/leash.py`, because `decide`
+    and `resume` return a decision rather than a reach, and those two are the gate's call
+    sites and the whole reason this was written. A scope intersection is worth a reader's
+    attention on the same grounds anyway.
+    """
+    found: dict[str, set[str]] = {}
+    for path in sorted(SRC.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:  # pragma: no cover - a file that will not parse fails elsewhere
+            continue
+        for holder in ast.walk(tree):
+            if not isinstance(holder, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            for node in ast.walk(holder):
+                called = node.func if isinstance(node, ast.Call) else None
+                if isinstance(called, ast.Attribute) and called.attr == "intersect":
+                    found.setdefault(path.relative_to(SRC).as_posix(), set()).add(holder.name)
+    return {where: tuple(sorted(names)) for where, names in sorted(found.items())}
+
+
 def test_intersect_is_defined_only_where_a_type_owns_its_own_meaning() -> None:
     """`intersect` is the exception that proves the rule, and it is here so nobody deletes
     the parametrised test above on the grounds that this name breaks it.
@@ -105,9 +133,12 @@ def test_intersect_is_defined_only_where_a_type_owns_its_own_meaning() -> None:
     about every type it might be handed, which is the shape that ends up with a default.
 
     What matters is that `EntitlementSet.intersect` is the only one anything computes reach
-    with, and `gate.invoke` and `ops.automation.flow_reach` both call it rather than doing
-    the set arithmetic themselves. Delete this and a fourth `intersect` looks like it
-    belongs."""
+    with, and `gate.leash.decide` and `ops.automation.flow_reach` both call it rather than
+    doing the set arithmetic themselves. Delete this and a fourth `intersect` looks like it
+    belongs.
+
+    This docstring named `gate.invoke` until 2026-09-08 and that module has no `intersect`
+    call in it. See the test below, which reads the call sites rather than naming them."""
     owners = set(_definitions("intersect"))
 
     assert owners == {
@@ -115,6 +146,77 @@ def test_intersect_is_defined_only_where_a_type_owns_its_own_meaning() -> None:
         "core/scope.py",
         "models/routing.py",
     }, "a new intersect appeared; it needs its own argument for owning that meaning"
+
+
+def test_the_reach_is_computed_where_this_file_says_and_nowhere_else() -> None:
+    """**Four documents said the gate computes the run reach in `brain.gate.invoke.invoke`,
+    and that module has no `intersect` call in it at all.** CLAUDE.md said it, `console/reads.py`
+    said it, `console/reach_view.py` said it, and the docstring above said it. They agreed with
+    one another because each was copied from the last, and none agreed with the code. The gate
+    computes it in `gate/leash.py`, in `decide` and again in `resume`.
+
+    `reads.py` had additionally turned "two call sites" into "two implementations", and that
+    is the drift worth catching rather than the wrong module name: a document saying there are
+    two implementations of the central rule makes writing a second one sound like the status
+    quo instead of the thing the rule forbids.
+
+    A sentence naming a module cannot go stale loudly, so this reads the call sites out of the
+    source. Moving the computation fails here, and the failure names where it moved to.
+
+    Pinned exactly rather than as a superset, which is what `SOLE_DEFINITIONS` and the test
+    above already do and for the same reason: a new place that intersects two reaches is a new
+    place the central rule is applied, and whether that is right is a question for a person.
+    The answer to a failure here is to read the new entry and then add it, not to loosen the
+    comparison.
+
+    Delete this and the prose can drift again, and the next reader looking for where an
+    agent's reach is decided is sent to a module that does not decide it."""
+    assert _intersections() == {
+        "agents/install.py": ("rehearse",),
+        "channels/room.py": ("floor",),
+        "console/reach_view.py": ("run_reach",),
+        "console/reads.py": ("audience",),
+        "core/department.py": (
+            "admits_department",
+            "compose",
+            "plan_cross_department",
+            "starter_scopes",
+        ),
+        "core/entitlement.py": ("intersect", "scope_for"),
+        "demo.py": ("record_grants",),
+        "gate/leash.py": ("decide", "resume"),
+        "identity/sessions.py": ("reach_for",),
+        "knowledge/verification.py": ("may_name_verifier",),
+        "memory/formation.py": ("may_recall",),
+        "memory/review.py": ("agent_memory",),
+        "ops/automation.py": ("flow_reach",),
+        "ops/denial_alerts.py": ("reach",),
+        "ops/feedback.py": ("may_flag",),
+        "tools/run_skill.py": ("handler", "run_skill_script"),
+    }
+
+
+def test_the_module_the_documents_used_to_name_still_computes_no_reach() -> None:
+    """The specific claim, asserted on its own so a failure says what went wrong rather than
+    handing the reader a sixteen-entry diff to compare by eye.
+
+    `gate/invoke.py` is a real module doing real work on the request path, and it is entirely
+    reasonable that somebody would expect the intersection to live there. It does not, and the
+    day it does, the four documents corrected on 2026-09-08 become right again by accident,
+    which is a worse state than being wrong: nobody would then know the sentence had ever been
+    checked.
+
+    **Guarded by what was read.** A mutation found this: the first version asserted the
+    absence against `_intersections()` and nothing stopped that becoming an absence asserted
+    against an empty mapping, which is true for every state the source could be in. An absent
+    key and an empty scan are the same answer, so the module that does compute the reach is
+    asserted present in the same breath.
+
+    Delete this and the correction survives only as a paragraph."""
+    found = _intersections()
+
+    assert "gate/leash.py" in found, "nothing was read, so the absence below proves nothing"
+    assert "gate/invoke.py" not in found
 
 
 # --- a second renderer, whatever it is called ------------------------------------------------
