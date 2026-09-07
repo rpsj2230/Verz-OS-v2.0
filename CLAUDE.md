@@ -10,6 +10,38 @@ code disagreeing with this file, the code is the fact and this file is the bug.
 
 ---
 
+## This repository is the template, not one company's system
+
+**Nothing here is being built for Verz Design.** This repository is the product, and Verz will
+be the first company to install it: their system is created by running the installer on their
+own server, never by copying this development environment. Every company after them installs
+the same product on their own server, with their own database, and owns it outright. Nobody
+operates it on their behalf.
+
+Three rules follow, and they apply to every line written here.
+
+**No company's details go into the source, ever.** Not a company name, not a domain, not a
+work address, not an API key, not a storage path, not an internal identifier. There is no
+later step that strips them out: a value that has to be removed at the end is a value that
+should never have been committed, and by then it is also in the git history. `M41.1` is the
+sweep that refuses one, and it is meant to be green from the first commit rather than fixed
+before a release.
+
+**Anything that differs between companies is configuration, and configuration is read in one
+place.** Company name, branding, domain, identity provider, model choice, storage location,
+which connectors are enabled. These are values a person sets during setup, not constants in a
+module. Nothing reads the environment directly.
+
+**When something cannot be configured, that is a defect in the extension points.** The answer
+is never a branch for one company or a copy of this repository. `M29` holds the plugin
+interfaces; a company-specific connector is a plugin, and a genuinely new feature goes into
+this repository behind a flag and ships to everyone switched off.
+
+The test to apply while writing: **would this line still be correct on a server belonging to a
+company nobody here has met?** If not, it is configuration and belongs in the setup wizard.
+
+---
+
 ## The one invariant everything else serves
 
 ```
