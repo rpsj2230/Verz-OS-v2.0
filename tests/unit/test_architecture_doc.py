@@ -115,3 +115,61 @@ def test_a_settled_decision_is_not_still_described_as_open(decided: str, phrase:
     html = ARCHITECTURE.read_text(encoding="utf-8").lower()
 
     assert decided in html, f"the architecture no longer records that {phrase}"
+
+
+def test_a_wrapped_paragraph_renders_as_one_paragraph_and_not_as_five() -> None:
+    """**The page the owner actually reads, and it was broken in the most visible way.**
+
+    The renderer emitted one `<p>` per source line until 2026-09-08, so a paragraph wrapped at
+    ninety columns in the markdown became five paragraphs on the page, each with a margin under
+    it. The document read as though every other sentence had its own block. The owner described
+    it as broken spacing and line breaks mid-paragraph, which is exactly what it was.
+
+    The file is wrapped for reading in an editor and the browser wraps for itself, so a newline
+    inside a paragraph carries no meaning and must not survive into the markup.
+
+    Asserted by counting: the rendered page must have far fewer paragraphs than the document
+    has non-blank prose lines. A ratio rather than an exact number, because the document
+    changes daily and an exact count would be a test about today's wording.
+
+    Delete this and the next edit to the renderer can go back to splitting on newlines, and
+    nobody notices until somebody opens the page."""
+    from fastapi.testclient import TestClient
+
+    from brain.app import create_app
+
+    source = (ARCHITECTURE.parent / "needs-rupash.md").read_text(encoding="utf-8")
+    prose = [
+        one
+        for one in source.splitlines()
+        if one.strip() and not one.startswith(("#", "-", "|", "*", "    ", "```"))
+    ]
+
+    page = TestClient(create_app()).get("/build/needs-rupash").text
+
+    assert page.count("<p>") < len(prose) / 2, (
+        f"{page.count('<p>')} paragraphs rendered from {len(prose)} wrapped prose lines, "
+        "which means the renderer is splitting on newlines again"
+    )
+
+
+def test_the_page_renders_bold_and_bullets_rather_than_showing_their_marks() -> None:
+    """The document uses `**bold**` to carry the load-bearing sentence of every item and `- `
+    for the option lists the owner chooses from. Both were passed through escaped and
+    unconverted, so the page showed the asterisks and ran the options together as prose.
+
+    Asserted on the absence of the marks as well as the presence of the tags, because a
+    renderer that emitted `<strong>` and left the asterisks in place would satisfy half of
+    this and look worse than before.
+
+    Delete this and the options in an item stop looking like options, which is the part the
+    owner is meant to choose between."""
+    from fastapi.testclient import TestClient
+
+    from brain.app import create_app
+
+    page = TestClient(create_app()).get("/build/needs-rupash").text
+
+    assert "<strong>" in page
+    assert "<li>" in page
+    assert "**" not in page

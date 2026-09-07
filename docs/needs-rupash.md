@@ -2,44 +2,45 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**11 items are open: 32 to 42.** 42 is the newest and blocks nothing today: the pipeline publishes each image and cannot tell the server about it, so a two-minute timer is the only thing deploying anything, and the workflow reports success either way. It needs three secrets set in GitHub and one of them is a token only you can create. 41 and 40 are the newest and neither blocks anything today. 41 is four services that would connect straight to the application's database with nothing budgeting them, which is the shape of the Keycloak outage on the database that holds the company records; none of the four is running yet, so it is a decision to take before they start. 40 is a second copy of the rule that decides who can see what, sitting unused in `core/`, and needs one sentence: delete it or keep it. 39 and 38 are the newest and neither blocks anything. 39 needs two short answers about where the Verz staff list really lives and whether that source may set roles as well as list people. 38 is the console screen list, now thirty-four screens rather than nine, with four design decisions in it worth disagreeing with before they are built. 37 blocks nothing: you asked why we use Keycloak, and the answer is that the part you found painful is a screen we have not built yet rather than a wrong dependency. 36 blocks nothing and needs one word: the plan named promptfoo for evaluation and I used pytest instead, for reasons written out under the item. 32 is three passwords, and it is what stands between
-the console and a working sign-in. 33 is one sentence from you about what "shadow-pinned
-thirty days" means, and it decides a safety property rather than a feature. 34 blocks local
-embedding: the model we chose produces vectors of one width and the corpus column holds
-another, and which of the two moves is a decision with a cost. 35 is the smallest of the four
-and needs only a yes or a no: renaming the repository broke the deploy this afternoon, it is
-fixed and live again, and what is left is whether to rename the container image to match. Answering 29 turned up that there is no
-Keycloak deployed at all, which is the real reason nobody can sign in. It is written and
-sized from measurement now; it needs three secrets I will not create on your behalf.
+**Eleven items are open, and they are not equally urgent.** They had accumulated into one
+paragraph in which three different items each claimed to be "the newest", so here they are
+sorted by what they actually need from you. Nothing below is a request to read code.
 
-**The four that were open this morning were all answered on 2026-09-06.**
+**One is holding up real work.** Item 34: the model we chose produces vectors of one width and
+the column that stores them is another width, so nothing can be embedded until one of the two
+moves. Every other embedding task waits behind it. My recommendation is in the item, and it
+comes with a cost either way.
 
-**31 is decided: Option A.** The parsing and name-recognition models go behind the same
-inference server that embedding already assumes, so every Brain container stays small. Work
-has started, and sizing it turned up one correction worth reading: three models resident need
-about 3 GB, which is more than removing your other project frees. Nothing is blocked on you
-today and there is no image to deploy yet. See 31.
+**Two are one-sentence answers with no work behind them.** Item 33 asks what "shadow-pinned
+thirty days" was meant to mean, and the answer decides a safety property. Item 36 asks whether
+you want the evaluation tool the plan named, or the one I used instead. Neither blocks
+anything; both are quick.
 
-**29 is answered and done.** Yes, `https://brain.194.233.66.89.sslip.io` is exactly the right
-address and it is now registered. Read 29: there is one thing to know about what happens when
-you buy a real domain.
+**Two are decisions to take before something starts rather than faults to fix.** Item 41: four
+services would connect straight to the database with nothing limiting how many connections
+they open, which is the shape of the outage we had on 7 September, on the database that holds
+your company records. None of the four is running yet. Item 42: the build publishes each new
+version and cannot tell the server about it, so a timer is the only thing deploying anything;
+it needs three values pasted into GitHub, and one of them is a token only you can create.
 
-**30 is decided: Option A, and it costs nothing.** No new server, no new container, no money.
-It is a Docker network, which is a few lines of configuration.
+**Two are design reviews, and they are worth twenty minutes each before anything is built.**
+Item 38 is the console screen list, now thirty-four screens rather than nine, with four
+decisions in it worth disagreeing with now rather than after they exist. Item 39 asks where
+your staff list really lives and whether that source may set people's roles as well as list
+their names.
 
-**25 is answered: you will remove your other project from this server.** Measured today, that
-frees about 2.4 GB, which changes the picture in 25 completely and is more than the full
-feature set was short by.
+**One is a tidy-up I should not decide alone.** Item 40: there are two copies of the rule that
+decides who can see what, they already disagree, and nothing uses the second one. Delete it or
+keep it, one sentence.
 
-**24, 26 and 28 were all answered on 2026-09-06.** 24 stays as built: an answer names a
-failed source only to somebody who could already see that source. 26 is decided: public
-visitors get public knowledge only, admins decide what is public, and no login. 28 is done
-and verified: production was being recreated every three minutes by an old deploy timer of
-mine, `brain-deploy.timer` is now disabled, and the recreates have stopped.
+**Two are effectively finished and are kept here so the reasoning is not lost.** Item 32 is
+done apart from two housekeeping steps of yours, listed in it. Item 35 is fixed, with one
+small naming decision left. Item 37 needed nothing from you at all: you asked why Keycloak is
+unpleasant to administer and the answer was that the screen for it is one we have not built.
 
-Everything else on this page is decided. It is kept as a record: each item states what the
-problem was, what was built, and why, so the reasoning outlives the conversation it happened
-in.
+Everything further down this page is decided. It is kept as a record: each item states what
+the problem was, what was built, and why, so the reasoning outlives the conversation it
+happened in.
 
 ---
 
@@ -467,6 +468,14 @@ No rush: the chaser is one of twenty-three agent templates and six are written s
 ---
 
 ## 32. Three passwords, and then people can actually sign in
+
+**Update, 8 September: this is done apart from two steps of yours.** Keycloak is deployed and
+answering on the server, the realm imported, and you have signed in. What is left is the
+housekeeping in the steps you were given: delete the temporary `admin` account now that your
+own exists, then change `KEYCLOAK_ADMIN_PASSWORD` in Coolify to a fresh value. **Do not delete
+that variable** - the stack refuses to start without it, and it is the way back in if every
+administrator is ever lost.
+
 
 **Small, and it is the last thing between the console and a working login.**
 

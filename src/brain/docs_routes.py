@@ -13,6 +13,7 @@ Task ids: M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -362,9 +363,34 @@ def _needs_count() -> int:
     return count
 
 
-@router.get("/build/needs-rupash", response_class=HTMLResponse)
-async def needs_rupash() -> HTMLResponse:
-    """Decisions waiting on a human, rendered from the markdown the repo carries."""
+def _inline(text: str) -> str:
+    """The three inline marks this document actually uses, after escaping.
+
+    Applied to escaped text, so a `<` in the source is already `&lt;` and cannot become a tag.
+    Deliberately three and not a markdown library: the document is written by me and read by
+    one person, and a dependency that renders arbitrary markdown is a dependency that renders
+    arbitrary HTML on a page served from the client's own network.
+    """
+    text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text, flags=re.S)
+    text = re.sub(r"`([^`]+?)`", r"<code>\1</code>", text)
+    return re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', text)
+
+
+@router.get("/build/needs-rupash", response_class=HTMLResponse, tags=["docs"])
+def needs_rupash() -> HTMLResponse:
+    """Decisions waiting on a human, rendered from the markdown the repo carries.
+
+    **Paragraphs are joined before they are wrapped in a tag, and that is the whole fix.**
+    Until 2026-09-08 this emitted one `<p>` per source line, so a paragraph wrapped at ninety
+    columns in the file became five paragraphs on the page, each with a margin under it. The
+    document read as though every other sentence had been given its own block, which is what
+    the owner saw and described as broken spacing and line breaks mid-paragraph.
+
+    The file is wrapped for reading in an editor and the browser does its own wrapping, so the
+    newline inside a paragraph carries no meaning and must not survive into the markup. A
+    blank line does, and so does the start of any block: a heading, a rule, a table row or a
+    list item all end the paragraph before them.
+    """
     path = DOCS / NEEDS_FILE
     if not path.exists():
         return HTMLResponse("<h1>Nothing waiting</h1>", status_code=200)
@@ -373,39 +399,81 @@ async def needs_rupash() -> HTMLResponse:
     raw = path.read_text(encoding="utf-8")
     body: list[str] = []
     in_table = False
+    paragraph: list[str] = []
+    bullets: list[str] = []
+
+    def close_paragraph() -> None:
+        if paragraph:
+            body.append("<p>" + _inline(" ".join(paragraph)) + "</p>")
+            paragraph.clear()
+
+    def close_bullets() -> None:
+        if bullets:
+            body.append("<ul>" + "".join(f"<li>{_inline(one)}</li>" for one in bullets) + "</ul>")
+            bullets.clear()
+
+    def close_table() -> None:
+        nonlocal in_table
+        if in_table:
+            body.append("</table>")
+            in_table = False
+
     for line in raw.splitlines():
         esc = _html.escape(line)
+        stripped = line.strip()
+
         if line.startswith("|"):
+            close_paragraph()
+            close_bullets()
             cells = [c.strip() for c in line.strip("|").split("|")]
             if all(set(c) <= set("-: ") for c in cells):
                 continue
             tag = "th" if not in_table else "td"
             in_table = True
-            row = "".join(f"<{tag}>{_html.escape(c)}</{tag}>" for c in cells)
+            row = "".join(f"<{tag}>{_inline(_html.escape(c))}</{tag}>" for c in cells)
             body.append(f"<tr>{row}</tr>")
             continue
-        if in_table:
-            body.append("</table>")
-            in_table = False
+        close_table()
+
+        if stripped.startswith(("- ", "* ")):
+            close_paragraph()
+            bullets.append(esc.strip()[2:])
+            continue
+        if bullets and stripped and not stripped.startswith(("#", "-", "|")):
+            # A wrapped continuation of the bullet above, joined for the same reason a
+            # paragraph is.
+            bullets[-1] = bullets[-1] + " " + esc.strip()
+            continue
+        close_bullets()
+
         if line.startswith("## "):
-            body.append(f"<h2>{esc[3:]}</h2>")
+            close_paragraph()
+            body.append(f"<h2>{_inline(esc[3:])}</h2>")
         elif line.startswith(ANSWERED_HEADING):
             # Everything from here on is decided, so it folds away. It stays on the page
             # rather than moving to another file, because the reasoning behind a decision is
             # most wanted by whoever is questioning that decision, and they arrive here.
             # Collapsed rather than dropped, so what the page is *about* is what is open.
+            close_paragraph()
             body.append(
-                f"</div><details class='past'><summary>{esc[2:]} "
+                f"</div><details class='past'><summary>{_inline(esc[2:])} "
                 "&mdash; decided, kept as a record</summary><div>"
             )
         elif line.startswith("# "):
-            body.append(f"<h1>{esc[2:]}</h1>")
+            close_paragraph()
+            body.append(f"<h1>{_inline(esc[2:])}</h1>")
         elif line.startswith("---"):
+            close_paragraph()
             body.append("<hr>")
-        elif line.strip():
-            body.append(f"<p>{esc}</p>")
-    if in_table:
-        body.append("</table>")
+        elif stripped:
+            paragraph.append(esc.strip())
+        else:
+            close_paragraph()
+
+    close_paragraph()
+    close_bullets()
+    close_table()
+
     # The open section opens a div that the answered summary closes. If the document has no
     # answered heading - which it will not once every item is decided - the wrapper still
     # has to balance, so the closing tags are emitted only when the fold was opened.
