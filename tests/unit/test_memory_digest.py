@@ -555,40 +555,91 @@ def test_digest_gaps_reports_a_tier_boundary_and_a_total_that_should_not_exist(
     assert any("MemoryItem carries confidence" in one for one in gaps), gaps
 
 
-def test_nothing_yet_calls_either_of_the_human_surfaces() -> None:
-    """**The honest gap, asserted so it cannot be forgotten quietly.**
+def _callers_of(*surfaces: str) -> list[str]:
+    """Every module outside `brain.memory` that imports one of these surfaces, as dotted names.
 
-    `weekly_digest`, `agent_memory`, `department_memory` and `review_queue` are correct,
-    tested and reachable by nothing. There is no route on the router in `brain.api_routes`, no
-    scheduled job that would send a digest, and no producer anywhere that assembles a
-    `Learning`: the `mem` schema holds `persistent` and `adaptive` and no table carries a
-    proposal, an observation or a correction, so `undo` returns a `Supersession` that nothing
-    can write down.
+    By import line rather than by call site, because the first thing a caller does is import,
+    and a module that has imported a listing and not yet called it is already the state this
+    guard exists to notice.
 
-    This is the thirteenth instance in this repository of something correct, tested,
-    documented and never invoked, and it is the same shape as the twelfth, which
-    `test_memory_correction.test_nothing_yet_composes_a_correction_with_the_recall_path`
-    records. The difference from the other twelve is that both of them say so in a test rather
-    than in a docstring nobody runs.
-
-    Written as a repository fact rather than as a signature check, because the absence being
-    recorded is an absence of callers rather than of parameters, and a caller is what will
-    appear first.
-
-    Delete this and the gap stops being visible, and the day somebody wires a memory tab they
-    will wire the half they can see, which is the listing rather than the entitlement
-    argument it takes."""
-    surfaces = ("brain.memory.digest", "brain.memory.review")
-    callers = [
-        f"{path.relative_to(REPO)}:{number}"
+    Dotted module names rather than a path and a line number, so that editing a docstring in a
+    caller does not fail this test with a message about a line that moved.
+    """
+    found = {
+        ".".join(path.relative_to(REPO / "src").with_suffix("").parts)
         for path in (REPO / "src").rglob("*.py")
         if "memory" not in path.parts[-2:]
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        for line in path.read_text(encoding="utf-8").splitlines()
         if line.startswith(("import ", "from ")) and any(one in line for one in surfaces)
-    ]
+    }
+    return sorted(found)
 
-    assert not callers, (
-        f"a caller now exists at {callers}, so these surfaces are wired; replace this test "
-        "with one asserting that the caller passes the reader's own entitlement set and, for "
-        "the agent tab, the agent's ceiling"
+
+def test_the_one_surface_with_a_caller_reads_the_agent_tab_at_the_run_reach() -> None:
+    """**The successor to the gap this file used to record**, and it is here rather than in
+    the caller's own test file on purpose: the guard belongs beside the thing being guarded,
+    so a second caller written by somebody who never opens `tests/unit/test_reach_view.py`
+    still lands on it.
+
+    `brain.memory.digest` had no caller anywhere in `src` until `brain.console.reach_view`
+    arrived. What that module has to get right is the argument rather than the listing: an
+    agent tab is read at `E_run(caller, agent) = E(caller) intersect agent_ceiling`, so a
+    memory formed under a capability the agent's ceiling does not cover is absent from the
+    agent's tab however much the caller reaches on their own.
+
+    Driven through the real `separate_memory`, `run_reach` and `may_recall` rather than
+    asserted about a signature, because the failure being guarded is a caller that passes the
+    caller's own entitlement set where the run's belongs, and that failure has the right
+    signature.
+
+    Delete this and the day somebody wires a second memory tab they will wire the half they
+    can see, which is the listing rather than the entitlement argument it takes."""
+    from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord, entitlement_ceiling
+    from brain.console.reach_view import run_reach, separate_memory
+    from brain.knowledge.visibility import Visibility
+
+    agent = AgentRecord(
+        agent_id="support_triage",
+        display_name="Support triage",
+        persona="Answers support questions in the house voice.",
+        audience=AgentAudience(level=Visibility.PERSONAL, owner_id="p_reader"),
+        authority=AgentAuthority(
+            scope=Scope.unrestricted(),
+            capabilities=(Capability(value="read:client.name"),),
+        ),
+        created_by="p_reader",
     )
+    caller = reader("read:client.name", "read:ticket.status")
+    outside_the_ceiling = learning(
+        "m_1", capability="read:ticket.status", agent_id="support_triage"
+    )
+    view = separate_memory(
+        now=NOW,
+        caller=caller,
+        record=agent,
+        subject_id="p_writer",
+        learnings=[outside_the_ceiling],
+    )
+
+    assert run_reach(caller, agent) == caller.intersect(entitlement_ceiling(agent))
+    assert view.per_agent == ()
+    assert [one.memory_id for one in view.per_person] == ["m_1"]
+
+
+def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
+    """**The honest gap, still asserted, and now narrowed to what is genuinely uncalled.**
+
+    `weekly_digest`, `agent_memory`, `department_memory` and `review_queue` are correct,
+    tested and reachable by nothing: there is no route on the router in `brain.api_routes`, no
+    scheduled job that would send a digest, and no producer anywhere that assembles a
+    `Learning`, so `undo` still returns a `Supersession` that nothing can write down.
+
+    What changed is that `brain.memory.digest`'s shapes now have exactly one importer, which
+    the test above holds to passing the run's reach rather than the caller's. The set is
+    pinned rather than counted, so a second importer fails here and has to be argued and given
+    a sibling of that test rather than being absorbed into a number.
+
+    Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
+    by somebody who saw that a caller already existed and assumed the question was settled."""
+    assert _callers_of("brain.memory.review") == []
+    assert _callers_of("brain.memory.digest") == ["brain.console.reach_view"]
