@@ -1,7 +1,7 @@
 """Running migrations at startup, safely, with more than one replica.
 
 Migrations used to run as a separate one-shot container. That worked, but it exits when
-it succeeds, and Coolify has no way to be told a container is *meant* to stop — so a
+it succeeds, and Coolify has no way to be told a container is *meant* to stop, so a
 successful migration displayed as a red "Exited" next to three healthy services, forever.
 A status anyone has to remember is fine is a status that will eventually be believed.
 
@@ -14,8 +14,8 @@ mid-migration does not wedge the deployment.
 
 The trade-off, stated because it is real: a failed migration now fails startup, so the
 application refuses to serve rather than serving against a schema it does not match. That
-is the behaviour we want — the alternative is answering questions from a half-migrated
-database — but it does mean a bad migration takes the app down rather than just failing a
+is the behaviour we want, the alternative is answering questions from a half-migrated
+database, but it does mean a bad migration takes the app down rather than just failing a
 job. The invariant suite and the CI stack test exist to catch that before it deploys.
 
 Task ids: M0.3.2, M31.1.1.2

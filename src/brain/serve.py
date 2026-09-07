@@ -1,7 +1,7 @@
 """Entry point. Sizes the process against the container, then hands over to uvicorn.
 
 Exists because `uvicorn --workers N` needs N decided before the process starts, and the
-only honest source for N is the container's own cgroup limits — which are not knowable
+only honest source for N is the container's own cgroup limits, which are not knowable
 from a Dockerfile.
 
 Task ids: M31.1.2.1, M31.1.2.2, M31.1.2.3

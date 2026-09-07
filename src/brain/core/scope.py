@@ -5,7 +5,7 @@ objects) and in SQL (for queries). It composes by conjunction only.
 
 That restriction is the whole design. Disjunction would let two narrow grants combine
 into a wider one, which means you could never answer "what can this person see?" by
-reading their grants — you would have to solve a satisfiability problem. Conjunction-only
+reading their grants, you would have to solve a satisfiability problem. Conjunction-only
 means composing scopes can only ever narrow, so the reachable set of any grant set is
 computable by inspection.
 
@@ -129,7 +129,7 @@ class Scope(BaseModel):
     on a grant that was explicitly written as company-wide.
 
     Clauses are normalised on construction: deduplicated and sorted. Conjunction is both
-    commutative and idempotent, so this changes no meaning — but it makes two scopes that
+    commutative and idempotent, so this changes no meaning, but it makes two scopes that
     admit the same rows serialise identically, which `EntitlementSet.ent_hash` depends on.
     Without it, intersecting a scope with itself yields duplicate clauses and a different
     hash, so the same caller would miss their own cache entry and appear in traces as a
@@ -160,7 +160,7 @@ class Scope(BaseModel):
         return all(c.matches(row) for c in self.clauses)
 
     def intersect(self, other: Scope) -> Scope:
-        """Conjunction. The result can only be narrower than either input, never wider —
+        """Conjunction. The result can only be narrower than either input, never wider,
         which is the property the whole permission model rests on."""
         return Scope(clauses=self.clauses + other.clauses)
 

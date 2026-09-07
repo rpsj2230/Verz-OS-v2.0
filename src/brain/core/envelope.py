@@ -1,7 +1,7 @@
 """The typed result envelope, and the tool contract.
 
 Everything a tool returns is wrapped in a TypedResult carrying an entity tag and a record
-id. That is not bookkeeping — it is what makes field-level redaction possible at all. The
+id. That is not bookkeeping, it is what makes field-level redaction possible at all. The
 redactor walks the envelope, and for each field asks "does the caller hold
 `read:<entity>.<field>` in a scope that admits this row?". A tool that returned an untyped
 dict would have no entity to ask about, so the redactor would have to either pass it
@@ -114,7 +114,7 @@ class IdentityMode(enum.StrEnum):
 
     DELEGATED means the caller's own token, so the source enforces its own permissions
     too. SERVICE means a shared credential, which is why any SERVICE tool must carry a
-    scope predicate — the source will not narrow it for us.
+    scope predicate, the source will not narrow it for us.
     """
 
     DELEGATED = "delegated"

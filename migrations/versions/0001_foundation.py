@@ -1,6 +1,6 @@
 """Extensions, schema namespaces, and the application role.
 
-The first migration. It creates nothing that holds data — it establishes the ground every
+The first migration. It creates nothing that holds data, it establishes the ground every
 later migration stands on: the four extensions, the nine schemas, and an application role
 that explicitly cannot bypass row-level security.
 
@@ -92,7 +92,7 @@ def upgrade() -> None:
         # then because a ::text cast collides with SQLAlchemy's own :param syntax.
         #
         # This matters for a password with a quote in it, which any generator produces
-        # eventually — and the difference is between it failing loudly and it executing.
+        # eventually, and the difference is between it failing loudly and it executing.
         conn = op.get_bind()
         stmt = (
             sql.SQL("ALTER ROLE {role} PASSWORD {pw}")

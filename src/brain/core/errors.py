@@ -2,8 +2,8 @@
 
 Five outcomes, and the distinction between the first two is the one that matters:
 
-- DENIED   — it exists and you may not see it
-- ABSENT   — it does not exist, or no grant covers it, and we will not say which
+- DENIED: it exists and you may not see it
+- ABSENT: it does not exist, or no grant covers it, and we will not say which
 
 Every user-facing path must collapse DENIED into ABSENT before it reaches a person.
 Otherwise "you are not allowed to see the contract value for SNM" confirms that SNM has

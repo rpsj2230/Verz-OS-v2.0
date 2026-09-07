@@ -1,7 +1,7 @@
 """Rules a migration must satisfy before it can merge.
 
 Alembic will autogenerate a migration from a model diff, and the generated file is very
-often nearly right — which is the problem. Nearly right passes review, and the three ways
+often nearly right, which is the problem. Nearly right passes review, and the three ways
 it is wrong are all invisible in a diff:
 
 **A dropped column looks like a rename.** Autogenerate sees `old_name` gone and `new_name`
@@ -129,7 +129,7 @@ class Finding:
     detail: str
 
     def __str__(self) -> str:
-        return f"{self.file}: {self.rule} — {self.detail}"
+        return f"{self.file}: {self.rule}, {self.detail}"
 
 
 def _function_body(text: str, name: str) -> str:

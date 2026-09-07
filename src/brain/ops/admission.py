@@ -749,8 +749,8 @@ def _wait_seconds(budget: Budget, *, used: int, units: int, ceiling: int, positi
     """
     needed = max(1, used + units - ceiling + max(0, position - 1))
     if budget.kind is BudgetKind.RATE:
-        # `window_seconds` is never None on a rate budget — `Budget.__post_init__` refuses
-        # one without it — but that is a runtime guarantee and the type is still optional,
+        # `window_seconds` is never None on a rate budget, `Budget.__post_init__` refuses
+        # one without it, but that is a runtime guarantee and the type is still optional,
         # so the fallback is spelled out rather than asserted away.
         window = budget.window_seconds or budget.mean_service_seconds
         return math.ceil(needed / ceiling) * window

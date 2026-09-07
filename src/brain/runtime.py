@@ -4,13 +4,13 @@ Three things that only matter when a container stops, which is to say on every d
 
 **Worker count is derived, not guessed.** The target host runs about thirty containers on
 twelve gigabytes. `2 * cores + 1`, the usual rule, would start nine workers on a four-core
-box and each holds its own connection pool — so the pooler's two hundred client slots are
+box and each holds its own connection pool, so the pooler's two hundred client slots are
 gone before a single question arrives. Worker count is chosen against memory and the pool,
 not against cores.
 
 **Shutdown drains rather than cuts.** Uvicorn stops accepting first, then waits for
 in-flight requests. Without a grace period longer than the slowest ordinary request, a
-deploy returns 502 to whoever was mid-question — and on a system where a question can take
+deploy returns 502 to whoever was mid-question, and on a system where a question can take
 eight seconds, a five-second grace period fails several every time.
 
 **SIGTERM is the deploy signal, SIGINT is a person.** Docker sends SIGTERM and waits ten
@@ -70,7 +70,7 @@ def profile_for(
 
     # Longer than the slowest ordinary request, and still inside Docker's stop timeout.
     # If those two cannot both hold, the request wins and the container stop timeout has
-    # to be raised — cutting a question in half to save two seconds is the wrong trade.
+    # to be raised, cutting a question in half to save two seconds is the wrong trade.
     graceful = min(DOCKER_STOP_TIMEOUT - 2, max(5, int(slowest_request_seconds) + 2))
 
     return ProcessProfile(

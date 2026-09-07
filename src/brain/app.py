@@ -3,7 +3,7 @@
 Liveness and readiness are separate endpoints and the distinction is load-bearing.
 Liveness answers "is this process alive"; readiness answers "can this process answer a
 question correctly". A container that is up but cannot reach the database, the cache or
-the secret store must fail readiness, because a half-connected instance does not refuse —
+the secret store must fail readiness, because a half-connected instance does not refuse,
 it answers from whatever it can still reach, which is how a permission-aware system
 quietly starts returning wrong answers.
 
@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     # DATABASE_URL and VALKEY_URL are read under their plain names as well as the
     # prefixed ones. The prefix exists so BRAIN_ENV cannot collide with anything else on
     # a shared host, but these two have universal names that every tool, compose file and
-    # operator already uses — including alembic/env.py two directories away.
+    # operator already uses, including alembic/env.py two directories away.
     #
     # Having two names for one setting is not a naming preference, it is a bug waiting to
     # happen, and it did: the deployed app read BRAIN_DATABASE_URL, found nothing, and

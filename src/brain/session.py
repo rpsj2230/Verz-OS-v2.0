@@ -4,7 +4,7 @@ Two engines, deliberately, and the reason is PgBouncer.
 
 **The application engine runs through PgBouncer in transaction mode**, which hands a
 different backend connection to every transaction. That is what makes a hundred
-application connections survivable on a database configured for twenty — but it breaks
+application connections survivable on a database configured for twenty, but it breaks
 server-side prepared statements, because the statement is prepared on one backend and
 executed on another. psycopg raises `InvalidSqlStatementName` or, worse, silently reuses a
 plan built for different parameters. So `prepare_threshold=None` is not a tuning knob

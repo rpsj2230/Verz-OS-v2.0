@@ -141,7 +141,7 @@ def sweep_grant_isolation() -> None:
     """No foreign key may run from a grant table to a connector table.
 
     If grants referenced connectors, removing a connector could cascade into removing
-    grants — and worse, the reverse: adding a connector would become a way to touch the
+    grants, and worse, the reverse: adding a connector would become a way to touch the
     permission graph. The two must stay unjoinable at the schema level.
     """
     url = _needs_db()
@@ -765,6 +765,54 @@ def sweep_install_from_empty() -> None:
         print(f"ok: {line}")
 
 
+#: The character CLAUDE.md forbids, named rather than typed inline so a reader of this file
+#: does not have to tell it from a hyphen at a glance.
+EM_DASH: str = chr(8212)
+
+#: Where the rule is enforced today. `tests` and `docs` still hold the backlog; see
+#: `sweep_house_style` for why this is scoped rather than total.
+HOUSE_STYLE_AREAS: tuple[str, ...] = ("src", "migrations", "ops")
+
+#: What is read inside them.
+HOUSE_STYLE_SUFFIXES: frozenset[str] = frozenset({".py", ".sh", ".json", ".yml", ".yaml"})
+
+
+def sweep_house_style() -> None:
+    """No em dash in the source, the migrations or the operational scripts.
+
+    CLAUDE.md has said "no em dashes, anywhere" since the day it was written and nothing
+    enforced it, so eighty-one of them accumulated across thirty-five files. That is the
+    ordinary fate of a rule with no check behind it: everybody agrees with it, nobody is
+    reminded of it, and the count only ever goes up.
+
+    **Scoped to what is clean rather than to everything the rule covers.** `tests` and `docs`
+    still hold the rest, and a check that is red the day it lands is a check somebody switches
+    off, which `sweep_traceability` records at length about its own advisory notes. Widening
+    this is one entry in `HOUSE_STYLE_AREAS` once those are done.
+
+    The character rather than a pattern, because there is nothing to interpret: an em dash is
+    an em dash, and the fix is the punctuation the sentence actually wanted.
+    """
+    findings: list[str] = []
+    for area in HOUSE_STYLE_AREAS:
+        root = REPO / area
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.suffix not in HOUSE_STYLE_SUFFIXES:
+                continue
+            if "__pycache__" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for number, line in enumerate(text.splitlines(), 1):
+                if EM_DASH in line:
+                    where = str(path.relative_to(REPO)).replace(chr(92), "/")
+                    findings.append(f"{where}:{number} carries an em dash: {line.strip()[:70]}")
+    if findings:
+        raise SweepFailure(findings)
+    print(f"ok: no em dash in {', '.join(HOUSE_STYLE_AREAS)}")
+
+
 SWEEPS = {
     "rls": sweep_rls,
     "grant_isolation": sweep_grant_isolation,
@@ -774,6 +822,7 @@ SWEEPS = {
     "slug_collisions": sweep_slug_collisions,
     "dependencies": sweep_dependencies,
     "client_independence": sweep_client_independence,
+    "house_style": sweep_house_style,
     "install_from_empty": sweep_install_from_empty,
 }
 

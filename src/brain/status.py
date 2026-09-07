@@ -97,7 +97,7 @@ def reopened_ids(body: str) -> set[str]:
 def claimed_ids(subject: str, body: str) -> set[str]:
     """Task ids a commit actually claims.
 
-    Read from the subject line and from `Closes:` lines only — never from body prose.
+    Read from the subject line and from `Closes:` lines only, never from body prose.
 
     That restriction was added after a commit whose body listed ten ids under
     "Deliberately NOT claimed, with the reason" and thereby claimed all ten. The parser
@@ -144,7 +144,7 @@ def closed_task_ids(repo: Path, ref: str = "HEAD") -> tuple[set[str], list[dict[
     recent: list[dict[str, str]] = []
     for entry in raw.split("\x1e"):
         # Strip line endings only, never str.strip(). Python counts \x1c through \x1f as
-        # whitespace, so a bare .strip() eats the trailing unit separator — and a commit
+        # whitespace, so a bare .strip() eats the trailing unit separator, and a commit
         # with an empty body (any one-line message, which is most of them) then splits
         # into three fields instead of four and is silently dropped. That would have
         # under-counted progress with no error anywhere.

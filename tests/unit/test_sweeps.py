@@ -14,6 +14,15 @@ from brain import status as status_module
 from brain.core import department
 from brain.ops import sweeps
 
+#: A file carrying one em dash, for the sweep to find. Built with `chr(8212)` rather than
+#: typed, because a literal one here would be a violation of the rule this file tests and
+#: `sweep_house_style` would refuse the repository for its own test fixture.
+PROBE_TEXT = (
+    '"""A probe written and removed by test_sweeps.\n\n'
+    "It carries one em dash " + chr(8212) + " right here, on purpose.\n\n"
+    'Task ids: none\n"""\n'
+)
+
 
 def test_sweep_failure_carries_every_finding() -> None:
     exc = sweeps.SweepFailure(["a", "b", "c"])
@@ -802,3 +811,38 @@ def test_the_counter_reports_nothing_rather_than_failing_without_a_repository() 
         assert sweeps._source_claims_never_closed_by_a_commit() == 0
     finally:
         sweeps.REPO = original
+
+
+def test_the_house_style_sweep_raises_on_an_em_dash_rather_than_only_printing() -> None:
+    """**Three mutations survived until this existed.** The only test covering a registered
+    sweep asserts it exits zero on this tree, which a sweep that can never fail satisfies
+    perfectly, and so does one that searches no area and one that reads no file type. All
+    three were green.
+
+    So the raising half is asserted directly, by planting an em dash in a real file under a
+    searched area and asking the sweep. The alternative, checking the function contains a
+    `raise`, is the shape this repository has been caught by twice.
+
+    The finding names the file and the line, because the fix is to choose the punctuation the
+    sentence actually wanted and somebody has to find the sentence.
+
+    Delete this and `sweep_house_style` can be reduced to a print, and the rule goes back to
+    being a sentence in CLAUDE.md that eighty-one violations accumulated under."""
+    from brain.ops.sweeps import REPO, SweepFailure, sweep_house_style
+
+    probe = REPO / "src" / "brain" / "_temporary_house_style_probe.py"
+    probe.write_text(
+        PROBE_TEXT,
+        encoding="utf-8",
+        newline="\n",
+    )
+    try:
+        with pytest.raises(SweepFailure) as raised:
+            sweep_house_style()
+    finally:
+        probe.unlink(missing_ok=True)
+
+    assert any("_temporary_house_style_probe" in one for one in raised.value.findings)
+    assert any(":3" in one for one in raised.value.findings), raised.value.findings
+
+    sweep_house_style()

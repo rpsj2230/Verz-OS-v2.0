@@ -93,7 +93,7 @@ class Page[T](BaseModel):
 
 
 def encode_cursor(position: dict[str, Any]) -> str:
-    """Opaque, not encrypted. It hides the shape, not a secret — never put a row a caller
+    """Opaque, not encrypted. It hides the shape, not a secret, never put a row a caller
     cannot see into one, because a cursor travels back and forth through the client."""
     return base64.urlsafe_b64encode(json.dumps(position, sort_keys=True).encode()).decode()
 

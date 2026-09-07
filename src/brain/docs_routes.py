@@ -4,7 +4,7 @@ The tracker and the architecture live at a fixed path on the server rather than 
 chat, so "how far along is it" is a URL that is always current, and progress is read from
 merged commits rather than from anyone's browser.
 
-These routes are public-by-deployment but carry no company data — they describe the build,
+These routes are public-by-deployment but carry no company data, they describe the build,
 not the client's records. Nothing here touches the gate.
 
 Task ids: M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5

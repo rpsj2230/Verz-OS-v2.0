@@ -25,7 +25,7 @@ echo "==> deploying to $HOST ($UUID)"
 
 # A signature nothing checks is a signature that silently stops being made. This verifies
 # on the server, before the image is pulled, that what is about to run was built by this
-# repository's own workflow — not merely that it exists in the registry.
+# repository's own workflow, not merely that it exists in the registry.
 #
 # cosign is optional here rather than required: a machine without it should not be unable
 # to deploy, but it must say so rather than passing quietly. Skipping a check and passing
@@ -74,7 +74,7 @@ fi
 
 echo "==> live"
 # Split on commas first. Matching commit and percent in one pattern picked up
-# commit_subject instead, because .* is greedy — and it reported 0% while the real
+# commit_subject instead, because .* is greedy, and it reported 0% while the real
 # figure was 8%, which is exactly the kind of wrong number this script exists to avoid.
 # Only the top-level figures. Every wave object also carries "done" and "percent", so
 # without the head the same fields print nine more times with per-wave values.

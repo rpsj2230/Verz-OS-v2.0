@@ -71,7 +71,7 @@ def normalise_database_url(url: str) -> str:
     """Point a plain postgres URL at psycopg 3.
 
     `postgresql://` is what every operator, tutorial and other tool writes, and SQLAlchemy
-    maps it to psycopg2 — a driver this project does not install. The failure is
+    maps it to psycopg2, a driver this project does not install. The failure is
     `ModuleNotFoundError: No module named 'psycopg2'`, which reads like a missing
     dependency rather than a URL scheme, so it sends you to pyproject.toml instead of to
     the connection string.
@@ -122,7 +122,7 @@ class TimestampMixin:
 
     `server_default=func.now()` and `onupdate` mean the times come from one clock. An
     application-set timestamp is the clock of whichever container handled the write, and
-    on a box running thirty containers those drift — which makes an audit ledger ordered
+    on a box running thirty containers those drift, which makes an audit ledger ordered
     by application time subtly wrong exactly when it matters.
     """
 

@@ -6,7 +6,7 @@ cache key can encode "who was asking" without encoding who they were.
 
 The one rule this module exists to enforce: entitlements are **additive only**. There is
 no deny clause and no subtraction. A field is invisible because no grant covers it, never
-because a rule removed it. Deny rules are what make permission systems unanswerable —
+because a rule removed it. Deny rules are what make permission systems unanswerable,
 once you have them, "can X see Y" stops being a lookup and becomes an evaluation order
 problem.
 
@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from brain.core.scope import Scope
 
-#: verb:noun[.field] — lowercase, dot-separated, no wildcards except a trailing `.*`
+#: verb:noun[.field], lowercase, dot-separated, no wildcards except a trailing `.*`
 CAPABILITY_RE = re.compile(r"^[a-z][a-z0-9_]*:[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*|\.\*)*$")
 
 VERBS = frozenset({"read", "write", "invoke", "approve", "admin"})
@@ -85,7 +85,7 @@ class EntitlementSet(BaseModel):
 
     `not_after` is carried here rather than checked by whoever builds this, because a
     check that lives in a helper is a check someone can construct their way around. An
-    expired principal's grants stay on file — revocation and expiry are different events —
+    expired principal's grants stay on file, revocation and expiry are different events,
     so the set has to know it is expired and refuse on that basis.
     """
 

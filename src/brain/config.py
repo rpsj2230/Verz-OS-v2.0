@@ -7,7 +7,7 @@ for a string field, and a default of `""` turns a missing setting into a working
 configuration that does the wrong thing.
 
 So requirements are declared per environment and checked at startup. Development may lack
-almost everything — running the documents locally with no Postgres is normal. Production
+almost everything, running the documents locally with no Postgres is normal. Production
 may lack nothing, and says so loudly rather than degrading into a shape nobody asked for.
 
 The check runs before the server binds a port, so a misconfigured container fails to start
@@ -47,7 +47,7 @@ class ConfigProblem:
     fix: str
 
     def __str__(self) -> str:
-        return f"{self.setting}: {self.problem} — {self.fix}"
+        return f"{self.setting}: {self.problem}, {self.fix}"
 
 
 def required_for(env: str) -> tuple[str, ...]:
@@ -65,7 +65,7 @@ def check(env: str, values: dict[str, str]) -> list[ConfigProblem]:
     """Every problem, not just the first.
 
     Reporting one at a time turns a misconfigured deployment into a sequence of restarts,
-    each revealing the next thing — which is how a five-minute fix takes an hour.
+    each revealing the next thing, which is how a five-minute fix takes an hour.
     """
     problems: list[ConfigProblem] = []
 

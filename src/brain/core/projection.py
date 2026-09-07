@@ -2,11 +2,11 @@
 
 Three tiers, and the boundary between the second and third is the one this file enforces.
 
-- **Local** — ours: identity, capabilities, audit, knowledge, memory, the entity registry.
-- **Projected** — a pointer, never the payload. Record ids, join keys, status enums,
+- **Local**, ours: identity, capabilities, audit, knowledge, memory, the entity registry.
+- **Projected**, a pointer, never the payload. Record ids, join keys, status enums,
   timestamps, short display labels, and the source's own visibility predicate. Capped at
   twelve fields per entity type.
-- **Federated** — everything else, fetched live at question time, never stored.
+- **Federated**, everything else, fetched live at question time, never stored.
 
 The cap and the denylist are not the same rule and both are needed. The cap keeps the
 projection a pointer rather than a mirror; the denylist names fields that may not be
@@ -32,7 +32,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 #: Never projected, at any size, under any configuration. From the architecture's data
-#: tier table, where these sit under "Federated — never stored".
+#: tier table, where these sit under "Federated, never stored".
 #:
 #: Each is here because storing it converts a permission mistake into a breach: a bug that
 #: over-returns a projected field leaks whatever we kept, while the same bug over a
