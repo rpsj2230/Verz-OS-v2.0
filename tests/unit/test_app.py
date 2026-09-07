@@ -395,36 +395,45 @@ def test_cors_is_closed_unless_origins_are_configured() -> None:
 
 
 # ------------------------------------------------- what readiness does not say (M31.1.1.5)
-def test_readiness_reports_tools_ready_while_the_catalogue_is_empty() -> None:
+def test_readiness_says_the_same_thing_whether_the_catalogue_can_answer_or_not() -> None:
     """**Measured on production on 2026-09-06: `tools=0` in the log, `{"tools": true}` on
-    `/health/ready`.** Both statements are accurate and together they read as something that
-    is not true.
+    `/health/ready`.** Both statements were accurate and together they read as something that
+    was not true.
 
     This module's docstring defines readiness as "can this process answer a question
     correctly", and a process holding no tools cannot answer anything. The check is really
     asserting that the catalogue was built and passed `freeze`, and an empty catalogue passes
     trivially, so the flag cannot distinguish a wired application from an unwired one.
 
-    The emptiness itself is expected and argued in `brain.tools.startup`: `RowSource.rows` is
-    synchronous, this application has an `AsyncEngine`, and each of the three ways out changes
-    the deployed connection profile. Nothing is being hidden. What this test refuses is the
-    gap being undocumented at the place an operator actually looks.
+    **The gap narrowed on 2026-09-07 and did not close.** The row plane became awaitable, so
+    `SessionRowSource` can use the pool the application already has, and an installation with a
+    database now registers a row tool. One with no database still registers nothing and still
+    reports the same `True`.
 
-    **The assertion is deliberately the awkward way round.** It pins the *current* state, so
-    it fails the day somebody passes a row source and the application starts registering
-    tools. That is the point: whoever wires it has to come back here, read the paragraph in
-    `lifespan`, and decide what readiness should mean once the answer can be yes.
+    **The old version of this test pinned the old state deliberately and was right to.** It
+    asserted the catalogue was empty and said in its own message that whoever wired a source
+    had to come back and decide what readiness should mean. It then failed in CI rather than
+    here, because CI sets `DATABASE_URL` and this machine does not, which made it the second
+    test that day to pass locally and fail on the runner for that reason. So this one is
+    written to hold in both places: it asserts the relationship rather than the count.
 
-    Delete this and a readiness check that has been green for months while the system could
-    not answer a single question stays green, and stays unexamined."""
+    What it says now is the remaining overstatement, in one line: readiness is True either
+    way, and the catalogue is non-empty exactly when a source was available to build it from.
+    Closing that means readiness knowing which profile it is in, which is a change to what the
+    check means rather than to a line.
+
+    Delete this and a readiness check that is green whether or not the system can answer
+    anything stays green, and stays unexamined."""
     app = create_app(Settings(env="development", commit_sha="abc1234"))
     with TestClient(app) as c:
         body = c.get("/health/ready").json()
 
         assert body["checks"]["tools"] is True
-        assert len(app.state.tools) == 0, (
-            "the application now registers tools, so the readiness paragraph in "
-            "brain.app.lifespan is out of date and needs rewriting by whoever wired it"
+
+        had_a_source = app.state.db_sessions is not None
+        assert (len(app.state.tools) > 0) is had_a_source, (
+            "the catalogue no longer follows whether a row source was available, so either a "
+            "tool is registered with nothing to read or a source was passed and dropped"
         )
 
 
