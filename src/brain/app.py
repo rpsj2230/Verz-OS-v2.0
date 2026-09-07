@@ -37,6 +37,7 @@ from brain.docs_routes import router as docs_router
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.identity.bearer import log_refusal, refusal_headers
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
+from brain.install import installed_name
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.trace_sink import CountingTraceSink
@@ -283,7 +284,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     in_production = settings.env == "production"
     app = FastAPI(
-        title="Verz Company Brain",
+        # The client's own, not ours. `brain.install` is the only reader; a literal here is a
+        # product wearing one deployment's name, and it is the first thing an API consumer
+        # sees. See `docs/repository-map.md`.
+        title=installed_name(),
         version="0.1.0",
         lifespan=lifespan,
         docs_url=None if in_production else "/docs",

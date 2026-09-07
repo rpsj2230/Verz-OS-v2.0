@@ -1,7 +1,13 @@
-# Verz Company Brain
+# Company Brain
 
 A permission-aware AI platform over a company's own business data. Single-tenant: the
 client hosts the entire stack on their own server.
+
+**This repository is the template, not one client's copy.** A client install is a release tag
+plus one environment file; every value that belongs to a client is declared in
+`src/brain/install.py` and lives in that install's own `.env`. Verz is one deployment of this
+and its values are not in here. `docs/repository-map.md` says which parts an install touches,
+which is none of them.
 
 The specification lives outside this repository — architecture, task tracker and key
 screens. See `_LINKS.md` in the parent folder for the current URLs.

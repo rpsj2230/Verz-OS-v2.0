@@ -35,7 +35,7 @@ sign-in page that redirects to somebody else's identity provider, and an empty s
 perfectly valid string. A value that has a safe neutral default takes it, because refusing to
 start over an unset logo would make the safe configuration the one that fails.
 
-Task ids: M41.1.2, M41.1.3, M41.1.4, M41.1.5, M41.1.6, M41.1.7
+Task ids: M41.1.2, M41.1.3, M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.3.1, M41.3.4
 """
 
 from __future__ import annotations
@@ -149,7 +149,11 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "What the client calls this system internally. Separate from the company name "
             "because several clients rename it, and the page title is the two together."
         ),
-        default="Company Brain",
+        # "Brain" rather than "Company Brain", because the two are concatenated and the
+        # unconfigured title came out as "Your Company Company Brain". Composing beats
+        # repeating: an install that changes nothing reads "Your Company Brain", and one that
+        # sets its own name reads "Acme Brain" or "Acme Knowledge Desk".
+        default="Brain",
     ),
     Setting(
         name="INSTALL_LOGO_URL",
@@ -298,6 +302,18 @@ def value_of(name: str, env: Mapping[str, str] | None = None) -> str:
     return declared.default
 
 
+def installed_name(env: Mapping[str, str] | None = None) -> str:
+    """What this installation is called, on a page title and in the API schema.
+
+    The company and the product together, because several clients rename the product and the
+    two are asked for separately. One function rather than two `value_of` calls at each site,
+    so the order and the separator are decided once: a title that reads
+    "Company Brain - Acme" on one page and "Acme Company Brain" on another looks like two
+    systems to the person using it.
+    """
+    return f"{value_of('INSTALL_COMPANY_NAME', env)} {value_of('INSTALL_PRODUCT_NAME', env)}"
+
+
 def belonging_to(group: Belongs, env: Mapping[str, str] | None = None) -> dict[str, str]:
     """Every value for one surface, resolved.
 
@@ -321,6 +337,41 @@ def missing(env: Mapping[str, str] | None = None) -> tuple[str, ...]:
     return tuple(
         one.name for one in INSTALLATION if one.required and not source.get(one.name, "").strip()
     )
+
+
+#: The heading the generated block sits under in `.env.example`, and the marker that finds it.
+#:
+#: A marker rather than "everything after the last blank line", because the file is edited by
+#: hand around this block and a positional rule breaks the first time somebody adds a comment.
+ENV_BLOCK_START = "# --- this installation ----------------------------------------------------"
+ENV_BLOCK_END = "# --- end of this installation ---------------------------------------------"
+
+
+def env_example() -> str:
+    """The installation block for `.env.example`, generated from the declaration.
+
+    **A hand-kept list of environment variables is wrong the first time somebody adds one, and
+    it is wrong by omitting the new one**, which is the direction nobody notices: the install
+    team sets the fourteen that are written down and the fifteenth takes its default on a
+    client's server. So the file carries a generated block and a test compares it against this,
+    which makes the declaration the single source and the file its printout.
+
+    Required settings are written with an empty value and a line saying there is no default, so
+    an install team reading the file sees which ones stop the boot.
+    """
+    lines = [ENV_BLOCK_START]
+    for group in Belongs:
+        lines.append(f"# {group.value}:")
+        for one in INSTALLATION:
+            if one.belongs is not group:
+                continue
+            lines.append(f"# {one.meaning}")
+            if one.required:
+                lines.append("# No default. The system refuses to start without it.")
+            lines.append(f"{one.name}={one.default}")
+        lines.append("")
+    lines.append(ENV_BLOCK_END)
+    return "\n".join(lines) + "\n"
 
 
 def runbook() -> str:

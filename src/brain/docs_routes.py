@@ -19,6 +19,8 @@ from typing import Any
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from brain.install import installed_name
+
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 
 #: The build pages' palette and faces, in one place and taking the accent from the install.
@@ -179,7 +181,7 @@ ul{{padding-left:18px;font-size:13px;color:var(--dim)}}
 code{{font-family:{MONO};font-size:11.5px;color:var(--brand)}}
 .note{{font-family:{MONO};font-size:10.5px;color:var(--dim);border-left:2px solid var(--brand);padding-left:11px;margin-top:30px;line-height:1.7}}
 </style></head><body><div class="w">
-<div class="sub">Verz Company Brain · build status</div>
+<div class="sub">{installed_name()} · build status</div>
 <h1>{current_name}</h1>
 <div class="big"><span class="p">{pct}%</span>
 <span class="c">{s.get("done", 0)} of {s.get("total", 0)} tasks · {today_line}<br>
@@ -286,7 +288,7 @@ async def root() -> HTMLResponse:
     """The product owns the root. Until it exists, say so and point at what does."""
     s = _read_status()
     return HTMLResponse(f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>Verz Company Brain</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>{installed_name()}</title>
 <style>
 {palette()}
 @media(prefers-color-scheme:dark){{:root{{--ground:#14110F;--panel:#1D1916;--line:#332C25;--ink:#F5F1ED;--dim:#948A83}}}}
