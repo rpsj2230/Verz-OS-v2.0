@@ -46,24 +46,34 @@ fi
 echo "pre-push: the commit, not the working tree"
 HEADCHECK="$(mktemp -d 2>/dev/null || echo "")"
 if [ -n "$HEADCHECK" ] && git worktree add --detach --quiet "$HEADCHECK" HEAD 2>/dev/null; then
-  ( cd "$HEADCHECK" && "$UV" run mypy && "$UV" run python -m brain.ops.sweeps traceability )     || { git worktree remove --force "$HEADCHECK" 2>/dev/null; exit 1; }
+  ( cd "$HEADCHECK" && "$UV" run python -m mypy && "$UV" run python -m brain.ops.sweeps traceability )     || { git worktree remove --force "$HEADCHECK" 2>/dev/null; exit 1; }
   git worktree remove --force "$HEADCHECK" 2>/dev/null
 else
   echo "  skipped: could not create a worktree at HEAD"
 fi
 
 echo "pre-push: format"
-"$UV" run ruff format --check src tests
+"$UV" run python -m ruff format --check src tests
 
 echo "pre-push: lint"
-"$UV" run ruff check src tests
+"$UV" run python -m ruff check src tests
 
 echo "pre-push: types (strict)"
-"$UV" run mypy
+"$UV" run python -m mypy
 
 echo "pre-push: invariants"
 # These encode rules that must never break. If one fails, the push stops here.
-"$UV" run pytest tests/invariants -q
+"$UV" run python -m pytest tests/invariants -q
+
+# `run python -m <tool>` rather than `run <tool>`, everywhere above.
+#
+# Measured on 2026-09-07. `uv run mypy` spawns the console shim uv has just written into a
+# worktree's brand-new `.venv`, and Windows Application Control refuses a freshly created
+# unsigned executable in a temporary directory: `Failed to spawn: mypy ... (os error 4551)`.
+# It is intermittent, and it presents as a push that fails with no gate having an opinion,
+# which is the worst way for a gate to fail. Running the interpreter uv already trusts and
+# importing the tool as a module spawns nothing new. `brain.ops.mutation` carries the same
+# fix and the same argument.
 
 echo "pre-push: sweeps"
 "$UV" run python -m brain.ops.sweeps tool_registry
