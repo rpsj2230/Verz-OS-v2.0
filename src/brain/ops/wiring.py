@@ -84,7 +84,7 @@ offer them. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`. So t
 blocked on which neighbour goes first; it is blocked on the three answers that paragraph above
 already names, and all three are Rupash's.
 
-Task ids: M32.1.1.1, M32.1.1.4
+Task ids: M32.1.1.4
 """
 
 from __future__ import annotations
@@ -434,6 +434,14 @@ LITE_KEEPS_THE_AUDIT_LEDGER = (
 #:
 #: Read as a mapping so a missing role is named rather than counted. A tuple of four when the
 #: leaf says five is exactly the shape a reader skims past.
+#:
+#: **M32.1.1.1 is named here and deliberately not claimed.** `docker-compose.langfuse.yml`
+#: refuses it in its own header and the refusal is arithmetic: the five services cost 2304 MiB
+#: against the 1720 MiB the whole of wave 2 may spend, so the set has never been started
+#: anywhere, and a compose file that has never run is a design rather than a deployment. This
+#: was claimed on 2026-09-08 by somebody who had read the services block and not the header,
+#: and taken back the same hour. What is here is a property of the declaration, which is worth
+#: having on its own: it is the sizing claim M32.1.1.2 already rests on, extended to the set.
 TRACE_STACK_ROLES: Final[Mapping[str, str]] = MappingProxyType(
     {
         "web": "langfuse-web",

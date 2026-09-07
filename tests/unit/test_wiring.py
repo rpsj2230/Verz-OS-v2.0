@@ -15,7 +15,7 @@ itself for an 11.7 GiB host it cannot have is the ceiling given to the process i
 units, and that is asserted here per service and asserted to sit strictly below the cgroup
 limit it lives under.
 
-Task ids: M32.1.1.1, M32.1.1.2, M32.1.1.4
+Task ids: M32.1.1.2, M32.1.1.4
 """
 
 from __future__ import annotations
