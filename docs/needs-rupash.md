@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**11 items are open, and they are not equally urgent.** They had accumulated into one
+**12 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -16,7 +16,9 @@ thirty days" was meant to mean, and the answer decides a safety property. Item 3
 you want the evaluation tool the plan named, or the one I used instead. Neither blocks
 anything; both are quick.
 
-**Two are decisions to take before something starts rather than faults to fix.** Item 41: four
+**Three are decisions to take before something starts rather than faults to fix.** Item 43: three things in the deployment files that would break a fresh install, each with options and a recommendation, and none of it affecting what runs today.
+
+**And two more of the same kind.** Item 41: four
 services would connect straight to the database with nothing limiting how many connections
 they open, which is the shape of the outage we had on 7 September, on the database that holds
 your company records. None of the four is running yet. Item 42: the build publishes each new
@@ -45,6 +47,73 @@ happened in.
 ---
 
 # Open
+
+## 43. Three things in the deployment files that break a fresh install
+
+**None of this affects what is running today.** All three are in parts of the system that are
+not switched on yet. They break the day somebody turns them on, which is why they are worth
+half an hour now rather than an evening later.
+
+### 1. Four containers read a settings file that will not be there
+
+Four containers are told to read a small settings file that sits next to the deployment file
+in the repository. The server does not have the repository. Coolify stores its own copy of the
+deployment file in its database and writes it out on its own, so when the container looks for
+that file it finds an empty folder, shrugs, and starts anyway. Three of the four then run with
+no settings at all and say nothing about it.
+
+The four are: the trace database (its memory limit), the automation sandbox (the list of
+addresses it is allowed to reach, which is the thing stopping it reaching anything else), the
+file store (its access credentials) and the file store's setup script.
+
+**We have already solved this once.** Keycloak had the same problem last week: its
+configuration file is now baked into the image we build, and a tiny helper container copies it
+into place at startup. It works and it is tested.
+
+- **Option A, recommended: do the same for all four.** About an hour. It is a pattern we have
+  already used, so there is nothing to invent, and it removes a class of failure rather than
+  four instances of one.
+- **Option B: leave them and remember.** Free today. The cost is that the automation sandbox's
+  address list is the one keeping it from reaching the internet, and "remember" is not a
+  security control.
+
+I recommend A, and I can do it without you. **Say the word and it is done.**
+
+### 2. The trace ledger connects to a database nobody creates
+
+Two of the tracing containers are pointed at a database called `langfuse`, and the database
+server only ever creates one called `brain`. On a fresh install they would fail to start, and
+the message would be about a missing database rather than about the real problem, which is
+that nothing was ever told to make it.
+
+- **Option A, recommended: create it during install.** A few lines. It also gives the tracing
+  system its own database, which is what you want anyway: it means a problem there cannot
+  reach your company records.
+- **Option B: point them at the `brain` database.** Fewer lines, and it puts the tracing
+  system's tables beside your business data with one login covering both. I would not.
+
+This one is tangled with item 41, because the same two containers also need a limit on how
+many connections they open. **Both are one change if we do them together.**
+
+### 3. The file store is described twice, differently
+
+The file store appears in two deployment files with different settings. One of them switches
+on its access-control layer and the other does not. Which one wins depends on the order the
+files happen to be listed in, which is not something either file says.
+
+- **Option A, recommended: describe it once, in the file store's own deployment file**, and
+  have the tracing file refer to it. Half an hour.
+- **Option B: make the two copies identical.** Faster now, and they drift apart again the
+  first time somebody edits one.
+
+### What I need from you
+
+**One word on each, or one word for all three.** If you say "do all three", I will do them and
+you will see them on the build page. There is no cost to you beyond the time, none of it
+touches what is running, and I would not be asking except that item 41 and number 2 above are
+the same change and I would rather do it once.
+
+---
 
 ## 42. The pipeline cannot tell the server to deploy, and says so as a warning
 
