@@ -118,7 +118,7 @@ def test_the_planes_nest_so_a_wider_reader_still_sees_the_narrower_thing() -> No
 
 def test_a_configuration_reader_never_reaches_content() -> None:
     """The direction that matters. Existence and configuration are what an auditor and a
-    connector administrator hold, and content is the one they must never have: M33.4.5 asks
+    connector administrator hold, and content is the one they must never have: M33.4.1.4 asks
     for that absence to be asserted by test and this is where the ordering makes it true.
 
     Delete this and the nesting is asserted in the abstract with nothing naming the pair the

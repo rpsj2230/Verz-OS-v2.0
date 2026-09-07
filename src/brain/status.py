@@ -22,7 +22,7 @@ import re
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel
 
@@ -345,6 +345,49 @@ def load_wbs(path: Path) -> dict[str, Any]:
                 _leaf_ids(task, f"{m['id']}.{i}", ids)
             m["leaf_ids"] = ids
     return data
+
+
+#: Why a length mismatch refuses rather than zipping to the shorter of the two. The arrays are
+#: positional, so one missing sentence does not lose one leaf: it shifts every leaf after it by
+#: one, and each of them then reads as a confident, wrong sentence. A test anchored to a leaf
+#: would be comparing a constant against its neighbour's specification and passing or failing
+#: for reasons nobody could reconstruct.
+A_SHORT_LIST_OF_SENTENCES_RENAMES_EVERY_LEAF: Final[str] = (
+    "leaf_texts is positional and shorter than leaf_ids, which misattributes every leaf "
+    "after the gap rather than losing one; re-run docs/wbs/export.js"
+)
+
+
+def leaf_sentences(path: Path) -> dict[str, str]:
+    """What each leaf of the work breakdown actually says, by id.
+
+    **The leaf sentence is the only thing outside a module that can settle whether the module
+    got the leaf right.** Everything else a test could compare a constant against is written
+    by the same person on the same afternoon. `TELEMETRY_FIELDS` names eighteen fields because
+    M27.1.5 lists eighteen fields; a test that restates those names in the test file, or reads
+    them back out of the module, is green for every list the module could hold.
+
+    The sentences live in `docs/wbs/*.js` and Python cannot read those, which is why this went
+    unchecked: reaching them meant shelling out to node from a test. `export.js` now writes
+    them into `wbs.json` alongside the ids, positionally aligned and built in the same push so
+    they cannot drift, and this is the reader.
+
+    Absent rather than raising when a module predates the field, because `load_wbs` already
+    tolerates a WBS without `leaf_ids` and a reader that refuses an older export would make
+    this the one function that cannot run against a checkout from last week. A module carrying
+    the field with the wrong number of sentences is the opposite case and refuses, for the
+    reason named below.
+    """
+    found: dict[str, str] = {}
+    for module in load_wbs(path).get("modules", []):
+        ids: list[str] = module.get("leaf_ids", [])
+        texts: list[str] = module.get("leaf_texts", [])
+        if not texts:
+            continue
+        if len(ids) != len(texts):
+            raise ValueError(f"{module['id']}: {A_SHORT_LIST_OF_SENTENCES_RENAMES_EVERY_LEAF}")
+        found.update(zip(ids, texts, strict=True))
+    return found
 
 
 def main() -> int:

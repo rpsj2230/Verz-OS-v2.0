@@ -1,6 +1,6 @@
 """The application shell: health, tracing, error mapping, headers.
 
-Task ids: M31.1.1, M31.1.2, M31.1.3, M31.1.1.1, M31.1.1.4, M31.1.3.1, M31.1.3.2,
+Task ids: M31.1.1.1, M31.1.1.4, M31.1.3.1, M31.1.3.2,
 M31.1.3.3, M31.1.3.4, M31.1.3.5, M31.2.2.1
 
 Deliberately not claimed here: M31.1.1.2 and M31.1.1.5, which ask for the lifespan to

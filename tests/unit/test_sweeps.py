@@ -797,6 +797,78 @@ def test_a_broken_claim_in_a_commit_is_reported_and_not_only_one_in_a_docstring(
     assert invented in reported, "a broken claim made only in a commit was not reported"
 
 
+def test_a_broken_claim_in_a_test_docstring_is_reported_and_not_only_one_in_source() -> None:
+    """**Test docstrings were not read until 2026-09-08, and four of them were wrong.**
+    `test_status.py` claimed `M38.3.4`, `M38.3.5` and `M38.3.6`, none of which name anything
+    in this tree: M38.3 was restructured into four-level ids and the line was never updated.
+    `test_app.py` and `test_migrate.py` each claimed a group.
+
+    None of it changed a number, because the tracker counts commits rather than docstrings,
+    and that is exactly why nobody noticed. A `Task ids:` line in a test file is read by a
+    person asking which test proves a leaf, which is the single moment it has to be right,
+    and it is not a moment any check was watching.
+
+    Stubbed on both sides, like the commit test above and for the same reason: a version of
+    this that read the real tree would assert a defect is present, and would fail on the day
+    the defect was fixed. The source half is emptied so the reported id can only have come
+    from the test half.
+
+    Delete this and the helper can stop reading test files again, and the four wrong claims
+    it found can come back one at a time with every sweep green."""
+    from brain.ops import sweeps
+
+    invented = "M99.9.8"
+
+    class _NoFiles:
+        def rglob(self, pattern: str) -> list[Any]:
+            del pattern
+            return []
+
+    class _Claiming:
+        def read_text(self, **kwargs: Any) -> str:
+            del kwargs
+            return f"Task ids: {invented}\n"
+
+    original_src = sweeps.SRC
+    original_tests = sweeps._test_sources
+    original_reader = status_module.closed_task_ids
+    try:
+        sweeps.SRC = _NoFiles()  # type: ignore[assignment]
+        sweeps._test_sources = lambda: [_Claiming()]  # type: ignore[assignment, return-value]
+        status_module.closed_task_ids = lambda *a, **k: (set(), [])
+        reported = set(sweeps._claims_that_name_no_leaf())
+    finally:
+        sweeps.SRC = original_src
+        sweeps._test_sources = original_tests  # type: ignore[assignment]
+        status_module.closed_task_ids = original_reader
+
+    assert invented in reported, "a broken claim made only in a test docstring was not reported"
+
+
+def test_every_task_ids_line_in_this_repository_names_a_leaf_that_exists() -> None:
+    """The check applied to the real tree, which is the state the two stubbed tests above
+    cannot assert: they prove the helper reads each source, not that what it reads is clean.
+
+    This is the one that goes red when somebody writes a group id on a `Task ids:` line, and
+    it goes red here rather than in a sweep note nobody reads.
+
+    Guarded by a count, because a helper returning nothing for the wrong reason (an exception
+    swallowed, a source list gone empty) also returns nothing for the right one, and the two
+    are indistinguishable from an empty tuple alone.
+
+    Delete this and the four claims fixed on 2026-09-08 can come back, and only the advisory
+    line in the sweep would mention it."""
+    from brain.ops import sweeps
+
+    claimed: set[str] = set()
+    for path in [*sweeps.SRC.rglob("*.py"), *sweeps._test_sources()]:
+        for line in sweeps.TASK_LINE_RE.findall(path.read_text(encoding="utf-8")):
+            claimed.update(sweeps.TASK_ID_RE.findall(line))
+
+    assert len(claimed) > 400, "almost nothing was read, so an empty finding proves nothing"
+    assert sweeps._claims_that_name_no_leaf() == ()
+
+
 def test_the_counter_reports_nothing_rather_than_failing_without_a_repository() -> None:
     """An advisory line on a sweep must not fail the sweep for want of git. `sweep_dependencies`
     and `_commit_claims_without_tests` both make this choice and this follows them.

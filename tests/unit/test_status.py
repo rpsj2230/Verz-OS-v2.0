@@ -1,7 +1,7 @@
 """Progress computed from git history, and the pages that serve it.
 
-Task ids: M38.3.1, M38.3.2, M38.3.3, M38.3.4, M38.3.5, M38.3.6,
-M38.3.1.1, M38.3.1.3, M38.3.1.4, M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5
+Task ids: M38.3.1.1, M38.3.1.3, M38.3.1.4,
+M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5
 
 Deliberately not claimed: M38.3.1.2, which asks for the status file to be written back
 to the repository on each merge. It is generated in CI and baked into the image, and
@@ -652,3 +652,84 @@ def test_a_claim_after_a_reopen_closes_it_again(tmp_path: Path) -> None:
     closed, _ = status.closed_task_ids(repo)
 
     assert "M1.1.1" in closed
+
+
+# --- the sentence that specifies a leaf (M38.3.1.4) -------------------------------------------
+
+
+REAL_WBS = Path(__file__).resolve().parents[2] / "docs" / "wbs.json"
+
+
+def a_wbs(path: Path, ids: list[str], texts: list[str] | None) -> Path:
+    """One module, written to disk, with the sentences under the caller's control.
+
+    A file rather than a dictionary because `leaf_sentences` takes a path, and it takes a path
+    because the thing it reads is a build artefact that can be stale. A helper that let the
+    test hand it a parsed object would test a function nobody calls."""
+    module: dict[str, object] = {"id": "M0", "name": "Foundation", "wave": 0, "leaf_ids": ids}
+    if texts is not None:
+        module["leaf_texts"] = texts
+    path.write_text(json.dumps({"modules": [module]}), encoding="utf-8", newline="\n")
+    return path
+
+
+def test_every_leaf_of_the_work_breakdown_arrives_with_the_sentence_that_specifies_it() -> None:
+    """The positive case, against the real export rather than a fixture, because the reader
+    exists so that a test can anchor a constant to the leaf it claims to implement and a
+    reader that works only on a two-leaf fixture would not carry that.
+
+    Counted and checked for emptiness, not spot-checked on one id: a lookup that returned the
+    same sentence for every leaf would satisfy any single-id assertion, and so would one that
+    returned the module's first sentence for all of its leaves.
+
+    Delete this and `leaf_sentences` can come back empty, every test anchored to a leaf skips
+    its comparison silently, and the anchoring stops meaning anything."""
+    found = status.leaf_sentences(REAL_WBS)
+    ids = {leaf for module in status.load_wbs(REAL_WBS)["modules"] for leaf in module["leaf_ids"]}
+
+    assert set(found) == ids
+    assert all(one.strip() for one in found.values())
+    assert len(set(found.values())) > len(found) * 0.9, "the sentences are barely distinct"
+
+
+def test_a_module_carrying_fewer_sentences_than_leaves_is_refused_rather_than_zipped(
+    tmp_path: Path,
+) -> None:
+    """**The arrays are positional, so a missing sentence does not lose one leaf, it renames
+    every leaf after it.** `M0.1.2` would come back holding `M0.1.3`'s sentence, and a test
+    anchored to it would be comparing a constant against its neighbour's specification, which
+    is worse than having no sentence at all because it looks like an answer.
+
+    `zip` without `strict` is the default that does this quietly, so the length is checked
+    before the zip and the reason is named.
+
+    Delete this and the guard has nothing to fire on, and dropping the check restores the
+    silent shift with every other test in this file still green."""
+    short = a_wbs(tmp_path / "short.json", ["M0.1.1", "M0.1.2", "M0.1.3"], ["one", "two"])
+
+    with pytest.raises(ValueError, match="positional"):
+        status.leaf_sentences(short)
+
+    # And the same file with the sentence restored is read, so the refusal above is a
+    # property of the mismatch and not of the fixture being unreadable.
+    whole = a_wbs(tmp_path / "whole.json", ["M0.1.1", "M0.1.2", "M0.1.3"], ["one", "two", "three"])
+
+    assert status.leaf_sentences(whole) == {"M0.1.1": "one", "M0.1.2": "two", "M0.1.3": "three"}
+
+
+def test_an_export_written_before_sentences_existed_reads_as_absent_rather_than_failing(
+    tmp_path: Path,
+) -> None:
+    """A checkout from before `docs/wbs/export.js` learned to write them is a `wbs.json` with
+    ids and no sentences, and the reader has to survive it: `load_wbs` already tolerates a WBS
+    with no `leaf_ids` at all, and a reader that refused an older export would be the one
+    function in this module that cannot run against last week.
+
+    Absence and a mismatch are different answers on purpose. Nothing is missing from an old
+    export; something is wrong with a short one.
+
+    Delete this and the tolerance can be replaced by a raise, and `brain.status` stops
+    importing on any tree whose `wbs.json` has not been regenerated."""
+    old = a_wbs(tmp_path / "old.json", ["M0.1.1", "M0.1.2"], None)
+
+    assert status.leaf_sentences(old) == {}

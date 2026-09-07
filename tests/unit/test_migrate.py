@@ -1,6 +1,6 @@
 """Startup migrations and the advisory lock that makes them safe with replicas.
 
-Task ids: M0.3.2, M31.1.1
+Task ids: M0.3.2
 """
 
 from __future__ import annotations

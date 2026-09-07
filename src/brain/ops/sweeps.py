@@ -461,11 +461,23 @@ def _malformed_task_lines() -> list[str]:
 
 
 def _claims_that_name_no_leaf() -> tuple[str, ...]:
-    """Ids claimed by a commit or a source docstring that are not WBS leaves at all.
+    """Ids claimed by a commit, a source docstring or a test docstring that are not leaves.
 
-    Both records of a claim are read, because the mistake is a typo and a typo does not
+    All three records of a claim are read, because the mistake is a typo and a typo does not
     care which file it was made in. A `Closes:` trailer and a `Task ids:` line are equally
     capable of naming a group where a leaf was meant.
+
+    **Test docstrings were not read until 2026-09-08, and four of them were wrong.**
+    `test_status.py` claimed `M38.3.4`, `M38.3.5` and `M38.3.6`, which name nothing in this
+    tree: M38.3 was restructured into four-level ids and the line was never updated. Three
+    more claimed groups. None of it changed a number, because the tracker counts commits, and
+    that is exactly why it went unnoticed for as long as the file existed: a wrong claim in a
+    test docstring is invisible until somebody reads the docstring to find out which test
+    proves a leaf, which is the one moment it needs to be right.
+
+    They are read through `_test_sources`, which is the same list `_commit_claims_without_tests`
+    uses to decide whether a closed leaf has a test, so a claim and its evidence are looked for
+    in one place rather than two lists that can disagree about what a test file is.
 
     **A bare module id is not reported, and nothing here excludes it.** `TASK_ID_RE` is
     `M\\d+(?:\\.\\d+){1,4}`, which requires at least one dot, so `M24` is never extracted by
@@ -487,7 +499,7 @@ def _claims_that_name_no_leaf() -> tuple[str, ...]:
             leaf for m in load_wbs(REPO / "docs" / "wbs.json")["modules"] for leaf in m["leaf_ids"]
         }
         claimed: set[str] = set(closed)
-        for path in SRC.rglob("*.py"):
+        for path in [*SRC.rglob("*.py"), *_test_sources()]:
             for line in TASK_LINE_RE.findall(path.read_text(encoding="utf-8")):
                 claimed.update(TASK_ID_RE.findall(line))
     except Exception:

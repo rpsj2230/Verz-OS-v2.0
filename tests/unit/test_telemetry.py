@@ -18,6 +18,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import MISSING, asdict, dataclass, fields
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
@@ -51,6 +52,7 @@ from brain.ops.telemetry import (
     status_for,
     telemetry_gaps,
 )
+from brain.status import leaf_sentences
 from brain.ops.tracing import (
     PAYLOAD_ROLE,
     SAFE_ATTRIBUTES,
@@ -61,6 +63,10 @@ from brain.ops.tracing import (
     TracingError,
     retention_for,
 )
+
+#: Every leaf of the work breakdown by id, so a constant claiming to match a leaf can be
+#: checked against the leaf rather than against itself. See `status.leaf_sentences`.
+LEAF_SENTENCES = leaf_sentences(Path(__file__).resolve().parents[2] / "docs" / "wbs.json")
 
 NOW = datetime(2026, 9, 7, 9, 30, tzinfo=UTC)
 
@@ -293,19 +299,85 @@ def test_the_scan_reports_a_probe_key_the_allowlist_no_longer_names(
 
 
 # ---------------------------------------------- the per-request fields (M27.1.5)
+def _fields_the_leaf_names() -> tuple[str, ...]:
+    """The field names M27.1.5 lists, read off the leaf and turned into identifiers.
+
+    Two shapes of phrase and nothing else: a plain noun becomes one field with its spaces
+    underscored, and a phrase joined by "and" distributes its first word over the terms, so
+    "tokens in and out" is two fields and "tool count and latency" is two more. A third shape
+    raises rather than being guessed at, because a derivation that quietly drops a phrase it
+    does not recognise reports perfect agreement about a shorter list.
+    """
+    said = LEAF_SENTENCES["M27.1.5"].partition(":")[2]
+    assert said, "M27.1.5 no longer reads as a prefix and a list, so this cannot be derived"
+
+    named: list[str] = []
+    for phrase in (one.strip() for one in said.split(",")):
+        if " and " not in phrase:
+            named.append(phrase.replace(" ", "_"))
+            continue
+        head, _, rest = phrase.partition(" ")
+        terms = [one.strip() for one in rest.split(" and ")]
+        assert all(" " not in one for one in terms), f"unrecognised shape in the leaf: {phrase}"
+        named.extend(f"{head}_{one}" for one in terms)
+    return tuple(named)
+
+
+#: The field names M27.1.5 declares, before the module adds a unit to the two durations.
+LEAF_FIELDS = _fields_the_leaf_names()
+
+
 def test_the_record_carries_exactly_the_fields_the_leaf_names() -> None:
-    """The leaf's list is long on purpose and a field silently missing from it is a request
-    nobody can reconstruct. Asserted in both directions off `TELEMETRY_FIELDS` rather than off
-    names retyped here, because a list restated in a test agrees with itself. Delete this and
-    a field can be dropped from the record, or added without being declared, and the ledger
-    row quietly stops matching the leaf.
+    """**The leaf is the only thing outside the module that can settle this, and until today
+    nothing read it.** The old assertion was `on_record == ("ingress", *TELEMETRY_FIELDS)`
+    with `TELEMETRY_FIELDS` imported from the module under test, which is the constant
+    compared against itself that `CLAUDE.md` has a section about: drop a field from both the
+    tuple and the dataclass and the test still agrees, for every list the module could hold.
+
+    Its docstring argued for that shape and the argument was half right. Restating the names
+    in the test file is indeed a list agreeing with itself. The answer is not to read them
+    back out of the module, it is to read them off M27.1.5, which is what the module's own
+    comment says the tuple is a copy of. `status.leaf_sentences` is the reader, and
+    `docs/wbs/export.js` now carries the sentences into `wbs.json` so Python can reach them.
+
+    Three separate claims, because they fail for different reasons: the tuple matches the
+    leaf, the dataclass matches the tuple, and `ingress` is the one field the record adds.
 
     Asserted as a sequence and not as a set, because the module claims the record is declared
-    in the order the leaf names its fields and `TELEMETRY_FIELDS` is that order written once.
-    A set comparison holds while the two orders drift apart, and the order is what a reader
-    comparing the tuple against the leaf checks by eye."""
+    in the order the leaf names its fields. A set comparison holds while the two orders drift
+    apart, and the order is what a reader comparing the tuple against the leaf checks by eye.
+
+    Delete this and a field can be dropped from the record, or added without being declared,
+    and the ledger row quietly stops matching the leaf it exists to satisfy."""
+    assert len(LEAF_FIELDS) == 18, LEAF_FIELDS
+
+    without_units = tuple(one.removesuffix("_ms") for one in TELEMETRY_FIELDS)
+    assert without_units == LEAF_FIELDS
+
     on_record = tuple(declared.name for declared in fields(RequestTelemetry))
     assert on_record == ("ingress", *TELEMETRY_FIELDS)
+    assert "ingress" not in LEAF_FIELDS
+
+
+def test_the_only_fields_carrying_a_unit_are_the_ones_the_leaf_names_as_durations() -> None:
+    """The half the test above cannot make: it strips `_ms` before comparing, so a suffix
+    stuck on `tokens_in` would pass it. A unit belongs on a duration and nowhere else, and a
+    count named `redaction_count_ms` is a number a reader would divide by a thousand.
+
+    The durations are recognised from the leaf's own words rather than from a list written
+    here, so a nineteenth field named as a latency is covered on the day it is added, and
+    `_DURATION_FIELDS` is checked against the same derivation rather than against itself.
+
+    Delete this and `TELEMETRY_FIELDS` can carry a unit on a field that has none, and the
+    comparison against the leaf still passes because it strips exactly that suffix."""
+    said_as_a_duration = {
+        one for one in LEAF_FIELDS if one.startswith("time_") or one.endswith("_latency")
+    }
+    carrying_a_unit = {one.removesuffix("_ms") for one in TELEMETRY_FIELDS if one.endswith("_ms")}
+
+    assert said_as_a_duration == {"time_to_first_token", "tool_latency"}
+    assert carrying_a_unit == said_as_a_duration
+    assert {one.removesuffix("_ms") for one in _DURATION_FIELDS} == said_as_a_duration
 
 
 def test_every_declared_field_is_a_name_a_count_a_duration_or_a_flag() -> None:

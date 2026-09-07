@@ -15,7 +15,10 @@ const SCH = require(path.join(__dirname, "schedule.js"));
 
 // Leaf numbering must match render.js exactly, or a commit closing M0.2.4 would tick a
 // different box in the tracker than the one the status page counts.
-function leafIds(node, prefix, out) {
+// Each leaf is pushed as [id, text] in one statement, so the two exported arrays cannot
+// drift apart. Kept as pairs internally and split at the end rather than exported as an
+// object keyed by id, which would repeat 1251 ids that leaf_ids already carries.
+function leaves(node, prefix, out) {
   const kids = node.s || [];
   const keys = node.k || [];
   // render.js reads k-or-s; this reads s and then k. Identical while no node carries both,
@@ -26,15 +29,16 @@ function leafIds(node, prefix, out) {
   }
   kids.forEach((child, i) => {
     const id = `${prefix}.${i + 1}`;
-    if (typeof child === "string") out.push(id);
-    else leafIds(child, id, out);
+    if (typeof child === "string") out.push([id, child]);
+    else leaves(child, id, out);
   });
-  keys.forEach((_, i) => out.push(`${prefix}.${kids.length + i + 1}`));
+  keys.forEach((key, i) => out.push([`${prefix}.${kids.length + i + 1}`, key]));
 }
 
 const modules = MODS.map((m) => {
-  const ids = [];
-  (m.tasks || []).forEach((t, i) => leafIds(t, `${m.id}.${i + 1}`, ids));
+  const pairs = [];
+  (m.tasks || []).forEach((t, i) => leaves(t, `${m.id}.${i + 1}`, pairs));
+  const ids = pairs.map((one) => one[0]);
   // Only the leaves that differ from their module's wave, so the common case stays
   // absent rather than repeating the module wave 1148 times.
   const leaf_waves = {};
@@ -48,6 +52,11 @@ const modules = MODS.map((m) => {
     name: m.name,
     wave: modWave,
     leaf_ids: ids,
+    // The leaf sentences themselves, positionally aligned with leaf_ids. Python has no way
+    // to read the .js sources, so before this every check of a constant against the leaf
+    // that specifies it had to restate the leaf in the test, which is the constant compared
+    // against itself wearing a different hat.
+    leaf_texts: pairs.map((one) => one[1]),
     leaf_waves,
   };
 });
