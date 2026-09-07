@@ -27,7 +27,16 @@ brain_fastlane` because a fast answer needed a document. The check lives here be
 is the one function every migration is already put through, so the rule applies to files
 nobody has written yet. See `THE_FAST_LANE_REACHES_PROJECTED_TABLES_AND_NOTHING_ELSE`.
 
-Task ids: M6.1.3, M31.2.2.2, M31.2.2.3, M31.2.2.4, M31.2.2.5
+**And one rule about the install from empty rather than about the upgrade.** M41.2.1 asks
+that migrations build every schema, table, index, constraint, trigger and row-level security
+policy from an empty database. Most of that can only be checked against a database that has
+been built, and CI does exactly that. One half of it cannot wait: a table created in one
+revision and secured in a later one is unprotected for the interval between them, and on an
+install from empty that interval is inside a single `alembic upgrade head`. What a migration
+*declares* is readable here, with no database anywhere, so it is read here. See
+`A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION`.
+
+Task ids: M6.1.3, M31.2.2.2, M31.2.2.3, M31.2.2.4, M31.2.2.5, M41.2.1
 """
 
 from __future__ import annotations
@@ -68,6 +77,24 @@ THE_FAST_LANE_REACHES_PROJECTED_TABLES_AND_NOTHING_ELSE = (
     "something else. So a grant or a policy naming this role is checked against a closed "
     "list of shapes, and anything not on it is a finding rather than a judgement call."
 )
+
+#: Why a table's row-level security has to be enabled in the migration that creates it.
+A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION = (
+    "`brain.ops.sweeps rls` asks a live database whether row-level security is on, which is "
+    "the right question and is asked too late to stop anything: by the time it can be asked "
+    "the migration has merged, deployed and run. A table created in one revision and secured "
+    "in a later one is a table with no policy for however long sits between them, and on an "
+    "install from empty that window is inside a single `alembic upgrade head`, where nothing "
+    "is watching at all. The declaration is checkable without a database and the produced "
+    "schema is not, so the declaration is checked here and the schema is checked in CI."
+)
+
+#: `ALTER TABLE <schema>.<table> ENABLE ROW LEVEL SECURITY`, as every migration writes it.
+#:
+#: Matched exactly rather than by looking for the table's name and the words somewhere in the
+#: same file. A file creating two tables and securing one names both, so the loose version
+#: passes for the table it left open, which is the only case this rule is for.
+_ENABLE_RLS = "ALTER TABLE {qualified} ENABLE ROW LEVEL SECURITY"
 
 #: A privilege statement mentioning the role. Bounded at the statement separator so one
 #: statement in a multi-statement literal cannot absorb the next.
@@ -246,6 +273,72 @@ def _fast_lane_findings(name: str, text: str) -> list[Finding]:
     return findings
 
 
+def tables_created(text: str) -> tuple[tuple[str, str], ...]:
+    """Every `(schema, table)` this migration creates, from the parse tree.
+
+    Read from `op.create_table` calls rather than from the file's text, because half the
+    migrations here discuss `create_table` in their docstrings and a text search would count
+    the discussion. A call with no `schema=` keyword yields an empty schema, which is itself
+    a finding: `brain.db` says every table lives in a named schema and never in `public`.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return ()
+    found: list[tuple[str, str]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        callee = node.func
+        if not isinstance(callee, ast.Attribute) or callee.attr != "create_table":
+            continue
+        if not node.args or not isinstance(node.args[0], ast.Constant):
+            continue
+        name = node.args[0].value
+        if not isinstance(name, str):
+            continue
+        schema = ""
+        for keyword in node.keywords:
+            if keyword.arg == "schema" and isinstance(keyword.value, ast.Constant):
+                schema = str(keyword.value.value)
+        found.append((schema, name))
+    return tuple(found)
+
+
+def _row_level_security_findings(name: str, text: str) -> list[Finding]:
+    """A table created without row-level security enabled in the same migration (M41.2.1).
+
+    See `A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION`.
+    """
+    literals = [" ".join(one.split()).upper() for one in _sql_literals(text)]
+    findings: list[Finding] = []
+    for schema, table in tables_created(text):
+        if not schema:
+            findings.append(
+                Finding(
+                    name,
+                    "table created outside a named schema",
+                    f"{table!r} is created with no schema, so it lands in `public`, which is "
+                    "where anything that forgets to say otherwise ends up and is a table "
+                    "nobody has decided the classification of",
+                )
+            )
+            continue
+        # The comparison is upper-cased and the message is not. A finding that shouts the
+        # table name back is a finding somebody has to translate before they can grep for it.
+        wanted = _ENABLE_RLS.format(qualified=f"{schema}.{table}")
+        if not any(wanted.upper() in one for one in literals):
+            findings.append(
+                Finding(
+                    name,
+                    "table created without row-level security",
+                    f"nothing in this migration says {wanted!r}. "
+                    f"{A_TABLE_IS_UNPROTECTED_FOR_AS_LONG_AS_ITS_POLICY_IS_IN_ANOTHER_MIGRATION}",
+                )
+            )
+    return findings
+
+
 def check_file(path: Path) -> list[Finding]:
     text = path.read_text(encoding="utf-8")
     name = path.name
@@ -325,6 +418,7 @@ def check_file(path: Path) -> list[Finding]:
         )
 
     findings.extend(_fast_lane_findings(name, text))
+    findings.extend(_row_level_security_findings(name, text))
 
     return findings
 

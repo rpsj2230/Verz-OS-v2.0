@@ -18,34 +18,67 @@ from typing import Any
 
 import pytest
 
+from brain import demo
 from brain import seed as seed_mod
 
 
-def test_seed_rows_come_from_the_same_fixture_the_canaries_use() -> None:
-    """One definition, two consumers. If the seed and the fixture drifted, the thing you
-    develop against and the thing the canaries protect would stop being the same system,
-    and a permission bug could pass CI and appear only in a demo."""
+class _Recorder:
+    """A connection that remembers the statements run against it and executes nothing."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, Any]] = []
+
+    def execute(self, statement: object, parameters: Any = None, /) -> None:
+        self.calls.append((str(statement), parameters))
+
+
+def _engine(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
+    """Point `seed` at a recorder instead of a database, and hand the recorder back."""
+    recorder = _Recorder()
+
+    class _Engine:
+        def begin(self) -> Any:
+            return nullcontext(recorder)
+
+        def dispose(self) -> None:
+            return None
+
+    monkeypatch.setattr(seed_mod, "create_engine", lambda *_a, **_k: _Engine())
+    return recorder
+
+
+def test_the_seed_reads_the_demo_company_and_never_the_test_fixture() -> None:
+    """The install step must not read a Verz artefact (M41.2.3).
+
+    It did until 2026-09-07: `_seed_rows` imported `tests.fixtures.company`, which is Verz's
+    own org chart with a canary in every restricted field, and which is not in the deployed
+    image at all. So `make seed` could not run on a client's install, and what it would have
+    written if it could was a Verz value in their database on the first day.
+
+    Deleting this test lets the import come back, and the symptom of its coming back is a
+    client seeing `CANARY-CONTRACT-7Q4XZ` on their first screen.
+    """
     principals, grants = seed_mod._seed_rows()
-    assert len(principals) == 12
-    assert len(grants) > 20
-
     ids = {p["id"] for p in principals}
-    assert "u_weiling" in ids  # sees-record-not-money
-    assert "u_expired" in ids  # the lapsed contractor
-    assert "svc_sentinel" in ids  # scheduled work is a principal too
+    assert ids == {row["id"] for row in demo.demo_rows()["auth.principal"]}
+    assert all(one.startswith(demo.DEMO_PREFIX) for one in ids), ids
 
-    # the expiry travels into the seeded row, not just the fixture object
-    expired = next(p for p in principals if p["id"] == "u_expired")
-    assert expired["not_after"] is not None
+    from tests.fixtures.company import build_company
+
+    assert not (ids & set(build_company())), "the seed and the test fixture share a principal"
+    assert len(grants) == len(demo.grant_rows())
 
 
-def test_grants_carry_their_scope_as_json() -> None:
+def test_the_seeded_grants_carry_a_scope_a_granter_and_a_reason() -> None:
+    """`granted_by` and `reason` are not nullable on `gate.capability_grant`, so a row
+    missing either is an insert that fails halfway through the demo load rather than a demo
+    that looks slightly thin. Deleting this leaves those two columns supplied by whichever
+    call site happens to write the row next."""
     _, grants = seed_mod._seed_rows()
-    weiling = [g for g in grants if g["principal_id"] == "u_weiling"]
-    assert weiling
-    assert all("clauses" in g["scope"] for g in weiling)
-    # and the money field is absent, which is the whole point of that persona
-    assert not any("contract_value" in g["capability"] for g in weiling)
+    assert grants
+    assert all("clauses" in g["scope"] for g in grants)
+    assert all(g["granted_by"] == demo.GRANTED_BY for g in grants)
+    assert all(g["reason"].strip() for g in grants)
 
 
 def test_the_owned_table_list_is_explicit() -> None:
@@ -69,12 +102,130 @@ def test_seed_refuses_when_the_database_holds_rows_it_does_not_own(
 
 def test_force_overrides_the_guard(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(seed_mod, "looks_like_production", lambda _url: (True, "whatever"))
+    _engine(monkeypatch)
     assert seed_mod.seed("postgresql://x", force=True) == 0
 
 
 def test_an_empty_database_seeds_without_force(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(seed_mod, "looks_like_production", lambda _url: (False, ""))
+    _engine(monkeypatch)
     assert seed_mod.seed("postgresql://x") == 0
+
+
+def test_a_demo_that_fails_its_own_checks_is_refused_before_anything_is_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The rows are about to become a client's rows, so the cheapest moment to refuse is
+    before the first insert rather than after the load, with a report.
+
+    Deleting this leaves `demo_gaps` a function nothing calls on the path where it matters,
+    which is the path where a canary or an unrestricted grant would reach a client.
+    """
+    monkeypatch.setattr(seed_mod, "looks_like_production", lambda _url: (False, ""))
+    monkeypatch.setattr(demo, "demo_gaps", lambda: ("an unrestricted grant",))
+    recorder = _engine(monkeypatch)
+    assert seed_mod.seed("postgresql://x") == 1
+    assert not recorder.calls, "the demo was written despite failing its own checks"
+
+
+# ------------------------------------------------------- writing, and writing reversibly
+def test_every_table_the_demo_declares_is_written_in_the_order_it_declares_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A grant carries a foreign key to a principal, so principals go first. The order is
+    `brain.demo.TABLES`, read rather than restated, because a second ordering is a second
+    thing to keep in step.
+
+    Deleting this lets a table be dropped from the load with the demo still reporting a
+    summary, which is an install that looks seeded and answers nothing.
+    """
+    monkeypatch.setattr(seed_mod, "looks_like_production", lambda _url: (False, ""))
+    recorder = _engine(monkeypatch)
+    assert seed_mod.seed("postgresql://x") == 0
+    written = [statement for statement, _ in recorder.calls]
+    assert len(written) == len(demo.TABLES)
+    for statement, table in zip(written, demo.TABLES, strict=True):
+        schema, _, name = table.partition(".")
+        assert f'INSERT INTO "{schema}"."{name}"' in statement
+
+
+def test_a_repeated_load_cannot_overwrite_a_row_somebody_edited() -> None:
+    """`ON CONFLICT DO NOTHING`, never an upsert. A client who corrects a demo row and then
+    re-runs the seed must keep their correction; an upsert would silently restore the
+    invented value.
+
+    Deleting this makes the conflict clause removable, and the failure it guards is
+    invisible: the second load looks exactly like the first.
+    """
+    statement = seed_mod.insert_statement("auth.principal", ("id", "display_name"))
+    assert "ON CONFLICT" in statement
+    assert "DO NOTHING" in statement
+    assert "DO UPDATE" not in statement
+
+
+def test_a_value_never_reaches_a_statement_as_text() -> None:
+    """Every value is a bind parameter and only identifiers are interpolated. Deleting this
+    lets a demo value be formatted into SQL, and the demo's values are the one part of this
+    module somebody is expected to edit."""
+    statement = seed_mod.insert_statement("proj.record", ("source", "entity", "source_id"))
+    assert ":source" in statement and ":entity" in statement and ":source_id" in statement
+    for row in demo.record_rows():
+        assert str(row["source_id"]) not in statement
+
+
+def test_a_column_name_that_is_not_an_identifier_never_reaches_a_statement() -> None:
+    """The table and column names are interpolated, so anything that is not an ordinary
+    lowercase identifier is refused rather than quoted and hoped for. Deleting this leaves
+    the one interpolation in this module unguarded."""
+    with pytest.raises(ValueError, match="ordinary identifier"):
+        seed_mod.insert_statement("auth.principal", ('id"; drop table x --',))
+
+
+def test_removal_is_bounded_by_the_identifiers_the_demo_declares(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A prefix match would also catch a real person a client happened to name that way, and
+    the occasion that matters is somebody running this over data they meant to keep. So the
+    delete carries the list, and the list is `brain.demo.demo_identifiers`.
+
+    Deleting this lets the bound become `LIKE 'demo_%'`, which is one character from
+    `LIKE '%'` and reads the same in review.
+    """
+    recorder = _Recorder()
+    removed = seed_mod.remove(recorder)
+    declared = set(demo.demo_identifiers())
+    assert removed
+    for statement, parameters in recorder.calls:
+        assert "LIKE" not in statement.upper()
+        assert set(parameters["targets"]) <= declared
+
+
+def test_removal_runs_in_the_reverse_of_the_order_the_load_used() -> None:
+    """The foreign key runs from a grant to a principal, so deleting principals first is
+    refused while their grants still point at them. Deleting this test lets the two orders
+    drift apart, and the symptom is a removal that half completes."""
+    recorder = _Recorder()
+    seed_mod.remove(recorder)
+    order = [statement for statement, _ in recorder.calls]
+    for statement, table in zip(order, tuple(reversed(demo.TABLES)), strict=True):
+        schema, _, name = table.partition(".")
+        # The target is built separately from the verb, so this assertion is not itself a
+        # string that looks like an assembled statement.
+        assert statement.startswith("DELETE FROM ")
+        assert f'"{schema}"."{name}"' in statement
+
+
+def test_owning_a_table_and_writing_into_one_stay_different_lists() -> None:
+    """`OWNED` is what `looks_like_production` treats as disposable. Widening it to the
+    demo's tables would tell the guard that rows in `proj.record` are safe to ignore, and
+    that is where a real client's projected records live.
+
+    Deleting this test removes the only thing standing between "the demo writes here" and
+    "the guard may ignore this", which are one edit apart and read alike.
+    """
+    assert set(seed_mod.OWNED) < set(seed_mod.WRITES)
+    assert "proj.record" in seed_mod.WRITES
+    assert "proj.record" not in seed_mod.OWNED
 
 
 def test_main_needs_a_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -274,3 +425,110 @@ def test_the_guard_looks_in_every_schema_that_exists() -> None:
         "a schema is added, and the one that gets forgotten is the new one"
     )
     assert "obs" in SCHEMAS
+
+
+# ------------------------------------------------------- one question, from the database
+class _Rows:
+    """What `Connection.execute` hands back when the caller asks for mappings."""
+
+    def __init__(self, rows: list[dict[str, Any]]) -> None:
+        self._rows = rows
+
+    def mappings(self) -> _Rows:
+        return self
+
+    def all(self) -> list[dict[str, Any]]:
+        return self._rows
+
+
+class _Reader:
+    """A database that answers the two questions `ask` puts to it, and no others."""
+
+    def __init__(self, rules: list[dict[str, Any]], records: list[dict[str, Any]]) -> None:
+        self.rules = rules
+        self.records = records
+        self.statements: list[str] = []
+
+    def execute(self, statement: object, parameters: Any = None, /) -> _Rows:
+        sql = str(statement)
+        self.statements.append(sql)
+        if "fast_path_rule" in sql:
+            return _Rows(self.rules)
+        return _Rows(self.records)
+
+
+def test_a_question_is_answered_from_the_rows_the_database_holds() -> None:
+    """The install is provable rather than describable only if something answers, and the
+    answer has to come from the database rather than from the module that declared the demo.
+    Every install bug this repository has had lived in that gap: a Dockerfile that never
+    copied the migrations, a volume path that only failed on start, a seed importing a
+    directory the image does not contain.
+
+    Deleting this leaves the read path exercised only by the CI job, which cannot say which
+    half broke.
+    """
+    reader = _Reader(list(demo.rule_rows()), list(demo.record_rows()))
+    assert seed_mod.ask(reader, "what is the status of Ashgrove Retail Group") == "active"
+    assert any("fast_path_rule" in one for one in reader.statements)
+    assert any("proj.record" in one for one in reader.statements)
+
+
+def test_a_question_answered_from_an_empty_database_comes_back_as_nothing() -> None:
+    """A migrated install with no rows in it must answer the same nothing as one asked about
+    a record that does not exist. An install that said "no rules configured" would be telling
+    its first user about its own state in a place answers belong.
+
+    Deleting this lets the empty case raise or return a diagnostic, and the diagnostic is on
+    the one screen a first user reads most carefully.
+    """
+    assert seed_mod.ask(_Reader([], []), "what is the status of Ashgrove Retail Group") is None
+
+
+def test_the_read_names_its_columns_rather_than_selecting_everything() -> None:
+    """A column added to `gate.fast_path_rule` must be inert until somebody puts it here, which
+    is the rule `brain.gate.fast_lane.RULE_FIELDS` states about the same table: a new column
+    reaching the matcher by accident is a rule field nobody reviewed.
+
+    Deleting this lets the read become `SELECT *`, and the matcher then receives whatever the
+    table grows next.
+    """
+    assert "SELECT *" not in seed_mod._READ_RULES
+    assert "SELECT *" not in seed_mod._READ_RECORDS
+    for column in (
+        "rule_id",
+        "template",
+        "slot",
+        "source",
+        "entity",
+        "match_field",
+        "answer_field",
+    ):
+        assert column in seed_mod._READ_RULES
+
+
+def test_the_smoke_check_compares_the_database_against_what_the_demo_declared() -> None:
+    """`--smoke` is the whole of the CI install job's assertion, so it has to be a comparison
+    between two different things: the left side comes out of the database through the fast
+    lane's matcher, the right side is what `brain.demo` said it was going to write.
+
+    Deleting this leaves the CI step asserting something no test explains, and the step would
+    go on passing with the answer path removed.
+    """
+    reader = _Reader(list(demo.rule_rows()), list(demo.record_rows()))
+    question, found, expected = seed_mod.smoke(reader)
+    assert found == expected
+    assert question.lower().startswith("what is the status of")
+
+
+def test_the_smoke_check_fails_on_a_migrated_install_that_was_never_seeded() -> None:
+    """The case it exists for. A database with the schema and no rows answers nothing, and an
+    install that migrated and did not seed looks identical to one that worked until something
+    asks it a question.
+
+    Deleting this lets `smoke` pass over an empty database, which is the exact failure the CI
+    job was added to catch.
+    """
+    question, found, expected = seed_mod.smoke(_Reader([], []))
+    assert found is None
+    assert expected
+    assert question

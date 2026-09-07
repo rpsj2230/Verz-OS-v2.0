@@ -218,6 +218,117 @@ jobs:
           node docs/wbs/render.js
           git diff --exit-code -- docs/tracker.html docs/wbs.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
 
+  # M41.2.5. An install into a scratch container, from a database with nothing in it, ending
+  # in a question that gets answered.
+  #
+  # **Deliberately not a step in the `tests` job, which also has a database.** That one runs
+  # the unit suite first, and the suite creates whatever it needs; by the time a migration ran
+  # there the database would not be empty, and "install from empty" would be a claim about a
+  # database somebody else had already touched. This job runs nothing before the migrations,
+  # its own service container is created for it and destroyed after it, and the first step
+  # asserts the database really is empty rather than assuming a fresh container is.
+  #
+  # Every value the last steps compare against is derived from `brain.demo` rather than typed
+  # here: a literal in a workflow is a second copy of the demo that nothing keeps in step, and
+  # it drifts by going on asserting a value the demo no longer holds.
+  install:
+    name: Install from empty and answer one question
+    runs-on: ubuntu-latest
+    needs: static
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          # A credential for a container created and destroyed inside this job, unreachable
+          # from outside the runner. `brain.firstrun.credential_default_gaps` reads the
+          # deployment configuration and deliberately not this file, for that reason.
+          POSTGRES_PASSWORD: install-from-empty
+          POSTGRES_DB: brain_install
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:install-from-empty@localhost:5432/brain_install
+      APP_ROLE_PASSWORD: "install'from\"empty"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+
+      - name: The database really is empty before anything runs
+        # Asserted rather than assumed. A job that installs into a database somebody already
+        # migrated proves nothing at all, and the failure is silent: everything downstream
+        # passes because the schema was already there.
+        run: |
+          n=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_namespace where nspname not like 'pg_%' and nspname not in ('information_schema','public')" | tr -d '[:space:]')
+          [ "$n" = "0" ] || { echo "::error::the scratch database already has $n schema(s)"; exit 1; }
+          echo "empty: no application schema present"
+
+      - name: Migrations build the whole schema from nothing
+        run: uv run alembic upgrade head
+
+      - name: Every schema the code expects is there
+        run: uv run python -m brain.ops.schema_check
+
+      - name: Row-level security, on a database this job built from empty
+        # The produced half of M41.2.1. `brain.ops.sweeps install_from_empty` reads what the
+        # migrations declare and runs in the sweeps job with no database; this asks the
+        # database that those declarations built. A table can be declared with a policy and
+        # still arrive without one if the statement never ran, and only this notices.
+        run: |
+          uv run python -m brain.ops.sweeps rls
+          uv run python -m brain.ops.sweeps grant_isolation
+
+      - name: The demo company loads into the tables the migrations made
+        run: uv run python -m brain.seed
+
+      - name: One question, asked and answered end to end
+        # The whole point of the job. A migrated, seeded install that has never been asked
+        # anything has not been shown to work, and every install bug this repository has had
+        # lived in exactly that gap.
+        run: uv run python -m brain.seed --smoke
+
+      - name: A question about a record that does not exist answers the same nothing
+        # The disclosure rule, on the first screen a new install has. An answer that
+        # distinguished "no such client" from "I do not understand" would teach its first user
+        # which clients exist.
+        run: |
+          absent=$(uv run python -m brain.seed --ask "what is the status of Nobody At All")
+          unknown=$(uv run python -m brain.seed --ask "what colour is the sky")
+          [ "$absent" = "$unknown" ] || { echo "::error::an absent record and an unmatched question answer differently"; exit 1; }
+          echo "both answered: $absent"
+
+      - name: Loading the demo a second time changes nothing
+        # `ON CONFLICT DO NOTHING`, against a real database rather than against a string.
+        run: |
+          before=$(psql "$DATABASE_URL" -tAc "select count(*) from auth.principal" | tr -d '[:space:]')
+          uv run python -m brain.seed --force
+          after=$(psql "$DATABASE_URL" -tAc "select count(*) from auth.principal" | tr -d '[:space:]')
+          [ "$before" = "$after" ] || { echo "::error::a repeated load changed the row count from $before to $after"; exit 1; }
+          echo "repeat load is a no-op at $after principal(s)"
+
+      - name: The demo can be removed, and leaves nothing behind
+        # M41.2.6's smallest testable half. The removal is bounded by the identifiers
+        # `brain.demo` declares, so what it must leave behind is everything else.
+        run: |
+          uv run python -m brain.seed --remove
+          left=$(psql "$DATABASE_URL" -tAc "select count(*) from auth.principal" | tr -d '[:space:]')
+          [ "$left" = "0" ] || { echo "::error::$left demo principal(s) survived the removal"; exit 1; }
+          # The same question the install answered, now expected to answer nothing. `if`
+          # rather than `&&` because the default shell is `bash -e` and a failing command in
+          # a condition is the one place that does not end the script.
+          if uv run python -m brain.seed --smoke; then
+            echo "::error::the demo still answers after being removed"
+            exit 1
+          fi
+          echo "after removal the demo answers nothing"
+
   stack:
     name: The whole stack starts
     runs-on: ubuntu-latest

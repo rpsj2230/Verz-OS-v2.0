@@ -346,3 +346,99 @@ def test_the_console_installs_from_its_lockfile() -> None:
     assert (REPO / "console" / "package-lock.json").is_file(), (
         "there is no console lockfile, so npm ci has nothing to install from"
     )
+
+
+# ------------------------------------------------- install from empty, end to end (M41.2.5)
+INSTALL_JOB = "install"
+
+
+def _job(name: str) -> dict[Any, Any]:
+    jobs = _workflow()["jobs"]
+    assert name in jobs, f"CI has no {name!r} job"
+    job: dict[Any, Any] = jobs[name]
+    return job
+
+
+def _steps(name: str) -> list[str]:
+    """Every `run:` in one job, in order. Parsed, so a commented-out line is not a step."""
+    return [str(step["run"]) for step in _job(name).get("steps", []) if "run" in step]
+
+
+def test_ci_installs_from_an_empty_database_and_asks_one_question() -> None:
+    """M41.2.5 itself. Migrating and seeding without asking anything is an install nobody has
+    shown to work, and every install bug this repository has had lived in that gap: a
+    Dockerfile that never copied the migrations, a volume path that only failed on start, a
+    seed importing a directory the image does not contain.
+
+    Deleting this lets the job be reduced to a migration that goes green while answering
+    nothing.
+    """
+    body = "\n".join(_steps(INSTALL_JOB))
+    assert "alembic upgrade head" in body
+    assert "brain.seed --smoke" in body
+
+
+def test_the_install_job_has_a_database_of_its_own() -> None:
+    """A job asserting an empty database needs one nothing else has touched. Sharing the
+    `tests` job's service would mean installing into a database the unit suite had already
+    used, which proves nothing and fails silently.
+
+    Deleting this lets the service be dropped and the job run against whatever `DATABASE_URL`
+    happens to point at.
+    """
+    services = _job(INSTALL_JOB).get("services", {})
+    assert "postgres" in services, "the install job has no database service"
+    assert "pgvector" in str(services["postgres"]["image"])
+
+
+def test_the_install_job_proves_the_database_is_empty_before_it_migrates() -> None:
+    """An install into a database somebody already migrated proves nothing and looks
+    identical to one that worked. The emptiness has to be asserted, and asserted first.
+
+    Deleting this lets the check move after the migration, where it would fail, or be dropped,
+    where the job would pass for a database that was never empty.
+    """
+    steps = _steps(INSTALL_JOB)
+    empty = next(i for i, one in enumerate(steps) if "pg_namespace" in one)
+    migrate = next(i for i, one in enumerate(steps) if "alembic upgrade head" in one)
+    assert empty < migrate, "the emptiness check runs after the migrations"
+
+
+def test_the_install_job_runs_nothing_that_would_populate_the_database_first() -> None:
+    """The reason this is a separate job. The `tests` job also has a database and runs the
+    unit suite against it first, so a migration there would not be running against an empty
+    one.
+
+    Deleting this lets a convenient `pytest` step be added to the install job, and the
+    emptiness it asserts stops being the thing that was installed into.
+    """
+    body = "\n".join(_steps(INSTALL_JOB))
+    assert "pytest" not in body, "the install job runs the test suite before installing"
+
+
+def test_the_install_job_asks_the_row_level_security_sweep_about_the_database_it_built() -> None:
+    """The produced half of M41.2.1. `install_from_empty` reads what the migrations declare;
+    a table can be declared with a policy and still arrive without one if the statement never
+    ran, and only a database says which.
+
+    Deleting this leaves the produced half asserted only by the `stack` job, which builds its
+    schema through a running application rather than through a bare `alembic upgrade`.
+    """
+    body = "\n".join(_steps(INSTALL_JOB))
+    assert "brain.ops.sweeps rls" in body
+
+
+def test_the_install_job_compares_against_the_demo_rather_than_a_value_typed_into_yaml() -> None:
+    """A literal answer in a workflow is a second copy of the demo that nothing keeps in step,
+    and it drifts by going on asserting a value the demo no longer holds. `--smoke` derives
+    both the question and the expected answer from `brain.demo`.
+
+    Deleting this lets the expected value be pasted into the YAML, where the next person to
+    edit the demo will not find it.
+    """
+    from brain import demo
+
+    body = "\n".join(_steps(INSTALL_JOB))
+    client = next(one for one in demo.build_records() if one.entity == "client")
+    assert client.fields["status"] not in body
+    assert client.fields["name"] not in body

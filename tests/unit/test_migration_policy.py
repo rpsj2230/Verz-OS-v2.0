@@ -186,3 +186,106 @@ def test_a_pure_data_migration_is_not_flagged(tmp_path: Path) -> None:
         ),
     )
     assert "schema and data change in one migration" not in rules(check_file(p))
+
+
+# ------------------------------------------------ row-level security, declared (M41.2.1)
+def test_a_table_created_without_row_level_security_in_its_own_migration_is_reported(
+    tmp_path: Path,
+) -> None:
+    """`brain.ops.sweeps rls` asks a live database and is therefore asked after the migration
+    has merged, deployed and run. A table created in one revision and secured in a later one
+    has no policy for the interval between them, and on an install from empty that interval
+    sits inside one `alembic upgrade head`.
+
+    Deleting this test moves the whole rule back to something only a runner with a database
+    can answer, which is the position M41.2.1 exists to move it out of.
+    """
+    p = write(
+        tmp_path,
+        migration(
+            ["op.create_table('widget', schema='gate')"],
+            ["op.drop_table('widget', schema='gate')"],
+        ),
+    )
+    assert "table created without row-level security" in rules(check_file(p))
+
+
+def test_a_migration_securing_one_of_the_two_tables_it_creates_is_still_reported(
+    tmp_path: Path,
+) -> None:
+    """The case that decides how the rule is written. A file creating two tables and securing
+    one names both tables and says the words, so a check looking for the name and the words
+    anywhere in the file passes for the table it left open, which is the only table the rule
+    is about.
+
+    Deleting this lets the exact match be relaxed to a substring search, and the relaxation
+    reads like tidying.
+    """
+    p = write(
+        tmp_path,
+        migration(
+            [
+                "op.create_table('widget', schema='gate')",
+                "op.create_table('gadget', schema='gate')",
+                "op.execute('ALTER TABLE gate.widget ENABLE ROW LEVEL SECURITY')",
+            ],
+            ["op.drop_table('widget', schema='gate')"],
+        ),
+    )
+    findings = [f for f in check_file(p) if f.rule == "table created without row-level security"]
+    assert len(findings) == 1
+    assert "gate.gadget" in findings[0].detail
+
+
+def test_a_table_created_with_row_level_security_enabled_beside_it_passes(
+    tmp_path: Path,
+) -> None:
+    """The positive half. A rule tested only by its refusals is satisfied by one that refuses
+    every migration, and a migration policy that fails on correct work is a policy people
+    route around.
+
+    Deleting this leaves the rule provable only by breaking things, and the twenty-one
+    migrations already here would be the only evidence it does not fire wrongly.
+    """
+    p = write(
+        tmp_path,
+        migration(
+            [
+                "op.create_table('widget', schema='gate')",
+                "op.execute('ALTER TABLE gate.widget ENABLE ROW LEVEL SECURITY')",
+            ],
+            ["op.drop_table('widget', schema='gate')"],
+        ),
+    )
+    assert "table created without row-level security" not in rules(check_file(p))
+
+
+def test_a_table_created_outside_a_named_schema_is_reported(tmp_path: Path) -> None:
+    """`brain.db` says every table lives in a named schema and never in `public`, because the
+    schema is what the row-level security policies and the grant sweeps are written against.
+    A table with no `schema=` lands in `public`, where the sweeps do not look.
+
+    Deleting this lets a table arrive outside every schema the sweeps read, which is a table
+    that passes the row-level security sweep by being invisible to it.
+    """
+    p = write(
+        tmp_path,
+        migration(["op.create_table('widget')"], ["op.drop_table('widget')"]),
+    )
+    assert "table created outside a named schema" in rules(check_file(p))
+
+
+def test_a_migration_discussing_create_table_in_prose_creates_nothing(tmp_path: Path) -> None:
+    """Half the migrations here argue about `op.create_table` in their docstrings. Reading the
+    parse tree rather than the text is what stops the argument being counted as the act, and
+    the failure mode of getting it wrong is a rule that fires on the files that explain
+    themselves best.
+
+    Deleting this lets the reader be rewritten as a text search, which is shorter and wrong.
+    """
+    body = (
+        "\"\"\"This migration would use op.create_table('widget', schema='gate') if it "
+        'created anything."""' + NL + NL + migration(["pass"], ["pass"])
+    )
+    p = write(tmp_path, body)
+    assert rules(check_file(p)) == {"empty downgrade"}
