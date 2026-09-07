@@ -22,6 +22,7 @@ import pytest
 import yaml
 
 from brain.ops.connections import (
+    A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND,
     POSTGRES_RESERVED_CONNECTIONS,
     THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE,
     Client,
@@ -31,7 +32,9 @@ from brain.ops.connections import (
     connection_breaches,
     database,
     demand_on,
+    direct_database_in,
     headroom_on,
+    undeclared_clients,
 )
 
 REPO = Path(__file__).resolve().parents[2]
@@ -39,6 +42,25 @@ REPO = Path(__file__).resolve().parents[2]
 
 def compose(name: str) -> dict[str, Any]:
     return yaml.safe_load((REPO / name).read_text(encoding="utf-8")) or {}
+
+
+def every_connection_string() -> dict[str, list[str]]:
+    """Every compose service against the environment values it carries, over every file.
+
+    All of them rather than the deployed ones, because a compose file that is not composed
+    today is exactly the thing this is watching: the trace ledger and the two workers are
+    written, sized and unstarted, and the moment somebody starts one the pool it opens is
+    real. Read with `yaml.safe_load` rather than grepped, so a connection string inside a
+    comment is not a client.
+    """
+    services: dict[str, list[str]] = {}
+    for path in sorted(REPO.glob("docker-compose*.yml")):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for name, body in (raw.get("services") or {}).items():
+            environment = body.get("environment") or {}
+            values = environment.values() if isinstance(environment, dict) else environment
+            services.setdefault(name, []).extend(str(one) for one in values)
+    return services
 
 
 def setting(command: list[str], key: str) -> str:
@@ -229,6 +251,134 @@ def test_keycloaks_ceiling_is_affordable_on_its_own() -> None:
 
     assert one.ceiling_cost_mib() <= one.memory_mib
     assert not any(one.name in line for line in ceiling_costs())
+
+
+# --- the clients nobody declared ------------------------------------------------------------
+
+
+def test_every_service_that_goes_round_the_pooler_is_named_by_the_budget_or_by_this_test() -> None:
+    """**The direction the outage came from, checked over the deployment rather than over the
+    declaration.** `connection_breaches` asks whether a database's declared clients can
+    outnumber its slots, and it cannot ask anything at all about a client nobody declared.
+    Keycloak's was undeclared and unbounded, and that is the whole incident.
+
+    Four services hold a connection string that reaches `db` with no pooler in the way, and
+    none of them has a `Client`. Every one bypasses PgBouncer for a good reason, which is
+    what makes them the case that matters: the queue needs LISTEN and the checkpointer needs
+    server-side prepared statements, so the services that most need budgeting are exactly the
+    ones the pooler is not bounding.
+
+    The set is pinned rather than merely asserted non-empty, in the shape
+    `test_the_only_breach_is_the_one_that_is_known_and_written_down` uses. A check tolerating
+    four findings tolerates five, and the fifth is the one nobody reads about.
+
+    Delete this and a service can be pointed straight at the application's database in a
+    compose file and left out of the budget for ever, which is the state this module was
+    written to end and the state it is still in for these four."""
+    found = undeclared_clients(every_connection_string())
+
+    assert {line.split("'")[1] for line in found} == {
+        "brain-worker",
+        "brain-parse-worker",
+        "langfuse-web",
+        "langfuse-worker",
+    }, found
+    assert all("'db'" in line for line in found), found
+    # The written reason rests on one fact about this budget, so it is asserted against that
+    # fact rather than read as prose: PgBouncer is the only declared client of the
+    # application's database, which is why anything else reaching it is invisible here.
+    assert [one.name for one in clients_of("db")] == ["pgbouncer"]
+    assert "PgBouncer" in A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND
+
+
+def test_a_caller_behind_the_pooler_is_not_counted_a_second_time() -> None:
+    """The positive case, and it is load-bearing rather than symmetry. A check that reported
+    every service holding any database URL would name the application itself, whose whole
+    connection story is that it goes through PgBouncer, and a budget that refused the correct
+    deployment is a budget somebody deletes.
+
+    Both halves: a caller behind the pooler is not a direct client, and a client that *is*
+    declared is not reported although it connects directly.
+
+    Delete this and `direct_database_in` can start returning a database for every URL, which
+    turns this check into noise on the day it would otherwise have said something."""
+    services = every_connection_string()
+    reported = {line.split("'")[1] for line in undeclared_clients(services)}
+
+    assert "app" in services, sorted(services)
+    assert "app" not in reported, "the application reaches its database through PgBouncer"
+
+    # Keycloak is the half that says the skip is doing work rather than never being reached.
+    # It holds `KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak`, so it is a direct
+    # client of a database this budget declares, and it is absent from the findings only
+    # because `CLIENTS` names it. Both facts are asserted, because the first spelling of this
+    # asserted the second alone and passed while the skip was removed entirely.
+    assert direct_database_in("jdbc:postgresql://keycloak-db:5432/keycloak") == "keycloak-db"
+    assert any(one.name == "keycloak" for one in clients_of("keycloak-db"))
+    assert "keycloak" not in reported, "Keycloak is declared, and declared is the point"
+
+    assert direct_database_in("postgresql+psycopg://brain:pw@pgbouncer:5432/brain") is None
+    assert direct_database_in("postgresql+psycopg://brain:pw@db:5432/brain") == "db"
+
+
+def test_a_value_that_is_not_a_connection_string_is_not_a_client() -> None:
+    """A compose environment block holds queue URLs, cache URLs, public addresses, secrets
+    with substitution markers in them and plain words. Every one of them is handed to this
+    check, so anything it cannot read has to come back as nothing rather than as a finding or
+    an exception.
+
+    `automation-db` is the sharp case and it is a real one: Activepieces keeps its own
+    Postgres, on its own internal network, and this budget has never declared it. A hostname
+    nobody declared is somebody else's server, and reporting it would be this module claiming
+    a database it cannot see the settings of.
+
+    Delete this and a Redis URL beside a Postgres one turns into an undeclared client, and
+    the pinned set above starts failing for reasons that are not about connections."""
+    assert direct_database_in("redis://langfuse-cache:6379/0") is None
+    assert direct_database_in("automation-db") is None
+    assert direct_database_in("") is None
+    assert direct_database_in("http://[::1:80/") is None
+    # As a URL rather than as a bare hostname, which is the assertion with teeth. A bare word
+    # has no host for `urlsplit` to find and returns None down a different branch, so the
+    # first spelling of this passed while a mutation admitting `automation-db` survived.
+    assert direct_database_in("postgresql://activepieces:pw@automation-db:5432/activepieces") is (
+        None
+    )
+
+    reported = {line.split("'")[1] for line in undeclared_clients(every_connection_string())}
+    assert "activepieces" not in reported, "its store is not one of ours to budget"
+
+
+def test_a_neighbours_database_is_declared_for_the_arithmetic_and_never_reported_as_ours(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`Database.ours` exists so the host's arithmetic can be honest about servers this system
+    does not own, and no such row exists today, so the clause reading it is asserted against a
+    declaration built here rather than against the live one. That is the same technique
+    `test_wiring.py` uses for the trace-ledger membership and for the same reason: a branch
+    that no real data reaches is a branch that has never been shown to work.
+
+    The point of the clause is what it stops: reporting a neighbour's Postgres as an
+    undeclared client of ours would ask somebody to add a `Client` row for a pool this system
+    has no say over, and the first honest answer to that request is a number invented for
+    somebody else's server.
+
+    Delete this and `and one.ours` can be dropped as dead code, which it is until the day the
+    first neighbour row is added, and on that day the check starts naming containers nobody
+    here can size."""
+    theirs = Database(
+        name="someone-elses",
+        max_connections=50,
+        shared_buffers_mib=64,
+        work_mem_mib=4,
+        memory_mib=512,
+        ours=False,
+    )
+    monkeypatch.setattr("brain.ops.connections.DATABASES", (database("db"), theirs))
+
+    assert direct_database_in("postgresql://u:p@someone-elses:5432/x") is None
+    assert direct_database_in("postgresql://u:p@db:5432/brain") == "db"
+    assert undeclared_clients({"a-service": ["postgresql://u:p@someone-elses:5432/x"]}) == ()
 
 
 def test_a_database_that_reserves_everything_cannot_be_constructed() -> None:

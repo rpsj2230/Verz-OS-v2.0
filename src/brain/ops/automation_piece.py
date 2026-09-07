@@ -71,28 +71,41 @@ it, nothing would type-check it, and it would drift from this module silently. W
 file has to contain is fully determined by what is here, which is a step declaring a tool
 name and a bag of arguments and nothing else.
 
-*The transport does not exist.* The sandbox has no route to this application at all: the
-`automation` network is internal, the proxy is the only way out, and the allowlist names
-five third-party hosts and nothing of ours. `docker-compose.automation.yml` says so in as
-many words. Giving the canvas a route is a deployment decision with two real options, a
-second network carrying the application and the canvas alone, or the application's public
-hostname on the allowlist, and both change the deployed network topology inside a commit
-about something else.
+*The transport now exists, and this paragraph used to say it did not.* It read "the sandbox
+has no route to this application at all", which was true when it was written and stopped
+being true on 2026-09-06: item 30 of `docs/needs-rupash.md` chose the second network over the
+public hostname, and `docker-compose.automation.yml` declares `tool-api` carrying the
+application and the canvas alone, with `tests/unit/test_automation_deployment.py` holding it
+to that. **A blocker that has been cleared and not rewritten is worse than one that stands,
+because it keeps a leaf looking further away than it is and nobody re-reads a refusal.** The
+same has happened to the sentence below it, and both are corrected here rather than left to
+read as diligence.
 
-*Nothing calls `run_step` yet, and the reason is not this leaf.* There is no HTTP route
-behind the gate anywhere in this repository, and `brain.app.create_app` says so where it
-turns off the schema; and no code in this tree has ever called a registered tool handler,
-so there is no dispatcher for `ToolCaller` to be implemented against. Inventing one here
-would be a second dispatch path, private to the automation canvas, that the real one would
-later have to be reconciled with. `plan_piece_call` refusing an unfrozen registry is the
-part of the wiring that can be done today: the only frozen `ToolRegistry` in the
+*What is missing is a route, and naming it is not the hard part.* The claim that there is no
+HTTP route behind the gate is also out of date: `brain.api_routes` mounts `/me`, `/records/
+{entity}` and `/answer` behind `asking`, which authenticates and resolves before anything
+runs, and `brain.gate.fast_lane` awaits a handler taken straight off the registry, so there
+is a dispatcher shape for `ToolCaller` to be implemented against. What none of those routes
+is, is "run this tool with these arguments": a piece step is a tool name and an argument bag,
+and no endpoint accepts one. `plan_piece_call` refusing an unfrozen registry remains the part
+of the wiring that can be done from here, because the only frozen `ToolRegistry` in the
 application is the one `brain.tools.startup.build_registry` returns and `brain.app.lifespan`
-puts on `app.state`, so a piece call cannot be planned against a registry somebody
-assembled that afternoon.
+puts on `app.state`.
 
-M32.6.1.3 is what this serves and only half of it is built: there is no transport from the
-sandbox and no dispatcher, both stated above. The commit trailer says Contributes to rather
-than Closes, and this line agrees with it rather than contradicting it.
+**The undecided part is who a flow runs as, and it is a decision rather than an omission.**
+Everything in this module takes the caller's own `EntitlementSet` and reads the principal off
+the reach, precisely so a flow cannot act as somebody it names. A route would have to
+establish that reach from something the canvas holds, and the canvas holds no user's token: a
+flow runs after its trigger, sometimes on a schedule, sometimes long after the person who
+built it has gone home. Delegated credentials, a token bound to the trigger, and a service
+principal with an explicit ceiling are three answers with three different blast radiuses, and
+choosing between them is an owner's decision about how much a flow may do unattended rather
+than something to settle inside a commit about a piece.
+
+M32.6.1.3 is what this serves and it is not closable today: there is no endpoint a step can
+be sent to, nothing says which principal a triggered flow runs as, and the TypeScript package
+above is unwritten. The commit trailer says Contributes to rather than Closes, and this line
+agrees with it rather than contradicting it.
 
 Task ids: none
 """

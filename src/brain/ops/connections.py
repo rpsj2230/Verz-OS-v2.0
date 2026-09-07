@@ -47,17 +47,40 @@ load-bearing rather than an optimisation, and `THE_POOLER_IS_WHAT_MAKES_THE_CEIL
 so where somebody proposing to remove it will read it. Raising the alarm instead would produce
 a check that is red on arrival, and `brain.ops.sweeps` records why those get switched off.
 
-Scope: declarations and arithmetic. Nothing here opens a connection or reads a server, which
-is the same split `brain.ops.limits` keeps and for the same reason: a budget that had to
-connect to something could not be checked before deploying the thing it is a budget for.
+**The budget could not see a client until somebody wrote it down, and four of them are not
+written down.** `CLIENTS` is a declaration, so a service pointed straight at a database in a
+compose file is invisible here until a row is added by hand, which is the same silence the
+outage above arrived through: Keycloak's pool was undeclared and unbounded and the budget had
+nothing to say about it. `undeclared_clients` closes the loop from the other side, over the
+compose files rather than over this list, and asked today it names four:
+`langfuse-web` and `langfuse-worker` hold `DATABASE_URL` at `db:5432` with no
+`connection_limit` anywhere on it, and `brain-worker` and `brain-parse-worker` hold `QUEUE_URL`
+and `BRAIN_CHECKPOINTER_URL` there. Every one of them bypasses PgBouncer deliberately and for
+a good reason, which is exactly what makes them the case that matters: see
+`A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND`. None is deployed today, and the
+finding is that a budget saying `db` has 77 spare connections is describing a host on which
+four services with no declared pool have not started yet.
+
+Reported rather than raised, and kept out of `connection_breaches` for the reason
+`ceiling_costs` is kept out of it: it is true on arrival, `test_connections.py` pins the set
+so a fifth cannot join quietly, and a check that is red the day it lands is a check somebody
+switches off.
+
+Scope: declarations and arithmetic. Nothing here opens a connection or reads a server, and it
+reads no file either: `undeclared_clients` takes connection strings somebody else parsed out
+of the YAML. That is the same split `brain.ops.limits` keeps and for the same reason: a budget
+that had to connect to something could not be checked before deploying the thing it is a
+budget for.
 
 Task ids: none
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
+from urllib.parse import urlsplit
 
 #: Why a client that has not declared a pool maximum is refused rather than defaulted.
 AN_UNBOUNDED_CLIENT_ALWAYS_RUNS_AT_THE_SERVERS_CEILING: Final = (
@@ -88,6 +111,22 @@ THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE: Final = (
     "worst case behind it is 832 MiB. The pooler is therefore load-bearing rather than an "
     "optimisation: removing it, or pointing a second client straight at the database, turns "
     "a configuration nobody has questioned into an out-of-memory kill under load."
+)
+
+#: Why a service that goes round the pooler is the one this budget has to be told about.
+A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND: Final = (
+    "A caller behind PgBouncer is already counted, because two hundred of them are twenty "
+    "server connections and PgBouncer is the client this budget declares. A service pointed "
+    "straight at the database is not counted by anything: it holds its own pool, that pool "
+    "is the only thing bounding it, and if nobody sized it then the server's ceiling is what "
+    "bounds it instead. Every direct connection in this repository is deliberate and well "
+    "argued, which is the point rather than a mitigation. The queue needs LISTEN and the "
+    "checkpointer needs server-side prepared statements, and both of those are the reason a "
+    "pooler cannot serve them, so the services that most need to be in this budget are "
+    "precisely the ones the pooler is not protecting. THE_POOLER_IS_WHAT_MAKES_THE_CEILING_"
+    "SAFE is the other half of the same sentence: the application's declared ceiling costs "
+    "more memory than its container has, and it is affordable only while real connections "
+    "stay far below it."
 )
 
 #: What Postgres holds back for administrators, by default.
@@ -314,3 +353,73 @@ def ceiling_costs() -> tuple[str, ...]:
         for one in DATABASES
         if one.ours and one.ceiling_cost_mib() > one.memory_mib
     )
+
+
+def direct_database_in(url: str) -> str | None:
+    """The database this connection string reaches without a pooler in the way, or None.
+
+    None for a pooler, and that is the useful half rather than an omission: a caller behind
+    PgBouncer is already in this budget as PgBouncer, whose whole purpose is that many callers
+    become twenty server connections. Counting the caller as well would budget the same
+    connections twice and would refuse a deployment that is correct.
+
+    None for anything that is not one of *our* declared databases too, including a neighbour's
+    server declared here only so the arithmetic about the host is honest, and a Redis URL that
+    happens to sit in the same environment block. A hostname this module has never heard of is
+    somebody else's server and there is nothing here that could budget it.
+
+    **The `jdbc:` prefix is stripped and that is not tidiness.** `urlsplit` reads `jdbc:` as
+    the scheme and everything after it as an opaque path, so a JDBC URL has no hostname at
+    all and `KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak` came back as nothing.
+    Keycloak happens to be declared, so this reported the right answer for the wrong reason,
+    which is the shape `brain.ops.sweeps` keeps finding: a check that is green because it
+    never looked. The next JVM service pointed at one of these databases would have been
+    invisible.
+    """
+    text = url.strip()
+    if text.lower().startswith("jdbc:"):
+        text = text[len("jdbc:") :]
+    try:
+        host = urlsplit(text).hostname
+    except ValueError:
+        # A connection string this cannot parse is reported as nothing rather than raised on.
+        # A compose environment holds passwords with substitution markers in them, and a
+        # budget that refused to run because one of them was unusual would be a budget nobody
+        # runs.
+        return None
+    if host is None:
+        return None
+    return host if any(one.name == host and one.ours for one in DATABASES) else None
+
+
+def undeclared_clients(connections: Mapping[str, Sequence[str]]) -> tuple[str, ...]:
+    """Every service holding a direct connection string that `CLIENTS` does not budget.
+
+    The check that reads the deployment rather than the declaration, which is the direction
+    the outage came from. `connection_breaches` asks whether the declared clients of a
+    database can outnumber its slots; it cannot ask about a client nobody declared, and an
+    undeclared client is what saturated Keycloak's database. See
+    `A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND`.
+
+    Takes a service name against the connection strings it holds, parsed by the caller, for
+    the reason the module docstring gives about scope. The test suite reads them out of the
+    compose files with `yaml.safe_load`, so what is checked is the deployment rather than a
+    second copy of it kept here.
+
+    Deliberately not part of `connection_breaches`. It is true on arrival, and folding it in
+    would make that function red the day this landed, which `brain.ops.sweeps` records at
+    length as how a gate comes to be switched off. What pins it instead is a test asserting
+    the exact set, so a fifth undeclared client fails rather than joining a list nobody reads.
+    """
+    budgeted = {(one.name, one.database) for one in CLIENTS}
+    found: list[str] = []
+    for service in sorted(connections):
+        for name in sorted({d for url in connections[service] if (d := direct_database_in(url))}):
+            if (service, name) in budgeted:
+                continue
+            found.append(
+                f"{service!r} connects straight to {name!r} and no Client declares it, so "
+                f"whatever pool it opens is outside this budget. {name!r} reports "
+                f"{headroom_on(name)} spare connections and that figure does not know about it"
+            )
+    return tuple(found)

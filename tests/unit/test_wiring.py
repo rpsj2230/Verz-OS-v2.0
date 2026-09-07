@@ -28,6 +28,7 @@ import pytest
 import yaml
 
 from brain.ops.wiring import (
+    A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING,
     COMPONENTS,
     HOST_HEADROOM_MIB,
     HOST_RESERVE_MIB,
@@ -46,6 +47,8 @@ from brain.ops.wiring import (
     pooler_misuse,
     runs_trace_ledger,
     safe_headroom_mib,
+    set_breaches,
+    set_cost_mib,
     spendable_mib,
     trace_config_conflicts,
     wave_two_mib,
@@ -604,3 +607,142 @@ def test_the_trace_ledger_is_the_full_profile_and_not_something_lite_can_acquire
 
     assert not (services & lite), f"lite would run trace-ledger services: {sorted(services & lite)}"
     assert services <= {c.name for c in components_for("full")}
+
+
+# ------------------------------------------- the service set costed on its own (M32.1.1.1)
+def _langfuse_services() -> list[str]:
+    """The service set the leaf names, read out of the file that declares it.
+
+    Out of the YAML rather than out of `TRACE_LEDGER`, because the leaf asks for five
+    containers and the ledger set is four: the S3-compatible store is deliberately shared
+    with the object store and is therefore not a member. Costing the set from the Python
+    constant would answer a question about a different set of containers from the one an
+    operator would start.
+    """
+    raw = yaml.safe_load((REPO / LANGFUSE_COMPOSE).read_text(encoding="utf-8"))
+    return sorted(raw["services"])
+
+
+def test_the_trace_ledger_service_set_does_not_fit_with_nothing_else_of_ours_deployed() -> None:
+    """**The finding M32.1.1.1 turns on, computed rather than asserted in prose.**
+
+    `budget_breaches("full")` already reports an overrun, and it names the inference server
+    as the largest container in the profile, which is true and is read as an invitation:
+    move that one somewhere else and the ledger presumably fits. It does not. Costed on its
+    own against the whole of what wave 2 may spend, the five services in this compose file
+    are 2304 MiB against 1720, which is the most generous host this system will ever offer
+    them.
+
+    The figures are exact on purpose, in the shape
+    `test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference_server`
+    uses: an overrun asserted only as "greater than" stays green while a container grows,
+    and the whole value of this number is that somebody notices when it moves.
+
+    Delete this and the only arithmetic left is per profile, which can be made to pass by
+    removing a neighbouring component, and the compose file gets deployed on the strength
+    of a subtraction that was never true."""
+    services = _langfuse_services()
+
+    assert len(services) == 5, services
+    assert set_cost_mib(services) == 2304
+    assert spendable_mib() == 1720
+
+    breaches = set_breaches(services)
+    assert len(breaches) == 1, breaches
+    assert "over by 584 MiB" in breaches[0]
+    # The whole phrase, not the name on its own. The message lists every service in the set,
+    # so `"langfuse-clickhouse" in breaches[0]` is satisfied by that list whichever container
+    # the sentence goes on to name, and a mutation swapping `max` for `min` survived it.
+    assert "The largest single container is 'langfuse-clickhouse' at 1024 MiB." in breaches[0], (
+        "the message exists to say which container to look at first, and a test that "
+        "checked only the overrun would keep passing while it named the smallest one"
+    )
+
+
+def test_the_same_service_set_would_fit_on_the_host_the_neighbours_have_left() -> None:
+    """The positive case, and it is also the answer to the question the owner actually
+    asked. A refusal-only test is satisfied by a function that refuses everything, and a
+    budget that could never say yes would be a budget nobody consults before buying a host.
+
+    With the other project's containers gone the cap is `safe_headroom_mib(neighbour_mib=0)`
+    and this set fits inside it with room over, which is what makes "remove the other
+    project, or buy a second host" a real answer rather than a hope. It is the same question
+    `test_removing_the_other_project_is_what_makes_the_full_set_fit` asks of the profile, and
+    the two answers differ: the ledger alone would fit there and the full profile still would
+    not, so the second host is about the inference server and the ledger is about this one.
+
+    Delete this and `set_breaches` can be broken into refusing everything, and every test
+    above it still passes."""
+    services = _langfuse_services()
+    without_them = safe_headroom_mib(neighbour_mib=0)
+
+    assert set_breaches(services, headroom_mib=without_them) == ()
+    assert budget_breaches("full", headroom_mib=without_them), (
+        "if the full profile fits once the neighbours go, this pair has stopped saying two "
+        "different things and one of them should be deleted deliberately"
+    )
+
+
+def test_a_set_naming_a_container_nobody_budgeted_is_refused_rather_than_costed_short() -> None:
+    """A typo in a service name must not make a set cheaper. Silently skipping an unknown
+    name is the failure that matters here and it fails in the affordable direction: four of
+    five services costed is a compose file that looks like it fits by exactly the size of the
+    one that was dropped.
+
+    Delete this and `set_cost_mib` can fall back to zero for a name it does not recognise,
+    which is how a budget comes to describe a deployment nobody would run."""
+    with pytest.raises(WiringError, match="unknown component"):
+        set_cost_mib(["langfuse-web", "langfuse-search"])
+
+
+def test_a_set_that_does_not_fit_alone_does_not_fit_in_any_profile_that_runs_it() -> None:
+    """The property that makes the stricter question worth asking, stated against the
+    profile arithmetic rather than against the constant that describes it.
+
+    Costing a set with nothing else of ours deployed is the most room it will ever have, so
+    a set that is over budget there is over budget in every profile containing it, whatever
+    else is removed from that profile. Asserting the implication is what stops
+    `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING` being a sentence that sounds
+    right: if the two checks ever disagree, one of them is computing something else.
+
+    Delete this and `set_breaches` and `budget_breaches` can drift into two budgets, and the
+    one that says a deployment fits is the one that gets believed."""
+    services = _langfuse_services()
+
+    assert set_breaches(services)
+    for profile in PROFILES:
+        if set(services) <= {c.name for c in components_for(profile)}:
+            assert budget_breaches(profile), (
+                f"{profile!r} runs every one of {services} and reports that it fits, while "
+                "the same containers costed on their own do not"
+            )
+
+
+def test_the_written_reason_carries_the_figures_the_arithmetic_actually_produces() -> None:
+    """A named reason constant quoting numbers is a paragraph that goes stale silently, which
+    is precisely what happened to `HOST_HEADROOM_MIB`: the justification stayed true while
+    the figure it justified stopped being. So the three numbers in the sentence are compared
+    against the functions that compute them rather than read as prose.
+
+    Delete this and a container can be resized, every arithmetic test above updated, and the
+    explanation a reader reaches for first left describing the previous host."""
+    reason = A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING
+
+    assert f"{set_cost_mib(TRACE_LEDGER)} MiB of containers" in reason
+    assert f"{set_cost_mib(_langfuse_services())} with the object store" in reason
+    assert f"has {spendable_mib()} MiB on this host" in reason
+
+
+def test_an_empty_service_set_is_reported_rather_than_passing_as_a_fit() -> None:
+    """Zero containers cost zero and fit anywhere, which is arithmetically true and is the
+    wrong answer to give somebody who has just filtered a compose file down to nothing. The
+    same shape as `sweep_slug_collisions` printing its counts: a tick over an empty
+    comparison is the one result nobody can act on.
+
+    Delete this and a broken reader that returns no services turns the trace ledger's
+    refusal into silence, which reads as the ledger fitting."""
+    found = set_breaches([])
+
+    assert len(found) == 1
+    assert "no components in it" in found[0]
+    assert set_cost_mib([]) == 0

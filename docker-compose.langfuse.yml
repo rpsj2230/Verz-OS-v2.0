@@ -53,12 +53,35 @@
 # install must run exactly one, which is why it is named here rather than duplicated
 # under a Langfuse prefix.
 #
+# **Neither service declares a connection limit, and that is the second thing stopping this
+# file being deployed.** `DATABASE_URL` above goes straight to `db` for the reason in the
+# pooler paragraph, so PgBouncer is not bounding either of them, and Langfuse runs Prisma,
+# whose pool defaults to a size derived from the host's core count rather than from anything
+# written here. `brain.ops.connections` calls that shape
+# `AN_UNBOUNDED_CLIENT_ALWAYS_RUNS_AT_THE_SERVERS_CEILING`, and it is the shape of the
+# 2026-09-07 outage: Keycloak's pool defaulted to a hundred against a server admitting thirty
+# and held every connection idle. `undeclared_clients` names both of these services today,
+# and `tests/unit/test_connections.py` pins that set so a third cannot join quietly. Closing
+# it needs `?connection_limit=N` on both URLs and a `Client` row for each, and N is a sizing
+# decision for a container that has no host to be sized against yet.
+#
+# The arithmetic it would have to fit: `db` admits 97 connections after the administrator's
+# reserve, PgBouncer is declared at 20, so 77 are unbudgeted. The memory side binds first.
+# `THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE` records that `db` declares 100 connections at
+# 16 MiB of work_mem inside a 2048 MiB container, which is 2112 MiB at worst and is
+# affordable only while real connections stay far below the ceiling. Two Prisma pools and
+# two workers are what "far below" stops meaning.
+#
 # **Not claimed: M32.1.1.1.** The service set is written here and has never been started
 # anywhere, because there is no host it fits on. A compose file that has never run is a
 # design, not a deployment, and claiming the leaf would put a tick on something nobody
-# has seen work. What is claimed is the sizing, which `tests/unit/test_wiring.py` checks
-# against `brain.ops.wiring.COMPONENTS` on every run, so the numbers here and the numbers
-# the budget is computed from cannot drift apart.
+# has seen work. That refusal is arithmetic rather than a sentence:
+# `brain.ops.wiring.set_breaches` costs the five services below against the whole of what
+# wave 2 may spend with nothing else of ours deployed, and answers 2304 MiB against 1720,
+# over by 584. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`, which is why
+# the answer is not "move the inference server". What is claimed is the sizing, which
+# `tests/unit/test_wiring.py` checks against `brain.ops.wiring.COMPONENTS` on every run, so
+# the numbers here and the numbers the budget is computed from cannot drift apart.
 #
 # Task ids: M32.1.1.2
 

@@ -73,12 +73,24 @@ and `tests/unit/test_wiring.py` holds the two copies equal, so neither can move 
 Still not claimed: M32.1.1.1. The service set is written and has never been started, because
 there is no host it fits on. A compose file that has never run is a design.
 
+**That refusal is now arithmetic rather than a sentence, and the arithmetic is stricter than
+the one the profile check makes.** `budget_breaches("full")` reports an overrun and names the
+inference server as the largest thing in the profile, which is true and reads as an
+invitation: remove that container and the rest presumably fits. It does not.
+`set_breaches` costs a named set against the whole of what wave 2 may spend with nothing else
+of ours deployed, and asked about the five services in `docker-compose.langfuse.yml` it
+answers 2304 MiB against 1720, over by 584, on the most generous host this system will ever
+offer them. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`. So the leaf is not
+blocked on which neighbour goes first; it is blocked on the three answers that paragraph above
+already names, and all three are Rupash's.
+
 Task ids: M32.1.1.4
 """
 
 from __future__ import annotations
 
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Final, Literal
 
@@ -102,6 +114,24 @@ HOST_TOTAL_MIB: Final = 11960
 #: to a neighbour the moment it asks. Sizing against the first is how a stack runs all week
 #: and kills something on the day the neighbour gets busy.
 NEIGHBOUR_MIB: Final = 6016
+
+#: Why a service set is costed on its own and not only as part of a profile.
+#:
+#: `budget_breaches` answers "does this profile fit" and names the largest single component
+#: in it, which is the right message for a profile and reads, for a service set, as an
+#: invitation: remove that one container and the rest of this presumably fits. For a set that
+#: is composed as its own file and deployed as one decision, that reading is how a compose
+#: file gets written for a host that cannot run it. `set_breaches` asks the stricter question
+#: instead, and the stricter question is the one a deployment decision turns on.
+A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING: Final = (
+    "A set of containers costed against the whole of what wave 2 may spend, with nothing "
+    "else of ours deployed, is the most generous host this system will ever offer it. A set "
+    "that is over budget there is over budget in every profile that runs it, whatever else "
+    "is removed, so the answer cannot be reached by shrinking a neighbour. That is why the "
+    "trace ledger's refusal is not a statement about the inference server: the ledger is "
+    "2048 MiB of containers, 2304 with the object store it needs, and the whole of wave 2 "
+    "has 1720 MiB on this host."
+)
 
 #: What this system's declared limits may add up to on the shared host, in mebibytes.
 #: Approximate on purpose: it is headroom above a neighbour whose own usage moves, so
@@ -532,6 +562,53 @@ def budget_breaches(
         f"profile {profile!r} wants {wanted} MiB and has {available} MiB; "
         f"over by {wanted - available} MiB. The largest single component is "
         f"{largest.name!r} at {largest.memory_mib} MiB.",
+    )
+
+
+def set_cost_mib(names: Iterable[str]) -> int:
+    """What this set of containers costs, whatever profile happens to run them.
+
+    Every name goes through `component`, so a set naming something nobody budgeted is a
+    refusal rather than a smaller total. That is the direction that matters: a typo which
+    quietly costed four services instead of five would make a service set look affordable
+    by the amount of the one it dropped.
+    """
+    return sum(component(name).memory_mib for name in names)
+
+
+def set_breaches(
+    names: Iterable[str],
+    *,
+    headroom_mib: int = HOST_HEADROOM_MIB,
+    baseline_mib: int | None = None,
+) -> tuple[str, ...]:
+    """Every reason this set of containers does not fit with nothing else of ours beside it.
+
+    The question `budget_breaches` cannot be asked, and the one a compose file has to answer
+    before it is written. See `A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING`.
+
+    The `names` are materialised before anything reads them twice, because a caller passing
+    a generator would otherwise get a cost computed from an iterator the message then found
+    empty, and the message is where the largest container is named.
+    """
+    wanted = tuple(names)
+    if not wanted:
+        # An empty set costs nothing and fits everywhere, which is true and is not what a
+        # caller who has just filtered a compose file down to nothing wants to hear. It is
+        # returned as a finding rather than as silence for the reason `sweep_slug_collisions`
+        # prints its counts: a check that passes over an empty comparison is a tick nobody
+        # can act on, and this one would read as "the trace ledger fits".
+        return ("a set with no components in it was costed, so this fits nothing in particular",)
+    cost = set_cost_mib(wanted)
+    available = spendable_mib(headroom_mib=headroom_mib, baseline_mib=baseline_mib)
+    if cost <= available:
+        return ()
+    largest = max((component(name) for name in wanted), key=lambda c: c.memory_mib)
+    return (
+        f"the {len(wanted)} container(s) {sorted(wanted)} want {cost} MiB and the host has "
+        f"{available} MiB for the whole of wave 2; over by {cost - available} MiB with nothing "
+        f"else of ours deployed. The largest single container is {largest.name!r} at "
+        f"{largest.memory_mib} MiB.",
     )
 
 

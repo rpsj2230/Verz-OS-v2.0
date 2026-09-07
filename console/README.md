@@ -639,6 +639,18 @@ constant builds to 0.17 kB, so the grid is tree-shaken away.
   conditional grammar, no code node and a SKILL.md coming out of the other end, is a
   different leaf and none of it is built. Nothing here can create, move, connect or delete a
   node, and that is the read-only half working rather than the authoring half being close.
+
+  Those leaves have ids, and naming them is what turns "a different leaf" from a claim into
+  something a reader can check: M20's `Canvases` group is M20.2.1 "Read-only trace graph over
+  completed runs using React Flow", M20.2.2 "Bounded procedure canvas outputting a SKILL.md",
+  M20.2.3 "Five node kinds with scope predicates as the only conditional grammar" and M20.2.4
+  "No code node, enforced", all of them wave 3 and none of them started. M20.2.1 is worth
+  reading twice, because it is the trace graph again: if M32.5.2.3 meant "both surfaces
+  exist" it would be M20.2.1 and M20.2.2 written out a second time under a different module,
+  and its three siblings in this group are library adoptions rather than screens. That is
+  the case for the reading the commit which added these components deliberately did not
+  take, and it is evidence for a decision rather than the decision itself. The leaf is still
+  open, and what settles it is somebody saying which of the two things it asks for.
 - **No form composer.** M32.5.2.2 is the library and the rules a generated form obeys.
   The seven-section agent manifest form, the AI co-author proposing diffs, and draft and
   version handling are a different leaf and none of them is built.

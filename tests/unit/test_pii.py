@@ -38,6 +38,7 @@ from brain.ops.pii import (
     PRESIDIO_DECLINED,
     SCRUB_COST_ON_THE_BUILD_MACHINE,
     SCRUB_PERCENTILE,
+    THE_BUDGET_IS_NOT_MEASURED_ON_THE_MACHINE_IT_IS_ABOUT,
     BuiltIn,
     Detection,
     EntityKind,
@@ -707,6 +708,38 @@ def test_the_budget_reports_that_it_has_never_been_measured_on_the_client_cpu() 
     assert len(findings) == 1, findings
     assert "M32.2.2.4" in findings[0]
     assert not SCRUB_COST_ON_THE_BUILD_MACHINE.on_the_client_cpu
+
+
+def test_the_written_reason_names_the_place_each_absence_is_actually_recorded() -> None:
+    """**The constant said `budget_gaps` reported both absences and it reports one.** There
+    are two things nobody has measured: the client's own processor, and the two legs that are
+    calls to containers which do not run here. Only the first is a finding; the second is a
+    required field on the cost, which is a stronger place for it, because a `ScrubCost` cannot
+    be constructed without saying what it leaves out.
+
+    That overstatement is the shape this repository keeps finding: a check credited in prose
+    with applying a rule it does not apply. It mattered here rather than being untidy, because
+    `budget_gaps` returning empty is exactly the edit that closes M32.2.2.4, and a permanent
+    second finding would mean the leaf could never be seen to close.
+
+    Asserted against the two mechanisms rather than against the sentence, so the prose cannot
+    be restored to a claim the code does not support without this failing. Delete this and
+    the explanation a reader reaches for first goes back to describing a check that is not
+    there."""
+    reason = THE_BUDGET_IS_NOT_MEASURED_ON_THE_MACHINE_IT_IS_ABOUT
+
+    assert len(budget_gaps()) == 1, "budget_gaps returns one finding, whatever the prose says"
+    assert "budget_gaps returns the first of them" in reason
+    assert "ScrubCost.excludes" in reason
+
+    excludes = SCRUB_COST_ON_THE_BUILD_MACHINE.excludes
+    assert "GLiNER" in excludes
+    assert "Presidio" in excludes
+    for leg in ("GLiNER", "Presidio"):
+        assert not any(leg in finding for finding in budget_gaps()), (
+            f"{leg} is recorded on the cost rather than reported as a gap; a permanent "
+            "finding here would stop budget_gaps ever returning empty"
+        )
 
 
 def test_a_budget_measured_on_the_target_machine_and_met_reports_nothing() -> None:
