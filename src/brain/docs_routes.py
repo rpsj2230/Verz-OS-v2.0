@@ -446,7 +446,15 @@ def needs_rupash() -> HTMLResponse:
             continue
         close_bullets()
 
-        if line.startswith("## "):
+        if line.startswith("### "):
+            # Third level, added on 2026-09-08 after five of these rendered on the live page
+            # as the literal text "### 1. Four containers read a settings file". The loop
+            # tested `## ` before `# ` and had nothing for `### `, so it fell through to the
+            # paragraph branch, which is the failure that looks like content rather than like
+            # a bug: the page was not broken, it was reading out its own markup.
+            close_paragraph()
+            body.append(f"<h3>{_inline(esc[4:])}</h3>")
+        elif line.startswith("## "):
             close_paragraph()
             body.append(f"<h2>{_inline(esc[3:])}</h2>")
         elif line.startswith(ANSWERED_HEADING):
@@ -492,7 +500,9 @@ body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.65 {SANS}}}
 .w{{max-width:760px;margin:0 auto;padding:48px 22px 80px}}
 h1{{font-family:{SANS};font-size:32px;margin:0 0 10px;letter-spacing:-.02em}}
 h2{{font-family:{SANS};font-size:19px;margin:34px 0 8px;letter-spacing:-.01em;border-left:3px solid var(--brand);padding-left:11px}}
+h3{{font-family:{SANS};font-size:15px;font-weight:650;margin:22px 0 6px;color:var(--ink)}}
 p{{color:var(--dim);max-width:64ch}}
+code{{font-family:{MONO};font-size:.88em;overflow-wrap:anywhere}}
 details.past{{margin-top:44px;border-top:1px solid var(--line);padding-top:18px}}
 details.past>summary{{cursor:pointer;font-family:{MONO};font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}}
 details.past[open]>summary{{margin-bottom:10px}}

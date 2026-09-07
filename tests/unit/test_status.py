@@ -733,3 +733,43 @@ def test_an_export_written_before_sentences_existed_reads_as_absent_rather_than_
     old = a_wbs(tmp_path / "old.json", ["M0.1.1", "M0.1.2"], None)
 
     assert status.leaf_sentences(old) == {}
+
+
+# --- the page renders its markup rather than reading it out (M38.3.2.1) -----------------------
+
+
+def test_every_heading_level_the_document_uses_is_rendered_as_a_heading() -> None:
+    """**Five third-level headings rendered on the live page as the literal text
+    `### 1. Four containers read a settings file that will not be there`.** The line loop
+    tested `## ` and `# ` and had nothing for `### `, so those lines fell through to the
+    paragraph branch, and the page read out its own markup in the middle of an item. Nothing
+    looked broken, which is why it survived: an unstyled paragraph beginning with three hashes
+    is a page reading correctly to a machine and wrongly to a person.
+
+    Asserted over the levels the real document actually uses, read from the document, rather
+    than over a fixed list. A fourth level added to `needs-rupash.md` next month is covered on
+    the day it is written, and a level that stops being used stops being asserted.
+
+    Both directions. Every level is rendered as its tag, and no rendered line still begins with
+    a hash, because emitting `<h3>### text</h3>` would satisfy the first half.
+
+    Delete this and the next heading level added to the document is published as prose."""
+    import re
+
+    from brain import docs_routes
+
+    text = (docs_routes.DOCS / "needs-rupash.md").read_text(encoding="utf-8")
+    levels = {len(found) for found in re.findall(r"^(#{1,6}) \S", text, flags=re.MULTILINE)}
+
+    assert levels >= {1, 2, 3}, f"the document no longer uses three levels: {levels}"
+
+    page = bytes(docs_routes.needs_rupash().body).decode("utf-8")
+
+    for level in levels:
+        assert f"<h{level}>" in page, f"level {level} is used in the document and rendered as prose"
+
+    # And nothing rendered still carries the markup that produced it. Searched over the whole
+    # page rather than over headings alone, because the failure was a paragraph and not a
+    # heading: the hashes were in a `<p>`.
+    for stray in re.findall(r">\s*(#{1,6} [^<]{0,60})", page):
+        raise AssertionError(f"markup published as content: {stray!r}")
