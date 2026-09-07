@@ -3,7 +3,14 @@ const SCH = require(__dirname + "/schedule.js");
 const SPR = {LAUNCH:{},WAVE:{},NAMES:{},START:"2026-09-08",LEAVES_PER_TRACK_DAY:14,INTEGRATION_DAYS:1};
 const MODS = [].concat(require(__dirname + "/wbs-a.js"), require(__dirname + "/wbs-b.js"), require(__dirname + "/wbs-c.js"), require(__dirname + "/wbs-d.js"), require(__dirname + "/wbs-e.js"), require(__dirname + "/wbs-f.js"));
 // ---- scheduling helpers
-function wd(d,n){const x=new Date(d);let i=0;while(i<n){x.setDate(x.getDate()+1);const g=x.getDay();if(g!==0&&g!==6)i++}return x}
+// Guarded, because a non-finite count here is an infinite loop with no error and no
+// output. On 2026-09-07 a wave holding leaves but no module of its own made `days`
+// Infinity below, and this function never returned: the render hung rather than
+// printing a wrong date, and a wrong date is findable where a hang is not.
+function wd(d,n){
+  if(Number.isNaN(n)||n===Infinity){throw new Error(`cannot walk ${n} working days; a window was sized from no module`)}
+  const x=new Date(d);let i=0;while(i<n){x.setDate(x.getDate()+1);const g=x.getDay();if(g!==0&&g!==6)i++}return x
+}
 function iso(d){return d.toISOString().slice(0,10)}
 function fmt(d){return d.toLocaleDateString("en-GB",{day:"2-digit",month:"short"})}
 
@@ -33,9 +40,20 @@ TREE.forEach(m => m.k.forEach(t => walk(t, 2)));
 const LW = SCH.LEAF_WAVE || {};
 const waveOfLeaf = (id, modWave) => (LW[id] !== undefined ? LW[id] : modWave);
 const waves = {};
+//: Wave to module id to how many of that module's leaves land in that wave. Needed because a
+//: wave can hold leaves without holding a module, and sizing such a wave from the modules
+//: whose `wave` equals it finds none at all. Keyed per module rather than as a plain set
+//: because a wave holding six leaves of a twenty-seven leaf module must be sized for six.
+const waveModLeaves = {};
 TREE.forEach(m => {
   const walkIds = (n, id) => {
-    if (!n.k.length) { const w = waveOfLeaf(id, m.wave); waves[w] = (waves[w] || 0) + 1; return; }
+    if (!n.k.length) {
+      const w = waveOfLeaf(id, m.wave);
+      waves[w] = (waves[w] || 0) + 1;
+      const here = (waveModLeaves[w] = waveModLeaves[w] || {});
+      here[m.id] = (here[m.id] || 0) + 1;
+      return;
+    }
     n.k.forEach((c, i) => walkIds(c, id + "." + (i + 1)));
   };
   m.k.forEach((t, i) => walkIds(t, m.id + "." + (i + 1)));
@@ -53,7 +71,13 @@ const lwaveIds = [...new Set(Object.values(SPR.WAVE))].sort((a,b)=>a-b);
 if(!lwaveIds.length){lwaveIds.push(0);LWIN[0]={start:new Date(SPR.START+"T00:00:00Z"),end:new Date(SPR.START+"T00:00:00Z"),days:0,tracks:0,leaves:0}}
 for (const w of lwaveIds) {
   const mods = TREE.filter(m => m.launch && m.lwave === w);
-  const biggest = Math.max.apply(null, mods.map(m => Math.round(modLeaves[m.id] * m.trim)));
+  // Floored at zero because `isL` returns false for every module, so `mods` is always
+  // empty here and `Math.max.apply(null, [])` is -Infinity. That made `days` -Infinity
+  // and `wd` returned its start date unchanged, which happened to be the right answer
+  // for a launch window nobody uses. It is still a nonsense value flowing through the
+  // scheduler, and the guard in `wd` now refuses one rather than trusting that the next
+  // arithmetic on it also cancels out.
+  const biggest = Math.max.apply(null, mods.map(m => Math.round(modLeaves[m.id] * m.trim)).concat([0]));
   const days = Math.ceil(biggest / SPR.LEAVES_PER_TRACK_DAY) + SPR.INTEGRATION_DAYS;
   const start = new Date(lc); const end = wd(start, days - 1);
   LWIN[w] = { start, end, days, tracks: mods.length, leaves: mods.reduce((a,m)=>a+Math.round(modLeaves[m.id]*m.trim),0) };
@@ -66,7 +90,17 @@ const WIN = {};
 let cursor = new Date(SCH.START + "T00:00:00Z");
 for (const w of waveIds) {
   const mods = TREE.filter(m => m.wave === w);
-  const tracks = mods.reduce((a,m)=>a+(SCH.SPLIT[m.id]||1), 0);
+  // A wave with no module of its own is sized from the leaves actually in it. LEAF_WAVE
+  // dates individual leaves later than their module, and M42's final audit is a whole group
+  // whose module sits in wave five, so wave six holds six leaves and no module. The branch
+  // is a fallback rather than a replacement: where a wave does own modules the arithmetic
+  // below is untouched, so no existing date moves.
+  const here = waveModLeaves[w] || {};
+  const leafOnly = mods.length === 0;
+  const sizingIds = leafOnly ? Object.keys(here) : mods.map(m => m.id);
+  const tracks = leafOnly
+    ? (sizingIds.reduce((a,id)=>a+(SCH.SPLIT[id]||1), 0) || 1)
+    : mods.reduce((a,m)=>a+(SCH.SPLIT[m.id]||1), 0);
 
   // A wave takes the longer of two things, and until 2026-09-05 it only took the first.
   //
@@ -77,7 +111,9 @@ for (const w of waveIds) {
   // TRACK_CAP existed in schedule.js and was never read here, so splitting a module more
   // finely always made the date earlier and nothing ever said "that needs more tracks
   // than we have". Every date quoted before this rested on a limit nothing enforced.
-  const biggest = Math.max.apply(null, mods.map(m => Math.ceil(modLeaves[m.id] / (SCH.SPLIT[m.id]||1))));
+  const biggest = leafOnly
+    ? Math.max.apply(null, sizingIds.map(id => Math.ceil(here[id] / (SCH.SPLIT[id]||1))).concat([1]))
+    : Math.max.apply(null, mods.map(m => Math.ceil(modLeaves[m.id] / (SCH.SPLIT[m.id]||1))));
   const byLongestTrack = Math.ceil(biggest / SCH.LEAVES_PER_TRACK_DAY);
   const concurrent = Math.min(tracks, SCH.TRACK_CAP || tracks);
   const byCapacity = Math.ceil(waves[w] / (concurrent * SCH.LEAVES_PER_TRACK_DAY));

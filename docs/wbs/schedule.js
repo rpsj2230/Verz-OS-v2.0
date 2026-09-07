@@ -1,4 +1,4 @@
-// ONE PHASE. Everything ships. 7 waves, the last one after go-live.
+// ONE PHASE. Everything ships. 7 waves; wave six is the independent install proof only.
 // Connectors are CODED against cassettes in-wave; real credentials are wired at go-live (W5).
 module.exports = {
   START:"2026-09-08", TRACK_CAP:10, LEAVES_PER_TRACK_DAY:14, INTEGRATION_DAYS:1,
@@ -6,7 +6,11 @@ module.exports = {
   SPLIT:{M39:2,M40:2,M32:2,M13:2,M37:3,M11:2,M14:2,M33:2,M30:2,M19:2,M27:2,M7:2,M16:2,M17:2},
   WAVE:{
     // W0 foundation — everything types against this
-    M0:0, M31:0, M38:0,
+    // M41 is here because client independence is a property kept from the first commit,
+    // not a packaging step at the end. A value stripped out later is a value that got
+    // in, and the sweep that refuses one has to be green from day one or the final
+    // audit becomes a year of drift cleaned in a panic.
+    M0:0, M31:0, M38:0, M41:0,
     // W1 the gate — the one wave that is not compressed
     M1:1, M2:1, M3:1, M4:1, M24:1, M5:1,
     // W2 data, channels, retrieval — connectors coded against cassettes
@@ -16,13 +20,7 @@ module.exports = {
     // W4 doing, lifecycle, extensions
     M17:4, M40:4, M18:4, M21:4, M25:4, M26:4, M29:4, M34:4, M35:4,
     // W5 hands, delivery, scale, go-live
-    M19:5, M30:5, M36:5, M37:5,
-    // W6 the client template, and it is after go-live by definition: it packages a
-    // system that is finished, deployed, verified and stable, and proves the packaging
-    // by installing it somewhere else. Nothing in it can be done earlier except M41.1,
-    // which is a CI gate that has to start on day one or the final audit becomes a
-    // year of contamination cleaned in a panic.
-    M41:6
+    M19:5, M30:5, M36:5, M37:5, M42:5
   },
   // Leaves whose module sits in one wave but whose own work cannot happen until a later
   // one. M38 is continuous delivery: the pipeline is wave 0, but "what is live after each
@@ -44,7 +42,12 @@ module.exports = {
     // Contract tests need the connector adapters they test.
     "M38.4.1.2":2,
     // Go-live: real credentials against live APIs.
-    "M38.4.2.1":5, "M38.4.2.2":5, "M38.4.2.3":5, "M38.4.2.4":5, "M38.4.2.5":5
+    "M38.4.2.1":5, "M38.4.2.2":5, "M38.4.2.3":5, "M38.4.2.4":5, "M38.4.2.5":5,
+    // The audit and the independent install are the only leaves that need a finished,
+    // deployed, verified system to exist first. Everything else in M42 describes and
+    // scripts a system being built, and waiting for go-live to write any of it is how a
+    // deployment guide ends up describing what somebody remembers.
+    "M42.4.1":6, "M42.4.2":6, "M42.4.3":6, "M42.4.4":6, "M42.4.5":6, "M42.4.6":6
   },
   NAMES:{
     0:"Foundation", 1:"The gate", 2:"Data, channels, retrieval",
