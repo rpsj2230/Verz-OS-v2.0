@@ -516,26 +516,34 @@ def test_a_record_grant_is_no_wider_than_the_column_grant_that_implied_it() -> N
     assert departments == {"maintenance"}, departments
 
 
-def test_no_persona_holds_one_capability_twice_at_one_scope() -> None:
-    """**Written because CI found this and the laptop could not.**
+def test_no_persona_holds_one_capability_twice() -> None:
+    """**The database constraint, asserted in memory where the mistake is made.**
 
-    The derived record grants were not deduplicated, so a persona holding three columns of one
-    entity in one department got three identical `read:client` grants. In memory that is
-    harmless, because `scope_for` intersects them and a scope intersected with itself is
-    itself, so the whole suite stayed green here. Loaded into PostgreSQL it violates
-    `uq_capability_grant_principal_id_capability_live`, and four resolver and audit tests
-    errored in CI on a constraint nothing local can enforce.
+    `uq_capability_grant_principal_id_capability_live` is unique on principal and capability
+    with no scope in it, so a person may hold one live grant of a capability and no more. The
+    reason is beside the index: a second grant narrows rather than widens, so the table
+    refuses it rather than accepting it and quietly inverting what whoever added it expected.
 
-    Asserted in memory over the fixture rather than against a database, so the check runs
-    where the mistake is made. The pair is the capability *and* the scope, because two grants
-    of one capability at two different scopes are legitimate and are what `u_dual` rests on.
+    That means `EntitlementSet.scope_for` intersecting several grants of one capability is a
+    defensive reading of a state the database will not produce, and a fixture that relies on
+    it is a fixture that cannot be loaded.
 
-    Delete this and the derivation can go back to emitting a grant per field, and the only
-    thing that notices is a database nobody has on their laptop."""
+    **On the capability alone, and the first version of this test got that wrong.** It checked
+    the capability and the scope together, which caught `u_weiling`'s three identical grants
+    and missed `u_dual`'s two distinct ones, so CI failed a second time on the same
+    constraint. There is no PostgreSQL here, so this in-memory check is the only thing that
+    can catch it before a build does.
+
+    Delete this and the fixture grows a second grant of one capability again, the whole suite
+    stays green on every laptop, and four resolver tests error in CI on a constraint nobody
+    local can see."""
     for pid, who in everyone().items():
-        pairs = [(one.capability.value, str(one.scope)) for one in who.grants]
-        duplicated = {pair for pair in pairs if pairs.count(pair) > 1}
-        assert not duplicated, f"{pid} holds {sorted(duplicated)} more than once"
+        held = [one.capability.value for one in who.grants]
+        repeated = sorted({one for one in held if held.count(one) > 1})
+        assert not repeated, (
+            f"{pid} holds {repeated} more than once, which "
+            "uq_capability_grant_principal_id_capability_live refuses however the scopes differ"
+        )
 
 
 def test_the_lane_reaches_a_row_source_for_a_caller_who_holds_the_record_grant() -> None:

@@ -315,22 +315,29 @@ def record_grants(held: Sequence[Grant]) -> tuple[Grant, ...]:
     wider scope the projection is `('name',)` and the contract value is absent everywhere,
     which is not the person the corpus describes.
 
-    **Deduplicated, because a persona usually holds several fields of one entity at one
-    scope.** `u_weiling` holds three client columns in her department, which produced three
-    identical `read:client` grants. In memory that is harmless: `scope_for` intersects them
-    and a scope intersected with itself is itself. Against a database it is not, because
-    `uq_capability_grant_principal_id_capability_live` refuses a principal holding one
-    capability twice, and the resolver tests that load this fixture into PostgreSQL failed in
-    CI with a unique violation. There is no PostgreSQL on the development laptop, so the whole
-    suite was green here and red there, which is the third time that pair has happened in this
-    repository.
+    **One grant per entity, with the scopes intersected here rather than at read time, and
+    that is a correction the database forced.** The first version emitted a record grant per
+    field grant and let `EntitlementSet.scope_for` intersect them, which is what that function
+    does and is right in memory. It cannot be stored:
+    `uq_capability_grant_principal_id_capability_live` is unique on principal and capability
+    alone, with no scope in it, so a person may hold one live grant of a capability and no
+    more. The comment beside that index says why, and it is a good reason: a second grant of
+    one capability narrows rather than widens, so the table refuses it instead of accepting it
+    and quietly inverting what whoever added it expected.
 
-    Deduplicated on the capability *and* the scope, not the capability alone. Two field grants
-    at two different scopes must still produce two record grants, because that is the
-    intersection `u_dual` depends on.
+    So the intersection that `scope_for` performs on read is performed here on write, and the
+    result is the one grant the schema permits. It is the same answer, reached one layer
+    earlier.
+
+    Two rounds of CI taught this. The first failure was three identical `read:client` grants
+    for `u_weiling`, who holds three client columns in one department, and deduplicating on
+    the capability and the scope together fixed that and not the rest. The second was
+    `u_dual`, who holds two client columns at two *different* scopes, so the pair was distinct
+    and the capability still repeated. There is no PostgreSQL on the development laptop, so
+    both were green here and red there.
     """
-    implied: list[Grant] = []
-    seen: set[tuple[str, str]] = set()
+    scopes: dict[str, Scope] = {}
+    order: list[str] = []
     for grant in held:
         verb, _, rest = grant.capability.value.partition(":")
         entity, dot, _field = rest.partition(".")
@@ -341,12 +348,12 @@ def record_grants(held: Sequence[Grant]) -> tuple[Grant, ...]:
         if not dot or not entity:
             continue
         record = f"{verb}:{entity}"
-        already = (record, str(grant.scope))
-        if already in seen:
-            continue
-        seen.add(already)
-        implied.append(Grant(capability=cap(record), scope=grant.scope))
-    return tuple(implied)
+        if record not in scopes:
+            scopes[record] = grant.scope
+            order.append(record)
+        else:
+            scopes[record] = scopes[record].intersect(grant.scope)
+    return tuple(Grant(capability=cap(one), scope=scopes[one]) for one in order)
 
 
 def reaching_their_own_rows(people: Sequence[Person]) -> list[Person]:
