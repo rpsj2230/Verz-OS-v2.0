@@ -1398,6 +1398,28 @@
     </table>
   </div>
   <p><strong><span data-open-questions="">Seventeen</span> questions are open</strong>, listed in full at <a href="/build/needs-rupash">/build/needs-rupash</a>. The count is carried in the markup and checked against the tracker by a test, because the previous sentence said six long after four had been answered, and a stale number in a document of record is worse than none: a reader takes it for the current position.</p>
+  <p><strong>What a closed task means, and what it does not.</strong> A task is closed here
+  when the decision is made, the code is written and a test proves the property. That is a
+  real bar and it is not the same bar as "a person can use it", and the gap between the two
+  is currently wide enough that the percentage on the tracker would mislead anybody reading
+  it alone. The estate is largely decided and substantially unwired.</p>
+
+  <p>Two figures make it concrete, and both are read off the code rather than estimated.
+  Thirteen mechanisms only work if something runs them on a schedule, and
+  <code>brain.ops.controls</code> is the register that says so;
+  <span data-unwired-controls="">twelve</span> of the thirteen have no caller of any kind,
+  and the one that runs is driven by a timer outside this repository. And the console declares
+  thirty-four screens, each naming the tool that answers it, while the tool registry holds
+  <span data-registered-tools="">one</span>. Neither of those is a defect in the code that was
+  written; both are work that has not been done yet, and the reason for saying so here is that
+  a correct mechanism nobody runs looks exactly like a working one from every direction except
+  the one that matters.</p>
+
+  <p>That shape is why <code>brain.ops.controls</code> exists at all, and why the invariant
+  beside it asserts that the register and the source agree rather than asserting that
+  everything is wired: a check that goes red on arrival is a check somebody switches off, and
+  the honest version of it goes red the day a control quietly stops being run.</p>
+
   <p><strong>Two that this section previously listed as open are decided.</strong> Production deploys on <em>every push</em>, not from a tagged release: the owner chose it deliberately, so the pipeline carries the CI gate instead of a tag, and a release manifest records what shipped without anybody tagging anything. And the vault custody question is settled at <em>five unseal pieces, any three of which open it</em>, with the root token revoked once an admin auth method works. Both numbers live in <code>brain.ops.vault_quorum</code> and the runbook derives its command from that module, so the two cannot drift.</p>
 </section>
 

@@ -312,3 +312,47 @@ def test_the_composition_table_names_availability_and_not_the_ceiling() -> None:
     assert "<td>Availability</td>" in first_table
     assert "<td>Ceiling</td>" not in first_table
     assert "<td>Artifacts</td>" not in first_table
+
+
+def _stated(attribute: str, what: str) -> str:
+    """The word inside a marked span, or a failure naming what is missing."""
+    html = ARCHITECTURE.read_text(encoding="utf-8")
+    found = re.search(rf'<span {attribute}="[^"]*">([^<]+)</span>', html)
+    if found is None:
+        pytest.fail(f"the architecture no longer marks {what}, so nothing can check it")
+    return found.group(1).strip().lower()
+
+
+def test_the_architecture_agrees_with_the_register_about_how_much_is_unwired() -> None:
+    """**The paragraph saying the estate is largely decided and substantially unwired carries
+    two numbers, and a number in a document of record is the thing that goes stale.**
+
+    The first is the count of scheduled mechanisms nothing calls, which
+    `brain.ops.controls.orphans` answers, and the day somebody wires one this sentence has to
+    move with it. That is the point: the paragraph exists to say the gap is wide, and it
+    should stop saying so when the gap closes.
+
+    Delete this and the document goes on describing a state the code has left."""
+    from brain.ops.controls import orphans
+
+    assert (
+        _stated("data-unwired-controls", "how many controls nothing calls") == WORDS[len(orphans())]
+    )
+
+
+def test_the_architecture_agrees_with_the_registry_about_how_many_tools_exist() -> None:
+    """The second number, and the one that will move first. Thirty-four console screens each
+    name the tool that answers them, and the registry holds what it holds. Read through
+    the same private helper `sweep_tool_registry` uses, in the way this file already reads
+    `docs_routes._needs_count`, so the document and the sweep cannot disagree.
+
+    Compared against the registry rather than a number here, so the second tool moves this
+    sentence.
+
+    Delete this and the document keeps saying one after the console is answering."""
+    from brain.ops.sweeps import _registered_tool_names
+
+    assert (
+        _stated("data-registered-tools", "how many tools are registered")
+        == WORDS[len(_registered_tool_names())]
+    )
