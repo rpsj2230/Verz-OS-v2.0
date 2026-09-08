@@ -400,12 +400,19 @@ def appoint_deputy(
         msg = f"a deputy appointment runs 1 to {DEPUTY_MAX.days} days, not {days}"
         raise IdentityError(msg)
 
+    # The appointment is clamped to the standing grant's own end, so a deputy never outlives
+    # the person who appointed them.
+    #
+    # There is deliberately no check that the clamped window is positive. It cannot be, and
+    # the two guards above are the proof: `is_active(now)` has already established that
+    # `not_after` is either absent or strictly after `now`, and `days` is at least one, so
+    # both arguments to `min` are strictly later than `now` and so is the smaller of them. A
+    # guard here was written and a mutation showed it could not fire for any input, which is
+    # the defect this repository keeps finding rather than a belt beside a brace. If either
+    # guard above is ever relaxed, this is the arithmetic that stops holding.
     expires = now + timedelta(days=days)
     if standing.not_after is not None:
         expires = min(expires, standing.not_after)
-    if expires <= now:
-        msg = f"{standing.principal_id!r}'s own grant ends at or before {now}"
-        raise IdentityError(msg)
 
     return RoleGrant(
         principal_id=deputy_principal_id,

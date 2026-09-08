@@ -52,6 +52,7 @@ from brain.identity.roles import (
     NoStandingEntitlement,
     Role,
     RoleGrant,
+    RoleMismatch,
     RoleMismatchKind,
     RoleSpec,
     appoint_deputy,
@@ -60,6 +61,7 @@ from brain.identity.roles import (
     open_break_glass,
     reach_during,
     revoke_role,
+    role_capability_leaks,
     spec_for,
     standing_entitlement,
     standing_super_admins,
@@ -984,3 +986,202 @@ def test_the_check_changes_nobody_permissions() -> None:
     before = entitlement.ent_hash()
     approver_mismatches([_approver_grant("u_wei")], {"u_wei": entitlement})
     assert entitlement.ent_hash() == before
+
+
+# --------------------------------------------- guards nothing could reach (2026-09-09)
+# An audit that mutates every `if` in this module and runs it against the eleven test files
+# that import it found nine guards no test reached. Every one of them is below. Three of the
+# nine are in the shape detector behind the rule that no role implies a capability, which is
+# the rule this whole module exists for, and they are the three branches the violation is
+# most likely to arrive through.
+
+
+def test_a_role_mapped_to_a_capability_written_as_a_string_is_a_leak() -> None:
+    """**The most likely spelling of the violation this module exists to prevent, and it had
+    never been tested.** `role_capability_leaks` looks at the shape of the data rather than at
+    a name, because the way the rule gets broken is not somebody writing `ROLE_CAPABILITIES`;
+    it is somebody adding a convenience mapping in a hurry and calling it `DEFAULTS`. A
+    convenience mapping written by hand holds strings, not `Capability` objects.
+
+    Delete this and the shape detector keeps its most reachable branch untested, and the
+    invariant that runs it over the whole package reports nothing while the mapping sits
+    there.
+
+    Delete the branch and a dictionary from Role to "read:client.name" passes the invariant
+    suite."""
+    leaks = role_capability_leaks({"DEFAULTS": {Role.MEMBER: "read:client.name"}})
+
+    assert len(leaks) == 1
+    assert "DEFAULTS" in leaks[0]
+
+    # And a string that is not a capability is not a finding, or every mapping from a role to
+    # a label would be reported and the check would be switched off.
+    assert role_capability_leaks({"LABELS": {Role.MEMBER: "Member"}}) == []
+
+
+def test_a_role_mapped_to_a_list_of_capabilities_is_a_leak() -> None:
+    """The second most likely spelling, and the one a reviewer skims past: a role with several
+    capabilities is a list, and a list is what somebody writes when the mapping is meant to
+    look like a permissions table.
+
+    All four sequence types the branch names, because a check written against `list` alone
+    passes on the tuple somebody used to make it immutable.
+
+    Delete this and the branch that walks a sequence is never run, and the rule holds for one
+    capability and not for two."""
+    for sequence in (
+        ["read:client.name"],
+        ("read:client.name",),
+        {"read:client.name"},
+        frozenset({"read:client.name"}),
+    ):
+        leaks = role_capability_leaks({"GRID": {Role.APPROVER: sequence}})
+
+        assert len(leaks) == 1, f"a role mapped to {type(sequence).__name__} was not reported"
+
+
+def test_a_private_name_is_not_searched_for_a_leak() -> None:
+    """A module's own private helpers are skipped, and the skip has to be tested in both
+    directions or the check either reports every internal table or reports nothing.
+
+    The same value under two names, so the only difference between the two answers is the
+    leading underscore.
+
+    Delete this and the skip can be widened until it covers everything, and the check passes
+    on a namespace it never looked at."""
+    leaking = {Role.MEMBER: "read:client.name"}
+
+    assert role_capability_leaks({"_INTERNAL": leaking}) == []
+    assert len(role_capability_leaks({"INTERNAL": leaking})) == 1
+
+
+def test_a_role_grant_confers_nothing_before_the_instant_it_was_granted() -> None:
+    """A grant written today to start next Monday confers nothing today. Without this branch
+    `is_active` would answer the same for a grant that has not begun and one in force, and the
+    place that matters is `standing_entitlement`, which is what the gate reads.
+
+    Delete this and a future-dated grant is live the moment it is written, which is the one
+    thing a future-dated grant exists not to be."""
+    starts_later = role_grant(Role.MEMBER, "u_priya", granted_at=NOW + timedelta(days=7))
+
+    assert starts_later.is_active(NOW) is False
+    assert starts_later.is_active(NOW + timedelta(days=7)) is True
+    assert starts_later.is_active(NOW + timedelta(days=8)) is True
+
+
+def test_a_deputy_appointment_is_clamped_to_the_standing_grant_and_cannot_be_empty() -> None:
+    """The clamp, and the reason there is no guard beside it.
+
+    A deputy never outlives the person who appointed them, so the window is the smaller of the
+    days asked for and the standing grant's own end. A guard checking that the clamped window
+    is positive was written and a mutation showed it could not fire: `is_active` has already
+    established that `not_after` is strictly after `now`, and the days are at least one, so
+    both arguments to the minimum are later than `now`. It is gone, and this asserts the
+    property it was guarding rather than the guard.
+
+    Delete this and the clamp can be written as a maximum, and a deputy outlives the grant
+    they were deputising for."""
+    ending_soon = role_grant(
+        Role.DEPARTMENT_ADMIN,
+        "u_priya",
+        scope=Scope(clauses=(Clause(field="department", op=Op.EQ, value="maintenance"),)),
+        granted_at=NOW - timedelta(days=30),
+        not_after=NOW + timedelta(days=2),
+    )
+
+    appointed = appoint_deputy(
+        ending_soon,
+        deputy_principal_id="u_deputy",
+        granted_by="u_founder",
+        reason="cover",
+        days=5,
+        now=NOW,
+    )
+
+    assert appointed.not_after == ending_soon.not_after
+    assert appointed.not_after is not None
+    assert appointed.not_after > NOW
+
+
+def test_a_break_glass_session_that_expires_when_it_opens_is_refused() -> None:
+    """A session of no length is audited, notified and confers nothing, which is the worst of
+    both: the record says somebody elevated and the elevation never happened.
+
+    At the instant and before it, because a check written with `<` admits the equal case and
+    the equal case is the one a caller produces by passing the same instant twice.
+
+    Delete this and a zero-length elevation is a real audit entry about nothing."""
+    for expires in (NOW, NOW - timedelta(seconds=1)):
+        with pytest.raises(ValueError, match="expire after it opens"):
+            BreakGlassSession(
+                session_id="bg_1",
+                principal_id="u_priya",
+                reason=BreakGlassReason.INCIDENT_RESPONSE,
+                opened_at=NOW,
+                expires_at=expires,
+                grants=(Grant(capability=cap("read:client.name"), scope=Scope()),),
+                authorised_by="u_founder",
+                notified=("u_founder",),
+            )
+
+
+def test_a_break_glass_session_longer_than_the_maximum_is_refused_by_the_model() -> None:
+    """`open_break_glass` refuses a long duration and this is the other door: a session
+    assembled directly, loaded from a store or replayed by a helper, has to be refused by the
+    type as well, or the maximum is a rule one code path keeps.
+
+    One second over, because a check on the wrong side of the boundary passes a test written
+    with a day over.
+
+    Delete this and the window is enforced by the function that opens a session and by nothing
+    that reads one back."""
+    with pytest.raises(ValueError, match="may run at most"):
+        BreakGlassSession(
+            session_id="bg_1",
+            principal_id="u_priya",
+            reason=BreakGlassReason.INCIDENT_RESPONSE,
+            opened_at=NOW,
+            expires_at=NOW + BREAK_GLASS_MAX + timedelta(seconds=1),
+            grants=(Grant(capability=cap("read:client.name"), scope=Scope()),),
+            authorised_by="u_founder",
+            notified=("u_founder",),
+        )
+
+
+def test_opening_a_break_glass_session_for_no_time_at_all_is_refused() -> None:
+    """The same rule at the other end, on the function rather than the model. A negative
+    duration is what arithmetic on two timestamps produces when they arrive the wrong way
+    round, and zero is what a caller passes when a configured window was never set.
+
+    Delete this and `open_break_glass` accepts a duration the session model would then refuse,
+    which turns a caller's mistake into an exception two frames away from where it was
+    made."""
+    for nothing in (timedelta(0), timedelta(seconds=-1)):
+        with pytest.raises(IdentityError, match="positive duration"):
+            open_break_glass(
+                session_id="bg_1",
+                principal=staff(),
+                reason=BreakGlassReason.INCIDENT_RESPONSE,
+                grants=(Grant(capability=cap("read:client.name"), scope=Scope()),),
+                authorised_by="u_founder",
+                notify=("u_founder",),
+                duration=nothing,
+                now=NOW,
+            )
+
+
+def test_a_mismatch_reads_differently_depending_on_which_way_round_it_is() -> None:
+    """Both sentences, because the two mismatches send somebody to do opposite things: a role
+    without the capability is a person the console lists who cannot approve, and a capability
+    without the role is a person who can approve and is not listed.
+
+    The rendering is the only place the direction is stated in words, and it had no test, so
+    both branches could have returned the same sentence.
+
+    Delete this and an operator reading the report is told the wrong half of the story."""
+    listed = RoleMismatch("u_priya", RoleMismatchKind.ROLE_WITHOUT_CAPABILITY)
+    unlisted = RoleMismatch("u_priya", RoleMismatchKind.CAPABILITY_WITHOUT_ROLE)
+
+    assert "no approve capability" in str(listed)
+    assert "does not hold the Approver role" in str(unlisted)
+    assert str(listed) != str(unlisted)
