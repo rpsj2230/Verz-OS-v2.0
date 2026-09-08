@@ -21,6 +21,7 @@ import itertools
 import json
 from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -341,6 +342,13 @@ CALLS: dict[str, dict[str, object]] = {
         "reason": BreakGlassReason.INCIDENT_RESPONSE,
         "authorised_by": "u_rupash",
     },
+    "compose_change": {
+        "agent_id": "a_maintenance",
+        "part": "skill",
+        "reference": "xero_reconciliation",
+        "attached": True,
+        "reason_code": "requested_by_owner",
+    },
 }
 
 
@@ -367,6 +375,38 @@ def test_every_declared_recorder_writes_the_action_it_declares() -> None:
         assert chain.entries, f"{name} wrote nothing"
         assert all(e.action is action for e in chain.entries), name
         assert chain.verify() is None, name
+
+
+def test_every_recorder_method_is_declared_in_the_mapping_and_not_only_the_reverse() -> None:
+    """**A mutation found this direction missing.** The test above iterates
+    `ACTION_BY_METHOD`, so a recorder method left out of the mapping is simply not tested:
+    deleting the entry for `compose_change` removed the only thing driving it and every
+    assertion still passed.
+
+    The mapping is what makes "does this method write the action it says" checkable at all,
+    so a method missing from it is a method nothing checks, which is the same failure the
+    `AuditAction` docstring names one level up: somebody adds a code path and nothing
+    anywhere notices that no entry was ever written.
+
+    Read off the class rather than from a list here. Private helpers and anything not
+    returning an entry are excluded by name, and the exclusion is asserted to be small, so
+    this cannot be satisfied by excluding whatever is missing.
+
+    Delete this and the eighth action could have shipped with no test driving it, which is
+    exactly what the mutation table showed."""
+    from brain.audit.record import AuditRecorder
+
+    public = {
+        name
+        for name in vars(AuditRecorder)
+        if not name.startswith("_") and callable(getattr(AuditRecorder, name))
+    }
+    #: Methods that do not write one action: the reader and the two-entry merge helper are
+    #: neither, and `entity_merge` is in the mapping despite returning a pair.
+    not_a_single_write = {"read_payload"} & public
+
+    assert len(not_a_single_write) <= 1, sorted(not_a_single_write)
+    assert public - not_a_single_write == set(ACTION_BY_METHOD)
 
 
 def test_the_recorder_binds_the_actor_once_so_a_call_site_cannot_get_it_wrong() -> None:
@@ -880,3 +920,109 @@ def test_nothing_in_the_view_decides_visibility_from_who_performed_the_action() 
     # And the filter does read it, so the absence above is a property of this function rather
     # than of the module having no notion of an actor at all.
     assert "actor" in inspect.getsource(AuditFilter.matches)
+
+
+# --- the eighth action: an agent's composition changing (M39.1.1.3) ---------------------------
+
+
+def test_a_composition_change_records_who_when_why_and_which_direction() -> None:
+    """M39.1.1.3 asks for an attachment added or removed to reach the ledger with who, when
+    and why, and until 2026-09-08 there was no action to write it under.
+
+    Who and when come from the recorder and the entry, which is the whole reason the recorder
+    binds them once. Why is the reason code, and the direction is a word rather than a
+    boolean, because a ledger row reading `attached: True` is a row somebody has to hold this
+    schema alongside to read, five years after the schema moved.
+
+    Both directions in one action rather than two members, because they are the same event
+    about the same pair and a reader asking when an agent stopped being able to do something
+    wants them in one place.
+
+    Delete this and the action exists with nothing writing it, which is the state the
+    `AuditAction` docstring calls an auditable event ending up unaudited."""
+    recorder, chain = a_recorder()
+
+    attached = recorder.compose_change(
+        agent_id="a_maintenance",
+        part="skill",
+        reference="xero_reconciliation",
+        attached=True,
+        reason_code="requested_by_owner",
+    )
+    detached = recorder.compose_change(
+        agent_id="a_maintenance",
+        part="skill",
+        reference="xero_reconciliation",
+        attached=False,
+        reason_code="grant_lapsed",
+    )
+
+    assert attached.action is AuditAction.COMPOSE_CHANGE
+    assert attached.subject == "agent:a_maintenance"
+    assert attached.actor_id == "u_rupash"
+    assert attached.details["direction"] == "attached"
+    assert detached.details["direction"] == "detached"
+    assert attached.details["reason_code"] == "requested_by_owner"
+    assert chain.verify() is None
+
+
+def test_a_reason_that_is_prose_is_refused_rather_than_stored_as_the_marker() -> None:
+    """**The why is the half of this leaf that a redaction can silently delete.**
+    `redact_details` admits field names and reduces anything else to the marker, so a
+    sentence passed here is stored as `<redacted>` and the reason is gone from the one record
+    kept to answer for it. Refusing at the call site is the only place the caller finds out.
+
+    The positive half matters as much: a code that looks like a field name survives, and the
+    test reads it back off the entry rather than off the argument, because an argument that
+    never reached the entry would satisfy a check on the input.
+
+    Delete this and a caller writes a sentence, the entry stores the marker, and the ledger
+    reads as though somebody detached a skill for no stated reason."""
+    recorder, chain = a_recorder()
+
+    for prose in ("the owner asked me to", "Grant lapsed.", "", "UPPER_CASE"):
+        with pytest.raises(ValueError, match="reason code"):
+            recorder.compose_change(
+                agent_id="a_maintenance",
+                part="skill",
+                reference="xero_reconciliation",
+                attached=False,
+                reason_code=prose,
+            )
+
+    assert chain.entries == ()
+
+    entry = recorder.compose_change(
+        agent_id="a_maintenance",
+        part="skill",
+        reference="xero_reconciliation",
+        attached=False,
+        reason_code="grant_lapsed",
+    )
+    assert entry.details["reason_code"] == "grant_lapsed"
+
+
+def test_every_action_value_fits_the_column_the_ledger_is_written_to() -> None:
+    """The check that would have caught the two names rejected for this member.
+    `attachment_change` is seventeen characters and `agent_config_change` is nineteen; the
+    column is `VARCHAR(16)`. Either would have passed every assertion about the enum and
+    failed on the first insert against a real database, which for this table means a write to
+    the audit ledger failing in production.
+
+    Read off the model rather than from a number typed here, so the day somebody widens the
+    column this follows it instead of refusing a name that now fits.
+
+    Delete this and the next member is chosen for how it reads."""
+    import sqlalchemy as sa
+
+    from brain.tables.audit import AuditEntryRow
+
+    # `Column.type` is `TypeEngine[Any]` and only some engines carry a length, so the cast is
+    # at the library boundary rather than a claim about the value: the assertion below is what
+    # proves it really is a bounded string, and it fails loudly if the column type changes.
+    column = cast(sa.String, AuditEntryRow.__table__.columns["action"].type)
+    width = column.length
+
+    assert width == 16
+    for action in AuditAction:
+        assert len(action.value) <= width, action

@@ -218,6 +218,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "entity merge": AuditAction.ENTITY_MERGE,
         "publish": AuditAction.PUBLISH,
         "break glass": AuditAction.BREAK_GLASS,
+        "compose change": AuditAction.COMPOSE_CHANGE,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -228,7 +229,13 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "entity_merge",
         "publish",
         "break_glass",
+        "compose_change",
     }
+    # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
+    # other names considered for the eighth member were `attachment_change` at seventeen
+    # characters and `agent_config_change` at nineteen, and either would have passed every
+    # assertion above and failed on the first insert against a real database.
+    assert max(len(action.value) for action in AuditAction) <= 16
 
 
 def test_every_auditable_action_can_actually_be_written() -> None:

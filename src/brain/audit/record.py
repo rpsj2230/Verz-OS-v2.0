@@ -128,6 +128,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "entity_merge": AuditAction.ENTITY_MERGE,
         "publish": AuditAction.PUBLISH,
         "break_glass": AuditAction.BREAK_GLASS,
+        "compose_change": AuditAction.COMPOSE_CHANGE,
     }
 )
 
@@ -307,6 +308,47 @@ class AuditRecorder:
         }
         _with_names(details, "scope_fields", scope_fields)
         return self._write(AuditAction.LEASH_CHANGE, subject("agent", agent_id), details)
+
+    def compose_change(
+        self,
+        *,
+        agent_id: str,
+        part: str,
+        reference: str,
+        attached: bool,
+        reason_code: str,
+    ) -> AuditEntry:
+        """Record that something was attached to or detached from an agent (M39.1.1.3).
+
+        The leaf asks for who, when and why. Who and when are the recorder's and the
+        entry's; why is `reason_code`, and it is a code rather than a sentence for the reason
+        `revoke` already gives: `redact_details` admits field names and reduces prose to the
+        marker, so a sentence would be stored as `<redacted>` and the why would be lost in
+        the one record kept to answer it.
+
+        `attached` is a direction rather than two members, because both directions are the
+        same event about the same pair and a reader asking "when did this agent stop being
+        able to do that" wants them in one place. The value is recorded as a word rather than
+        a boolean, since a ledger row reading `attached: True` is a row somebody has to hold
+        the schema alongside to read.
+
+        The reference is a name and not a value, which is what makes it recordable at all.
+        What is attached is a skill id, a connector name or a channel: none of them is
+        somebody's data, and the tool's own arguments never reach here.
+        """
+        if not _REASON_CODE_RE.fullmatch(reason_code):
+            msg = (
+                f"{reason_code!r} is not a reason code. A code survives `redact_details` and "
+                "a sentence is stored as the marker, so prose here loses the why entirely"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {
+            "part": part,
+            "reference": reference,
+            "direction": "attached" if attached else "detached",
+            "reason_code": reason_code,
+        }
+        return self._write(AuditAction.COMPOSE_CHANGE, subject("agent", agent_id), details)
 
     def entity_merge(
         self,

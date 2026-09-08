@@ -120,6 +120,29 @@ class AuditAction(enum.StrEnum):
     magnitude in frequency (denies are routine, revokes are rare), and they answer
     different questions. Collapsing them makes "who removed her access, and when"
     unanswerable without reading the details of every refusal in between.
+
+    COMPOSE_CHANGE was added on 2026-09-08, and it is the eighth. M39.1.1.3 asks for an
+    attachment added to or removed from an agent to reach the ledger with who, when and why,
+    and there was nothing to write it under. The same absence blocked two other things:
+    `migrations/versions/0004` records that an audit trigger on `ops.setting` could not be
+    written for want of a member, and `brain.connectors.registry` returns a lifecycle event
+    for a caller to record with nothing covering it either.
+
+    Recording it under an existing member was rejected, and `brain.tables.audit` has the
+    precedent that made it tempting: `PACK_ASSIGNMENT_ACTION` is `GRANT`, because a pack
+    assignment really is somebody gaining capabilities. That is exactly why GRANT cannot take
+    this: its justification is that "what did this person gain, and when" is answerable from
+    one action, and filling it with rows about which tools an agent carries breaks the query
+    it exists to serve. PUBLISH is about an artefact; LEASH_CHANGE's whole content is its two
+    rungs. No member fitted, so the honest answer was a member.
+
+    **Adding one moves no existing digest.** `compute_entry_hash` takes the action per entry
+    and `HASH_SCHEMA` is a literal, so an unused member is invisible to every hash already
+    written and every chain still verifies. What it does need is a migration, because
+    `brain.tables.audit` renders the CHECK constraint from this enum and `0002` wrote the
+    list out literally; `0022` supersedes it in the way `0007`, `0011` and `0012` already
+    supersede each other for the channel vocabulary. The migration must land before code
+    writes the new action, or a write fails at the database rather than in a test.
     """
 
     GRANT = "grant"
@@ -129,6 +152,11 @@ class AuditAction(enum.StrEnum):
     ENTITY_MERGE = "entity_merge"
     PUBLISH = "publish"
     BREAK_GLASS = "break_glass"
+    #: An agent's composition changed: a skill, a knowledge predicate, a connector or a
+    #: channel attached or detached. Fourteen characters, which matters because the column
+    #: is `VARCHAR(16)`: `attachment_change` and `agent_config_change` were the other two
+    #: candidates and neither fits.
+    COMPOSE_CHANGE = "compose_change"
 
 
 # --------------------------------------------------------------------- redaction
