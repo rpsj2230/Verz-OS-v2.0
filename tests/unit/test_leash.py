@@ -32,11 +32,14 @@ from brain.gate.leash import (
     ApprovalWindowError,
     CheckName,
     CheckReason,
+    Decision,
     Governed,
     Leash,
     LeashEntry,
     ResumeRefusal,
+    Resumption,
     Route,
+    SuspendedAction,
     decide,
     effective_tier,
     govern,
@@ -710,6 +713,309 @@ def test_an_approval_window_longer_than_the_maximum_is_refused() -> None:
             now=NOW,
             window=MAX_APPROVAL_WINDOW + timedelta(seconds=1),
         )
+
+
+# --------------------------------------- M3.8.4 what the resume re-checks
+#
+# An approval is a statement about a moment, not a permit. Between the moment and the resume
+# the stored action can be edited, the caller's reach can move, and a check that passed can
+# stop passing, and none of those events knows that an approved artefact is sitting in a
+# queue. Each test below is one suspension and two resumptions differing in exactly one
+# thing, because a fixture that changes two cannot say which guard fired.
+
+
+def approved_suspension(
+    *, caller: EntitlementSet = CALLER, subject: Action | None = None
+) -> SuspendedAction:
+    """A suspension raised at NOW and approved five minutes later: the baseline world."""
+    governed = run(subject, leash=leash_at(AutonomyTier.ASSISTED), caller=caller)
+    assert governed.suspension is not None
+    return governed.suspension.approved_by("u_director", NOW + timedelta(minutes=5))
+
+
+def attempt_resume(
+    suspension: SuspendedAction,
+    *,
+    caller: EntitlementSet = CALLER,
+    policy: FieldPolicy = POLICY,
+    now: datetime = NOW + timedelta(minutes=6),
+    execute: Callable[[Action], TypedResult[Ticket]] = executed,
+) -> Resumption[Ticket]:
+    """Resume the baseline world, with at most one argument changed from it.
+
+    A helper rather than the call written out each time, so the argument a test varies reads
+    as the only difference rather than as one line in twenty identical ones.
+    """
+    return resume(
+        suspension,
+        caller=caller,
+        agent_ceiling=CEILING,
+        policy=policy,
+        leash=leash_at(AutonomyTier.ASSISTED),
+        assessment=CLEAN,
+        trace_id="tr_2",
+        now=now,
+        execute=execute,
+    )
+
+
+def test_an_action_altered_after_it_was_approved_does_not_resume() -> None:
+    """A person read one artefact and approved that one. Deleting this lets the stored action
+    be rewritten between the approval and the resume and then executed under the approval
+    granted for the old one: somebody approves "close this ticket" and what runs is whatever
+    anybody able to write to the queue put in its place. The digest recorded at suspension is
+    the only thing that can notice, because `artefact` is kept verbatim rather than
+    re-rendered, so the queue goes on displaying the action that was approved."""
+    ran: list[str] = []
+
+    def recording_execute(subject: Action) -> TypedResult[Ticket]:
+        ran.append(subject.args["status"])
+        return executed(subject)
+
+    approved = approved_suspension()
+    # The row as somebody else left it: one column rewritten, every other column intact.
+    altered = approved.model_copy(update={"action": action(args={"status": "reopened"})})
+    assert altered.action_digest == action().digest()
+    assert altered.action.digest() != altered.action_digest
+    assert altered.artefact == approved.artefact
+    assert "status: closed" in altered.artefact
+
+    outcome = attempt_resume(altered, execute=recording_execute)
+    assert not outcome.resumed
+    assert outcome.refusal is ResumeRefusal.ARTEFACT_ALTERED
+    assert outcome.result is None
+    assert ran == []
+
+    # The sibling. One thing differs: nothing was rewritten, and it proceeds.
+    untouched = attempt_resume(approved, execute=recording_execute)
+    assert untouched.resumed
+    assert ran == ["closed"]
+
+
+def test_a_reach_that_moved_between_the_approval_and_the_resume_does_not_resume() -> None:
+    """The Monday to Friday case, and the only guard on this path that can see it. The three
+    checks are re-run below, but they answer about this one action, so a move anywhere else in
+    the caller's reach is invisible to them: the grant revoked this morning, or the one the
+    directory sync added, is not the grant this action needs. Deleting this executes an
+    approved action under a reach nobody approved, wider or narrower than the one the artefact
+    was raised against, and the record filed for it would carry the hash it was granted under
+    rather than the hash it ran under."""
+    wider = entitlement("write:ticket.status", "read:ticket.status", "read:invoice.amount")
+    ran: list[str] = []
+
+    def recording_execute(subject: Action) -> TypedResult[Ticket]:
+        ran.append(subject.args["status"])
+        return executed(subject)
+
+    raised_wide = approved_suspension(caller=wider)
+    assert raised_wide.ent_hash == wider.intersect(CEILING).ent_hash()
+    assert raised_wide.ent_hash != CALLER.intersect(CEILING).ent_hash()
+
+    # The grant this action needs is untouched in both directions and all three checks still
+    # pass, which is the point: nothing else on the resume path is looking at the difference.
+    assert decide(
+        action(),
+        caller=CALLER,
+        agent_ceiling=CEILING,
+        policy=POLICY,
+        leash=leash_at(AutonomyTier.ASSISTED),
+        assessment=CLEAN,
+        now=NOW + timedelta(minutes=6),
+    ).permitted
+
+    revoked = attempt_resume(raised_wide, caller=CALLER, execute=recording_execute)
+    assert not revoked.resumed
+    assert revoked.refusal is ResumeRefusal.ENTITLEMENT_CHANGED
+
+    granted = attempt_resume(approved_suspension(), caller=wider, execute=recording_execute)
+    assert not granted.resumed
+    assert granted.refusal is ResumeRefusal.ENTITLEMENT_CHANGED
+    assert ran == []
+
+    # The sibling. One thing differs: the reach is the one the approval was granted under.
+    unchanged = attempt_resume(raised_wide, caller=wider, execute=recording_execute)
+    assert unchanged.resumed
+    assert ran == ["closed"]
+
+
+def test_a_check_that_stopped_passing_after_the_approval_does_not_resume() -> None:
+    """An approval is not a permit, and this is the guard that says so. Deleting it executes
+    an approved action whose checks now refuse, and the rung guard below it does not stand in:
+    the tier here is still Assisted, so the call goes straight past that one and runs. The
+    world is a field policy tightened after the approval was granted, which is the ordinary
+    way a check changes its mind about an action nobody has touched. What the agent then
+    writes is a field the caller may no longer see, and the mask check is the only thing in
+    the system that knows."""
+    tightened = FieldPolicy(
+        rules=(
+            FieldRule.of(
+                "ticket", "status", "read:ticket.internal_status", Classification.RESTRICTED
+            ),
+            FieldRule.of("invoice", "amount", "read:invoice.amount", Classification.CONFIDENTIAL),
+        )
+    )
+    ran: list[str] = []
+
+    def recording_execute(subject: Action) -> TypedResult[Ticket]:
+        ran.append(subject.args["status"])
+        return executed(subject)
+
+    approved = approved_suspension()
+    outcome = attempt_resume(approved, policy=tightened, execute=recording_execute)
+    assert not outcome.resumed
+    assert outcome.refusal is ResumeRefusal.CHECKS_FAILED
+    assert outcome.decision is not None
+    assert outcome.decision.refused_by is CheckName.MASK
+    # Still Assisted, so `RUNG_LOWERED` never fires and nothing else would have stopped this.
+    assert outcome.decision.tier is AutonomyTier.ASSISTED
+    assert outcome.record is not None
+    assert outcome.record.route is Route.REFUSED
+    assert outcome.result is None
+    assert ran == []
+
+    # The sibling. One thing differs: the policy the approval was granted under.
+    unchanged = attempt_resume(approved, execute=recording_execute)
+    assert unchanged.resumed
+    assert ran == ["closed"]
+
+
+# ------------------------------- M3.8.4 what a stored artefact may not carry
+#
+# A suspension and a record both arrive by being loaded from a table or written by an older
+# version of this code, not only from `suspend` and `_record`. These are the checks on the
+# model itself, so the tests build the row rather than the call wherever `suspend` would
+# refuse first.
+
+
+def a_decision() -> Decision:
+    """The decision the baseline suspension is raised from."""
+    return decide(
+        action(),
+        caller=CALLER,
+        agent_ceiling=CEILING,
+        policy=POLICY,
+        leash=leash_at(AutonomyTier.ASSISTED),
+        assessment=CLEAN,
+        now=NOW,
+    )
+
+
+def a_suspension(
+    *,
+    raised_at: datetime = NOW,
+    expires_at: datetime = NOW + DEFAULT_APPROVAL_WINDOW,
+    decided_at: datetime | None = None,
+) -> SuspendedAction:
+    """One suspension, built as a row is built when it is loaded rather than raised."""
+    return SuspendedAction(
+        id="ap_1",
+        trace_id="tr_1",
+        action=action(),
+        principal_id=CALLER.principal_id,
+        ent_hash=CALLER.intersect(CEILING).ent_hash(),
+        artefact=render_artefact(action()),
+        action_digest=action().digest(),
+        raised_at=raised_at,
+        expires_at=expires_at,
+        decided_at=decided_at,
+    )
+
+
+def a_record(at: datetime) -> ActionRecord:
+    """One record, built the same way, because a record is also read back from a table."""
+    return ActionRecord(
+        trace_id="tr_1",
+        agent_id=AGENT,
+        tool_name=UPDATE_STATUS.name,
+        target=TARGET,
+        principal_id=CALLER.principal_id,
+        ent_hash=CALLER.intersect(CEILING).ent_hash(),
+        action_digest=action().digest(),
+        route=Route.EXECUTE,
+        tier=AutonomyTier.AUTONOMOUS,
+        checks=(CheckName.CAPABILITY, CheckName.RUNG, CheckName.MASK),
+        at=at,
+    )
+
+
+def test_a_record_refuses_a_timestamp_with_no_timezone() -> None:
+    """`at` is the only thing that says when an action happened, and it is the record that
+    outlives the call. Deleting this stores a naive one, which whatever reads it next reads as
+    UTC: an action taken at 17:00 in an office eight hours ahead is filed as 17:00 UTC, so it
+    sits inside an approval window that had already closed and outside the day an auditor
+    searches for it. `govern` reaches this with a single `datetime.now()` that forgot its
+    `UTC`, which is how it would actually happen rather than by anybody meaning it."""
+    with pytest.raises(ValueError, match="timezone-aware"):
+        a_record(datetime(2026, 9, 17, 9, 0))
+    with pytest.raises(ValueError, match="timezone-aware"):
+        run(leash=leash_at(AutonomyTier.AUTONOMOUS), now=datetime(2026, 9, 17, 9, 0))
+    # The sibling: the same record with an offset on it is the ordinary case and is accepted.
+    assert a_record(NOW).at == NOW
+
+
+def test_a_suspension_refuses_a_timestamp_with_no_timezone() -> None:
+    """These three timestamps decide whether an approval is still open, and `is_expired`
+    compares them against an aware `now`. Deleting this admits a naive one, and the comparison
+    it feeds then either raises at the moment somebody tries to approve, or, when both sides
+    are naive, silently reads an offset clock as UTC and holds the window open for the hours
+    between them. `suspend` reaches it the same way `govern` does, with one missing `UTC`."""
+    naive_raised = datetime(2026, 9, 17, 9, 0)
+    naive_expires = datetime(2026, 9, 17, 13, 0)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        a_suspension(raised_at=naive_raised, expires_at=naive_expires)
+    with pytest.raises(ValueError, match="timezone-aware"):
+        a_suspension(decided_at=datetime(2026, 9, 17, 10, 0))
+    with pytest.raises(ValueError, match="timezone-aware"):
+        suspend(
+            action(),
+            a_decision(),
+            principal_id=CALLER.principal_id,
+            trace_id="tr_1",
+            now=naive_raised,
+        )
+    # The sibling, and the other half of the condition: an artefact nobody has decided yet
+    # carries no `decided_at` at all, and an absent timestamp is not a naive one.
+    assert a_suspension().decided_at is None
+    assert a_suspension(decided_at=NOW + timedelta(minutes=5)).decided_at is not None
+
+
+def test_a_suspension_that_expires_no_later_than_it_was_raised_cannot_exist() -> None:
+    """An approval whose window has already closed when it is written is one nobody can ever
+    grant: `is_open` is false from the first instant, so the artefact sits in the queue as a
+    permanent nothing and the action it was raised for is never decided either way. Deleting
+    this is also what lets the two ends be the wrong way round, so a row with them swapped
+    loads and reads as a window of minus four hours. `suspend` reaches it with a zero window,
+    which is what a caller computing one from two clocks gets on the day they agree."""
+    with pytest.raises(ValueError, match="can never be granted"):
+        a_suspension(expires_at=NOW)
+    with pytest.raises(ValueError, match="can never be granted"):
+        a_suspension(expires_at=NOW - timedelta(hours=1))
+    with pytest.raises(ValueError, match="can never be granted"):
+        suspend(
+            action(),
+            a_decision(),
+            principal_id=CALLER.principal_id,
+            trace_id="tr_1",
+            now=NOW,
+            window=timedelta(0),
+        )
+    # The sibling, and the boundary the comparison sits on: one second of window is a window.
+    assert a_suspension(expires_at=NOW + timedelta(seconds=1)).is_open(NOW)
+
+
+def test_a_suspension_loaded_with_a_window_over_the_maximum_is_refused() -> None:
+    """`suspend` refuses a caller who asks for a week, and that is the test above. This is the
+    same bound on the model, for the artefact that never went through `suspend`: a row read
+    back from the table, or one written by a version of this code from before the bound
+    existed. Deleting it lets such a row stand for as long as it says it does, which is the
+    standing grant the maximum exists to prevent: it survives the reorganisation, the leaver
+    and the policy change that would each have stopped it being granted today."""
+    with pytest.raises(ValueError, match="exceeds"):
+        a_suspension(expires_at=NOW + MAX_APPROVAL_WINDOW + timedelta(seconds=1))
+    # The sibling, and the boundary: exactly the maximum is a window that may still be held.
+    at_the_bound = a_suspension(expires_at=NOW + MAX_APPROVAL_WINDOW)
+    assert at_the_bound.expires_at - at_the_bound.raised_at == MAX_APPROVAL_WINDOW
+    assert at_the_bound.is_open(NOW)
 
 
 # ------------------------------------------------------------------ the action
