@@ -271,8 +271,13 @@ class Step:
             raise InstallerError(msg)
 
 
-#: The install, in the order it runs. Ten steps, and the count is what the output counts
-#: against: a person reading "step 4 of 10" knows how much is left.
+#: The install, in the order it runs. The count in the output is `len(PLAN)`, so a person
+#: reading "step 4 of 12" knows how much is left.
+#:
+#: The number is deliberately not written in this sentence. It said ten while the plan held
+#: twelve, which is what a hand-maintained count does, and the output was right the whole
+#: time because `render` has always used `len`. A comment that disagrees with the code is
+#: worse than no comment when the code is the thing being explained.
 #:
 #: `$BRAIN_RELEASE` is the release tag, which is the whole of what a client pins. Nothing here
 #: reads it from anywhere but the argument the person ran the installer with, because a
@@ -476,6 +481,12 @@ PLAN: Final[tuple[Step, ...]] = (
         changes=False,
     ),
     Step(
+        # "once" is about the value and not about the step: `presents_once` is what exempts
+        # this from the leak check, because the code has to reach the person standing here
+        # exactly once and nowhere else. Re-running the installer runs this step again and
+        # prints the same value, which is not a leak, because whoever can run the installer
+        # already has a shell on that server and can read the environment file directly. It
+        # is worth saying because the name reads as a guarantee the step does not make.
         name="present the setup code, once",
         run=(
             f'printf "setup code: %s\\n" "$(grep BRAIN_SETUP_SECRET '

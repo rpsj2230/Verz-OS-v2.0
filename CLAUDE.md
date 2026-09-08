@@ -308,6 +308,14 @@ made five questions open while `docs/architecture.html` still said four, and
 yourself before pushing anything that touches a document, a fixture or a count. The hook is a
 fast filter, not the gate.
 
+**No function or class under `src/brain` may have "restore" in its name** unless it is
+`recovery.last_verified_restore`. `tests/unit/test_installation.py` pins that, and the reason
+is in `docs/needs-rupash.md` item 44: a console field labelled "last verified restore" beside
+a backup timestamp is the field somebody checks before deciding not to worry, and the test is
+written so it goes red on the day somebody adds a restore, which is the day that screen should
+be written. It cost an agent a red test on 2026-09-09 for a wizard helper called `restore`
+that had nothing to do with backups. Call it something else.
+
 **`ruff` reads the word "noqa" inside an ordinary comment as a directive.** Reword rather than
 explain a suppression using that word.
 
