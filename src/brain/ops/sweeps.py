@@ -788,12 +788,16 @@ def sweep_install_from_empty() -> None:
 #: does not have to tell it from a hyphen at a glance.
 EM_DASH: str = chr(8212)
 
-#: Where the rule is enforced today. `tests` and `docs` still hold the backlog; see
-#: `sweep_house_style` for why this is scoped rather than total.
-HOUSE_STYLE_AREAS: tuple[str, ...] = ("src", "migrations", "ops")
+#: Where the rule is enforced today. `tests` still holds a backlog of thirty across twelve
+#: files; see `sweep_house_style` for why this is scoped rather than total.
+HOUSE_STYLE_AREAS: tuple[str, ...] = ("src", "migrations", "ops", "docs")
 
-#: What is read inside them.
-HOUSE_STYLE_SUFFIXES: frozenset[str] = frozenset({".py", ".sh", ".json", ".yml", ".yaml"})
+#: What is read inside them. Prose suffixes were added with `docs`, because the documents this
+#: repository serves are where the rule was broken most: one hundred and forty nine em dashes
+#: in `architecture.html` alone, against zero in the whole of `src`.
+HOUSE_STYLE_SUFFIXES: frozenset[str] = frozenset(
+    {".py", ".sh", ".json", ".yml", ".yaml", ".md", ".html", ".js"}
+)
 
 
 def sweep_house_style() -> None:
@@ -804,10 +808,17 @@ def sweep_house_style() -> None:
     ordinary fate of a rule with no check behind it: everybody agrees with it, nobody is
     reminded of it, and the count only ever goes up.
 
-    **Scoped to what is clean rather than to everything the rule covers.** `tests` and `docs`
-    still hold the rest, and a check that is red the day it lands is a check somebody switches
-    off, which `sweep_traceability` records at length about its own advisory notes. Widening
-    this is one entry in `HOUSE_STYLE_AREAS` once those are done.
+    **Scoped to what is clean rather than to everything the rule covers.** `tests` still holds
+    thirty across twelve files, and a check that is red the day it lands is a check somebody
+    switches off, which `sweep_traceability` records at length about its own advisory notes.
+    Widening this is one entry in `HOUSE_STYLE_AREAS` once those are done.
+
+    `docs` joined on 2026-09-08, with `.md`, `.html` and `.js` added to the suffixes, after
+    one hundred and eighty six were replaced across the served documents. That is where the
+    rule was broken most and where it matters most, because those pages are what the client
+    reads. The four compose files and `README.md` at the repository root are still outside any
+    area: sweeping the root means sweeping `.venv` and `node_modules`, and an area entry of
+    `.` is not worth what it would cost to filter.
 
     The character rather than a pattern, because there is nothing to interpret: an em dash is
     an em dash, and the fix is the punctuation the sentence actually wanted.

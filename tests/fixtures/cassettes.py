@@ -1,7 +1,7 @@
 """Recorded connector responses, so connectors can be built before credentials exist.
 
 This is what makes the thirty-day plan possible. Every connector is written and tested
-against these, and wired to real credentials at go-live — otherwise the whole build waits
+against these, and wired to real credentials at go-live - otherwise the whole build waits
 on someone finding a Xero API key.
 
 A cassette is not a convenience mock. It records three things a hand-written mock always
@@ -13,7 +13,7 @@ from memory. A mock that only knows success produces a connector that has never 
 compiled against failure.
 
 **The real limits, verified rather than assumed.** Freshdesk search returns at most 300
-records *ever* — not per page, not per request, but as a hard ceiling on the result set.
+records *ever* - not per page, not per request, but as a hard ceiling on the result set.
 A connector written against a mock that pages forever will silently under-report and look
 correct doing it.
 

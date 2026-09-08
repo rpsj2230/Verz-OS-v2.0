@@ -17,7 +17,7 @@ digest `sha256:131e228179c16705a9cb6c31fc15ef05a18bed91f892d0d3048e5e3d278d5f53`
 
 ## The target box
 
-`verz-vps` — 194.233.66.89, Docker 29.7.2, 11.7 GiB RAM, 86 GiB free disk.
+`verz-vps` - 194.233.66.89, Docker 29.7.2, 11.7 GiB RAM, 86 GiB free disk.
 
 **It is shared.** At last check it ran 29 containers using about 4.5 GiB, including
 Coolify itself, a Dify stack, Langfuse, Activepieces, and the existing Coolify project
@@ -32,7 +32,7 @@ Two consequences, already handled in `docker-compose.yml`:
 
 Budget for this stack: about **3.8 GiB** (app 1 GiB, Postgres 2 GiB, cache 0.5 GiB,
 migrate 0.25 GiB one-shot). That leaves roughly 3 GiB headroom. Adding OpenBao, a worker
-and the browser sandbox later will need a hard look at what else the box is running —
+and the browser sandbox later will need a hard look at what else the box is running -
 Langfuse alone documents a 25.5 GiB minimum, so it does not belong on this host.
 
 ## Steps
@@ -64,7 +64,7 @@ On the resource, set:
 | `BRAIN_ENV` | `production` |
 | `BRAIN_COMMIT_SHA` | leave to the pipeline |
 
-Set the health check path to `/health/ready`. **Not `/health/live`** — liveness only says
+Set the health check path to `/health/ready`. **Not `/health/live`** - liveness only says
 the process is running. A container that is up but cannot reach the database still answers
 questions, from whatever it can still reach, which is how this system would start
 returning wrong answers while appearing healthy.
@@ -73,7 +73,7 @@ returning wrong answers while appearing healthy.
 
 Coolify Services have no git webhook, but they do not need one: the generic API deploy
 endpoint handles them (`DeployController::deploy_resource` → `StartService`). Calling that
-from GitHub Actions also keeps the CI gate, which a push webhook could not — a push webhook
+from GitHub Actions also keeps the CI gate, which a push webhook could not - a push webhook
 fires whether or not the tests passed.
 
 In Coolify: **Keys & Tokens → API tokens → + Add**, with write permission. Then three
@@ -97,7 +97,7 @@ manual costs almost nothing.
 
 ## Rollback
 
-Images are tagged by commit SHA, so rolling back is redeploying an older tag — set
+Images are tagged by commit SHA, so rolling back is redeploying an older tag - set
 `APP_IMAGE` to `ghcr.io/rpsj2230/verz-brain-v2.0:<sha>` and redeploy. Nothing needs
 rebuilding, and the SHA in `/health/ready` says exactly what is running.
 

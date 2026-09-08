@@ -314,7 +314,7 @@ ${toc}</ol></nav>
 <section id="how">
 <h2><span class="sn">§</span>How to use this</h2>
 <div class="rule">Every leaf is a deliverable with a checkbox. A module is complete when every leaf under it is ticked <em>and</em> its invariants pass. Nothing is done because it looks finished.</div>
-<p>Ids run four and five levels deep — <code>M0.2.1</code> is a subtask, <code>M31.1.1.3</code> a step within one. Put the id in the commit message and the traceability file so progress is a query rather than a meeting.</p>
+<p>Ids run four and five levels deep - <code>M0.2.1</code> is a subtask, <code>M31.1.1.3</code> a step within one. Put the id in the commit message and the traceability file so progress is a query rather than a meeting.</p>
 <p>Ticks are stored in this browser only, so each person tracks their own view. Use <strong>Export</strong> to produce a JSON snapshot for the traceability file or to share with the team.</p>
 <table><thead><tr><th>Wave</th><th>Dates</th><th>Tracks</th><th>Items</th><th>Done</th><th>Modules</th></tr></thead><tbody>
 ${waveRows}</tbody></table>

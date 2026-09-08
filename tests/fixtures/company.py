@@ -2,7 +2,7 @@
 
 Every permission test from here on runs against this. It is deliberately not a tidy org
 chart: the interesting cases are the ones a real company produces and a clean fixture
-never does — the contractor whose access expires, the person who sits in two departments,
+never does - the contractor whose access expires, the person who sits in two departments,
 the one mid-transfer who still holds grants in the department they left.
 
 Three ideas make this fixture do real work.
@@ -71,7 +71,7 @@ def dept_in(*names: str) -> Scope:
 
 @dataclass(frozen=True)
 class Person:
-    """A principal plus the grants they hold, and — the useful part — what they must not
+    """A principal plus the grants they hold, and - the useful part - what they must not
     reach. `forbidden` is asserted directly by the canary tests."""
 
     principal: Principal
@@ -111,7 +111,7 @@ def build_company() -> dict[str, Person]:
                 Grant(capability=cap("read:ticket.*"), scope=Scope.unrestricted()),
                 Grant(capability=cap("invoke:agent"), scope=Scope.unrestricted()),
             ),
-            note="Super Admin. Wide, but still a grant set — there is no bypass flag.",
+            note="Super Admin. Wide, but still a grant set - there is no bypass flag.",
             # An admin who can grant themselves anything is still not born holding it.
             forbidden=("hr.salary",),
         ),
@@ -229,7 +229,7 @@ def build_company() -> dict[str, Person]:
             ),
             note=(
                 "Two departments, unequal depth. Sees contract value in sales and not in "
-                "web — a per-field, per-scope difference within one person."
+                "web - a per-field, per-scope difference within one person."
             ),
             forbidden=("hr.salary",),
         ),

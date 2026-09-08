@@ -9,7 +9,7 @@ plus one environment file; every value that belongs to a client is declared in
 and its values are not in here. `docs/repository-map.md` says which parts an install touches,
 which is none of them.
 
-The specification lives outside this repository — architecture, task tracker and key
+The specification lives outside this repository - architecture, task tracker and key
 screens. See `_LINKS.md` in the parent folder for the current URLs.
 
 ## The rule everything else follows
@@ -25,8 +25,8 @@ different answers, and nothing was configured to make that happen.
 Two consequences worth stating before you read any code:
 
 - **Audience is not authority.** Who can *find* an agent and what an agent *returns* are
-  separate questions with separate answers. Notion and Dust both ship the opposite — the
-  creator's access travels with the agent — which turns every shared assistant into an
+  separate questions with separate answers. Notion and Dust both ship the opposite - the
+  creator's access travels with the agent - which turns every shared assistant into an
   escalation path.
 - **Entitlements are additive only.** There is no deny list anywhere. A field is hidden
   because no grant covers it. Deny rules make "can X see Y" an evaluation-order problem
@@ -54,7 +54,7 @@ uv run pytest
 ```
 
 Everything above runs today. Anything marked `needs_db` skips until `DATABASE_URL` is
-set — CI provides Postgres 18 with pgvector, so the database suites run there from the
+set - CI provides Postgres 18 with pgvector, so the database suites run there from the
 first commit.
 
 ## Conventions
@@ -64,4 +64,4 @@ first commit.
   count as done. Nothing is marked done by hand.
 - A branch is named for its module, so concurrent tracks do not collide.
 - The three files under CODEOWNERS need a second reviewer. A permission bug there is
-  silent — it returns a plausible answer that is merely too wide.
+  silent - it returns a plausible answer that is merely too wide.

@@ -921,3 +921,43 @@ def test_the_house_style_sweep_raises_on_an_em_dash_rather_than_only_printing() 
     assert any(":3" in one for one in raised.value.findings), raised.value.findings
 
     sweep_house_style()
+
+
+def test_the_house_style_sweep_reads_the_documents_this_repository_serves() -> None:
+    """**One hundred and forty nine em dashes were in `architecture.html` while `src` had
+    zero**, because the sweep landed scoped to code and the documents are where the rule was
+    broken most. They are also where it matters most: those pages are what the client reads,
+    and the tracker and the Needs Rupash page are served by the application itself.
+
+    Planted in a Markdown file under `docs`, so this covers two widenings at once: the area
+    and the suffix. `.md`, `.html` and `.js` were added with `docs`, and a sweep that gained
+    the directory and not the file types would find nothing there and say so cheerfully.
+
+    The probe is built with `chr(8212)` rather than typed, for the reason the constant above
+    gives: a literal one here would be a violation of the rule this file tests, and the sweep
+    would refuse the repository for its own fixture.
+
+    Delete this and `docs` can quietly leave `HOUSE_STYLE_AREAS`, or the prose suffixes can
+    leave `HOUSE_STYLE_SUFFIXES`, and the hundred and eighty six replaced on 2026-09-08 come
+    back one document at a time."""
+    from brain.ops.sweeps import HOUSE_STYLE_AREAS, REPO, SweepFailure, sweep_house_style
+
+    assert "docs" in HOUSE_STYLE_AREAS
+
+    probe = REPO / "docs" / "_temporary_house_style_probe.md"
+    probe.write_text(
+        "# A probe written and removed by test_sweeps\n\n"
+        "It carries one em dash " + chr(8212) + " right here, on purpose.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    try:
+        with pytest.raises(SweepFailure) as raised:
+            sweep_house_style()
+    finally:
+        probe.unlink(missing_ok=True)
+
+    assert any("_temporary_house_style_probe" in one for one in raised.value.findings)
+    assert any(":3" in one for one in raised.value.findings), raised.value.findings
+
+    sweep_house_style()

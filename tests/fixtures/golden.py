@@ -2,14 +2,14 @@
 
 The point is not that the system answers well. It is that **the same question asked by
 different people must produce different answers**, and that the difference is exactly the
-difference in their entitlements — not more, not less.
+difference in their entitlements - not more, not less.
 
 So every question is recorded three times over, once per persona, each with what that
 person should get. Three outcomes are possible and all three are correct answers:
 
-- ``ANSWER``   — the data, with the fields that persona may see
-- ``PARTIAL``  — the record, with named fields locked
-- ``REFUSE``   — nothing, phrased identically to "no such thing"
+- ``ANSWER``   - the data, with the fields that persona may see
+- ``PARTIAL``  - the record, with named fields locked
+- ``REFUSE``   - nothing, phrased identically to "no such thing"
 
 That last one is the one that gets tested wrongly everywhere else. A refusal that says
 "you may not see SNM's contract value" has already confirmed that SNM has one. So the
@@ -39,7 +39,7 @@ class Golden:
     question: str
     asked_by: str
     expect: Expect
-    #: Substrings that must appear. Facts, never phrasing — the wording is the model's.
+    #: Substrings that must appear. Facts, never phrasing - the wording is the model's.
     must_contain: tuple[str, ...] = field(default_factory=tuple)
     #: Substrings that must never appear. Canary tokens live here.
     must_not_contain: tuple[str, ...] = field(default_factory=tuple)

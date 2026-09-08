@@ -6,7 +6,7 @@
 # in this stack would take down someone else's production.
 #
 # There is no migrate service. Migrations run inside the application's startup, under a
-# PostgreSQL advisory lock, before readiness passes — see src/brain/migrate.py. A one-shot
+# PostgreSQL advisory lock, before readiness passes - see src/brain/migrate.py. A one-shot
 # container did the job correctly but exits when it succeeds, and Coolify has no way to be
 # told a container is meant to stop, so a successful migration displayed as a red "Exited"
 # beside three healthy services.
@@ -29,7 +29,7 @@ services:
       BRAIN_ENV: ${BRAIN_ENV:-production}
       # BRAIN_COMMIT_SHA is deliberately absent. The image bakes it in at build
       # time, and a runtime environment entry would override that with whatever
-      # the deployment happens to know — which, in Coolify's case, is the literal
+      # the deployment happens to know - which, in Coolify's case, is the literal
       # string "unknown" resolved once at save time and never updated again.
       APP_ROLE_PASSWORD: ${APP_ROLE_PASSWORD:-}
     deploy:
@@ -69,7 +69,7 @@ services:
   #
   # src/brain/session.py sets prepare_threshold=None because of this container. Transaction
   # pooling hands a different backend to every transaction, so a server-side prepared
-  # statement made on one and executed on another fails — and only ever in production,
+  # statement made on one and executed on another fails - and only ever in production,
   # because development has no pooler.
   pgbouncer:
     image: edoburu/pgbouncer:v1.24.1-p1

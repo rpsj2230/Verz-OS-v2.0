@@ -1109,7 +1109,7 @@ this repository at `ops/deploy/brain-deploy`.
 
 ---
 
-## 23. Should the client's audit trail show your deployment history? — DECIDED: leave the two chains separate
+## 23. Should the client's audit trail show your deployment history? - DECIDED: leave the two chains separate
 
 **Nothing is blocked. I have built it the safe way and this is a question about whether to
 open it up.**
@@ -1150,7 +1150,7 @@ Nothing to do unless you disagree.
 
 ---
 
-## 22. The plan says production deploys only tested releases. You asked for every push. — DECIDED: every push deploys, no tagging
+## 22. The plan says production deploys only tested releases. You asked for every push. - DECIDED: every push deploys, no tagging
 
 **These are both reasonable and they cannot both happen. I have kept yours running and am
 not changing it without you saying so.**
@@ -1192,7 +1192,7 @@ alongside your other project on the same box.
 
 ---
 
-## 21. Where do role grants that came from the directory live? — DECIDED: directory-sourced grants get their own table, owned by the sync
+## 21. Where do role grants that came from the directory live? - DECIDED: directory-sourced grants get their own table, owned by the sync
 
 **A smaller decision inside the same area, recorded so it is not made by accident.**
 
@@ -1253,7 +1253,7 @@ it.
 
 ---
 
-## 20. Two designs for what a person's ID is, and they contradict each other — DECIDED: keep the indirection; the architecture line is wrong
+## 20. Two designs for what a person's ID is, and they contradict each other - DECIDED: keep the indirection; the architecture line is wrong
 
 **Not urgent, but it gets expensive the moment the identity provider is wired in.**
 
@@ -1291,7 +1291,7 @@ subject fails that test today. Nothing to change beyond the two comments.
 
 ---
 
-## 19. How long should somebody stay signed in? — CONFIRMED: 10 hours absolute, 30 minutes idle
+## 19. How long should somebody stay signed in? - CONFIRMED: 10 hours absolute, 30 minutes idle
 
 **A number I picked, and nobody has confirmed.**
 
@@ -1348,7 +1348,7 @@ outlives the laptop it was issued to. It is set correctly and is now asserted.
 
 ---
 
-## 17. Who holds the keys to the secrets vault? — DECIDED: five pieces, any three open it; both configurable, and the root token revoked
+## 17. Who holds the keys to the secrets vault? - DECIDED: five pieces, any three open it; both configurable, and the root token revoked
 
 **Not a design question. A physical-custody question only you can answer, and it has to be
 settled before the vault goes in rather than after.**
@@ -1423,7 +1423,7 @@ them in; or fill them in yourself at the top of `vault_quorum.py`.
 
 ---
 
-## 16. Two different things both mean "can approve", and nothing says which wins — DECIDED: the permission decides
+## 16. Two different things both mean "can approve", and nothing says which wins - DECIDED: the permission decides
 
 **The plain problem: a person can look approved and not be, or be approved and not look it.**
 
@@ -1453,7 +1453,7 @@ misconfiguration rather than a silent nothing.
 
 ---
 
-## 15. How long should an emergency access session last? — DECIDED: 4 hours, set per grant
+## 15. How long should an emergency access session last? - DECIDED: 4 hours, set per grant
 
 **The plain problem: someone needs to get into something urgently, out of hours, and we
 need to let them without leaving the door open afterwards.**
@@ -1482,7 +1482,7 @@ forgotten has expired before anyone starts work the next morning.
 
 ---
 
-## 14. An approval card can show the approver something they are not allowed to see — ACCEPTED: fix with the approval work
+## 14. An approval card can show the approver something they are not allowed to see - ACCEPTED: fix with the approval work
 
 **Not a decision, a gap I am recording so it is not forgotten.**
 
@@ -1525,7 +1525,7 @@ reintroduced by writing the natural code.
 
 ---
 
-## 13. Can a leash rule say "supervise everywhere except maintenance"? — DECIDED: strictest wins
+## 13. Can a leash rule say "supervise everywhere except maintenance"? - DECIDED: strictest wins
 
 **The plain problem: today it cannot, and the safe choice I made is probably not the one
 you would expect.**
@@ -1556,7 +1556,7 @@ configured, because changing it later silently loosens every rule already writte
 
 ---
 
-## 12. The opaque escape hatch depends on a promise the redaction module cannot keep — DECIDED: the rule goes to the channel adapters (M10.1.5)
+## 12. The opaque escape hatch depends on a promise the redaction module cannot keep - DECIDED: the rule goes to the channel adapters (M10.1.5)
 
 M4.1.6 allows a payload to skip redaction entirely, for genuinely untypeable data. It is
 guarded three ways: it needs its own capability, it flags the trace, and the answer is
@@ -1571,7 +1571,7 @@ on passing.
 payload carrying a label renders that label or refuses to send. That turns "the adapter
 remembered" into "the adapter cannot forget".
 
-**No decision needed if you agree** — I will write it into M16 when I get there. It is here
+**No decision needed if you agree** - I will write it into M16 when I get there. It is here
 because it is the kind of dependency that gets lost between two modules, and the failure is
 invisible from either side.
 
@@ -1579,7 +1579,7 @@ invisible from either side.
 
 ---
 
-## 11. A hidden count can still be worked out by subtraction — DECIDED: add the policy column
+## 11. A hidden count can still be worked out by subtraction - DECIDED: add the policy column
 
 **This is a hole in a rule we already promise**, so it needs an owner rather than a
 preference.
@@ -1614,7 +1614,7 @@ projections.
 
 ---
 
-## 10. What happens when even the largest model runs out of room? — DECIDED: trim retrieval and retry
+## 10. What happens when even the largest model runs out of room? - DECIDED: trim retrieval and retry
 
 **The gap.** Tier escalation is defined as upward only: a request too large for `small`
 moves to `main`, and one too large for `main` moves to `heavy`. The specification never says
@@ -1629,7 +1629,7 @@ consequences for the person asking:
 | Refuse | "That question is too large" | Honest, but a dead end with no path forward |
 | Trim retrieval and retry | An answer, from fewer sources, and told so | More work, and it belongs in retrieval rather than routing |
 
-**My recommendation:** the third. The real fix is upstream — if a question needs more
+**My recommendation:** the third. The real fix is upstream - if a question needs more
 context than the largest model has, retrieval gathered too much, and routing is the wrong
 layer to paper over it.
 
@@ -1640,7 +1640,7 @@ so nothing silently truncates. Something has to own the path before M8 ships.
 
 ---
 
-## 9. Should a refusal make the system try a different AI model? — DECIDED: no
+## 9. Should a refusal make the system try a different AI model? - DECIDED: no
 
 **The plain problem: if one AI says "I will not answer that", should we keep asking other
 AIs until one says yes?**
@@ -1680,7 +1680,7 @@ honestly, and it is recorded.
 
 ---
 
-## 8. Where does the audit anchor live? — DECIDED: a private GitHub repo
+## 8. Where does the audit anchor live? - DECIDED: a private GitHub repo
 
 **The plain problem: someone could delete the last few days of the security log and nothing
 would notice.**
@@ -1721,7 +1721,7 @@ what does not exist is the place to keep the note.
 
 ---
 
-## 7. The audit view will want to show a capability, and the ledger redacts it — DECIDED: capabilities allowed in the ledger
+## 7. The audit view will want to show a capability, and the ledger redacts it - DECIDED: capabilities allowed in the ledger
 
 **The conflict.** The ledger's redaction rule is an allowlist: a value survives only if it
 is a field name, a list of field names, a digest, or a boolean. A capability string like
@@ -1747,7 +1747,7 @@ the ledger or a screen that reads two sources and hopes they agree.
 
 ---
 
-## 6. The audit ledger cannot record before-and-after values — DECIDED: field names only
+## 6. The audit ledger cannot record before-and-after values - DECIDED: field names only
 
 **The conflict.** M24.1.4 asks the ledger to record "actor, timestamp, before and after
 state, reason". But before-and-after state *is* field values, and the architecture says
@@ -1775,7 +1775,7 @@ retention and its own access rules, which is real work and belongs in M25, not M
 
 ---
 
-## 5. Coolify's stale compose — LEFT AS IS, as you asked
+## 5. Coolify's stale compose - LEFT AS IS, as you asked
 
 Three changes remain unapplied there: the `migrate` service removed, PgBouncer added, and
 `BRAIN_COMMIT_SHA` dropped.
@@ -1793,7 +1793,7 @@ you want to paste it across.
 
 ---
 
-## 4. Automatic deploys — NOW GENUINELY ON
+## 4. Automatic deploys - NOW GENUINELY ON
 
 You said "I see you have done this as well". It was not done, and it is worth being precise
 about why it looked done: the Deploy workflow's Coolify step printed `secrets not set` and
@@ -1804,14 +1804,14 @@ deploy until today was me running `ops/deploy.sh` by hand. A green run looked li
 and deploys when the published image changes.
 
 Pulled rather than pushed, deliberately: every other route gives something outside the
-server a way in — a Coolify token over plain HTTP, or an SSH key held by GitHub. This way
+server a way in - a Coolify token over plain HTTP, or an SSH key held by GitHub. This way
 nothing new reaches the box and no credential leaves it.
 
 It compares the digest the registry serves against what the container is running. Comparing
 tags is useless, since `:latest` always equals `:latest`, and comparing build times trusts
 a clock.
 
-**cosign is installed and the signature is verified before the container starts** — a
+**cosign is installed and the signature is verified before the container starts** - a
 signature checked after the thing is live is checked too late. Verified by hand: the
 certificate binds the running image to
 `.github/workflows/deploy.yml@refs/heads/main` in your repository.
@@ -1822,7 +1822,7 @@ History: `ssh verz-vps journalctl -u brain-deploy -n 50`
 
 ---
 
-## 3. Langfuse — no action, and a correction
+## 3. Langfuse - no action, and a correction
 
 You said to go ahead and install it. **It is already installed and running** on the box:
 `verz-langfuse-server` and `verz-langfuse-db`, up several days. My note was not asking
@@ -1838,13 +1838,13 @@ rest of observability. It is in the plan already.
 
 ---
 
-## 2. AnyGen — DECIDED: replace
+## 2. AnyGen - DECIDED: replace
 
 M37 now carries a second migration. **29 tasks, finish moves 6 Oct to 7 Oct.** One day to
 replace an entire second system.
 
 - **The twelve house skills come across, not rewritten.** `verz-master-theme`,
-  `verz-doc-letterhead`, `seo-audit`, `website-cro-audit` go first — in daily use, and the
+  `verz-doc-letterhead`, `seo-audit`, `website-cro-audit` go first - in daily use, and the
   real test of whether import works at all.
 - **Agents are rebuilt.** AnyGen has no ceiling and no leash, so there is nothing to carry
   over; each starts at Shadow on writes regardless of how it behaved there.
@@ -1859,7 +1859,7 @@ replace an entire second system.
 
 ---
 
-## 1. Coolify on plain HTTP — FIXED
+## 1. Coolify on plain HTTP - FIXED
 
 You said leave it, but fix it if I could. I could.
 
@@ -1878,7 +1878,7 @@ Two details worth keeping:
   inserts its own iptables rules ahead of ufw, so the packet never reaches ufw. The block
   lives in the `DOCKER-USER` chain, which Docker leaves alone for exactly this.
 - **The rule survives a reboot** via a small systemd unit. Worth knowing: the pre-existing
-  block on port 5003, belonging to your other project, does **not** — nothing persists it,
+  block on port 5003, belonging to your other project, does **not** - nothing persists it,
   so it disappears on the next restart. That is yours to decide about; I left it alone
   rather than quietly managing another project's firewall.
 
