@@ -136,6 +136,23 @@ class AuditAction(enum.StrEnum):
     it exists to serve. PUBLISH is about an artefact; LEASH_CHANGE's whole content is its two
     rungs. No member fitted, so the honest answer was a member.
 
+    APPROVAL was added on 2026-09-09, and it is the ninth. M40.6.1.2 asks that approving,
+    rejecting and amending each reach the ledger, and M33.6.1.3 adds taking the work over.
+    Nothing covered any of them: `brain.gate.leash.SuspendedAction` records the decision on
+    its own row, which answers "what happened to this one" and not "what has this approver
+    been waving through", and the second question is the one an auditor asks.
+
+    **One member for four verdicts, and the asymmetry with `ApprovalState` is deliberate.**
+    A state says whether the stored action may still run and there are three of those; a
+    verdict says what the person did and there are four. Taking the work over and rejecting
+    both leave the agent's action unrun, so they are one state and two verdicts, and adding
+    states for them would produce two members every consumer has to know both of. The verdict
+    rides in the details, which is where a closed vocabulary that is finer than the action's
+    belongs: `revoke` already carries its reason code the same way.
+
+    Eight characters, well inside the column's sixteen. `approval_decision` is nineteen and
+    would not have fitted, which is the constraint `COMPOSE_CHANGE` ran into first.
+
     **Adding one moves no existing digest.** `compute_entry_hash` takes the action per entry
     and `HASH_SCHEMA` is a literal, so an unused member is invisible to every hash already
     written and every chain still verifies. What it does need is a migration, because
@@ -157,6 +174,9 @@ class AuditAction(enum.StrEnum):
     #: is `VARCHAR(16)`: `attachment_change` and `agent_config_change` were the other two
     #: candidates and neither fits.
     COMPOSE_CHANGE = "compose_change"
+    #: A person decided a suspended action: approved it, rejected it, took the work over or
+    #: approved an amended version. The verdict is in the details, for the reason above.
+    APPROVAL = "approval"
 
 
 # --------------------------------------------------------------------- redaction

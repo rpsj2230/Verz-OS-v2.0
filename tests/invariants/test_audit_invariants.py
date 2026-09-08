@@ -202,9 +202,10 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
 
     An open action vocabulary is how an auditable event ends up unaudited: someone adds a
     code path, invents a string for it, and nothing anywhere notices that no entry was
-    ever written. Pinning the exact member set here means a seventh action is a deliberate
+    ever written. Pinning the exact member set here means a ninth action is a deliberate
     edit in two files rather than an omission in one, in either direction: a member added
-    without a test fails, and a member removed fails too.
+    without a test fails, and a member removed fails too. It has done its job twice now, on
+    `compose_change` and on `approval`.
 
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
@@ -219,6 +220,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "publish": AuditAction.PUBLISH,
         "break glass": AuditAction.BREAK_GLASS,
         "compose change": AuditAction.COMPOSE_CHANGE,
+        "approval": AuditAction.APPROVAL,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -230,11 +232,13 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "publish",
         "break_glass",
         "compose_change",
+        "approval",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen
     # characters and `agent_config_change` at nineteen, and either would have passed every
-    # assertion above and failed on the first insert against a real database.
+    # assertion above and failed on the first insert against a real database. The ninth ran
+    # into the same wall: `approval_decision` is nineteen, and `approval` is eight.
     assert max(len(action.value) for action in AuditAction) <= 16
 
 

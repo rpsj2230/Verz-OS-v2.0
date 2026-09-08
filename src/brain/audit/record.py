@@ -49,7 +49,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol
 
-from brain.audit.ledger import SUBJECT_KINDS, AuditAction, AuditEntry
+from brain.audit.ledger import DIGEST, SUBJECT_KINDS, AuditAction, AuditEntry
 from brain.core.entitlement import Capability
 
 if TYPE_CHECKING:
@@ -91,6 +91,27 @@ class DenyReason(enum.StrEnum):
     RISK_CEILING = "risk_ceiling"
 
 
+class ApprovalVerdict(enum.StrEnum):
+    """What a person did with a suspended action. Four, and there are only three states.
+
+    The asymmetry with `brain.gate.leash.ApprovalState` is the point rather than an
+    oversight. A state says whether the stored action may still run; a verdict says what the
+    person did. Rejecting and taking the work over both leave the agent's action unrun, so
+    they are one state and two verdicts, and giving each a state of its own would produce two
+    members that mean the same thing to every consumer and different things to one reader.
+
+    Taking over is not a rejection with a nicer name. A rejection says the work should not
+    happen; a take-over says it should, and that the person is doing it. An estate where half
+    the approvals are taken over is an estate whose agents are configured wrongly, and that is
+    invisible if both land as `rejected`.
+    """
+
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    TAKEN_OVER = "taken_over"
+    AMENDED = "amended"
+
+
 class LedgerWriter(Protocol):
     """What the recorder needs from whatever holds the chain.
 
@@ -129,6 +150,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "publish": AuditAction.PUBLISH,
         "break_glass": AuditAction.BREAK_GLASS,
         "compose_change": AuditAction.COMPOSE_CHANGE,
+        "approval": AuditAction.APPROVAL,
     }
 )
 
@@ -349,6 +371,60 @@ class AuditRecorder:
             "reason_code": reason_code,
         }
         return self._write(AuditAction.COMPOSE_CHANGE, subject("agent", agent_id), details)
+
+    def approval(
+        self,
+        *,
+        suspension_id: str,
+        verdict: ApprovalVerdict,
+        digest: str,
+        reason_code: str = "",
+    ) -> AuditEntry:
+        """Record what a person decided about a suspended action (M33.6.1.3, M40.6.1.2).
+
+        The subject is the suspension rather than the agent or the target, under the `leash`
+        kind, because a suspension is the leash holding an action and that is the thing being
+        decided. Recording it against the target would put approvals and the writes they
+        authorised under one subject, and "who approved this" would then be a search through
+        everything that ever happened to that row.
+
+        **A reason is required for every verdict except an approval, and the asymmetry is
+        deliberate.** Rejecting, taking over and amending are each somebody deciding the thing
+        should not run as asked, and the next person needs to know why. Requiring one on an
+        approval collects "ok" forever, and a field that always says the same thing is a field
+        nobody reads, including on the row where it mattered.
+
+        `digest` is the action digest the decision was taken against, and it is required on
+        every verdict including an amendment, where it is the amended action's rather than the
+        original's. That difference is what makes an amendment auditable at all: two entries
+        naming the same suspension with two digests are a record of what was asked for and
+        what was allowed, and one digest for both would be an amendment nobody can see.
+        """
+        if verdict is not ApprovalVerdict.APPROVED and not _REASON_CODE_RE.fullmatch(reason_code):
+            msg = (
+                f"a {verdict.value} verdict needs a reason code and {reason_code!r} is not "
+                "one. A code survives `redact_details` and a sentence is stored as the "
+                "marker, so prose here loses the why entirely"
+            )
+            raise ValueError(msg)
+        if verdict is ApprovalVerdict.APPROVED and reason_code:
+            msg = (
+                "an approval carries no reason code. Requiring one collects the same word "
+                "forever, and a field that always says the same thing is one nobody reads "
+                "on the row where it mattered"
+            )
+            raise ValueError(msg)
+        if not re.fullmatch(DIGEST, digest):
+            msg = (
+                f"{digest!r} is not an action digest. A decision recorded against no digest "
+                "cannot be compared with the action that ran, so an action edited between "
+                "the approval and the run would agree with its own approval forever"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"verdict": verdict.value, "action_digest": digest}
+        if reason_code:
+            details["reason_code"] = reason_code
+        return self._write(AuditAction.APPROVAL, subject("leash", suspension_id), details)
 
     def entity_merge(
         self,
