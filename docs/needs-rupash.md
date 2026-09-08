@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**14 items are open, and they are not equally urgent.** They had accumulated into one
+**15 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -11,10 +11,11 @@ the column that stores them is another width, so nothing can be embedded until o
 moves. Every other embedding task waits behind it. My recommendation is in the item, and it
 comes with a cost either way.
 
-**Two are one-sentence answers with no work behind them.** Item 33 asks what "shadow-pinned
+**Three are one-sentence answers with no work behind them.** Item 33 asks what "shadow-pinned
 thirty days" was meant to mean, and the answer decides a safety property. Item 36 asks whether
-you want the evaluation tool the plan named, or the one I used instead. Neither blocks
-anything; both are quick.
+you want the evaluation tool the plan named, or the one I used instead. Item 46 asks which pair of
+recovery figures goes into a client agreement, and gives you the three pairs and a
+recommendation. None of them blocks anything; all three are quick.
 
 **Three are decisions to take before something starts rather than faults to fix.** Item 43: three things in the deployment files that would break a fresh install, each with options and a recommendation, and none of it affecting what runs today.
 
@@ -60,6 +61,61 @@ happened in.
 ---
 
 # Open
+
+## 46. Your client agreement will promise a recovery point and a recovery time. These are the numbers, and I need you to pick which set
+
+**One line from you, and there is no work behind it.** A client agreement carries two figures:
+how much work may be lost if the system has to be restored from a backup (the recovery point),
+and how long it may be down while that happens (the recovery time). Until today both existed in
+the code as defaults and nothing turned them into a document anybody signs. Now something does,
+and the first document it produces is the one Verz hands its first client.
+
+**Where the numbers come from.** The system offers three deployment profiles, and each carries
+its own pair. These are not my estimates; they are what is written in the code today, with the
+reason beside each one:
+
+| Profile | Recovery point | Recovery time | Why |
+| --- | --- | --- | --- |
+| `lite` | 24 hours | 8 hours | Four containers on one host, and no second host to restore onto, so the recovery time is however long it takes somebody to build one |
+| `standard` | 4 hours | 4 hours | The workers and the file store are running, so a restore has somewhere to go and the time is replaying archived data rather than provisioning a machine |
+| `full` | 1 hour | 2 hours | The tightest figures the system offers, and they need a standby host that already exists |
+
+`lite` is what an install that never says otherwise runs, and it is what is running now.
+
+**The backup schedule is already better than the promise, and I would not promise the
+difference.** The copies are scheduled to run every hour at worst, and the database's write
+log every minute, so the exposure on paper is one hour rather than twenty-four. It is tempting
+to write the better number into the agreement. I recommend against it: a recovery point is a
+promise about the slowest copy on the worst day, and the gap between one hour and twenty-four
+is the margin that absorbs a failed backup nobody noticed for a day. Promise the profile's
+figure, keep the margin, and let the client be pleasantly surprised.
+
+**Options.**
+
+- **Option A, recommended: sign the `lite` figures, 24 hours and 8 hours.** They are what one
+  host with no standby can actually deliver, and eight hours is honest about the fact that the
+  recovery time includes somebody building a machine. Costs nothing and needs no change to
+  what runs.
+- **Option B: sign the `standard` figures, 4 hours and 4 hours.** This is a real promise and it
+  requires the install to be on the standard profile, which means the worker, the file store
+  and the trace database running rather than the four containers. If you want to sell a
+  four-hour recovery, this is the smallest install that supports it.
+- **Option C: sign the `full` figures, 1 hour and 2 hours.** Needs a second host standing by,
+  paid for whether or not it is ever used. Worth it for a client whose finance system is in
+  here and not otherwise.
+
+I recommend A for the first install and B as the shape of the paid tier: the difference between
+them is a second host and about an hour of setup, and it is a much easier conversation to have
+as an upgrade than as a promise you have to walk back.
+
+**One thing that blocks all three, and it is item 44.** The code refuses to produce a service
+level statement at all until a restore drill has actually verified, because a recovery time
+nobody has measured is a number somebody chose. Nothing takes a backup yet, so nothing has ever
+been restored, so today every one of the three options above produces a refusal rather than a
+document. That is deliberate and it is the right behaviour. It also means item 44 comes first:
+answer that one and this one becomes real.
+
+---
 
 ## 45. "Which agents have read my HR record" is a question the system cannot answer
 
