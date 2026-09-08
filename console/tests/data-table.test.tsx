@@ -17,6 +17,8 @@
  * Task ids: M32.5.2.1
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { chipCell, statusCell } from "../src/components/cells";
@@ -323,5 +325,35 @@ describe("a withheld cell", () => {
     const container = grid({ lockedCells: new Set([lockedCellKey("two", "owner")]) });
     expect(container.querySelectorAll(".lock")).toHaveLength(1);
     expect(namesOn(container)).toEqual(["Acme", "Borden", "Corvid", "Delve", "Ember"]);
+  });
+});
+
+describe("a table on a narrow screen", () => {
+  test("the table scrolls inside its own container and the pager does not", () => {
+    // What breaks if this is deleted: a table's minimum width is decided by its columns'
+    // content, so `width: 100%` is a preference and not a ceiling. Five columns of
+    // identifiers are wider than a phone whatever the percentage says, and a wide element
+    // with nowhere to scroll makes the document scroll instead. The reader then loses the
+    // navigation and the pager off the side of the screen, and on a touch device cannot get
+    // them back without scrolling the page. Wrapping the whole grid is the version that
+    // looks fixed and takes the pager with it, so the parent is asserted on both sides.
+    const container = grid();
+    const table = container.querySelector("table");
+    const pager = container.querySelector(".grid__pager");
+
+    expect(table).not.toBeNull();
+    expect(table?.parentElement?.className).toBe("grid__scroll");
+    expect(pager).not.toBeNull();
+    expect(pager?.parentElement?.className).toBe("grid");
+  });
+
+  test("the scrolling container is the one the stylesheet gives an overflow", () => {
+    // What breaks if this is deleted: the markup keeps the wrapper and the rule that makes
+    // it scroll is tidied away, which leaves a div doing nothing and a page that scrolls
+    // sideways again. The class in the markup and the class in the stylesheet are the two
+    // halves and neither is evidence about the other.
+    const css = readFileSync(resolve(process.cwd(), "src/styles/app.css"), "utf8");
+
+    expect(/\.grid__scroll\s*\{[^}]*overflow-x:\s*auto/.test(css)).toBe(true);
   });
 });

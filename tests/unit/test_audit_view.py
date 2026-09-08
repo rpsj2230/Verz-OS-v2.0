@@ -35,7 +35,13 @@ from brain.audit.ledger import (
     BreakReason,
     ChainBreak,
 )
-from brain.audit.record import ACTION_BY_METHOD, AuditRecorder, DenyReason, subject
+from brain.audit.record import (
+    ACTION_BY_METHOD,
+    ApprovalVerdict,
+    AuditRecorder,
+    DenyReason,
+    subject,
+)
 from brain.audit.verify import (
     ANCHOR_MISSING_CAVEAT,
     UNANCHORED_CAVEAT,
@@ -348,6 +354,12 @@ CALLS: dict[str, dict[str, object]] = {
         "reference": "xero_reconciliation",
         "attached": True,
         "reason_code": "requested_by_owner",
+    },
+    "approval": {
+        "suspension_id": "sus_1",
+        "verdict": ApprovalVerdict.REJECTED,
+        "digest": "a" * 64,
+        "reason_code": "wrong_ticket",
     },
 }
 

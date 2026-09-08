@@ -343,6 +343,19 @@ code {
   gap: var(--space-3);
 }
 
+/*
+ * The table scrolls, the page does not. A table's minimum width is decided by its columns'
+ * content, so `width: 100%` sets a preference and not a ceiling: five columns of identifiers
+ * are wider than a phone whatever the percentage says. Without this the overflow is taken by
+ * the document, which takes the navigation and the pager off the side of the screen.
+ *
+ * On the container rather than on the table, because a scrolling container has to be the
+ * table's parent for the table to be what moves inside it.
+ */
+.grid__scroll {
+  overflow-x: auto;
+}
+
 .grid__table {
   width: 100%;
   border-collapse: collapse;

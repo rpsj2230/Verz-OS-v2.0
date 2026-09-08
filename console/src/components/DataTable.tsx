@@ -167,7 +167,17 @@ export function DataTable<T extends RowData>({
 
   return (
     <div className="grid">
-      <table className="grid__table">
+      {/*
+       * The table has its own scrolling container and the rest of the grid does not. A
+       * table's minimum width is its columns' content, so `width: 100%` does not stop one
+       * being wider than a phone, and a wide element with nowhere to scroll makes the page
+       * body scroll instead: the reader loses the navigation and the pager off the side of
+       * the screen, and on a touch device they cannot get them back without scrolling the
+       * document. Wrapping the whole grid would take the pager and the status line with it,
+       * which is the version that looks fixed and hides the controls.
+       */}
+      <div className="grid__scroll">
+        <table className="grid__table">
         <caption className="grid__caption">{caption}</caption>
         <thead>
           {table.getHeaderGroups().map((group) => (
@@ -221,8 +231,9 @@ export function DataTable<T extends RowData>({
               ))}
             </tr>
           ))}
-        </tbody>
-      </table>
+          </tbody>
+        </table>
+      </div>
 
       {failure ? (
         <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
