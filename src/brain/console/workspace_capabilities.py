@@ -72,14 +72,21 @@ Scope: domain logic. Nothing here opens a connection, probes anything or reads a
 health and policies arrive as arguments, exactly as they do in `brain.console.reads`.
 
 **Nothing here is a screen.** There is no capabilities tab in this repository and no route
-behind one, so eight of M39.2's nineteen leaves are claimed and eleven are not. Most of the
-eleven are controls: attach and detach, the route to the review queue, the upload and the link
-extraction, the promote control. Two are worth naming because they are not merely unbuilt.
-The icons M39.2.1.1 asks for are a rendering asset chosen from the source name, and what is
-claimed for that leaf is the overflow rule beside them. And group installation, M39.2.4.4, has
-no `brain.channels.adapter.Feature` member: that enum is closed and every member of it gates a
-code path, so adding one with nothing behind it would be a capability an adapter declares and
-nothing honours.
+behind one, so this module is the reading half of M39.2 and claims eight of its nineteen
+leaves. The other eleven are the acting half and they are `brain.console.agent_tabs`, which
+landed on 2026-09-08 and completed the group. The icons M39.2.1.1 asks for are still a
+rendering asset chosen from the source name, and what is claimed for that leaf here is the
+overflow rule beside them.
+
+**This paragraph said the other eleven were unclaimed, and that stopped being true the day
+`agent_tabs` landed.** It also said group installation had no `brain.channels.adapter.Feature`
+member, on the argument that the enum is closed and adding one with nothing behind it would be
+a capability an adapter declares and nothing honours. That objection was answered rather than
+ignored: `Feature.GROUP_INSTALL` exists and `agent_tabs.install_to_group` refuses an install
+on a surface that does not declare it, so the member has a code path behind it. No adapter
+declares it yet, and a test asserts that so the day one does prompts a read. Corrected here
+because a docstring that describes a gap somebody has since filled is how ten documents came
+to agree with each other and none of them with the code.
 
 Task ids: M39.2.1.1, M39.2.1.3, M39.2.1.4, M39.2.1.5, M39.2.2.2, M39.2.3.1, M39.2.3.3, M39.2.4.2
 """

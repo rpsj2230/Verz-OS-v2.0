@@ -65,6 +65,15 @@ class Feature(enum.StrEnum):
     #: Editing a message already sent, which is how a card stops being actionable once the
     #: approval it offers has been taken by somebody else.
     EDIT_IN_PLACE = "edit_in_place"
+    #: The agent can be installed into a shared conversation rather than only into a
+    #: one-to-one one. Added for M39.2.4.4 and honoured by
+    #: `brain.console.agent_tabs.install_to_group`, which refuses an install on a surface
+    #: that does not declare it, so this is a member with a code path behind it rather than
+    #: a label an adapter can wear. **No adapter in this repository declares it yet**, and
+    #: that is the honest state: a group install needs a path for the conversation reference
+    #: the vendor hands back, and none of the six adapters has one. Declaring it is a
+    #: decision per surface, made where the surface's other capabilities are argued.
+    GROUP_INSTALL = "group_install"
 
 
 @dataclass(frozen=True)
