@@ -132,6 +132,29 @@ def test_a_fact_claiming_to_be_measured_carries_something_measured():
         Fact(name="release", source=Source.MEASURED, value="   ")
 
 
+def test_a_fact_with_no_name_is_refused_rather_than_rendered_under_a_blank_heading():
+    """**Written because a mutation of `Fact`'s name check survived the whole file.** Every
+    fact this suite built carried a name, so the refusal could be deleted and nothing would
+    have said so.
+
+    A nameless fact is a value on an install screen with no heading over it, read by somebody
+    deciding whether to worry, and it is worse than that downstream: `installation_gaps`
+    counts facts by name, so two of them collapse into one entry and are reported as a single
+    heading appearing twice rather than as two facts nobody can identify.
+
+    The blank case is separate from the empty one because a name arriving from a form is
+    whitespace far more often than it is empty, and a bare falsiness check passes it.
+
+    Delete this and a renderer draws a value in a column with nothing naming it."""
+    with pytest.raises(InstallationError, match="a fact about nothing"):
+        Fact(name="", source=Source.DECLARED, value="lite")
+
+    with pytest.raises(InstallationError, match="a fact about nothing"):
+        Fact(name="   ", source=Source.DECLARED, value="lite")
+
+    assert Fact(name="profile", source=Source.DECLARED, value="lite").name == "profile"
+
+
 # ------------------------------------------------------------- this install (M27.6.1)
 def test_the_release_is_unknown_outside_a_built_image_rather_than_something_plausible():
     """Deleting this lets the console fall back to whatever commit is nearest, so the screen
@@ -210,6 +233,66 @@ def test_the_repositorys_own_migration_chain_is_a_single_line():
 
     assert level.source is Source.DECLARED
     assert level.head
+
+
+def test_a_branched_history_reaches_the_install_screen_as_an_unknown_that_says_why():
+    """**Written because a mutation of the unknown branch inside `install_facts` survived.**
+    The test above covers `level_of`, and nothing in this file called `install_facts` with a
+    branched chain, so the branch that turns that verdict into a row could be deleted with
+    every test still green.
+
+    What the deletion produces is not a missing row. The level falls through to the measured
+    branch and is built as a measured migration level carrying the empty revision, which is
+    the shape `Fact` refuses, so the install screen raises on a merged alembic history rather
+    than saying there is no single head. The three source values are the whole of this screen's
+    honesty and the unknown one is the only one that shows nothing.
+
+    Delete this and a branched history is either an exception on the screen somebody opened
+    because something is wrong, or a blank measurement once somebody removes the refusal that
+    is currently catching it."""
+    branched = (
+        Revision(name="a", revision="0001", down_revision=None),
+        Revision(name="b", revision="0002", down_revision="0001"),
+        Revision(name="c", revision="0003", down_revision="0001"),
+    )
+
+    facts = install_facts(profile="lite", manifest=None, revisions=branched, env=NOTHING_SET)
+
+    level = next(one for one in facts if one.name == "migration level")
+    assert level.source is Source.UNKNOWN
+    assert level.value == ""
+    assert "more than one head" in level.because
+
+
+def test_a_single_line_history_reaches_the_install_screen_labelled_by_what_measured_it():
+    """The sibling of the test above, and it covers the other two branches: a refusal test on
+    its own is satisfied by a screen that reports every history as unknown.
+
+    Declared without a pending list and measured with one, which is the same distinction
+    `level_of` makes, asserted here through the screen rather than through the function so
+    that the label a reader actually sees is the one under test.
+
+    Delete this and `install_facts` can answer unknown for every install, which reads as a
+    broken deployment on a machine that is fine."""
+    declared = install_facts(
+        profile="lite", manifest=None, revisions=a_chain("0001", "0002"), env=NOTHING_SET
+    )
+    measured = install_facts(
+        profile="lite",
+        manifest=None,
+        revisions=a_chain("0001", "0002"),
+        pending=["0002"],
+        env=NOTHING_SET,
+    )
+
+    on_declared = next(one for one in declared if one.name == "migration level")
+    assert on_declared.source is Source.DECLARED
+    assert on_declared.value == "0002"
+    assert on_declared.because
+
+    on_measured = next(one for one in measured if one.name == "migration level")
+    assert on_measured.source is Source.MEASURED
+    assert on_measured.value == "0001"
 
 
 def test_the_install_screen_names_no_identity_setting():

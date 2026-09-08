@@ -68,7 +68,7 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.knowledge.visibility import Visibility
-from brain.memory.tiers import CHANGES_WHAT_ANYBODY_MAY_SEE, Tier
+from brain.memory.tiers import CHANGES_WHAT_ANYBODY_MAY_SEE, Change, Tier
 from brain.ops.halt import ENFORCED_AXES, Effect, HaltScope
 from brain.ops.jobs import MAX_ATTEMPTS, TERMINAL, JobState, hidden_count_fields
 
@@ -302,6 +302,37 @@ def test_an_automation_cannot_be_constructed_with_a_name_that_breaks_those_rules
     assert an_automation().name == GOOD_NAME
 
 
+def test_an_automation_missing_any_of_the_three_identifiers_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every automation
+    built anywhere in these tests carried all three, so the refusal could be deleted with
+    nothing red.
+
+    Each of the three is what a different person needs. Without an `automation_id` nobody can
+    pause or remove it, and `registry_gaps` matches rows by that id, so a blank one pairs with
+    every other blank one. Without an `agent_id` it appears under no agent, which is the pile
+    M39.6.1.1 refuses. Without a `task` nothing runs and the row in the registry describes
+    work that does not exist.
+
+    Blank as well as empty in every case: an identifier arriving from a form that trims
+    nothing is a space, and a bare falsiness check passes it.
+
+    Delete this and an automation with no id sits on a schedule nobody can stop."""
+    for missing in ("", "   "):
+        with pytest.raises(AutomationSurfaceError, match="no automation_id"):
+            an_automation(missing)
+        with pytest.raises(AutomationSurfaceError, match="no agent_id"):
+            an_automation(agent_id=missing)
+        with pytest.raises(AutomationSurfaceError, match="no task"):
+            an_automation(task=missing)
+
+    built = an_automation()
+    assert (built.automation_id, built.agent_id, built.task) == (
+        "auto_1",
+        AGENT,
+        "file_timesheets",
+    )
+
+
 # --- a named principal, never the agent (M39.6.2.1) ------------------------------------------
 
 
@@ -405,6 +436,75 @@ def test_every_automation_appears_in_the_registry_with_what_it_guards() -> None:
 
     with pytest.raises(AutomationSurfaceError, match="what it guards"):
         register(one, guards="too short")
+
+
+def a_registry_row(
+    *,
+    automation_id: str = "auto_1",
+    agent_id: str = AGENT,
+    task: str = "file_timesheets",
+    runs_as_id: str = RUNNER,
+    next_run_at: datetime | None = NEXT,
+    guards: str = GUARDS,
+) -> RegistryEntry:
+    """One registry row with a single field replaced, for the refusals below.
+
+    Explicit parameters rather than a keyword splat, because a splat into a frozen dataclass
+    is untyped at the call site and these refusals are about the fields as much as the values.
+    """
+    return RegistryEntry(
+        automation_id=automation_id,
+        agent_id=agent_id,
+        task=task,
+        runs_as_id=runs_as_id,
+        next_run_at=next_run_at,
+        guards=guards,
+    )
+
+
+def test_a_registry_row_naming_no_automation_or_no_task_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every registry row
+    in these tests came from `register` or was copied from one, so the refusal could be deleted
+    and the suite would have stayed green.
+
+    The registry is the list somebody reads during an incident when they are deciding what to
+    switch off. A row with no automation id cannot be matched back to anything: `registry_gaps`
+    pairs rows to automations by that id, so a blank one is reported as a schedule nothing owns
+    while the automation it belongs to is reported as having no row, and the two findings sit
+    beside each other describing one thing. A row with no task schedules nothing, so the entry
+    is a promise that something is being protected when nothing runs.
+
+    Whitespace as well as empty in both, because a registry row assembled from a form arrives
+    with a space in the field somebody left alone.
+
+    Delete this and the registry grows rows nobody can match to anything."""
+    for missing in ("", "   "):
+        with pytest.raises(AutomationSurfaceError, match="naming no automation or no task"):
+            a_registry_row(automation_id=missing)
+        with pytest.raises(AutomationSurfaceError, match="naming no automation or no task"):
+            a_registry_row(task=missing)
+
+    assert registry_gaps([an_automation()], [a_registry_row()]) == ()
+
+
+def test_a_registry_row_naming_no_principal_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file**, and it is a
+    separate refusal from the one above rather than the same sentence twice.
+
+    `runs_as_id` is what makes a scheduled run accountable: it is whose grants the work
+    spends, and the whole of M39.6.2.1 is that unattended work runs on a named principal
+    somebody can revoke. A row carrying no principal is a schedule with nobody behind it, and
+    the reach it would run at is decided by whatever the runner defaults to.
+
+    `registry_gaps` compares this field against the automation's, so a blank one also reads as
+    the two halves having been written separately rather than as a missing value.
+
+    Delete this and a registry row can schedule work that answers to nobody."""
+    for missing in ("", "   "):
+        with pytest.raises(AutomationSurfaceError, match="names no principal"):
+            a_registry_row(runs_as_id=missing)
+
+    assert a_registry_row().runs_as_id == RUNNER
 
 
 def test_the_registry_reports_work_it_does_not_list_and_schedules_nothing_owns() -> None:
@@ -651,6 +751,34 @@ def test_a_run_that_has_not_finished_is_not_history() -> None:
         AutomationRun(automation_id="auto_1", at=NOW, state=JobState.RUNNING, principal_id=RUNNER)
 
 
+def test_a_run_dated_with_no_timezone_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every run built
+    here was dated `NOW`, which is aware, so the refusal could be deleted with nothing red.
+
+    A naive instant compares wrongly against an aware one, and `history` sorts on exactly this
+    field to decide which run is `last`. So a naive run in a list of aware ones does not
+    produce an error, it produces an ordering that is out by the host's offset from UTC, and
+    the visible symptom is a history whose newest entry is the wrong one. On a screen headed
+    with what an automation last did, that is the failing run hidden behind an older success.
+
+    `Automation.next_run_at` already refuses a naive instant for the same reason; this is the
+    other half of the pair, on the side that records what happened rather than what will.
+
+    Delete this and a run recorded in local time sorts into the middle of the history."""
+    with pytest.raises(AutomationSurfaceError, match="no timezone"):
+        AutomationRun(
+            automation_id="auto_1",
+            at=datetime(2026, 3, 10, 9, 0),
+            state=JobState.SUCCEEDED,
+            principal_id=RUNNER,
+        )
+
+    aware = AutomationRun(
+        automation_id="auto_1", at=NOW, state=JobState.SUCCEEDED, principal_id=RUNNER
+    )
+    assert aware.at.tzinfo is not None
+
+
 def test_the_schedule_basis_is_the_same_rule_pointed_at_the_queue_screen() -> None:
     """`schedule_basis` is `brain.console.agent_output.basis_over` with one screen key, and
     the key is the registry's own rather than a capability spelled again here. Two spellings
@@ -698,6 +826,41 @@ def test_a_schedule_change_is_a_tier_three_learning_event_and_needs_a_person() -
     assert may_change_schedule(one, becomes=NEXT, approved_by="") is False
     assert may_change_schedule(one, becomes=NEXT, approved_by="   ") is False
     assert may_change_schedule(one, becomes=NEXT, approved_by=RUNNER) is False
+
+
+def test_a_schedule_change_that_stops_being_gated_is_refused_loudly_and_not_quietly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Written because a mutation of this premise check survived the whole file.** The check
+    reads a constant and a tier table that both say gated today, so nothing in this suite could
+    reach it, and it could have been deleted with everything green.
+
+    It is not decoration. Everything below it in `may_change_schedule` is the rule that a
+    person must approve a schedule move, and that rule is written down in exactly one place:
+    `brain.memory.tiers` saying a leash increase is gated. If `SCHEDULE_CHANGE_IS` is repointed
+    at a lower-tier change, or the tier table demotes a leash increase, this function is
+    enforcing an approval requirement that nothing states any more.
+
+    Loud rather than a quiet `False`, and that is the property under test. A `False` here would
+    present as no approver ever being good enough, and whoever investigated would go and look
+    at the names rather than at the tier the whole thing rests on.
+
+    The constant is patched rather than the tier lookup, so the real `blast_radius` and the
+    real table are what answer: this is the edit somebody would actually make, and it is the
+    same way `brain.console.reads`' own diagnostic is made watchable.
+
+    Delete this and the premise can stop holding with nothing saying so."""
+    assert schedule_change_tier() is Tier.GATED
+
+    monkeypatch.setattr(automations_module, "SCHEDULE_CHANGE_IS", Change.PREFERENCE)
+
+    assert schedule_change_tier() is not Tier.GATED
+    with pytest.raises(AutomationSurfaceError, match="no longer a gated change"):
+        may_change_schedule(an_automation(), becomes=NEXT, approved_by=OWNER)
+
+    # Pausing is still allowed, because it is refused before the premise is consulted: a
+    # fail-safe direction must not become unavailable because a classification moved.
+    assert may_change_schedule(an_automation(), becomes=None, approved_by="") is True
 
 
 def test_stopping_a_schedule_needs_no_approval_and_starting_one_does() -> None:

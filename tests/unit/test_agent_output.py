@@ -324,6 +324,43 @@ def test_an_artifact_record_has_no_field_the_produced_bytes_could_arrive_in() ->
     }
 
 
+def test_a_retention_window_arriving_on_the_artifact_row_itself_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Written because a mutation of this check survived the whole file.** `Artifact` carries
+    none of the four field names it looks for, so the branch could not fire and could have been
+    deleted with everything green.
+
+    What it exists to refuse is a per-row retention window. The class decides how long an
+    artifact is kept, decided from its inputs by `retention_class_for`, and
+    `brain.ops.retention.THE_CLASS_DECIDES_AND_A_ROW_CANNOT_ARGUE` is that rule stated where it
+    is enforced. A `keep_until` on the record is the row arguing: the file then outlives the
+    class it was classified under, which is the disclosure `retention_enforcement_gaps` already
+    says nothing is sweeping for.
+
+    The class is patched rather than passed, and that is worth knowing rather than hiding:
+    unlike the check above it, this one reads the module's own `Artifact` rather than the
+    `artifact_type` parameter, so no argument reaches it. Patching the name it reads is how it
+    becomes watchable, exactly as `brain.console.reads`' field scan is made watchable in
+    `tests/unit/test_console_reads.py`.
+
+    **The first version of this had to patch the module global**, because the check read
+    `fields(Artifact)` while the parameter that exists to make it reachable sat unused thirty
+    lines below its sibling. That was a defect rather than an untested guard: no caller could
+    reach the branch at all. The module reads the parameter now and this hands one in.
+
+    Delete this and a per-row window arrives with the next screen that wanted to pin one
+    artifact for a client meeting."""
+    assert artifact_gaps() == ()
+
+    @dataclass(frozen=True)
+    class WithAKeepUntil:
+        artifact_id: str
+        keep_until: datetime
+
+    assert any("per-row window" in one for one in artifact_gaps(artifact_type=WithAKeepUntil))
+
+
 # --- the store: how long it is kept (M39.5.1.3) ----------------------------------------------
 
 
@@ -461,6 +498,62 @@ def test_two_runs_over_the_same_inputs_choose_the_same_class_whatever_order_they
 
     with pytest.raises(ArtifactError, match="no declared inputs"):
         retention_class_for([])
+
+
+def test_an_input_with_no_label_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every input built
+    anywhere here was labelled, so the refusal could be deleted with nothing red.
+
+    The label is what the run has to say which input was which, and two things read it. A
+    provenance panel names it, and a sweep looking for where an artifact's material came from
+    matches on it. Less obviously, it is the tie-break in `retention_class_for`: the test above
+    asserts that two runs over the same inputs in a different order are kept for the same
+    length of time, and the only thing making that true is the sort on this field. Unlabelled
+    inputs all compare equal, the sort collapses to the caller's iteration order, and the
+    property that test pins is gone while that test stays green.
+
+    Empty and blank both, because an input assembled from anything that trims nothing arrives
+    with a space where the name should be.
+
+    Delete this and a produced file records that something fed it and cannot say what."""
+    for missing in ("", "   "):
+        with pytest.raises(ArtifactError, match="no label"):
+            ArtifactInput(
+                label=missing,
+                data_class=DataClass.BUSINESS_RECORD,
+                classification=Classification.INTERNAL,
+            )
+
+    assert (
+        ArtifactInput(
+            label="ticket",
+            data_class=DataClass.BUSINESS_RECORD,
+            classification=Classification.INTERNAL,
+        ).label
+        == "ticket"
+    )
+
+
+def test_an_artifact_occupying_a_negative_amount_of_the_bucket_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every artifact
+    built here carried a positive size, so the refusal could be deleted with nothing red.
+
+    `bytes_stored` is the one field on this surface that is added up: `storage_summary` sums it
+    over the rows a reader may see, and the whole construction of that figure is that it counts
+    what was shown and can therefore say nothing about what was not. A negative row breaks that
+    in the only way it can be broken from inside, because the total then stops being a count of
+    the visible rows: adding a row makes the figure smaller, which is a subtraction reaching
+    the screen through the arithmetic rather than through a field.
+
+    Zero is the sibling and is a real state. An artifact whose bytes have already gone from the
+    bucket still has a record, and refusing that would be refusing the row that explains an
+    answer somebody was given.
+
+    Delete this and a storage figure can be talked downwards by a row."""
+    with pytest.raises(ArtifactError, match="negative amount"):
+        an_artifact("a_1", bytes_stored=-1)
+
+    assert an_artifact("a_1", bytes_stored=0).bytes_stored == 0
 
 
 def test_the_bucket_artifacts_live_in_has_no_lifecycle_rule_and_this_surface_says_so() -> None:

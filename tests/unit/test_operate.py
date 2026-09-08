@@ -300,6 +300,27 @@ def test_a_per_person_figure_over_rows_belonging_to_nobody_is_refused():
         tile(panel("runs"), [Anonymous(what="x")], holding(), NOW)
 
 
+def test_a_tile_reporting_fewer_than_no_rows_is_refused():
+    """**Written because a mutation of this guard survived the whole file.** Every tile built
+    anywhere in these tests was counted from a list, so the refusal could be deleted and
+    nothing would have noticed.
+
+    A negative figure is not a count of anything, and the way one arrives is arithmetic: a
+    subtraction of what was hidden from what exists is exactly the operation this module is
+    built to make impossible, and it is the operation that produces a negative number when
+    the two figures come from different filters. So a tile carrying one is the shape of the
+    disclosure this whole screen refuses, arriving as a rendering bug.
+
+    Zero is the sibling and it is not the same case: a reader who may see nothing is shown a
+    nought, which is honest and is the point of several of these screens.
+
+    Delete this and a subtraction reaches the front page as a minus sign."""
+    with pytest.raises(OperateError, match="not a count of anything"):
+        Tile(key="runs", basis=Basis.EVERYONE, value=-1)
+
+    assert Tile(key="runs", basis=Basis.OWN, value=0).value == 0
+
+
 def test_the_landing_screen_says_nothing_about_a_figure_it_withheld():
     """Deleting this lets a placeholder, a greyed panel or a count of withheld tiles back
     onto the front page. Each says the same thing a number would: that there is a screen here
@@ -456,6 +477,137 @@ def test_a_panel_naming_a_row_that_does_not_resolve_is_reported():
     )
     found = operate_gaps(panels=[*[one for one in PANELS if one.key != "halt"], broken])
     assert any("does not resolve" in one for one in found)
+
+
+def a_panel(
+    *,
+    key: str = "runs",
+    row: str = "brain.ops.jobs.JobRecord",
+    counts: str = "runs executing right now",
+    attribution: Attribution = Attribution.PER_PERSON,
+    shows: str = "what is executing, for whom and since when",
+    never: str = "a job's arguments, which are identifiers of records",
+) -> Panel:
+    """One panel with a single field replaced, for the refusals below.
+
+    Explicit parameters rather than a keyword splat, because a splat into a frozen dataclass
+    is untyped at the call site and these refusals are about the fields as much as the values.
+    """
+    return Panel(key=key, row=row, counts=counts, attribution=attribution, shows=shows, never=never)
+
+
+def test_a_panel_that_does_not_say_what_its_figure_counts_is_refused():
+    """**Written because a mutation of this guard survived the whole file.** Every panel this
+    suite built was copied from a registered one, so the refusal could be deleted with nothing
+    red.
+
+    A number on the landing screen with no unit is a number the reader supplies a unit for,
+    and the units available on this front page are documents, runs, halts and pounds. The
+    reader who guesses wrong reads the corpus as a queue depth or a queue depth as a bill.
+
+    The blank case is separate from the empty one: a panel registered through anything that
+    trims input arrives with a space in it, and a bare falsiness check passes that.
+
+    Delete this and a screen lends the front page a bare integer."""
+    with pytest.raises(OperateError, match="says nothing about what its figure counts"):
+        a_panel(counts="")
+
+    with pytest.raises(OperateError, match="says nothing about what its figure counts"):
+        a_panel(counts="   ")
+
+    assert a_panel().counts
+
+
+def test_a_panel_whose_row_is_not_a_dotted_path_is_refused():
+    """**Written because a mutation of this guard survived the whole file.**
+
+    The attribution claim in the register is only worth anything because it is checked against
+    the row type rather than believed, and `operate_gaps` does that by importing the dotted
+    path. A bare name imports nothing, `row_type` raises, and the diagnostic records the panel
+    as unresolvable and moves on: the panel then carries whatever attribution somebody typed,
+    with nothing at all holding it to the rows.
+
+    Delete this and a register entry can claim a per-person figure over rows that belong to
+    nobody, with the one check that would have caught it skipping that entry."""
+    with pytest.raises(OperateError, match="not a dotted path"):
+        a_panel(row="JobRecord")
+
+    assert a_panel().row_type() is JobRecord
+
+
+def test_a_panel_missing_either_sentence_about_what_it_shows_is_refused():
+    """**Written because a mutation of this guard survived the whole file.**
+
+    Two sentences, and the second is the one a screen gets built without: what it shows is
+    written by whoever wanted the screen, and what it must never show is written by whoever
+    thought about the reader who may not open it. A panel carrying only the first is a screen
+    with a specification and no constraint, which is the state every leak on this front page
+    would start from.
+
+    Blank as well as empty, in both fields, because prose arriving through a form that trims
+    nothing is whitespace rather than absent.
+
+    Delete this and a panel ships with the constraint half of its register entry missing."""
+    for missing in ("", "   "):
+        with pytest.raises(OperateError, match="does not say both"):
+            a_panel(shows=missing)
+        with pytest.raises(OperateError, match="does not say both"):
+            a_panel(never=missing)
+
+    assert a_panel().shows and a_panel().never
+
+
+def test_a_panel_naming_something_that_is_not_a_type_is_refused():
+    """**Written because a mutation of this guard survived the whole file.** The existing test
+    covers a dotted path that resolves to nothing; nothing covered one that resolves to
+    something which is not a type.
+
+    That is the quieter failure of the two. A constant, a function or a module answers
+    `getattr` perfectly well, and `_field_names` then asks it for dataclass fields and pydantic
+    fields, gets neither, and reports it as a row carrying no principal. So the register's
+    attribution claim would be checked against an object that has no fields at all, and the
+    check would come back with an opinion.
+
+    Delete this and a panel can name a frozenset as the row its figure counts, and the
+    diagnostic will tell you confidently that the figure cannot be narrowed."""
+    with pytest.raises(OperateError, match="which is not a type"):
+        a_panel(row="brain.ops.jobs.TERMINAL").row_type()
+
+    assert panel("runs").row_type() is JobRecord
+
+
+def test_a_screen_registered_as_a_panel_twice_is_reported():
+    """**Written because a mutation of this guard survived the whole file.** The register is
+    correct today, and the diagnostic's own duplicate check had nothing to fire on.
+
+    Two panels for one screen is two figures for one screen assembled a step earlier than
+    `overview` refuses it. The pair hands the reader the difference between them, which is a
+    count of work belonging to people they cannot see, and it arrives as a copy-and-paste in a
+    tuple of eleven near-identical entries rather than as anything anybody decided.
+
+    Delete this and the register can grow a second entry for a screen, and the only thing
+    standing behind it is `overview` refusing the two tiles at render time."""
+    twice = operate_gaps(panels=[*PANELS, panel("runs")])
+
+    assert any("registered as a panel 2 times" in one for one in twice)
+    assert operate_gaps() == ()
+
+
+def test_a_panel_for_a_screen_outside_this_group_is_reported():
+    """**Written because a mutation of this guard survived the whole file.**
+
+    The register and the screen registry are two lists that have to say the same thing, and
+    this is the direction the completeness test does not cover: that one checks every operate
+    and report screen has a panel, and this checks that every panel is one of those screens. A
+    panel for a screen in another group, or for a key no screen has, lends the landing page a
+    figure governed by a grant nobody registered against it.
+
+    Delete this and the front page can carry a number from a screen whose own group decided
+    something different about who may read it."""
+    stray = operate_gaps(panels=[*PANELS, a_panel(key="not_a_registered_screen")])
+
+    assert any("is not an operate or report screen" in one for one in stray)
+    assert operate_gaps() == ()
 
 
 # --------------------------------------------------------------- live runs (M27.2.2)

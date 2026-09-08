@@ -270,6 +270,28 @@ def test_a_passing_system_check_stops_nothing() -> None:
     assert Check(name="c", origin=CheckOrigin.AUTHOR, passed=False).blocks is False
 
 
+def test_a_check_with_no_name_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every check built
+    anywhere here was named, so the refusal could be deleted and the suite would have stayed
+    green.
+
+    The name is the entire content of a blocked publish. `blocking_failures` returns names and
+    nothing else, deliberately: the author is told which check stopped them and never what it
+    found, because what a permission canary found is somebody's data. So an unnamed failing
+    check is a publish refused with an empty string as the reason, and the only ways past it
+    are to guess or to ask somebody with more reach to look.
+
+    Blank as well as empty, because a check registered through anything that trims nothing
+    arrives with a space rather than with nothing at all.
+
+    Delete this and a builder can be stopped by a check nobody can argue with or fix."""
+    for missing in ("", "   "):
+        with pytest.raises(BuilderError, match="a check with no name"):
+            Check(name=missing, origin=CheckOrigin.SYSTEM, passed=False)
+
+    assert Check(name="canary.contract_value", origin=CheckOrigin.SYSTEM, passed=False).name
+
+
 def test_nothing_on_a_check_could_promote_an_authors_test_to_blocking() -> None:
     """**M20.4.2.** "Advisory forever" is a claim about every future edit, and a claim of that
     shape only survives as a check on the type: `blocks` is a property computed from the

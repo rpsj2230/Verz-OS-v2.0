@@ -298,6 +298,27 @@ def test_a_branch_without_a_predicate_is_refused() -> None:
         Node(node_id="n1", kind=NodeKind.BRANCH)
 
 
+def test_a_node_with_no_id_is_refused() -> None:
+    """**Written because a mutation of this guard survived the whole file.** Every node built
+    anywhere here was given an id, so the refusal could be deleted with nothing red.
+
+    An id is how a node is connected to, and it is how it is talked about afterwards. Every
+    other refusal on this class names the node by its id in the sentence it raises, so a
+    drawing full of unnamed nodes produces a series of refusals reading `node ''`, and the
+    author is told that something on the canvas is wrong and not which thing. A reviewer
+    reading the same drawing has nothing to point at either.
+
+    Blank as well as empty, because a drawing surface that hands back a trimmed field for a
+    box somebody clicked into and left gives a space rather than nothing.
+
+    Delete this and a canvas can hold two nodes nothing tells apart."""
+    for missing in ("", "   "):
+        with pytest.raises(BuilderError, match="a node with no id"):
+            Node(node_id=missing, kind=NodeKind.ASK, prompt="Which client is this about?")
+
+    assert Node(node_id="n1", kind=NodeKind.ASK, prompt="Which client?").node_id == "n1"
+
+
 def test_only_a_tool_call_may_name_a_tool() -> None:
     """**M20.2.3.** A tool named on any other kind is a call made from a node kind nothing
     projects a catalogue for, so the gate is not in front of it. Deleting this lets a finish

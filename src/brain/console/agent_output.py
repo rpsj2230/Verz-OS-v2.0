@@ -96,7 +96,7 @@ import enum
 import inspect
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
 
@@ -882,7 +882,13 @@ def artifact_gaps(
                 "grant an administrator reviewing the artifacts screen would never see"
             )
 
-    names = {one.name for one in fields(Artifact)}
+    # `artifact_type` and not the module's own `Artifact`, which is what this read until
+    # 2026-09-08. The parameter exists precisely so the refusal is reachable, its sibling
+    # thirty lines above already reads it, and reading the global here made this branch
+    # unreachable through every caller: a diagnostic that can only be run against the healthy
+    # tree has nothing to report, which is the defect this function's docstring is about.
+    # Found by mutating every `if` in the module rather than the ones somebody thought of.
+    names = set(getattr(artifact_type, "__dataclass_fields__", {}))
     for forbidden in ("expires_at_override", "keep_until", "retain_until", "retention_days"):
         if forbidden in names:
             gaps.append(
