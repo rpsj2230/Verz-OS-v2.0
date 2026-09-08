@@ -847,3 +847,80 @@ def test_every_estate_screen_is_a_screen_this_console_registers() -> None:
 
     assert set(ESTATE_SCREEN.values()) <= registered
     assert len(set(ESTATE_SCREEN.values())) == len(EstateKind)
+
+
+# --- guards a mutation found unreachable (M33.1.2.3) ------------------------------------------
+
+
+def test_a_nomination_refuses_every_shape_of_missing_that_it_names() -> None:
+    """**Found by mutating every `if` in the module rather than the ones somebody thought of.**
+    `Nomination.__post_init__` refuses four things and the tests reached one: the
+    self-nomination. The other three could each be deleted from the validator with the whole
+    suite green, because every nomination built anywhere in these tests names two different
+    people, carries a reason and carries an aware time.
+
+    They are not decoration. A nomination naming nobody cannot be confirmed or reviewed. A
+    nomination with no reason is one nobody can review later, and the review is the only thing
+    that ever removes an appointment that should not have been made. A naive time compares
+    wrongly against an aware confirmation, which is the bug that shows up once, in the hour
+    around a daylight-saving change, in a record about who was made an administrator.
+
+    Whitespace as well as empty for the two string fields, because `" "` is what arrives from
+    a form and passes a bare falsiness check.
+
+    Delete this and three of the four go back to being unreachable, which is how they got
+    here."""
+
+    def a_nomination(**changed: object) -> Nomination:
+        fields: dict[str, object] = {
+            "principal_id": "u_1",
+            "role": Role.SUPER_ADMIN,
+            "nominated_by": "u_2",
+            "reason": "they run the department and have done for two years",
+            "at": NOW,
+        }
+        fields.update(changed)
+        return Nomination(**fields)  # type: ignore[arg-type]
+
+    assert a_nomination().principal_id == "u_1"
+
+    for nobody in ("", " "):
+        with pytest.raises(GlobalSurfaceError, match="naming nobody"):
+            a_nomination(principal_id=nobody)
+        with pytest.raises(GlobalSurfaceError, match="naming nobody"):
+            a_nomination(nominated_by=nobody)
+        with pytest.raises(GlobalSurfaceError, match="no reason"):
+            a_nomination(reason=nobody)
+
+    with pytest.raises(GlobalSurfaceError, match="naive"):
+        a_nomination(at=datetime(2027, 3, 9, 9, 0))
+
+
+def test_a_reader_holding_the_capability_nowhere_at_all_sees_no_row() -> None:
+    """The other guard the mutation found: `scope_for` returning `None`, which is a reader who
+    does not hold the capability at all, as opposed to holding it somewhere that does not admit
+    this row. Every test in this file gave its reader the capability in some scope, so the
+    branch separating "holds it nowhere" from "holds it elsewhere" was never taken.
+
+    The two must stay one answer to the reader and are two answers to this function, which is
+    why it is written as an early return rather than as a `matches` on a scope that might be
+    `None`. Today both refuse; the day `Scope` gains a permissive default, only the early
+    return still refuses.
+
+    Three readers rather than two, because a guard tested only by the absent case is satisfied
+    by a function that refuses everybody.
+
+    Delete this and `scope_for` can stop being asked, and a reader holding nothing is decided
+    by whatever a `None` scope happens to do."""
+    rows = [a_row(EstateKind.AGENT, "a_maintenance")]
+
+    # The plane grant and no estate capability at all. A reader holding literally nothing
+    # fails the console-plane check first and never reaches the scope question, which is why
+    # the mutation survived a version of this test that used an empty entitlement set.
+    holds_nothing = holding(department=MAINTENANCE)
+    holds_elsewhere = holding(*ESTATE_CAPABILITIES, department=FINANCE)
+    holds_here = holding(*ESTATE_CAPABILITIES, department=MAINTENANCE)
+
+    assert visible_estate(rows, holds_nothing, NOW) == ()
+    assert visible_estate(rows, holds_elsewhere, NOW) == ()
+    assert [one.item_id for one in visible_estate(rows, holds_here, NOW)] == ["a_maintenance"]
