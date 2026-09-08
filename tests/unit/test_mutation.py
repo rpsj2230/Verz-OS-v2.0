@@ -483,3 +483,51 @@ def test_bytecode_writing_is_switched_off_for_every_run() -> None:
 
     source = (REPO / "src" / "brain" / "ops" / "mutation.py").read_text(encoding="utf-8")
     assert "env={**os.environ, **NO_BYTECODE}" in source
+
+
+def test_a_test_that_prints_outside_the_platform_encoding_does_not_crash_the_reader() -> None:
+    """**The harness exists to be believed, and it was crashing on the tests of any module
+    that prints non-ASCII.** `text=True` alone decodes with the platform encoding, which on
+    this machine is a Windows code page. `brain.locale`'s tests print the Chinese in its own
+    catalogue, and that produced a `UnicodeDecodeError` in the reader thread and then
+    `TypeError: expected string or bytes-like object, got 'NoneType'` in `failures_in`,
+    because `stdout` came back as None.
+
+    That is the worst available failure mode here. A crash with no message about encoding
+    reads as the mutation crashing rather than the reader, which is exactly the distinction
+    `A_CRASH_IS_NOT_A_CAUGHT_MUTATION` exists to keep, and it arrived in the one module every
+    other module's evidence rests on.
+
+    Asserted on the call rather than by running a mutation over a module that prints Chinese,
+    which would make this test depend on such a module continuing to exist. Both keywords are
+    checked, because either alone is not the fix: without `errors="replace"` a byte the
+    harness cannot decode still raises, and a raise here loses a `FAILED` line that is plain
+    ASCII either side of it.
+
+    **Read off the parsed call and not off the source text**, which the first version of this
+    got wrong and which is the trap `CLAUDE.md` names: the paragraph explaining why `text=True`
+    is not enough contains the string `text=True`, so a substring check over the function body
+    was satisfied by its own comment. Two tests in this repository have already been satisfied
+    by their own docstrings.
+
+    Delete this and the harness goes back to decoding at whatever the machine happens to be
+    set to, and the failure it produces names neither the encoding nor the reader."""
+    import ast
+    import inspect
+    import textwrap
+
+    from brain.ops import mutation
+
+    tree = ast.parse(textwrap.dedent(inspect.getsource(mutation._run_tests)))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "subprocess.run"
+    ]
+
+    assert len(calls) == 1, "the runner no longer makes exactly one subprocess call"
+    passed = {one.arg: ast.unparse(one.value) for one in calls[0].keywords if one.arg}
+
+    assert passed.get("encoding") == "'utf-8'"
+    assert passed.get("errors") == "'replace'"
+    assert "text" not in passed, "text=True decodes at the platform encoding"

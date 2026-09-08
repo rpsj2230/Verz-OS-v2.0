@@ -31,6 +31,7 @@ from pathlib import Path
 import pytest
 
 from brain.console.installation import (
+    NAMEABLE_SURFACES,
     RECOVERY_NEEDS,
     ConnectionCapacity,
     Fact,
@@ -559,3 +560,26 @@ def test_nothing_in_this_module_intersects_two_entitlement_sets():
     source = Path("src/brain/console/installation.py").read_text(encoding="utf-8")
 
     assert intersections_in(source) == ()
+
+
+def test_every_installation_group_reaches_this_screen_except_the_one_argued_out() -> None:
+    """**Three locale settings arrived under a new `Belongs` group and none of them reached
+    this screen.** `NAMEABLE_SURFACES` is an explicit list, and an explicit list says nothing
+    when a fourth group appears: the settings existed, `value_of` answered for them, and the
+    screen whose whole job is to say what this deployment is made of did not mention them.
+
+    So the tuple is asserted as a complement rather than as a list. Everything `brain.install`
+    declares a group for is nameable except identity, and identity is argued out in the
+    constant's own comment: `value_of` raises on an install that has not finished being set
+    up, which is the install whose screen somebody is most likely to be looking at.
+
+    Read off `Belongs` rather than from four names written here, so the next group added has
+    to be classified deliberately rather than falling silently outside.
+
+    Delete this and the next `Belongs` group is invisible on the install page, and the way
+    anybody finds out is a client reading a currency the page never mentioned."""
+    from brain.install import Belongs
+
+    assert set(NAMEABLE_SURFACES) == set(Belongs) - {Belongs.IDENTITY}
+    assert Belongs.IDENTITY not in NAMEABLE_SURFACES
+    assert len(NAMEABLE_SURFACES) == len(set(NAMEABLE_SURFACES)), "a group is listed twice"

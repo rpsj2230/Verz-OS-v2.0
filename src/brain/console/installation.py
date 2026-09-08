@@ -370,12 +370,24 @@ def features_of(profile: str) -> tuple[Feature, ...]:
 # ------------------------------------------------------------ this install (M27.6.1)
 #: The installation surfaces an install screen may name, and the one it may not.
 #:
-#: Branding, models and storage say what this deployment is made of. Identity is left out on
-#: purpose: `brain.install` marks the issuer and the redirect URIs required precisely because
-#: a wrong one is a sign-in page that authenticates against somewhere else, and reading them
-#: here would make `value_of` raise on an install that has not finished being set up, which is
-#: the install whose screen somebody is most likely to be looking at.
-NAMEABLE_SURFACES: Final[tuple[Belongs, ...]] = (Belongs.BRANDING, Belongs.MODELS, Belongs.STORAGE)
+#: Branding, models, storage and locale say what this deployment is made of. Identity is left
+#: out on purpose: `brain.install` marks the issuer and the redirect URIs required precisely
+#: because a wrong one is a sign-in page that authenticates against somewhere else, and reading
+#: them here would make `value_of` raise on an install that has not finished being set up,
+#: which is the install whose screen somebody is most likely to be looking at.
+#:
+#: **Locale joined on 2026-09-08 and the tuple is why it had to be added by hand.** Three
+#: settings arrived under a new `Belongs` group and none of them reached this screen, because
+#: an explicit list of groups says nothing when a fourth appears. The argument above applies to
+#: identity and to nothing else: a locale has a neutral default, `value_of` answers for an
+#: install that has not chosen one, and a client reading the wrong currency on a screen that
+#: does not mention currency is the failure this leaf exists to prevent.
+NAMEABLE_SURFACES: Final[tuple[Belongs, ...]] = (
+    Belongs.BRANDING,
+    Belongs.LOCALE,
+    Belongs.MODELS,
+    Belongs.STORAGE,
+)
 
 
 def install_facts(

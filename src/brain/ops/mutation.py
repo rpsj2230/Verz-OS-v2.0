@@ -245,7 +245,20 @@ def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProces
         ["uv", "run", "python", "-m", "pytest", *tests, "--no-header", "--disable-warnings"],  # noqa: S607
         cwd=cwd,
         capture_output=True,
-        text=True,
+        # **Read as UTF-8 rather than at the platform encoding, and never allowed to raise.**
+        # `text=True` alone decodes with `locale.getpreferredencoding()`, which on this machine
+        # is a Windows code page. A module whose tests print anything outside it, which for
+        # `brain.locale` means the Chinese in its own catalogue, produced a `UnicodeDecodeError`
+        # inside the reader thread and then `TypeError: expected string or bytes-like object,
+        # got 'NoneType'` in `failures_in`, because `stdout` came back as None.
+        #
+        # That failure mode is the worst available here. The harness exists to be believed, and
+        # a crash with no message about encoding reads as the mutation crashing rather than the
+        # reader, which is the one distinction `A_CRASH_IS_NOT_A_CAUGHT_MUTATION` is about.
+        # `errors="replace"` rather than `strict`, because a byte the harness cannot decode
+        # must not be able to lose a `FAILED` line that is plain ASCII either side of it.
+        encoding="utf-8",
+        errors="replace",
         check=False,
         env={**os.environ, **NO_BYTECODE},
     )
