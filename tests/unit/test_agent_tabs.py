@@ -13,7 +13,7 @@ nothing else, and the run-reach case gives one caller two agents whose ceilings 
 capability, because a fixture where the caller and the ceiling change together cannot tell
 which of them was read.
 
-Task ids: M39.2.1.2, M39.2.2.1, M39.2.2.3, M39.2.2.4, M39.2.2.5
+Task ids: M39.1.1.3, M39.2.1.2, M39.2.2.1, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.2, M39.2.3.4, M39.2.3.5, M39.2.4.1, M39.2.4.3, M39.2.4.4
 """
 
@@ -27,6 +27,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
+from brain.audit.ledger import AuditAction, AuditChain
+from brain.audit.record import AuditRecorder
 from brain.channels.adapter import ChannelCapabilities, Feature
 from brain.channels.email import EMAIL_FEATURES
 from brain.channels.lark import LARK_FEATURES
@@ -48,6 +50,7 @@ from brain.console.agent_tabs import (
     AddRoute,
     AgentTabError,
     ChannelRow,
+    Composed,
     Control,
     GroupInstall,
     ItemRetrieval,
@@ -144,6 +147,25 @@ def a_record(*capabilities: str, agent_id: str = AGENT) -> AgentRecord:
     )
 
 
+def a_recorder(chain: AuditChain | None = None) -> tuple[AuditRecorder, AuditChain]:
+    """One recorder bound to one chain, so a test can read back what a call wrote.
+
+    Built here rather than taken from `test_audit_view` because a test that shares a recorder
+    with another module's fixtures shares its actor, and every assertion below about who did
+    something would be about a name chosen somewhere else."""
+    target = chain if chain is not None else AuditChain()
+    return (
+        AuditRecorder(
+            target,
+            actor_id="u_owner",
+            ent_hash=EntitlementSet(principal_id="u_owner").ent_hash(),
+            trace_id="trace-tabs",
+            clock=lambda: NOW,
+        ),
+        target,
+    )
+
+
 def a_composition(*attachments: Attachment) -> Composition:
     return Composition(agent_id=AGENT, attachments=attachments)
 
@@ -229,12 +251,27 @@ def test_an_attach_is_refused_unless_this_person_reaches_the_thing_they_are_bind
     binding it could not name, and `connector_rows`'s visible filter is the only thing keeping
     it off the page."""
     needs = {"freshdesk": Capability(value="read:ticket.status")}
-    bound = attach(a_composition(), a_connector(), by=holding("read:ticket.status"), requires=needs)
+    recorder, _ = a_recorder()
+    bound = attach(
+        a_composition(),
+        a_connector(),
+        by=holding("read:ticket.status"),
+        requires=needs,
+        recorder=recorder,
+        reason_code="requested_by_owner",
+    ).composition
 
     assert bound.attached_to(Part.CONNECTORS) == (a_connector(),)
 
     with pytest.raises(AgentTabError, match="freshdesk"):
-        attach(a_composition(), a_connector(), by=holding(), requires=needs)
+        attach(
+            a_composition(),
+            a_connector(),
+            by=holding(),
+            requires=needs,
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
+        )
 
 
 def test_a_thing_that_does_not_exist_and_one_out_of_reach_are_one_refusal() -> None:
@@ -248,13 +285,22 @@ def test_a_thing_that_does_not_exist_and_one_out_of_reach_are_one_refusal() -> N
     Delete this and the two messages drift apart the next time somebody improves one of
     them."""
     with pytest.raises(AgentTabError) as unknown:
-        attach(a_composition(), a_connector(), by=holding("read:ticket.status"), requires={})
+        attach(
+            a_composition(),
+            a_connector(),
+            by=holding("read:ticket.status"),
+            requires={},
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
+        )
     with pytest.raises(AgentTabError) as unreachable:
         attach(
             a_composition(),
             a_connector(),
             by=holding(),
             requires={"freshdesk": Capability(value="read:ticket.status")},
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
         )
 
     assert str(unknown.value) == str(unreachable.value)
@@ -273,11 +319,23 @@ def test_a_detach_asks_for_nothing_and_a_second_one_is_refused() -> None:
     symmetrical, and the symmetry is the bug."""
     bound = a_composition(a_connector())
 
-    left = detach(bound, Part.CONNECTORS, "freshdesk")
+    left = detach(
+        bound,
+        Part.CONNECTORS,
+        "freshdesk",
+        recorder=a_recorder()[0],
+        reason_code="grant_lapsed",
+    ).composition
 
     assert left.attachments == ()
     with pytest.raises(AgentTabError, match="not attached"):
-        detach(left, Part.CONNECTORS, "freshdesk")
+        detach(
+            left,
+            Part.CONNECTORS,
+            "freshdesk",
+            recorder=a_recorder()[0],
+            reason_code="grant_lapsed",
+        )
 
 
 def test_a_detach_names_a_part_as_well_as_a_reference() -> None:
@@ -291,7 +349,13 @@ def test_a_detach_names_a_part_as_well_as_a_reference() -> None:
         Attachment(part=Part.SKILLS, ref="freshdesk", version="b" * 64),
     )
 
-    left = detach(bound, Part.SKILLS, "freshdesk")
+    left = detach(
+        bound,
+        Part.SKILLS,
+        "freshdesk",
+        recorder=a_recorder()[0],
+        reason_code="grant_lapsed",
+    ).composition
 
     assert left.attachments == (a_connector("freshdesk"),)
 
@@ -310,7 +374,15 @@ def test_an_attachment_outlives_the_capability_and_the_read_path_asks_again() ->
     Delete this and `admitted` gets simplified into "return the attachments", which is true on
     the day it is written and wrong the first time a grant lapses."""
     needs = {"freshdesk": Capability(value="read:ticket.status")}
-    bound = attach(a_composition(), a_connector(), by=holding("read:ticket.status"), requires=needs)
+    recorder, _ = a_recorder()
+    bound = attach(
+        a_composition(),
+        a_connector(),
+        by=holding("read:ticket.status"),
+        requires=needs,
+        recorder=recorder,
+        reason_code="requested_by_owner",
+    ).composition
 
     assert admitted(bound.attachments, by=holding("read:ticket.status"), requires=needs) == (
         a_connector(),
@@ -609,11 +681,25 @@ def test_a_skill_whose_description_cannot_route_does_not_reach_the_agent() -> No
     good = approved(a_skill(description="Use when a hosting plan is close to renewal"))
     weak = approved(a_skill(description="Use for hosting expiry"))
 
-    bound = register_skill(a_composition(), good, alongside=[], by=holding(SKILL_CAPABILITY.value))
+    bound = register_skill(
+        a_composition(),
+        good,
+        alongside=[],
+        by=holding(SKILL_CAPABILITY.value),
+        recorder=a_recorder()[0],
+        reason_code="requested_by_owner",
+    ).composition
 
     assert bound.attached_to(Part.SKILLS)[0].ref == "hosting-expiry"
     with pytest.raises(AgentTabError, match="adds no word"):
-        register_skill(a_composition(), weak, alongside=[], by=holding(SKILL_CAPABILITY.value))
+        register_skill(
+            a_composition(),
+            weak,
+            alongside=[],
+            by=holding(SKILL_CAPABILITY.value),
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
+        )
 
 
 def test_a_skill_collides_only_with_the_ones_on_the_same_agent() -> None:
@@ -628,13 +714,23 @@ def test_a_skill_collides_only_with_the_ones_on_the_same_agent() -> None:
     unrelated = a_skill("timesheets", "Files the weekly timesheets on a Friday")
 
     bound = register_skill(
-        a_composition(), joining, alongside=[unrelated], by=holding(SKILL_CAPABILITY.value)
-    )
+        a_composition(),
+        joining,
+        alongside=[unrelated],
+        by=holding(SKILL_CAPABILITY.value),
+        recorder=a_recorder()[0],
+        reason_code="requested_by_owner",
+    ).composition
 
     assert bound.attached_to(Part.SKILLS)[0].ref == "dns-audit"
     with pytest.raises(AgentTabError, match="position rather than by meaning"):
         register_skill(
-            a_composition(), joining, alongside=[twin], by=holding(SKILL_CAPABILITY.value)
+            a_composition(),
+            joining,
+            alongside=[twin],
+            by=holding(SKILL_CAPABILITY.value),
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
         )
 
 
@@ -650,7 +746,14 @@ def test_registering_a_skill_still_needs_the_approval_and_pins_the_digest() -> N
     read it."""
     one = approved(a_skill(description="Use when a hosting plan is close to renewal"))
 
-    bound = register_skill(a_composition(), one, alongside=[], by=holding(SKILL_CAPABILITY.value))
+    bound = register_skill(
+        a_composition(),
+        one,
+        alongside=[],
+        by=holding(SKILL_CAPABILITY.value),
+        recorder=a_recorder()[0],
+        reason_code="requested_by_owner",
+    ).composition
 
     assert bound.attached_to(Part.SKILLS)[0].version == one.skill.digest()
     assert bound.attached_to(Part.SKILLS)[0].version != one.skill.version
@@ -660,6 +763,8 @@ def test_registering_a_skill_still_needs_the_approval_and_pins_the_digest() -> N
             imported(a_skill(description="Use when a hosting plan is close to renewal")),
             alongside=[],
             by=holding(SKILL_CAPABILITY.value),
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
         )
 
 
@@ -674,10 +779,22 @@ def test_registering_a_skill_runs_the_attach_time_capability_check() -> None:
     one = approved(a_skill(description="Use when a hosting plan is close to renewal"))
 
     assert register_skill(
-        a_composition(), one, alongside=[], by=holding(SKILL_CAPABILITY.value)
-    ).attachments
+        a_composition(),
+        one,
+        alongside=[],
+        by=holding(SKILL_CAPABILITY.value),
+        recorder=a_recorder()[0],
+        reason_code="requested_by_owner",
+    ).composition.attachments
     with pytest.raises(AgentTabError, match="hosting-expiry"):
-        register_skill(a_composition(), one, alongside=[], by=holding())
+        register_skill(
+            a_composition(),
+            one,
+            alongside=[],
+            by=holding(),
+            recorder=a_recorder()[0],
+            reason_code="requested_by_owner",
+        )
 
 
 # --- invocation counts (M39.2.2.4) -----------------------------------------------------------
@@ -1415,3 +1532,140 @@ def test_the_types_a_reader_is_handed_are_all_on_the_declared_surface() -> None:
     }
 
     assert returned <= set(AGENT_TAB_SURFACE)
+
+
+# --- every add and remove reaches the ledger (M39.1.1.3) --------------------------------------
+
+
+def test_an_attach_and_a_detach_each_reach_the_ledger_with_who_when_why_and_which_way() -> None:
+    """**M39.1.1.3 asks for who, when and why, and the direction is the fourth thing it needs
+    without saying so.** An entry that records a composition change without saying whether the
+    thing arrived or left answers "was this agent ever able to do that" and not "can it now",
+    and the second is the question somebody asks during an incident.
+
+    Who is the recorder's actor, bound once so a call site cannot get it wrong. When is the
+    entry's. Why is the reason code. All four are read back off the entry rather than off the
+    arguments, because an argument that never reached the entry would satisfy a check on the
+    input.
+
+    Both calls write to one chain and the chain still verifies, so the two entries are a
+    sequence rather than two unrelated rows.
+
+    Delete this and the tab can bind and unbind things with nothing recorded, which is a
+    change to what an agent can do that nobody can date."""
+    recorder, chain = a_recorder()
+    needs = {"freshdesk": Capability(value="read:ticket.status")}
+
+    bound = attach(
+        a_composition(),
+        a_connector(),
+        by=holding("read:ticket.status"),
+        requires=needs,
+        recorder=recorder,
+        reason_code="requested_by_owner",
+    )
+    freed = detach(
+        bound.composition,
+        Part.CONNECTORS,
+        "freshdesk",
+        recorder=recorder,
+        reason_code="grant_lapsed",
+    )
+
+    assert bound.entry.action is AuditAction.COMPOSE_CHANGE
+    assert bound.entry.subject == f"agent:{a_composition().agent_id}"
+    assert bound.entry.actor_id == "u_owner"
+    assert bound.entry.details["reference"] == "freshdesk"
+    assert bound.entry.details["direction"] == "attached"
+    assert bound.entry.details["reason_code"] == "requested_by_owner"
+
+    assert freed.entry.details["direction"] == "detached"
+    assert freed.entry.details["reason_code"] == "grant_lapsed"
+    assert freed.composition.attached_to(Part.CONNECTORS) == ()
+
+    assert len(chain.entries) == 2
+    assert chain.verify() is None
+
+
+def test_a_refused_attach_writes_nothing_to_the_ledger() -> None:
+    """A refused attach changed nothing, and a ledger carrying attempts beside changes is a
+    ledger where "what does this agent carry" cannot be answered by reading it. The entry is
+    therefore written after the refusal and never before.
+
+    The positive half is the test above; this is the one that fails if the write moves to the
+    top of the function, which is where somebody would put it to record the intent.
+
+    Delete this and every refused attempt becomes a row saying a thing was attached."""
+    recorder, chain = a_recorder()
+
+    with pytest.raises(AgentTabError, match="cannot be attached"):
+        attach(
+            a_composition(),
+            a_connector(),
+            by=holding(),
+            requires={"freshdesk": Capability(value="read:ticket.status")},
+            recorder=recorder,
+            reason_code="requested_by_owner",
+        )
+    with pytest.raises(AgentTabError, match="is not attached"):
+        detach(
+            a_composition(),
+            Part.CONNECTORS,
+            "freshdesk",
+            recorder=recorder,
+            reason_code="grant_lapsed",
+        )
+
+    assert chain.entries == ()
+
+
+def test_neither_call_can_hand_back_a_composition_without_its_entry() -> None:
+    """**The structural half, and the reason the pair type exists.** An entry written by a
+    second call is a line somebody forgets, wraps in a condition, or moves below an early
+    return; `brain.ops.export.bulk_export` reached the same conclusion about the widest
+    permission act in the system and returns its audit row for the same reason.
+
+    Asserted on the annotations rather than on a call, because the wrong version arrives as a
+    signature change: an `audit: AuditEntry | None = None` parameter, or a return type
+    loosened back to `Composition` so a caller can ignore the entry. Behaviour alone would
+    keep passing on the day either lands.
+
+    Delete this and the recording becomes optional again by the smallest possible edit."""
+    import inspect
+
+    for one in (attach, detach, register_skill):
+        signature = inspect.signature(one)
+
+        assert signature.return_annotation in {"Composed", Composed}, one.__name__
+        taken = signature.parameters
+        assert "recorder" in taken, one.__name__
+        assert "reason_code" in taken, one.__name__
+        assert taken["recorder"].default is inspect.Parameter.empty, one.__name__
+        assert taken["reason_code"].default is inspect.Parameter.empty, one.__name__
+
+
+def test_a_reason_that_is_prose_is_refused_by_the_recorder_and_not_softened_here() -> None:
+    """The why is a code and not a sentence, and this module does not have its own opinion
+    about that: `brain.audit.record` refuses prose because `redact_details` admits field names
+    and reduces anything else to the marker, so a sentence would be stored as `<redacted>` and
+    the why would be gone from the record kept to answer for it.
+
+    What is asserted here is that the refusal is allowed through rather than wrapped. Wrapping
+    it would make a rule of the ledger look like an opinion of this tab, which is the argument
+    `attach` already makes about letting `Composition`'s duplicate refusal propagate.
+
+    Delete this and somebody catches the ledger's refusal here and substitutes a default
+    reason, which is a record that answers the question with a value nobody chose."""
+    recorder, chain = a_recorder()
+
+    with pytest.raises(ValueError, match="reason code"):
+        attach(
+            a_composition(),
+            a_connector(),
+            by=holding("read:ticket.status"),
+            requires={"freshdesk": Capability(value="read:ticket.status")},
+            recorder=recorder,
+            reason_code="the owner asked me to",
+        )
+
+    assert chain.entries == ()

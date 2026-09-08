@@ -101,7 +101,7 @@ behind one, exactly as `brain.console.screens` says of its own registry. What is
 domain layer such a tab would call, and the leaves claimed are the ones where the decision is
 the whole content.
 
-Task ids: M39.2.1.2, M39.2.2.1, M39.2.2.3, M39.2.2.4, M39.2.2.5
+Task ids: M39.1.1.3, M39.2.1.2, M39.2.2.1, M39.2.2.3, M39.2.2.4, M39.2.2.5
 Task ids: M39.2.3.2, M39.2.3.4, M39.2.3.5, M39.2.4.1, M39.2.4.3, M39.2.4.4
 """
 
@@ -117,6 +117,8 @@ from datetime import datetime
 from typing import Any, Final
 
 from brain.agents.model import AgentRecord
+from brain.audit.ledger import AuditEntry
+from brain.audit.record import AuditRecorder
 from brain.channels.adapter import ChannelCapabilities, Feature
 from brain.console.agent_output import basis_over
 from brain.console.reads import permitted
@@ -252,15 +254,60 @@ class AgentTabError(Exception):
 
 
 # ------------------------------------------------- attaching and detaching (M39.2.1.2)
+#: Why a composition change and its ledger entry come back together rather than the entry
+#: being a second call.
+#:
+#: M39.1.1.3 asks for every add and remove to reach the ledger with who, when and why, and an
+#: entry written by a separate call is a line somebody forgets, wraps in a condition, or moves
+#: below an early return. `brain.ops.export.bulk_export` reached the same conclusion about the
+#: widest permission act in the system and returns its audit row for the same reason: the only
+#: way to make a record non-optional is to make it the thing the caller wanted.
+#:
+#: A composition change is a smaller act than an export and the argument is the same one, one
+#: size down: what an agent carries is what it can do, so a change nobody recorded is a change
+#: to what an agent can do that nobody can date.
+A_RECORD_WRITTEN_BY_A_SECOND_CALL_IS_A_LINE_SOMEBODY_FORGETS: Final = (
+    "An add or a remove that returns only the new composition leaves the ledger entry to a "
+    "second call, and a second call is skipped under a condition, lost in an early return, or "
+    "never written at all. What an agent carries is what it can do, so a composition change "
+    "nobody recorded is a change to what an agent can do that nobody can date. Returning the "
+    "entry beside the composition is what makes it impossible to have one without the other."
+)
+
+
+@dataclass(frozen=True)
+class Composed:
+    """A composition and the ledger entry that says how it came to be that way.
+
+    Both, always. See `A_RECORD_WRITTEN_BY_A_SECOND_CALL_IS_A_LINE_SOMEBODY_FORGETS`.
+    """
+
+    composition: Composition
+    entry: AuditEntry
+
+
 def attach(
     composition: Composition,
     one: Attachment,
     *,
     by: EntitlementSet,
     requires: Mapping[str, Capability],
+    recorder: AuditRecorder,
+    reason_code: str,
     now: datetime | None = None,
-) -> Composition:
-    """Bind one thing to one agent, with the capability check made here (M39.2.1.2).
+) -> Composed:
+    """Bind one thing to one agent, and record it (M39.2.1.2, M39.1.1.3).
+
+    **The ledger entry comes back with the composition and cannot be omitted.** See
+    `A_RECORD_WRITTEN_BY_A_SECOND_CALL_IS_A_LINE_SOMEBODY_FORGETS`. The recorder carries who
+    and when, because it binds the actor, the reach and the trace once; `reason_code` is the
+    why and is a code rather than a sentence, since `brain.audit.record.redact_details` admits
+    field names and reduces prose to the marker, so a sentence would be stored as `<redacted>`
+    and the why would be lost in the record kept to answer for it.
+
+    The entry is written after the refusal and never before. A refused attach changed nothing,
+    and a ledger carrying attempts alongside changes is a ledger where "what does this agent
+    carry" cannot be answered by reading it.
 
     `by` is the person's own reach and deliberately not `E_run(caller, agent)`. Attaching is
     a configuration act performed by a person, so the question is whether *they* may reach
@@ -290,11 +337,26 @@ def attach(
             f"{AN_ATTACH_THAT_REFUSES_DIFFERENTLY_SAYS_WHAT_EXISTS}"
         )
         raise AgentTabError(msg)
-    return Composition(agent_id=composition.agent_id, attachments=(*composition.attachments, one))
+    after = Composition(agent_id=composition.agent_id, attachments=(*composition.attachments, one))
+    entry = recorder.compose_change(
+        agent_id=composition.agent_id,
+        part=one.part.value,
+        reference=one.ref,
+        attached=True,
+        reason_code=reason_code,
+    )
+    return Composed(composition=after, entry=entry)
 
 
-def detach(composition: Composition, part: Part, ref: str) -> Composition:
-    """Unbind one thing, asking for nothing (M39.2.1.2).
+def detach(
+    composition: Composition,
+    part: Part,
+    ref: str,
+    *,
+    recorder: AuditRecorder,
+    reason_code: str,
+) -> Composed:
+    """Unbind one thing, asking for nothing, and record it (M39.2.1.2, M39.1.1.3).
 
     No capability, on purpose. See `THE_GUARDED_ACT_IS_ATTACH_AND_NEVER_DETACH`.
 
@@ -312,7 +374,15 @@ def detach(composition: Composition, part: Part, ref: str) -> Composition:
             "would record a change that did not happen"
         )
         raise AgentTabError(msg)
-    return Composition(agent_id=composition.agent_id, attachments=kept)
+    after = Composition(agent_id=composition.agent_id, attachments=kept)
+    entry = recorder.compose_change(
+        agent_id=composition.agent_id,
+        part=part.value,
+        reference=ref,
+        attached=False,
+        reason_code=reason_code,
+    )
+    return Composed(composition=after, entry=entry)
 
 
 def admitted(
@@ -643,8 +713,10 @@ def register_skill(
     *,
     alongside: Sequence[Skill],
     by: EntitlementSet,
+    recorder: AuditRecorder,
+    reason_code: str,
     now: datetime | None = None,
-) -> Composition:
+) -> Composed:
     """Put one approved skill on the router's menu for this agent (M39.2.2.5, M39.2.1.2).
 
     The enforcement point for the description convention, and it is here rather than at the
@@ -679,6 +751,8 @@ def register_skill(
         one,
         by=by,
         requires={one.ref: SKILL_CAPABILITY},
+        recorder=recorder,
+        reason_code=reason_code,
         now=now,
     )
 
