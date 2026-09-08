@@ -60,6 +60,39 @@ WORDS = {
 }
 
 
+#: Words for a screen count, which is a larger number than an open-question count and is
+#: written out in prose in the same way. Separate from `WORDS` rather than merged into it,
+#: because the two sentences are about different things and a shared table would make a
+#: change to one look like a change to the other.
+#:
+#: It stops where the console plausibly stops. A fortieth screen fails with a `KeyError`
+#: naming this table, which is the failure `WORDS` already records: a table that runs out is
+#: a check that stops working at a number nobody chose.
+WORDS_LARGE = {
+    **WORDS,
+    21: "twenty-one",
+    22: "twenty-two",
+    23: "twenty-three",
+    24: "twenty-four",
+    25: "twenty-five",
+    26: "twenty-six",
+    27: "twenty-seven",
+    28: "twenty-eight",
+    29: "twenty-nine",
+    30: "thirty",
+    31: "thirty-one",
+    32: "thirty-two",
+    33: "thirty-three",
+    34: "thirty-four",
+    35: "thirty-five",
+    36: "thirty-six",
+    37: "thirty-seven",
+    38: "thirty-eight",
+    39: "thirty-nine",
+    40: "forty",
+}
+
+
 def _stated_open_questions() -> str:
     """The word inside the marked span, or a failure naming what is missing."""
     html = ARCHITECTURE.read_text(encoding="utf-8")
@@ -173,3 +206,42 @@ def test_the_page_renders_bold_and_bullets_rather_than_showing_their_marks() -> 
     assert "<strong>" in page
     assert "<li>" in page
     assert "**" not in page
+
+
+def _stated_screen_count() -> str:
+    """The word inside the marked span, or a failure naming what is missing."""
+    html = ARCHITECTURE.read_text(encoding="utf-8")
+    found = re.search(r'<span data-screen-count="[^"]*">([^<]+)</span>', html)
+    if found is None:
+        pytest.fail(
+            "the architecture no longer marks its console screen count, so nothing can "
+            "check it against the screen registry"
+        )
+    return found.group(1).strip().lower()
+
+
+def test_the_architecture_agrees_with_the_console_about_how_many_screens_there_are() -> None:
+    """**The heading said thirteen while `SCREENS` declared thirty-four.** The table under it
+    lists the original thirteen and the grouping argument in it is still right, so the table
+    stayed and is labelled as the sketch it is; what was wrong was the number in the heading,
+    which reads as the current position.
+
+    Compared against `brain.console.screens.SCREEN_COUNT` rather than a number written here,
+    so the thirty-fifth screen fails this rather than being invisible.
+
+    Delete this and the document goes back to being one screen count behind the console, and
+    the person who reads it is the client."""
+    from brain.console.screens import SCREEN_COUNT
+
+    assert _stated_screen_count() == WORDS_LARGE[SCREEN_COUNT], (
+        f"the architecture says {_stated_screen_count()!r} screens and there are {SCREEN_COUNT}"
+    )
+
+
+def test_the_screen_count_is_carried_somewhere_a_test_can_read() -> None:
+    """The guard on the guard, in the same shape as the one on the open-question count: an
+    edit that rewrites the heading and drops the span leaves the test above with nothing to
+    compare, and a test that quietly stops checking is what this file exists to prevent."""
+    html = ARCHITECTURE.read_text(encoding="utf-8")
+
+    assert 'data-screen-count=""' in html

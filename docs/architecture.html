@@ -839,10 +839,16 @@
   <p>Deterministic automation - a trigger, then steps, with no model deciding control flow - is exactly what a canvas is good at, and it carries none of the objections above because the flow calls our tools through the API and the gate still runs on every call.</p>
   <p>So ship it as an <strong>optional container</strong>, sandboxed with allowlisted egress and no database credentials, on the extension-point list so it is a configuration choice rather than a fork. For that job <strong>Activepieces</strong> (MIT core) fits better than Langflow, and n8n is available where a client already runs one.</p>
   <p>The division that results: <em>model-driven agent behaviour</em> is composed in a form, because a drawn edge would be a lie about what the runtime does when the catalogue is projected per request. <em>Deterministic automation</em> is drawn on a canvas, because there the drawing is the truth.</p>
-  <h3>Console, thirteen screens</h3>
+  <h3>Console, <span data-screen-count="">thirty-four</span> screens</h3>
+  <p>The table below is the original sketch of thirteen, kept because the grouping argument in
+  it still holds. It is not the register: <code>brain.console.screens.SCREENS</code> is, and
+  it now declares thirty-four in four groups, eighteen of them under Govern. The count in the
+  heading is carried in the markup and checked against that module by a test, for the same
+  reason the open-question count is: a stale number in a document of record is worse than no
+  number, because a reader takes it for the current position.</p>
   <div class="scroll">
     <table>
-      <thead><tr><th>Group</th><th>Screens</th></tr></thead>
+      <thead><tr><th>Group</th><th>Screens, as first sketched</th></tr></thead>
       <tbody>
         <tr><td class="k">Operate</td><td>Live runs · Model matrix and provider health · Connector health · Knowledge coverage and staleness · Queue and automations</td></tr>
         <tr><td class="k">Govern</td><td>People and grants · Scopes and departments · Agents and leash state with promotion history · Skills and templates with review queue · Audit</td></tr>
