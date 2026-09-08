@@ -64,6 +64,16 @@ sites" into "two implementations", which is the drift that matters: it makes a s
 implementation sound like the status quo. `tests/invariants/test_single_implementation.py`
 now reads the call sites out of the source, because nothing else would have caught it.
 
+**`intersect` evaluates the right-hand side's expiry, so it has to be told the instant.**
+The left-hand side's is not decided there: it is carried out on `not_after` and asked later by
+whoever calls `scope_for` on the result, with their own `now`. Only the right-hand side's is
+decided inside `intersect`, and until 2026-09-08 that call had no parameter for the time and
+used the process clock. The four surfaces that ask "may this reader be told this" are written
+`requirement(thing).intersect(reader)`, which puts the real principal on the right, so a
+reader's expiry was exactly what was being judged at the wrong instant, and it failed
+permissive. Pass `now` wherever you have one. Which call sites do is pinned in
+`tests/invariants/test_single_implementation.py`, along with the four that cannot.
+
 **Entitlements are additive only.** There is no deny list anywhere and there must not be one.
 Revocation is the deletion of a grant. A second source of grants (the directory sync, say)
 can therefore only ever add, and that is why a union is safe.
@@ -114,6 +124,17 @@ boundary where proving a structural match buys nothing; say so in a comment when
 **Every test docstring says what breaks if the test is deleted.** This is not a formality. It
 is the only thing standing between a future reader and deleting a test that looks redundant.
 If you cannot write that sentence, you do not yet know what the test is for.
+
+**A fixture with a date in it is a clock, and it will go off.** `test_memory_formation.py`
+built its readers around `NOW = 2026-09-07 12:00` and gave one of them `NOW + one day`. It
+passed the day it was written and failed at noon the next, with nothing about the code having
+changed, and what it had found was a real defect in `EntitlementSet.intersect` that had been
+there since the method existed. Two lessons and they point in opposite directions, so keep
+both. The bug was real and only a clock crossing a fixture ever surfaced it, so do not
+"fix" such a failure by moving the date. And a fixture that can expire is a test that reports
+a defect on a schedule nobody chose, so pin dates far outside any plausible wall clock when
+what you are testing is not itself about the present: `tests/unit/test_scope_and_capability.py`
+uses 2019 and 2999 deliberately, and says so.
 
 **Assert on structure, not on text that also appears nearby.** Two tests in this repository
 have been satisfied by their own docstrings: `sweep_tool_registry` matched the example in its
