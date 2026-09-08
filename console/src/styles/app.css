@@ -351,6 +351,12 @@ code {
  *
  * On the container rather than on the table, because a scrolling container has to be the
  * table's parent for the table to be what moves inside it.
+ *
+ * Measured rather than reasoned about, at 375 CSS pixels, with the console's own rules and a
+ * five-column row of real-shaped identifiers: the table's natural width is 479px, the page
+ * scrolls to 496px without this rule, and to 375px with it. jsdom has no layout engine, so
+ * the tests beside this assert the two halves of the mechanism and this comment carries the
+ * number.
  */
 .grid__scroll {
   overflow-x: auto;
