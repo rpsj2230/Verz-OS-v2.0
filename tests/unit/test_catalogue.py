@@ -478,3 +478,35 @@ def test_the_ux_designer_reads_a_finding_and_never_who_produced_it() -> None:
         assert not any(forbidden in value for value in held), (
             f"the UX designer can read something naming a {forbidden}"
         )
+
+
+def test_no_built_in_template_is_published_by_a_company() -> None:
+    """**`PUBLISHER` read `"verz"` until 2026-09-08, twenty-two times.** Every built-in
+    template shipped to every client stamped with the first client's name, which is the
+    violation `CLAUDE.md` forbids in its first rule and which `brain.install` uses as its
+    illustration of the archetypal defect.
+
+    **`client_independence` was green over it and could not have caught it.**
+    `value_shaped_literals` matches an address, a bare IPv4 or an absolute URL, and a company
+    slug is none of those. `install.py` already says why: a company name has no shape, so a
+    shape-based sweep cannot find one. Widening the pattern is not the fix; it would have to
+    become a list of company names, which is the blocklist that passes for every company
+    except the ones on it.
+
+    So the anchor is the value rather than the shape. The catalogue's publisher is the
+    system's, `brain.agents.template.SYSTEM_PUBLISHER`, which existed in the same package for
+    the blank template and for the same reason: nobody in particular published these. Compared
+    against that constant rather than against the string "system", so the two cannot drift,
+    and asserted over every template rather than over the constant alone, because the constant
+    being right does not mean every manifest uses it.
+
+    Delete this and the next person naming a publisher has nothing to stop them writing a
+    company, and the sweep will go on saying the tree is clean."""
+    from brain.agents.template import SYSTEM_PUBLISHER
+
+    assert PUBLISHER is SYSTEM_PUBLISHER
+
+    published = {one.identity.published_by for one in CATALOGUE}
+
+    assert published == {SYSTEM_PUBLISHER}
+    assert len(CATALOGUE) > 5, "almost no templates were read, so an empty difference is nothing"

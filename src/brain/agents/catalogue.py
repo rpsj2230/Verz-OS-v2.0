@@ -65,7 +65,10 @@ Task ids: M13.5.16, M13.5.17, M13.5.19, M13.5.20, M13.5.21, M13.5.22, M13.5.23
 
 from __future__ import annotations
 
+from typing import Final
+
 from brain.agents.template import (
+    SYSTEM_PUBLISHER,
     GoldenCase,
     LeashRung,
     ManifestAuthority,
@@ -112,12 +115,24 @@ A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS = (
 )
 
 
-#: Who these were published by, and it is the house rather than a person.
+#: Who these were published by, and it is the system rather than a person or a company.
 #:
 #: A template outlives whoever wrote it, and `published_by` on a person who has left is a
-#: record pointing at a principal `is_active` refuses. The catalogue is the agency's, so it
-#: is named as such and `M13.6` is where a client's own templates get a real author.
-PUBLISHER = "verz"
+#: record pointing at a principal `is_active` refuses. `M13.6` is where a client's own
+#: templates get a real author.
+#:
+#: **This read `"verz"` until 2026-09-08, twenty-two times, and it is the violation
+#: `CLAUDE.md` forbids in its first rule.** Every built-in template shipped to every client
+#: stamped with the first client's name, and `brain.install` uses that exact literal as its
+#: illustration of the archetypal defect. `client_independence` was green over it because
+#: `value_shaped_literals` matches an address, a bare IPv4 or an absolute URL, and a company
+#: slug is none of those: a company name has no shape, which `install.py` already says.
+#:
+#: So the fix is not a wider pattern, it is the right value. `brain.agents.template` had
+#: `SYSTEM_PUBLISHER = "system"` in the same package for the blank template and for the same
+#: reason, and these are the same kind of thing: nobody in particular published them. Imported
+#: rather than restated, so there is one spelling of it.
+PUBLISHER: Final = SYSTEM_PUBLISHER
 
 
 def _department(slug: str) -> Scope:
