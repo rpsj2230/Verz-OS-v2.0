@@ -300,6 +300,26 @@ survived, wrote a test whose docstring said so, and wrote the mutant line back i
 Both agents were behaving correctly. This is now closed by construction: `brain.ops.mutation`
 owns its worktree and has no parameter you could point at this tree. Use it.
 
+**A mutation run is only as honest as the tests you pass it, and the failure is silent and
+flattering.** `Mutation.tests` names the files to run. Name too few and every guard the other
+files cover comes back SURVIVED, and a survivor reads as a gap in the code rather than a gap
+in the run.
+
+That is not hypothetical and it was expensive. On 2026-09-08 an audit that mutates every `if`
+in a module was pointed at `gate/leash.py` with `tests/unit/test_leash.py` alone, for a module
+nineteen test files exercise. It reported seven unreachable guards, three of them security
+checks on the resume path, and the report was written up and briefed to an agent before
+anybody re-measured. Four were real. Three were already covered by
+`tests/invariants/test_leash_invariants.py` and the run had simply not been shown it.
+
+So: **for a module anything else imports, work the test set out from the import graph rather
+than guessing it**, and print the set. A cheap first pass against one file is fine and is what
+makes auditing a module affordable at all, but a first-pass survivor is a candidate and never
+a finding. Re-check it against every test file that imports the module before writing a word
+about it. `.scratch/recheck_survivors.py` is that second stage, and the console modules'
+nineteen real findings the same day are what the first stage is worth when its scope happens
+to be right: each of those has exactly one test file, so there was nothing else to miss.
+
 ---
 
 ## Layout
