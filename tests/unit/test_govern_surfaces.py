@@ -83,7 +83,7 @@ from brain.identity.staff_source import Asserts, Roster, StaffRecord
 from brain.identity.teams import principal_subject
 from brain.knowledge.visibility import PROMOTION_CAPABILITY, PromotionProposal, Visibility
 from brain.ops.erasure import deletion_order
-from brain.ops.export import ExportAudit, ExportReason
+from brain.ops.export import ExportAudit, ExportError, ExportReason
 from brain.ops.retention import Store, StoreCensus, enforcement_report
 
 #: A fixed moment, so an expiry test cannot pass because the machine's clock happened to sit
@@ -639,24 +639,30 @@ def test_an_export_covering_everybody_reaches_nobody_through_the_subject_branch(
     assert export_log(entries, reader, NOW) == (shortlist,)
 
 
-def test_a_row_that_covers_everybody_and_names_a_shortlist_admits_nobody_by_name() -> None:
-    """**The guard the test above cannot reach, and the reason it exists.**
-    `brain.ops.export.BulkExportRequest` refuses an export that both covers everybody and
-    names a shortlist, in its own words because the shortlist would read as the scope and it
-    is not. `ExportAudit` does not refuse the same pair, so a row loaded from a table, written
-    by an older version of the code or hand-built by a test can carry both, and then a
-    shortlist that is not the scope would admit the people on it by name while the export
-    reached everybody.
+def test_a_row_that_covers_everybody_cannot_name_a_shortlist_at_all() -> None:
+    """**This tested a filter term and the rule moved underneath it.**
+    `BulkExportRequest` refuses an export that both covers everybody and names a shortlist, in
+    its own words because the shortlist would read as the scope and it is not. `ExportAudit`
+    did not refuse the same pair, so `export_log` carried a `not all_subjects` term against a
+    row that could exist, and this test built one to reach it.
 
-    Delete this and the `all_subjects` half of that check is unreachable, because every row
-    built through `bulk_export` has an empty shortlist when it covers everybody, and a
-    mutation removing the check would survive.
+    `ExportAudit` refuses it now. The row is the half that persists, is loaded back from a
+    table and may have been written by an older version, so the record has to refuse what the
+    request refuses. With that in place the filter term guarded a shape that cannot be
+    constructed, which is two checks nothing can separate, and the term is gone.
 
-    The two rows differ only in `all_subjects`, and the reader is named on both."""
+    So the property is asserted where it is now enforced, and the positive half stays here:
+    a shortlist that is really a shortlist still admits the people on it by name.
+
+    Delete this and the refusal can leave the record, and `export_log` has no term left to
+    catch a row that covers everybody while naming somebody."""
+    with pytest.raises(ExportError, match="shortlist"):
+        an_export("x_1", subjects=("u_1",), all_subjects=True)
+
     reader = EntitlementSet(principal_id="u_1", grants=())
-    malformed = an_export("x_1", subjects=("u_1",), all_subjects=True)
     shortlist = an_export("x_2", subjects=("u_1",))
-    entries = (Placed(record=malformed, where={}), Placed(record=shortlist, where={}))
+    everybody = an_export("x_3", subjects=(), all_subjects=True)
+    entries = (Placed(record=shortlist, where={}), Placed(record=everybody, where={}))
 
     assert export_log(entries, reader, NOW) == (shortlist,)
 

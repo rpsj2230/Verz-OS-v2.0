@@ -604,9 +604,16 @@ def export_log(
 
     **The reader is one of the subjects.** See
     `A_PERSON_MAY_LEARN_THAT_THEIR_OWN_DATA_LEFT_THE_BUILDING`. An export covering everybody
-    does not admit anybody this way: `all_subjects` is the request saying it named no
-    shortlist, so there is nobody on the row for the reader to be, and an export of the whole
+    does not admit anybody this way, because `all_subjects` means the request named no
+    shortlist and there is nobody on the row for the reader to be. An export of the whole
     company reaching every employee's screen would be the log becoming a company-wide read.
+
+    **This read `not one.record.all_subjects and ...` until 2026-09-08, and the term is gone
+    because the rule moved to where it cannot be bypassed.** `ExportAudit` now refuses a row
+    that both covers everybody and names a shortlist, in the same words `BulkExportRequest`
+    already used, so there is no such row for this filter to meet. Keeping the term as well
+    would be two checks nothing can separate, which is the finding `friction` made about its
+    own pair in `brain.console.govern`.
 
     **A grant covers export rows, in a scope that admits the row.** The capability is the
     Exports screen's own and is deliberately not the capability the export's contents needed;
@@ -625,7 +632,7 @@ def export_log(
     return tuple(
         one.record
         for one in entries
-        if (not one.record.all_subjects and entitlement.principal_id in one.record.subjects)
+        if entitlement.principal_id in one.record.subjects
         or _in_reach(entitlement, required, one.where, now)
     )
 

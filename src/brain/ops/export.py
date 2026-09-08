@@ -303,6 +303,18 @@ class ExportAudit:
         if self.at.tzinfo is None:
             msg = "a naive audit time compares wrongly against an aware one"
             raise ExportError(msg)
+        if self.all_subjects and self.subjects:
+            # The same refusal `BulkExportRequest` makes, in the same words, and it was
+            # missing here until 2026-09-08. `bulk_export` builds this row from a validated
+            # request, so nothing was corrupt; the row is what persists, is loaded back from a
+            # table and may have been written by an older version, and a consumer reading
+            # `subjects` as the scope is wrong on a row that covers everybody. The record has
+            # to refuse what the request refuses, because the record is what outlives it.
+            msg = (
+                "an export audit row cannot both cover everybody and name a shortlist; the "
+                "shortlist would read as the scope and it is not"
+            )
+            raise ExportError(msg)
 
     def line(self) -> str:
         """One line for an operator, naming the reason and the reference and no content."""

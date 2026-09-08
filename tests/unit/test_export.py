@@ -306,6 +306,48 @@ def test_a_bulk_export_cannot_both_cover_everybody_and_name_a_shortlist() -> Non
         )
 
 
+def test_the_audit_row_refuses_the_shape_the_request_refuses_because_the_row_outlives_it() -> None:
+    """**The request refused this and the row did not, until 2026-09-08.**
+    `BulkExportRequest` will not both cover everybody and name a shortlist, in its own words
+    because the shortlist would read as the scope and it is not. `ExportAudit` carried no such
+    refusal, and `ExportAudit(..., subjects=("p_ada",), all_subjects=True)` constructed
+    cleanly.
+
+    Nothing was corrupt, because `bulk_export` builds the row from a validated request. That
+    is exactly why it needed fixing rather than noting: the row is the half that persists, is
+    loaded back from a table, and may have been written by an older version or by a caller
+    that never held a request at all. A consumer reading `subjects` as the scope is wrong on a
+    row that covers everybody, and the row is what an auditor reads five years later.
+
+    Both directions, because a refusal of everything also passes the first half: the same row
+    with an empty shortlist, and the same row with a shortlist and `all_subjects` false, both
+    construct.
+
+    Delete this and the record can disagree with the request that produced it, in the one
+    field that says who an export was about."""
+
+    def a_row(**changed: object) -> ExportAudit:
+        fields: dict[str, object] = {
+            "export_id": "x_1",
+            "at": NOW,
+            "requested_by": "p_ops",
+            "reason": ExportReason.REGULATORY_REQUEST,
+            "reason_reference": "matter-77",
+            "stores": (Store.CONVERSATION,),
+            "subjects": (),
+            "all_subjects": True,
+            "items": 3,
+        }
+        fields.update(changed)
+        return ExportAudit(**fields)  # type: ignore[arg-type]
+
+    with pytest.raises(ExportError, match="shortlist"):
+        a_row(subjects=("p_ada",))
+
+    assert a_row().all_subjects is True
+    assert a_row(subjects=("p_ada",), all_subjects=False).subjects == ("p_ada",)
+
+
 def test_a_bulk_export_returns_its_audit_row_and_there_is_no_way_to_take_one_without() -> None:
     """**An export is the widest permission act in the system and the row is not optional.**
 
