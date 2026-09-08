@@ -541,7 +541,13 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="queue_redrive",
-        symbols=("brain.ops.queue:verdict_for",),
+        # Two halves since 2026-09-09. `verdict_for` decides what an orphaned row deserves
+        # and `brain.ops.crash.redrive` is the driver that asks it and joins the answer with
+        # the operation record. Naming only the first would have measured this control as
+        # running the day the driver was written, because the driver calls it; naming both
+        # says what `A_CONTROL_IS_RUN_ONLY_WHEN_ALL_OF_IT_IS` means here, which is that a
+        # decision with nobody driving it is still not a control.
+        symbols=("brain.ops.queue:verdict_for", "brain.ops.crash:redrive"),
         guards=(
             "that a job whose worker died underneath it is reclaimed and either retried or "
             "set aside, rather than staying in flight for ever with nothing holding it"
@@ -559,7 +565,10 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="side_effect_resume",
-        symbols=("brain.ops.idempotency:resume",),
+        # The same split, and here the second half is the act rather than the decision.
+        # `resume` says a record must be read back; `brain.ops.crash.verify_once` is the
+        # read-back, and it is the half that can be wrong about what a connector answered.
+        symbols=("brain.ops.idempotency:resume", "brain.ops.crash:verify_once"),
         guards=(
             "that a side effect issued by a process which then died is read back from the "
             "source before anybody decides whether to issue it again"
