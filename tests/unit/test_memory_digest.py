@@ -654,6 +654,15 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     in that module's words: narrowing a person's memory by an agent's ceiling would hide a
     memory from its own subject for a reason that has nothing to do with them.
 
+    **`brain.member_activity` is the fourth importer and it arrived on 2026-09-08**, for
+    M40.4.1.1 and M40.4.1.3, the member's own preferences page and the weekly digest delivered
+    on their own channel. Its sibling is below and its argument is a fourth one, because the
+    reader and the subject are the same person there and that is exactly where the question
+    gets slid past: it reads at the subject's own reach, refuses a reach belonging to anybody
+    else, and still asks `may_recall`. Ownership admits the row and recall admits the words, so
+    a memory formed under a grant since revoked leaves the page although its owner is standing
+    in front of it.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == ["brain.console.own_things"]
@@ -661,6 +670,7 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
         "brain.console.govern_estate",
         "brain.console.own_things",
         "brain.console.reach_view",
+        "brain.member_activity",
     ]
 
 
@@ -745,3 +755,52 @@ def test_the_personal_memory_tab_narrows_by_authorship_and_holds_no_reach_at_all
     assert own_memory([mine, theirs], principal_id="p_reader") == (mine,)
     with pytest.raises(OwnThingsError, match="may not delete"):
         delete_own_memory(theirs, principal_id="p_reader", at=NOW)
+
+
+def test_the_members_own_page_asks_recall_even_though_the_reader_owns_the_memory() -> None:
+    """The sibling the pin above demands, for the fourth importer of these shapes.
+
+    **Two claims, and the second is the one a personal page gets wrong.** It reads at the
+    subject's own reach and refuses a reach belonging to anybody else, which is the check the
+    other three importers do not need because none of them takes both a subject and a reader.
+    And it still asks `brain.memory.formation.may_recall`, although the reader owns every row
+    it is about: `Formation.principal_id` is recorded for the audit question and its own
+    comment says it never permits a recall, so a page that read ownership as permission would
+    show somebody the text of a memory formed under a grant they have since lost.
+
+    The discriminating fixture is one memory read twice by its own owner, once holding the
+    capability it was formed under and once holding nothing. The second read is empty.
+
+    Delete this and the pin above can be widened to admit a caller nobody argued for, which is
+    the thing that pin exists to make impossible."""
+    from brain.core.entitlement import EntitlementSet
+    from brain.member_activity import MemberError, learned_about_me
+
+    mine = Learning(
+        memory_id="m_mine",
+        proposal=propose(Change.PREFERENCE, subject="tone"),
+        formation=Formation(
+            principal_id="p_reader",
+            capabilities=(Capability(value="read:client.name"),),
+            scope=Scope.unrestricted(),
+            ent_hash="0" * 32,
+            formed_at=NOW,
+        ),
+    )
+    entries = [(mine, "prefers short answers")]
+
+    holding = reader("read:client.name")
+    assert holding.principal_id == "p_reader"
+    page = learned_about_me(entries, principal_id="p_reader", reader=holding, now=NOW)
+    assert [one.memory_id for one in page.items] == ["m_mine"]
+
+    revoked = EntitlementSet(principal_id="p_reader", grants=())
+    assert learned_about_me(entries, principal_id="p_reader", reader=revoked, now=NOW).items == ()
+
+    with pytest.raises(MemberError, match="reach offered"):
+        learned_about_me(
+            entries,
+            principal_id="p_reader",
+            reader=reader("read:client.name", principal_id="p_other"),
+            now=NOW,
+        )
