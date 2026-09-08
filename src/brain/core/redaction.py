@@ -917,9 +917,18 @@ _TYPED_RESULT_RE = re.compile(
 
 
 def _annotation_text(annotation: object) -> str:
-    """One rendering of an annotation, whether it arrived as a string or an object."""
-    if isinstance(annotation, str):
-        return annotation
+    """One rendering of an annotation, whether it arrived as a string or an object.
+
+    Two cases and not three. A class renders as its bare name, because `str(int)` is
+    `<class 'int'>` and matches no pattern anybody would write; everything else falls through
+    to `str`, and that includes a string, because `str(s)` is `s`.
+
+    There was a third branch returning a string unchanged. A mutation found it: replacing its
+    condition with `False` changed no answer for any input, which is the definition of a
+    branch that cannot be tested. Removing it is the honest resolution rather than writing a
+    test that could not distinguish the two, and the behaviour it described is still true and
+    is now stated here.
+    """
     if isinstance(annotation, type):
         return annotation.__name__
     return str(annotation)

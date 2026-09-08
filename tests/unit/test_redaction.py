@@ -41,12 +41,15 @@ from brain.core.redaction import (
     ChannelAdapterRegistry,
     ChannelPathError,
     ChannelPayload,
+    DroppedObject,
     DropReason,
     RedactedAnswer,
     RedactionReason,
     RedactionTrace,
     SimulationReport,
     UntypedShapeError,
+    _annotation_text,
+    _count_would_be_subtractable,
     assert_channel_adapter,
     assert_tool_returns_typed_result,
     compute_mask,
@@ -1518,3 +1521,152 @@ def test_a_typed_result_of_something_that_is_not_an_entity_is_refused() -> None:
     look a capability up by."""
     with pytest.raises(UntypedShapeError, match="not an Entity"):
         assert_tool_returns_typed_result(a_tool_returning_untagged_records)
+
+
+# --------------------------------------------------- guards nothing could reach (2026-09-08)
+# An audit that mutates every `if` in this module and runs it against every test file that
+# imports it found seven guards no test could reach. Six are below. The seventh,
+# `child is None` in `_count_would_be_subtractable`, says in its own comment that it is
+# unreachable and why it is written as a refusal rather than an assert, and it is left alone:
+# a test that reached it would have to construct a state the walker cannot produce.
+#
+# Every one of the six is the same shape the rest of this repository keeps finding. A
+# validator is written, it is correct, and every object any test ever builds is valid, so the
+# check has never once run.
+
+
+def test_a_dropped_object_whose_path_is_not_a_path_is_refused() -> None:
+    """`DroppedObject.path` is the one field in a trace that comes from the shape of the
+    answer rather than from a name, so it is the one that could carry a value: a path built
+    by string formatting from a record is a path with the record in it.
+
+    The walker never produces one, which is exactly why this had never run. A trace also
+    arrives by being loaded from a store or replayed by a helper, and the module docstring
+    says the validator exists for those.
+
+    Both an obviously wrong path and a plausible one carrying a value, because a check
+    written against the first passes on nothing.
+
+    Delete this and the shape of an answer becomes a place to put its contents."""
+    for wrong in ("not a path!", "clients[alice@example.test].tickets", ""):
+        with pytest.raises(ValidationError):
+            DroppedObject(path=wrong, reason=DropReason.UNTAGGED)
+
+    assert DroppedObject(path="clients[0].tickets[2]", reason=DropReason.UNTAGGED).path
+
+
+def test_a_redaction_naming_something_that_is_not_a_name_cannot_enter_a_trace() -> None:
+    """The trace is the record an auditor reads and it must hold names and counts and never
+    a value. `_names_only` is the check that says so at the type, and until now every
+    redaction any test built was already well formed.
+
+    The entity and the field are checked separately here, because a validator looking at one
+    of them satisfies a test that only breaks the other.
+
+    Delete this and a redaction record is a place to smuggle a client's name into the
+    longest-lived object in the request."""
+    for wrong in ("Acme Ltd", "ticket subject", "", "Ticket"):
+        with pytest.raises(ValidationError, match="not a name"):
+            RedactionTrace(
+                policy_epoch="e1",
+                ent_hash="h1",
+                redactions=(
+                    Redaction(entity=wrong, record_id="t1", field="subject", reason="no grant"),
+                ),
+            )
+        with pytest.raises(ValidationError, match="not a name"):
+            RedactionTrace(
+                policy_epoch="e1",
+                ent_hash="h1",
+                redactions=(
+                    Redaction(entity="ticket", record_id="t1", field=wrong, reason="no grant"),
+                ),
+            )
+
+
+def test_a_redaction_carrying_something_that_is_not_a_record_id_cannot_enter_a_trace() -> None:
+    """The record id is the field most likely to be handed a value by accident, because a
+    connector that has no id often hands over the thing it identifies the record by, which is
+    a name, an address or a subject line.
+
+    Delete this and "which record" becomes "here is the record"."""
+    for wrong in ("SSL renewal for Acme", "", "id with spaces"):
+        with pytest.raises(ValidationError, match="not an identifier"):
+            RedactionTrace(
+                policy_epoch="e1",
+                ent_hash="h1",
+                redactions=(
+                    Redaction(entity="ticket", record_id=wrong, field="subject", reason="no grant"),
+                ),
+            )
+
+    assert RedactionTrace(
+        policy_epoch="e1",
+        ent_hash="h1",
+        redactions=(
+            Redaction(entity="ticket", record_id="t-1@src", field="subject", reason="no grant"),
+        ),
+    ).redactions
+
+
+def test_a_count_over_a_collection_the_walk_removed_entirely_is_withheld() -> None:
+    """The strongest version of the subtraction leak and the branch nothing reached:
+    `ticket_count: 40` beside no tickets at all says all forty were withheld.
+
+    The private function is addressed directly because the four cases are decided here and
+    the public path can only exercise the ones a mask happens to produce. The alternative is
+    a fixture whose mask drops a whole collection, which tests the mask.
+
+    All four cases together, so a version answering the same for every input fails: absent
+    from the record keeps the count, removed entirely withholds it, a non-sequence withholds
+    it, and a sequence that lost nothing keeps it.
+
+    Delete this and a collection the walker removed keeps its count, which is the one case
+    where the count is the whole of what was hidden."""
+    from brain.core.redaction import _Node
+
+    kept = _Node(value=[1, 2], kept=True, redactions=(), dropped=(), locked=(), filtered=False)
+    lost = _Node(value=[1], kept=True, redactions=(), dropped=(), locked=(), filtered=True)
+    scalar = _Node(value=7, kept=True, redactions=(), dropped=(), locked=(), filtered=False)
+
+    def asked(**kw: Any) -> bool:
+        return _count_would_be_subtractable("tickets", **kw)
+
+    assert not asked(present=frozenset(), out={}, children={})
+    # Walked, lost everything, and therefore absent from the output while still in `children`.
+    # Both of those together are what separates this branch from the `child is None` refusal
+    # below it: with `children` empty as well, breaking this one is invisible, which is how
+    # the first version of this test passed while asserting nothing about it.
+    assert asked(present=frozenset({"tickets"}), out={}, children={"tickets": kept})
+    assert asked(present=frozenset({"tickets"}), out={"tickets": 7}, children={"tickets": scalar})
+    assert asked(present=frozenset({"tickets"}), out={"tickets": [1]}, children={"tickets": lost})
+    assert not asked(
+        present=frozenset({"tickets"}), out={"tickets": [1, 2]}, children={"tickets": kept}
+    )
+
+
+def test_an_annotation_reads_the_same_whether_it_arrived_as_text_or_as_an_object() -> None:
+    """`assert_tool_returns_typed_result` runs against a tool whose module may not have
+    finished importing, so the return annotation arrives as a string under
+    `from __future__ import annotations` and as an object without it. Both spellings have to
+    render, and the two branches that make that true had never been reached separately.
+
+    A bare class is the third case and it is not the same as the second: `str(int)` is
+    `<class 'int'>`, which matches no pattern anybody would write.
+
+    Delete this and the check that a tool can be redacted starts depending on whether its
+    module happens to postpone annotations."""
+    assert _annotation_text("TypedResult[Ticket]") == "TypedResult[Ticket]"
+    assert _annotation_text(int) == "int"
+    assert _annotation_text(Ticket) == "Ticket"
+    assert "TypedResult" in _annotation_text(TypedResult[Ticket])
+
+    # The string case is handled by the fallthrough and not by a branch of its own. There was
+    # a branch, and a mutation showed it did nothing: `str(s)` is `s`, so removing it changed
+    # no answer for any input. It is gone, and this line is what says the behaviour survived
+    # the removal.
+    import inspect as _inspect
+
+    from brain.core import redaction as _redaction
+
+    assert "isinstance(annotation, str)" not in _inspect.getsource(_redaction._annotation_text)
