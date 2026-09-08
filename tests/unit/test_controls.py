@@ -16,6 +16,7 @@ import pytest
 
 from brain.ops.alerting import Severity
 from brain.ops.controls import (
+    _RUNBOOK_STEPS,
     CONTROLS,
     ESCALATE_AFTER_UNANSWERED,
     HANDOVER_RESIDUE,
@@ -43,7 +44,6 @@ from brain.ops.controls import (
     runbook_gaps,
 )
 
-REPO = Path(__file__).resolve().parents[2]
 NOW = datetime(2026, 9, 8, 12, 0, tzinfo=UTC)
 
 
@@ -388,6 +388,85 @@ def test_a_control_whose_only_caller_is_itself_uncalled_is_reported() -> None:
     findings = chains_worth_checking((inner_only,))
     assert any("as unreached as the control" in one for one in findings)
     assert chains_worth_checking((control("audit_anchor"),)) == ()
+
+
+def test_a_call_written_as_import_the_module_then_call_the_attribute_is_found(
+    tmp_path: Path,
+) -> None:
+    """Delete this and half of the caller scan can be removed with nothing failing.
+
+    `from x import f` then `f()` is how every call in this tree happens to be written today,
+    so the `import x` then `x.f()` branch is dead in the sense that nothing exercises it, and
+    a mutation proved both halves of it removable. It is not dead in the sense that matters:
+    the day somebody wires a control up with the other spelling, a scan that lost this branch
+    reports the control as an orphan and the registry disagrees with a tree that is correct.
+    A tree of its own, because the point is a spelling this repository does not currently use.
+    """
+    src = tmp_path / "brain"
+    (src / "ops").mkdir(parents=True)
+    (src / "ops" / "guarded.py").write_text("def sweep() -> None:\n    return None\n", "utf-8")
+    (src / "dotted.py").write_text(
+        "import brain.ops.guarded\n\n\ndef go() -> None:\n    brain.ops.guarded.sweep()\n",
+        "utf-8",
+    )
+    (src / "direct.py").write_text(
+        "from brain.ops.guarded import sweep\n\n\ndef go() -> None:\n    sweep()\n",
+        "utf-8",
+    )
+    assert call_sites("brain.ops.guarded:sweep", src) == ("brain.direct", "brain.dotted")
+
+
+def test_a_module_that_imports_itself_is_not_its_own_caller(tmp_path: Path) -> None:
+    """Delete this and a self-import makes an unreached chain look reached.
+
+    `chains_worth_checking` asks whether the module calling a control is itself imported by
+    anything. A module that names itself in an import, which happens under a type-checking
+    block or after a rename that half landed, would answer that question with itself and the
+    chain would read as connected while nothing outside it ever runs.
+    """
+    from brain.ops.controls import chains_worth_checking
+
+    src = tmp_path / "src" / "brain"
+    src.mkdir(parents=True)
+    (src / "thing.py").write_text("def guard() -> None:\n    return None\n", "utf-8")
+    (src / "runner.py").write_text(
+        "from brain.thing import guard\nfrom brain.runner import guard as again\n\n\n"
+        "def go() -> None:\n    guard()\n    again()\n",
+        "utf-8",
+    )
+    wired = _control(symbols=("brain.thing:guard",), invoked_by=Invocation.IN_PROCESS)
+    assert call_sites("brain.thing:guard", src) == ("brain.runner",)
+    findings = chains_worth_checking((wired,), tmp_path)
+    assert any("as unreached as the control" in one for one in findings)
+
+
+def test_a_row_naming_a_missing_symbol_is_reported_once_and_not_twice() -> None:
+    """Delete this and a typo produces a second finding that sends the reader elsewhere.
+
+    A symbol that does not exist has no callers either, so measuring its invocation reports
+    it as an orphan on top of reporting the typo. The second line is arithmetic about a
+    function that is not there, and it is the one a reader acts on first because it names a
+    state rather than a mistake.
+    """
+    broken = _control(symbols=("brain.ops.canaries:nope",), invoked_by=Invocation.IN_PROCESS)
+    about_it = [one for one in registry_gaps((broken,)) if one.startswith(broken.name)]
+    assert len(about_it) == 1, about_it
+    assert "brain.ops.canaries:nope" in about_it[0]
+
+
+def test_a_reason_with_no_runbook_behind_it_is_reported() -> None:
+    """Delete this and `runbook_gaps` cannot be shown to find anything.
+
+    `_RUNBOOK_STEPS` is exhaustive over `Missed`, so the branch that reports a reason with no
+    steps could never fire against the declared table and a mutation removed it with the
+    whole suite green. The table is a parameter now, for the reason every gap function in
+    this package takes its subject as one.
+    """
+    only_one = {Missed.BEHIND: _RUNBOOK_STEPS[Missed.BEHIND]}
+    findings = runbook_gaps((_control(),), only_one)
+    assert len(findings) == len(Missed) - 1
+    assert all("no next step" in one for one in findings)
+    assert runbook_gaps((_control(),), _RUNBOOK_STEPS) == ()
 
 
 def test_a_duplicate_control_name_is_reported() -> None:

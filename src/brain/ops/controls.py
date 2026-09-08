@@ -725,6 +725,24 @@ def _sources(src: Path | None = None) -> tuple[Path, ...]:
     )
 
 
+def _dotted_name(node: ast.expr) -> str:
+    """`a.b.c` as text, or empty for anything that is not a chain of plain names.
+
+    Empty rather than a partial answer for a subscript, a call or a literal in the middle of
+    the chain, because a partial name would be looked up in the import table and could match
+    something else entirely. Nothing resolves is the honest answer to `things[0].sweep()`.
+    """
+    parts: list[str] = []
+    current = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if not isinstance(current, ast.Name):
+        return ""
+    parts.append(current.id)
+    return ".".join(reversed(parts))
+
+
 @cache
 def _call_index(src: Path | None = None) -> Mapping[str, frozenset[str]]:
     """Every `module:function` called anywhere in the tree, against the modules calling it.
@@ -768,8 +786,14 @@ def _call_index(src: Path | None = None) -> Mapping[str, frozenset[str]]:
             symbol = ""
             if isinstance(called, ast.Name):
                 symbol = direct.get(called.id, "")
-            elif isinstance(called, ast.Attribute) and isinstance(called.value, ast.Name):
-                module = dotted.get(called.value.id, "")
+            elif isinstance(called, ast.Attribute):
+                # The whole chain rather than the immediate parent. `import brain.ops.x`
+                # binds `brain`, so the call reads `brain.ops.x.f()` and the attribute
+                # directly under `f` is `x` rather than anything the import table knows.
+                # Looking at that one name found nothing, which is why the first version of
+                # this branch could be deleted with the suite green.
+                left = _dotted_name(called.value)
+                module = dotted.get(left, "")
                 symbol = f"{module}:{called.attr}" if module else ""
             if symbol and not symbol.startswith(f"{here}:"):
                 index.setdefault(symbol, set()).add(here)
@@ -1165,6 +1189,14 @@ class Missed(enum.StrEnum):
     BEHIND = "behind"
 
 
+#: What to check first and what to do next, for one reason a control has not run.
+#:
+#: A name rather than the tuple written out at three signatures, because the pair is what
+#: `runbook_for` destructures and a reader meeting `tuple[tuple[str, ...], tuple[str, ...]]`
+#: has to count brackets to find out which half is which.
+RunbookSteps = tuple[tuple[str, ...], tuple[str, ...]]
+
+
 @dataclass(frozen=True)
 class Overdue:
     """One control that has not run, and everything needed to act on it.
@@ -1270,7 +1302,7 @@ def overdue(
 #: the drift is invisible because nobody reads twelve of them. What is genuinely specific to
 #: a control is its entry point, its cadence and what it guards, and every one of those is on
 #: the row already, so `runbook_for` puts them in.
-_RUNBOOK_STEPS: Final[Mapping[Missed, tuple[tuple[str, ...], tuple[str, ...]]]] = MappingProxyType(
+_RUNBOOK_STEPS: Final[Mapping[Missed, RunbookSteps]] = MappingProxyType(
     {
         Missed.UNREACHABLE: (
             (
@@ -1331,7 +1363,9 @@ _RUNBOOK_STEPS: Final[Mapping[Missed, tuple[tuple[str, ...], tuple[str, ...]]]] 
 )
 
 
-def runbook_for(one: Control, missed: Missed) -> Runbook:
+def runbook_for(
+    one: Control, missed: Missed, steps: Mapping[Missed, RunbookSteps] | None = None
+) -> Runbook:
     """What the person who received this alert does about it.
 
     Assembled from the reason's steps and the control's own facts rather than written out
@@ -1344,7 +1378,7 @@ def runbook_for(one: Control, missed: Missed) -> Runbook:
     the time they were given. `brain.ops.alerting.runbook_gaps` is the check that would catch
     it, and deriving it is what makes the check green by construction rather than by care.
     """
-    first, then = _RUNBOOK_STEPS[missed]
+    first, then = (_RUNBOOK_STEPS if steps is None else steps)[missed]
     route = route_for(one.severity)
     return Runbook(
         first_check=(
@@ -1357,25 +1391,33 @@ def runbook_for(one: Control, missed: Missed) -> Runbook:
     )
 
 
-def runbook_gaps(controls: Sequence[Control] | None = None) -> tuple[str, ...]:
+def runbook_gaps(
+    controls: Sequence[Control] | None = None, steps: Mapping[Missed, RunbookSteps] | None = None
+) -> tuple[str, ...]:
     """Every alert this registry can raise that has no runbook behind it.
 
     Asked over the product of the controls and the reasons rather than over the reasons
     alone, because that product is the set of alerts a person can actually receive, and a
     reason covered for twelve controls and not the thirteenth is a gap that only appears
     during the incident on the thirteenth.
+
+    The steps table is a parameter defaulting to the declared one, for the reason
+    `brain.ops.queue.concurrency_gaps` takes its allocation: `_RUNBOOK_STEPS` is exhaustive
+    over `Missed` today, so a check that could only be run against it would report no gap
+    whatever it did, and a mutation proved exactly that.
     """
     rows = CONTROLS if controls is None else tuple(controls)
+    table = _RUNBOOK_STEPS if steps is None else steps
     findings: list[str] = []
     for row in rows:
         for missed in Missed:
-            if missed not in _RUNBOOK_STEPS:
+            if missed not in table:
                 findings.append(
                     f"{row.name} can be reported as {missed.value} and nothing says what to "
                     "do about it, so the alert arrives with no next step"
                 )
                 continue
-            book = runbook_for(row, missed)
+            book = runbook_for(row, missed, table)
             findings.extend(
                 f"{row.name}/{missed.value}: {problem}"
                 for problem in _alerting_runbook_gaps(book, row.severity)

@@ -27,7 +27,6 @@ Task ids: M37.5.1.2, M37.5.1.4
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
@@ -47,8 +46,6 @@ from brain.ops.controls import (
     registry_gaps,
     runbook_for,
 )
-
-REPO = Path(__file__).resolve().parents[2]
 
 #: The controls nothing calls today, named rather than counted.
 #:
