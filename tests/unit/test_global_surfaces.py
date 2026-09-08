@@ -896,31 +896,38 @@ def test_a_nomination_refuses_every_shape_of_missing_that_it_names() -> None:
         a_nomination(at=datetime(2027, 3, 9, 9, 0))
 
 
-def test_a_reader_holding_the_capability_nowhere_at_all_sees_no_row() -> None:
-    """The other guard the mutation found: `scope_for` returning `None`, which is a reader who
-    does not hold the capability at all, as opposed to holding it somewhere that does not admit
-    this row. Every test in this file gave its reader the capability in some scope, so the
-    branch separating "holds it nowhere" from "holds it elsewhere" was never taken.
+def test_holding_the_governance_control_nowhere_refuses_like_holding_it_elsewhere() -> None:
+    """The fourth guard the mutation found: `scope_for` returning `None`, which is a reader who
+    does not hold the capability at all, as opposed to one who holds it somewhere that does not
+    admit the row. Both refuse, which is why nothing noticed; they are two answers to the
+    helper and one answer to the reader, and that is why it is an early return rather than a
+    `matches` on a scope that might be `None`.
 
-    The two must stay one answer to the reader and are two answers to this function, which is
-    why it is written as an early return rather than as a `matches` on a scope that might be
-    `None`. Today both refuse; the day `Scope` gains a permissive default, only the early
-    return still refuses.
+    **Reached through `may_confirm` and not through the estate.** Two earlier attempts at this
+    could not fire the branch: `visible_estate` asks `permitted` first, so a reader who does
+    not hold the capability is refused before the scope is looked up, and an empty entitlement
+    set fails the console-plane check even earlier. `may_confirm` and
+    `may_approve_publication` are the two callers that ask nothing before it except a
+    self-exclusion, so they are the only doors to it.
 
-    Three readers rather than two, because a guard tested only by the absent case is satisfied
-    by a function that refuses everybody.
+    Three readers, because a guard tested only by the absent case is satisfied by a function
+    that refuses everybody.
 
     Delete this and `scope_for` can stop being asked, and a reader holding nothing is decided
     by whatever a `None` scope happens to do."""
-    rows = [a_row(EstateKind.AGENT, "a_maintenance")]
+    nomination = Nomination(
+        principal_id="u_1",
+        role=Role.SUPER_ADMIN,
+        nominated_by="u_2",
+        reason="they run the department and have done for two years",
+        at=NOW,
+    )
+    where = {"department": MAINTENANCE}
 
-    # The plane grant and no estate capability at all. A reader holding literally nothing
-    # fails the console-plane check first and never reaches the scope question, which is why
-    # the mutation survived a version of this test that used an empty entitlement set.
-    holds_nothing = holding(department=MAINTENANCE)
-    holds_elsewhere = holding(*ESTATE_CAPABILITIES, department=FINANCE)
-    holds_here = holding(*ESTATE_CAPABILITIES, department=MAINTENANCE)
+    holds_nothing = EntitlementSet(principal_id="u_admin", grants=())
+    holds_elsewhere = holding(GOVERNANCE_CONTROL.value, department=FINANCE)
+    holds_here = holding(GOVERNANCE_CONTROL.value, department=MAINTENANCE)
 
-    assert visible_estate(rows, holds_nothing, NOW) == ()
-    assert visible_estate(rows, holds_elsewhere, NOW) == ()
-    assert [one.item_id for one in visible_estate(rows, holds_here, NOW)] == ["a_maintenance"]
+    assert not may_confirm(nomination, holds_nothing, where, NOW)
+    assert not may_confirm(nomination, holds_elsewhere, where, NOW)
+    assert may_confirm(nomination, holds_here, where, NOW)
