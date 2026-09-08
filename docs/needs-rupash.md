@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**12 items are open, and they are not equally urgent.** They had accumulated into one
+**13 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -35,6 +35,13 @@ their names.
 decides who can see what, they already disagree, and nothing uses the second one. Delete it or
 keep it, one sentence.
 
+**And one is new, and it is the only thing on this page about losing something.** Item 44:
+nothing takes a backup of your database. The bucket for one exists, it has a retention policy
+and a written reason, and nothing writes to it. It is planned work, in wave 5, and what is in
+that database today is demonstration data rather than your records. I would still rather you
+knew tonight. Three options in the item, and my recommendation costs about fifteen minutes and
+one command pasted into the server.
+
 **Two are effectively finished and are kept here so the reasoning is not lost.** Item 32 is
 done apart from two housekeeping steps of yours, listed in it. Item 35 is fixed, with one
 small naming decision left. Item 37 needed nothing from you at all: you asked why Keycloak is
@@ -47,6 +54,55 @@ happened in.
 ---
 
 # Open
+
+## 44. Nothing takes a backup of your database, and the shelf for one is already built
+
+Everything around a backup exists. There is a `backups` bucket on the file store, it is set to
+keep things for 35 days, it is set to keep old versions, and the reason for the 35 days is
+written down: one full monthly cycle plus a few days, so a fault noticed at month end can still
+be restored from before it started. The erasure certificates even do arithmetic on that number
+so they can tell somebody which of their data a deletion has not reached yet.
+
+**Nothing writes to it.** I checked the whole repository for anything that takes a database
+dump or restores one, and the only place `pg_restore` appears is in a guard whose job is to
+refuse an installation step that tries to load somebody else's data. So the shelf is there, it
+is labelled, and it is empty.
+
+This is planned work: it is module M30, "Hosting, delivery and recovery", which sits in wave 5
+and has none of its 37 tasks done. So nothing has gone wrong. But the plan puts it a long way
+out, and in the meantime the answer to "what happens if the database is lost" is "everything is
+lost", and I would rather you knew that tonight than in wave 5.
+
+**How bad is it right now.** Not very, and I want to be accurate rather than alarming. What is
+in that database today is seeded demonstration data, the build tracker, and configuration. It
+is not yet your company's records. The day that changes is the day this becomes urgent, and
+that day is a decision you make rather than one that arrives by surprise.
+
+**What I would need from you, and the options.**
+
+- **Option A, recommended: I write the nightly dump now and you run one command.** A dump on a
+  timer on the server, written to the bucket that is already waiting for it, roughly fifteen
+  minutes of work. It needs one thing from you because it touches the live server rather than
+  this repository: I would give you a single command to paste into the VPS, and you would paste
+  it. I have not done it unasked because a change to what runs on your production host at three
+  in the morning is not mine to make while you are asleep.
+- **Option B: wait for wave 5 and do it properly.** M30 covers backup, restore, a verified
+  restore drill and a recovery runbook, which is the whole thing rather than half of it. This
+  is the right answer if real data does not land in that database before wave 5.
+- **Option C: do A now and B later.** The nightly dump is not wasted work when M30 arrives; it
+  becomes the thing M30's restore drill restores from.
+
+I recommend C. The dump is cheap, it stops the worst outcome, and it does not duplicate
+anything wave 5 will build.
+
+**One thing worth saying plainly.** A backup nobody has restored is not a backup, it is a file.
+The console screen for "last verified restore" is deliberately not built, because a screen
+showing a backup timestamp under that heading would be the field somebody checks before
+deciding not to worry. There is a test in the repository that walks every module and asserts
+nothing is named for restoring anything; it passes today, and it is written so that it fails on
+the day somebody adds a restore, which is the day that screen should be written.
+
+---
 
 ## 43. Three things in the deployment files that break a fresh install
 
