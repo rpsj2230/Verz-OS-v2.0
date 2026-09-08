@@ -37,6 +37,7 @@ from brain.agents.template import (
     MANIFEST_PATHS,
     SEALED_PATHS,
     SETTABLE_PATHS,
+    SYSTEM_PUBLISHER,
     EffectiveAgent,
     FieldSource,
     GoldenCase,
@@ -808,3 +809,35 @@ def test_a_template_carries_no_audience_anywhere() -> None:
     wide = materialise(signed, instance, audience=company)
     assert tool_ceiling(narrow.record) == tool_ceiling(wide.record)
     assert entitlement_ceiling(narrow.record) == entitlement_ceiling(wide.record)
+
+
+# ------------------------------------- the one place a built-in publisher is now spelled
+def test_the_system_publisher_is_the_word_system_and_not_a_company() -> None:
+    """**A mutation setting this constant to a company name survived twenty nine test files
+    on 2026-09-08, and this test is what was missing.**
+
+    `catalogue.PUBLISHER` read a company name until that morning, twenty two times. Pointing
+    it here was the right fix: it took the name out of every built-in manifest and left one
+    spelling of the publisher. It also made this line the only place the value is written,
+    and `test_no_built_in_template_is_published_by_a_company` compares the catalogue against
+    `SYSTEM_PUBLISHER` imported from the module under test. Both sides move together, so that
+    test is green for every value this constant could hold, a company name included. That is
+    the trap CLAUDE.md names under "mutate the constants too", and the fix reduced the
+    exposure from twenty two lines to one rather than closing it.
+
+    So the word is written out here, in a file the constant cannot reach. **It is a pin and
+    not a property, and it is a pin because no property is available**: nothing can tell a
+    company's name from a product's word by looking at it, which is the wall
+    `brain.ops.independence` documents and the reason `client_independence` could not have
+    caught the original defect either. What a pin buys is that the value cannot change
+    quietly. A rename has to come here and edit the sentence saying why it is what it is.
+
+    Both uses are asserted, because the constant reaches a manifest and a signature by
+    different routes: `BLANK_MANIFEST` carries it as `published_by`, and `blank_template`
+    takes it as a default argument. A change to either alone would leave the other correct.
+
+    Delete this and the publisher of all twenty three built-in manifests is unguarded again,
+    one line further down than it was before."""
+    assert SYSTEM_PUBLISHER == "system"
+    assert BLANK_MANIFEST.identity.published_by == SYSTEM_PUBLISHER
+    assert blank_template(key=KEY, at=NOW).signed_by == SYSTEM_PUBLISHER

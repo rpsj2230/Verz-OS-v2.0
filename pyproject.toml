@@ -1,7 +1,7 @@
 [project]
 name = "verz-brain"
 version = "0.1.0"
-description = "Company Brain — a permission-aware AI platform over a company's own business data"
+description = "Company Brain: a permission-aware AI platform over a company's own business data"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "pydantic>=2.9",

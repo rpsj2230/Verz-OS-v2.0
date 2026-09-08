@@ -4,8 +4,8 @@
 FROM python:3.13-slim-bookworm AS builder
 
 # uv is copied in as a pinned binary rather than taken from a combined base image.
-# The `<uv-version>-python<x.y>-<distro>` tags are not published for every uv release —
-# 0.12.9 has none — so depending on one is a build that breaks on an upstream tagging
+# The `<uv-version>-python<x.y>-<distro>` tags are not published for every uv release
+# (0.12.9 has none), so depending on one is a build that breaks on an upstream tagging
 # decision. This pins both uv and Python exactly and depends on neither.
 COPY --from=ghcr.io/astral-sh/uv:0.12.9 /uv /uvx /bin/
 
@@ -36,7 +36,7 @@ RUN groupadd --system --gid 1001 brain \
 
 # The image carries its own identity rather than being told at runtime. Coolify resolves
 # ${VAR:-default} at save time and bakes the literal into its stored compose, so a runtime
-# variable could not be overridden by the deploy at all — /health/ready reported "unknown"
+# variable could not be overridden by the deploy at all: /health/ready reported "unknown"
 # while the status page reported the truth. An image knowing what it is is also simply
 # more correct: the answer cannot depend on how it was started.
 ARG COMMIT_SHA=unknown
@@ -82,7 +82,7 @@ USER brain
 EXPOSE 8000
 
 # Readiness, not liveness. Coolify must not route traffic to a container that is up but
-# cannot reach the database, the cache or the secret store — a half-connected instance
+# cannot reach the database, the cache or the secret store: a half-connected instance
 # answers questions wrongly rather than not at all.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=4).status==200 else 1)"

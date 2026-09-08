@@ -830,7 +830,14 @@ def sweep_house_style() -> None:
 
     The repository root is the one exclusion, for a duller reason than the others: sweeping it
     means sweeping `.venv` and `node_modules`, and an area entry of `.` is not worth what
-    filtering it would cost. The four files there that carried one were done by hand.
+    filtering it would cost.
+
+    **This paragraph said the files there had been done by hand, and they had not been.** Six
+    em dashes were still sitting in `pyproject.toml`, `Dockerfile` and `alembic.ini` when
+    somebody next read the root with a script, on 2026-09-08. They are gone now, by hand
+    again, and the sentence is worth keeping as it is rather than as a claim: an area kept by
+    hand goes wrong quietly and reports nothing, and the record of it having gone wrong once
+    is the argument for paying the filtering cost rather than for trusting the next reader.
 
     The character rather than a pattern, because there is nothing to interpret: an em dash is
     an em dash, and the fix is the punctuation the sentence actually wanted.
