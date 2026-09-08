@@ -79,10 +79,15 @@ happened in.
 **The finding.** An audit entry records four things a permission can be written against: what
 happened, what kind of thing it happened to, which thing, and who did it. It does not record a
 department. A department head's permissions are written against their department, so their
-audit permission matches no entry at all, and their activity page is empty. Not filtered:
+audit permissions match no entry at all, and their activity page is empty. Not filtered:
 empty. I found this while building that page, and the page would have been empty for every
 reader it exists for while passing every test, because a test fixture uses a company-wide
 permission and never notices.
+
+I ran both halves rather than reasoning about them. A reader whose audit permission is scoped
+to a department sees nought rows. The same reader with the same permission scoped to a named
+person sees that person's rows and nobody else's. So the recommendation below is not a theory
+about what the permission model could do; it is what it does today.
 
 Two tasks on the plan are blocked by it: all-activity with department filters, and the
 department head's own activity view. A third, usage and tokens by department, is blocked by
@@ -96,14 +101,20 @@ different thing to hold about a person, and it is not mine to decide at two in t
 
 **Options.**
 
-- **Option A, recommended: write a department head's audit permission against the people
+- **Option A, recommended: write a department head's audit permissions against the people
   rather than against the department.** Permissions can already name a set of people, and the
   staff directory already knows who is in a department, so the grant becomes "may read the
   audit trail for these fifteen people" and is rewritten by the directory sync when somebody
   joins or leaves. Nothing new is retained, no column is added, and the permission says
-  exactly whose activity that head may read, which is a thing you can review on a screen. The
-  cost is that it goes briefly stale between a transfer and the next sync, and that the grant
-  is longer to look at.
+  exactly whose activity that head may read, which is a thing you can review on a screen.
+
+  Two costs, and the second is the one I would want you to hear. It goes briefly stale between
+  a transfer and the next sync. And audit permissions are per kind of thing rather than one
+  permission: there is one for entries about people, one for entries about grants, one for
+  agents, connectors, sessions and so on, eight in all. So a department head is eight grants
+  rather than one, and whoever writes them has to decide which of the eight a head should
+  have. That is a real question and it is a better one than the one this item is about,
+  because the answer is a list you can read.
 - **Option B: record the department on every audit entry.** Every department view then works
   directly and simply, including the two blocked tasks. The cost is the one above: the audit
   trail becomes a record of where each person worked over time. There is a second, quieter

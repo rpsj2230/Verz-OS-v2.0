@@ -758,9 +758,11 @@ def department_coverage(
 #: trying to build the department version, is that **a department-scoped audit grant matches
 #: no audit entry at all**: `brain.audit.view._scope_row` offers `action`, `actor_id`,
 #: `subject` and `subject_kind`, and `brain.core.scope.Clause.matches` refuses a row that does
-#: not carry the field, which is the correct fail-closed reading. So a department admin
-#: holding `read:audit` over their own department reads an empty ledger, and would do so
-#: whatever this module did with the filter.
+#: not carry the field, which is the correct fail-closed reading. So a department admin whose
+#: audit grants are scoped to their own department reads an empty ledger, and would do so
+#: whatever this module did with the filter. Run rather than reasoned about: the same reader
+#: with the same capability scoped to a named person sees that person's entries, which is
+#: both the confirmation and the shape of the fix.
 #:
 #: A wrapper that narrowed by member ids would therefore have been a surface that is always
 #: empty for exactly the readers it is for, and its tests would have passed: every fixture
@@ -770,10 +772,11 @@ def department_coverage(
 A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING: Final = (
     "An audit entry carries an action, a subject kind, a subject and an actor, and no "
     "department. A scope written against a department therefore matches no entry, because a "
-    "missing field must never satisfy a predicate. A department admin holding read:audit over "
-    "their own department reads an empty ledger, and a department activity screen built on "
-    "that would be empty for every reader it exists for while passing every test written with "
-    "a company-wide fixture."
+    "missing field must never satisfy a predicate. brain.audit.view.CAPABILITY_BY_KIND gives "
+    "one capability per subject kind and every one of them is matched against that same row, "
+    "so a department admin whose audit grants are scoped to their department reads an empty "
+    "ledger, and a department activity screen built on that would be empty for every reader "
+    "it exists for while passing every test written with a company-wide fixture."
 )
 
 #: The capability a department budget view is read behind: the budget screen's own.
