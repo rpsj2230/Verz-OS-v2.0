@@ -370,6 +370,9 @@ to be right: each of those has exactly one test file, so there was nothing else 
 | `src/brain/tools/` | The tool registry, skills, archive extraction, importing from elsewhere. |
 | `src/brain/channels/` | Channel adapters and the room floor. |
 | `src/brain/tables/` | SQLAlchemy models. Ten schemas; see `brain.db.SCHEMAS`. |
+| `src/brain/console/` | Every administrative surface. Each one decides what a reader may see and writes nothing. |
+| `src/brain/orchestration/` | Multi-agent runs: the fold that narrows a reach at every hop, and the fan-out budget. |
+| `src/brain/browsing/` | An agent with hands. Four refusals: the planner cannot read the page, the policy cannot change mid-run, the credential never reaches the model, the rubric predates the run. |
 | `migrations/versions/` | Alembic. Every new table enables row-level security. |
 | `docs/wbs/*.js` | The work breakdown. `docs/wbs.json` is compiled from it. |
 | `docs/needs-rupash.md` | Decisions only the owner can make. Served at `/build/needs-rupash`. |
