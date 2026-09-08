@@ -140,6 +140,17 @@ HTTP_TOO_MANY_REQUESTS: Final = 429
 HTTP_CLIENT_ERROR: Final = 400
 HTTP_SERVER_ERROR: Final = 500
 
+#: The smallest status a source can actually return. Anything below it did not come from a
+#: source at all: `0` and `-1` are what an HTTP client reports when the connection failed, the
+#: request timed out or the response never parsed, and several of them do it instead of
+#: raising. Without this, `classify(status=0)` was a success, and a success on a
+#: side-effecting call is recorded by `brain.ops.idempotency.state_after_call` as
+#: `SUCCEEDED`: the system would have believed a filing happened because the connection to
+#: the source failed. That is the worst direction an error in this module can take, and it is
+#: the direction a fall-through takes by default, because every real failure status is a
+#: number and zero is smaller than four hundred.
+HTTP_SMALLEST_STATUS: Final = 100
+
 
 def classify(
     *,
@@ -153,7 +164,12 @@ def classify(
 
     Timeouts and connection failures are checked first, because a source that never answered
     has no status to classify and a caller with a stale status variable would otherwise have
-    it read. Then 429, before the generic client-error branch, because 429 is a 4xx and
+    it read. **A status below the smallest real one is the same event arriving as a number**,
+    and it is checked immediately after: a client that reports `0` rather than raising was
+    reporting exactly what `connection_failed` means, and a fall-through would have made it a
+    success. See `HTTP_SMALLEST_STATUS`.
+
+    Then 429, before the generic client-error branch, because 429 is a 4xx and
     lumping it in with the rest is exactly the mistake `A_QUOTA_REFUSAL_IS_NOT_ILL_HEALTH`
     describes, in the opposite direction: it would make a quota refusal permanent instead of
     retryable.
@@ -163,6 +179,8 @@ def classify(
     this cannot come to a different conclusion from the module the ceiling is recorded in.
     """
     if timed_out or connection_failed:
+        return CallOutcome.UNAVAILABLE
+    if status is not None and status < HTTP_SMALLEST_STATUS:
         return CallOutcome.UNAVAILABLE
     if status == HTTP_TOO_MANY_REQUESTS:
         return CallOutcome.QUOTA
