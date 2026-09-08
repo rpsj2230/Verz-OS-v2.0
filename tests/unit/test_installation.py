@@ -13,10 +13,15 @@ grant, because a rate limit's subject is often a person (M27.6.3). Capacity carr
 declared figure and the deployed one as two numbers and never derives one from the other
 (M27.6.4).
 
-The backup and recovery screen is not built and the last two tests are why: nothing in this
-repository defines a function or a class for restoring anything, so a panel headed "last
-verified restore" would be a reassurance nobody measured. Those tests fail on the day a
-restore verifier lands, which is the day the screen should be written.
+The backup and recovery screen is not built and the last two tests are why. The first of
+them used to assert that nothing in this repository defines a function or a class for
+restoring anything, and it fired on 2026-09-08 when `brain.ops.recovery` landed, which is
+what it was written to do. What it asserts now is narrower and is the reason M27.6.2 is
+still not claimed: the restore vocabulary exists in exactly one module, that module cannot
+perform a restore, and **nothing anywhere calls the function that turns a drill into a
+verified one**. So there is a definition of a verified restore and no producer of one, and a
+panel would still be showing a heading with nothing under it. It fails again on the day a
+runner lands, which is the day the screen should be written.
 
 Task ids: M27.6.1, M27.6.3, M27.6.4
 """
@@ -519,26 +524,77 @@ def test_a_throttle_row_carries_no_count_of_refused_requests():
 
 
 # ------------------------------------------ the screen that is not built (the finding)
-def test_nothing_in_this_repository_restores_anything():
-    """**This test is the finding.** The backup and recovery screen asks for the last
-    verified restore, and no function or class in `src/brain` restores anything: there is a
-    bucket declaration, a lifecycle rule, a retention number derived from it and a guard that
-    refuses an install step naming somebody else's dump. A panel built on those would show a
-    reassurance nobody measured, to the one reader who acts on it.
+def test_nothing_in_this_repository_performs_a_restore():
+    """**This test is the finding, and it has already fired once.**
 
-    Deleting this loses the record that the leaf was examined rather than missed. It fails on
-    the day a restore verifier lands, which is the day the screen should be written."""
-    found: list[str] = []
+    Until 2026-09-08 it asserted that no function or class in `src/brain` was named for
+    restoring anything, and it passed: there was a bucket declaration, a lifecycle rule, a
+    retention number derived from it, and a guard refusing an install step that named
+    somebody else's dump. `brain.ops.recovery` then landed and it failed, which is exactly
+    what it was written to do.
+
+    What it asserts now is the narrower thing that is still true and is why M27.6.2 remains
+    unclaimed. Three parts, and the third is the load-bearing one.
+
+    The restore vocabulary lives in one module, pinned by name rather than by count, for the
+    reason `tests/invariants/test_single_implementation.py` pins its call sites exactly: a
+    second module naming something for restoring is a second place the rule about what
+    counts as recovered would be applied, and whether that is right is a question for a
+    person rather than a comparison to loosen.
+
+    That module cannot perform one. It imports nothing that opens a process, a socket, a
+    connection or a file, so it is a declaration in the sense
+    `brain.ops.recovery`'s own docstring claims, and the claim is checked rather than
+    trusted.
+
+    And **nothing calls `verification_of`**, which is the only function that turns an
+    attempted restore into a verified one. A definition with no producer is a heading with
+    nothing under it, so the screen would still be showing a field nobody has filled. This
+    is what fails on the day a runner arrives, and that is the day the panel gets built.
+
+    Deleting this loses the record that the leaf was examined rather than missed, and loses
+    the distinction the whole of M30.3 rests on: that a backup nobody has restored is a
+    file."""
+    restorers: dict[str, list[str]] = {}
+    callers: list[str] = []
+    acts: list[str] = []
+    #: Modules whose presence would mean this is a runner rather than a declaration.
+    performing = {
+        "subprocess",
+        "socket",
+        "shutil",
+        "psycopg",
+        "sqlalchemy",
+        "httpx",
+        "os",
+        "pathlib",
+    }
+
     for path in sorted(Path("src/brain").rglob("*.py")):
+        where = path.as_posix()
         tree = ast.parse(path.read_text(encoding="utf-8"))
-        found.extend(
-            f"{path.as_posix()}::{node.name}"
-            for node in ast.walk(tree)
-            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
-            and "restore" in node.name.lower()
-        )
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+                and "restore" in node.name.lower()
+            ):
+                restorers.setdefault(where, []).append(node.name)
+            called = node.func if isinstance(node, ast.Call) else None
+            if isinstance(called, ast.Name) and called.id == "verification_of":
+                callers.append(where)
+            if where.endswith("ops/recovery.py") and isinstance(node, ast.Import | ast.ImportFrom):
+                named = (
+                    [node.module or ""]
+                    if isinstance(node, ast.ImportFrom)
+                    else [one.name for one in node.names]
+                )
+                acts.extend(one for one in named if one.split(".")[0] in performing)
 
-    assert found == []
+    assert restorers == {"src/brain/ops/recovery.py": ["last_verified_restore"]}
+    assert acts == [], f"brain.ops.recovery imports {acts}, so it is a runner rather than a shelf"
+    assert callers == [], (
+        f"{callers} produce a verified restore, so the recovery panel can now be built"
+    )
 
 
 def test_the_recovery_screen_says_what_would_have_to_exist_before_it_is_built():
