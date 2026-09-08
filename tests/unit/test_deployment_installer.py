@@ -13,8 +13,10 @@ Task ids: M42.1.3, M42.3.1, M42.3.4, M42.5.15
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +24,7 @@ import pytest
 import yaml
 
 from brain.deployment.installer import (
+    INSTALL_ENV_FILE,
     INSTALL_HOME,
     PLAN,
     InstallerError,
@@ -38,6 +41,7 @@ from brain.deployment.installer import (
     value_leaks_in,
 )
 from brain.deployment.requirements import files_for
+from brain.ops.leases import SealedSecret
 from brain.ops.wiring import PROFILES, WiringError, components_for
 
 REPO = Path(__file__).resolve().parents[2]
@@ -550,3 +554,113 @@ def test_the_rendered_script_prints_exactly_one_value_and_it_is_the_setup_code()
     leaks = value_leaks_in(script)
     assert len(leaks) == 1
     assert "BRAIN_SETUP_SECRET" in leaks[0]
+
+
+# --- the setup pair --------------------------------------------------------------------------
+
+
+def test_the_setup_code_and_the_instant_it_was_minted_are_written_by_one_guarded_step() -> None:
+    """The two halves of one value. `brain.firstrun.derived_enrolment` reads both and refuses a
+    file carrying one of them, which is only a safe rule if this repository cannot produce that
+    file: written in two steps, a run that died between them would leave a secret with no
+    instant and an install nobody can claim, reachable without anybody hand-editing anything.
+
+    One group, one redirect and one `already_done` therefore, and the guard is the same one
+    that keeps a second run from re-minting the database password. That is what makes a restart
+    unable to move the window: neither line is ever written twice.
+
+    Delete this and the instant can drift into a step of its own, where a second run of the
+    installer would write a new one beside the old secret and reopen the hour."""
+    step = step_named("mint this installation's secrets")
+    lines = step.run.splitlines()
+
+    opened = [i for i, line in enumerate(lines) if line.strip() == "{"]
+    closed = [i for i, line in enumerate(lines) if line.strip().startswith("}")]
+    assert len(opened) == 1 and len(closed) == 1, "the mint step is no longer one written group"
+
+    written = {
+        line.split('"')[1].split("=")[0] for line in lines[opened[0] + 1 : closed[0]] if '"' in line
+    }
+    assert {"BRAIN_SETUP_SECRET", "BRAIN_SETUP_ISSUED_AT"} <= written, (
+        f"the setup pair is not written together; this group writes {sorted(written)}"
+    )
+    assert value_leaks_in(step.run) == ()
+    assert step.changes and "POSTGRES_PASSWORD" in step.already_done
+
+
+def test_the_instant_the_installer_writes_is_one_python_reads_back_as_an_aware_time() -> None:
+    """The join crosses a language boundary, and this is the only test on either side of it.
+    `date` writes the instant into the environment file and `brain.app.Settings` parses it back
+    into a `datetime` that `brain.firstrun.Enrolment` refuses unless it carries a zone, so a
+    format without the `Z`, or with a space instead of the `T`, produces an install whose
+    wizard raises on every screen rather than one that refuses politely.
+
+    The format is read out of the step rather than restated, so this tests what the installer
+    will actually run. `strftime` and `date` share these codes, which is what makes the
+    round trip meaningful rather than a test of Python against itself.
+
+    Delete this and the two ends can disagree about a date format, with the failure appearing
+    on a client's server on install day."""
+    minting = step_named("mint this installation's secrets").run
+    found = re.search(r"date -u \+(\S+?)\)", minting)
+    assert found, f"the mint step no longer writes an instant with date: {minting}"
+
+    written = datetime(2026, 1, 6, 9, 0, tzinfo=UTC).strftime(found.group(1))
+    read_back = datetime.fromisoformat(written)
+
+    assert read_back == datetime(2026, 1, 6, 9, 0, tzinfo=UTC)
+    assert read_back.tzinfo is not None, "a naive instant is one Enrolment refuses"
+
+
+def test_running_the_template_and_mint_steps_produces_an_enrolment(tmp_path: Path) -> None:
+    """**The only test anywhere that runs a step of this plan rather than reading it.** Every
+    other test here asserts about the text; this one copies the template, mints into the copy
+    with a real shell, and takes the result through the settings object to the enrolment the
+    wizard is handed. Two steps of twelve, and it is the two that decide whether an install can
+    be claimed at all.
+
+    It also settles the one thing the template change made ambiguous. `.env.example` carries
+    `BRAIN_SETUP_SECRET=` blank, because M31.3.1.2 says every setting the application reads is
+    documented there, and the mint step appends the real value to a copy of that file. So the
+    install's environment file holds the name twice, and this asserts that what a reader gets
+    is the minted one rather than the blank. That was already true of `APP_ROLE_PASSWORD` and
+    nothing had ever checked it.
+
+    Delete this and the plan goes back to being prose that is only ever read."""
+    shell = shutil.which("sh")
+    if shell is None or shutil.which("openssl") is None:  # pragma: no cover - CI has both
+        pytest.skip("no POSIX shell with openssl on this machine to run a step of the plan")
+
+    from brain.app import Settings
+    from brain.deployment.variables import parse_env
+    from brain.firstrun import claim
+
+    home = tmp_path / "install"
+    home.mkdir()
+    shutil.copyfile(REPO / ".env.example", home / ".env.example")
+    for name in (
+        "write the environment file from the template",
+        "mint this installation's secrets",
+    ):
+        script = step_named(name).run.replace(INSTALL_HOME, home.as_posix())
+        ran = subprocess.run(
+            [shell, "-eu", "-c", script], capture_output=True, text=True, check=False, timeout=60
+        )
+        assert ran.returncode == 0, f"{name}: {ran.stderr}"
+
+    values = parse_env((home / INSTALL_ENV_FILE).read_text(encoding="utf-8"))
+    secret, minted = values["BRAIN_SETUP_SECRET"], values["BRAIN_SETUP_ISSUED_AT"]
+    assert len(secret) == 64, "the blank from the template won over the minted value"
+
+    settings = Settings(
+        env="development",
+        setup_secret=SealedSecret(secret),
+        # Parsed here rather than passed as text, because `Settings` declares a `datetime` and
+        # a keyword argument is checked against the declaration: what proves the string the
+        # shell wrote is readable is that this parse succeeds on it.
+        setup_issued_at=datetime.fromisoformat(minted),
+    )
+    enrolment = settings.setup_enrolment()
+
+    assert enrolment is not None
+    assert claim(enrolment, presented=secret, now=enrolment.issued_at).accepted

@@ -40,6 +40,16 @@ nobody can become the first administrator. `brain.firstrun` already argues that 
 exception is a declared flag on one step rather than a value that slipped through because its
 name happened not to match.
 
+**The mint step writes when it minted the setup code as well as the code**, and that second
+line is what makes the code a window rather than a password with no end. Nothing in this
+repository read `BRAIN_SETUP_SECRET` until 2026-09-09, so the question of when the window
+opened had never been answered anywhere; `brain.firstrun.derived_enrolment` now answers it
+from these two values, which means the window belongs to the file this step writes and to
+nothing else. A restart cannot move it because neither line is written twice: the guard on
+this step is keyed on a credential, so a second run of the installer mints nothing at all.
+How long the window is stays `brain.firstrun.DEFAULT_WINDOW`'s to say and is deliberately not
+repeated here, because the number written in prose is the one that stops being true.
+
 Rejected: making the installer a Python entry point rather than a rendered shell script. It is
 the more testable shape and it cannot work: the machine has no Python at the moment the first
 command runs, and an installer whose first act is to install its own runtime has moved the
@@ -51,7 +61,7 @@ Rejected: `git clone` for the release. It is one line shorter and it is the shap
 `brain.ops.independence.duplication_gaps` refuses in a build input, for the reason that ends
 with a client running a copy nobody fixed. The installer fetches one archive of one tag.
 
-Task ids: M42.1.3, M42.3.1, M42.3.4, M42.5.15
+Task ids: M42.1.3, M42.3.1, M42.3.4, M42.5.3, M42.5.15
 """
 
 from __future__ import annotations
@@ -382,16 +392,26 @@ PLAN: Final[tuple[Step, ...]] = (
     ),
     Step(
         name="mint this installation's secrets",
+        # The setup code and the instant it was minted are one value in two lines, and they
+        # are in this group rather than in a step of their own so that one guard and one
+        # redirect cover both. `brain.firstrun.derived_enrolment` reads the pair and produces
+        # the window the wizard is judged against, so a file carrying one of them is a file
+        # the wizard refuses: writing them apart would make that state reachable by a run that
+        # died between two steps rather than only by a hand edit. Written together, they also
+        # cannot be re-minted, which is what makes a restart unable to move the window.
         run=(
             f'umask 077\n{{\n  printf "POSTGRES_PASSWORD=%s\\n" "$(openssl rand -hex 32)"\n'
             '  printf "APP_ROLE_PASSWORD=%s\\n" "$(openssl rand -hex 32)"\n'
             '  printf "BRAIN_SETUP_SECRET=%s\\n" "$(openssl rand -hex 32)"\n'
+            '  printf "BRAIN_SETUP_ISSUED_AT=%s\\n" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"\n'
             f'}} >> "{INSTALL_HOME}/{INSTALL_ENV_FILE}"'
         ),
         why=(
             "every credential is generated here, on this server, so no two installs share "
             "one and none of them ships in the template. See M42.5.2 and "
             "brain.deployment.variables.A_VALUE_THAT_ARRIVED_WITH_THE_TEMPLATE_WAS_NEVER_MINTED"
+            ". The instant beside the setup code is what closes the window a stranger could "
+            "claim this system in: it is written once, so a restart cannot reopen it"
         ),
         on_failure=(
             "install openssl and run this again. The environment file is written in one go, "

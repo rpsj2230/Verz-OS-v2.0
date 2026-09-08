@@ -8,10 +8,13 @@ widest account in the system is reachable by anyone who can find the address. M4
 "no default password anywhere", and this module is what that sentence costs.
 
 **A one-time enrolment, not a credential.** The installer mints one secret, hands it to the
-person who is going to become the administrator, and this module keeps only its digest. The
-secret is presented once. It is then spent, and there is no state it can return to in which
-it works again. That is the whole difference from a password: a password is a value that
-keeps working, and a value that keeps working is a value somebody keeps. See
+person who is going to become the administrator, and this module keeps only its digest. What
+makes it one-time is what presenting it does: it appoints the administrator whose existence
+closes first run permanently, and it stops working when its window closes whether anybody
+presented it or not. That is the whole difference from a password: a password is a value that
+keeps working, and a value that keeps working is a value somebody keeps. `claim` marks the
+enrolment spent for a caller holding one, and the paragraph on derivation below says why
+nothing stores that mark and why it costs nothing. See
 `A_VALUE_THAT_GOES_ON_WORKING_IS_A_CREDENTIAL`.
 
 **Nothing here mints anything, and that is deliberate rather than incomplete.** There is no
@@ -35,6 +38,34 @@ administrator existing, and `is_open` takes the count rather than a boolean some
 set. A second administrator is appointed by the first, through `brain.identity.roles`, which
 is where appointments are reviewed. See `THE_FIRST_ADMINISTRATOR_CLOSES_THE_DOOR`.
 
+**The enrolment is derived from this install's own environment file rather than stored.**
+Until 2026-09-09 `open_enrolment` had no caller anywhere: the installer minted
+`BRAIN_SETUP_SECRET` and printed it, `brain.setup_wizard` required it on every screen, and
+nothing turned the one into the other, so the install path did not join up. The shortest join
+is to construct an enrolment when the process starts, and it is the wrong one, because a
+restart would then reopen the window and a window a restart reopens is not a window at all.
+So the installer writes the instant it minted the secret beside the secret, both inputs live
+in the one file it already owns, and `derived_enrolment` produces the same enrolment with the
+same expiry in every process that reads them. See
+`THE_WINDOW_IS_DERIVED_SO_A_RESTART_CANNOT_MOVE_IT`.
+
+**A derived enrolment is never spent, and that costs an attacker nothing.** `claim` hands the
+spend back on its result for a caller to store and nothing stores it, so every derivation is
+unspent. What actually closes the door across a restart is not spentness: it is `is_open`,
+which every wizard entry point asks before it compares anything and which takes the number of
+administrators rather than a flag, and `setup_wizard.apply_install` creates that administrator
+in the same act that spends the enrolment. A replay therefore needs an install that has no
+administrator, which means the appointment never landed, and there the replay is the client
+finishing their own install. See
+`SPENTNESS_WOULD_ONLY_BIND_AN_INSTALL_THAT_APPOINTED_NOBODY`.
+
+Rejected: a row or a file recording that the enrolment was opened. It is the shape a reader
+reaches for and it holds the same expiry this derives, so it buys nothing this does not have,
+and it needs a first write on a server whose database may still be migrating. That is not a
+remote case: `brain.setup_wizard` is reachable while the first migration runs and keeps its
+draft in a file for exactly that reason, so the write that establishes the window would be
+attempted at the one moment the window matters and cannot be relied on.
+
 **What is checked statically, and what is not.** `credential_default_gaps` reads the
 deployment configuration for a credential that carries a value, which is the shape a default
 password has in this repository: `docker-compose.keycloak.yml` already refuses one with `:?`
@@ -42,7 +73,7 @@ rather than `:-`, and its comment argues for a page. What that sweep does not re
 because ruff's `S105` and `S106` already refuse a hardcoded password in Python and a second
 reader of the same rule is a second place for it to disagree.
 
-Task ids: M41.2.4
+Task ids: M41.2.4, M42.5.3
 """
 
 from __future__ import annotations
@@ -57,6 +88,7 @@ from pathlib import Path
 from typing import Final
 
 from brain.identity.roles import Role, RoleGrant
+from brain.ops.leases import SealedSecret
 
 REPO: Final = Path(__file__).resolve().parents[2]
 
@@ -103,6 +135,32 @@ A_PATH_TO_A_CREDENTIAL_IS_NOT_ONE: Final = (
     "entire point of keeping one in a file rather than in a variable. A sweep reporting it "
     "would be a sweep reporting the correct pattern, and the first thing anybody does with a "
     "check that fires on the right answer is switch it off."
+)
+
+#: Why the window comes out of two values in the environment file rather than out of a store.
+THE_WINDOW_IS_DERIVED_SO_A_RESTART_CANNOT_MOVE_IT: Final = (
+    "An enrolment constructed when the process starts takes a fresh expiry on every restart, "
+    "which makes the window a formality: what it exists to close is the period during which "
+    "a stranger could claim the system, and a period that reopens on a crash never closes. "
+    "Deriving it from the secret and from the instant the installer minted that secret gives "
+    "every process one window, because neither input can move without somebody editing the "
+    "file the secret is already in. A stored row would carry the same expiry and would need a "
+    "first write on a server whose database may still be migrating, which is when the wizard "
+    "is reachable and when that write is least able to be relied on."
+)
+
+#: Why a derived enrolment being permanently unspent is not a replay worth having.
+SPENTNESS_WOULD_ONLY_BIND_AN_INSTALL_THAT_APPOINTED_NOBODY: Final = (
+    "Nothing stores the spent enrolment `claim` returns, so a derived one is always unspent, "
+    "and that gives an attacker nothing. Presenting it needs the secret, and somebody holding "
+    "the secret while the install has no administrator can claim the system on their first "
+    "attempt whether or not a second is possible. Every wizard entry point asks `is_open` "
+    "before it compares anything, and the appointment that closes it is the same act that "
+    "spends the enrolment, so the only interval where a stored spend would differ is between "
+    "a spend and an appointment that never landed. Refusing there would leave an install with "
+    "no administrator and no way to appoint one, which is worse than the replay it prevents. "
+    "The copy in a terminal history is still worth nothing once the window has passed, which "
+    "is what `A_VALUE_THAT_GOES_ON_WORKING_IS_A_CREDENTIAL` is really about."
 )
 
 # ------------------------------------------------------------------ the enrolment
@@ -220,6 +278,74 @@ def open_enrolment(
         msg = "an enrolment window has to be positive; this one closes before it opens"
         raise FirstRunError(msg)
     return Enrolment(digest=digest, issued_at=issued_at, expires_at=issued_at + window)
+
+
+def sealed_setup_secret(value: object) -> SealedSecret | None:
+    """The setup code as a value with no rendering, from whatever configuration hands over.
+
+    The seal is `brain.ops.leases.SealedSecret`, which this repository already owns and which
+    argues its own case: an overridden repr on a container is defeated by `asdict`, by an
+    f-string interpolating the field, and by an exception constructed with it, so the
+    guarantee has to sit on the value. A second sealed type here would be a second answer to
+    one question, and the wrong copy is the one that renders.
+
+    `credential_field_gaps` refuses a field on `Enrolment` or `Claim` that could hold the
+    secret, and this deliberately holds one: configuration is read in one place, so the value
+    has to live on the settings object a logger renders whole, and the seal is the difference.
+
+    Empty is nothing rather than a sealed blank, and whitespace is empty. An install past
+    first run, and a developer's machine that never ran the installer, both have no setup code
+    at all; `SealedSecret` refuses an empty value outright, so the alternative to answering
+    None here is a settings object that cannot be constructed on either.
+    """
+    if isinstance(value, SealedSecret):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return SealedSecret(value)
+
+
+def derived_enrolment(
+    secret: SealedSecret | None,
+    *,
+    issued_at: datetime | None,
+    window: timedelta = DEFAULT_WINDOW,
+) -> Enrolment | None:
+    """The one enrolment this installation's own environment file describes, or none (M42.5.3).
+
+    This is the join between `brain.deployment.installer`'s mint step and
+    `brain.setup_wizard`, and until it existed there was none: the installer wrote the secret
+    and the wizard compared a digest, with nothing in this repository between them. Both
+    inputs come from the file the installer wrote, so every process derives one window and a
+    restart cannot move it. See `THE_WINDOW_IS_DERIVED_SO_A_RESTART_CANNOT_MOVE_IT`.
+
+    **The window runs from the mint and not from the first visit**, which is the property the
+    whole design is for and is also its one cost: the installer pulls images, starts a
+    database and waits for readiness after it mints, and that time comes out of the window. A
+    test compares `DEFAULT_WINDOW` against the installer's own readiness budget so the two
+    cannot drift into a code that expires before the console can be opened.
+
+    Takes the sealed secret rather than the characters, so no caller holds a value that
+    renders itself and `reveal` is written down once, here, beside the digest it becomes.
+
+    None when neither half was minted, which is a development machine or an install from
+    before the installer wrote the instant: there is then no code to accept and nobody can
+    claim the system through the wizard, which is the safe direction to fail in. Half a pair
+    refuses instead, because one step writes both into one file, so a file carrying one of
+    them was edited by hand and supplying the other from a clock here would be exactly the
+    reopening this refuses.
+    """
+    if secret is None and issued_at is None:
+        return None
+    if secret is None or issued_at is None:
+        msg = (
+            "this installation has one half of its setup pair and not the other. Both are "
+            "written by the installer's mint step, in one redirected group under one guard, "
+            "so a file carrying one of them was edited by hand. "
+            f"{THE_WINDOW_IS_DERIVED_SO_A_RESTART_CANNOT_MOVE_IT}"
+        )
+        raise FirstRunError(msg)
+    return open_enrolment(digest=digest_of(secret.reveal()), issued_at=issued_at, window=window)
 
 
 @dataclass(frozen=True)

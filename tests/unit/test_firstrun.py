@@ -10,6 +10,7 @@ Task ids: M41.2.4
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -28,13 +29,16 @@ from brain.firstrun import (
     claim,
     credential_default_gaps,
     credential_field_gaps,
+    derived_enrolment,
     digest_of,
     first_administrator,
     first_run_gaps,
     is_open,
     open_enrolment,
+    sealed_setup_secret,
 )
 from brain.identity.roles import Role, standing_super_admins
+from brain.ops.leases import SEALED_RENDERING, SealedSecret
 
 NOW = datetime(2026, 1, 6, 9, 0, tzinfo=UTC)
 NL = "\n"
@@ -451,3 +455,260 @@ def test_a_claim_is_accepted_with_no_reason_or_refused_with_one_and_never_both()
 
     assert Claim(accepted=True, enrolment=enrolment).reason is None
     assert Claim(accepted=False, enrolment=enrolment, reason=Refusal.SPENT).reason is Refusal.SPENT
+
+
+# --- the join with the installer ---------------------------------------------------------------
+#
+# `open_enrolment` had no caller in `src` until 2026-09-09. The installer wrote
+# BRAIN_SETUP_SECRET and the wizard required it, and nothing turned the one into the other, so
+# every test above proved a rule that no install could reach.
+
+
+def test_two_processes_reading_one_environment_file_derive_one_window() -> None:
+    """The property the whole design rests on, and the reason the enrolment is derived rather
+    than constructed at startup. A fresh enrolment per process is a window that reopens on
+    every restart, which makes it a formality: the period it closes is the one in which a
+    stranger could claim the system, and a period that reopens never closes.
+
+    Two derivations from the same two values, asserted equal as whole objects rather than by
+    their expiries, because a restart that moved the digest or the issue instant would be the
+    same defect wearing different clothes.
+
+    Delete this and the expiry becomes whatever the last process to start decided."""
+    first = derived_enrolment(SealedSecret(INERT), issued_at=NOW)
+    second = derived_enrolment(SealedSecret(INERT), issued_at=NOW)
+
+    assert first == second
+    assert first == open_enrolment(digest=digest_of(INERT), issued_at=NOW)
+    assert first is not None
+    assert first.expires_at == NOW + DEFAULT_WINDOW
+
+
+def test_a_derived_enrolment_is_the_one_the_installers_own_secret_opens() -> None:
+    """The positive half of the join, without which every test here is satisfied by a
+    derivation that produces an enrolment nothing can ever present a secret to.
+
+    The wrong secret is the sibling: a derivation that ignored what it was handed and hashed
+    something constant would accept everybody, and the equality above would still hold.
+
+    Delete this and the digest can be derived from something other than the installer's
+    value with the whole file green."""
+    enrolment = derived_enrolment(SealedSecret(INERT), issued_at=NOW)
+    assert enrolment is not None
+
+    accepted = claim(enrolment, presented=INERT, now=NOW + timedelta(minutes=5))
+    assert accepted.accepted
+    assert accepted.enrolment.spent
+
+    refused = claim(enrolment, presented=OTHER, now=NOW + timedelta(minutes=5))
+    assert not refused.accepted
+    assert refused.reason is Refusal.WRONG
+
+
+def test_a_derived_enrolment_expires_from_the_mint_and_not_from_the_visit() -> None:
+    """What a restart cannot do, observed through `claim` rather than through a field. The
+    installer writes the instant it minted the code, so the window has already been running
+    while the images pulled and the database came up; a process that started an hour later
+    derives an enrolment that is already expired rather than a fresh one.
+
+    Delete this and a derivation could quietly take its issue instant from the clock, which
+    would pass the equality test above inside any single process.
+
+    Deliberately not spent. A derived enrolment never is, because nothing stores the spend
+    `claim` returns, and the expiry is what closes the window instead. See
+    `SPENTNESS_WOULD_ONLY_BIND_AN_INSTALL_THAT_APPOINTED_NOBODY`."""
+    enrolment = derived_enrolment(SealedSecret(INERT), issued_at=NOW)
+    assert enrolment is not None
+    assert not enrolment.spent
+
+    late = claim(enrolment, presented=INERT, now=NOW + DEFAULT_WINDOW)
+    assert not late.accepted
+    assert late.reason is Refusal.EXPIRED
+
+
+def test_an_install_that_minted_neither_half_has_no_enrolment_rather_than_an_open_one() -> None:
+    """A development machine, and an install from before the installer wrote the instant, have
+    no setup code at all. The answer is None, which a route has to read as "there is no wizard
+    here", and the alternative shapes are both worse: an exception makes an ordinary
+    configuration a crash, and an enrolment built from nothing is a window nobody minted.
+
+    Delete this and the empty case can start raising, which would take the whole application
+    down on every machine that never ran the installer."""
+    assert derived_enrolment(None, issued_at=None) is None
+
+
+def test_half_a_setup_pair_refuses_rather_than_deriving_the_missing_half_from_a_clock() -> None:
+    """One step of the installer writes both values, into one file, in one redirected group
+    under one guard, so a file carrying one of them was edited by hand. Supplying the other
+    from the current time would be exactly the restart this design refuses: an hour that
+    nobody minted, opened by whoever edited the file.
+
+    Both directions, because a check written for the missing instant leaves the missing secret
+    reaching `open_enrolment` with nothing to hash.
+
+    Delete this and an install with a hand-edited environment file gets a fresh window."""
+    with pytest.raises(FirstRunError, match="one half of its setup pair"):
+        derived_enrolment(SealedSecret(INERT), issued_at=None)
+
+    with pytest.raises(FirstRunError, match="one half of its setup pair"):
+        derived_enrolment(None, issued_at=NOW)
+
+
+def test_a_setup_code_shorter_than_the_installers_is_refused_at_the_derivation() -> None:
+    """The length floor reaches the configured value as well as the presented one. A file
+    hand-edited to a four-character code would otherwise produce a perfectly valid enrolment
+    whose secret can be guessed inside its own window, and nothing would say so.
+
+    Delete this and the floor applies only to what a visitor types."""
+    with pytest.raises(FirstRunError, match="can be guessed inside its own window"):
+        derived_enrolment(SealedSecret("a" * 31), issued_at=NOW)
+
+    assert derived_enrolment(SealedSecret("a" * 32), issued_at=NOW) is not None
+
+
+def test_the_setup_code_is_sealed_before_anything_can_render_it() -> None:
+    """The code arrives on a settings object that is rendered whole into the startup log line
+    and into any traceback that carries it, so the value has to be one with no rendering
+    before it is stored anywhere. `brain.ops.leases.SealedSecret` is that value and is reused
+    rather than reimplemented; a second sealed type would be a second answer to one question.
+
+    Four cases, and the last two are the ones that decide whether a settings object can be
+    constructed at all: `SealedSecret` refuses an empty value, so unset has to become None
+    here rather than a sealed blank, and whitespace is unset.
+
+    Delete this and an install with no setup code cannot start, or one with a setup code
+    prints it."""
+    sealed = sealed_setup_secret(INERT)
+    assert sealed is not None
+    assert sealed.reveal() == INERT
+    assert INERT not in f"{sealed!r} {sealed} {sealed:>40}"
+    assert repr(sealed) == SEALED_RENDERING
+
+    already = SealedSecret(INERT)
+    assert sealed_setup_secret(already) is already
+
+    assert sealed_setup_secret(None) is None
+    assert sealed_setup_secret("") is None
+    assert sealed_setup_secret("   ") is None
+
+
+def test_the_enrolment_window_outlasts_the_installers_own_wait_for_readiness() -> None:
+    """**`DEFAULT_WINDOW` had nothing outside itself to compare against.** Every test in this
+    file derives its dates from the constant, so an hour could become a minute, or a week,
+    with the whole file green. That mattered less while nothing read the value; it matters now
+    that the window runs from the mint, because the installer keeps working afterwards.
+
+    The floor is the installer's own readiness loop, read out of its shell rather than
+    restated here: a window shorter than the time the install spends waiting for the
+    application to answer would expire before the console could be opened, on a code the
+    installer had already printed. The ceiling is a literal, because the argument for it is
+    that somebody is still standing there, and two hours is generous for that.
+
+    Delete this and the one number in this module that decides how long a stranger has is a
+    number nothing has an opinion about."""
+    from brain.deployment.installer import step_named
+
+    waiting = step_named("wait for the application to report ready").run
+    attempts = re.search(r"seq 1 (\d+)", waiting)
+    pause = re.search(r"sleep (\d+)", waiting)
+    assert attempts and pause, f"the readiness step no longer waits in a loop: {waiting}"
+
+    budget = timedelta(seconds=int(attempts.group(1)) * int(pause.group(1)))
+    assert budget < DEFAULT_WINDOW, (
+        "the setup code can expire while the installer is still waiting for the application "
+        "to report ready, on a value it has already printed"
+    )
+    assert timedelta(hours=2) >= DEFAULT_WINDOW
+
+
+# --- the five guards a mutation audit found nothing watching ------------------------------------
+#
+# `.scratch/guard_audit.py` mutates every `if` in this module. Five of them could be deleted with
+# the file green, and all five are about a time that is not what it claims to be. They are worth
+# more now than they were: `Settings.setup_issued_at` is parsed out of an environment file, so a
+# naive or backwards instant is a thing an install can actually have rather than a thing a caller
+# could write.
+
+
+def test_a_naive_now_is_refused_rather_than_compared_against_an_aware_expiry() -> None:
+    """`claim` takes the instant from its caller, and a caller reading a clock without a zone
+    is the ordinary mistake. Comparing naive against aware raises a `TypeError` from deep
+    inside a comparison, which reaches a browser as a failure with no explanation on the one
+    screen that has no other way in.
+
+    Delete this and the refusal can be removed with nothing failing, because every other test
+    in this file passes an aware instant.
+
+    The positive sibling is every accepted claim above."""
+    with pytest.raises(FirstRunError, match="naive now"):
+        claim(_enrolment(), presented=INERT, now=datetime(2026, 1, 6, 9, 0))
+
+
+def test_an_enrolment_that_expires_before_it_was_issued_cannot_be_constructed() -> None:
+    """`test_an_enrolment_that_closes_before_it_opens_cannot_be_created` proves `open_enrolment`
+    refuses a window of zero, and it never reaches this guard: the window check answers first.
+    So the same rule stated on the model itself had nothing watching it, and `Enrolment` is a
+    public type that `brain.setup_wizard` imports and a caller can build.
+
+    Both shapes, because equal and backwards are different values and a test for one leaves
+    the other reachable.
+
+    Delete this and an enrolment can exist that is expired at the instant it is issued, which
+    refuses every correct code with `EXPIRED` and says nothing about the window."""
+    for expires in (NOW, NOW - timedelta(seconds=1)):
+        with pytest.raises(FirstRunError, match="can never be presented"):
+            Enrolment(digest=digest_of(INERT), issued_at=NOW, expires_at=expires)
+
+    assert Enrolment(digest=digest_of(INERT), issued_at=NOW, expires_at=NOW + timedelta(seconds=1))
+
+
+def test_an_enrolment_carrying_a_time_with_no_zone_is_refused_at_construction() -> None:
+    """All three times on the model, and this is the guard the environment file walks into.
+    `BRAIN_SETUP_ISSUED_AT=2026-01-06T09:00:00` without the `Z` parses to a naive datetime, so
+    an install whose instant was typed by hand rather than written by `date -u` reaches here.
+    Refusing is right: a naive instant is judged in whatever zone the comparison happens to
+    pick, and the window it describes is then hours wide or hours gone.
+
+    `claimed_at` is the third because it is the one a future caller sets, and a spend recorded
+    without a zone is a spend that compares wrongly against the next expiry.
+
+    Delete this and a hand-edited instant produces a window judged in the wrong zone, silently
+    and only on installs whose server is not in UTC."""
+    naive = datetime(2026, 1, 6, 9, 0)
+
+    with pytest.raises(FirstRunError, match="issued_at is naive"):
+        open_enrolment(digest=digest_of(INERT), issued_at=naive)
+
+    with pytest.raises(FirstRunError, match="expires_at is naive"):
+        Enrolment(digest=digest_of(INERT), issued_at=NOW, expires_at=naive)
+
+    with pytest.raises(FirstRunError, match="claimed_at is naive"):
+        Enrolment(
+            digest=digest_of(INERT),
+            issued_at=NOW,
+            expires_at=NOW + DEFAULT_WINDOW,
+            claimed_at=naive,
+        )
+
+    with pytest.raises(FirstRunError, match="issued_at is naive"):
+        derived_enrolment(SealedSecret(INERT), issued_at=naive)
+
+
+def test_a_directory_matching_a_configuration_pattern_is_not_read_as_a_file(
+    tmp_path: Path,
+) -> None:
+    """`CONFIGURATION` globs `ops/deploy/*` and `ops/vps/*`, and a glob matches directories.
+    Reading one raises an operating-system error rather than reporting a finding, which turns
+    the sweep that proves this repository ships no default credential into a sweep that
+    crashes, and a crashed sweep is read as an infrastructure problem rather than as a result.
+
+    The file beside it is the positive half: skipping directories must not become skipping
+    everything, which is the mutation that would otherwise pass this test on its own.
+
+    Delete this and the next directory added under `ops/deploy` stops the credential sweep."""
+    repo = _config(tmp_path, "ops/deploy/deploy.sh", "ADMIN_PASSWORD=letmein" + NL)
+    (repo / "ops" / "deploy" / "keys").mkdir()
+
+    findings = credential_default_gaps(repo)
+    assert len(findings) == 1
+    assert "ADMIN_PASSWORD" in findings[0]

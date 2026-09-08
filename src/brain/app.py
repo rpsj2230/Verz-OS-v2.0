@@ -19,13 +19,14 @@ import time
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Literal
+from datetime import datetime
+from typing import Annotated, Literal
 
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from brain.api import ErrorBody, TimeoutMiddleware
@@ -34,12 +35,14 @@ from brain.audit.ledger import TRACE_ID
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
+from brain.firstrun import Enrolment, derived_enrolment, sealed_setup_secret
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.identity.bearer import log_refusal, refusal_headers
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
 from brain.install import installed_name
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
+from brain.ops.leases import SealedSecret
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.wiring import DEFAULT_PROFILE
 from brain.routing_routes import router as routing_router
@@ -63,7 +66,13 @@ TRACE_ID_RE = re.compile(TRACE_ID)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="BRAIN_", extra="ignore")
+    # `arbitrary_types_allowed` is for one field and buys nothing anywhere else: every other
+    # type here is one pydantic already knows, so the loosening applies to `SealedSecret`
+    # alone. The alternative was a second sealed-string type, which is the thing this
+    # repository refuses everywhere: two answers to one question, and the wrong copy renders.
+    model_config = SettingsConfigDict(
+        env_prefix="BRAIN_", extra="ignore", arbitrary_types_allowed=True
+    )
 
     env: Literal["development", "staging", "production"] = "development"
     #: Read from the environment, and corrected from the image's own manifest when the
@@ -113,6 +122,41 @@ class Settings(BaseSettings):
     #: by hand sets this false and runs `alembic upgrade head` itself.
     run_migrations: bool = True
     request_timeout_seconds: float = 30.0
+    #: The setup code the installer minted for this install, and the instant it minted it.
+    #: One place reads configuration, so this is where the pair arrives, and it is sealed on
+    #: the way in because this object is rendered whole into a log line at startup and into
+    #: any traceback that carries it. See `brain.firstrun.sealed_setup_secret`.
+    #:
+    #: Both default to None and both are blank in `.env.example`, which is deliberate on both
+    #: counts. M31.3.1.2 says every setting the application reads is documented in that file,
+    #: so the names are there; the values are not, because a setup code shipped with a value
+    #: is the same code on every install that copied the template and an instant shipped with
+    #: one would date the window to whenever the release was cut. The installer appends the
+    #: real pair to its own copy of that file, on the client's server, in one guarded step,
+    #: and the appended line is the one a reader of the finished file gets.
+    setup_secret: Annotated[SealedSecret | None, BeforeValidator(sealed_setup_secret)] = None
+    setup_issued_at: datetime | None = None
+
+    def setup_enrolment(self) -> Enrolment | None:
+        """The one enrolment this installation's environment file describes, or none.
+
+        The join, from this end. `brain.setup_wizard` is handed an `Enrolment` on every screen
+        and `brain.deployment.installer` writes a secret and an instant; this is the only
+        thing that turns the second into the first, and until it existed the install path did
+        not connect at all.
+
+        A method rather than a field, because a field would be computed once when the settings
+        object is built and would then be a value that could be constructed with any expiry
+        somebody passed. Derived on each read, from two values that cannot change while the
+        process runs, it is the same enrolment every time and is nobody's to set. See
+        `brain.firstrun.THE_WINDOW_IS_DERIVED_SO_A_RESTART_CANNOT_MOVE_IT`.
+
+        None means this install has no setup code, which is a development machine or an
+        install whose first administrator was appointed long ago. A route reading None has to
+        refuse the wizard rather than open it: there is no code to present, so there is
+        nothing for a stranger to guess and nothing for the client to type either.
+        """
+        return derived_enrolment(self.setup_secret, issued_at=self.setup_issued_at)
 
     def resolved_commit(self) -> str:
         """Which commit this process is running, believing the image over the environment.

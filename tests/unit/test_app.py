@@ -12,6 +12,7 @@ that makes a half-connected instance answer from whatever it can still reach.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, MutableMapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -586,3 +587,94 @@ def test_the_handler_returns_the_shape_the_schema_documents() -> None:
     assert body.keys() == set(ErrorBody.model_fields)
     assert body["trace_id"], "the body carries no trace id, so nobody can quote one"
     assert header_id, "the middleware stopped setting the header the body copies"
+
+
+# --- the setup pair the installer writes -------------------------------------------------------
+#
+# Not a credential. A visibly inert run of zeroes, long enough to pass the length floor and
+# useless anywhere, for the reason `tests/unit/test_firstrun.py` states at the top of itself.
+INERT_CODE = "not-a-secret-" + "0" * 64
+MINTED_AT = "2026-01-06T09:00:00Z"
+
+
+def test_the_setup_code_never_renders_itself_out_of_the_settings_object(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """This object is written into the startup log line whole, and into any traceback that
+    carries it. A plain string here would put the one value that stands between a fresh server
+    and whoever finds its address into whatever ships the logs.
+
+    Every rendering path, because an overridden repr on the container is defeated by each of
+    the others in turn: the object, the field, an f-string with a width on it.
+
+    Read from the environment rather than passed in, so the value goes through the same
+    validator a real install does: sealing that only happened for a caller who passed a
+    `SealedSecret` would seal nothing on a server.
+
+    Delete this and the setup code becomes a string again the first time somebody finds
+    `<sealed>` inconvenient while debugging an install."""
+    monkeypatch.setenv("BRAIN_SETUP_SECRET", INERT_CODE)
+    monkeypatch.setenv("BRAIN_SETUP_ISSUED_AT", MINTED_AT)
+    settings = Settings(env="development")
+
+    assert INERT_CODE not in repr(settings)
+    assert INERT_CODE not in str(settings)
+    assert settings.setup_secret is not None
+    assert INERT_CODE not in f"{settings.setup_secret!r} {settings.setup_secret:>80}"
+    assert settings.setup_secret.reveal() == INERT_CODE
+
+
+def test_the_environment_file_the_installer_writes_produces_the_wizards_enrolment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The join, end to end and under the names that actually travel between the two halves.
+    The installer writes two lines into this install's environment file and the wizard is
+    handed an `Enrolment`; nothing connected them until 2026-09-09, so both halves were
+    correct and the install path did not work.
+
+    The names are read out of the installer's own mint step rather than written here, which is
+    the half that would otherwise rot silently: renaming the field on this object, or the
+    variable in that step, leaves both modules passing their own tests and the value read by
+    nobody. The prefix is the settings object's own, so this also pins that the two agree
+    about it.
+
+    Set in the process environment rather than passed as arguments, because the prefix is the
+    thing being tested and a keyword argument goes round it. `monkeypatch` puts them back,
+    which matters more than usual here: a test that left `BRAIN_SETUP_SECRET` set would hand a
+    setup code to every `Settings()` built after it.
+
+    Delete this and the two ends can be renamed apart with every other test green."""
+    from brain.deployment.installer import step_named
+    from brain.firstrun import claim, digest_of
+
+    minting = step_named("mint this installation's secrets").run
+    written = set(re.findall(r'printf "([A-Z][A-Z0-9_]*)=%s', minting))
+    assert {"BRAIN_SETUP_SECRET", "BRAIN_SETUP_ISSUED_AT"} <= written, (
+        f"the mint step no longer writes the setup pair; it writes {sorted(written)}"
+    )
+
+    monkeypatch.setenv("BRAIN_SETUP_SECRET", INERT_CODE)
+    monkeypatch.setenv("BRAIN_SETUP_ISSUED_AT", MINTED_AT)
+    enrolment = Settings(env="development").setup_enrolment()
+
+    assert enrolment is not None
+    assert enrolment.digest == digest_of(INERT_CODE)
+    assert enrolment.issued_at == datetime(2026, 1, 6, 9, 0, tzinfo=UTC)
+    assert claim(enrolment, presented=INERT_CODE, now=enrolment.issued_at).accepted
+
+
+def test_a_machine_that_never_ran_the_installer_has_no_enrolment_and_still_starts() -> None:
+    """The ordinary case for a developer, and the permanent case for an install whose first
+    administrator was appointed months ago. None is the answer a route reads as "there is no
+    wizard here"; raising instead would take the application down on every machine that has
+    never had a setup code, which is most of them.
+
+    Both halves are passed explicitly rather than left to the environment, so the test says
+    what it means on a machine that happens to have one of them set.
+
+    Delete this and the unset case can start raising, inside the settings constructor that
+    every process builds before it binds a port."""
+    settings = Settings(env="development", setup_secret=None, setup_issued_at=None)
+
+    assert settings.setup_enrolment() is None
+    assert create_app(settings).state.settings.setup_enrolment() is None
