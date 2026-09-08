@@ -265,6 +265,14 @@ skips the habit of formatting, and the pre-push hook catches it after the commit
 **Python writes CRLF.** `Path.write_text` without `newline="\n"` inserts CRLF on this machine,
 which dirties a clean tree and has broken a shell script on the server.
 
+**And a green test run is not evidence about what you staged.** On 2026-09-08 an agent's
+module and its test file passed together at 21:08, were staged at 21:10, and the commit was
+red: between the two the agent had renamed a constant in the test and had not yet renamed it
+in the module. `git add` takes the working tree at the moment it runs, which is a different
+moment from the one the tests were run in, and two minutes was enough. The clean-worktree
+check caught it, the commit was unpushed and the repair was an amend. Waiting for the agent's
+completion notification is the cheap version of this.
+
 **Never stage a file another agent is editing.** `git add` takes the working tree, not your
 edits, so staging a shared file commits whatever anybody else has written into it. This has
 now happened once with `src/brain/tables/__init__.py` and `tests/unit/test_tables.py`: a
