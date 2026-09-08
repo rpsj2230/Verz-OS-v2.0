@@ -245,3 +245,70 @@ def test_the_screen_count_is_carried_somewhere_a_test_can_read() -> None:
     html = ARCHITECTURE.read_text(encoding="utf-8")
 
     assert 'data-screen-count=""' in html
+
+
+def _stated_part_count() -> str:
+    """The word inside the marked span, or a failure naming what is missing."""
+    html = ARCHITECTURE.read_text(encoding="utf-8")
+    found = re.search(r'<span data-part-count="[^"]*">([^<]+)</span>', html)
+    if found is None:
+        pytest.fail(
+            "the architecture no longer marks how many things an agent composes, so nothing "
+            "can check it against the enum that lists them"
+        )
+    return found.group(1).strip().lower()
+
+
+def test_the_architecture_agrees_with_the_workspace_about_what_an_agent_is_made_of() -> None:
+    """**The document said eleven and listed a different eleven from the ten the plan names.**
+    It dropped availability, and added the ceiling and artifacts, which are administered per
+    agent and are not parts: a ceiling is the right-hand side of the intersection and confers
+    nothing on its own, and an artifact is what an agent produced rather than what it is made
+    of. Listing the ceiling beside the persona invites exactly the merge the paragraph under
+    the table exists to forbid.
+
+    M39.1.1.1 names the ten and `brain.console.workspace.Part` is that list, so the document
+    was the only one of the three that disagreed.
+
+    Compared against the enum rather than a number here, so an eleventh part fails this rather
+    than being invisible.
+
+    Delete this and the document goes back to describing an agent that is not the one this
+    system builds."""
+    from brain.console.workspace import Part
+
+    assert _stated_part_count() == WORDS_LARGE[len(Part)], (
+        f"the architecture says an agent composes {_stated_part_count()!r} things and "
+        f"`Part` names {len(Part)}"
+    )
+
+
+def test_the_part_count_is_carried_somewhere_a_test_can_read() -> None:
+    """The guard on the guard, in the same shape as the two beside it."""
+    html = ARCHITECTURE.read_text(encoding="utf-8")
+
+    assert 'data-part-count=""' in html
+
+
+def test_the_composition_table_names_availability_and_not_the_ceiling() -> None:
+    """The count alone would pass on a table that still listed the ceiling and dropped
+    something else, because eleven minus one is ten. What went wrong was the membership, so
+    the membership is what is asserted.
+
+    Read off the composition table only, found by its own column heading. The ceiling and the
+    artifacts are still in the document, in a second table that says they are not parts, and a
+    search over the whole file would find them there and pass whatever the first table said.
+
+    Found by the heading rather than by position, because "the first table" moves the moment
+    anybody adds one above it and the test would then be reading something else and passing.
+
+    Delete this and the table can drift back one row at a time while the number stays
+    right."""
+    html = ARCHITECTURE.read_text(encoding="utf-8")
+    after_heading = html.split("<th>Attached</th>", 1)
+    assert len(after_heading) == 2, "the composition table no longer has its own heading"
+    first_table = after_heading[1].split("</table>", 1)[0]
+
+    assert "<td>Availability</td>" in first_table
+    assert "<td>Ceiling</td>" not in first_table
+    assert "<td>Artifacts</td>" not in first_table

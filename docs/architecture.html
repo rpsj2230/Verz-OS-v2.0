@@ -877,7 +877,7 @@
   <p>One distinction the console must hold and most products collapse: a Super Admin sees the complete <strong>inventory</strong> by role - every item, its owner, scope, freshness and audience. Opening the <strong>contents</strong> of another department's document is a separate capability, granted by default in a single-tenant install, revocable, and written to the audit ledger on every use. Existence, configuration and content are three planes of visibility, and role governs the first two while entitlement governs the third.</p>
 
   <h3>An agent is a container, not a configuration row</h3>
-  <p>The member application and the agent workspace were both missing from the first console specification, and the second omission is the more expensive one. An agent composes eleven things, each stored as a <strong>reference with a pinned version rather than an inline copy</strong>, so a fix reaches every instance when someone promotes the version and a repository push on its own changes nothing that is live:</p>
+  <p>The member application and the agent workspace were both missing from the first console specification, and the second omission is the more expensive one. An agent composes <span data-part-count="">ten</span> things, each stored as a <strong>reference with a pinned version rather than an inline copy</strong>, so a fix reaches every instance when someone promotes the version and a repository push on its own changes nothing that is live. The list is <code>brain.console.workspace.Part</code> and it is the one M39.1.1.1 names; the count here is carried in the markup and checked against that enum by a test:</p>
 
   <table>
     <thead><tr><th>Attached</th><th>Stored as</th><th>Who may change it</th></tr></thead>
@@ -887,11 +887,26 @@
       <tr><td>Connectors</td><td>references; ungranted ones show as <em>requested</em></td><td>department admin</td></tr>
       <tr><td>Skills</td><td>pinned versions from the approved library only</td><td>owner, after review</td></tr>
       <tr><td>Channels</td><td>references, intersected with the ceiling</td><td>department admin</td></tr>
+      <tr><td>Availability</td><td>who may find and invoke this agent, never what a run may reach</td><td>department admin</td></tr>
       <tr><td>Model policy</td><td>primary and fallback chain</td><td>super admin</td></tr>
-      <tr><td>Ceiling</td><td>the widest entitlement any run may reach</td><td>department admin</td></tr>
       <tr><td>Leash</td><td>a rung per target and scope</td><td>department admin; money boundaries need two</td></tr>
       <tr><td>Memory</td><td>readable text with a diff per revision</td><td>owner; the subject may delete their own</td></tr>
       <tr><td>Automations</td><td>owned by the agent, run on a named principal</td><td>owner</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>Two things this table used to carry and should not.</strong> The <em>ceiling</em>
+  is not a part an agent is composed of: it is the right-hand side of
+  <code>E(caller) &cap; ceiling</code>, it confers nothing on its own, and listing it beside
+  the persona invites exactly the merge the next paragraph exists to forbid. <em>Artifacts</em>
+  are what an agent produced rather than what it is made of, and they have their own section
+  below with their own retention. Both are still administered per agent, in the same
+  workspace, and neither is an attachment:</p>
+
+  <table>
+    <thead><tr><th>Not a part</th><th>Stored as</th><th>Who may change it</th></tr></thead>
+    <tbody>
+      <tr><td>Ceiling</td><td>the widest entitlement any run may reach</td><td>department admin</td></tr>
       <tr><td>Artifacts</td><td>append-only, carrying the producing run</td><td>nobody edits; supersede or archive</td></tr>
     </tbody>
   </table>
