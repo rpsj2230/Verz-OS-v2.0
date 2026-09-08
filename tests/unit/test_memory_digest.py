@@ -646,13 +646,62 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     module takes no `EntitlementSet` and cannot be wired at the wrong reach because it has
     none. What it does take is a principal, and the delete control refuses somebody else's.
 
+    **`brain.console.govern_estate` is the third importer and it arrived on 2026-09-08**, for
+    M27.3.17, the governance memory viewer. Its sibling is below and the argument is the third
+    of the three: it does take an `EntitlementSet`, and it reads at the caller's own reach
+    rather than at the run's, because a governance memory screen is about a person and not
+    about an agent. `separate_memory` already reaches that answer for its own per-person half,
+    in that module's words: narrowing a person's memory by an agent's ceiling would hide a
+    memory from its own subject for a reason that has nothing to do with them.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == ["brain.console.own_things"]
     assert _callers_of("brain.memory.digest") == [
+        "brain.console.govern_estate",
         "brain.console.own_things",
         "brain.console.reach_view",
     ]
+
+
+def test_the_governance_memory_viewer_reads_one_subject_at_the_callers_own_reach() -> None:
+    """The sibling the pin above demands, for the third importer of these shapes.
+
+    **Two claims, and the second is the one a screen gets wrong.** It reads at the caller's
+    own reach and never at `E_run`, which is `separate_memory`'s decision for its per-person
+    half: a governance screen about what is remembered about a person is not the agent's
+    memory, and narrowing it by an agent's ceiling would hide a memory from its own subject
+    for a reason that has nothing to do with them. And it computes no reach of its own; the
+    recall verdict is `brain.memory.formation.may_recall`, reached through
+    `brain.console.reach_view`.
+
+    Asserted on the signature as well as on the behaviour. The signature is where the wrong
+    version arrives, as an `AgentRecord` parameter added so the viewer can be opened from an
+    agent's tab, and behaviour alone would keep passing on the day it does.
+
+    Delete this and the pin above can be widened to admit a caller nobody argued for, which is
+    the thing that pin exists to make impossible."""
+    import inspect
+
+    from brain.console.govern_estate import subject_memory
+
+    taken = inspect.signature(subject_memory).parameters
+
+    assert "subject_id" in taken
+    assert "reader" in taken
+    assert not any(name in taken for name in ("record", "agent_id", "ceiling", "run"))
+
+    theirs = learning("m_theirs")
+
+    view = subject_memory(
+        subject_id=theirs.formation.principal_id,
+        entries=((theirs, "prefers email"),),
+        reader=reader("read:client.name"),
+        now=NOW,
+    )
+
+    assert [one.memory_id for one in view.memory.extracted] == ["m_theirs"]
+    assert view.subject_id == theirs.formation.principal_id
 
 
 def test_the_personal_memory_tab_narrows_by_authorship_and_holds_no_reach_at_all() -> None:

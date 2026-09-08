@@ -490,8 +490,16 @@ GOVERN_SURFACES: Final[tuple[GovernSurface, ...]] = (
         ),
     ),
     GovernSurface(
+        # Repointed on 2026-09-08. This said `brain.audit.record`, which was true when the
+        # register was written and stopped being true the same evening: `console.agent_output`
+        # landed with the artifact record, its provenance and its retention class, and pointing
+        # here at an uncommitted file would have made `govern_gaps` red on a clean checkout.
+        # `govern_gaps` only checks that the owner imports, so a wrong-but-importable name
+        # passes it in silence. That is a real weakness in the check and it is not fixed here:
+        # an owner is a claim about which module does the work, and there is no honest signal
+        # for that short of a person reading both.
         key="artifacts",
-        owner="brain.audit.record",
+        owner="brain.console.agent_output",
         shows="what was produced, the publish entry it came from, and when it is deleted",
         never=(
             "the artefact's contents, which live in their own store under their own "
