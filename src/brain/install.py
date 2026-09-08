@@ -84,6 +84,11 @@ class Belongs(enum.StrEnum):
     IDENTITY = "identity"
     MODELS = "models"
     STORAGE = "storage"
+    #: Language, currency and time zone. Its own surface rather than part of branding,
+    #: because the person who owns the brand is not the person who knows where the staff sit
+    #: and what they read, and asking one of them for the other's answer is how an install
+    #: ends up rendering every date in the zone the implementer happened to be in.
+    LOCALE = "locale"
 
 
 @dataclass(frozen=True)
@@ -264,6 +269,40 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
             "is a value rather than a migration."
         ),
         default="postgres",
+    ),
+    # --- locale, M35.1.1
+    Setting(
+        name="INSTALL_LOCALES",
+        belongs=Belongs.LOCALE,
+        meaning=(
+            "Comma-separated language tags this install offers, most preferred first. The "
+            "first is what somebody with no stated preference reads. Only tags this product "
+            "ships a complete catalogue for are accepted: see brain.locale.SHIPPED."
+        ),
+        # Every shipped catalogue, rather than English alone. Offering a language nobody
+        # uses is visible and harmless; withholding one a colleague needs is invisible,
+        # because nothing on the screen says the switcher could have had it.
+        default="en,zh-Hans",
+    ),
+    Setting(
+        name="INSTALL_CURRENCY",
+        belongs=Belongs.LOCALE,
+        meaning=(
+            "The ISO 4217 code money figures are rendered in. XXX is the code meaning no "
+            "currency, so an install that has not chosen one shows something visibly unset "
+            "rather than a figure that reads correctly in the wrong currency."
+        ),
+        default="XXX",
+    ),
+    Setting(
+        name="INSTALL_TIME_ZONE",
+        belongs=Belongs.LOCALE,
+        meaning=(
+            "The IANA zone a timestamp is rendered in for a reader with no zone of their "
+            "own. UTC by default because it is nobody's local time, so a wrong rendering is "
+            "visibly wrong rather than out by an hour on some days of the year."
+        ),
+        default="UTC",
     ),
 )
 
