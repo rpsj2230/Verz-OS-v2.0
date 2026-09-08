@@ -208,6 +208,25 @@ must not happen is a survivor being quietly dropped from the table.
 import a stale `.pyc`, which produces false *survivals*. It cannot produce a false catch, so
 earlier passes stay sound, but a mutation run without it will lie to you in the safe direction.
 
+**Where the guard audit has been, as of 2026-09-09.** `.scratch/guard_audit.py` mutates every
+`if` in a module and reports the ones no test can reach. It has found roughly forty real
+defects in two days and almost every one was the same shape: a validator that is written,
+correct, and never once run, because every object any test builds is valid. Knowing where it
+has already been saves running it again, and knowing where it has not is the more useful half.
+
+Audited with no survivors remaining: `core/redaction.py` (six real, fixed),
+`identity/roles.py` (eight real and one removed as unreachable), `connectors/throttle.py`,
+`launch.py`, `setup_wizard.py`, `ops/crash.py`, `ops/controls.py`, `ops/alerting.py`,
+`ops/retune.py`, `ops/scaling.py`, `ops/partitioning.py`, every module under `browsing/`, and
+`console/spend_view.py`, `console/model_matrix.py`, `console/approvals.py`,
+`console/scoped_authority.py`.
+
+Two are known unfinished. `ops/admission.py` produced seven first-pass survivors that were
+never re-checked against the import graph, so they are candidates and not findings.
+`gate/leash.py` was audited against one test file for a module nineteen exercise, which is the
+episode recorded above; four of its seven reported survivors were real and the audit has not
+been re-run with the right scope since.
+
 **Mutate the constants too, not only the branches.** This is the sibling of the docstring rule
 above and it caught three separate authors on 2026-09-06, in one afternoon. A test that asserts
 `answer == SOME_CONSTANT` while importing `SOME_CONSTANT` from the module under test compares
