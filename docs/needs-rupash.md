@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**13 items are open, and they are not equally urgent.** They had accumulated into one
+**14 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -35,7 +35,13 @@ their names.
 decides who can see what, they already disagree, and nothing uses the second one. Delete it or
 keep it, one sentence.
 
-**And one is new, and it is the only thing on this page about losing something.** Item 44:
+**One is a question the system cannot answer, and the reason is a design decision.** Item 45:
+a member's page is meant to show which agents have read their HR record, and nothing records
+reads. That is deliberate rather than forgotten, because logging every read keeps a permanent
+map of who looked at whom. Three options in the item; my recommendation needs one line from
+you naming which record types are sensitive enough to log.
+
+**And one is about losing something.** Item 44:
 nothing takes a backup of your database. The bucket for one exists, it has a retention policy
 and a written reason, and nothing writes to it. It is planned work, in wave 5, and what is in
 that database today is demonstration data rather than your records. I would still rather you
@@ -54,6 +60,54 @@ happened in.
 ---
 
 # Open
+
+## 45. "Which agents have read my HR record" is a question the system cannot answer
+
+One task on the plan asks for a page where a member can see which agents have read their HR
+record. It is a good thing to be able to show somebody. The system cannot answer it today, and
+the reason is a design decision that was made deliberately and is worth you knowing about.
+
+**What is recorded today.** Two different things are kept, on purpose, and neither is a list of
+who read what.
+
+- The **audit ledger** records things that change what somebody may do: a permission granted, a
+  permission taken away, a leash moved, an emergency access session opened. It is kept for five
+  years, it holds no content at all, and it is deliberately a short list of eight kinds of
+  event. None of the eight is "somebody read something".
+- The **trace record** holds one row per request: who asked, which model answered, how long it
+  took, how many things were redacted. It holds names and counts and never a value, and it is
+  kept for a month. It can tell you that somebody asked a question; it cannot tell you which
+  rows came back.
+
+So "who has read my HR record" falls between them. Nothing is broken and nothing was
+forgotten: a system that logged every read of every row would be keeping a second copy of who
+looked at what, forever, which is its own privacy problem and its own storage bill.
+
+**What answering it would take, and what each costs.**
+
+- **Option A, recommended: answer it for a narrow, high-sensitivity set rather than for
+  everything.** Personnel records are the case the task actually names, and they are a small
+  slice of the data. A read log scoped to that slice is affordable, is the thing people
+  genuinely ask about, and does not turn every ordinary lookup into a permanent record. It
+  needs one new kind of audit event and a decision from you about which record types count as
+  sensitive enough to log.
+- **Option B: log every read of every row.** Complete, and the honest cost is that the log
+  becomes the largest thing in the database and is itself a map of who is interested in whom.
+  I would not do this.
+- **Option C: leave it, and say so on the page.** The member's page tells them plainly that
+  reads are not logged and what is logged instead. This is the cheapest and it is a real
+  answer rather than a blank space, and it is the right choice if nobody has actually asked
+  for the read log.
+
+I recommend A, and the decision I need from you is one line: **which record types are sensitive
+enough that every read of them should be written down.** My starting suggestion would be
+personnel records and anything carrying a salary, and nothing else.
+
+**Why this is on your list rather than mine.** The two costs are the kind you would notice and
+I would not: a permanent record of who looked at whom is a privacy position, and the storage it
+takes is a bill. Neither is a coding question.
+
+---
 
 ## 44. Nothing takes a backup of your database, and the shelf for one is already built
 
