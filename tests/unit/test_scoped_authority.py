@@ -21,7 +21,7 @@ Real `EntitlementSet`s, real `SubjectGrant`s through their own validators, a rea
 `brain.identity.packs.expand` rather than building the expanded rows by hand, because the
 claim being made is about what that function produces.
 
-Task ids: M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
+Task ids: M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
 """
 
 from __future__ import annotations
@@ -40,7 +40,9 @@ from brain.agents.model import (
 )
 from brain.console.govern import Placed, may_certify
 from brain.console.reach_view import Operation, PromotionEvidence
+from brain.console.reads import Plane, plane_capability
 from brain.console.scoped_authority import (
+    COVERAGE_AUTHORITY,
     REACH_AUTHORITY,
     REACH_AUTHORITY_SCREEN,
     RUNG_AUTHORITY,
@@ -51,6 +53,7 @@ from brain.console.scoped_authority import (
     approvable,
     authority_gaps,
     ceiling_within_reach,
+    department_coverage,
     deputy_runs_at_most,
     grantable,
     may_adopt,
@@ -72,7 +75,8 @@ from brain.identity.lifecycle import Adoption
 from brain.identity.packs import CapabilityPack, PackAssignment, SubjectGrant, expand
 from brain.identity.roles import DEPUTY_MAX, IdentityError, Role, RoleGrant
 from brain.identity.teams import principal_subject
-from brain.knowledge.visibility import Visibility
+from brain.knowledge.item import KnowledgeItem, KnowledgeState
+from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.status import leaf_sentences
 
 #: A fixed moment, so an expiry test cannot pass because the machine's clock sat on the
@@ -985,3 +989,212 @@ def test_an_unrestricted_scope_is_contained_only_by_an_unrestricted_holding() ->
     assert within_reach(company, capability, Scope.department(MAINTENANCE), NOW)
     assert not within_reach(department, capability, Scope.unrestricted(), NOW)
     assert within_reach(department, capability, Scope.department(MAINTENANCE), NOW)
+
+
+# --- what a department knows (M33.2.1.4) ------------------------------------------------------
+
+
+def an_item(item_id: str, *, area: str, owner: str = "u_author") -> KnowledgeItem:
+    """One knowledge item visible to one department, through its own validators.
+
+    Built the way `test_operate` builds one, because the thing under test calls that module's
+    `coverage` and a fixture shaped differently would be testing a different function."""
+    return KnowledgeItem(
+        item_id=item_id,
+        content="something written down",
+        visibility=KnowledgeVisibility.of_department(area),
+        owner_id=owner,
+        state=KnowledgeState.PUBLISHED,
+        verified_by="u_steward",
+        verified_at=NOW - timedelta(days=1),
+    )
+
+
+def a_head(department: str) -> EntitlementSet:
+    """A department head: the knowledge library's capability, scoped to their department."""
+    where = Scope(clauses=(Clause(field="department", op=Op.EQ, value=department),))
+    return EntitlementSet(
+        principal_id="u_head",
+        grants=(
+            Grant(capability=COVERAGE_AUTHORITY, scope=where),
+            Grant(capability=plane_capability(Plane.EXISTENCE), scope=where),
+        ),
+    )
+
+
+def test_a_department_head_sees_the_areas_of_their_own_department_and_no_others() -> None:
+    """M33.2.1.4. The counting and the staleness are `operate.coverage`'s and are called
+    rather than reimplemented; what is decided here is that the areas come from the
+    department and the head's authority is asked about the department first.
+
+    The two departments hold items either side of the boundary, so the difference between
+    the two answers is the head's own scope and nothing else.
+
+    Delete this and a department coverage screen becomes the company one with a heading."""
+    items = [an_item("k_1", area=MAINTENANCE), an_item("k_2", area=FINANCE)]
+    areas_of = {MAINTENANCE: [MAINTENANCE], FINANCE: [FINANCE]}
+
+    mine = department_coverage(
+        MAINTENANCE, items, a_head(MAINTENANCE), headed=[MAINTENANCE], areas_of=areas_of, now=NOW
+    )
+
+    assert [one.area for one in mine] == [MAINTENANCE]
+
+
+def test_a_department_this_head_does_not_head_and_one_that_does_not_exist_are_one_answer() -> None:
+    """**A head who could tell a department they cannot reach from one that is not there has
+    been handed the org chart one guess at a time.** Both are empty, and the emptiness carries
+    nothing: no refusal naming the department, no count, no note that something was withheld.
+
+    Three calls rather than two, because a function returning empty for everything satisfies
+    the first two: the head's own department with the same items produces rows.
+
+    Delete this and the coverage surface answers "does this department exist" for anybody who
+    can type a string."""
+    items = [an_item("k_1", area=MAINTENANCE), an_item("k_2", area=FINANCE)]
+    areas_of = {MAINTENANCE: [MAINTENANCE], FINANCE: [FINANCE]}
+    head = a_head(MAINTENANCE)
+
+    assert (
+        department_coverage(FINANCE, items, head, headed=[MAINTENANCE], areas_of=areas_of, now=NOW)
+        == ()
+    )
+    assert (
+        department_coverage("legal", items, head, headed=[MAINTENANCE], areas_of=areas_of, now=NOW)
+        == ()
+    )
+    assert (
+        department_coverage(
+            MAINTENANCE, items, head, headed=[MAINTENANCE], areas_of=areas_of, now=NOW
+        )
+        != ()
+    )
+
+
+def test_the_areas_come_from_the_department_and_are_not_a_question_the_head_may_ask() -> None:
+    """`operate.coverage` takes its areas as a parameter, which is right for the company
+    overview: it asks about every area and the reader's reach decides which produce a row.
+    Handing a department head that parameter makes the list a question, and the list is the
+    disclosure.
+
+    Asserted on the signature as well as on the behaviour, because the wrong version arrives
+    as an `areas` parameter added so a head can narrow their own page, and behaviour alone
+    would keep passing on the day it lands.
+
+    Delete this and the surface grows the parameter, and an area with no row stops meaning
+    one thing."""
+    import inspect
+
+    taken = inspect.signature(department_coverage).parameters
+
+    assert "areas" not in taken
+    assert "areas_of" in taken
+    assert "department" in taken
+    assert "headed" in taken, "the departments come from the role and not from the reach"
+
+    # And the mapping really is what supplies them: a department absent from it has no areas
+    # and therefore no rows, which is the same answer as one out of reach.
+    items = [an_item("k_1", area=MAINTENANCE)]
+    head = a_head(MAINTENANCE)
+
+    assert (
+        department_coverage(MAINTENANCE, items, head, headed=[MAINTENANCE], areas_of={}, now=NOW)
+        == ()
+    )
+    assert (
+        department_coverage(
+            MAINTENANCE,
+            items,
+            head,
+            headed=[MAINTENANCE],
+            areas_of={MAINTENANCE: [MAINTENANCE]},
+            now=NOW,
+        )
+        != ()
+    )
+
+
+def test_a_coverage_report_needs_a_department_and_there_is_no_value_meaning_all_of_them() -> None:
+    """Over no department it is the company's report, which is a different screen with a
+    different grant. `govern_estate` made the same decision about the memory viewer and
+    `agent_automations` about a listing with no agent id.
+
+    Whitespace as well as empty, because `" "` is what arrives from a form and passes a bare
+    falsiness check.
+
+    Delete this and one call with an empty string is the whole company's coverage read behind
+    a department head's grant."""
+    items = [an_item("k_1", area=MAINTENANCE)]
+    head = a_head(MAINTENANCE)
+
+    for nobody in ("", " "):
+        with pytest.raises(ValueError, match="needs a department"):
+            department_coverage(nobody, items, head, headed=[MAINTENANCE], areas_of={}, now=NOW)
+
+
+def test_a_head_who_may_read_every_department_still_sees_only_the_one_they_head() -> None:
+    """**The case that makes this a department surface rather than the company overview.**
+    A person can hold `read:knowledge` company-wide, for an audit or because somebody was
+    generous, and head one department. Narrowing this page by what they may read shows them
+    every department, and the two answers differ for exactly the person most likely to be
+    looking at it.
+
+    Two mutations proved the first version of this surface did nothing: it checked the
+    reader's scope, which `operate.coverage` had already checked, so both the authority check
+    and the area derivation refused exactly what was going to be refused anyway.
+
+    Delete this and the department page becomes the overview with a heading on it."""
+    everywhere = EntitlementSet(
+        principal_id="u_head",
+        grants=(
+            Grant(capability=COVERAGE_AUTHORITY, scope=Scope()),
+            Grant(capability=plane_capability(Plane.EXISTENCE), scope=Scope()),
+        ),
+    )
+    items = [an_item("k_1", area=MAINTENANCE), an_item("k_2", area=FINANCE)]
+    areas_of = {MAINTENANCE: [MAINTENANCE], FINANCE: [FINANCE]}
+
+    mine = department_coverage(
+        MAINTENANCE, items, everywhere, headed=[MAINTENANCE], areas_of=areas_of, now=NOW
+    )
+    theirs = department_coverage(
+        FINANCE, items, everywhere, headed=[MAINTENANCE], areas_of=areas_of, now=NOW
+    )
+
+    assert [one.area for one in mine] == [MAINTENANCE]
+    assert theirs == (), "a grant that reaches finance is not a headship of finance"
+
+
+def test_the_capability_is_the_knowledge_librarys_own_and_not_one_invented_here() -> None:
+    """A coverage report is the knowledge library counted by area and nothing else, so a
+    capability invented for it would be a second grant over the same rows, which is the
+    finding `agent_output` makes about a second artifact grant: an administrator reviewing
+    the library screen would never meet it.
+
+    Delete this and the department page acquires a grant nobody reviews."""
+    assert COVERAGE_AUTHORITY.value == "read:knowledge"
+    assert COVERAGE_AUTHORITY != REACH_AUTHORITY
+
+    # A head holding the grant-writing capability and not the library's sees nothing.
+    wrong = EntitlementSet(
+        principal_id="u_head",
+        grants=(
+            Grant(capability=REACH_AUTHORITY, scope=Scope.department(MAINTENANCE)),
+            Grant(
+                capability=plane_capability(Plane.EXISTENCE), scope=Scope.department(MAINTENANCE)
+            ),
+        ),
+    )
+    items = [an_item("k_1", area=MAINTENANCE)]
+
+    assert (
+        department_coverage(
+            MAINTENANCE,
+            items,
+            wrong,
+            headed=[MAINTENANCE],
+            areas_of={MAINTENANCE: [MAINTENANCE]},
+            now=NOW,
+        )
+        == ()
+    )

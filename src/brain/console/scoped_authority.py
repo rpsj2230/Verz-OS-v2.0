@@ -92,16 +92,17 @@ package: `brain.console.screens.unregistered_tools([])` still returns all thirty
 claimed below is the authority decision, which is the half a screen cannot supply and the half
 that was missing.
 
-Task ids: M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
+Task ids: M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Final
 
 from brain.agents.model import AgentRecord, entitlement_ceiling
+from brain.console.operate import CoverageRow, coverage
 from brain.console.reach_view import OPERATION_EFFECT, Operation, PromotionEvidence, may_raise
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
@@ -112,6 +113,7 @@ from brain.gate.leash import LeashEntry
 from brain.identity.lifecycle import Adoption
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import DEPUTY_MAX, RoleGrant, appoint_deputy
+from brain.knowledge.item import KnowledgeItem
 from brain.tools.registry import rung_ceiling
 
 # ------------------------------------------------------------------ written-down reasons
@@ -246,6 +248,13 @@ REACH_AUTHORITY: Final = Capability(value="approve:grant")
 
 #: The screen that requirement belongs to. Pinned beside it, so the pair can be checked.
 REACH_AUTHORITY_SCREEN: Final = "access_review"
+
+#: The capability the rows behind this report are read with. The knowledge library's own,
+#: because a coverage report is that library counted by area and nothing else, and a
+#: capability invented here would be a second grant over the same rows. It is not asked
+#: about here: `operate.coverage` asks it, and asking again would be the redundant check
+#: that two mutations found in the first version of this surface.
+COVERAGE_AUTHORITY: Final = Capability(value="read:knowledge")
 
 #: The capability that decides whether supervision may be moved. Not `REACH_AUTHORITY`.
 #:
@@ -664,3 +673,76 @@ def authority_gaps(
         )
 
     return tuple(gaps)
+
+
+# ------------------------------------------------- what a department knows (M33.2.1.4)
+#: Why this surface asks which departments somebody heads rather than which they can read.
+#:
+#: **The first version of this checked the reader's scope and two mutations proved it did
+#: nothing.** `brain.console.operate.coverage` already narrows by the reader's own reach, so a
+#: containment check here refused exactly what it was going to refuse anyway, and deriving the
+#: areas from the named department changed nothing either. Both were redundant, which is the
+#: honest reason this leaf sat open: read as "coverage, scoped", M33.2.1.4 is `coverage` and
+#: nothing more.
+#:
+#: What makes it a department surface is a different question, and it is one nothing else
+#: asks: **reading a department and heading it are not the same thing.** A person can hold
+#: `read:knowledge` company-wide, for an audit or because somebody was generous, and head one
+#: department. The company overview is right to show them everything they may read. A
+#: department head's page is about the department they answer for, and showing them finance
+#: because their grant happens to reach it turns the page into the overview with a heading.
+#:
+#: So the departments come from the role and never from the parameter, and a department this
+#: person does not head produces nothing whether or not their grant reaches it.
+HEADING_A_DEPARTMENT_IS_NOT_THE_SAME_AS_READING_IT: Final = (
+    "A person may hold read:knowledge company-wide and head one department. Narrowing this "
+    "page by what they may read shows them every department, which is the company overview "
+    "with a heading on it. Narrowing it by what they head is the question the page is about, "
+    "and the two differ for exactly the person most likely to be looking at it."
+)
+
+
+def department_coverage(
+    department: str,
+    items: Sequence[KnowledgeItem],
+    entitlement: EntitlementSet,
+    *,
+    headed: Sequence[str],
+    areas_of: Mapping[str, Sequence[str]],
+    now: datetime,
+) -> tuple[CoverageRow, ...]:
+    """What this department knows and where the gaps are, for the person who heads it
+    (M33.2.1.4).
+
+    `brain.console.operate.coverage` does the counting and the staleness, called and not
+    reimplemented: it already returns no row for an area the reader does not reach, counts an
+    item against its own area, and carries no total, share or percentage, because each of
+    those is this figure divided by a number the reader was not shown.
+
+    **What is decided here is that heading a department and being able to read it are
+    different questions.** See `HEADING_A_DEPARTMENT_IS_NOT_THE_SAME_AS_READING_IT`. `headed`
+    is the departments this person answers for, which the caller derives from their role
+    grants because that is `brain.identity.roles`' question and not this module's. Narrowing
+    by their reach instead would be `coverage` with a heading on it, which two mutations
+    proved when this was written that way.
+
+    Empty rather than a refusal for a department this person does not head, and empty for one
+    that does not exist, because those must be one answer: somebody who could tell a
+    department they do not head from one that is not there has been handed the org chart one
+    guess at a time.
+
+    Both narrowings still apply. A head sees their own department's areas, and within them
+    only what their own grant reaches, because `coverage` asks that second question and this
+    module does not repeat it.
+    """
+    if not department.strip():
+        msg = "a department coverage report needs a department; over none it is the company's"
+        raise ValueError(msg)
+    if department not in set(headed):
+        return ()
+    return coverage(
+        items,
+        entitlement,
+        areas=tuple(areas_of.get(department, ())),
+        now=now,
+    )
