@@ -465,7 +465,7 @@ def needs_rupash() -> HTMLResponse:
             close_paragraph()
             body.append(
                 f"</div><details class='past'><summary>{_inline(esc[2:])} "
-                "&mdash; decided, kept as a record</summary><div>"
+                "- decided, kept as a record</summary><div>"
             )
         elif line.startswith("# "):
             close_paragraph()

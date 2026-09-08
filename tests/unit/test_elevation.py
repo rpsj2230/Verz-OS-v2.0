@@ -625,3 +625,27 @@ def test_a_revocation_carries_a_reason_long_enough_to_be_one() -> None:
             reason=long_enough,
         )
     assert Revocation(session_id="bg_1", by="u_other", at=NOW, reason=long_enough).by == "u_other"
+
+
+def test_a_revocation_by_nobody_is_refused_like_the_other_two_things_it_refuses() -> None:
+    """**Found by mutating every `if` in the module rather than the ones somebody thought of.**
+    `Revocation.__post_init__` refuses three things and the test above reached two: an empty
+    `by` could be deleted from the validator with the whole suite green, because every
+    revocation built anywhere in these tests names somebody.
+
+    It is the one of the three that matters most. A short reason is a bad record and a naive
+    timestamp is a comparison bug; a revocation by nobody is an authorised session ended with
+    no one accountable for ending it, which is precisely the fact a break-glass trail exists
+    to carry.
+
+    Whitespace as well as empty, because `by=" "` is the shape that arrives from a form and
+    passes a bare falsiness check.
+
+    Delete this and the guard goes back to being unreachable, which is how it got here."""
+    long_enough = "y" * MINIMUM_REASON
+
+    for nobody in ("", " ", "\t\n"):
+        with pytest.raises(ElevationError, match="accountable"):
+            Revocation(session_id="bg_1", by=nobody, at=NOW, reason=long_enough)
+
+    assert Revocation(session_id="bg_1", by="u_other", at=NOW, reason=long_enough).by == "u_other"

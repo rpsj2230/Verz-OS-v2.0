@@ -788,6 +788,15 @@ def sweep_install_from_empty() -> None:
 #: does not have to tell it from a hyphen at a glance.
 EM_DASH: str = chr(8212)
 
+#: The same character written as an HTML entity, which a scan for the character does not see.
+#: One survived the first pass over the served documents and rendered on the live page:
+#: `docs_routes` emitted it into the Needs Rupash summary line, and a sweep looking for a
+#: character reads an entity as eight ordinary letters. Built by concatenation for the reason
+#: `EM_DASH` uses `chr`: spelling it out here would make this file a violation of its own rule.
+#: Named separately rather than folded into `EM_DASH`, because the two are found by different
+#: means and a reader should be able to see that both are looked for.
+EM_DASH_ENTITY: str = "&" + "mdash;"
+
 #: Where the rule is enforced today. `tests` still holds a backlog of thirty across twelve
 #: files; see `sweep_house_style` for why this is scoped rather than total.
 HOUSE_STYLE_AREAS: tuple[str, ...] = ("src", "migrations", "ops", "docs")
@@ -835,7 +844,7 @@ def sweep_house_style() -> None:
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
             for number, line in enumerate(text.splitlines(), 1):
-                if EM_DASH in line:
+                if EM_DASH in line or EM_DASH_ENTITY in line:
                     where = str(path.relative_to(REPO)).replace(chr(92), "/")
                     findings.append(f"{where}:{number} carries an em dash: {line.strip()[:70]}")
     if findings:
