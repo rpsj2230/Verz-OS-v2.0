@@ -73,20 +73,27 @@ axis is not, and `activity_filter` refuses a department lens rather than droppin
 which is `brain.console.screens.Screen.accepts`' rule: a filter that is quietly ignored leaves
 the reader believing they are looking at one department while looking at all of them.
 
-M33.1.2.1 asks to publish and retire global agents. Retiring exists, as
-`brain.agents.lifecycle.archive`. Publishing does not: that module holds enable, disable,
-archive and transfer_ownership, and an agent is published company-wide by its
-`AgentAudience` reaching `Visibility.COMPANY`, which nothing changes. Writing that change in a
-console module would be an agent state transition living outside the module that owns agent
-state transitions, which is the second implementation this repository refuses, so the leaf is
-reported rather than half-built.
+**M33.1.2.1 asks to publish and retire global agents, and until 2026-09-08 only retiring
+existed.** `brain.agents.lifecycle` held enable, disable, archive and transfer_ownership, and
+an agent is published company-wide by its `AgentAudience` reaching `Visibility.COMPANY`, which
+nothing changed. This module reported that rather than half-building it, because writing an
+agent state transition in a console module is a transition living outside the module that owns
+transitions, which is the second implementation this repository refuses.
+
+`lifecycle.publish` and `lifecycle.archive` are both there now, so the surface is two calls
+and a listing, and neither transition is written here. What this module decides is the part
+that is a console question: which agents a reader is offered the control for, and that is the
+estate's own narrowing rather than a third rule. The authority is `lifecycle`'s own capability
+and is deliberately not `GOVERNANCE_CONTROL`, because publishing widens who is told about an
+agent and never what it reaches: `AUDIENCE_IS_NOT_AUTHORITY` is the distinction, and a console
+that asked for the grant-writing capability here would be asserting the opposite.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock; `now`
 is a parameter for the reason `brain.ops.limits` gives about policy that owns a client. No
 console screen exists behind any of these, exactly as `brain.console.screens` says of its own
 registry; what is claimed is the disclosure decision, which is the whole content of each.
 
-Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.2
+Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.1, M33.1.2.2
 Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5
 """
 
@@ -99,6 +106,8 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
+from brain.agents.lifecycle import AGENT_PUBLICATION_CAPABILITY, PUBLICATION_LEVEL
+from brain.agents.model import AgentRecord
 from brain.audit.ledger import AuditEntry
 from brain.console.govern import Placed
 from brain.console.reads import StewardNotice, permitted, self_grants
@@ -685,6 +694,66 @@ def confirm(
 
 
 # ------------------------------------------------------- disable a principal (M33.1.2.4)
+#: Why publishing asks for the visibility capability and not the one that writes grants.
+#:
+#: A publication widens who is told about an agent and never what the agent reaches: the run
+#: reach has no term for an audience, so a published agent hands nobody a row. Asking for
+#: `GOVERNANCE_CONTROL` here would say the opposite, and it would refuse the person the leaf
+#: names, since a super administrator deliberately not granted a department's data could not
+#: publish that department's agent while publishing it lets them read none of it.
+PUBLISHING_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED: Final = (
+    "Publishing an agent moves its audience to the whole company and moves no reach at all. "
+    "So the authority is the visibility capability that brain.agents.lifecycle owns, and not "
+    "the capability that writes grants: asking for the second would make the audience a "
+    "function of somebody's reach, which is the conflation AUDIENCE_IS_NOT_AUTHORITY refuses."
+)
+
+
+def may_publish(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader may move an agent's audience to the whole company (M33.1.2.1).
+
+    One capability and no scope, because an audience is not a row: publishing does not happen
+    somewhere, it happens to everybody at once, and a department-scoped grant over it would
+    be a grant to publish company-wide within one department, which is not a thing.
+
+    See `PUBLISHING_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED`. The steward rule is
+    `lifecycle.publish`'s own and is not repeated here: it needs the record, this does not
+    have one, and asking half the question in two places is how the two answers drift.
+    """
+    return entitlement.holds(AGENT_PUBLICATION_CAPABILITY, now)
+
+
+def publishable(
+    records: Sequence[AgentRecord],
+    entitlement: EntitlementSet,
+    now: datetime | None = None,
+) -> tuple[AgentRecord, ...]:
+    """The agents this reader could publish, offered only where the control would work.
+
+    Empty for a reader without the capability rather than a list they cannot act on, which is
+    the shape `brain.console.role_surfaces` chose for expired suspensions: a queue offering a
+    row it will refuse invites the attempt and then explains it.
+
+    Already-company agents are absent, because `publish` is a no-op for them and an offer that
+    changes nothing reads as an offer that does something. Archived ones are absent because
+    `publish` refuses them: archived is terminal, and publishing one would put a thing nobody
+    can start in front of everybody.
+
+    The steward exclusion is applied here as well as in `publish`, and that is not a duplicate
+    check: this decides what is offered and that decides what happens, which is the same pair
+    `approve_publication` and its queue already keep.
+    """
+    if not may_publish(entitlement, now):
+        return ()
+    return tuple(
+        one
+        for one in records
+        if one.audience.level is not PUBLICATION_LEVEL
+        and one.archived_at is None
+        and one.audience.owner_id != entitlement.principal_id
+    )
+
+
 def may_disable(
     entitlement: EntitlementSet,
     where: Mapping[str, str],

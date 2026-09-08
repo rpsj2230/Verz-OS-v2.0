@@ -23,7 +23,7 @@ Two leaves under this heading are not claimed. All activity under the same filte
 department on an audit entry, which the ledger deliberately does not carry; publishing a global
 agent needs an audience change, which `brain.agents.lifecycle` does not have.
 
-Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.2
+Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.1, M33.1.2.2
 Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5
 """
 
@@ -34,6 +34,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from brain.agents.lifecycle import AGENT_PUBLICATION_CAPABILITY, archive, publish
+from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
 from brain.audit.ledger import AuditAction, AuditChain
 from brain.console.global_surfaces import (
     ESTATE_SCREEN,
@@ -55,9 +57,11 @@ from brain.console.global_surfaces import (
     may_approve_publication,
     may_confirm,
     may_disable,
+    may_publish,
     may_stop,
     press_stop,
     publication_queue,
+    publishable,
     self_grant_notices,
     steward_for,
     visible_estate,
@@ -931,3 +935,116 @@ def test_holding_the_governance_control_nowhere_refuses_like_holding_it_elsewher
     assert not may_confirm(nomination, holds_nothing, where, NOW)
     assert not may_confirm(nomination, holds_elsewhere, where, NOW)
     assert may_confirm(nomination, holds_here, where, NOW)
+
+
+# --- publish and retire global agents (M33.1.2.1) ---------------------------------------------
+
+
+def an_agent(
+    agent_id: str = "a_triage",
+    *,
+    level: Visibility = Visibility.PERSONAL,
+    owner_id: str = "u_owner",
+    archived_at: datetime | None = None,
+) -> AgentRecord:
+    """One agent record, through its own validators, with the audience under the test's
+    control because the audience is the field this surface is about."""
+    return AgentRecord.model_validate(
+        {
+            "agent_id": agent_id,
+            "display_name": "Support triage",
+            "persona": "Answers support questions in the house voice.",
+            "audience": AgentAudience(level=level, owner_id=owner_id),
+            "authority": AgentAuthority(),
+            "created_by": owner_id,
+            "archived_at": archived_at,
+        }
+    )
+
+
+def test_publishing_asks_for_the_visibility_capability_and_not_the_one_that_writes_grants() -> None:
+    """**A publication widens who is told about an agent and never what the agent reaches.**
+    The run reach has no term for an audience, so a published agent hands nobody a row, and
+    asking for `GOVERNANCE_CONTROL` here would say the opposite.
+
+    It would also refuse the person the leaf names: a super administrator deliberately not
+    granted a department's data could not publish that department's agent, while publishing it
+    lets them read none of it.
+
+    Both directions, and the discriminating reader holds the grant-writing capability and not
+    the visibility one, which is the mix-up this test exists to catch.
+
+    Delete this and the console asks for the wrong capability, and the audience becomes a
+    function of somebody's reach."""
+    holds_visibility = holding(AGENT_PUBLICATION_CAPABILITY.value)
+    holds_grants = holding(GOVERNANCE_CONTROL.value)
+
+    assert may_publish(holds_visibility, NOW)
+    assert not may_publish(holds_grants, NOW)
+    assert not may_publish(EntitlementSet(principal_id="u_admin", grants=()), NOW)
+
+
+def test_the_control_is_offered_only_for_agents_it_would_actually_move() -> None:
+    """A queue offering a row it will refuse invites the attempt and then explains it, which
+    is the shape `brain.console.role_surfaces` rejected for expired suspensions.
+
+    Three exclusions and each is `lifecycle.publish`'s own refusal read one step earlier: an
+    already-company agent, where publishing is a no-op and an offer that changes nothing reads
+    as an offer that does something; an archived one, which is terminal, so publishing it
+    would put a thing nobody can start in front of everybody; and the reader's own, because a
+    gate one person passes alone is not a gate.
+
+    Delete this and the surface offers a control for every agent and the refusals arrive one
+    click later, which is the same information delivered worse."""
+    mine = an_agent("a_mine", owner_id="u_admin")
+    already = an_agent("a_already", level=Visibility.COMPANY)
+    gone = an_agent("a_gone", archived_at=NOW - timedelta(days=1))
+    ready = an_agent("a_ready")
+
+    reader = holding(AGENT_PUBLICATION_CAPABILITY.value)
+    offered = publishable([mine, already, gone, ready], reader, NOW)
+
+    assert [one.agent_id for one in offered] == ["a_ready"]
+
+
+def test_a_reader_without_the_capability_is_offered_nothing_rather_than_a_list() -> None:
+    """The other half, and the one a fixture makes unreachable if every reader holds the
+    capability. An empty tuple rather than the four rows greyed out: a control somebody cannot
+    press, rendered beside three they also cannot press, is a list of agents disclosed to
+    somebody with no grant over any of them.
+
+    Asserted against the same records the test above admits one of, so the difference is the
+    reader and nothing else.
+
+    Delete this and the estate leaks through the publish control."""
+    ready = an_agent("a_ready")
+    reader = holding(GOVERNANCE_CONTROL.value)
+
+    assert publishable([ready], reader, NOW) == ()
+    assert publishable([ready], holding(AGENT_PUBLICATION_CAPABILITY.value), NOW) == (ready,)
+
+
+def test_neither_transition_is_written_here_and_both_are_the_lifecycle_modules() -> None:
+    """The structural claim the module docstring makes, asserted rather than described.
+
+    An agent state transition written in a console module is a transition living outside the
+    module that owns transitions, which is the second implementation this repository refuses,
+    and it is why this leaf sat open for two days rather than being half-built. Both halves of
+    M33.1.2.1 are `brain.agents.lifecycle`'s: `publish` moves the audience and `archive`
+    retires.
+
+    Read off the source rather than from the imports, because an import can be present while a
+    function nearby does the work itself, which is exactly how a second implementation
+    arrives.
+
+    Delete this and somebody adds a three-line `set_audience` here on a Friday."""
+    import inspect
+
+    from brain.console import global_surfaces
+
+    body = inspect.getsource(global_surfaces)
+
+    assert "def publish(" not in body, "the transition is being written here"
+    assert "def archive(" not in body, "the transition is being written here"
+    assert publish.__module__ == "brain.agents.lifecycle"
+    assert archive.__module__ == "brain.agents.lifecycle"
