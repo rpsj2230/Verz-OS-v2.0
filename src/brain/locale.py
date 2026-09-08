@@ -537,6 +537,94 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
         "en": "Anything else is not listed anywhere, and finding nothing never means a refusal",
         "zh-Hans": "其余内容不会在任何地方列出 找不到结果并不代表被拒绝",
     },
+    # The install wizard, `brain.setup_wizard`. The first screens of the product and the only
+    # ones read by somebody who has never seen it, which is why they are here rather than in a
+    # renderer: an install that offers a language and refuses it on screen one has offered
+    # nothing. `wizard_gaps` fails the suite for a key missing from this block.
+    "setup.step.setup_code.title": {"en": "Enter the setup code", "zh-Hans": "输入安装码"},
+    "setup.step.company.title": {"en": "Your company", "zh-Hans": "贵公司"},
+    "setup.step.administrator.title": {"en": "The first administrator", "zh-Hans": "第一位管理员"},
+    "setup.step.staff_source.title": {"en": "Your staff list", "zh-Hans": "员工名单"},
+    "setup.step.model_provider.title": {
+        "en": "How questions are answered",
+        "zh-Hans": "如何解答提问",
+    },
+    "setup.step.connections.title": {"en": "Data sources", "zh-Hans": "数据源"},
+    "setup.step.review.title": {
+        "en": "Check this before anything is written",
+        "zh-Hans": "写入之前请先核对",
+    },
+    "setup.step.finish.title": {"en": "Setup is complete", "zh-Hans": "安装完成"},
+    "field.setup_code.label": {"en": "Setup code", "zh-Hans": "安装码"},
+    "field.company_name.label": {"en": "Company name", "zh-Hans": "公司名称"},
+    "field.product_name.label": {
+        "en": "What your staff will call this system",
+        "zh-Hans": "员工对本系统的称呼",
+    },
+    "field.web_address.label": {"en": "Web address of this system", "zh-Hans": "本系统的网址"},
+    "field.logo_url.label": {"en": "Web address of your logo", "zh-Hans": "贵公司标志的网址"},
+    "field.full_name.label": {"en": "Full name", "zh-Hans": "姓名"},
+    "field.work_address.label": {"en": "Work email address", "zh-Hans": "工作邮箱地址"},
+    "field.staff_source.label": {
+        "en": "Where your staff list comes from",
+        "zh-Hans": "员工名单来源",
+    },
+    "field.model_profile.label": {
+        "en": "Where questions are answered",
+        "zh-Hans": "提问在何处解答",
+    },
+    "field.model_provider.label": {"en": "Model provider", "zh-Hans": "模型服务商"},
+    "field.provider_key.label": {
+        "en": "Key from your provider account",
+        "zh-Hans": "服务商账户密钥",
+    },
+    "field.connections.label": {
+        "en": "Data sources to connect later",
+        "zh-Hans": "稍后要连接的数据源",
+    },
+    "setup.error.blank": {
+        "en": "This is needed before setup can continue",
+        "zh-Hans": "继续安装之前需要填写此项",
+    },
+    "setup.error.too_long": {
+        "en": "That is longer than this screen accepts. Shorten it and try again",
+        "zh-Hans": "内容超过本页允许的长度 请缩短后重试",
+    },
+    "setup.error.unknown_choice": {
+        "en": "Choose one of the options shown",
+        "zh-Hans": "请从所列选项中选择一项",
+    },
+    "setup.error.not_absolute": {
+        "en": "Enter a whole web address, beginning with http:// or https://",
+        "zh-Hans": "请输入完整网址 以 http:// 或 https:// 开头",
+    },
+    "setup.error.not_an_address": {
+        "en": "Enter the work email address this person signs in with",
+        "zh-Hans": "请输入此人用于登录的工作邮箱地址",
+    },
+    "setup.error.not_a_source_name": {
+        "en": "Use each source's short name, in lower case, separated by commas",
+        "zh-Hans": "请使用各数据源的简称 全部小写 以逗号分隔",
+    },
+    "setup.error.provider_needed": {
+        "en": "Choose which provider answers questions, or keep them on your own hardware",
+        "zh-Hans": "请选择由哪家服务商解答提问 或选择保留在贵公司自有硬件上",
+    },
+    "setup.error.key_needed": {
+        "en": "This provider needs a key from your own account with them",
+        "zh-Hans": "该服务商需要贵公司自有账户下的密钥",
+    },
+    "setup.error.key_not_wanted": {
+        "en": "Nothing would use a key here, because questions stay on your own hardware",
+        "zh-Hans": "此处不会用到密钥 因为提问都留在贵公司自有硬件上",
+    },
+    "setup.error.refused": {
+        "en": "That code was not accepted. Check the line the installer printed",
+        "zh-Hans": "该安装码未被接受 请核对安装程序打印的那一行",
+    },
+    "setup.review.supplied": {"en": "Supplied", "zh-Hans": "已提供"},
+    "setup.review.not_given": {"en": "Not given", "zh-Hans": "未填写"},
+    "setup.review.skipped": {"en": "Skipped", "zh-Hans": "已跳过"},
 }
 
 #: What a placeholder looks like in a message. `{example}` and nothing cleverer: a format
