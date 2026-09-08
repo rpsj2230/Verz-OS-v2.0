@@ -34,7 +34,7 @@ from brain.launch import (
     pack_gaps,
     playbook_gaps,
     review_gaps,
-    runbook_gaps,
+    screen_runbook_gaps,
     service_level,
     subprocessors,
 )
@@ -313,8 +313,8 @@ def test_a_console_screen_with_no_runbook_is_a_gap_in_the_pack() -> None:
     dropped = SCREENS[0].key
     del short[dropped]
 
-    assert any(dropped in one for one in runbook_gaps(short))
-    assert runbook_gaps(every_screen_covered()) == ()
+    assert any(dropped in one for one in screen_runbook_gaps(short))
+    assert screen_runbook_gaps(every_screen_covered()) == ()
 
 
 def test_a_runbook_for_a_screen_that_does_not_exist_is_a_gap_because_it_reads_as_coverage() -> None:
@@ -326,7 +326,7 @@ def test_a_runbook_for_a_screen_that_does_not_exist_is_a_gap_because_it_reads_as
     stale = every_screen_covered()
     stale["a_screen_that_was_renamed"] = "how to work a screen that is not there"
 
-    findings = runbook_gaps(stale)
+    findings = screen_runbook_gaps(stale)
 
     assert any("does not exist" in one for one in findings)
 
@@ -343,7 +343,7 @@ def test_an_empty_runbook_is_a_gap_and_not_an_entry() -> None:
         blank = every_screen_covered()
         blank[SCREENS[0].key] = nothing
 
-        assert any("empty" in one for one in runbook_gaps(blank))
+        assert any("empty" in one for one in screen_runbook_gaps(blank))
 
 
 def test_the_screens_are_read_from_the_console_register_and_not_from_a_list_here() -> None:
@@ -353,7 +353,7 @@ def test_the_screens_are_read_from_the_console_register_and_not_from_a_list_here
 
     Delete this and the runbook check becomes a comparison against whatever the caller
     happened to pass, which is always complete."""
-    taken = inspect.signature(runbook_gaps).parameters
+    taken = inspect.signature(screen_runbook_gaps).parameters
 
     assert "screens" in taken
     assert taken["screens"].default is SCREENS

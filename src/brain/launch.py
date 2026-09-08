@@ -330,10 +330,15 @@ def subprocessors(
 
 
 # ------------------------------------------------------ a runbook per screen (M37.4.3.1)
-def runbook_gaps(
+def screen_runbook_gaps(
     runbooks: Mapping[str, str], *, screens: Sequence[Screen] = SCREENS
 ) -> tuple[str, ...]:
     """Console screens with no runbook, and runbooks for screens that do not exist.
+
+    Named for its subject rather than `runbook_gaps`, because `brain.ops.alerting` has a
+    function of that name about a different runbook: one is how to work a screen, the other
+    is what to do when an alert fires. Two identical names in one handover pack is a reader
+    assuming one of them is a duplicate.
 
     Read off `brain.console.screens.SCREENS` rather than from a list of names here, so the
     thirty-fifth screen arrives as a gap in the pack rather than as a screen the client was
@@ -462,7 +467,7 @@ def pack_gaps(
     them and lets those exceptions through.
     """
     findings = list(owner_gaps(owners))
-    findings.extend(runbook_gaps(screen_runbooks, screens=screens))
+    findings.extend(screen_runbook_gaps(screen_runbooks, screens=screens))
     findings.extend(playbook_gaps(rows, components))
     findings.extend(review_gaps(launched_on=launched_on, review_booked_for=review_booked_for))
     return tuple(findings)

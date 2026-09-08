@@ -2,9 +2,15 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**15 items are open, and they are not equally urgent.** They had accumulated into one
+**16 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
+
+**One is the most important thing on this page and it is new.** Item 47: thirteen mechanisms
+in the system only work if something runs them on a schedule, and twelve of them are run by
+nothing at all. Nothing has gone wrong yet, because none of them has ever run and there is no
+client data in the system. What it needs from you is one decision about where scheduled work
+lives on your server, with three options and a recommendation.
 
 **One is holding up real work.** Item 34: the model we chose produces vectors of one width and
 the column that stores them is another width, so nothing can be embedded until one of the two
@@ -61,6 +67,64 @@ happened in.
 ---
 
 # Open
+
+## 47. Twelve of the thirteen safety mechanisms in the system have never been switched on, and I need one decision about where scheduled work runs
+
+**The finding.** The system has thirteen mechanisms that only work if something runs them on a
+schedule: pruning data past its retention window, the permission canaries, the restore drill,
+the backup exposure alert, the refusal digest, the staff directory sync, knowledge
+re-verification, entity resolution calibration, redriving stuck jobs, resuming interrupted
+side effects, the model health probes, and the spend estimator correction. Twelve of them have
+no caller anywhere. Each one is written, tested, documented, and nothing has ever run it.
+
+The thirteenth is the audit anchor, and it works: a GitHub Actions timer calls a web address in
+the system every day, and that publishes the tamper-evident seal on the audit trail. It is the
+one that runs, and it is the reason I can tell you the other twelve do not: the check that
+found them had to get the working one right first.
+
+**How bad is this right now.** Not bad, and I want to be accurate. Nothing has degraded,
+because none of these has ever run and there is no client data in the system yet. The reason
+it is worth waking up to is the direction it goes: **the console screens being built now will
+say the estate is protected.** A retention screen that shows a 30-day window is telling the
+truth about the policy and nothing about whether a single row has ever been deleted. That gap
+between what a screen says and what is happening is the failure mode, and it arrives quietly
+on the day somebody trusts the screen.
+
+There is now a check that goes red if a mechanism that was wired stops being wired, or if the
+written record and the code disagree in either direction. It is deliberately not red today:
+a check that fails the day it lands is a check somebody switches off.
+
+**What I need from you: where should scheduled work run.** This is a decision about your
+server rather than about the code, which is why it is here.
+
+- **Option A, recommended: a small scheduler inside the application container.** Every one of
+  the thirteen already has a function that answers "is this due", so the scheduler is a loop
+  that asks each of them and puts a job on the queue. No new container, no host configuration,
+  and it works on the small deployment profile, which is the one you are running. It needs a
+  lock so that two copies of the app do not both run the same sweep, and the database already
+  provides the kind of lock that does this. About a day of work, and it ships with the product,
+  so every client after you gets it by installing.
+- **Option B: more GitHub Actions timers, like the audit anchor.** Nothing changes on your
+  server and the pattern is proven, because one of these already works that way. I recommend
+  against it beyond the anchor, and the reason is the whole shape of this product: a
+  client-hosted system whose safety mechanisms are triggered from our GitHub account is a
+  system we operate on their behalf. The client cannot see the schedule, cannot change it, and
+  loses it if the relationship ends. It is the right answer for exactly one thing, publishing a
+  seal to a repository we hold, and the wrong answer for the other twelve.
+- **Option C: timers on the server itself.** Standard, reliable, and it puts the schedule
+  outside the product, so every client installs it by hand from a runbook and their thirteen
+  timers drift from ours. It also means the installer has to write files as root.
+
+I recommend A, and leaving the audit anchor where it is until A has been running long enough
+to trust.
+
+**One thing to know either way.** Turning these on is not free of consequences: the retention
+sweep deletes things. That is its job, and the first time it runs on a system that has been
+accumulating rows since installation it will delete a great deal at once. When we wire it, it
+runs in a dry-run mode first and reports what it would remove, and you look at that report
+before it is allowed to remove anything. I will not turn that one on silently.
+
+---
 
 ## 46. Your client agreement will promise a recovery point and a recovery time. These are the numbers, and I need you to pick which set
 
