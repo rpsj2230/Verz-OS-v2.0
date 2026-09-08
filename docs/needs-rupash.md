@@ -80,7 +80,10 @@ reason beside each one:
 | `standard` | 4 hours | 4 hours | The workers and the file store are running, so a restore has somewhere to go and the time is replaying archived data rather than provisioning a machine |
 | `full` | 1 hour | 2 hours | The tightest figures the system offers, and they need a standby host that already exists |
 
-`lite` is what an install that never says otherwise runs, and it is what is running now.
+`lite` is what an install that never says otherwise runs, and it is what the example
+environment file sets. I have not read the value off your server, because I do not touch it
+while you are asleep; if it says something else, the row above changes and the
+recommendation below does not.
 
 **The backup schedule is already better than the promise, and I would not promise the
 difference.** The copies are scheduled to run every hour at worst, and the database's write
