@@ -221,11 +221,15 @@ Audited with no survivors remaining: `core/redaction.py` (six real, fixed),
 `console/spend_view.py`, `console/model_matrix.py`, `console/approvals.py`,
 `console/scoped_authority.py`.
 
-Two are known unfinished. `ops/admission.py` produced seven first-pass survivors that were
-never re-checked against the import graph, so they are candidates and not findings.
-`gate/leash.py` was audited against one test file for a module nineteen exercise, which is the
-episode recorded above; four of its seven reported survivors were real and the audit has not
-been re-run with the right scope since.
+`gate/leash.py` has since been re-run with the right scope, and the result is the point of the
+episode recorded above. Against the twenty-four test files that import it, the audit finds
+twenty-one guards and **no survivors at all**. The seven the one-file run reported were an
+artefact of the scope, top to bottom, and the module they were reported against was the one
+whose guards a reader would least want to doubt.
+
+One is still unfinished. `ops/admission.py` produced seven first-pass survivors that were
+never re-checked against the import graph, so they are candidates and not findings, and the
+leash result is the reason to treat them that way rather than as a list to go and fix.
 
 **Mutate the constants too, not only the branches.** This is the sibling of the docstring rule
 above and it caught three separate authors on 2026-09-06, in one afternoon. A test that asserts
