@@ -42,6 +42,7 @@ from brain.console.govern import Placed, may_certify
 from brain.console.reach_view import Operation, PromotionEvidence
 from brain.console.reads import Plane, plane_capability
 from brain.console.scoped_authority import (
+    BUDGET_AUTHORITY,
     COVERAGE_AUTHORITY,
     REACH_AUTHORITY,
     REACH_AUTHORITY_SCREEN,
@@ -54,6 +55,7 @@ from brain.console.scoped_authority import (
     authority_gaps,
     ceiling_within_reach,
     department_coverage,
+    department_pace,
     deputy_runs_at_most,
     grantable,
     may_adopt,
@@ -66,6 +68,7 @@ from brain.console.scoped_authority import (
     write_grant,
 )
 from brain.console.screens import screen
+from brain.console.spend_view import pace
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.core.scope_sql import scope_narrows
@@ -77,6 +80,7 @@ from brain.identity.roles import DEPUTY_MAX, IdentityError, Role, RoleGrant
 from brain.identity.teams import principal_subject
 from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
+from brain.ops.budgets import Allowance, BudgetLevel, BudgetPeriod, BudgetRow
 from brain.status import leaf_sentences
 
 #: A fixed moment, so an expiry test cannot pass because the machine's clock sat on the
@@ -1198,3 +1202,174 @@ def test_the_capability_is_the_knowledge_librarys_own_and_not_one_invented_here(
         )
         == ()
     )
+
+
+# --- what a department spent, against pace (M33.2.1.3) ----------------------------------------
+
+MONTH_START = datetime(2026, 3, 1, tzinfo=UTC)
+MONTH_END = datetime(2026, 3, 31, tzinfo=UTC)
+QUARTER_WAY = datetime(2026, 3, 8, 12, 0, tzinfo=UTC)
+
+
+def a_budget_for(
+    department: str, *, ceiling: int = 1_000, spent: int = 250, level: BudgetLevel | None = None
+) -> Allowance:
+    """One budget row with spend against it, through the real constructors."""
+    return Allowance(
+        row=BudgetRow(
+            level=level if level is not None else BudgetLevel.DEPARTMENT,
+            subject=department,
+            period=BudgetPeriod.MONTH,
+            ceiling_minor=ceiling,
+            version=1,
+            author="u_admin",
+            effective_from=MONTH_START,
+            reason="a figure written for this test",
+        ),
+        spent_minor=spent,
+    )
+
+
+def a_budget_head(department: str) -> EntitlementSet:
+    """A department head holding the budget screen's capability over their department."""
+    return EntitlementSet(
+        principal_id="u_head",
+        grants=(Grant(capability=BUDGET_AUTHORITY, scope=Scope.department(department)),),
+    )
+
+
+def test_a_head_reads_their_own_departments_pace_and_gets_nothing_for_another() -> None:
+    """M33.2.1.3. The same reach question every other surface in this module asks, and the
+    same answer shape: `None` rather than a refusal, because a refusal naming the department
+    answers "does this exist".
+
+    Two departments either side of the boundary, so the difference between the two answers is
+    the head's own scope and nothing else.
+
+    Delete this and a department head reads another department's consumption on a page headed
+    with their own department's name."""
+    mine = department_pace(
+        MAINTENANCE,
+        a_budget_for(MAINTENANCE),
+        a_budget_head(MAINTENANCE),
+        started_at=MONTH_START,
+        ends_at=MONTH_END,
+        now=QUARTER_WAY,
+    )
+    theirs = department_pace(
+        FINANCE,
+        a_budget_for(FINANCE),
+        a_budget_head(MAINTENANCE),
+        started_at=MONTH_START,
+        ends_at=MONTH_END,
+        now=QUARTER_WAY,
+    )
+
+    assert mine is not None
+    assert mine.spent_fraction == 0.25
+    assert mine.elapsed_fraction == 0.25
+    assert theirs is None
+
+
+def test_a_budget_from_another_level_or_another_department_is_refused() -> None:
+    """**A company allowance passed to a department page renders the company's consumption
+    under a department heading, with every figure correct and every one about somebody else.**
+    A pace is two fractions and neither of them says whose, so nothing downstream could
+    notice.
+
+    Both mistakes, because they are different: the wrong level and the right level with the
+    wrong subject. A check on one passes a test that only makes the other.
+
+    Delete this and the department page is one argument away from being the company's."""
+    head = a_budget_head(MAINTENANCE)
+
+    with pytest.raises(ValueError, match="another level"):
+        department_pace(
+            MAINTENANCE,
+            a_budget_for("everybody", level=BudgetLevel.COMPANY),
+            head,
+            started_at=MONTH_START,
+            ends_at=MONTH_END,
+            now=QUARTER_WAY,
+        )
+    with pytest.raises(ValueError, match="another level"):
+        department_pace(
+            MAINTENANCE,
+            a_budget_for(FINANCE),
+            head,
+            started_at=MONTH_START,
+            ends_at=MONTH_END,
+            now=QUARTER_WAY,
+        )
+    # And the case a subject check alone lets through, which a mutation found: a company
+    # budget whose subject happens to be spelled the same as the department. The key is
+    # (level, subject, period), so nothing stops a company row being keyed on that string,
+    # and the figure it carries is the whole install's.
+    with pytest.raises(ValueError, match="another level"):
+        department_pace(
+            MAINTENANCE,
+            a_budget_for(MAINTENANCE, level=BudgetLevel.COMPANY),
+            head,
+            started_at=MONTH_START,
+            ends_at=MONTH_END,
+            now=QUARTER_WAY,
+        )
+
+
+def test_a_department_pace_needs_a_department_and_there_is_no_value_meaning_all_of_them() -> None:
+    """Over no department it is the company's figure, which is a different screen with a
+    different grant. The same decision `department_coverage` makes above.
+
+    Whitespace as well as empty, because `" "` is what arrives from a form.
+
+    Delete this and one call with an empty string is the company's consumption behind a
+    department head's grant."""
+    # A real allowance, because `BudgetRow` refuses an empty subject in its own constructor
+    # and the blank department has to be the thing that fails here.
+    for nobody in ("", " "):
+        with pytest.raises(ValueError, match="needs a department"):
+            department_pace(
+                nobody,
+                a_budget_for(MAINTENANCE),
+                a_budget_head(MAINTENANCE),
+                started_at=MONTH_START,
+                ends_at=MONTH_END,
+                now=QUARTER_WAY,
+            )
+
+
+def test_the_arithmetic_is_spend_views_own_and_not_a_second_copy() -> None:
+    """`brain.console.spend_view.pace` already refuses a per-run budget, a period with no
+    length and an instant outside it. A second copy here would be a second set of edge cases
+    to keep in step, and the one that gets fixed is the one somebody is looking at.
+
+    Asserted on the source as well as on the answer, because a reimplementation that agrees
+    today passes an equality check and is exactly the thing being refused.
+
+    Delete this and the three refusals get rewritten here, slightly differently."""
+    import inspect
+
+    body = inspect.getsource(department_pace)
+    allowance = a_budget_for(MAINTENANCE)
+
+    assert "return pace(" in body
+    assert department_pace(
+        MAINTENANCE,
+        allowance,
+        a_budget_head(MAINTENANCE),
+        started_at=MONTH_START,
+        ends_at=MONTH_END,
+        now=QUARTER_WAY,
+    ) == pace(allowance, started_at=MONTH_START, ends_at=MONTH_END, now=QUARTER_WAY)
+
+
+def test_the_capability_is_the_budget_screens_own_and_not_one_invented_here() -> None:
+    """A capability invented for this page would be a second grant over the same figures, and
+    an administrator reviewing the console's screens would never meet it.
+
+    Anchored to the literal as well as to the screen, so the pair is not compared against
+    itself.
+
+    Delete this and the department budget page is read behind a grant nobody reviews."""
+    assert BUDGET_AUTHORITY.value == "read:budget"
+    assert screen("budget").read.requires == BUDGET_AUTHORITY

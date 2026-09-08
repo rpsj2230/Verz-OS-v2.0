@@ -92,7 +92,7 @@ package: `brain.console.screens.unregistered_tools([])` still returns all thirty
 claimed below is the authority decision, which is the half a screen cannot supply and the half
 that was missing.
 
-Task ids: M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
+Task ids: M33.2.1.3, M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
 """
 
 from __future__ import annotations
@@ -105,6 +105,7 @@ from brain.agents.model import AgentRecord, entitlement_ceiling
 from brain.console.operate import CoverageRow, coverage
 from brain.console.reach_view import OPERATION_EFFECT, Operation, PromotionEvidence, may_raise
 from brain.console.screens import screen
+from brain.console.spend_view import Pace, pace
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Scope
 from brain.core.scope_sql import scope_narrows
@@ -114,6 +115,7 @@ from brain.identity.lifecycle import Adoption
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import DEPUTY_MAX, RoleGrant, appoint_deputy
 from brain.knowledge.item import KnowledgeItem
+from brain.ops.budgets import Allowance, BudgetLevel
 from brain.tools.registry import rung_ceiling
 
 # ------------------------------------------------------------------ written-down reasons
@@ -746,3 +748,73 @@ def department_coverage(
         areas=tuple(areas_of.get(department, ())),
         now=now,
     )
+
+
+# ------------------------------------- what a department spent, against pace (M33.2.1.3)
+#: Why there is no department activity view here, and why the block is deeper than a filter.
+#:
+#: `brain.console.global_surfaces.activity_filter` refuses a department lens because an audit
+#: entry carries no department. That is the visible half. The half found on 2026-09-08, while
+#: trying to build the department version, is that **a department-scoped audit grant matches
+#: no audit entry at all**: `brain.audit.view._scope_row` offers `action`, `actor_id`,
+#: `subject` and `subject_kind`, and `brain.core.scope.Clause.matches` refuses a row that does
+#: not carry the field, which is the correct fail-closed reading. So a department admin
+#: holding `read:audit` over their own department reads an empty ledger, and would do so
+#: whatever this module did with the filter.
+#:
+#: A wrapper that narrowed by member ids would therefore have been a surface that is always
+#: empty for exactly the readers it is for, and its tests would have passed: every fixture
+#: would have used a company-wide grant. It is item 48 in `docs/needs-rupash.md` because the
+#: answer is a decision about what the longest-retained record in the estate says about a
+#: person, and not one to take at two in the morning.
+A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING: Final = (
+    "An audit entry carries an action, a subject kind, a subject and an actor, and no "
+    "department. A scope written against a department therefore matches no entry, because a "
+    "missing field must never satisfy a predicate. A department admin holding read:audit over "
+    "their own department reads an empty ledger, and a department activity screen built on "
+    "that would be empty for every reader it exists for while passing every test written with "
+    "a company-wide fixture."
+)
+
+#: The capability a department budget view is read behind: the budget screen's own.
+BUDGET_AUTHORITY: Final = screen("budget").read.requires
+
+
+def department_pace(
+    department: str,
+    allowance: Allowance,
+    entitlement: EntitlementSet,
+    *,
+    started_at: datetime,
+    ends_at: datetime,
+    now: datetime,
+) -> Pace | None:
+    """This department's spend against the part of the period that has elapsed (M33.2.1.3).
+
+    The arithmetic is `brain.console.spend_view.pace` and is called rather than repeated: it
+    already refuses a per-run budget, a period with no length and an instant outside it, and a
+    second copy of those three would be a second set of edge cases to keep in step.
+
+    What is decided here is the two things that make it a department surface. The head's
+    authority is asked about the department first, and **the allowance has to be this
+    department's own**. That second one is the mistake worth guarding: a company allowance
+    passed to a department page renders the company's consumption under a department heading,
+    every figure correct and every one about somebody else. It is refused rather than
+    rendered, because a pace is two fractions and neither of them says whose.
+
+    `None` rather than a refusal for a head who does not reach the department, matching every
+    other surface here: a refusal naming the department would answer "does this exist".
+    """
+    if not department.strip():
+        msg = "a department budget view needs a department; over none it is the company's"
+        raise ValueError(msg)
+    if allowance.row.level is not BudgetLevel.DEPARTMENT or allowance.row.subject != department:
+        msg = (
+            f"the allowance is {allowance.row.level.value}:{allowance.row.subject!r} and this "
+            f"is the {department!r} page; a budget from another level renders somebody else's "
+            "consumption under this heading with every figure correct"
+        )
+        raise ValueError(msg)
+    if not within_reach(entitlement, BUDGET_AUTHORITY, Scope.department(department), now):
+        return None
+    return pace(allowance, started_at=started_at, ends_at=ends_at, now=now)

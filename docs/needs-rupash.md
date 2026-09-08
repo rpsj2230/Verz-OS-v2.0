@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**16 items are open, and they are not equally urgent.** They had accumulated into one
+**17 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -16,6 +16,12 @@ lives on your server, with three options and a recommendation.
 the column that stores them is another width, so nothing can be embedded until one of the two
 moves. Every other embedding task waits behind it. My recommendation is in the item, and it
 comes with a cost either way.
+
+**One is a fault I found while building on top of it.** Item 48: a department head's
+permissions are written against their department and an audit entry does not record one, so
+their activity page is empty rather than filtered. Nothing is being shown to anybody who
+should not see it; the failure is the other way round. Three options, one of which is to
+decide department heads do not read the audit trail at all, and that is a real answer.
 
 **Three are one-sentence answers with no work behind them.** Item 33 asks what "shadow-pinned
 thirty days" was meant to mean, and the answer decides a safety property. Item 36 asks whether
@@ -67,6 +73,58 @@ happened in.
 ---
 
 # Open
+
+## 48. A department head cannot read their own department's activity, and the fix is one line from you
+
+**The finding.** An audit entry records four things a permission can be written against: what
+happened, what kind of thing it happened to, which thing, and who did it. It does not record a
+department. A department head's permissions are written against their department, so their
+audit permission matches no entry at all, and their activity page is empty. Not filtered:
+empty. I found this while building that page, and the page would have been empty for every
+reader it exists for while passing every test, because a test fixture uses a company-wide
+permission and never notices.
+
+Two tasks on the plan are blocked by it: all-activity with department filters, and the
+department head's own activity view. A third, usage and tokens by department, is blocked by
+the same shape in a different table.
+
+**Why I have not just fixed it.** The obvious fix is to record the department on every audit
+entry, and that is a decision about the record this system keeps longest. Today an audit row
+says what somebody did. With a department on it, the sequence of rows says where they worked
+and when they moved, kept for as long as the audit trail is kept, which is years. That is a
+different thing to hold about a person, and it is not mine to decide at two in the morning.
+
+**Options.**
+
+- **Option A, recommended: write a department head's audit permission against the people
+  rather than against the department.** Permissions can already name a set of people, and the
+  staff directory already knows who is in a department, so the grant becomes "may read the
+  audit trail for these fifteen people" and is rewritten by the directory sync when somebody
+  joins or leaves. Nothing new is retained, no column is added, and the permission says
+  exactly whose activity that head may read, which is a thing you can review on a screen. The
+  cost is that it goes briefly stale between a transfer and the next sync, and that the grant
+  is longer to look at.
+- **Option B: record the department on every audit entry.** Every department view then works
+  directly and simply, including the two blocked tasks. The cost is the one above: the audit
+  trail becomes a record of where each person worked over time. There is a second, quieter
+  cost, which is that a department written at the time of the event will disagree with the
+  org chart after somebody transfers, so the system would then have two answers to "which
+  department was that", and the code would have to say which one every screen means.
+- **Option C: leave it and say so.** Department heads read grants, budgets, knowledge coverage
+  and their people's work, and do not read the audit trail; the audit trail is for the auditor
+  and the super administrator. This is a defensible product decision rather than a fault, and
+  it costs nothing.
+
+I recommend A. It answers the question without changing what is kept, and the thing it
+produces, a permission that names the people it covers, is easier to review than a permission
+that names a department and relies on a column agreeing with it.
+
+**Nothing is broken today.** Nobody is being shown data they should not see; the failure is in
+the other direction, and there is no client data in the ledger yet. The department budget page
+does work and shipped tonight, because a budget is written against a department and does not
+have this problem.
+
+---
 
 ## 47. Twelve of the thirteen safety mechanisms in the system have never been switched on, and I need one decision about where scheduled work runs
 
