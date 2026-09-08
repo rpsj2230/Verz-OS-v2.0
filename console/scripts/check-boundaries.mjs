@@ -1,11 +1,11 @@
 /**
  * The rules in this console that are worth more than a paragraph, checked mechanically.
  *
- * **This script has never been run.** There is no Node toolchain on the machine it was
- * written on, so it has been reasoned about and not executed. Treat a first run as part of
- * reviewing it, and treat a failure on first run as a bug in the script until proven
- * otherwise. It has no dependencies, so `node scripts/check-boundaries.mjs` is the whole
- * of what it needs.
+ * **First run on 2026-09-08, on Node 24, clean.** It had never been executed before that:
+ * there was no Node toolchain on the machine it was written on, so it had been reasoned
+ * about and not run, and this paragraph said so. Every rule below the first seven was added
+ * afterwards and has been run. It has no dependencies, so `node scripts/check-boundaries.mjs`
+ * is the whole of what it needs, and CI runs it on every push.
  *
  * **Why a grep and not a linter rule.** ESLint would express most of this better and would
  * be another toolchain to pin, configure and keep working. Every rule here is a rule about
@@ -105,6 +105,17 @@ const RULES = [
       "Rendering any of it as HTML is script injection with the company's own data as the " +
       "vector, and it also breaks the lock: markup in a field would render as markup.",
   },
+  {
+    name: "no positive tab order",
+    pattern: /tabIndex=\{?\s*["']?[1-9]/,
+    allow: [],
+    why:
+      "A positive tabindex lifts one element out of the document's own order and puts it " +
+      "ahead of everything with a zero, which is every other control on the page. One of " +
+      "them reorders the whole console for anybody navigating by keyboard, and the order " +
+      "it produces is not the one somebody reading the markup would predict. Nothing here " +
+      "needs one: every control is a native element, so the tab order is the source order.",
+  },
 ];
 
 async function sourceFiles(directory) {
@@ -184,9 +195,155 @@ async function checkThemeKey(failures) {
   }
 }
 
+/** Every stylesheet under a directory, at any depth. */
+async function stylesheets(directory) {
+  const found = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const full = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...(await stylesheets(full)));
+    } else if (entry.name.endsWith(".css")) {
+      found.push(full);
+    }
+  }
+  return found;
+}
+
+/**
+ * The focus ring, which is the only thing telling somebody navigating by keyboard where
+ * they are.
+ *
+ * Two questions, and the second is the one that goes stale quietly. First: does anything
+ * remove the outline. `outline: none` is the single most common accessibility regression on
+ * the web and it arrives as a tidy-up, because the default ring is ugly and the person
+ * removing it is looking at a mouse pointer. Second: is there still a rule that draws one.
+ * A stylesheet with no `:focus-visible` rule passes the first check perfectly and leaves the
+ * console with whatever the browser does by default, which in a design that has restyled its
+ * buttons is frequently nothing.
+ *
+ * The stylesheets are checked here rather than in `RULES` because `sourceFiles` walks
+ * TypeScript only. Every `.css` under `src`, not only the ones in `src/styles`: the focus
+ * colour itself lives in `src/theme/tokens.css`, and a scan of one directory would have
+ * been a scan that could not see the file most likely to be tidied.
+ */
+async function checkFocusStates(failures) {
+  const sheets = await stylesheets(SRC);
+  let drawsAFocusRing = false;
+  for (const sheet of sheets) {
+    const text = await readFile(sheet, "utf8");
+    if (/:focus-visible[^{]*\{[^}]*outline\s*:/.test(text)) {
+      drawsAFocusRing = true;
+    }
+    text.split("\n").forEach((line, index) => {
+      if (line.includes(OPT_OUT)) {
+        return;
+      }
+      if (/outline\s*:\s*(none|0)\s*(;|$|!)/.test(line)) {
+        failures.push({
+          where: `${relativePath(sheet)}:${index + 1}`,
+          rule: "the focus outline is never removed",
+          why:
+            "Removing the outline leaves somebody navigating by keyboard with no way to " +
+            "tell where they are on the page, and the person removing it is looking at a " +
+            "mouse pointer and cannot see the loss. If a control genuinely needs a " +
+            "different ring, draw the different ring rather than taking the default away.",
+          line: line.trim(),
+        });
+      }
+    });
+  }
+  if (!drawsAFocusRing) {
+    failures.push({
+      where: "src",
+      rule: "something draws a focus ring",
+      why:
+        "No stylesheet has a `:focus-visible` rule that sets an outline. Nothing is " +
+        "removing one either, which is why the rule above passes, and the console is left " +
+        "with whatever the browser draws by default on controls this design has restyled.",
+      line: "",
+    });
+  }
+}
+
+/** Elements that are not focusable and not announced as controls. */
+const NOT_A_CONTROL = new Set([
+  "div",
+  "span",
+  "li",
+  "td",
+  "tr",
+  "p",
+  "section",
+  "article",
+  "header",
+  "footer",
+  "nav",
+  "ul",
+  "ol",
+  "main",
+  "img",
+  "svg",
+]);
+
+/**
+ * A click handler on something the keyboard cannot reach.
+ *
+ * A `div` with an `onClick` works perfectly for a mouse and does not exist for anybody
+ * else: it takes no focus, it is announced as nothing, and Enter does not activate it. The
+ * fix is almost always a `button`, which is why this refuses rather than asking for the
+ * three attributes that would make the `div` behave like one.
+ *
+ * Found by scanning backwards from each `onClick` to the tag that opens it, rather than by
+ * matching an opening tag forwards. A JSX attribute list contains `=>`, so a pattern for
+ * `<div ...>` stops at the first arrow function and reports the wrong element or none.
+ * Blunt, in the same spirit as the rest of this file, and a genuine exception can carry the
+ * opt-out marker with a reason.
+ */
+async function checkClickablesAreFocusable(failures) {
+  for (const file of await sourceFiles(SRC)) {
+    if (!file.endsWith(".tsx")) {
+      continue;
+    }
+    const text = await readFile(file, "utf8");
+    for (const match of text.matchAll(/onClick\s*=/g)) {
+      const opens = text.lastIndexOf("<", match.index);
+      if (opens < 0) {
+        continue;
+      }
+      const named = /^<([A-Za-z][A-Za-z0-9]*)/.exec(text.slice(opens, opens + 40));
+      if (!named || !NOT_A_CONTROL.has(named[1])) {
+        continue;
+      }
+      const attributes = text.slice(opens, match.index + 400);
+      if (/\brole=|\bonKeyDown=|\bonKeyUp=/.test(attributes)) {
+        continue;
+      }
+      const before = text.slice(0, match.index);
+      const lineNumber = before.split("\n").length;
+      const line = text.split("\n")[lineNumber - 1] ?? "";
+      if (line.includes(OPT_OUT)) {
+        continue;
+      }
+      failures.push({
+        where: `${relativePath(file)}:${lineNumber}`,
+        rule: "a click handler belongs on something the keyboard can reach",
+        why:
+          `<${named[1]}> takes no focus, is announced as nothing, and does not activate on ` +
+          "Enter, so a click handler on one works for a mouse and does not exist for " +
+          "anybody else. Use a button. If this really is not a control, the handler is on " +
+          "the wrong element.",
+        line: line.trim(),
+      });
+    }
+  }
+}
+
+
 const failures = [];
 await checkRules(failures);
 await checkThemeKey(failures);
+await checkFocusStates(failures);
+await checkClickablesAreFocusable(failures);
 
 if (failures.length === 0) {
   console.log("check-boundaries: clean");
