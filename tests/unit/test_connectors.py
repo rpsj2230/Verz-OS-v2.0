@@ -5,12 +5,14 @@ anybody edits live in `tests/invariants/test_projection_invariants.py`, which is
 storage guarantees are; this file says what each refusal actually does and what it says.
 
 Task ids: M11.1.1, M11.1.2, M11.1.3, M11.1.4, M11.1.5, M11.1.6, M11.1.7, M11.2.1, M11.2.3,
-M11.2.4, M11.2.5, M11.2.6, M11.4.2, M11.4.3, M11.4.5, M11.4.6, M11.4.7
+M11.2.4, M11.2.5, M11.2.6, M11.4.2, M11.4.3, M11.4.5, M11.4.6, M11.4.7, M33.5.1.1,
+M33.5.1.3
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import inspect
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -33,19 +35,24 @@ from brain.connectors.manifest import (
     FieldShape,
     HotUse,
     ManifestError,
+    PermissionSync,
     ProjectedEntity,
     ProjectedField,
     ToolDeclaration,
     digest_input,
     failed_clauses,
+    implementable_permission_sync,
     manifest_digest,
     projectability,
 )
 from brain.connectors.registry import (
+    INSTALL_AUTHORITY,
     ConnectorRegistry,
     ConnectorState,
+    InstallAuthorityError,
     LifecycleError,
     ManifestPinError,
+    may_install,
 )
 from brain.connectors.transports import (
     CustomTransport,
@@ -58,7 +65,7 @@ from brain.connectors.transports import (
     assert_scope_covers,
     normalise,
 )
-from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, IdentityMode, SideEffect, TypedResult
 from brain.core.scope import Clause, Op, Scope
 from brain.ops.secrets import Lease, SecretRef, Vault, VaultRole
@@ -106,6 +113,22 @@ def a_manifest(**overrides: object) -> ConnectorManifest:
     }
     defaults.update(overrides)
     return ConnectorManifest(**defaults)  # type: ignore[arg-type]
+
+
+def _connector_admin(
+    *capabilities: Capability, principal_id: str = "u_priya", not_after: datetime | None = None
+) -> EntitlementSet:
+    """Somebody who may change what is installed, company-wide.
+
+    Defaults to `INSTALL_AUTHORITY` so the lifecycle tests below say what they are about and
+    the refusal tests each remove exactly one thing.
+    """
+    held = capabilities or (INSTALL_AUTHORITY,)
+    return EntitlementSet(
+        principal_id=principal_id,
+        grants=tuple(Grant(capability=c, scope=Scope.unrestricted()) for c in held),
+        not_after=not_after,
+    )
 
 
 # ------------------------------------------------------------- the fetch contract (M11.1.1)
@@ -557,9 +580,9 @@ def test_a_registered_connector_serves_nothing_until_it_is_enabled() -> None:
     anybody uses it, and a connector that served traffic the instant it was declared would
     make that proof retrospective."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     assert registry.serving() == ()
-    registry.enable("laravel", now=NOW)
+    registry.enable("laravel", installer=_connector_admin(), now=NOW)
     assert registry.serving() == ("laravel",)
 
 
@@ -568,18 +591,18 @@ def test_registering_over_an_installed_connector_is_refused() -> None:
     match by construction and `reconnect` would be checking the new connector against
     itself."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     with pytest.raises(LifecycleError, match="front door"):
-        registry.register(a_manifest(version="2.0.0"), now=NOW)
+        registry.register(a_manifest(version="2.0.0"), installer=_connector_admin(), now=NOW)
 
 
 def test_disabling_leaves_the_pin_and_the_manifest_alone() -> None:
     """Disabling is the reversible half. If it dropped the pin, re-enabling would trust
     whatever the far side says it is now."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     pinned = registry.get("laravel").digest
-    registry.disable("laravel", now=NOW)
+    registry.disable("laravel", installer=_connector_admin(), now=NOW)
     assert registry.get("laravel").digest == pinned
     assert registry.get("laravel").state is ConnectorState.DISABLED
 
@@ -588,7 +611,7 @@ def test_an_upgrade_that_changes_the_manifest_without_the_version_is_refused() -
     """The version is what a person reads in a console row, so a redefinition that keeps it
     is invisible in the one place it would be noticed."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     changed = a_manifest(
         tools=(
             ToolDeclaration(
@@ -597,7 +620,7 @@ def test_an_upgrade_that_changes_the_manifest_without_the_version_is_refused() -
         )
     )
     with pytest.raises(ManifestError, match="without a version bump"):
-        registry.upgrade(changed, now=NOW)
+        registry.upgrade(changed, installer=_connector_admin(), now=NOW)
 
 
 def test_an_upgrade_that_changes_the_transport_is_refused() -> None:
@@ -605,9 +628,13 @@ def test_an_upgrade_that_changes_the_transport_is_refused() -> None:
     units with different blast radii. Calling the second an upgrade of the first makes it
     inherit the approval the first was given."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     with pytest.raises(LifecycleError, match="different deployment unit"):
-        registry.upgrade(a_manifest(version="2.0.0", transport=TransportKind.CUSTOM), now=NOW)
+        registry.upgrade(
+            a_manifest(version="2.0.0", transport=TransportKind.CUSTOM),
+            installer=_connector_admin(),
+            now=NOW,
+        )
 
 
 def test_a_version_bump_with_no_manifest_change_is_allowed() -> None:
@@ -615,8 +642,8 @@ def test_a_version_bump_with_no_manifest_change_is_allowed() -> None:
     Refusing it teaches people to avoid the version field, which is the field the previous
     rule depends on."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
-    event = registry.upgrade(a_manifest(version="1.0.1"), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
+    event = registry.upgrade(a_manifest(version="1.0.1"), installer=_connector_admin(), now=NOW)
     assert event.action == "upgrade"
 
 
@@ -626,8 +653,8 @@ def test_a_reconnect_with_a_moved_manifest_quarantines_and_raises() -> None:
     warns has been overridden by the time anybody reads the warning, and the thing on the
     other side is by then already being described to a model."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
-    registry.enable("laravel", now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
+    registry.enable("laravel", installer=_connector_admin(), now=NOW)
     moved = a_manifest(
         tools=(
             ToolDeclaration(
@@ -647,11 +674,11 @@ def test_a_quarantined_connector_cannot_be_enabled() -> None:
     """If enabling cleared it, the remedy would be one click on an amber badge, taken by
     whoever is on call rather than by whoever understands what the descriptions now say."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     with pytest.raises(ManifestPinError):
         registry.reconnect("laravel", a_manifest(version="9.9.9"), now=NOW)
     with pytest.raises(LifecycleError, match="quarantined"):
-        registry.enable("laravel", now=NOW)
+        registry.enable("laravel", installer=_connector_admin(), now=NOW)
 
 
 def test_accepting_the_new_manifest_through_upgrade_releases_the_quarantine() -> None:
@@ -659,11 +686,11 @@ def test_accepting_the_new_manifest_through_upgrade_releases_the_quarantine() ->
     reads the diff, accepts it, and the version moves. Without this the only remedy is
     deleting the connector, which loses its projection."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     moved = a_manifest(version="2.0.0", ceiling="freshdesk")
     with pytest.raises(ManifestPinError):
         registry.reconnect("laravel", moved, now=NOW)
-    registry.upgrade(moved, now=NOW)
+    registry.upgrade(moved, installer=_connector_admin(), now=NOW)
     assert registry.get("laravel").state is ConnectorState.REGISTERED
     assert registry.reconnect("laravel", moved, now=NOW).detail == "manifest matches its pin"
 
@@ -672,8 +699,8 @@ def test_a_matching_reconnect_changes_nothing() -> None:
     """The ordinary path has to stay ordinary. A reconnect that disturbed the state would
     make every restart look like an incident."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
-    registry.enable("laravel", now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
+    registry.enable("laravel", installer=_connector_admin(), now=NOW)
     event = registry.reconnect("laravel", a_manifest(), now=NOW)
     assert event.state is ConnectorState.ENABLED
     assert registry.serving() == ("laravel",)
@@ -685,9 +712,11 @@ def test_a_rebind_moves_the_path_and_leaves_the_pin() -> None:
     path is a configuration edit; if it moved the pin, the next reconnect would quarantine
     a connector nobody had redefined."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     pinned = registry.get("laravel").digest
-    event = registry.rebind("laravel", CredentialBinding(ref=WRITE_REF), now=NOW)
+    event = registry.rebind(
+        "laravel", CredentialBinding(ref=WRITE_REF), installer=_connector_admin(), now=NOW
+    )
     assert registry.get("laravel").manifest.credential.ref.path == WRITE_REF.path
     assert registry.get("laravel").digest == pinned
     assert event.detail == f"{READ_REF.path} to {WRITE_REF.path}"
@@ -697,12 +726,12 @@ def test_a_rebind_cannot_widen_read_only_to_write() -> None:
     """Otherwise the audit line for 'somebody moved a path' and the line for 'somebody
     granted write' are the same line, and write arrives without a reviewer."""
     registry = ConnectorRegistry()
-    registry.register(a_manifest(), now=NOW)
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
     write_binding = CredentialBinding(
         ref=WRITE_REF, mode=AccessMode.WRITE, write_granted_by="u_weiling"
     )
     with pytest.raises(LifecycleError, match="widen"):
-        registry.rebind("laravel", write_binding, now=NOW)
+        registry.rebind("laravel", write_binding, installer=_connector_admin(), now=NOW)
 
 
 # ---------------------------------------------------------------------- health (M11.1.1)
@@ -907,3 +936,235 @@ def test_only_the_database_transport_is_checked_against_the_connect_scope() -> N
         ),
         a_scope(),
     )
+
+
+# ------------------------------------------- who may install a connector (M33.5.1.1)
+def test_installing_a_connector_needs_the_install_capability() -> None:
+    """The act had nothing over it at all: `read:connector` is the screen's read, and
+    `register` took a manifest and a clock and asked nobody.
+
+    Delete this and the capability is decoration. Installing a connector decides which
+    sources exist, which is a decision before every other permission rather than one bounded
+    by them, so nothing downstream can catch a source somebody should not have added."""
+    registry = ConnectorRegistry()
+    nobody = EntitlementSet(principal_id="u_weiling")
+    with pytest.raises(InstallAuthorityError, match=INSTALL_AUTHORITY.value):
+        registry.register(a_manifest(), installer=nobody, now=NOW)
+    assert registry.names() == ()
+
+
+def test_reading_the_connector_screen_does_not_let_somebody_install_one() -> None:
+    """`read:connector` is what the Connector health screen requires, and it is the read
+    rather than the act.
+
+    Asserted as behaviour rather than by comparing two strings, so repointing
+    `INSTALL_AUTHORITY` at the screen's own capability fails here instead of passing a test
+    that compares a constant with itself."""
+    reader = _connector_admin(Capability(value="read:connector"))
+    assert not may_install(reader)
+    with pytest.raises(InstallAuthorityError, match=INSTALL_AUTHORITY.value):
+        ConnectorRegistry().register(a_manifest(), installer=reader, now=NOW)
+
+
+def test_every_transition_that_changes_what_is_installed_asks_who_is_calling() -> None:
+    """Five transitions, each refused for somebody holding nothing, and each on a registry
+    where the connector is already installed so the refusal is not standing in for a missing
+    row.
+
+    Delete this and four of the five can lose the guard while the fifth keeps every test in
+    this file green, which is exactly how a guard survives on one path only."""
+    registry = ConnectorRegistry()
+    admin = _connector_admin()
+    registry.register(a_manifest(), installer=admin, now=NOW)
+    nobody = EntitlementSet(principal_id="u_weiling")
+
+    with pytest.raises(InstallAuthorityError):
+        registry.register(a_manifest(name="xero"), installer=nobody, now=NOW)
+    with pytest.raises(InstallAuthorityError):
+        registry.enable("laravel", installer=nobody, now=NOW)
+    with pytest.raises(InstallAuthorityError):
+        registry.disable("laravel", installer=nobody, now=NOW)
+    with pytest.raises(InstallAuthorityError):
+        registry.upgrade(a_manifest(version="2.0.0"), installer=nobody, now=NOW)
+    with pytest.raises(InstallAuthorityError):
+        registry.rebind("laravel", CredentialBinding(ref=WRITE_REF), installer=nobody, now=NOW)
+
+    assert registry.get("laravel").state is ConnectorState.REGISTERED
+    assert registry.get("laravel").manifest.credential.ref.path == READ_REF.path
+
+
+def test_the_guarded_transitions_are_pinned_and_reconnect_is_not_one_of_them() -> None:
+    """Read off the signatures rather than listed in prose, so a sixth transition added
+    without the guard fails here rather than being noticed by a reader.
+
+    `reconnect` is deliberately outside the set. It is the system comparing a manifest with
+    its pin rather than a person deciding something, and a capability on it would mean a
+    caller without one never performs the comparison: the connector goes on serving against a
+    manifest nobody checked and the quarantine that should have fired arrives as an
+    authorisation error in a log."""
+    guarded = {
+        name
+        for name, function in inspect.getmembers(ConnectorRegistry, inspect.isfunction)
+        if not name.startswith("_") and "installer" in inspect.signature(function).parameters
+    }
+    assert guarded == {"register", "enable", "disable", "upgrade", "rebind"}
+    assert "installer" not in inspect.signature(ConnectorRegistry.reconnect).parameters
+
+
+def test_a_reconnect_still_quarantines_for_a_caller_holding_nothing() -> None:
+    """The positive half of the rule above, and the one that matters: the pin check has to
+    keep working for the caller that has no capability at all, because that is every caller
+    on the reconnection path.
+
+    Delete this and `reconnect` can quietly acquire the guard, at which point a redefined
+    connector stays enabled for anybody whose grant lapsed."""
+    registry = ConnectorRegistry()
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
+    registry.enable("laravel", installer=_connector_admin(), now=NOW)
+    with pytest.raises(ManifestPinError, match="no longer matches"):
+        registry.reconnect("laravel", a_manifest(version="9.9.9"), now=NOW)
+    assert registry.get("laravel").state is ConnectorState.QUARANTINED
+
+
+def test_the_refusal_comes_before_the_registry_is_consulted() -> None:
+    """A caller without the capability learns nothing about what is installed.
+
+    `get` raises `LifecycleError` naming the connector as absent, and which sources a company
+    reads is precisely what a refusal must not confirm. Asking first means both answers are
+    the same refusal, so a name that exists and a name that does not are indistinguishable to
+    somebody probing one at a time."""
+    registry = ConnectorRegistry()
+    registry.register(a_manifest(), installer=_connector_admin(), now=NOW)
+    nobody = EntitlementSet(principal_id="u_weiling")
+
+    with pytest.raises(InstallAuthorityError) as installed:
+        registry.enable("laravel", installer=nobody, now=NOW)
+    with pytest.raises(InstallAuthorityError) as absent:
+        registry.enable("freshdesk", installer=nobody, now=NOW)
+
+    assert "laravel" in str(installed.value)
+    assert "no connector named" not in str(installed.value)
+    assert "no connector named" not in str(absent.value)
+
+
+def test_an_installer_whose_own_grant_has_expired_is_refused() -> None:
+    """`now` is the transition's own instant rather than the wall clock.
+
+    Every function here already has one, and letting `holds` default would make whether a
+    rebind is refused depend on when the process happened to be running rather than on when
+    the decision was made. Delete this and the argument can be dropped as a simplification."""
+    registry = ConnectorRegistry()
+    expired = _connector_admin(not_after=NOW - timedelta(hours=1))
+    with pytest.raises(InstallAuthorityError, match=INSTALL_AUTHORITY.value):
+        registry.register(a_manifest(), installer=expired, now=NOW)
+
+    still_here = _connector_admin(not_after=NOW + timedelta(hours=1))
+    assert registry.register(a_manifest(), installer=still_here, now=NOW).action == "register"
+
+
+# --------------------------------------- permission sync per connector (M33.5.1.3)
+def test_a_connector_claims_nothing_about_permissions_unless_it_says_so() -> None:
+    """The default is the claim that promises nothing, which is the opposite direction from
+    `ProjectedField.uses` and right for the opposite reason.
+
+    A forgotten field here understates the connector, so the cost is a second permission
+    check nobody uses. The other default costs a row shown to somebody because a console said
+    the source was handling it."""
+    assert a_manifest().permission_sync is PermissionSync.NONE
+    assert not a_manifest().permission_sync.syncs_permissions
+    assert PermissionSync.PREDICATE.syncs_permissions
+    assert PermissionSync.DELEGATED.syncs_permissions
+
+
+def test_a_connector_whose_tools_all_run_as_the_caller_may_claim_delegated() -> None:
+    """The positive case for the strongest claim, and the sibling every refusal needs: three
+    refusals below are all satisfied by a check that refuses every claim."""
+    manifest = a_manifest(permission_sync=PermissionSync.DELEGATED)
+    assert manifest.permission_sync.syncs_permissions
+    assert PermissionSync.DELEGATED in implementable_permission_sync(
+        manifest.tools, manifest.projections
+    )
+
+
+def test_one_service_tool_costs_a_connector_its_delegated_claim() -> None:
+    """A tool answered on a shared credential is a call the source never sees the person
+    make, so the second permission check the claim promises is not there for that tool.
+
+    Delete this and a connector with fifteen delegated tools and one service tool reads in a
+    console as permission-aware, which is true of everything except the call that matters."""
+    mixed = {
+        "tools": (
+            ToolDeclaration(
+                name="laravel.read_client",
+                description="One client row from the maintenance portal.",
+                entity="client",
+            ),
+            ToolDeclaration(
+                name="laravel.read_report",
+                description="A rollup the portal computes for everybody.",
+                entity="client",
+                identity_mode=IdentityMode.SERVICE,
+            ),
+        )
+    }
+    assert PermissionSync.DELEGATED not in implementable_permission_sync(
+        a_manifest(**mixed).tools, ()
+    )
+    with pytest.raises(ManifestError, match="identity_mode DELEGATED"):
+        a_manifest(permission_sync=PermissionSync.DELEGATED, **mixed)
+
+
+def test_a_connector_with_no_tools_at_all_cannot_claim_delegated() -> None:
+    """`all` over an empty sequence is True, so without the second half of the condition a
+    connector declaring nothing would claim the strongest answer by declaring nothing.
+
+    That is the direction this leaf must not fail in, and it is the failure that arrives
+    looking like a connector nobody had finished writing."""
+    assert implementable_permission_sync((), ()) == frozenset({PermissionSync.NONE})
+    with pytest.raises(ManifestError, match="at least one"):
+        a_manifest(tools=(), permission_sync=PermissionSync.DELEGATED)
+
+
+def test_a_connector_that_projects_nothing_cannot_claim_a_predicate() -> None:
+    """The source's visibility predicate is stored with a projection and there is nowhere
+    else it lives, so a connector with no projections has nothing to evaluate.
+
+    Delete this and `PREDICATE` becomes a word an admin can tick, which is exactly the shape
+    of this leaf that would have been worse than not building it."""
+    with pytest.raises(ManifestError, match="project at least one entity"):
+        a_manifest(projections=(), permission_sync=PermissionSync.PREDICATE)
+
+
+def test_a_connector_that_projects_an_entity_may_claim_a_predicate() -> None:
+    """The positive case, and the reason the check asks nothing more about the projection:
+    `ProjectedEntity` already refuses an unrestricted visibility and refuses a predicate that
+    enumerates principals, so a projection that exists is a real predicate by construction.
+
+    Delete this and the refusal above is satisfied by a check that refuses everything."""
+    manifest = a_manifest(permission_sync=PermissionSync.PREDICATE)
+    assert manifest.permission_sync is PermissionSync.PREDICATE
+    assert manifest.projections[0].visibility.clauses
+
+
+def test_understating_what_a_connector_can_do_is_always_allowed() -> None:
+    """`NONE` is in every answer `implementable_permission_sync` returns.
+
+    Understating costs a second check and never a row, and a connector rewritten to answer
+    as a service account has to be able to drop its claim without a review of the field it is
+    dropping. Delete this and the check can start refusing a connector for being modest."""
+    assert PermissionSync.NONE in implementable_permission_sync((), ())
+    assert a_manifest(permission_sync=PermissionSync.NONE).permission_sync is PermissionSync.NONE
+
+
+def test_the_permission_sync_claim_is_inside_the_pinned_digest() -> None:
+    """A connector that changes what it claims about the source's permissions between one
+    connection and the next has changed what it does, which is the silent redefinition
+    `reconnect` fails closed on.
+
+    Delete this and `permission_sync` can be added to `UNPINNED_FIELDS` beside the credential
+    binding, at which point a far side can drop its permission model with the pin still
+    matching."""
+    modest = a_manifest()
+    claiming = a_manifest(permission_sync=PermissionSync.DELEGATED)
+    assert "permission_sync" in digest_input(claiming)
+    assert manifest_digest(modest) != manifest_digest(claiming)

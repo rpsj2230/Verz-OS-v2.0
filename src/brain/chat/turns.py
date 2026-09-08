@@ -16,6 +16,30 @@ chat box into a write path into the knowledge base with no review, no scope and 
 provenance - anybody who can talk to the assistant can teach it something. What is stored
 is the shape of the disagreement.
 
+**A turn says which agent answered and never which department asked.** `Turn` carried a
+principal and an instant and nothing else, and two console modules wrote the consequence into
+their own docstrings: `brain.console.workspace.headline` says it cannot check that the turns
+it counts are the agent's own, and `brain.console.own_things.own_history` says it narrows to a
+person because that is the only identifier a turn has. Departmental activity could not be
+assembled at all, for the same missing field. `agent_id` closes the first two and is what the
+third has to be built from.
+
+The department is deliberately not here, and it is not an omission to be filled in later. A
+department is a fact about a person and people sit in several at once: `AgentViewer.departments`
+is a frozenset precisely because somebody is in Sales and Web, and `brain.core.department.
+membership_scope` exists for the same reason. A single `department` column on a turn would
+have to pick one, and whichever it picked would be the one an activity screen counted. It
+would also be a copy of directory state written at the moment somebody spoke, so a mover
+either rewrites last month's activity or does not, and one of those two readings is wrong
+whichever is implemented. What a turn can honestly carry is which agent answered, and an
+agent's audience already carries a department that nothing has to keep in step. See
+`A_TURN_CARRIES_THE_AGENT_AND_NEVER_THE_DEPARTMENT`.
+
+**Nothing here joins the two**, and that is the point of stopping at the field. Turning
+turns plus agent records into departmental activity is a read somebody has to be entitled to
+make, and a helper in this module would be the place that read got justified. `M33.2.1.2` is
+therefore not claimed here; the field it needed is.
+
 Task ids: M9.2.1, M9.2.2, M9.2.3, M9.2.4
 """
 
@@ -34,6 +58,18 @@ from brain.core.redaction import ChannelPayload, LockedField, render_lock
 #: later is a question about something the asker has forgotten the details of too, and
 #: answering it from a record they can no longer see is the failure this module is about.
 CONTEXT_DEPTH = 6
+
+#: Why a turn names an agent and not a department.
+A_TURN_CARRIES_THE_AGENT_AND_NEVER_THE_DEPARTMENT = (
+    "A department is a fact about a person and a person can be in several, so a department "
+    "field on a turn would have to choose one and the choice would be invisible in every "
+    "count made from it. It would also be a copy of directory state frozen at the moment "
+    "somebody spoke: a mover then either rewrites last month's activity or leaves it saying "
+    "something no longer true, and there is no version of that which is right. An agent id "
+    "is a fact about the exchange itself and does not move, and an agent's audience already "
+    "records a department that nothing has to keep in step. Departmental activity is that "
+    "join, made by somebody entitled to make it, and not a column on a transcript."
+)
 
 
 class TurnKind(enum.StrEnum):
@@ -73,6 +109,14 @@ class Turn:
     kind: TurnKind
     at: datetime
     principal_id: str
+    #: Which agent answered, or empty when nothing routed the exchange through one.
+    #:
+    #: Empty rather than None, so the type has one absent value instead of two, which is
+    #: `brain.connectors.projection.ProjectedRecord.local_id`'s argument about the same
+    #: choice. It is a slug in the shared namespace, unvalidated here on purpose: this
+    #: module is downstream of `brain.agents.model`, and importing the pattern to check it
+    #: would put a transcript above the agent record it refers to.
+    agent_id: str = ""
     text: str = ""
     refs: tuple[RecordRef, ...] = ()
     #: Fields withheld from records this turn showed. Carried so a follow-up knows a lock
@@ -215,6 +259,13 @@ class Correction:
     at: datetime
     principal_id: str
     kind: CorrectionKind
+    #: Which agent was wrong, copied from the answer rather than supplied.
+    #:
+    #: Taken from the corrected turn for the same reason `answer_at` is: a caller that could
+    #: name the agent could file a correction against one that never spoke, and "which agent
+    #: is corrected most" is the whole reason to count these. `record_correction` is the only
+    #: constructor anything uses and it reads both off the same turn.
+    agent_id: str = ""
     #: What the answer had drawn on, so a reviewer can look at the same records. Identifiers
     #: only, like everywhere else here.
     refs: tuple[RecordRef, ...] = field(default_factory=tuple)
@@ -233,6 +284,10 @@ def record_correction(
     Raises when there is nothing to correct. A correction with no answer behind it is a
     complaint, and counting it alongside real corrections would make the signal say the
     system is wrong more often than it is.
+
+    The agent, the instant and the references all come off the same turn, and none of them is
+    a parameter. A caller that could name the agent could file a correction against one that
+    never spoke, and "which agent is corrected most" is the reason these are counted at all.
     """
     last_answer = next((t for t in reversed(list(history)) if t.is_answer), None)
     if last_answer is None:
@@ -243,5 +298,6 @@ def record_correction(
         at=at,
         principal_id=principal_id,
         kind=kind,
+        agent_id=last_answer.agent_id,
         refs=last_answer.refs,
     )

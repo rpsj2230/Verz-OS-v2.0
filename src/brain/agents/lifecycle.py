@@ -1,9 +1,9 @@
-"""Turning an agent off, retiring it for good, and handing it to somebody else.
+"""Turning an agent off, retiring it for good, handing it on, and showing it to everybody.
 
-Three states and one move between people, and every one of them is a decision a person made
-about a record rather than a fact about a clock. Nothing here reads the time; `now` is a
-parameter, for the reason `brain.gate.provenance` gives, because a rule about dates that
-reads the clock itself cannot be tested at its own boundary.
+Three states, one move between people and one widening of who may see it, and every one of
+them is a decision a person made about a record rather than a fact about a clock. Nothing
+here reads the time; `now` is a parameter, for the reason `brain.gate.provenance` gives,
+because a rule about dates that reads the clock itself cannot be tested at its own boundary.
 
 **Disable is reversible and archive is not, and that difference is the only reason there
 are two.** A reversible archive is a disable with a longer name: the two controls collapse
@@ -35,7 +35,50 @@ lives. An id would mean re-deriving it from a lookup the caller may not have mad
 failure that produces is silent: a leaver's agents handed to a second leaver on the same
 offboarding run, with every record looking correct.
 
-**`agents_needing_transfer` is the one listing in this package not filtered by audience,
+****Publishing is the audience widening, and until now nothing anywhere performed one.** An
+agent is global when its `AgentAudience.level` is `Visibility.COMPANY`, so
+`brain.console.global_surfaces` could retire a global agent and could not create one, and it
+said so rather than writing an agent state change in a rendering module. `publish` is that
+transition, here, beside the other three.
+
+**A publication widens who is told and never what is reached, which is why it does not take
+what a grant takes.** `brain.console.scoped_authority.may_grant` asks two questions and both
+are about reach: the authority to write grants at all, held over the scope being written, and
+the capability being written, held over that same scope. The second one is what a grant needs
+and a publication must not have. `E_run(caller, agent) = E(caller) ∩ agent_ceiling` has no
+term for the audience, so a published agent hands nobody a row they could not already reach,
+and requiring the publisher to hold the agent's own ceiling would be reading authority in
+order to decide audience: the conflation `brain.agents.model.AUDIENCE_IS_NOT_AUTHORITY`
+exists to refuse, arriving in the direction that looks safe. It would also refuse the person
+the leaf names. A Super Admin deliberately not granted Finance's data could not publish
+Finance's agent, while publishing it would still let them read nothing, because their own run
+is intersected down to their own set.
+
+What a publication does widen is `A_HIDDEN_AGENT_AND_A_MISSING_AGENT_ARE_ONE_ANSWER`, and it
+suspends it on purpose for one record: an agent outside somebody's audience and an agent that
+does not exist are the same answer until this function turns absence into presence for all of
+them at once. So the capability is named for that act and for this object, and the gate is the
+second pair of eyes rather than a reach test. See
+`A_PUBLICATION_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED`.
+
+**Rejected: reusing `brain.knowledge.visibility.PROMOTION_CAPABILITY`.** The levels are that
+module's and `brain.agents.model` argues at length for not writing a second enum, so reusing
+its capability looks like the same economy. It is not. `approve:knowledge.visibility` is a
+noun about documents, and somebody granted it so a team lead may publish a handbook has not
+been asked whether they may put an agent in front of 126 people. That is
+`brain.ops.outbox`'s argument about `admin:webhooks` and `admin:webhook_subscriber`: a
+capability whose name does not match what it governs is checked by whoever reads the name.
+The width comparison is still that module's, because `is_wider` is the one implementation of
+which way the three levels run.
+
+**Rejected: an `unpublish`, or any narrowing of audience.** Narrowing takes an agent away
+from people who are using it, which is a different decision with different consequences from
+never having shown it to them, and `PromotionProposal` already refuses a narrowing down the
+widening path for the same reason. The retire half of M33.1.2.1 is `archive`, which stops the
+agent for everybody rather than returning it to a smaller audience, and a general audience
+narrowing needs its own argument and its own leaf.
+
+`agents_needing_transfer` is the one listing in this package not filtered by audience,
 and that is its whole purpose.** A personal agent whose owner has gone is reachable by
 nobody: `visible_agent_ids` correctly returns nothing for it, for every viewer, for ever.
 Finding those rows therefore cannot be an audience question. It is keyed by the ids the
@@ -54,7 +97,9 @@ from datetime import datetime
 from typing import Final
 
 from brain.agents.model import AgentAudience, AgentError, AgentRecord, AgentState
+from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.principal import Principal
+from brain.knowledge.visibility import Visibility, is_wider
 
 #: Why archive has no inverse, stated where a reader meets it.
 ARCHIVE_IS_TERMINAL: Final = (
@@ -63,6 +108,31 @@ ARCHIVE_IS_TERMINAL: Final = (
     "doing nothing, so a caller that believes it brought an agent back is told otherwise. "
     "A reversible archive is a disable with a longer name, and two controls that differ "
     "only in wording are one control somebody will use interchangeably."
+)
+
+#: Why a publication takes an agreement rather than the reach test a grant takes.
+A_PUBLICATION_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED: Final = (
+    "Publishing an agent moves its audience to the company and moves nobody's reach at all: "
+    "a run through it is still the caller's entitlement intersected with the agent's "
+    "ceiling, and neither side of that intersection mentions who may see the agent. So the "
+    "two questions brain.console.scoped_authority.may_grant asks about a grant are the wrong "
+    "questions here, and the second of them is actively wrong: requiring the publisher to "
+    "hold every capability in the ceiling would let authority decide audience, which is the "
+    "conflation the agent model exists to refuse, and it would refuse a Super Admin "
+    "publishing a department's agent while protecting nothing, because publishing it lets "
+    "them read none of it. What the act does widen is who is told the agent exists, so it "
+    "takes a capability named for that and a second person to perform it."
+)
+
+#: Why the person answering for an agent is not the person who may publish it.
+A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE: Final = (
+    "brain.knowledge.visibility.approve_promotion refuses an approver who is the proposer, "
+    "and brain.builder.publish refuses the author as one of a publish's approvers. This is "
+    "the same refusal at the audience axis, and the steward is exactly the person it has to "
+    "name: the persona is text they wrote, they are the one reader who cannot come to it "
+    "fresh, and they are the one person with a reason to want it in front of everybody. The "
+    "way past it is another person, which is the whole content of the rule, and not a "
+    "second function with a friendlier name."
 )
 
 #: Why a transfer is safe to perform without re-approving anything.
@@ -74,6 +144,25 @@ A_TRANSFER_MOVES_THE_STEWARD_AND_NOT_THE_REACH: Final = (
     "with narrower access does not narrow it. What a transfer does change is the audience "
     "of a personal agent, because at that level the steward is the audience."
 )
+
+#: The capability that decides whether an agent may be shown to the whole company.
+#:
+#: Named in the module that performs the transition, which is what
+#: `brain.console.scoped_authority` and `brain.console.global_surfaces` both refuse to do
+#: from the rendering layer: a capability invented where a screen is drawn is one the
+#: administrator reviewing grants never meets. The noun is `agent`, the same noun the
+#: `agents` screen reads under, so the act and the screen govern one object; the verb is
+#: `approve`, because a publication is somebody agreeing to a widening rather than reading
+#: one. `brain.ops.halt.HALT_CAPABILITY` and `brain.ops.outbox.MANAGE_SUBSCRIBERS` are named
+#: the same way and in the same position.
+AGENT_PUBLICATION_CAPABILITY: Final = Capability(value="approve:agent.visibility")
+
+#: The one level `publish` moves an agent to.
+#:
+#: A constant rather than a parameter, and the absence of the parameter is the guarantee:
+#: there is no argument to this module's publication path that could name a narrower level,
+#: so nothing here can take an agent away from people who can currently see it.
+PUBLICATION_LEVEL: Final = Visibility.COMPANY
 
 
 def _revalidated(record: AgentRecord, **changes: object) -> AgentRecord:
@@ -148,6 +237,70 @@ def archive(record: AgentRecord, *, now: datetime) -> AgentRecord:
     if record.state is AgentState.ARCHIVED:
         return record
     return _revalidated(record, archived_at=now)
+
+
+def publish(record: AgentRecord, *, publisher: EntitlementSet, now: datetime) -> AgentRecord:
+    """Show an agent to the whole company. The transition M33.1.2.1 had no function for.
+
+    Three refusals and one no-op, and the argument for each is in the module docstring.
+
+    **The agent is not archived.** Archived is terminal, so publishing one would put a thing
+    nobody can start in front of everybody, and `enable` already refuses to bring it back.
+
+    **The publisher is not the steward.** See `A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE`.
+
+    **The publisher holds `AGENT_PUBLICATION_CAPABILITY`.** Absence of a grant is why this
+    refuses; nothing subtracts, because there is no deny list anywhere in this system. It is
+    deliberately not the pair `brain.console.scoped_authority.may_grant` asks for, and not
+    `brain.knowledge.visibility.PROMOTION_CAPABILITY`. See
+    `A_PUBLICATION_WIDENS_WHO_IS_TOLD_AND_NEVER_WHAT_IS_REACHED`.
+
+    Publishing an already published agent returns the same record rather than raising, for
+    the reason `enable` gives: a retry after a timeout must not fail, and there is nothing to
+    refuse. The comparison is `brain.knowledge.visibility.is_wider` rather than an equality
+    test, so which way the three levels run is decided in the one place that decides it.
+
+    **There is no argument here that names a person, and that is why the entitlement is the
+    only thing passed in.** `approve_promotion` takes an approver id beside an entitlement
+    and has to check the two agree, because a handler with the wrong variable in scope
+    approves on behalf of somebody never asked. Reading the publisher off
+    `EntitlementSet.principal_id` means that mismatch cannot be written.
+
+    **Says nothing about the lifecycle beyond the terminal state.** A disabled agent can be
+    published, and it is invisible to `runnable_agent_ids` until somebody enables it. Making
+    the order of two independent decisions load-bearing is the coupling this module refuses
+    in the other direction when it keeps a state change away from the ceiling.
+
+    The department is dropped, because `AgentAudience` refuses to carry one at any level but
+    its own: a department on a company row reads as an audience and applies to nothing.
+    That refusal is the reason this transition cannot be written anywhere else without
+    somebody working around a validation error by keeping the field.
+    """
+    _refuse_if_archived(record, "published")
+    if publisher.principal_id == record.audience.owner_id:
+        msg = (
+            f"{publisher.principal_id!r} answers for {record.agent_id!r} and cannot publish "
+            f"it. {A_GATE_ONE_PERSON_PASSES_ALONE_IS_NOT_A_GATE}"
+        )
+        raise AgentError(msg)
+    if not publisher.holds(AGENT_PUBLICATION_CAPABILITY, now):
+        msg = (
+            f"{publisher.principal_id!r} does not hold "
+            f"{AGENT_PUBLICATION_CAPABILITY.value} and cannot publish {record.agent_id!r}; "
+            "nobody has granted them the path that tells the whole company an agent exists"
+        )
+        raise AgentError(msg)
+    if not is_wider(PUBLICATION_LEVEL, record.audience.level):
+        return record
+    # Built rather than copied, for the reason `transfer_ownership` gives below: pydantic
+    # does not revalidate a model instance handed to a model field, so an audience that
+    # kept its department would slip past both this constructor and the record's rebuild.
+    published = AgentAudience(
+        level=PUBLICATION_LEVEL,
+        owner_id=record.audience.owner_id,
+        department="",
+    )
+    return _revalidated(record, audience=published)
 
 
 def transfer_ownership(record: AgentRecord, *, to_owner: Principal, now: datetime) -> AgentRecord:

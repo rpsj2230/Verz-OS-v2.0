@@ -1,9 +1,31 @@
 """Installing a connector, turning it off, upgrading it, and refusing it on reconnect.
 
 A connector is a deployment unit and is never granted: granting it would grant everything
-behind it. So there is no permission question anywhere in this file. What is here is the
-lifecycle, and the lifecycle exists because every one of its transitions is a place a
-connector can change meaning without anybody deciding that it should.
+behind it. So there is no capability here for *reaching through* a connector, and there must
+not be one. What is here is the lifecycle, and the lifecycle exists because every one of its
+transitions is a place a connector can change meaning without anybody deciding that it
+should.
+
+**There is a permission question in this file and there was not one until now.** "A
+connector is never granted" answers who may read a source and it was being read as though it
+answered who may install one, which is a different question with a different actor.
+`read:connector` is the connector screen's read, and until M33.5.1.1 nothing at all stood
+over the act: `register`, `enable`, `disable`, `upgrade` and `rebind` all took a manifest and
+a clock and asked nobody. Installing a connector is the act that decides which sources exist
+at all, and it comes before every other permission in the system rather than being bounded by
+one. `INSTALL_AUTHORITY` is that capability, and it is named here rather than by a console,
+which is `brain.console.scoped_authority`'s rule about the five acts it governs: a capability
+invented in the rendering layer is one the administrator reviewing grants never meets.
+`brain.console.reads.KNOWING_A_THING_EXISTS_IS_A_DISCLOSURE_OF_ITS_OWN` already says a
+connector administrator "installs and binds and must never read a record", and
+`brain.console.role_surfaces` already reasons about "every connector capability the registry
+names". Both sentences were written against a registry that named none.
+
+**`reconnect` deliberately does not ask.** It is the system checking a pin rather than a
+person changing something, and a capability on it would mean a caller without one skips the
+check: the connector goes on serving against a manifest nobody compared, and the quarantine
+that should have fired reads as an authorisation problem in a log. See
+`A_PIN_CHECK_THAT_ASKS_WHO_IS_CALLING_IS_A_PIN_CHECK_WITH_A_WAY_ROUND_IT`.
 
 **Reconnect is the dangerous one.** A third-party server, an MCP server most of all, defines
 its own tools and can redefine them between one connection and the next. The description is
@@ -35,7 +57,7 @@ Scope: domain logic. This holds declarations in memory; the table that survives 
 somebody else's, and this returns a `LifecycleEvent` per transition so that whoever owns the
 ledger can record one without this module importing the audit layer.
 
-Task ids: M11.1.6, M11.1.7, M11.2.6
+Task ids: M11.1.6, M11.1.7, M11.2.6, M33.5.1.1
 """
 
 from __future__ import annotations
@@ -43,11 +65,33 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from typing import Final
 
 from brain.connectors.contract import AccessMode, ConnectorContractError, CredentialBinding
 from brain.connectors.manifest import ConnectorManifest, ManifestError, manifest_digest
+from brain.core.entitlement import Capability, EntitlementSet
 
 # ------------------------------------------------------------------ written-down reasons
+#: The capability that decides who may install, switch, upgrade or rebind a connector.
+#:
+#: `admin`, because this is configuration of the installation rather than agreement to
+#: somebody else's act: `brain.ops.halt.HALT_CAPABILITY` and
+#: `brain.ops.outbox.MANAGE_SUBSCRIBERS` are the two nearest neighbours and both are `admin:`
+#: for the same reason. The noun is the connector screen's own noun, so the read and the act
+#: govern one object and a reviewer reading a grant table sees `read:connector` beside
+#: `admin:connector` rather than two unrelated strings.
+INSTALL_AUTHORITY: Final = Capability(value="admin:connector")
+
+#: Why the pin check is the one transition that does not ask who is calling.
+A_PIN_CHECK_THAT_ASKS_WHO_IS_CALLING_IS_A_PIN_CHECK_WITH_A_WAY_ROUND_IT: Final = (
+    "reconnect compares what the far side says it is against what was pinned, and it is "
+    "reached on a connection rather than by somebody deciding something. Requiring a "
+    "capability would mean a caller without one never performs the comparison: the connector "
+    "goes on serving a manifest nobody checked, and the quarantine that should have fired "
+    "arrives instead as an authorisation error in a log, which reads as a configuration "
+    "problem with the caller. The refusals that matter for a redefinition are already there "
+    "and they are about the manifest, not about the person."
+)
 #: Why a rebind may move a credential and never widen one.
 REBINDING_CANNOT_WIDEN = (
     "A rebind points the connector at a different vault path. Widening it from read-only to "
@@ -99,6 +143,54 @@ class ManifestPinError(ConnectorContractError):
 
 class LifecycleError(ConnectorContractError):
     """A transition that is not available from where the connector is."""
+
+
+class InstallAuthorityError(ConnectorContractError):
+    """Somebody without `INSTALL_AUTHORITY` tried to change what is installed.
+
+    Its own type rather than a `LifecycleError`, on the same argument `ManifestPinError`
+    makes about itself: a `LifecycleError` says the connector is in the wrong state and is
+    fixed by moving it, and this says the caller is the wrong person and is fixed by a grant.
+    A caller catching one and retrying is right in one case and wrong in the other.
+    """
+
+
+def may_install(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this principal may change what is installed.
+
+    One line, and it earns its place by being the only line: the capability is named once, so
+    the console screen that does not exist yet cannot check a different one, and a test can
+    pin it without importing a string literal from a template. This is
+    `brain.ops.outbox.may_manage` at the connector.
+    """
+    return entitlement.holds(INSTALL_AUTHORITY, now)
+
+
+def _assert_may_install(
+    installer: EntitlementSet, *, act: str, connector: str, now: datetime
+) -> None:
+    """Refuse the act, naming the capability and nothing about the connector's state.
+
+    Deliberately asked before the registry is consulted, in every transition below. Asking
+    afterwards would let somebody without the capability learn whether a connector is
+    installed, and which connectors a company reads is exactly the sort of thing a refusal
+    must not confirm: `LifecycleError` from `get` says "no connector named x is installed",
+    which is an answer to a question this caller was not entitled to ask.
+
+    `now` is the transition's own instant rather than the wall clock, because every function
+    here already has one and an expired contractor's grants stay on file. Letting `holds`
+    default would make whether a rebind is refused depend on when the process happened to run
+    rather than on when the decision was made.
+    """
+    if may_install(installer, now):
+        return
+    msg = (
+        f"{installer.principal_id!r} does not hold {INSTALL_AUTHORITY.value} and cannot "
+        f"{act} {connector!r}; installing a connector decides which sources exist at all, "
+        "which is a decision before every other permission in the system rather than one "
+        "bounded by them"
+    )
+    raise InstallAuthorityError(msg)
 
 
 @dataclass(frozen=True)
@@ -157,14 +249,21 @@ class ConnectorRegistry:
     _entries: dict[str, RegisteredConnector] = field(default_factory=dict)
 
     # ------------------------------------------------------------------ installing
-    def register(self, manifest: ConnectorManifest, *, now: datetime) -> LifecycleEvent:
-        """Install a connector and pin its manifest. It serves nothing until enabled.
+    def register(
+        self, manifest: ConnectorManifest, *, installer: EntitlementSet, now: datetime
+    ) -> LifecycleEvent:
+        """Install a connector and pin its manifest (M33.5.1.1). It serves nothing until enabled.
 
         A second registration under the same name is refused rather than replacing the first.
         Replacing silently is how a redefinition arrives through the front door: the digest
         would be recomputed over the new manifest, the pin would match by construction, and
         the check in `reconnect` would be checking the new connector against itself.
+
+        `installer` is required rather than defaulted, and that is the whole of the guard. An
+        optional entitlement meaning "not checked" is a capability every existing caller
+        skips, which is a rule written down and enforced nowhere.
         """
+        _assert_may_install(installer, act="install", connector=manifest.name, now=now)
         if manifest.name in self._entries:
             msg = (
                 f"connector {manifest.name!r} is already installed; registering over it "
@@ -185,8 +284,9 @@ class ConnectorRegistry:
             detail=f"{manifest.transport} transport, version {manifest.version}",
         )
 
-    def enable(self, name: str, *, now: datetime) -> LifecycleEvent:
-        """Start serving traffic from a connector that is not quarantined."""
+    def enable(self, name: str, *, installer: EntitlementSet, now: datetime) -> LifecycleEvent:
+        """Start serving traffic from a connector that is not quarantined (M33.5.1.1)."""
+        _assert_may_install(installer, act="enable", connector=name, now=now)
         entry = self.get(name)
         if entry.state is ConnectorState.QUARANTINED:
             msg = (
@@ -196,21 +296,32 @@ class ConnectorRegistry:
             raise LifecycleError(msg)
         return self._transition(entry, ConnectorState.ENABLED, action="enable", now=now)
 
-    def disable(self, name: str, *, now: datetime, detail: str = "") -> LifecycleEvent:
-        """Stop serving traffic. Reversible, and it touches no projected row.
+    def disable(
+        self, name: str, *, installer: EntitlementSet, now: datetime, detail: str = ""
+    ) -> LifecycleEvent:
+        """Stop serving traffic (M33.5.1.1). Reversible, and it touches no projected row.
 
         Available from quarantine as well as from enabled, deliberately: disabling a
         quarantined connector is the correct first move during an incident, and a transition
         that refused it would leave an operator with nothing to do but clear the quarantine.
+
+        It still takes the capability, although stopping something is the fail-safe
+        direction. The company-wide stop that must not need a connector grant already exists
+        and is a different capability on a different screen: `brain.ops.halt.HALT_CAPABILITY`,
+        which is the global kill switch. Two paths to stopping, and the one an incident uses
+        is not this one.
         """
+        _assert_may_install(installer, act="disable", connector=name, now=now)
         entry = self.get(name)
         return self._transition(
             entry, ConnectorState.DISABLED, action="disable", now=now, detail=detail
         )
 
     # ------------------------------------------------------------------- upgrading
-    def upgrade(self, manifest: ConnectorManifest, *, now: datetime) -> LifecycleEvent:
-        """Accept a new manifest for an installed connector, and re-pin it.
+    def upgrade(
+        self, manifest: ConnectorManifest, *, installer: EntitlementSet, now: datetime
+    ) -> LifecycleEvent:
+        """Accept a new manifest for an installed connector, and re-pin it (M33.5.1.1).
 
         Three refusals, and each closes a way a connector could change meaning quietly.
 
@@ -228,8 +339,11 @@ class ConnectorRegistry:
 
         An upgrade leaves the connector where it was: an enabled connector goes on serving,
         and a quarantined one is released, because accepting the new manifest is exactly the
-        remedy quarantine is waiting for.
+        remedy quarantine is waiting for. It is also the one path that clears a quarantine,
+        which is why it takes the capability and `reconnect` does not: accepting a changed
+        manifest is a person deciding something, and comparing one against its pin is not.
         """
+        _assert_may_install(installer, act="upgrade", connector=manifest.name, now=now)
         entry = self.get(manifest.name)
         if manifest.transport is not entry.manifest.transport:
             msg = (
@@ -297,8 +411,15 @@ class ConnectorRegistry:
         raise ManifestPinError(msg)
 
     # -------------------------------------------------------------------- rebinding
-    def rebind(self, name: str, binding: CredentialBinding, *, now: datetime) -> LifecycleEvent:
-        """Point a connector at a different vault path. No redeploy, no re-pin.
+    def rebind(
+        self,
+        name: str,
+        binding: CredentialBinding,
+        *,
+        installer: EntitlementSet,
+        now: datetime,
+    ) -> LifecycleEvent:
+        """Point a connector at a different vault path (M33.5.1.1). No redeploy, no re-pin.
 
         The digest deliberately does not cover the credential binding, so this changes
         nothing a reconnect would notice: see `manifest.WHAT_THE_DIGEST_COVERS_AND_WHY`. What
@@ -308,6 +429,7 @@ class ConnectorRegistry:
         reach this function at all. Nothing holds a credential between runs, so the next
         `borrow` picks up the new value with no call to anything here.
         """
+        _assert_may_install(installer, act="rebind", connector=name, now=now)
         entry = self.get(name)
         current = entry.manifest.credential
         if current.mode is AccessMode.READ_ONLY and binding.mode is AccessMode.WRITE:

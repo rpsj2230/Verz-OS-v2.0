@@ -1,11 +1,19 @@
 """A conversation turn. Every test is a way yesterday's permission answers today's question.
 
+**The last section is about a field and the field beside it that is refused.** A turn now
+says which agent answered, because three console modules recorded being unable to attribute
+one. It still says nothing about a department, and the test asserting that is the one that
+matters: a person sits in several departments and a column would have to pick one, so the
+obvious next field is the one that makes departmental activity wrong rather than absent.
+
 Task ids: M9.2.1, M9.2.2, M9.2.3, M9.2.4
 """
 
 from __future__ import annotations
 
 import dataclasses
+import importlib
+import inspect
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -232,3 +240,103 @@ def test_the_correction_attaches_to_the_most_recent_answer() -> None:
         history, CorrectionKind.STALE, principal_id="u_weiling", at=NOW + timedelta(minutes=3)
     )
     assert correction.refs == (INVOICE_REF,)
+
+
+# ------------------------------------------------- who answered (M33.2.1.2's missing field)
+def test_a_turn_records_which_agent_answered() -> None:
+    """`Turn` carried a principal and an instant and nothing else, and three console modules
+    recorded working around it: a headline that cannot check the turns it counts are the
+    agent's own, a personal history that can only narrow to a person, and department activity
+    that could not be assembled at all.
+
+    Delete this and the field can be removed as unused, because nothing in `src` reads it
+    yet: the modules that will are the ones that could not be written without it."""
+    answered = Turn(
+        kind=TurnKind.ANSWER,
+        at=NOW,
+        principal_id="u_weiling",
+        agent_id="support_triage",
+        text="here is what I found",
+    )
+    assert answered.agent_id == "support_triage"
+
+
+def test_a_turn_that_went_through_no_agent_says_so_with_one_absent_value() -> None:
+    """Empty rather than None, so the type has one absent value instead of two.
+
+    That is `ProjectedRecord.local_id`'s argument about the same choice, and it matters here
+    because a filter counting an agent's turns has to be able to tell "no agent" from "an
+    agent whose id nobody set" without asking which of two spellings it got."""
+    assert Turn(kind=TurnKind.QUESTION, at=NOW, principal_id="u_weiling").agent_id == ""
+
+
+def test_a_turn_carries_the_agent_and_never_the_department() -> None:
+    """`A_TURN_CARRIES_THE_AGENT_AND_NEVER_THE_DEPARTMENT`, asserted over the fields rather
+    than argued in a comment.
+
+    A person sits in several departments at once, so a department column would have to pick
+    one and the choice would be invisible in every count made from it; it would also be a
+    copy of directory state frozen at the moment somebody spoke, so a mover either rewrites
+    last month's activity or leaves it saying something untrue. Delete this and the obvious
+    next field is the one that makes departmental activity wrong rather than absent."""
+    names = {f.name for f in dataclasses.fields(Turn)}
+    assert "agent_id" in names
+    for forbidden in ("department", "departments", "team", "org_unit", "division"):
+        assert forbidden not in names, f"Turn has a {forbidden!r} field"
+
+
+def test_nothing_in_this_module_turns_turns_into_departmental_activity() -> None:
+    """The field is here and the join is not, deliberately.
+
+    Turns plus agent records into a department's activity is a read somebody has to be
+    entitled to make, and a helper here would be the place that read got justified: this
+    module would need an agent record to do it, which is the import that turns a transcript
+    into something that reads the agent estate. Delete this and the helper arrives, because
+    it looks like the obvious next line."""
+    module = importlib.import_module("brain.chat.turns")
+    callables = [
+        name for name in dir(module) if not name.startswith("_") and callable(getattr(module, name))
+    ]
+    assert not [name for name in callables if "department" in name.lower()]
+    # The written-down reason is allowed to say the word, and is not a callable.
+    assert "A_TURN_CARRIES_THE_AGENT_AND_NEVER_THE_DEPARTMENT" in dir(module)
+    assert not [
+        name
+        for name in callables
+        if getattr(getattr(module, name), "__module__", "").startswith("brain.agents")
+    ]
+
+
+def test_a_correction_names_the_agent_that_was_wrong_and_takes_it_from_the_answer() -> None:
+    """Copied off the corrected turn rather than passed in, like `answer_at`.
+
+    A caller that could name the agent could file a correction against one that never spoke,
+    and "which agent is corrected most" is the whole reason these are counted. Delete this
+    and `record_correction` can grow an `agent_id` parameter, at which point the signal
+    describes whoever filed the correction rather than whatever produced the answer."""
+    history = [
+        Turn(
+            kind=TurnKind.ANSWER,
+            at=NOW,
+            principal_id="u_weiling",
+            agent_id="renewal_chaser",
+            refs=(CLIENT_REF,),
+        )
+    ]
+    correction = record_correction(
+        history, CorrectionKind.WRONG_FACT, principal_id="u_weiling", at=LATER
+    )
+    assert correction.agent_id == "renewal_chaser"
+    assert "agent_id" not in inspect.signature(record_correction).parameters
+
+
+def test_a_correction_against_an_answer_from_no_agent_names_no_agent() -> None:
+    """The sibling of the test above, and the one that stops the agent being invented.
+
+    An exchange that never routed through an agent produces a correction that says so,
+    rather than one attributed to whichever agent happened to be nearby. Delete this and a
+    default naming some agent passes every other test in this file."""
+    correction = record_correction(
+        [_answer(CLIENT_REF)], CorrectionKind.STALE, principal_id="u_weiling", at=LATER
+    )
+    assert correction.agent_id == ""

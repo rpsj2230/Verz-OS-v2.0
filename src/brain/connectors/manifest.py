@@ -22,6 +22,17 @@ that cannot be kept fresh is exactly the field somebody wants to copy once and b
 A projection with no change signal is not a stale projection: it is a value that will be
 quoted as current, forever, with nothing anywhere reporting it.
 
+**What a connector may claim about permissions is checked against what it declared.**
+M33.5.1.3 asks for a permission-sync capability set per connector, and the dangerous version
+of that leaf is a field an admin ticks. A connector that says it syncs permissions and does
+not is worse than one that says nothing, because the console then reports a source as
+permission-aware and somebody stops asking. So `PermissionSync` is declared on the manifest
+and `implementable_permission_sync` reads what the manifest already contains: `DELEGATED`
+needs every tool to run on the caller's own credentials, and `PREDICATE` needs a projection,
+which cannot exist without a real visibility predicate because `_assert_predicate_is_not_an_acl`
+refuses one without. A claim the declarations cannot support is refused at review, in front
+of the person making it. See `A_PERMISSION_SYNC_CLAIM_IS_CHECKED_AGAINST_THE_DECLARATIONS`.
+
 **A visibility predicate, never a resolved ACL.** We store the source's predicate and
 evaluate it against the live entitlement set, so a person changing department gets a
 different row set on their next query with zero writes and zero invalidation. Storing the
@@ -39,7 +50,7 @@ chooses. So the digest covers the whole manifest including every tool descriptio
 
 Scope: domain logic. Nothing here opens a connection or reads a table.
 
-Task ids: M11.1.7, M11.4.2, M11.4.3, M11.4.5, M11.4.6, M11.4.7
+Task ids: M11.1.7, M11.4.2, M11.4.3, M11.4.5, M11.4.6, M11.4.7, M33.5.1.3
 """
 
 from __future__ import annotations
@@ -50,6 +61,7 @@ import hashlib
 import json
 import re
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Final
 
@@ -86,6 +98,19 @@ WHY_FIVE_CLAUSES = (
     "written as five they each have a distinct failure, and each failure names what to do "
     "instead, which is what stops the author renaming the field rather than fixing the "
     "design."
+)
+
+#: Why a permission-sync claim is read out of the manifest rather than taken on trust.
+A_PERMISSION_SYNC_CLAIM_IS_CHECKED_AGAINST_THE_DECLARATIONS = (
+    "A connector that says it syncs permissions and does not is worse than one that says "
+    "nothing, because a console showing a source as permission-aware is a console telling "
+    "everybody to stop asking. The two real answers are already stated elsewhere in the "
+    "manifest and neither can be forged from the field: DELEGATED means every tool runs on "
+    "the caller's own credentials, so the source applies its own rules to the person asking, "
+    "and a single SERVICE tool defeats it because that call is answered as us. PREDICATE "
+    "means the source's own visibility predicate is stored and evaluated live against the "
+    "entitlement set, and a projection cannot exist without one. So the claim is checked "
+    "against the declarations, and the default is the claim that promises nothing."
 )
 
 #: Why an entity with no change signal may project nothing at all.
@@ -498,6 +523,73 @@ class ToolDeclaration:
             raise ManifestError(msg)
 
 
+# --------------------------------------------- permission sync per connector (M33.5.1.3)
+class PermissionSync(enum.StrEnum):
+    """What this connector can do about the source's own permission model.
+
+    Two mechanisms and an explicit absence, in the shape `ChangeSignal` uses and for the same
+    reason: "this source tells us nothing about who may see a row" is a thing an author
+    writes down and a reviewer reads, rather than a field somebody left blank.
+
+    **The two are mechanisms and not rungs, which is why there is no ordering here.**
+    `VISIBILITY_ORDER` exists in `brain.knowledge.visibility` because its three levels
+    genuinely nest; these two do not. Delegated identity asks the source about the person on
+    every call, and is bounded by whatever that source knows. A stored predicate is evaluated
+    against our own entitlement set, so it keeps working for a person the source has never
+    heard of and stops meaning anything the moment the source changes how it groups people.
+    Neither contains the other, and a `width` function here would be an invitation to write
+    "at least PREDICATE", which is a comparison nobody can defend.
+    """
+
+    #: The source says nothing we can act on. Our own grants are the only permissions there
+    #: are, which is the same position `IdentityMode.SERVICE` puts one tool in.
+    NONE = "none"
+    #: The source's visibility predicate is stored with the projection and evaluated live
+    #: against the asking entitlement set, so a mover gets a different row set with no writes.
+    PREDICATE = "predicate"
+    #: Every call runs on the caller's own credentials, so the source applies its own rules
+    #: to the person asking and we get a second independent check for free.
+    DELEGATED = "delegated"
+
+    @property
+    def syncs_permissions(self) -> bool:
+        """True when the source contributes anything at all to who may see a row."""
+        return self is not PermissionSync.NONE
+
+
+def implementable_permission_sync(
+    tools: Sequence[ToolDeclaration], projections: Sequence[ProjectedEntity]
+) -> frozenset[PermissionSync]:
+    """Which claims this connector's own declarations can support (M33.5.1.3).
+
+    Public, because a console offering the choice has to offer the ones that are true, and
+    computing that from a manifest twice is the shape where the offered list and the accepted
+    list disagree. `ConnectorManifest` calls this rather than restating the rule.
+
+    `NONE` is always in the set: understating what a source can do costs a second check and
+    never a row, and a connector rewritten to answer as a service account should be able to
+    drop its claim without a review of the field it drops.
+
+    **`DELEGATED` requires tools and requires all of them.** `all` over an empty sequence is
+    True, so a connector declaring no tools at all would otherwise claim the strongest answer
+    by declaring nothing, which is exactly the direction this leaf must not fail in. One
+    `SERVICE` tool is enough to lose the claim, because that call is answered as us and the
+    source never sees the person.
+
+    **`PREDICATE` requires a projection and asks nothing else about it.** That is not a weak
+    check: `ProjectedEntity` refuses an unrestricted visibility and refuses a predicate that
+    enumerates principals, so a projection that exists is a real predicate by construction.
+    Re-checking it here would be a second implementation of what a real predicate is, and the
+    permissive copy is the one that would be believed.
+    """
+    supported = {PermissionSync.NONE}
+    if projections:
+        supported.add(PermissionSync.PREDICATE)
+    if tools and all(tool.identity_mode is IdentityMode.DELEGATED for tool in tools):
+        supported.add(PermissionSync.DELEGATED)
+    return frozenset(supported)
+
+
 # --------------------------------------------------------------------- the manifest
 @dataclass(frozen=True)
 class ConnectorManifest:
@@ -520,6 +612,17 @@ class ConnectorManifest:
     #: means no verified ceiling exists, which `throttle.limits_for` treats as a reason to
     #: refuse rather than as a reason to invent one.
     ceiling: str = ""
+    #: What this connector does about the source's own permissions (M33.5.1.3). Checked
+    #: against the tools and projections above rather than believed.
+    #:
+    #: Defaulted rather than required, which is the opposite of `ProjectedField.uses` and for
+    #: a reason that inverts with it. There, the default would have been the permissive
+    #: answer, so leaving it out would have let a field be projected on nobody's say-so.
+    #: Here the default is the claim that promises nothing, so a connector whose author never
+    #: thought about this understates itself: the cost is a source that could have contributed
+    #: a second permission check being read as one that cannot, and the cost of the other
+    #: default is a row shown to somebody because a console said the source was handling it.
+    permission_sync: PermissionSync = PermissionSync.NONE
 
     def __post_init__(self) -> None:
         if not _NAME_RE.match(self.name):
@@ -533,6 +636,7 @@ class ConnectorManifest:
             raise ManifestError(msg)
         self._assert_tools_are_covered_by_the_binding()
         self._assert_one_projection_per_entity()
+        self._assert_permission_sync_is_implemented()
 
     def _assert_tools_are_covered_by_the_binding(self) -> None:
         """A write tool on a read-only binding is a tool that will fail at the source.
@@ -563,6 +667,36 @@ class ConnectorManifest:
             )
             raise ManifestError(msg)
 
+    def _assert_permission_sync_is_implemented(self) -> None:
+        """Refuse a permission-sync claim this manifest's own declarations cannot support.
+
+        The message names what is missing rather than only what is refused, which is
+        `ClauseVerdict`'s rule about carrying the remedy: a refusal that does not say "run
+        the tools delegated" invites the author to change the claim to `NONE` and move on,
+        and a connector that quietly gave up its second permission check is exactly what
+        nobody would notice.
+        """
+        supported = implementable_permission_sync(self.tools, self.projections)
+        if self.permission_sync in supported:
+            return
+        remedies = {
+            PermissionSync.DELEGATED: (
+                "every tool must declare identity_mode DELEGATED, and there must be at least "
+                "one, so the source sees the person asking rather than seeing us"
+            ),
+            PermissionSync.PREDICATE: (
+                "it must project at least one entity, because the source's visibility "
+                "predicate is stored with a projection and there is nowhere else it lives"
+            ),
+        }
+        msg = (
+            f"connector {self.name!r} claims permission sync {self.permission_sync} and its "
+            f"declarations support {sorted(one.value for one in supported)}: "
+            f"{remedies[self.permission_sync]}. "
+            f"{A_PERMISSION_SYNC_CLAIM_IS_CHECKED_AGAINST_THE_DECLARATIONS}"
+        )
+        raise ManifestError(msg)
+
     def projection_for(self, entity: str) -> ProjectedEntity | None:
         for projection in self.projections:
             if projection.entity == entity:
@@ -578,6 +712,11 @@ class ConnectorManifest:
 #: should be hard: every field not named here is pinned, so a field added to
 #: `ConnectorManifest` is covered without anybody remembering to cover it. The opposite
 #: default, an explicit include list, is how a new field ends up unpinned silently.
+#:
+#: `permission_sync` is therefore pinned, and it is worth saying out loud rather than leaving
+#: to the default: a connector that changes what it claims about the source's permissions
+#: between one connection and the next has changed what it does, and that is precisely the
+#: silent redefinition `brain.connectors.registry.reconnect` fails closed on.
 UNPINNED_FIELDS: Final[frozenset[str]] = frozenset({"credential"})
 
 #: How many hex characters of the digest are carried. Sixty-four, the whole SHA-256: this is

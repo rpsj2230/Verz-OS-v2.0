@@ -92,7 +92,7 @@ from brain.connectors.manifest import (
     ProjectedField,
     ToolDeclaration,
 )
-from brain.connectors.registry import ConnectorRegistry, ConnectorState
+from brain.connectors.registry import INSTALL_AUTHORITY, ConnectorRegistry, ConnectorState
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.scope import Scope
@@ -200,9 +200,14 @@ def _connectors(*, serving: bool | None) -> ConnectorRegistry:
     registry = ConnectorRegistry()
     if serving is None:
         return registry
-    registry.register(_connector_manifest(), now=NOW)
+    # `brain.connectors.registry.INSTALL_AUTHORITY` governs the act of installing, which is a
+    # Connector Admin's and not this wizard's. Nothing under test here reads it; the fixture
+    # holds it so that the readiness indicator is exercised rather than the guard in front of
+    # it, which `tests/unit/test_connectors.py` owns.
+    installer = _reach(INSTALL_AUTHORITY.value, principal_id="u_connector_admin")
+    registry.register(_connector_manifest(), installer=installer, now=NOW)
     if serving:
-        registry.enable(CONNECTOR, now=NOW)
+        registry.enable(CONNECTOR, installer=installer, now=NOW)
     return registry
 
 
