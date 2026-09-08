@@ -499,7 +499,7 @@ def reach_for(
         msg = f"entitlement set belongs to {owner_entitlement.principal_id!r}, not {owner.id!r}"
         raise IdentityError(msg)
 
-    narrowed = owner_entitlement.intersect(account.ceiling_set())
+    narrowed = owner_entitlement.intersect(account.ceiling_set(), now)
     # Rebuilt under the account's own id rather than returned as the owner's. The audit
     # trail and the answer cache both key on `principal_id`, and an action taken by an
     # integration must not be recorded as an action taken by the person who owns it.

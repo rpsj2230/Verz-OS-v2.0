@@ -336,7 +336,7 @@ def agent_memory(
     anything was left out, because the difference between what a caller sees here and what
     exists is the set of memories formed from other people's conversations.
     """
-    run = caller.intersect(agent_ceiling)
+    run = caller.intersect(agent_ceiling, now)
     mine = [one for one in learnings if one.agent_id == agent_id]
     return AgentMemoryView(
         reader_id=caller.principal_id,

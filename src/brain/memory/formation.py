@@ -264,7 +264,7 @@ def may_recall(
     reaches. Absent, it is the memory's own scope, which is the case where somebody is asking
     about exactly what the memory is about.
     """
-    shared = requirement(formation).intersect(reader)
+    shared = requirement(formation).intersect(reader, now)
 
     reached: Scope | None = None
     for capability in formation.capabilities:

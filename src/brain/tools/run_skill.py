@@ -805,7 +805,7 @@ class SkillScriptTool:
                 request,
                 leash=self.leash,
                 environment=self.environment,
-                reach_hash=entitlement.intersect(agent_ceiling).ent_hash(),
+                reach_hash=entitlement.intersect(agent_ceiling, now).ent_hash(),
             )
             record = accept_outcome(spec, self.runner.run(spec))
             return TypedResult(

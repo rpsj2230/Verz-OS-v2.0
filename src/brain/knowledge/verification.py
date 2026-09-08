@@ -342,7 +342,7 @@ def may_name_verifier(item: KnowledgeItem, reader: EntitlementSet, *, now: datet
         return False
     if reader.principal_id == item.verified_by:
         return True
-    shared = requirement_to_name_the_verifier(item).intersect(reader)
+    shared = requirement_to_name_the_verifier(item).intersect(reader, now)
     scope = shared.scope_for(VERIFIER_CAPABILITY, now)
     return scope is not None and scope.matches(_place(item))
 

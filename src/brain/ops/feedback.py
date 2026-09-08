@@ -431,7 +431,7 @@ def may_flag(department: str, flagger: EntitlementSet, *, now: datetime) -> Scop
     where a lead who left last week stops being able to flag, and `Scope.matches` decides
     whether what survived still admits the department.
     """
-    shared = requirement_to_flag(department).intersect(flagger)
+    shared = requirement_to_flag(department).intersect(flagger, now)
     scope = shared.scope_for(FLAG_CAPABILITY, now)
     if scope is None or not scope.matches({"department": department}):
         return None

@@ -990,7 +990,7 @@ def rehearse(
     something the caller has to remember to catch.
     """
     questions = tuple(case.question for case in installed.effective.manifest.golden_set)
-    run = entitlement.intersect(entitlement_ceiling(installed.record))
+    run = entitlement.intersect(entitlement_ceiling(installed.record), now)
     try:
         invocation = invoke(
             principal_id=entitlement.principal_id,

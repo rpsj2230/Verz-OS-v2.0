@@ -199,6 +199,75 @@ def test_the_reach_is_computed_where_this_file_says_and_nowhere_else() -> None:
     }
 
 
+def _timed_intersections() -> dict[str, tuple[str, ...]]:
+    """Every function that hands `intersect` an instant, by module.
+
+    A second argument, positional or `now=`. `Scope.intersect` takes one argument and
+    therefore never appears here, which is what makes this a list of entitlement
+    intersections without having to resolve a type.
+    """
+    found: dict[str, set[str]] = {}
+    for path in sorted(SRC.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:  # pragma: no cover - a file that will not parse fails elsewhere
+            continue
+        for holder in ast.walk(tree):
+            if not isinstance(holder, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            for node in ast.walk(holder):
+                if not isinstance(node, ast.Call):
+                    continue
+                called = node.func
+                if not (isinstance(called, ast.Attribute) and called.attr == "intersect"):
+                    continue
+                # A second argument, positional or by name. `Scope.intersect` takes one.
+                timed = len(node.args) > 1 or any(one.arg == "now" for one in node.keywords)
+                if timed:
+                    found.setdefault(path.relative_to(SRC).as_posix(), set()).add(holder.name)
+    return {where: tuple(sorted(names)) for where, names in sorted(found.items())}
+
+
+def test_every_intersection_that_knows_the_instant_passes_it() -> None:
+    """**`EntitlementSet.intersect` evaluates the right-hand side's expiry, and until
+    2026-09-08 it had no way to be told what time it was.** It read the process clock, and
+    the four surfaces that ask "may this reader be told this" put the reader on the right, so
+    the reader's expiry was the thing judged against the wrong instant. It failed permissive.
+
+    It was found by a test whose fixture expired at noon: green on the day it was written and
+    red the next, with nothing about the code having changed. That is the only reason anybody
+    looked, which is worth saying plainly, because a defect that only shows up as a clock
+    passing a fixture is a defect that can sit for a year.
+
+    This is pinned as an exact map rather than as "every site passes it", because five sites
+    have no instant in scope and inventing one for them would be worse than the wall clock:
+
+      channels/room.py floor, console/reach_view.py run_reach, console/reads.py audience,
+      ops/automation.py flow_reach
+
+    Each of those would need `now` threaded from its own callers, which is a wider change
+    than the defect required and is the sort of thing that gets done badly at the end of a
+    long day. They are listed here so the gap is a decision with a name on it rather than an
+    omission, and adding one to the map above is how it gets closed.
+
+    A function that acquires a `now` and does not pass it fails nothing here, which is the
+    limit of this check: what it catches is a site that *stops* passing one.
+
+    Delete this and the instant an intersection is evaluated at goes back to being whatever
+    the process clock happened to say, in the one function the whole platform rests on."""
+    assert _timed_intersections() == {
+        "agents/install.py": ("rehearse",),
+        "gate/leash.py": ("decide", "resume"),
+        "identity/sessions.py": ("reach_for",),
+        "knowledge/verification.py": ("may_name_verifier",),
+        "memory/formation.py": ("may_recall",),
+        "memory/review.py": ("agent_memory",),
+        "ops/denial_alerts.py": ("reach",),
+        "ops/feedback.py": ("may_flag",),
+        "tools/run_skill.py": ("handler", "run_skill_script"),
+    }
+
+
 def test_the_module_the_documents_used_to_name_still_computes_no_reach() -> None:
     """The specific claim, asserted on its own so a failure says what went wrong rather than
     handing the reader a sixteen-entry diff to compare by eye.

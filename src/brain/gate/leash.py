@@ -433,7 +433,7 @@ def decide(
     walks `CHECK_ORDER` and dispatches exhaustively. Adding a fourth check without wiring it
     in is a type error; deleting one changes a constant that two invariant tests pin.
     """
-    run = caller.intersect(agent_ceiling)
+    run = caller.intersect(agent_ceiling, now)
     outcomes: list[CheckOutcome] = []
     tier = MISSING_ENTRY_RUNG
     permitted = True
@@ -831,7 +831,7 @@ def resume[T: Entity](
     if suspension.action.digest() != suspension.action_digest:
         return Resumption(resumed=False, refusal=ResumeRefusal.ARTEFACT_ALTERED)
 
-    run = caller.intersect(agent_ceiling)
+    run = caller.intersect(agent_ceiling, now)
     if run.ent_hash() != suspension.ent_hash:
         return Resumption(resumed=False, refusal=ResumeRefusal.ENTITLEMENT_CHANGED)
 

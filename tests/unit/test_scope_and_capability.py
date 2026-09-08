@@ -5,10 +5,12 @@ Task ids: M0.2.2, M0.2.3
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from pydantic import ValidationError
 
-from brain.core.entitlement import Capability
+from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 
 
@@ -198,3 +200,100 @@ def test_the_shapes_that_merely_match_nothing_are_still_allowed() -> None:
     be authoring-time sanity, which is a different job and a different layer."""
     assert Clause(field="d", op=Op.IN, value=()).matches({"d": "x"}) is False
     assert Clause(field="d", op=Op.EQ, value=None).matches({"d": "x"}) is False
+
+
+# --------------------------------------------- the instant the invariant is evaluated at
+#: Two instants far enough from any wall clock that this file can never become
+#: time-dependent. That is the whole point of choosing them: the defect these tests exist
+#: for was found by a fixture that expired at noon, so a fixture that could expire again
+#: would be repeating the mistake rather than testing it.
+LONG_AGO = datetime(2019, 1, 1, tzinfo=UTC)
+LONG_AFTER = datetime(2999, 1, 1, tzinfo=UTC)
+
+READ = Capability(value="read:client.name")
+
+
+def _holder(not_after: datetime | None) -> EntitlementSet:
+    """Somebody holding one capability everywhere, until a date."""
+    return EntitlementSet(
+        principal_id="p_holder",
+        grants=(Grant(capability=READ, scope=Scope.unrestricted()),),
+        not_after=not_after,
+    )
+
+
+def test_an_intersection_judges_the_right_hand_side_at_the_instant_it_is_given() -> None:
+    """**`EntitlementSet.intersect` evaluates the right-hand side's expiry, and until
+    2026-09-08 it did so against the process clock.**
+
+    The left-hand side's expiry is not evaluated inside `intersect` at all: it is carried
+    out on `not_after` and asked later by whoever calls `scope_for` on the result. The
+    right-hand side's has to be asked here, because a ceiling that has run out admits
+    nothing, and that one call had no instant to use.
+
+    Here the right-hand side lapsed in 2020 and the question is being asked about 2019, so
+    it had not lapsed then and the capability survives the intersection. A version reading
+    the wall clock answers empty.
+
+    Delete this and the one implementation of the platform's invariant goes back to reading
+    a clock nobody handed it."""
+    lapsed_in_2020 = _holder(datetime(2020, 1, 1, tzinfo=UTC))
+
+    asking_about_2019 = _holder(None).intersect(lapsed_in_2020, LONG_AGO)
+
+    assert asking_about_2019.scope_for(READ, LONG_AGO) is not None
+
+
+def test_an_intersection_at_an_instant_after_the_right_hand_side_lapsed_admits_nothing() -> None:
+    """The other direction, and the one that matters. The failure was permissive: a reader
+    whose access had lapsed by the instant being reasoned about was admitted, because the
+    process clock had not reached it yet.
+
+    Four surfaces ask "may this reader be told this" as `requirement(thing).intersect(reader)`,
+    which puts the real principal on the right, so this is the side their expiry was on.
+
+    Delete this and an evaluation for a future instant admits a reader who has already gone."""
+    lapses_in_2999 = _holder(LONG_AFTER)
+
+    asking_about_3000 = _holder(None).intersect(lapses_in_2999, datetime(3000, 1, 1, tzinfo=UTC))
+
+    assert asking_about_3000.scope_for(READ, datetime(3000, 1, 1, tzinfo=UTC)) is None
+    # And the sibling: the same pair asked about an instant inside the window still holds.
+    assert _holder(None).intersect(lapses_in_2999, LONG_AGO).scope_for(READ, LONG_AGO) is not None
+
+
+def test_an_intersection_with_no_instant_still_answers() -> None:
+    """`now` is optional, because five call sites have no instant to give and inventing one
+    for them would be worse than the wall clock. Omitting it must therefore keep working
+    rather than raise or return empty.
+
+    Neither side expires here, so this asserts the default path and says nothing about which
+    clock it reads.
+
+    Delete this and making `now` required looks free."""
+    both_open = _holder(None).intersect(_holder(None))
+
+    assert both_open.scope_for(READ, LONG_AGO) is not None
+
+
+def test_an_intersection_carries_the_tighter_of_the_two_time_bounds() -> None:
+    """**Nothing tested this and a mutation found it: replacing the minimum with the
+    left-hand side's own bound survived every test file that mentions `not_after`.**
+
+    The comment beside the line has said since it was written that an agent ceiling with its
+    own expiry, a time-boxed automation say, must not outlive either side of the
+    intersection. It was a comment and not a check.
+
+    Asserted both ways round, because a version that always takes the left-hand side and one
+    that always takes the right each pass one of the two orders. And with neither side bound,
+    because a version that invents a bound when there is none would refuse work nobody
+    limited.
+
+    Delete this and a run can outlive the ceiling that authorised it, which is the one
+    direction an intersection is not allowed to move in."""
+    until_2030 = _holder(datetime(2030, 1, 1, tzinfo=UTC))
+    until_2025 = _holder(datetime(2025, 1, 1, tzinfo=UTC))
+
+    assert until_2030.intersect(until_2025, LONG_AGO).not_after == datetime(2025, 1, 1, tzinfo=UTC)
+    assert until_2025.intersect(until_2030, LONG_AGO).not_after == datetime(2025, 1, 1, tzinfo=UTC)
+    assert _holder(None).intersect(_holder(None), LONG_AGO).not_after is None

@@ -388,7 +388,7 @@ def reach(pattern: DenialPattern, recipient: EntitlementSet, *, now: datetime) -
     whether the grant admits the place - the same predicate `brain.audit.view._may_see`
     evaluates against a ledger row.
     """
-    shared = requirement(pattern).intersect(recipient)
+    shared = requirement(pattern).intersect(recipient, now)
     scope = shared.scope_for(pattern.capability, now)
     if scope is None or not scope.matches(dict(pattern.where)):
         return None

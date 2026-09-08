@@ -123,16 +123,38 @@ class EntitlementSet(BaseModel):
     def holds(self, capability: Capability, now: datetime | None = None) -> bool:
         return self.scope_for(capability, now) is not None
 
-    def intersect(self, ceiling: EntitlementSet) -> Self:
+    def intersect(self, ceiling: EntitlementSet, now: datetime | None = None) -> Self:
         """`E_run(caller, agent) = E(caller) ∩ agent_ceiling`.
 
         The core invariant of the whole platform. A run gets a capability only when the
         caller holds it *and* the agent's ceiling admits it, and the scope is the
         conjunction of both. An agent can therefore only ever narrow.
+
+        **`now` is the instant the intersection is being reasoned about, and omitting it
+        means the wall clock.** The right-hand side's expiry is evaluated here, because
+        `scope_for` refuses an expired principal and a ceiling that has run out admits
+        nothing; the left-hand side's is not evaluated here at all, it is carried out on
+        `not_after` and asked later by whoever calls `scope_for` on the result. Until
+        2026-09-08 this method had no way to be told the time, so that one evaluation used
+        `datetime.now`.
+
+        That asymmetry is not academic and it fails in the permissive direction. The four
+        surfaces that ask "may this reader be told this" put the *reader* on the right, as
+        `requirement(thing).intersect(reader)`, so the reader's expiry was the thing judged
+        against the process clock rather than against the instant the caller was reasoning
+        with. A recall being evaluated for an earlier instant, a replay, or an audit
+        reconstruction would therefore admit a reader whose access had since lapsed. It was
+        found by a test whose fixture expired at noon: green when it was written, red the
+        next day, with nothing about the code having changed.
+
+        Optional rather than required, because five call sites have no instant to give and
+        inventing one for them would be worse than the wall clock. Which sites pass it is
+        pinned in `tests/invariants/test_single_implementation.py` so the list stays a
+        decision.
         """
         out: list[Grant] = []
         for g in self.grants:
-            ceiling_scope = ceiling.scope_for(g.capability)
+            ceiling_scope = ceiling.scope_for(g.capability, now)
             if ceiling_scope is None:
                 continue
             out.append(Grant(capability=g.capability, scope=g.scope.intersect(ceiling_scope)))
