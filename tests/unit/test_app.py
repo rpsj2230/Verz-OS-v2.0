@@ -112,7 +112,7 @@ def test_readiness_is_ok_when_nothing_has_registered_a_check(client: TestClient)
 def test_readiness_fails_when_any_dependency_is_unreachable(app: FastAPI) -> None:
     """Deployment gates on readiness, so a half-connected instance must fail it.
 
-    An instance that is up but cannot reach the database does not refuse — it answers
+    An instance that is up but cannot reach the database does not refuse - it answers
     from whatever it can still reach. That is how a permission-aware system starts
     returning wrong answers without anything appearing to be down.
     """

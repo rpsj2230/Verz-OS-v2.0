@@ -60,7 +60,7 @@ def test_in_renders_as_a_parameterised_array() -> None:
 
 
 def test_prefix_renders_as_like_with_the_wildcard_in_the_parameter() -> None:
-    """The `%` goes in the value, never in the SQL string — otherwise a value containing
+    """The `%` goes in the value, never in the SQL string - otherwise a value containing
     `%` would change the shape of the query."""
     sql, params = Clause(field="scope_path", op=Op.PREFIX, value="web.").to_sql("p")
     assert "LIKE :p" in sql
@@ -120,7 +120,7 @@ def test_capability_grammar_rejects_malformed_strings() -> None:
 
 def test_unknown_verbs_are_rejected() -> None:
     """A typo like `reed:client.name` would otherwise create a capability nobody holds and
-    nothing grants — a permanently silent refusal that looks like missing data."""
+    nothing grants - a permanently silent refusal that looks like missing data."""
     with pytest.raises(ValidationError, match="unknown verb"):
         Capability(value="reed:client.name")
 

@@ -2,7 +2,7 @@
 
 The point of these is inverted from an ordinary test. They do not check that the right
 data comes back; they check that the wrong data does not. A permission bug that widens
-access passes every test written the normal way, because more data is still valid data —
+access passes every test written the normal way, because more data is still valid data -
 it is only wrong relative to who asked.
 
 So each of these asks for something the persona must not reach and fails if it arrives.
@@ -79,7 +79,7 @@ def test_the_sees_record_not_money_persona_is_exactly_that() -> None:
 
 def test_one_person_can_see_a_field_in_one_department_and_not_another() -> None:
     """Daniel reads contract value in sales and not in web. Field-level and scope-level
-    at once, inside a single person — the case a per-user permission cache gets wrong."""
+    at once, inside a single person - the case a per-user permission cache gets wrong."""
     scope = person("u_dual").entitlement().scope_for(cap("read:client.contract_value"))
     assert scope is not None
     assert scope.matches({"department": "sales"})

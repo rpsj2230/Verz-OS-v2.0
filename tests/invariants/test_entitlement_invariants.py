@@ -215,7 +215,7 @@ def test_scope_normalises_duplicate_clauses() -> None:
 
     `intersect` concatenates clause tuples, so intersecting a scope with itself produced
     `(department=maintenance, department=maintenance)`. Same meaning, different
-    serialisation, therefore a different ent_hash — which is the cache key. The same
+    serialisation, therefore a different ent_hash - which is the cache key. The same
     caller would have missed their own cache entry and shown up in traces as a different
     principal. Scope now deduplicates and sorts on construction.
     """

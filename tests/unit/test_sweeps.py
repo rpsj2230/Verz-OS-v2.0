@@ -320,7 +320,7 @@ def test_tool_name_grammar_rejects_malformed_names() -> None:
 
 
 def test_task_id_grammar_matches_nested_ids() -> None:
-    """Ids run to four levels — M0.1.1.1 and deeper — because the tracker does."""
+    """Ids run to four levels - M0.1.1.1 and deeper - because the tracker does."""
     for good in ("M0.1", "M0.2.4", "M38.1.5", "M0.1.1.1", "M12.3.4.5.6"):
         assert sweeps.TASK_ID_RE.fullmatch(good), good
 

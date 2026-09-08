@@ -15,8 +15,8 @@ from brain.app import Settings, create_app
 
 
 def test_the_lock_id_is_a_fixed_constant() -> None:
-    """Every replica must ask for the same lock. Deriving it from anything that varies —
-    a hostname, a pid, the database name — would let two replicas each take a different
+    """Every replica must ask for the same lock. Deriving it from anything that varies -
+    a hostname, a pid, the database name - would let two replicas each take a different
     lock and migrate at the same time, which is the exact failure the lock prevents."""
     assert isinstance(migrate.MIGRATION_LOCK_ID, int)
     assert migrate.MIGRATION_LOCK_ID == 8_274_419_003

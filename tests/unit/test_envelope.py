@@ -58,7 +58,7 @@ def test_result_carries_records_and_counts_them() -> None:
 
 def test_redactions_are_recorded_not_silently_dropped() -> None:
     """A removed field leaves a trace. Without this, an answer that was quietly narrowed
-    is indistinguishable from one where the data never existed — and the console could
+    is indistinguishable from one where the data never existed - and the console could
     not report a redaction rate at all."""
     r: TypedResult[Client] = TypedResult(
         records=(a_client(),),

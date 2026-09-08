@@ -198,8 +198,8 @@ def test_a_one_line_commit_message_is_counted(repo: Path) -> None:
     r"""Regression, found by test_ids_are_read_from_subject_and_body on 2026-09-04.
 
     Python counts \x1c through \x1f as whitespace, so `entry.strip()` ate the trailing
-    unit separator. A commit with an empty body — every one-line message, and so most
-    commits — then split into three fields instead of four and was dropped with no error
+    unit separator. A commit with an empty body - every one-line message, and so most
+    commits - then split into three fields instead of four and was dropped with no error
     anywhere. Progress simply read low.
     """
     git(repo, "commit", "--allow-empty", "-m", "M1.1.2: one line, no body")
@@ -355,7 +355,7 @@ def test_a_missing_document_is_a_404_not_a_crash(client: TestClient) -> None:
 
 
 def test_docs_pages_are_reachable_in_production(client: TestClient) -> None:
-    """Unlike /docs these carry no company data and stay on in production — the whole
+    """Unlike /docs these carry no company data and stay on in production - the whole
     point is that progress is visible without asking anyone."""
     assert client.get("/build").status_code == 200
     assert client.get("/api/status.json").status_code == 200

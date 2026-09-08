@@ -797,9 +797,9 @@ EM_DASH: str = chr(8212)
 #: means and a reader should be able to see that both are looked for.
 EM_DASH_ENTITY: str = "&" + "mdash;"
 
-#: Where the rule is enforced today. `tests` still holds a backlog of thirty across twelve
-#: files; see `sweep_house_style` for why this is scoped rather than total.
-HOUSE_STYLE_AREAS: tuple[str, ...] = ("src", "migrations", "ops", "docs")
+#: Where the rule is enforced. Every area this repository writes code or prose in, as of
+#: 2026-09-08. The repository root is the one exclusion and the reason is in `sweep_house_style`.
+HOUSE_STYLE_AREAS: tuple[str, ...] = ("src", "migrations", "ops", "docs", "tests")
 
 #: What is read inside them. Prose suffixes were added with `docs`, because the documents this
 #: repository serves are where the rule was broken most: one hundred and forty nine em dashes
@@ -817,17 +817,20 @@ def sweep_house_style() -> None:
     ordinary fate of a rule with no check behind it: everybody agrees with it, nobody is
     reminded of it, and the count only ever goes up.
 
-    **Scoped to what is clean rather than to everything the rule covers.** `tests` still holds
-    thirty across twelve files, and a check that is red the day it lands is a check somebody
-    switches off, which `sweep_traceability` records at length about its own advisory notes.
-    Widening this is one entry in `HOUSE_STYLE_AREAS` once those are done.
+    **It landed scoped to what was already clean, and that was the point.** A check that is
+    red the day it lands is a check somebody switches off, which `sweep_traceability` records
+    at length about its own advisory notes. So it began at `src`, `migrations` and `ops`,
+    which had none between them, and each area was added as its backlog was worked down.
 
-    `docs` joined on 2026-09-08, with `.md`, `.html` and `.js` added to the suffixes, after
-    one hundred and eighty six were replaced across the served documents. That is where the
-    rule was broken most and where it matters most, because those pages are what the client
-    reads. The four compose files and `README.md` at the repository root are still outside any
-    area: sweeping the root means sweeping `.venv` and `node_modules`, and an area entry of
-    `.` is not worth what it would cost to filter.
+    `docs` joined on 2026-09-08 with the prose suffixes, after two hundred and thirty six were
+    replaced across the served documents, which is where the rule was broken most and where it
+    matters most because those pages are what the client reads. `tests` joined the same day
+    after fourteen more. Every area is now in, one week and three hundred and thirty one
+    replacements after the rule had nothing behind it at all.
+
+    The repository root is the one exclusion, for a duller reason than the others: sweeping it
+    means sweeping `.venv` and `node_modules`, and an area entry of `.` is not worth what
+    filtering it would cost. The four files there that carried one were done by hand.
 
     The character rather than a pattern, because there is nothing to interpret: an em dash is
     an em dash, and the fix is the punctuation the sentence actually wanted.
