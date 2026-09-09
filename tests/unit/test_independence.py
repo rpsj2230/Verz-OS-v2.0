@@ -35,6 +35,8 @@ from brain.install import (
 )
 from brain.ops.independence import (
     ALLOWED_HOSTS,
+    DOCS_SUFFIXES,
+    READ_SUFFIXES,
     SEARCHED,
     compose_services,
     environment_reads,
@@ -72,6 +74,52 @@ def test_the_whole_tree_is_free_of_client_values_and_second_readers() -> None:
     `brain.knowledge.embed_policy.policy_gaps` was in for a fortnight: correct, argued, and
     asked by nothing."""
     assert independence_gaps(REPO) == ()
+
+
+def test_the_pages_the_application_serves_are_read_as_markdown_as_well_as_html() -> None:
+    """**The hole this closed had one deployment's address in a page every client would serve.**
+
+    `docs/needs-rupash.md` is copied into the image by `COPY docs /app/docs` and rendered at
+    `/build/needs-rupash`, so it is as deployed as the HTML next to it. Until 2026-09-09 the
+    sweep read `docs` for code suffixes only, and that file held fourteen client values: a
+    host, an address, a Coolify panel and a service identifier.
+
+    Asserted as a property of the mapping rather than by running the sweep, because the sweep
+    passing proves the tree is clean and not that this area is being read at all. That is the
+    same distinction `brain.ops.controls` draws between a mechanism existing and a mechanism
+    running.
+
+    Delete this and dropping `.md` back out of the mapping is a green change."""
+    docs, src = SEARCHED["docs"], SEARCHED["src"]
+
+    assert docs is not None and ".md" in docs
+    assert src is not None and ".md" not in src, "Markdown under src is a file nothing renders"
+    assert DOCS_SUFFIXES > READ_SUFFIXES, "the docs set is the code set and more"
+
+
+def test_a_client_value_in_a_served_markdown_page_is_reported() -> None:
+    """The other half, and a check that can only be run against a clean tree cannot be shown to
+    fail.
+
+    Written against a temporary tree rather than by dirtying this one, because the sweep is a
+    hard gate here and a test that leaves a finding behind would be a test that has to clean up
+    correctly to keep the gate honest.
+
+    Delete this and the suffix could be present while the matcher never reaches the file."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp)
+        (repo / "docs").mkdir()
+        (repo / "docs" / "page.md").write_text(
+            "The console answers on https://brain.198.51.100.7.example.net today.\n",
+            encoding="utf-8",
+        )
+
+        found = value_shaped_literals(repo)
+
+    assert found, "a host and an address in a served page are two findings"
+    assert any("page.md" in one for one in found)
 
 
 def test_a_setting_read_from_the_environment_anywhere_else_is_reported() -> None:
@@ -590,20 +638,31 @@ def test_the_operational_files_are_swept_whatever_they_are_called(tmp_path: Path
     assert any("ops/deploy/brain-deploy" in one for one in found), found
 
 
-def test_the_markdown_the_build_serves_is_a_known_gap_and_not_an_accident(tmp_path: Path) -> None:
-    """What is read is a property of the area, and `docs` reads the pages and not the log.
+def test_the_markdown_the_build_serves_is_read_now_and_the_gap_it_recorded_is_closed(
+    tmp_path: Path,
+) -> None:
+    """**This test used to assert the opposite, and that is what it was for.**
 
-    This is a gap and it is recorded as one: `docs/needs-rupash.md` is served at
-    `/build/needs-rupash` and held sixteen findings when this was measured on 2026-09-09. It
-    is left open deliberately rather than by omission, because widening `docs` in the same
-    change that widened `ops` would take a green gate red on somebody else's file, and a gate
-    that is red on arrival is a gate that gets switched off.
+    It read "the markdown the build serves is a known gap and not an accident" until
+    2026-09-09, and it said in words why: `docs/needs-rupash.md` is served at
+    `/build/needs-rupash`, it held fourteen client values, and widening `docs` in the same
+    change that widened `ops` would have taken a green gate red on a file nobody had fixed
+    yet, which is the state in which a gate gets switched off.
 
-    Delete this and the gap stops being a decision and becomes a thing nobody noticed."""
+    The page is fixed, so the line went in. Every value in it is now either a description of
+    what the reader should look at on their own screen or a command that derives it from the
+    server it runs on, which is also the better instruction: a command reading
+    `/data/coolify/services` is right on every server and an identifier typed into a page is
+    right on exactly one.
+
+    A gap deliberately left, written down with the condition for closing it, and closed on the
+    day that condition was met. Worth keeping as a shape rather than only as a result.
+
+    Delete this and the widening can be reverted with the suite green."""
     found = value_shaped_literals(_a_repository(tmp_path))
 
-    assert not any("docs/log.md" in one for one in found), found
-    assert SEARCHED["docs"] is not None and ".md" not in SEARCHED["docs"]
+    assert any("docs/log.md" in one for one in found), found
+    assert SEARCHED["docs"] is not None and ".md" in SEARCHED["docs"]
 
 
 def test_the_sweep_can_say_what_it_read(tmp_path: Path) -> None:
@@ -618,7 +677,7 @@ def test_the_sweep_can_say_what_it_read(tmp_path: Path) -> None:
 
     assert ".env.example" in read
     assert "ops/deploy/brain-deploy" in read
-    assert "docs/log.md" not in read
+    assert "docs/log.md" in read, "served Markdown joined on 2026-09-09; see the test above"
 
 
 def test_this_products_build_provenance_is_allowed_and_is_not_a_name_to_pass_a_check() -> None:

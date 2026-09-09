@@ -55,13 +55,24 @@ not read is the failure this module was written about. Over-reading a file that 
 produces a visible finding somebody spends a minute on; under-reading produces nothing, which
 is what happened.
 
-**What this widening does not close, measured rather than assumed.** `docs/*.md` is not read,
-and on 2026-09-09 it held sixteen hits, every one of them in `docs/needs-rupash.md`, which is
-served at `/build/needs-rupash` and is therefore as deployed as the HTML beside it. They are
-a real finding and they are left open here deliberately: that page is a decision log owned
-elsewhere, and widening `docs` to Markdown in the same change that widens `ops` would take a
-gate that is green and make it red on somebody else's file, which is the state in which a gate
-gets switched off. It is one line of `SEARCHED` on the day those pages are fixed.
+**`docs/*.md` was the last hole and it closed the same day, in the order the paragraph above
+described.** Until 2026-09-09 this read `docs` for `.py`, `.ts`, `.tsx`, `.html` and `.js`, so
+the Markdown beside those pages was invisible, and `docs/needs-rupash.md` held fourteen hits:
+the first deployment's host, its address, its Coolify panel and its service identifier. That
+file is copied into the image by `COPY docs /app/docs` and rendered at `/build/needs-rupash`,
+so every client's own Company Brain would have served another company's server coordinates on
+a page of its own build log.
+
+The order mattered and is worth keeping as a pattern. The widening was written down here as a
+one-line change waiting on a fixed file rather than made immediately, because a gate that goes
+red on arrival over somebody else's document is a gate that gets switched off. The page was
+rewritten first, every value replaced by either a description of what the reader should look
+at on their own screen or a command that derives it from the server it runs on, and the line
+was added in the same commit. It went in green.
+
+**And the commands got better rather than worse for it.** `ls /data/coolify/services` on the
+server is right on every server; the same identifier typed into a page is right on exactly one
+and silently wrong on every other, which is the failure that page's own item 49 is about.
 
 Task ids: M41.1.1, M41.3.2
 """
@@ -97,6 +108,14 @@ A_COMMENT_CANNOT_BE_DEPLOYED: Final = (
 #: and a link tag is exactly the shape of value this is looking for.
 READ_SUFFIXES: Final[frozenset[str]] = frozenset({".py", ".ts", ".tsx", ".html", ".js"})
 
+#: The same, plus Markdown, for the one area whose Markdown is served rather than read.
+#:
+#: A separate name rather than adding `.md` to the set above, because the two say different
+#: things. Markdown under `src` would be a file nothing renders; Markdown under `docs` is a
+#: page the application returns to a browser, which is exactly as deployed as the HTML next to
+#: it. Widening `READ_SUFFIXES` itself would have made that claim about every area at once.
+DOCS_SUFFIXES: Final[frozenset[str]] = READ_SUFFIXES | {".md"}
+
 #: Read every file in the area, whatever it is called. See the header: an allowlist of
 #: suffixes is what let `ops` carry one deployment's host in four file types nobody had
 #: listed, and a check that is quiet about what it declined to read is the failure this
@@ -114,12 +133,19 @@ EVERY_FILE: Final = None
 #: imported into every client's Keycloak, its policies and proxy configuration are mounted
 #: into their containers, and its runbooks are followed by a person on their server. None of
 #: that is source and all of it is deployed.
+#:
+#: `docs` reads Markdown from the same day, which is the third step of the same argument and
+#: the one that had been written down and left. `docs/needs-rupash.md` is rendered at
+#: `/build/needs-rupash` by `brain.docs_routes`, and the Dockerfile copies the whole directory,
+#: so a page carrying one deployment's address is a page every client's install serves. The
+#: header says what it held and why the widening waited for the file rather than the other way
+#: round.
 SEARCHED: Final[Mapping[str, frozenset[str] | None]] = MappingProxyType(
     {
         "src": READ_SUFFIXES,
         "migrations": READ_SUFFIXES,
         "console/src": READ_SUFFIXES,
-        "docs": READ_SUFFIXES,
+        "docs": DOCS_SUFFIXES,
         "ops": EVERY_FILE,
     }
 )

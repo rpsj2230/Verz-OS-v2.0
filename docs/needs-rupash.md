@@ -38,7 +38,8 @@ nothing.
 
 1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/variables/actions`.
 2. Click **New repository variable**.
-3. Name it `BRAIN_URL`. Value: `https://brain.194.233.66.89.sslip.io`.
+3. Name it `BRAIN_URL`. The value is the address this system answers on, the one you
+   type to reach the console, with no path after it.
 4. Tell me, and I remove the address from both workflow files.
 
 Step 3 changes nothing about what runs: it is exactly what the fallback in the file already
@@ -55,7 +56,7 @@ used as a canary in two tests, with the comment above it saying so, and a placeh
 it is not real. No environment file has ever been committed.
 
 The address, in two places. `.github/workflows/anchor.yml` carries
-`brain.194.233.66.89.sslip.io` as a fallback for `vars.BRAIN_URL`, and
+this deployment's own address as a fallback for `vars.BRAIN_URL`, and
 `.github/workflows/deploy.yml` carries it hardcoded as the address a deploy waits on. Setting
 the variable removes the first; the second becomes the same variable.
 
@@ -138,22 +139,24 @@ setting, which is the thing M42.1.4 exists to prevent.
 **One command, and it corrects a value my own instructions sent you to the wrong place for.**
 
 ```
-ssh verz-vps "printf %s c74hlhygvg7scjttu8ydwnqi > /root/.coolify-service-uuid"
+ssh <your server> "docker ps --format '{{.Names}}' | sed -n 's/^app-//p' \
+  | head -1 > /root/.coolify-service-uuid"
 ```
 
 Then, to see it took:
 
 ```
-ssh verz-vps "cat /root/.coolify-service-uuid; ls -d /data/coolify/services/c74hlhygvg7scjttu8ydwnqi"
+ssh <your server> "u=\$(cat /root/.coolify-service-uuid); echo \"\$u\"; \
+  test -d /data/coolify/services/\"\$u\" && echo 'that service exists' || echo WRONG"
 ```
 
 **What went wrong.** This item used to tell you to copy the identifier out of Coolify's address
 bar. That address holds several identifiers, one for the project, one for the environment and
 one for the service, and the one you copied was not the service. Measured on your own server
-on 2026-09-09: `/data/coolify/services/` holds `c74hlhygvg7scjttu8ydwnqi` and
-`iii3i6yyvra7tvzr5s6vhwod`, the Brain stack and Keycloak. The value in the file matched
-neither, and `docker ps` names the containers `app-c74hlhygvg7scjttu8ydwnqi` and
-`db-c74hlhygvg7scjttu8ydwnqi`, which is the same identifier a second way.
+on 2026-09-09: `/data/coolify/services/` holds two directories, the Brain stack and
+Keycloak, and the value in the file matched neither. `docker ps` names the application
+and database containers after the right one, with `app-` and `db-` in front, which is
+the same identifier a second way and is what the command above reads.
 
 **Why the wrong value is worse than an empty file.** `brain-deploy` builds
 `/data/coolify/services/$UUID` and `app-$UUID` from it. With a wrong identifier the directory
@@ -171,57 +174,60 @@ itself, not the browser: `ls /data/coolify/services` names the directories and
 front. Coolify's address bar is where I sent you and it is the one place that is ambiguous.
 
 **And the same value belongs in GitHub.** `COOLIFY_SERVICE_UUID` should be
-`c74hlhygvg7scjttu8ydwnqi` as well; see item 42.
+the same value; item 42 says where to paste it and this item says where to read it.
 
-## 42. You set the three deploy secrets five days ago and the pipeline still says they are missing
+## 42. The three deploy secrets were saved empty, and re-entering them is the whole fix
 
-**You were right and this item was wrong, so read this one before doing anything.** It used to
-ask you to create three GitHub secrets. They exist. Measured on 2026-09-09 against
-`rpsj2230/Verz-OS-v2.0`:
+**What you do, and it is three fields on one page.**
+
+1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
+2. Click **Update** beside `COOLIFY_URL` and paste your Coolify panel's address. It is
+   the one you open the panel with, port and all, and `docker ps` on the server prints
+   the same host if you would rather read it there than type it from memory.
+3. Click **Update** beside `COOLIFY_SERVICE_UUID` and paste your service identifier. Read
+   it off the server rather than out of Coolify's address bar, which carries three
+   different identifiers and is where this page used to send you: item 49 has the one
+   command that prints it, and the story of why the value you wrote first was wrong.
+4. Click **Update** beside `COOLIFY_TOKEN` and paste a Coolify API token. If you no longer have
+   the one from September, make a new one: in Coolify, your avatar, **Keys & Tokens**, **API
+   tokens**, create one with permission to deploy, and copy it when it is shown because it is
+   shown once. I do not create or hold tokens on your behalf.
+
+The next push then calls Coolify directly and the warning stops.
+
+**How this is known rather than guessed.** The run at 10:22 on 2026-09-09 printed, before
+deciding anything:
 
 ```
-COOLIFY_SERVICE_UUID   created 2026-09-04T12:12:45Z
-COOLIFY_TOKEN          created 2026-09-04T12:12:46Z
-COOLIFY_URL            created 2026-09-04T12:12:44Z
-COOLIFY_WEBHOOK_URL    created 2026-09-04T11:48:00Z
+what this job can see:
+  secrets.COOLIFY_URL: empty
+  secrets.COOLIFY_TOKEN: empty
+  secrets.COOLIFY_SERVICE_UUID: empty
+  vars.COOLIFY_URL: empty
+  vars.COOLIFY_SERVICE_UUID: empty
 ```
 
-And the Deploy run at 09:05 on 2026-09-09, five days after that, still ended with:
+All three exist on the repository, created 2026-09-04 at 12:12:44, :45 and :46, one second
+apart. They deliver empty strings, no repository variables exist to have caught the values
+instead, the repository is not a fork, it declares no deployment environments, and the workflow
+file that ran is the one on `main`. A secret that exists and is empty is the only reading left,
+and GitHub's API accepts an empty value without complaint even though the web form does not.
+Three timestamps a second apart look like a script that set them from environment variables
+that were not themselves set.
 
-```
-no deploy: missing secret(s) COOLIFY_URL COOLIFY_TOKEN COOLIFY_SERVICE_UUID.
-The image is published; the server was not told.
-```
+**You were right to push back on this item.** It used to say the secrets were missing and ask
+you to create them. You had created them, five days earlier.
 
-So the problem is not the one this item described. The secrets are on the repository, the
-workflow reads them by the right names, the repository is not a fork, there are no deployment
-environments that could be gating them, and the file that ran is the file on `main`. The job
-simply receives three empty strings.
+**Nothing is broken while this is open.** The timer on your server checks for a new image every
+two minutes and picks up every build, which is why deploys have been working the whole time.
 
-**Nothing is needed from you while this is open.** Your server is current: the timer on it
-polls for a new image every two minutes and picks up every build, which is why deploys have
-been working the whole time this item claimed they could not.
-
-**What I did instead of guessing.** The run now prints, before it decides anything, whether
-each of the three arrives as a secret and whether the two safe ones arrive as a repository
-*variable*. GitHub's Actions settings page has Secrets and Variables side by side and only one
-of them is read; that is the cheapest remaining explanation and the run will now say so
-outright. No value is printed, only the word `set` or `empty`.
-
-**And a second fault was sitting behind the first, which is the part worth reading.** The
-missing-secret check was three lines of the shape `[ -z "$X" ] && missing="$missing X"`. Every
-`run:` block in GitHub Actions is `bash -eo pipefail`, and a whole `&&` list is the command
-whose exit status `-e` reads. When the value is present, the test is false, the line exits 1
-and the step dies before it ever calls Coolify. It has never happened, because all three have
-been empty on every run. It would have happened on the first run where the secrets arrived:
-the check would have broken at the moment it started to matter. Both are `if` statements now.
-
-**What happens next without you.** The next push runs it and the answer is in that job's log
-under "what this job can see". If it says the secrets are empty and the variables are set, the
-fix is one move in the GitHub settings page and I will give you the two clicks. If it says
-they are set, the deploy call happens on that same run and this item closes itself.
-
----
+**A second fault was hiding behind the first**, and it is fixed. The missing-secret check was
+three lines shaped `[ -z "$X" ] && missing="$missing X"`, and every `run:` block in GitHub
+Actions is `bash -eo pipefail`. A whole `&&` list is the command whose exit status `-e` reads,
+so the first line where the value was present would exit 1 and kill the step before it called
+Coolify. It never fired, because all three have always been empty. It would have fired on the
+first run after you fixed the secrets: a check that breaks at the moment it starts to matter,
+invisible for as long as the fault it sits behind is there.
 
 ## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - which moves?
 
@@ -300,8 +306,8 @@ unless the corpus is empty and says why.
 
 ## 32. Two pieces of Keycloak housekeeping, and nothing is blocked by either
 
-**Keycloak is up.** Measured on 2026-09-09: `keycloak-iii3i6yyvra7tvzr5s6vhwod` and
-`keycloak-db-iii3i6yyvra7tvzr5s6vhwod` have both been healthy for two days. The three passwords
+**Keycloak is up.** Measured on 2026-09-09: its own container and its own database
+container have both been healthy for two days. The three passwords
 are set, the realm imported, and you have signed in. Everything this item originally asked for
 is done and the rest of it has moved to the answered section.
 
@@ -1242,7 +1248,7 @@ The original analysis is kept below because the measurements are what made the c
 
 ## 29. The console address - DONE: your existing address, now registered
 
-**You were right, and it is done.** `https://brain.194.233.66.89.sslip.io` is exactly the
+**You were right, and it is done.** The address this deployment already answers on is exactly the
 address, and it is now registered in the realm. Nothing further is needed from you today.
 
 **Why your instinct was correct.** The console is not a separate system, it is the screen on
@@ -1255,8 +1261,8 @@ have to cross.
 **What is registered**, exact paths rather than a wildcard, because Keycloak will hand a
 sign-in code to any address on this list and a wildcard means any path on that host:
 
-    https://brain.194.233.66.89.sslip.io/auth/callback     where sign-in returns to
-    https://brain.194.233.66.89.sslip.io/signed-out        where sign-out returns to
+    <this system's address>/auth/callback                  where sign-in returns to
+    <this system's address>/signed-out                     where sign-out returns to
     http://localhost:5173/auth/callback                    development only
 
 **The one thing to know for when you buy a domain.** Those addresses live in
@@ -2346,7 +2352,7 @@ signature checked after the thing is live is checked too late. Verified by hand:
 certificate binds the running image to
 `.github/workflows/deploy.yml@refs/heads/main` in your repository.
 
-History: `ssh verz-vps journalctl -u brain-deploy -n 50`
+History: `ssh <your server> journalctl -u brain-deploy -n 50`
 
 ---
 
@@ -2393,13 +2399,13 @@ replace an entire second system.
 
 You said leave it, but fix it if I could. I could.
 
-**The panel is now at https://coolify.194.233.66.89.sslip.io** with a real Let's Encrypt
+**The panel is now on its own subdomain** with a real Let's Encrypt
 certificate, valid to 3 December. **Plain HTTP on port 8000 is closed.**
 
 I was wrong about something here, and being wrong changed the answer. I had told you
 sslip.io could not get a real certificate, having tested one of your apps and found
 Traefik's self-signed default. That app was simply configured for `http://`;
-`brain.194.233.66.89.sslip.io` has had a genuine Let's Encrypt certificate all along. No
+This deployment's own address has had a genuine Let's Encrypt certificate all along. No
 domain purchase was needed after all.
 
 Two details worth keeping:
