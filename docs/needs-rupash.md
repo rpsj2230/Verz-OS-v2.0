@@ -2,17 +2,11 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**7 items are open, and that is down from twenty on 2026-09-09.** You answered every
+**6 items are open, and that is down from twenty on 2026-09-09.** You answered every
 one of the others in two messages that afternoon, and those answers are recorded in the
 answered section below with what each one authorises. What is left is genuinely left: two of
 them are one command each, one is a question I owe you a recommendation on and now have, one
 is a fault under investigation, and one is a decision about how versions are pinned.
-
-**One is new today and it stops me running a fifth of the test suite.** Item 53: Windows
-Smart App Control has started blocking the database driver's library, so twenty-three test
-files cannot be collected on this machine. Nothing is wrong with the code and CI still runs
-those files against a real database. The fix is installing a signed copy of one library, five
-minutes, and it switches nothing off.
 
 **Two are one action each and neither is urgent.** Item 49: the service identifier on your
 server holds the wrong value, because this page told you to copy it out of an address bar that
@@ -37,74 +31,6 @@ so an install that pins nothing is not pinned. Three numbered steps and the firs
 nothing.
 
 # Open
-
-## 53. Windows has started blocking the database driver, and 23 test files cannot run
-
-**What you do, and it is one install with nothing switched off.**
-
-1. Open a terminal and run this. It installs PostgreSQL's own client libraries, which are
-   signed by the PostgreSQL Global Development Group and therefore not blocked:
-
-   ```
-   winget install --id PostgreSQL.PostgreSQL.17 --silent
-   ```
-
-2. Add its `bin` directory to your PATH. In the same terminal, as administrator:
-
-   ```
-   setx /M PATH "$env:PATH;C:\Program Files\PostgreSQL\17\bin"
-   ```
-
-3. Close every terminal and open a new one, then tell me. I check it in one command and
-   carry on.
-
-If you would rather not install PostgreSQL, say so and I will work around it: the eight
-failures and fifteen collection errors are all one import, so I can keep building and run the
-affected files on the next machine that can.
-
-**What happened.** Partway through 2026-09-09 the local test suite stopped being able to
-import `psycopg`, the library the system talks to PostgreSQL with:
-
-```
-ImportError: no pq wrapper available.
-- couldn't import psycopg 'binary' implementation: DLL load failed while importing pq:
-  An Application Control policy has blocked this file.
-- couldn't import psycopg 'python' implementation: libpq library not found
-```
-
-Measured: Smart App Control is on and enforcing on this machine
-(`VerifiedAndReputablePolicyState : 1`, user-mode code integrity enforcement `2`). It blocks
-unsigned binaries that have no reputation yet, and the driver ships an unsigned DLL that a
-package install writes fresh, so it has none. Reinstalling the package does not help, and I
-tried: a freshly written copy of an unsigned file is exactly what the policy refuses.
-
-This is the same trap `CLAUDE.md` already records for `mypy`, where the same policy
-intermittently refused a freshly written shim and it presented as a gate failing with no gate
-having an opinion. It has moved from an executable to a library, which is worse, because a
-library failing takes twenty-three test files with it.
-
-**What it costs today.** 9,978 tests still pass, all 1,305 invariants pass, and mypy, both
-ruff gates and every sweep are green. Eight tests fail and fifteen files cannot be collected,
-and every one of those is this import: they are the files that touch the database driver.
-Nothing is wrong with the code; the machine cannot load the driver.
-
-**Why the recommendation is not to switch the policy off.** Smart App Control on Windows 11
-cannot be switched back on once it is off, short of reinstalling Windows. It is protecting the
-whole machine, and this is one library. Installing a signed copy of the same library changes
-nothing about your security posture and is undoable with an uninstall.
-
-**Options.**
-
-- **Install the signed client libraries, which is the recommendation.** Three steps above,
-  about five minutes, and nothing is weakened. The driver has a pure-Python implementation
-  that works as soon as it can find a signed `libpq`, and there is none on this machine today,
-  which is why the second line of that error appears at all.
-- Turn Smart App Control off. It would work, it is one setting, and it is a one-way door on
-  this version of Windows. I would not.
-- Leave it. The tests that cannot run are the ones about the database driver and the pooler,
-  which are also the ones CI runs against a real PostgreSQL on every commit, so nothing ships
-  unchecked. What is lost is the ability to catch those failures here rather than in CI, which
-  is minutes rather than seconds and is a real cost when a change touches the schema.
 
 ## 52. Two workflow files carry your server's address, and one repository variable removes them
 
@@ -400,6 +326,85 @@ I cannot check either of these for you without administrator credentials for you
 provider, which I do not hold and should not.
 
 # Answered
+
+## 53. Windows blocked the database driver for four hours and then stopped - DONE: nothing was done
+
+**Closed 2026-09-10, and nobody did anything.** The driver imports again, the whole suite runs, and Smart App Control is still on and still enforcing: measured after the fact,
+`VerifiedAndReputablePolicyState` is unchanged. Reinstalling the package had not helped while it was blocked, and nothing was installed to fix it.
+
+**So the likeliest reading is that the file gained reputation**, which is how Smart App Control is designed to work: an unsigned binary with no history is refused until enough machines have run it without incident. That means it can happen again, to this file or to the next unsigned one a package installs, and it will present the same way: a gate failing with no gate having an opinion.
+
+**Nothing is needed from you and the recommendation stands if it recurs.** Install the signed PostgreSQL client libraries rather than switching the policy off, which on this version of Windows cannot be switched back on. The three steps are below, unchanged, and they are worth doing pre-emptively if you would rather not lose four hours of local test coverage the next time.
+
+**What it cost, measured rather than guessed.** For about four hours, sixteen test files could not be collected and eight tests failed, all on one import. 9,978 tests, all 1,305 invariants, mypy, both ruff gates and every sweep stayed green throughout, and CI runs the blocked files against a real database on every commit, so nothing shipped unchecked. Six changes were committed during the window and every one of them was verified by mutation.
+
+
+**What you do, and it is one install with nothing switched off.**
+
+1. Open a terminal and run this. It installs PostgreSQL's own client libraries, which are
+   signed by the PostgreSQL Global Development Group and therefore not blocked:
+
+   ```
+   winget install --id PostgreSQL.PostgreSQL.17 --silent
+   ```
+
+2. Add its `bin` directory to your PATH. In the same terminal, as administrator:
+
+   ```
+   setx /M PATH "$env:PATH;C:\Program Files\PostgreSQL\17\bin"
+   ```
+
+3. Close every terminal and open a new one, then tell me. I check it in one command and
+   carry on.
+
+If you would rather not install PostgreSQL, say so and I will work around it: the eight
+failures and fifteen collection errors are all one import, so I can keep building and run the
+affected files on the next machine that can.
+
+**What happened.** Partway through 2026-09-09 the local test suite stopped being able to
+import `psycopg`, the library the system talks to PostgreSQL with:
+
+```
+ImportError: no pq wrapper available.
+- couldn't import psycopg 'binary' implementation: DLL load failed while importing pq:
+  An Application Control policy has blocked this file.
+- couldn't import psycopg 'python' implementation: libpq library not found
+```
+
+Measured: Smart App Control is on and enforcing on this machine
+(`VerifiedAndReputablePolicyState : 1`, user-mode code integrity enforcement `2`). It blocks
+unsigned binaries that have no reputation yet, and the driver ships an unsigned DLL that a
+package install writes fresh, so it has none. Reinstalling the package does not help, and I
+tried: a freshly written copy of an unsigned file is exactly what the policy refuses.
+
+This is the same trap `CLAUDE.md` already records for `mypy`, where the same policy
+intermittently refused a freshly written shim and it presented as a gate failing with no gate
+having an opinion. It has moved from an executable to a library, which is worse, because a
+library failing takes twenty-three test files with it.
+
+**What it costs today.** 9,978 tests still pass, all 1,305 invariants pass, and mypy, both
+ruff gates and every sweep are green. Eight tests fail and fifteen files cannot be collected,
+and every one of those is this import: they are the files that touch the database driver.
+Nothing is wrong with the code; the machine cannot load the driver.
+
+**Why the recommendation is not to switch the policy off.** Smart App Control on Windows 11
+cannot be switched back on once it is off, short of reinstalling Windows. It is protecting the
+whole machine, and this is one library. Installing a signed copy of the same library changes
+nothing about your security posture and is undoable with an uninstall.
+
+**Options.**
+
+- **Install the signed client libraries, which is the recommendation.** Three steps above,
+  about five minutes, and nothing is weakened. The driver has a pure-Python implementation
+  that works as soon as it can find a signed `libpq`, and there is none on this machine today,
+  which is why the second line of that error appears at all.
+- Turn Smart App Control off. It would work, it is one setting, and it is a one-way door on
+  this version of Windows. I would not.
+- Leave it. The tests that cannot run are the ones about the database driver and the pooler,
+  which are also the ones CI runs against a real PostgreSQL on every commit, so nothing ships
+  unchecked. What is lost is the ability to catch those failures here rather than in CI, which
+  is minutes rather than seconds and is a real cost when a change touches the schema.
+
 
 ## 33. "Shadow-pinned thirty days" - which of the two things does it mean? - DECIDED: both readings, with a confidence measure gating the switch
 
