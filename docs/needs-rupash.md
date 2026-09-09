@@ -2,94 +2,80 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**20 items are open, and they are not equally urgent.** They had accumulated into one
-paragraph in which three different items each claimed to be "the newest", so here they are
-sorted by what they actually need from you. Nothing below is a request to read code.
+**6 items are open, and that is down from twenty on 2026-09-09.** You answered every
+one of the others in two messages that afternoon, and those answers are recorded in the
+answered section below with what each one authorises. What is left is genuinely left: two of
+them are one command each, one is a question I owe you a recommendation on and now have, one
+is a fault under investigation, and one is a decision about how versions are pinned.
 
-**One is the most important thing on this page and it is new.** Item 47: thirteen mechanisms
-in the system only work if something runs them on a schedule, and eleven of them are run by
-nothing at all. Nothing has gone wrong yet, because none of them has ever run and there is no
-client data in the system. What it needs from you is one decision about where scheduled work
-lives on your server, with three options and a recommendation.
+**Two are one action each and neither is urgent.** Item 49: the service identifier on your
+server holds the wrong value, because this page told you to copy it out of an address bar that
+carries three of them. Nothing is broken today and the command that fixes it is at the top of
+the item. Item 52: two workflow files carry your server's address, and one repository variable
+lets me remove them.
 
-**One is holding up real work.** Item 34: the model we chose produces vectors of one width and
-the column that stores them is another width, so nothing can be embedded until one of the two
-moves. Every other embedding task waits behind it. My recommendation is in the item, and it
-comes with a cost either way.
+**One needs a sentence from you and this page finally has a recommendation in it.** Item 34:
+the embedding model produces vectors of one width and the column that stores them is another
+width, so nothing can be embedded until one of the two moves. The recommendation is in the
+item, along with why the answer is not simply a number.
 
-**One is a fault I found while building on top of it.** Item 48: a department head's
-permissions are written against their department and an audit entry does not record one, so
-their activity page is empty rather than filtered. Nothing is being shown to anybody who
-should not see it; the failure is the other way round. Three options, one of which is to
-decide department heads do not read the audit trail at all, and that is a real answer.
+**One is two pieces of housekeeping on a system that is otherwise working.** Item 32: Keycloak
+is up, healthy and signed into. A temporary account should be deleted and one password should
+be rotated, both in your identity provider, and I hold no credentials for it.
 
-**Three are one-sentence answers with no work behind them.** Item 33 asks what "shadow-pinned
-thirty days" was meant to mean, and the answer decides a safety property. Item 36 asks whether
-you want the evaluation tool the plan named, or the one I used instead. Item 46 asks which pair of
-recovery figures goes into a client agreement, and gives you the three pairs and a
-recommendation. None of them blocks anything; all three are quick.
+**One is being investigated rather than waiting on you.** Item 42: the three deploy secrets
+exist and the pipeline still reports them missing. The next run says where.
 
-**One is three numbered steps and the first one changes nothing.** Item 51: every container
-defaults to the `latest` image, so an install that pins nothing is not pinned at all. Making the
-version required would stop your automatic deploy until a value exists, so step one is to put
-that value in Coolify, where it changes nothing, and step two is to tell me. Half of this is
-already fixed: one variable now pins every container of an install instead of two.
-
-**One is about the tracker rather than the system.** Item 50: thirty of the two hundred
-tasks still open are things people do on the week of a migration rather than things anybody can
-build, and four of them name one company's own skills and groups, which cannot go into a
-product every client installs. Three options and a recommendation; nothing is blocked either
-way.
-
-**Two need one command each on the server, and neither is urgent.** Item 49: your server's
-own identifier used to be a default inside the deploy scripts, so it shipped to every client
-along with the product; it has been taken out, and one file on your server has to hold it
-instead. Nothing breaks until somebody reinstalls those scripts, and the command is in the
-item. Item 43: three things in the deployment files that would break a fresh install, each
-with options and a recommendation, and none of it affecting what runs today.
-
-**And two more of the same kind.** Item 41: four
-services would connect straight to the database with nothing limiting how many connections
-they open, which is the shape of the outage we had on 7 September, on the database that holds
-your company records. None of the four is running yet. Item 42: the build publishes each new
-version and cannot tell the server about it, so a timer is the only thing deploying anything;
-it needs three values pasted into GitHub, and one of them is a token only you can create.
-
-**Two are design reviews, and they are worth twenty minutes each before anything is built.**
-Item 38 is the console screen list, now thirty-four screens rather than nine, with four
-decisions in it worth disagreeing with now rather than after they exist. Item 39 asks where
-your staff list really lives and whether that source may set people's roles as well as list
-their names.
-
-**One is a tidy-up I should not decide alone.** Item 40: there are two copies of the rule that
-decides who can see what, they already disagree, and nothing uses the second one. Delete it or
-keep it, one sentence.
-
-**One is a question the system cannot answer, and the reason is a design decision.** Item 45:
-a member's page is meant to show which agents have read their HR record, and nothing records
-reads. That is deliberate rather than forgotten, because logging every read keeps a permanent
-map of who looked at whom. Three options in the item; my recommendation needs one line from
-you naming which record types are sensitive enough to log.
-
-**And one is about losing something.** Item 44:
-nothing takes a backup of your database. The bucket for one exists, it has a retention policy
-and a written reason, and nothing writes to it. It is planned work, in wave 5, and what is in
-that database today is demonstration data rather than your records. I would still rather you
-knew tonight. Three options in the item, and my recommendation costs about fifteen minutes and
-one command pasted into the server.
-
-**Two are effectively finished and are kept here so the reasoning is not lost.** Item 32 is
-done apart from two housekeeping steps of yours, listed in it. Item 35 is fixed, with one
-small naming decision left. Item 37 needed nothing from you at all: you asked why Keycloak is
-unpleasant to administer and the answer was that the screen for it is one we have not built.
-
-Everything further down this page is decided. It is kept as a record: each item states what
-the problem was, what was built, and why, so the reasoning outlives the conversation it
-happened in.
-
----
+**One is a decision about pinning.** Item 51: every container defaults to the `latest` image,
+so an install that pins nothing is not pinned. Three numbered steps and the first changes
+nothing.
 
 # Open
+
+## 52. Two workflow files carry your server's address, and one repository variable removes them
+
+**What you do, and it is one value in a settings page.**
+
+1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/variables/actions`.
+2. Click **New repository variable**.
+3. Name it `BRAIN_URL`. Value: `https://brain.194.233.66.89.sslip.io`.
+4. Tell me, and I remove the address from both workflow files.
+
+Step 3 changes nothing about what runs: it is exactly what the fallback in the file already
+resolves to. Step 4 is what makes the fallback unnecessary, and until step 3 exists, removing
+it would stop the audit anchor, which is the one safety mechanism in this system that has
+always run.
+
+**Why this exists.** You asked what a duplicate of this repository would carry to another
+client. Measured on 2026-09-09, the answer is: no credentials, and your server's address.
+
+No credentials, and that is checked rather than asserted. Every commit on every branch was
+scanned for credential-shaped assignments. Two matches, both harmless: an invented company name
+used as a canary in two tests, with the comment above it saying so, and a placeholder that says
+it is not real. No environment file has ever been committed.
+
+The address, in two places. `.github/workflows/anchor.yml` carries
+`brain.194.233.66.89.sslip.io` as a fallback for `vars.BRAIN_URL`, and
+`.github/workflows/deploy.yml` carries it hardcoded as the address a deploy waits on. Setting
+the variable removes the first; the second becomes the same variable.
+
+**And the bigger half, which is not a settings page.** Three older commits carry the same host
+in files that have since been cleaned: `.env.example`, `ops/keycloak/realm-export.json` and
+`ops/deploy.sh`. A commit cannot be un-made, so a copy of this repository carries them however
+tidy the working tree is.
+
+My recommendation is to leave the history alone. It is a hostname and an address, not a
+credential, the machine is firewalled to three ports, and rewriting history breaks every clone
+and every commit identifier already published. The answer is not to clean the history: it is
+that **a client should never receive a copy of this repository.**
+
+That is already how the installer is written. `install.sh` fetches one archive of one tag and
+never clones, precisely so a client never receives `.github/` or any history, and
+`docs/install/install.md` says under "What you cannot do today" that no such archive is
+published yet. Until it is, a copy of this repository is the only way the files reach a server,
+which is why your question had teeth. Publishing that archive is `M42.3.8` and it is being
+built now, with a check that fails if a client value ever reaches it.
+
 
 ## 51. Every container defaults to `latest`, and the fix stops your automatic deploy until you set one value
 
@@ -147,400 +133,619 @@ one install and you are the person publishing the images. It stops being fine at
 client, because "hold this client back on last month's release" is then a fork rather than a
 setting, which is the thing M42.1.4 exists to prevent.
 
-## 50. Thirty of the remaining tasks are things people do on the week of a migration, and the percentage counts them as if I could build them
+## 49. The service identifier on your server is written, and the value in it is the wrong one
 
-**The decision.** The tracker says 1045 of 1251 tasks are done. Thirty of the 206 that are
-left cannot be done by writing code, by me or by anybody: they are acts. "Announce the switch
-before removing their bot." "Revoke every OAuth grant." "Record the date access actually
-ended." "Twenty real questions as the acceptance set." "Restore drill executed in front of the
-client." Every one of those has to happen and none of them is a commit.
+**One command, and it corrects a value my own instructions sent you to the wrong place for.**
 
-They are all in M37, and they are the reason that module has stayed the largest open block all
-week while I have closed twenty-two leaves inside it. What I should do about the tracker is
-your call, and there are three options below.
+```
+ssh verz-vps "printf %s c74hlhygvg7scjttu8ydwnqi > /root/.coolify-service-uuid"
+```
 
-**Why it matters rather than being tidy-up.** The percentage is the number you look at to know
-how the build is going, and it is currently mixing two things that behave differently. Code
-tasks close when I write them. These close when a person does something on a specific day with
-a specific client, which cannot start before there is a client to do it with. So the number
-will keep rising until it reaches about 86 percent and then stop, and the stop will not mean
-the build stalled.
+Then, to see it took:
 
-**Three of the thirty are worse than uncountable, they are unbuildable on purpose.** Four
-leaves name one company's things: twelve house skills by count, four skills by name, which
-Lark groups each agent sits in, and what the outgoing vendor produced that people still rely
-on. This repository is the product every client installs, and the first rule in `CLAUDE.md` is
-that no company's details go in the source. Those four cannot be code here without breaking
-that rule, and I have not tried to make them fit.
+```
+ssh verz-vps "cat /root/.coolify-service-uuid; ls -d /data/coolify/services/c74hlhygvg7scjttu8ydwnqi"
+```
 
-**What I did instead, so you can see the shape.** The generic half of the same work is now
-built and tested: what the old system holds and what happens to each item, what is carried and
-what is re-derived, the parallel-running period and its cutover criteria, the decommission, the
-agent rebuild, the skills and the learning. Nine modules, none of which names a vendor or a
-company. The parts that are left are the parts that only exist on the day.
+**What went wrong.** This item used to tell you to copy the identifier out of Coolify's address
+bar. That address holds several identifiers, one for the project, one for the environment and
+one for the service, and the one you copied was not the service. Measured on your own server
+on 2026-09-09: `/data/coolify/services/` holds `c74hlhygvg7scjttu8ydwnqi` and
+`iii3i6yyvra7tvzr5s6vhwod`, the Brain stack and Keycloak. The value in the file matched
+neither, and `docker ps` names the containers `app-c74hlhygvg7scjttu8ydwnqi` and
+`db-c74hlhygvg7scjttu8ydwnqi`, which is the same identifier a second way.
 
-**Options.**
+**Why the wrong value is worse than an empty file.** `brain-deploy` builds
+`/data/coolify/services/$UUID` and `app-$UUID` from it. With a wrong identifier the directory
+does not exist and `docker inspect` prints nothing and exits non-zero, which every branch in
+that script reads as "not running yet". An empty file makes it refuse and say so; a wrong one
+makes it look like it is working.
 
-- **Mark them in the work breakdown as work for people, and show two numbers.** The tracker
-  would say something like "1045 of 1221 buildable, plus 30 to do on the week". One flag per
-  leaf in `docs/wbs/*.js`, an afternoon, and it makes the percentage mean one thing again.
-  This is the recommendation: the work stays visible, which matters because forgetting to
-  revoke an OAuth grant is how an outgoing vendor keeps reading a client's email.
-- Leave it. Nothing breaks, the number tops out below a hundred, and you and I both know why.
-  This is a real option if you would rather I spend the afternoon on something else, and I
-  would rather that too if you have a preference for what.
-- Move them out of the work breakdown into a separate delivery checklist. Cleanest tracker,
-  and the risk is the one thing I would not accept: a list nothing gates is a list nobody
-  reads, and these thirty are exactly the ones with a security consequence.
+**Nothing is broken today.** The scripts running on the server are the copies installed in
+August with the old value compiled in, so deploys keep working exactly as they do now. The file
+only starts being read when somebody reinstalls them.
 
-**One thing I will do either way**, because it costs nothing: the four leaves that name a
-company's things are recorded here as unbuildable rather than left looking merely undone, so
-nobody spends a day trying to make them fit.
+**And the instruction is fixed rather than only the value.** The reliable source is the server
+itself, not the browser: `ls /data/coolify/services` names the directories and
+`docker ps --format '{{.Names}}' | grep '^app-'` prints the same identifier with `app-` in
+front. Coolify's address bar is where I sent you and it is the one place that is ambiguous.
 
-## 49. Two of your deploy scripts now refuse to run until one file exists on the server, and it does not exist yet
+**And the same value belongs in GitHub.** `COOLIFY_SERVICE_UUID` should be
+`c74hlhygvg7scjttu8ydwnqi` as well; see item 42.
 
-**What you do, and it is one command.** Nothing is broken today and nothing will break on its
-own. Do this before the next time anybody reinstalls the deploy scripts on the server.
+## 42. You set the three deploy secrets five days ago and the pipeline still says they are missing
 
-1. Open Coolify in your browser and go to the Company Brain resource. The address bar ends in
-   a long string of letters and digits: that is the service identifier. Copy it.
-2. Open a terminal and connect to the server over ssh, the way you normally do. The
-   host alias is not written down here on purpose: this page is served by the product
-   and the whole point of the change below is that your server's coordinates are not
-   in this repository any more.
-3. Paste this, replacing `PASTE_IT_HERE` with what you copied in step 1:
+**You were right and this item was wrong, so read this one before doing anything.** It used to
+ask you to create three GitHub secrets. They exist. Measured on 2026-09-09 against
+`rpsj2230/Verz-OS-v2.0`:
 
-   ```
-   printf %s 'PASTE_IT_HERE' > /root/.coolify-service-uuid
-   ```
+```
+COOLIFY_SERVICE_UUID   created 2026-09-04T12:12:45Z
+COOLIFY_TOKEN          created 2026-09-04T12:12:46Z
+COOLIFY_URL            created 2026-09-04T12:12:44Z
+COOLIFY_WEBHOOK_URL    created 2026-09-04T11:48:00Z
+```
 
-4. Check it took, which prints the identifier back:
+And the Deploy run at 09:05 on 2026-09-09, five days after that, still ended with:
 
-   ```
-   cat /root/.coolify-service-uuid
-   ```
+```
+no deploy: missing secret(s) COOLIFY_URL COOLIFY_TOKEN COOLIFY_SERVICE_UUID.
+The image is published; the server was not told.
+```
 
-If you would rather not go to Coolify for it, the server already knows the value twice over:
-`ls /data/coolify/services` names one directory and that name is the identifier, and
-`docker ps --format '{{.Names}}' | grep '^app-'` prints it with `app-` in front.
+So the problem is not the one this item described. The secrets are on the repository, the
+workflow reads them by the right names, the repository is not a fork, there are no deployment
+environments that could be gating them, and the file that ran is the file on `main`. The job
+simply receives three empty strings.
 
-**Why it changed.** That identifier, the ssh host name and the address the system answers on
-were written into six files in this repository as defaults. They are your deployment's
-details, and this repository is the product every client installs: `.env.example` is copied
-onto the client's own server during installation, so all three arrived on somebody else's
-machine with your server's coordinates already in them. Worse than untidy, a shell default is
-invisible: removing the value from the environment file changed nothing, because the fallback
-answered first, so the file looked clean and the script still reached your box.
+**Nothing is needed from you while this is open.** Your server is current: the timer on it
+polls for a new image every two minutes and picks up every build, which is why deploys have
+been working the whole time this item claimed they could not.
 
-They are gone now. Each script refuses with a message naming what to set instead of guessing,
-and the sweep that is meant to catch a client value in this repository has been widened to
-read `ops/` and `.env.example`, which it could not see before.
+**What I did instead of guessing.** The run now prints, before it decides anything, whether
+each of the three arrives as a secret and whether the two safe ones arrive as a repository
+*variable*. GitHub's Actions settings page has Secrets and Variables side by side and only one
+of them is read; that is the cheapest remaining explanation and the run will now say so
+outright. No value is printed, only the word `set` or `empty`.
 
-**Why this needs you rather than me.** I do not change the live server, and writing that file
-is a change to the live server. The value is also not one I should put back into the
-repository even in a document, which is the point of the change.
+**And a second fault was sitting behind the first, which is the part worth reading.** The
+missing-secret check was three lines of the shape `[ -z "$X" ] && missing="$missing X"`. Every
+`run:` block in GitHub Actions is `bash -eo pipefail`, and a whole `&&` list is the command
+whose exit status `-e` reads. When the value is present, the test is false, the line exits 1
+and the step dies before it ever calls Coolify. It has never happened, because all three have
+been empty on every run. It would have happened on the first run where the secrets arrived:
+the check would have broken at the moment it started to matter. Both are `if` statements now.
 
-**What happens if you do nothing.** Today, nothing. The scripts running on the server right
-now are the copies installed in August and they still hold the old value, so deploys keep
-working exactly as they do today. The refusal only appears when somebody reinstalls them from
-this repository, and then it appears every two minutes in the system journal, where nobody is
-looking. That is the failure this item exists to get ahead of.
-
-**Options.**
-
-- **Write the file, which is the recommendation.** One command, thirty seconds, and it also
-  makes the next server you deploy onto work the same way as this one.
-- Leave it and write the file only when you next reinstall the scripts. This works, and it
-  relies on somebody reading the installer's error at the moment they are standing at the
-  machine. The installer does check and does refuse loudly, so this is a real option rather
-  than a trap.
-- Put the identifier back into the scripts as a default. I would argue against it: it is the
-  arrangement that put your server's address into a file that gets copied to other people's
-  machines, and the sweep that now watches for that would go red.
-
-## 48. A department head cannot read their own department's activity, and the fix is one line from you
-
-**The finding.** An audit entry records four things a permission can be written against: what
-happened, what kind of thing it happened to, which thing, and who did it. It does not record a
-department. A department head's permissions are written against their department, so their
-audit permissions match no entry at all, and their activity page is empty. Not filtered:
-empty. I found this while building that page, and the page would have been empty for every
-reader it exists for while passing every test, because a test fixture uses a company-wide
-permission and never notices.
-
-I ran both halves rather than reasoning about them. A reader whose audit permission is scoped
-to a department sees nought rows. The same reader with the same permission scoped to a named
-person sees that person's rows and nobody else's. So the recommendation below is not a theory
-about what the permission model could do; it is what it does today.
-
-Two tasks on the plan are blocked by it: all-activity with department filters, and the
-department head's own activity view. A third, usage and tokens by department, is blocked by
-the same shape in a different table.
-
-**Why I have not just fixed it.** The obvious fix is to record the department on every audit
-entry, and that is a decision about the record this system keeps longest. Today an audit row
-says what somebody did. With a department on it, the sequence of rows says where they worked
-and when they moved, kept for as long as the audit trail is kept, which is years. That is a
-different thing to hold about a person, and it is not mine to decide at two in the morning.
-
-**Options.**
-
-- **Option A, recommended: write a department head's audit permissions against the people
-  rather than against the department.** Permissions can already name a set of people, and the
-  staff directory already knows who is in a department, so the grant becomes "may read the
-  audit trail for these fifteen people" and is rewritten by the directory sync when somebody
-  joins or leaves. Nothing new is retained, no column is added, and the permission says
-  exactly whose activity that head may read, which is a thing you can review on a screen.
-
-  Two costs, and the second is the one I would want you to hear. It goes briefly stale between
-  a transfer and the next sync. And audit permissions are per kind of thing rather than one
-  permission: there is one for entries about people, one for entries about grants, one for
-  agents, connectors, sessions and so on, eight in all. So a department head is eight grants
-  rather than one, and whoever writes them has to decide which of the eight a head should
-  have. That is a real question and it is a better one than the one this item is about,
-  because the answer is a list you can read.
-- **Option B: record the department on every audit entry.** Every department view then works
-  directly and simply, including the two blocked tasks. The cost is the one above: the audit
-  trail becomes a record of where each person worked over time. There is a second, quieter
-  cost, which is that a department written at the time of the event will disagree with the
-  org chart after somebody transfers, so the system would then have two answers to "which
-  department was that", and the code would have to say which one every screen means.
-- **Option C: leave it and say so.** Department heads read grants, budgets, knowledge coverage
-  and their people's work, and do not read the audit trail; the audit trail is for the auditor
-  and the super administrator. This is a defensible product decision rather than a fault, and
-  it costs nothing.
-
-I recommend A. It answers the question without changing what is kept, and the thing it
-produces, a permission that names the people it covers, is easier to review than a permission
-that names a department and relies on a column agreeing with it.
-
-**Nothing is broken today.** Nobody is being shown data they should not see; the failure is in
-the other direction, and there is no client data in the ledger yet. The department budget page
-does work and shipped tonight, because a budget is written against a department and does not
-have this problem.
+**What happens next without you.** The next push runs it and the answer is in that job's log
+under "what this job can see". If it says the secrets are empty and the variables are set, the
+fix is one move in the GitHub settings page and I will give you the two clicks. If it says
+they are set, the deploy call happens on that same run and this item closes itself.
 
 ---
 
-## 47. Eleven of the thirteen safety mechanisms in the system have never been switched on, and I need one decision about where scheduled work runs
+## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - which moves?
 
-**The finding.** The system has thirteen mechanisms that only work if something runs them on a
-schedule: pruning data past its retention window, the permission canaries, the restore drill,
-the backup exposure alert, the refusal digest, the staff directory sync, knowledge
-re-verification, entity resolution calibration, redriving stuck jobs, resuming interrupted
-side effects, the model health probes, and the spend estimator correction. Eleven of them have
-no caller anywhere. Each one is written, tested, documented, and nothing has ever run it.
+**This blocks local embedding, and it is a schema decision rather than a setting.**
 
-**One of the twelve moved on 2026-09-09 and the move is smaller than it sounds.** The spend
-estimator correction now has a caller: the cost review section of the usage screen asks for it.
-That takes it out of the list of mechanisms nothing calls and puts it in a shorter list of
-mechanisms whose caller is a screen nobody opens on a schedule. It is one link of the chain
-rather than the chain, and the registry says so rather than counting it as wired.
+The knowledge corpus stores a vector per chunk in a column declared `VECTOR(1536)`. That width
+was chosen for a hosted model, `text-embedding-3-small`, before item 31 decided that embedding
+would run locally behind the inference server. The model that decision names,
+Qwen3-Embedding-0.6B, produces 1024 dimensions. Its published truncation only shortens a
+vector, so no setting on the far side turns 1024 into 1536.
 
-The thirteenth is the audit anchor, and it works: a GitHub Actions timer calls a web address in
-the system every day, and that publishes the tamper-evident seal on the audit trail. It is the
-one that runs, and it is the reason I can tell you the others do not: the check that found
-them had to get the working one right first.
+**Nothing is quietly wrong in the meantime.** The width is part of the column's type, so
+PostgreSQL refuses a vector of the wrong size on insert rather than storing something
+meaningless, and the code now reports the disagreement in words before anything is sent. The
+figure of 1024 is from the published model card and has not been verified here, because no
+weights have been pulled on this host; if it is wrong, the check reads the real width off the
+server's own response rather than believing what we asked for.
 
-**How bad is this right now.** Not bad, and I want to be accurate. Nothing has degraded,
-because none of these has ever run and there is no client data in the system yet. The reason
-it is worth waking up to is the direction it goes: **the console screens being built now will
-say the estate is protected.** A retention screen that shows a 30-day window is telling the
-truth about the policy and nothing about whether a single row has ever been deleted. That gap
-between what a screen says and what is happening is the failure mode, and it arrives quietly
-on the day somebody trusts the screen.
+**Update, 2026-09-07: the check that says this now runs, and it did not before.** The function
+comparing the two widths was written, correct and never called: its own docstring said so and
+named the place it belonged. It is wired in now, so `python -m brain.ops.worker --check` prints
+the disagreement, which means the answer to this question stops depending on somebody
+remembering the question.
 
-There is now a check that goes red if a mechanism that was wired stops being wired, or if the
-written record and the code disagree in either direction. It is deliberately not red today:
-a check that fails the day it lands is a check somebody switches off.
+It prints and does not refuse, and that took a second change worth knowing about. Everything
+that check's new home reports is a reason a worker must not start, and this is not one: a
+column that disagrees with the model means every embedding job fails and means nothing at all
+for the rest of the queue. Refusing to boot over it would take the whole queue down to protect
+one leg, and would replace the operator's real problem, "no queue driver is installed", with a
+schema decision they cannot make at three in the morning. So the worker now has two lists: what
+stops it, and what is wrong that starting will not fix. This is the first entry in the second.
 
-**What I need from you: where should scheduled work run.** This is a decision about your
-server rather than about the code, which is why it is here.
+Nothing here changes the decision or its cost. The one thing it changes is that the window
+where deciding is nearly free is now visible from the command line rather than only from this
+document.
 
-- **Option A, recommended: a small scheduler inside the application container.** Every one of
-  the thirteen already has a function that answers "is this due", so the scheduler is a loop
-  that asks each of them and puts a job on the queue. No new container, no host configuration,
-  and it works on the small deployment profile, which is the one you are running. It needs a
-  lock so that two copies of the app do not both run the same sweep, and the database already
-  provides the kind of lock that does this. About a day of work, and it ships with the product,
-  so every client after you gets it by installing.
-- **Option B: more GitHub Actions timers, like the audit anchor.** Nothing changes on your
-  server and the pattern is proven, because one of these already works that way. I recommend
-  against it beyond the anchor, and the reason is the whole shape of this product: a
-  client-hosted system whose safety mechanisms are triggered from our GitHub account is a
-  system we operate on their behalf. The client cannot see the schedule, cannot change it, and
-  loses it if the relationship ends. It is the right answer for exactly one thing, publishing a
-  seal to a repository we hold, and the wrong answer for every other one.
-- **Option C: timers on the server itself.** Standard, reliable, and it puts the schedule
-  outside the product, so every client installs it by hand from a runbook and their thirteen
-  timers drift from ours. It also means the installer has to write files as root.
+Three ways out, and the cost is different in each.
 
-I recommend A, and leaving the audit anchor where it is until A has been running long enough
-to trust.
+- **Narrow the column to 1024 and re-embed.** A migration that alters the column and rebuilds
+  the vector index, plus a re-embed of every chunk. Today that second cost is nearly nothing,
+  because no chunk has ever been embedded. It stops being nearly nothing the moment the first
+  real document is ingested, which is the argument for deciding this now rather than later.
+- **Serve a wider local model.** The larger models in the same family are wider still, and
+  pgvector will index at most 2,000 dimensions whatever it will store, so this route means a
+  different family rather than a bigger Qwen3.
+- **Keep the column at 1536 and keep embedding hosted.** Honest, and it gives back the reason
+  item 31 chose to run models locally in the first place.
 
-**One thing to know either way.** Turning these on is not free of consequences: the retention
-sweep deletes things. That is its job, and the first time it runs on a system that has been
-accumulating rows since installation it will delete a great deal at once. When we wire it, it
-runs in a dry-run mode first and reports what it would remove, and you look at that report
-before it is allowed to remove anything. I will not turn that one on silently.
+**Recommendation, added 2026-09-09 because you asked for one: narrow to 1024, and make the
+width a setting rather than a number.** Both halves, and the second is the one that matters.
 
----
+Narrow to 1024 because that is what the model item 31 chose produces, and because the re-embed
+that would normally make this expensive costs nothing today: no chunk has ever been embedded.
+That window closes the day the first real document is ingested.
 
-## 46. Your client agreement will promise a recovery point and a recovery time. These are the numbers, and I need you to pick which set
+Make it a setting because a hardcoded 1024 is the same defect as a hardcoded 1536, one number
+later. This repository is the product every client installs, and CLAUDE.md's rule is that
+anything differing between companies is configuration read in one place. A client running a
+different inference model needs a different width, and if the width is compiled in, that client
+is a fork. So `brain.install` gains a declared setting, the migration reads it, and 1024 is its
+default rather than its value.
 
-**One line from you, and there is no work behind it.** A client agreement carries two figures:
-how much work may be lost if the system has to be restored from a backup (the recovery point),
-and how long it may be down while that happens (the recovery time). Until today both existed in
-the code as defaults and nothing turned them into a document anybody signs. Now something does,
-and the first document it produces is the one Verz hands its first client.
+That also answers the objection this item has been carrying, which was yours and was right:
+choosing a column width before choosing the model spends the same migration twice. With the
+width as a setting it does not. Any smaller model that also produces 1024 needs no schema
+change at all, and one that produces a different width is one value at install time. So this
+stops being blocked on items 25 and 31.
 
-**Where the numbers come from.** The system offers three deployment profiles, and each carries
-its own pair. These are not my estimates; they are what is written in the code today, with the
-reason beside each one:
+One guard comes with it, because a setting that can be changed later is a setting somebody will
+change later: altering the width after installation is a re-embed of everything, so it refuses
+unless the corpus is empty and says why.
 
-| Profile | Recovery point | Recovery time | Why |
-| --- | --- | --- | --- |
-| `lite` | 24 hours | 8 hours | Four containers on one host, and no second host to restore onto, so the recovery time is however long it takes somebody to build one |
-| `standard` | 4 hours | 4 hours | The workers and the file store are running, so a restore has somewhere to go and the time is replaying archived data rather than provisioning a machine |
-| `full` | 1 hour | 2 hours | The tightest figures the system offers, and they need a standby host that already exists |
-
-`lite` is what an install that never says otherwise runs, and it is what the example
-environment file sets. I have not read the value off your server, because I do not touch it
-while you are asleep; if it says something else, the row above changes and the
-recommendation below does not.
-
-**The backup schedule is already better than the promise, and I would not promise the
-difference.** The copies are scheduled to run every hour at worst, and the database's write
-log every minute, so the exposure on paper is one hour rather than twenty-four. It is tempting
-to write the better number into the agreement. I recommend against it: a recovery point is a
-promise about the slowest copy on the worst day, and the gap between one hour and twenty-four
-is the margin that absorbs a failed backup nobody noticed for a day. Promise the profile's
-figure, keep the margin, and let the client be pleasantly surprised.
-
-**Options.**
-
-- **Option A, recommended: sign the `lite` figures, 24 hours and 8 hours.** They are what one
-  host with no standby can actually deliver, and eight hours is honest about the fact that the
-  recovery time includes somebody building a machine. Costs nothing and needs no change to
-  what runs.
-- **Option B: sign the `standard` figures, 4 hours and 4 hours.** This is a real promise and it
-  requires the install to be on the standard profile, which means the worker, the file store
-  and the trace database running rather than the four containers. If you want to sell a
-  four-hour recovery, this is the smallest install that supports it.
-- **Option C: sign the `full` figures, 1 hour and 2 hours.** Needs a second host standing by,
-  paid for whether or not it is ever used. Worth it for a client whose finance system is in
-  here and not otherwise.
-
-I recommend A for the first install and B as the shape of the paid tier: the difference between
-them is a second host and about an hour of setup, and it is a much easier conversation to have
-as an upgrade than as a promise you have to walk back.
-
-**One thing that blocks all three, and it is item 44.** The code refuses to produce a service
-level statement at all until a restore drill has actually verified, because a recovery time
-nobody has measured is a number somebody chose. Nothing takes a backup yet, so nothing has ever
-been restored, so today every one of the three options above produces a refusal rather than a
-document. That is deliberate and it is the right behaviour. It also means item 44 comes first:
-answer that one and this one becomes real.
+**What I need from you is one sentence: yes to that, or one of the three below instead.**
 
 ---
 
-## 45. "Which agents have read my HR record" is a question the system cannot answer
+## 32. Two pieces of Keycloak housekeeping, and nothing is blocked by either
 
-One task on the plan asks for a page where a member can see which agents have read their HR
-record. It is a good thing to be able to show somebody. The system cannot answer it today, and
-the reason is a design decision that was made deliberately and is worth you knowing about.
+**Keycloak is up.** Measured on 2026-09-09: `keycloak-iii3i6yyvra7tvzr5s6vhwod` and
+`keycloak-db-iii3i6yyvra7tvzr5s6vhwod` have both been healthy for two days. The three passwords
+are set, the realm imported, and you have signed in. Everything this item originally asked for
+is done and the rest of it has moved to the answered section.
 
-**What is recorded today.** Two different things are kept, on purpose, and neither is a list of
-who read what.
+**Two steps remain and both are yours.**
 
-- The **audit ledger** records things that change what somebody may do: a permission granted, a
-  permission taken away, a leash moved, an emergency access session opened. It is kept for five
-  years, it holds no content at all, and it is deliberately a short list of eight kinds of
-  event. None of the eight is "somebody read something".
-- The **trace record** holds one row per request: who asked, which model answered, how long it
-  took, how many things were redacted. It holds names and counts and never a value, and it is
-  kept for a month. It can tell you that somebody asked a question; it cannot tell you which
-  rows came back.
+1. **Delete the temporary `admin` account** now that your own administrator exists. It was
+   created to make the first one and it is a second way in that nobody needs.
+2. **Change `KEYCLOAK_ADMIN_PASSWORD` in Coolify to a fresh value.** It was used once to create
+   your account, so it is a credential that has been through a setup process and is written in
+   at least one place it should not stay.
 
-So "who has read my HR record" falls between them. Nothing is broken and nothing was
-forgotten: a system that logged every read of every row would be keeping a second copy of who
-looked at what, forever, which is its own privacy problem and its own storage bill.
+**Do not delete that variable.** The stack refuses to start without it, and it is the way back
+in if every administrator is ever lost. Change the value, keep the name.
 
-**What answering it would take, and what each costs.**
+I cannot check either of these for you without administrator credentials for your identity
+provider, which I do not hold and should not.
 
-- **Option A, recommended: answer it for a narrow, high-sensitivity set rather than for
-  everything.** Personnel records are the case the task actually names, and they are a small
-  slice of the data. A read log scoped to that slice is affordable, is the thing people
-  genuinely ask about, and does not turn every ordinary lookup into a permanent record. It
-  needs one new kind of audit event and a decision from you about which record types count as
-  sensitive enough to log.
-- **Option B: log every read of every row.** Complete, and the honest cost is that the log
-  becomes the largest thing in the database and is itself a map of who is interested in whom.
-  I would not do this.
-- **Option C: leave it, and say so on the page.** The member's page tells them plainly that
-  reads are not logged and what is logged instead. This is the cheapest and it is a real
-  answer rather than a blank space, and it is the right choice if nobody has actually asked
-  for the read log.
+# Answered
 
-I recommend A, and the decision I need from you is one line: **which record types are sensitive
-enough that every read of them should be written down.** My starting suggestion would be
-personnel records and anything carrying a salary, and nothing else.
+## 33. "Shadow-pinned thirty days" - which of the two things does it mean? - DECIDED: both readings, with a confidence measure gating the switch
 
-**Why this is on your list rather than mine.** The two costs are the kind you would notice and
-I would not: a permanent record of who looked at whom is a privacy position, and the storage it
-takes is a bill. Neither is a coding question.
+**Your decision, 2026-09-09, and it is a third answer rather than one of the two.**
+Both readings, with a measurement between them:
 
----
+- The agent stays supervised and is reviewed at thirty days, which is reading one.
+- The review is not only a person's impression. There is a measure of how much the agent
+  understood and a confidence level derived from it.
+- **Below 90 percent confidence the shadow period extends** so the agent can raise it. Only at
+  90 percent or above does supervision end.
 
-## 44. Nothing takes a backup of your database, and the shelf for one is already built
+So the pin never expires on a timer, which was the danger in reading two, and it does not
+depend on somebody remembering to look, which was the weakness in reading one. You called this
+one important and it is: it is the difference between an agent that is trusted because it
+earned it and one that is trusted because a month passed.
 
-Everything around a backup exists. There is a `backups` bucket on the file store, it is set to
-keep things for 35 days, it is set to keep old versions, and the reason for the 35 days is
-written down: one full monthly cycle plus a few days, so a fault noticed at month end can still
-be restored from before it started. The erasure certificates even do arithmetic on that number
-so they can tell somebody which of their data a deletion has not reached yet.
+**Small, and it decides a safety property rather than a feature.**
 
-**Nothing writes to it.** I checked the whole repository for anything that takes a database
-dump or restores one, and the only place `pg_restore` appears is in a guard whose job is to
-refuse an installation step that tries to load somebody else's data. So the shelf is there, it
-is labelled, and it is empty.
+Your work breakdown lists two agents with a supervision constraint in their titles:
 
-This is planned work: it is module M30, "Hosting, delivery and recovery", which sits in wave 5
-and has none of its 37 tasks done. So nothing has gone wrong. But the plan puts it a long way
-out, and in the meantime the answer to "what happens if the database is lost" is "everything is
-lost", and I would rather you knew that tonight than in wave 5.
+- **SEM Agent**, shadow-pinned, human commits budget changes
+- **AR and Renewal Chaser**, shadow-pinned **thirty days**
 
-**How bad is it right now.** Not very, and I want to be accurate rather than alarming. What is
-in that database today is seeded demonstration data, the build tracker, and configuration. It
-is not yet your company's records. The day that changes is the day this becomes urgent, and
-that day is a decision you make rather than one that arrives by surprise.
+The first is built. "A human commits budget changes" is something the system can refuse: the
+agent may prepare a change and may not apply one, and that is enforced by the gate rather
+than by asking the agent nicely in its instructions.
 
-**What I would need from you, and the options.**
+The second I did not build, because the system cannot currently express it and I do not want
+to guess which of two very different things you meant.
 
-- **Option A, recommended: I write the nightly dump now and you run one command.** A dump on a
-  timer on the server, written to the bucket that is already waiting for it, roughly fifteen
-  minutes of work. It needs one thing from you because it touches the live server rather than
-  this repository: I would give you a single command to paste into the VPS, and you would paste
-  it. I have not done it unasked because a change to what runs on your production host at three
-  in the morning is not mine to make while you are asleep.
-- **Option B: wait for wave 5 and do it properly.** M30 covers backup, restore, a verified
-  restore drill and a recovery runbook, which is the whole thing rather than half of it. This
-  is the right answer if real data does not land in that database before wave 5.
-- **Option C: do A now and B later.** The nightly dump is not wasted work when M30 arrives; it
-  becomes the thing M30's restore drill restores from.
+**Reading one: review after thirty days.** The agent stays supervised. After a month somebody
+looks at what it did and decides whether to trust it further. Nothing changes on its own.
 
-I recommend C. The dump is cheap, it stops the worst outcome, and it does not duplicate
-anything wave 5 will build.
+**Reading two: becomes autonomous after thirty days.** The pin expires. On day thirty-one the
+agent starts chasing customers for money without anybody watching, because a timer ran out.
 
-**One thing worth saying plainly.** A backup nobody has restored is not a backup, it is a file.
-The console screen for "last verified restore" is deliberately not built, because a screen
-showing a backup timestamp under that heading would be the field somebody checks before
-deciding not to worry. There is a test in the repository that walks every module and asserts
-nothing is named for restoring anything; it passes today, and it is written so that it fails on
-the day somebody adds a restore, which is the day that screen should be written.
+I would build the first and would want to argue with you before building the second. An agent
+that gains authority on a date nobody diarised is the one kind of change that happens when
+nobody is paying attention, which is exactly when you would want it not to.
+
+**Either way there is a small piece of work**, because today a supervision level has no time
+attached to it at all. Reading one needs a review date and a reminder. Reading two needs an
+expiry, and I would want it to be loud rather than silent.
+
+No rush: the chaser is one of twenty-three agent templates and six are written so far.
 
 ---
 
-## 43. Three things in the deployment files that break a fresh install
+
+## 35. You renamed the GitHub repository, and it stopped the deploy - DONE: nothing outstanding, and the image keeps the name it has
+
+**Closed 2026-09-09.** You confirmed it is fixed, and the one decision left was
+cosmetic: the image is still called `verz-brain-v2.0` while the repository is called
+`Verz-OS-v2.0`. It keeps the name it has, which was the recommendation. If the mismatch ever
+starts to bother you it is ten minutes and one deploy, and it has to be done in one step.
+
+**Fixed already, in about twenty minutes, and there is one small decision left for you.**
+
+You renamed the repository from `verz-brain-v2.0` to `Verz-OS-v2.0` this afternoon. The build
+that ran straight afterwards failed:
+
+    invalid tag "ghcr.io/rpsj2230/Verz-OS-v2.0:79204c6": repository name must be lowercase
+
+The pipeline was naming the container image after the repository, so renaming one renamed the
+other, and container image names may not contain capital letters. Meanwhile the server pulls
+the image by its old name, written into three files.
+
+**The lucky part.** Your new name has capital letters in it, so this arrived as a failed build
+half a minute after the push. Had you renamed it to something lowercase, the build would have
+worked, published the image somewhere nothing looks, reported success, and left the server
+running the old one with every check green. That is the failure you had in August, when
+production sat fourteen commits behind and nothing said so.
+
+The image name is now written out rather than derived, four files that name it are held equal
+by a test, and production is live on the current commit again. Nothing is outstanding.
+
+**The decision.** The image is still called `verz-brain-v2.0` while the repository is called
+`Verz-OS-v2.0`. Two options:
+
+1. **Leave it.** The image name is an internal address that only the pipeline and the server
+   use. Nothing is wrong with it, and it costs nothing. My recommendation.
+2. **Rename the image to match.** Tidier to read, and it has to be done in one step: publish
+   under the new name and change what the server pulls at the same moment, or the server
+   spends that deploy pulling something that is no longer published. Ten minutes and a
+   deploy, and worth doing only if the mismatch will bother you every time you see it.
+
+**One thing to know for next time**, not a complaint: a rename is the kind of change that
+looks free and reaches the build, the registry and the server. If you tell me before or just
+after, I can have the three files moved in the same minute rather than finding it in a red
+build.
+
+---
+
+
+## 36. The WBS names promptfoo for evaluation and I used pytest - say if you want the tool - DECIDED: as recommended
+
+**Your decision, 2026-09-09: as recommended.**
+
+**Nothing is blocked. This is a deviation from your wording, flagged so it is your call rather
+than mine.**
+
+M28.1.1 reads "promptfoo driven through our gate, never against a bare model". I built the
+harness in Python, in `tests/invariants/test_golden_through_the_gate.py`, and did not use
+promptfoo.
+
+The reasoning. promptfoo drives a provider: you give it a thing that takes a prompt and
+returns a completion. What has to be driven here is not a provider, it is an entitled request
+pipeline that needs a different principal for every case, because the whole point of the
+corpus is that the same question asked by three people must produce three different answers.
+Wiring promptfoo to that means writing a custom provider in JavaScript that shells into
+Python once per case, which puts a second language and a subprocess between the corpus and
+the gate, and buys nothing the Python harness does not already do. The invariants suite is
+already its own CI step and CI already gates Deploy, so the blocking half of M28.1.4 came for
+free.
+
+What I kept is the part of the leaf that matters: the phrase "never against a bare model".
+Every question goes through `answer_lane`, which runs the projection, the row read at the
+caller's own reach, the redaction and the abstention classifier. A test asserts structurally
+that this module imports no model driver, so a faster path that asked a provider directly
+cannot be added quietly.
+
+**Say the word and I will add promptfoo as a second front end over the same harness.** The
+case for it is real: it is a tool your team may already know, and its report format is nicer
+than pytest's. The case against is a second thing to keep in step with the corpus.
+
+**One thing worth knowing that this turned up, and I am fixing it separately.** Asking the
+golden corpus of the real system for the first time showed that no persona in the synthetic
+company can read a record at all. Reaching a row needs `read:client` and reading a column
+needs `read:client.name`, and the two are deliberately separate grants; the fixture grants
+only columns. So the twenty golden questions have been describing a company nobody could read
+from, and nothing noticed because the only tests of the corpus checked the corpus's own shape.
+It is asserted as a test now so it cannot go quiet again. Fixing it widens what every persona
+reaches and about seven thousand tests take their reach from that fixture, so it is a change
+on its own rather than a side effect of building the harness.
+
+---
+
+
+## 37. Keycloak is unpleasant to administer, and the reason is a screen we have not built - DECIDED: as recommended
+
+**Your decision, 2026-09-09: as recommended.**
+
+**Nothing is blocked and no work stops on this. You asked why we use Keycloak at all, having
+found it horrible to manage users and roles in. The honest answer has two halves.**
+
+**The half where you are right.** Keycloak's admin console is genuinely dense. Two realms that
+look alike, groups and roles and clients that overlap, and a layout that assumes you already
+know its vocabulary. Nobody enjoys it.
+
+**The half that matters more: you are not supposed to be in there.** The design was always
+that Keycloak is plumbing you open twice, once to bootstrap and once if you are ever locked
+out. Everything routine was meant to happen elsewhere:
+
+- Staff arrive from your existing directory rather than being typed in.
+  `brain.identity.directory` is written and tested for that and is wired to nothing.
+- Day-to-day people and grants happen on a Company Brain screen, M27.3.1, which does not
+  exist. The console has five pages and none of them is that one.
+- Joining, moving and leaving happen through `brain.identity.lifecycle`, written today, also
+  wired to nothing.
+
+So the pain you hit is real and it is pointing at three missing pieces of *our* system rather
+than at the wrong choice of dependency. Switching identity providers would not remove it,
+because the thing you were doing by hand in Keycloak is the thing that should not be done by
+hand anywhere.
+
+**Why an identity provider at all.** The whole permission model rests on knowing who is
+asking, provably, from a token the gate can check without calling anything. That is OIDC. The
+alternative is writing passwords, sessions, resets, lockout, multi-factor and their audit
+trail ourselves, which is a large security-critical surface and a bad trade at any size.
+
+**Why Keycloak specifically.** It is self-hosted, which your single-tenant client-hosted
+requirement needs. It has no per-seat cost, which matters at 126 staff and more later. It
+speaks OIDC and SAML and federates to LDAP and Active Directory, which is what a client with
+their own directory will ask for. And its whole configuration exports as one file, which is
+why `ops/keycloak/realm-export.json` is reviewed in the repository rather than clicked into
+existence.
+
+**The honest alternatives, if you want to reconsider.** Authentik has a considerably friendlier
+admin interface and is also self-hosted and free. Zitadel is lighter and has a better API.
+Both are younger with smaller communities, which for the component holding your credentials is
+a real consideration rather than a formality. Auth0, Clerk and WorkOS are far easier to run and
+break the client-hosted requirement while charging per seat.
+
+**My recommendation: keep Keycloak and build the screen.** The switch costs a few days and
+buys a nicer version of a console you should stop opening. The same few days spent on M27.3.1
+and wiring the directory sync removes the need to open any identity console at all, and that
+work is needed whichever provider sits underneath.
+
+**What I would want from you if you disagree**: say so and I will cost the migration properly
+rather than guess. I have not measured Authentik's footprint on your server and would not
+quote one without doing so.
+
+---
+
+
+## 38. The console will have thirty-four screens, and four of them are decisions - DECIDED: all four, and a department admin gets every screen the requirements call for
+
+**Your decisions, 2026-09-09.**
+
+1. **Over budget: warn the department admin, and refuse further questions until the next
+   period.** Both, in that order.
+2. The stop button: as recommended.
+3. **Not four screens.** A department admin gets every screen the requirements call for, and
+   the four I had scoped were a scoping error rather than a decision. The screen list is
+   re-derived from the requirements.
+4. The filter dropdown: as recommended.
+
+**Nothing is blocked. This is a design record to disagree with now rather than after it is
+built.** You said the nine screens I described could not be the whole console, and you were
+right. The plan named eighteen and the code had four. It is now thirty-four, declared in
+`brain/console/screens.py` with tests holding every one of them to the rules below, and the
+roadmap under M27 lists them all.
+
+Your five specific asks were already in the plan at M33 and had reached neither the screen list
+nor any code. They are now in both: company overview, everything filterable by department and
+person, all activity, budget and spend, and a global stop button.
+
+**Four things there are decisions rather than mechanics.**
+
+**One: budget is separate from usage, and budget is a limit.** "Usage and tokens" tells you
+what was spent. "Budget and spend" is a ceiling with something that happens when it is
+reached. What should happen? Warn the person and carry on; warn their department admin; refuse
+further questions until the next period; or refuse only the expensive lanes and leave cheap
+answers working. **My recommendation is the last**, because a hard stop at a budget turns a
+cost control into an outage. Nothing is built until you pick.
+
+**Two: the stop button stops instantly and needs nobody's approval.** One capability, no
+confirmation dialogue, no second signature, because a stop button that can fail is not one. The
+paperwork sits on the *resume*: restarting a system somebody halted needs a written reason, and
+it says out loud when one person is overriding another. A halt also survives a restart and has
+no expiry, so it ends when a person ends it and never on its own. Tell me if you want that
+reversed anywhere.
+
+**Three: four screens do not exist for a department admin.** Their rows are narrower
+everywhere, which is automatic. But four screens are about the deployment rather than the work
+in it, and at a department's scope each is either empty or a leak: backup and recovery, this
+install, rate limits, and capacity. Department admins keep everything else, including a stop
+button for their own department.
+
+**Four: a filter dropdown is a disclosure and is treated as one.** Every screen can be narrowed
+by department and by person, as you asked. That means every screen carries a department
+dropdown, and filled from the department table it would name every department in the company to
+somebody whose rows were carefully scoped. The options are intersected with what the reader can
+already reach. You may find you cannot filter by a department you know exists. That is this,
+working.
+
+
+## 39. Which staff list is the real one, and may it set roles - DECIDED: every source selectable per client, and the staff list does not set roles
+
+**Your decision, 2026-09-09, and the first half changes the shape of the answer rather
+than picking one of the options.** There is no single Verz staff list to name, because this
+repository is the master that gets duplicated per client: company A may take its staff list
+from a Google Sheet, company B from Google Workspace, company C from something else. So every
+source stays selectable at deploy time, and choosing one is a setup decision on the client's
+own install rather than a constant here.
+
+That is the right shape and it is not extra work: it is what `M29`'s plugin interfaces are
+for, and CLAUDE.md's rule that anything differing between companies is configuration reaches
+exactly this case.
+
+**Question two: keep the default.** The staff list lists people; roles are set in the console.
+Safest, and the extra work is per joiner rather than ongoing.
+
+**Nothing is blocked today. This decides what gets built first and it needs two short
+answers.** You asked for the staff list to be pluggable: spreadsheet, Google Sheet, Google
+Workspace, Microsoft, Lark, or anything else. That is designed and in the plan as M1.6, twelve
+leaves. Building all six adapters before we know which one you use is a month spent on five we
+may never run.
+
+**Question one: where does the Verz staff list actually live today?** Not where it could live.
+Where the current, correct list of who works there is: the one somebody updates when a person
+joins. A Google Sheet is a perfectly good answer.
+
+**Question two, and this one has a security consequence.** A source declares what it is
+trusted to assert, and there are three things it can assert: that a person exists, which
+department they are in, and what platform role they hold. By default a spreadsheet or a Google
+Sheet may assert **only that a person exists**.
+
+A sheet anybody with the link can edit is a fine answer to "who works here" and a catastrophic
+answer to "who is a Super Admin": one edit to one cell and somebody has appointed themselves,
+with the edit history in a document nobody reviews. A Workspace group is different, because
+changing it needs the admin console and leaves a trail there.
+
+So if your staff list is a sheet, the consequence is: **people arrive automatically, and their
+department and role are set by you in the console.** A few clicks per joiner rather than none.
+
+**Your options.**
+
+- **A. Keep the default.** The sheet lists people; roles are set in the console. Safest, and
+  the extra work is per joiner rather than ongoing.
+- **B. Trust the sheet with departments too, but not roles.** Reasonable if the sheet has a
+  department column that is kept accurate. Departments bound what people can see, so this is a
+  real widening, though a much smaller one than roles.
+- **C. Trust the sheet with roles as well.** Only sensible if the sheet is locked to two or
+  three named editors. Say so and I will configure it that way and write down who those
+  editors are, so an auditor can see the argument.
+
+The default is A and it is what will be built if you say nothing. It can change later, per
+source, without a migration.
+
+
+## 40. A second copy of the rule that decides who can see what - DECIDED: delete it
+
+**Your decision, 2026-09-09: delete it**, on the recommendation below.
+
+The recommendation, recorded because you asked why the item did not carry one: delete
+`Scope.to_sql` and `Clause.to_sql`. Nothing in the application calls them, measured again on
+the day; the two already disagree with `compile_where` on a real input; and they are the less
+safe of the pair, because `to_sql` hard-codes `row_data ->> field` so it cannot use a promoted
+column and never calls `assert_conjunctive`, which is the check that stops a scope widening
+instead of narrowing. Keeping a second answer to "who may see what" that skips the widening
+check is exactly what the single-implementation invariant exists to prevent, and the next
+person needing scope SQL finds it first because it is a method on the object they are already
+holding.
+
+`brain.core.scope.Scope.to_sql` and `Clause.to_sql` render a scope into SQL. So does
+`brain.core.scope_sql.compile_where`, which is the one everything uses, and the repository has
+an invariant forbidding a second implementation of a central rule for a reason it states
+plainly: each copy is reasonable in isolation, they drift, and the one that drifts is
+discovered by a permission being wrong rather than by a test.
+
+The two already disagree. Measured:
+
+```
+Scope.to_sql   -> ("(row_data ->> 'department' = ANY(:s0))", {'s0': ['a', 'b', 'c']})
+compile_where  -> refused: department in: needs a tuple of strings; a bare string becomes one
+```
+
+`to_sql` also hard-codes `row_data ->> '<field>'`, so it cannot use a promoted column, and it
+never calls `assert_conjunctive`, which is the check that stops a scope widening rather than
+narrowing.
+
+The invariant did not catch it because it guards the *name* `compile_where`, and this one is
+called `to_sql`.
+
+**Nothing in the application calls it.** Only two test files do. So it is loaded rather than
+live, and the risk is the next person who needs scope SQL finding it first.
+
+**What I need is one sentence: delete it, or keep it.** Deleting it means changing the two
+test files that use it and widening the invariant to catch a renamed copy. Keeping it means
+saying what it is for, because right now it is a second answer to the most important question
+this system asks.
+
+---
+
+
+## 41. Four services connect straight to the application database and nothing budgets them - DECIDED: the four bounds below, and a refusal so an understatement cannot repeat
+
+**Your decision, 2026-09-09: go with the recommendation.** You also asked why there was
+no recommendation in the first place, and that was my mistake rather than a judgement about
+the question. The numbers, with the provenance of each:
+
+| Service | Bound | Where the number comes from |
+| --- | --- | --- |
+| `langfuse-web` | `connection_limit=5` | A trace interface, not on the request path. Five serves a browser. |
+| `langfuse-worker` | `connection_limit=5` | Batched ingestion with one writer. |
+| `brain-worker` | 15 | Ten is measured: `make_worker_engine` keeps five plus five overflow. Five for the queue connection. |
+| `brain-parse-worker` | 5 | A queue connection and nothing else. |
+
+Thirty against the seventy-seven currently unbudgeted, leaving forty-seven spare on a database
+that admits ninety-seven.
+
+**And the part that matters more than the numbers.** A worker refuses to start when a queue
+driver is present and its pool size is undeclared. That turns "we guessed five and the driver
+opens twenty" from a silent understatement into a refusal, and a silent understatement is what
+caused the outage this item is about.
+
+**This is the shape of the Keycloak outage, on the database that holds the company records.**
+
+On 2026-09-07 Keycloak opened every connection its database would give it and held all thirty
+idle. The next connection was refused, and the next connection was an administrator trying to
+find out why. The fix was a bounded pool and a budget that fails a test when a client's pool
+and a server's ceiling stop agreeing.
+
+That budget checks the clients we *declared*. It cannot see one nobody declared, and an
+undeclared client is exactly what saturated Keycloak's. Reading the compose files rather than
+the declaration turned up four:
+
+- `langfuse-web` and `langfuse-worker`, through Prisma, with no connection limit on the URL
+- `brain-worker`, through both its queue URL and its checkpointer URL
+- `brain-parse-worker`, through its queue URL
+
+Every one of them bypasses PgBouncer for a good reason: the queue needs LISTEN and the
+checkpointer needs server-side prepared statements, and the pooler in transaction mode
+supports neither. Which is what makes them the case that matters. **The services that most
+need budgeting are precisely the ones the pooler is not bounding.**
+
+The arithmetic today: `db` admits 97 connections, the declared demand is 20, and 77 are
+unbudgeted. Its declared ceiling costs 2112 MiB against a 2048 MiB container, and that is
+affordable only because PgBouncer holds real connections to twenty. These four are outside
+that.
+
+**Nothing is broken today** because none of the four is running: Langfuse is not deployed and
+both workers exit because no queue driver is installed. So this is a decision to take before
+they start rather than a fault to fix. It is reported by a check with a test pinning the exact
+set, so a fifth cannot arrive unnoticed.
+
+**Part of this is already measured, and I stopped short of declaring it for a reason worth
+knowing.** `brain.session.make_worker_engine` keeps a pool of five connections plus five
+overflow, so the checkpointer half of each worker opens at most ten. That is a real limit
+already in the code.
+
+It is not the whole of a worker, though. Each one also holds a queue connection, and that pool
+belongs to the queue driver, which is not installed, so nobody can say what it opens. Writing
+"brain-worker: 10" into the budget would look complete and be an understatement, and an
+understated connection budget is precisely what caused the outage this item is about. So the
+measured half is recorded here and nothing is declared until the other half exists.
+
+The other two are Langfuse's, and they are the ones that need you: Prisma takes a
+`connection_limit` on the URL and nobody has chosen a number, and the same two services also
+point at a database nothing creates, which is number 2 of item 43. Those are one change.
+
+**What I need is a bound for each.** Prisma takes `connection_limit` on the URL; the workers
+take a pool size. I can pick numbers that fit the budget and write them in, and I have not,
+because the two worker figures interact with the slot allocation you already approved and the
+Langfuse ones interact with whether Langfuse is deployed at all, which is item 25.
+
+---
+
+
+## 43. Three things in the deployment files that break a fresh install - DECIDED: Option A on all three
+
+**Your decision, 2026-09-09: Option A on each of the three.** The settings file is
+created during install, the trace ledger's database is created during install, and the file
+store is described once in its own deployment file with the tracing file referring to it.
 
 **None of this affects what is running today.** All three are in parts of the system that are
 not switched on yet. They break the day somebody turns them on, which is why they are worth
@@ -607,493 +812,380 @@ the same change and I would rather do it once.
 
 ---
 
-## 42. You set the three deploy secrets five days ago and the pipeline still says they are missing
 
-**You were right and this item was wrong, so read this one before doing anything.** It used to
-ask you to create three GitHub secrets. They exist. Measured on 2026-09-09 against
-`rpsj2230/Verz-OS-v2.0`:
+## 44. Nothing takes a backup of your database, and the shelf for one is already built - DECIDED: Option C, the nightly dump now and the restore drill with M30
 
-```
-COOLIFY_SERVICE_UUID   created 2026-09-04T12:12:45Z
-COOLIFY_TOKEN          created 2026-09-04T12:12:46Z
-COOLIFY_URL            created 2026-09-04T12:12:44Z
-COOLIFY_WEBHOOK_URL    created 2026-09-04T11:48:00Z
-```
+**Your decision, 2026-09-09: Option C, A now and B later.** In your words, the nightly
+dump is not wasted work when M30 arrives: it becomes the thing M30's restore drill restores
+from.
 
-And the Deploy run at 09:05 on 2026-09-09, five days after that, still ended with:
+Everything around a backup exists. There is a `backups` bucket on the file store, it is set to
+keep things for 35 days, it is set to keep old versions, and the reason for the 35 days is
+written down: one full monthly cycle plus a few days, so a fault noticed at month end can still
+be restored from before it started. The erasure certificates even do arithmetic on that number
+so they can tell somebody which of their data a deletion has not reached yet.
 
-```
-no deploy: missing secret(s) COOLIFY_URL COOLIFY_TOKEN COOLIFY_SERVICE_UUID.
-The image is published; the server was not told.
-```
+**Nothing writes to it.** I checked the whole repository for anything that takes a database
+dump or restores one, and the only place `pg_restore` appears is in a guard whose job is to
+refuse an installation step that tries to load somebody else's data. So the shelf is there, it
+is labelled, and it is empty.
 
-So the problem is not the one this item described. The secrets are on the repository, the
-workflow reads them by the right names, the repository is not a fork, there are no deployment
-environments that could be gating them, and the file that ran is the file on `main`. The job
-simply receives three empty strings.
+This is planned work: it is module M30, "Hosting, delivery and recovery", which sits in wave 5
+and has none of its 37 tasks done. So nothing has gone wrong. But the plan puts it a long way
+out, and in the meantime the answer to "what happens if the database is lost" is "everything is
+lost", and I would rather you knew that tonight than in wave 5.
 
-**Nothing is needed from you while this is open.** Your server is current: the timer on it
-polls for a new image every two minutes and picks up every build, which is why deploys have
-been working the whole time this item claimed they could not.
+**How bad is it right now.** Not very, and I want to be accurate rather than alarming. What is
+in that database today is seeded demonstration data, the build tracker, and configuration. It
+is not yet your company's records. The day that changes is the day this becomes urgent, and
+that day is a decision you make rather than one that arrives by surprise.
 
-**What I did instead of guessing.** The run now prints, before it decides anything, whether
-each of the three arrives as a secret and whether the two safe ones arrive as a repository
-*variable*. GitHub's Actions settings page has Secrets and Variables side by side and only one
-of them is read; that is the cheapest remaining explanation and the run will now say so
-outright. No value is printed, only the word `set` or `empty`.
+**What I would need from you, and the options.**
 
-**And a second fault was sitting behind the first, which is the part worth reading.** The
-missing-secret check was three lines of the shape `[ -z "$X" ] && missing="$missing X"`. Every
-`run:` block in GitHub Actions is `bash -eo pipefail`, and a whole `&&` list is the command
-whose exit status `-e` reads. When the value is present, the test is false, the line exits 1
-and the step dies before it ever calls Coolify. It has never happened, because all three have
-been empty on every run. It would have happened on the first run where the secrets arrived:
-the check would have broken at the moment it started to matter. Both are `if` statements now.
+- **Option A, recommended: I write the nightly dump now and you run one command.** A dump on a
+  timer on the server, written to the bucket that is already waiting for it, roughly fifteen
+  minutes of work. It needs one thing from you because it touches the live server rather than
+  this repository: I would give you a single command to paste into the VPS, and you would paste
+  it. I have not done it unasked because a change to what runs on your production host at three
+  in the morning is not mine to make while you are asleep.
+- **Option B: wait for wave 5 and do it properly.** M30 covers backup, restore, a verified
+  restore drill and a recovery runbook, which is the whole thing rather than half of it. This
+  is the right answer if real data does not land in that database before wave 5.
+- **Option C: do A now and B later.** The nightly dump is not wasted work when M30 arrives; it
+  becomes the thing M30's restore drill restores from.
 
-**What happens next without you.** The next push runs it and the answer is in that job's log
-under "what this job can see". If it says the secrets are empty and the variables are set, the
-fix is one move in the GitHub settings page and I will give you the two clicks. If it says
-they are set, the deploy call happens on that same run and this item closes itself.
+I recommend C. The dump is cheap, it stops the worst outcome, and it does not duplicate
+anything wave 5 will build.
 
----
-
-## 41. Four services connect straight to the application database and nothing budgets them
-
-**This is the shape of the Keycloak outage, on the database that holds the company records.**
-
-On 2026-09-07 Keycloak opened every connection its database would give it and held all thirty
-idle. The next connection was refused, and the next connection was an administrator trying to
-find out why. The fix was a bounded pool and a budget that fails a test when a client's pool
-and a server's ceiling stop agreeing.
-
-That budget checks the clients we *declared*. It cannot see one nobody declared, and an
-undeclared client is exactly what saturated Keycloak's. Reading the compose files rather than
-the declaration turned up four:
-
-- `langfuse-web` and `langfuse-worker`, through Prisma, with no connection limit on the URL
-- `brain-worker`, through both its queue URL and its checkpointer URL
-- `brain-parse-worker`, through its queue URL
-
-Every one of them bypasses PgBouncer for a good reason: the queue needs LISTEN and the
-checkpointer needs server-side prepared statements, and the pooler in transaction mode
-supports neither. Which is what makes them the case that matters. **The services that most
-need budgeting are precisely the ones the pooler is not bounding.**
-
-The arithmetic today: `db` admits 97 connections, the declared demand is 20, and 77 are
-unbudgeted. Its declared ceiling costs 2112 MiB against a 2048 MiB container, and that is
-affordable only because PgBouncer holds real connections to twenty. These four are outside
-that.
-
-**Nothing is broken today** because none of the four is running: Langfuse is not deployed and
-both workers exit because no queue driver is installed. So this is a decision to take before
-they start rather than a fault to fix. It is reported by a check with a test pinning the exact
-set, so a fifth cannot arrive unnoticed.
-
-**Part of this is already measured, and I stopped short of declaring it for a reason worth
-knowing.** `brain.session.make_worker_engine` keeps a pool of five connections plus five
-overflow, so the checkpointer half of each worker opens at most ten. That is a real limit
-already in the code.
-
-It is not the whole of a worker, though. Each one also holds a queue connection, and that pool
-belongs to the queue driver, which is not installed, so nobody can say what it opens. Writing
-"brain-worker: 10" into the budget would look complete and be an understatement, and an
-understated connection budget is precisely what caused the outage this item is about. So the
-measured half is recorded here and nothing is declared until the other half exists.
-
-The other two are Langfuse's, and they are the ones that need you: Prisma takes a
-`connection_limit` on the URL and nobody has chosen a number, and the same two services also
-point at a database nothing creates, which is number 2 of item 43. Those are one change.
-
-**What I need is a bound for each.** Prisma takes `connection_limit` on the URL; the workers
-take a pool size. I can pick numbers that fit the budget and write them in, and I have not,
-because the two worker figures interact with the slot allocation you already approved and the
-Langfuse ones interact with whether Langfuse is deployed at all, which is item 25.
+**One thing worth saying plainly.** A backup nobody has restored is not a backup, it is a file.
+The console screen for "last verified restore" is deliberately not built, because a screen
+showing a backup timestamp under that heading would be the field somebody checks before
+deciding not to worry. There is a test in the repository that walks every module and asserts
+nothing is named for restoring anything; it passes today, and it is written so that it fails on
+the day somebody adds a restore, which is the day that screen should be written.
 
 ---
 
-## 40. A second copy of the rule that decides who can see what
 
-`brain.core.scope.Scope.to_sql` and `Clause.to_sql` render a scope into SQL. So does
-`brain.core.scope_sql.compile_where`, which is the one everything uses, and the repository has
-an invariant forbidding a second implementation of a central rule for a reason it states
-plainly: each copy is reasonable in isolation, they drift, and the one that drifts is
-discovered by a permission being wrong rather than by a test.
+## 45. "Which agents have read my HR record" is a question the system cannot answer - DECIDED: Option A
 
-The two already disagree. Measured:
+**Your decision, 2026-09-09: Option A.**
 
-```
-Scope.to_sql   -> ("(row_data ->> 'department' = ANY(:s0))", {'s0': ['a', 'b', 'c']})
-compile_where  -> refused: department in: needs a tuple of strings; a bare string becomes one
-```
+One task on the plan asks for a page where a member can see which agents have read their HR
+record. It is a good thing to be able to show somebody. The system cannot answer it today, and
+the reason is a design decision that was made deliberately and is worth you knowing about.
 
-`to_sql` also hard-codes `row_data ->> '<field>'`, so it cannot use a promoted column, and it
-never calls `assert_conjunctive`, which is the check that stops a scope widening rather than
-narrowing.
+**What is recorded today.** Two different things are kept, on purpose, and neither is a list of
+who read what.
 
-The invariant did not catch it because it guards the *name* `compile_where`, and this one is
-called `to_sql`.
+- The **audit ledger** records things that change what somebody may do: a permission granted, a
+  permission taken away, a leash moved, an emergency access session opened. It is kept for five
+  years, it holds no content at all, and it is deliberately a short list of eight kinds of
+  event. None of the eight is "somebody read something".
+- The **trace record** holds one row per request: who asked, which model answered, how long it
+  took, how many things were redacted. It holds names and counts and never a value, and it is
+  kept for a month. It can tell you that somebody asked a question; it cannot tell you which
+  rows came back.
 
-**Nothing in the application calls it.** Only two test files do. So it is loaded rather than
-live, and the risk is the next person who needs scope SQL finding it first.
+So "who has read my HR record" falls between them. Nothing is broken and nothing was
+forgotten: a system that logged every read of every row would be keeping a second copy of who
+looked at what, forever, which is its own privacy problem and its own storage bill.
 
-**What I need is one sentence: delete it, or keep it.** Deleting it means changing the two
-test files that use it and widening the invariant to catch a renamed copy. Keeping it means
-saying what it is for, because right now it is a second answer to the most important question
-this system asks.
+**What answering it would take, and what each costs.**
 
----
+- **Option A, recommended: answer it for a narrow, high-sensitivity set rather than for
+  everything.** Personnel records are the case the task actually names, and they are a small
+  slice of the data. A read log scoped to that slice is affordable, is the thing people
+  genuinely ask about, and does not turn every ordinary lookup into a permanent record. It
+  needs one new kind of audit event and a decision from you about which record types count as
+  sensitive enough to log.
+- **Option B: log every read of every row.** Complete, and the honest cost is that the log
+  becomes the largest thing in the database and is itself a map of who is interested in whom.
+  I would not do this.
+- **Option C: leave it, and say so on the page.** The member's page tells them plainly that
+  reads are not logged and what is logged instead. This is the cheapest and it is a real
+  answer rather than a blank space, and it is the right choice if nobody has actually asked
+  for the read log.
 
-## 39. Which staff list is the real one, and may it set roles
+I recommend A, and the decision I need from you is one line: **which record types are sensitive
+enough that every read of them should be written down.** My starting suggestion would be
+personnel records and anything carrying a salary, and nothing else.
 
-**Nothing is blocked today. This decides what gets built first and it needs two short
-answers.** You asked for the staff list to be pluggable: spreadsheet, Google Sheet, Google
-Workspace, Microsoft, Lark, or anything else. That is designed and in the plan as M1.6, twelve
-leaves. Building all six adapters before we know which one you use is a month spent on five we
-may never run.
-
-**Question one: where does the Verz staff list actually live today?** Not where it could live.
-Where the current, correct list of who works there is: the one somebody updates when a person
-joins. A Google Sheet is a perfectly good answer.
-
-**Question two, and this one has a security consequence.** A source declares what it is
-trusted to assert, and there are three things it can assert: that a person exists, which
-department they are in, and what platform role they hold. By default a spreadsheet or a Google
-Sheet may assert **only that a person exists**.
-
-A sheet anybody with the link can edit is a fine answer to "who works here" and a catastrophic
-answer to "who is a Super Admin": one edit to one cell and somebody has appointed themselves,
-with the edit history in a document nobody reviews. A Workspace group is different, because
-changing it needs the admin console and leaves a trail there.
-
-So if your staff list is a sheet, the consequence is: **people arrive automatically, and their
-department and role are set by you in the console.** A few clicks per joiner rather than none.
-
-**Your options.**
-
-- **A. Keep the default.** The sheet lists people; roles are set in the console. Safest, and
-  the extra work is per joiner rather than ongoing.
-- **B. Trust the sheet with departments too, but not roles.** Reasonable if the sheet has a
-  department column that is kept accurate. Departments bound what people can see, so this is a
-  real widening, though a much smaller one than roles.
-- **C. Trust the sheet with roles as well.** Only sensible if the sheet is locked to two or
-  three named editors. Say so and I will configure it that way and write down who those
-  editors are, so an auditor can see the argument.
-
-The default is A and it is what will be built if you say nothing. It can change later, per
-source, without a migration.
-
-## 38. The console will have thirty-four screens, and four of them are decisions
-
-**Nothing is blocked. This is a design record to disagree with now rather than after it is
-built.** You said the nine screens I described could not be the whole console, and you were
-right. The plan named eighteen and the code had four. It is now thirty-four, declared in
-`brain/console/screens.py` with tests holding every one of them to the rules below, and the
-roadmap under M27 lists them all.
-
-Your five specific asks were already in the plan at M33 and had reached neither the screen list
-nor any code. They are now in both: company overview, everything filterable by department and
-person, all activity, budget and spend, and a global stop button.
-
-**Four things there are decisions rather than mechanics.**
-
-**One: budget is separate from usage, and budget is a limit.** "Usage and tokens" tells you
-what was spent. "Budget and spend" is a ceiling with something that happens when it is
-reached. What should happen? Warn the person and carry on; warn their department admin; refuse
-further questions until the next period; or refuse only the expensive lanes and leave cheap
-answers working. **My recommendation is the last**, because a hard stop at a budget turns a
-cost control into an outage. Nothing is built until you pick.
-
-**Two: the stop button stops instantly and needs nobody's approval.** One capability, no
-confirmation dialogue, no second signature, because a stop button that can fail is not one. The
-paperwork sits on the *resume*: restarting a system somebody halted needs a written reason, and
-it says out loud when one person is overriding another. A halt also survives a restart and has
-no expiry, so it ends when a person ends it and never on its own. Tell me if you want that
-reversed anywhere.
-
-**Three: four screens do not exist for a department admin.** Their rows are narrower
-everywhere, which is automatic. But four screens are about the deployment rather than the work
-in it, and at a department's scope each is either empty or a leak: backup and recovery, this
-install, rate limits, and capacity. Department admins keep everything else, including a stop
-button for their own department.
-
-**Four: a filter dropdown is a disclosure and is treated as one.** Every screen can be narrowed
-by department and by person, as you asked. That means every screen carries a department
-dropdown, and filled from the department table it would name every department in the company to
-somebody whose rows were carefully scoped. The options are intersected with what the reader can
-already reach. You may find you cannot filter by a department you know exists. That is this,
-working.
-
-## 37. Keycloak is unpleasant to administer, and the reason is a screen we have not built
-
-**Nothing is blocked and no work stops on this. You asked why we use Keycloak at all, having
-found it horrible to manage users and roles in. The honest answer has two halves.**
-
-**The half where you are right.** Keycloak's admin console is genuinely dense. Two realms that
-look alike, groups and roles and clients that overlap, and a layout that assumes you already
-know its vocabulary. Nobody enjoys it.
-
-**The half that matters more: you are not supposed to be in there.** The design was always
-that Keycloak is plumbing you open twice, once to bootstrap and once if you are ever locked
-out. Everything routine was meant to happen elsewhere:
-
-- Staff arrive from your existing directory rather than being typed in.
-  `brain.identity.directory` is written and tested for that and is wired to nothing.
-- Day-to-day people and grants happen on a Company Brain screen, M27.3.1, which does not
-  exist. The console has five pages and none of them is that one.
-- Joining, moving and leaving happen through `brain.identity.lifecycle`, written today, also
-  wired to nothing.
-
-So the pain you hit is real and it is pointing at three missing pieces of *our* system rather
-than at the wrong choice of dependency. Switching identity providers would not remove it,
-because the thing you were doing by hand in Keycloak is the thing that should not be done by
-hand anywhere.
-
-**Why an identity provider at all.** The whole permission model rests on knowing who is
-asking, provably, from a token the gate can check without calling anything. That is OIDC. The
-alternative is writing passwords, sessions, resets, lockout, multi-factor and their audit
-trail ourselves, which is a large security-critical surface and a bad trade at any size.
-
-**Why Keycloak specifically.** It is self-hosted, which your single-tenant client-hosted
-requirement needs. It has no per-seat cost, which matters at 126 staff and more later. It
-speaks OIDC and SAML and federates to LDAP and Active Directory, which is what a client with
-their own directory will ask for. And its whole configuration exports as one file, which is
-why `ops/keycloak/realm-export.json` is reviewed in the repository rather than clicked into
-existence.
-
-**The honest alternatives, if you want to reconsider.** Authentik has a considerably friendlier
-admin interface and is also self-hosted and free. Zitadel is lighter and has a better API.
-Both are younger with smaller communities, which for the component holding your credentials is
-a real consideration rather than a formality. Auth0, Clerk and WorkOS are far easier to run and
-break the client-hosted requirement while charging per seat.
-
-**My recommendation: keep Keycloak and build the screen.** The switch costs a few days and
-buys a nicer version of a console you should stop opening. The same few days spent on M27.3.1
-and wiring the directory sync removes the need to open any identity console at all, and that
-work is needed whichever provider sits underneath.
-
-**What I would want from you if you disagree**: say so and I will cost the migration properly
-rather than guess. I have not measured Authentik's footprint on your server and would not
-quote one without doing so.
+**Why this is on your list rather than mine.** The two costs are the kind you would notice and
+I would not: a permanent record of who looked at whom is a privacy position, and the storage it
+takes is a bill. Neither is a coding question.
 
 ---
 
-## 36. The WBS names promptfoo for evaluation and I used pytest - say if you want the tool
 
-**Nothing is blocked. This is a deviation from your wording, flagged so it is your call rather
-than mine.**
+## 46. Your client agreement will promise a recovery point and a recovery time. These are the numbers, and I need you to pick which set - DECIDED: Option A
 
-M28.1.1 reads "promptfoo driven through our gate, never against a bare model". I built the
-harness in Python, in `tests/invariants/test_golden_through_the_gate.py`, and did not use
-promptfoo.
+**Your decision, 2026-09-09: Option A.**
 
-The reasoning. promptfoo drives a provider: you give it a thing that takes a prompt and
-returns a completion. What has to be driven here is not a provider, it is an entitled request
-pipeline that needs a different principal for every case, because the whole point of the
-corpus is that the same question asked by three people must produce three different answers.
-Wiring promptfoo to that means writing a custom provider in JavaScript that shells into
-Python once per case, which puts a second language and a subprocess between the corpus and
-the gate, and buys nothing the Python harness does not already do. The invariants suite is
-already its own CI step and CI already gates Deploy, so the blocking half of M28.1.4 came for
-free.
+**One line from you, and there is no work behind it.** A client agreement carries two figures:
+how much work may be lost if the system has to be restored from a backup (the recovery point),
+and how long it may be down while that happens (the recovery time). Until today both existed in
+the code as defaults and nothing turned them into a document anybody signs. Now something does,
+and the first document it produces is the one Verz hands its first client.
 
-What I kept is the part of the leaf that matters: the phrase "never against a bare model".
-Every question goes through `answer_lane`, which runs the projection, the row read at the
-caller's own reach, the redaction and the abstention classifier. A test asserts structurally
-that this module imports no model driver, so a faster path that asked a provider directly
-cannot be added quietly.
+**Where the numbers come from.** The system offers three deployment profiles, and each carries
+its own pair. These are not my estimates; they are what is written in the code today, with the
+reason beside each one:
 
-**Say the word and I will add promptfoo as a second front end over the same harness.** The
-case for it is real: it is a tool your team may already know, and its report format is nicer
-than pytest's. The case against is a second thing to keep in step with the corpus.
+| Profile | Recovery point | Recovery time | Why |
+| --- | --- | --- | --- |
+| `lite` | 24 hours | 8 hours | Four containers on one host, and no second host to restore onto, so the recovery time is however long it takes somebody to build one |
+| `standard` | 4 hours | 4 hours | The workers and the file store are running, so a restore has somewhere to go and the time is replaying archived data rather than provisioning a machine |
+| `full` | 1 hour | 2 hours | The tightest figures the system offers, and they need a standby host that already exists |
 
-**One thing worth knowing that this turned up, and I am fixing it separately.** Asking the
-golden corpus of the real system for the first time showed that no persona in the synthetic
-company can read a record at all. Reaching a row needs `read:client` and reading a column
-needs `read:client.name`, and the two are deliberately separate grants; the fixture grants
-only columns. So the twenty golden questions have been describing a company nobody could read
-from, and nothing noticed because the only tests of the corpus checked the corpus's own shape.
-It is asserted as a test now so it cannot go quiet again. Fixing it widens what every persona
-reaches and about seven thousand tests take their reach from that fixture, so it is a change
-on its own rather than a side effect of building the harness.
+`lite` is what an install that never says otherwise runs, and it is what the example
+environment file sets. I have not read the value off your server, because I do not touch it
+while you are asleep; if it says something else, the row above changes and the
+recommendation below does not.
 
----
+**The backup schedule is already better than the promise, and I would not promise the
+difference.** The copies are scheduled to run every hour at worst, and the database's write
+log every minute, so the exposure on paper is one hour rather than twenty-four. It is tempting
+to write the better number into the agreement. I recommend against it: a recovery point is a
+promise about the slowest copy on the worst day, and the gap between one hour and twenty-four
+is the margin that absorbs a failed backup nobody noticed for a day. Promise the profile's
+figure, keep the margin, and let the client be pleasantly surprised.
 
-## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - which moves?
+**Options.**
 
-**This blocks local embedding, and it is a schema decision rather than a setting.**
+- **Option A, recommended: sign the `lite` figures, 24 hours and 8 hours.** They are what one
+  host with no standby can actually deliver, and eight hours is honest about the fact that the
+  recovery time includes somebody building a machine. Costs nothing and needs no change to
+  what runs.
+- **Option B: sign the `standard` figures, 4 hours and 4 hours.** This is a real promise and it
+  requires the install to be on the standard profile, which means the worker, the file store
+  and the trace database running rather than the four containers. If you want to sell a
+  four-hour recovery, this is the smallest install that supports it.
+- **Option C: sign the `full` figures, 1 hour and 2 hours.** Needs a second host standing by,
+  paid for whether or not it is ever used. Worth it for a client whose finance system is in
+  here and not otherwise.
 
-The knowledge corpus stores a vector per chunk in a column declared `VECTOR(1536)`. That width
-was chosen for a hosted model, `text-embedding-3-small`, before item 31 decided that embedding
-would run locally behind the inference server. The model that decision names,
-Qwen3-Embedding-0.6B, produces 1024 dimensions. Its published truncation only shortens a
-vector, so no setting on the far side turns 1024 into 1536.
+I recommend A for the first install and B as the shape of the paid tier: the difference between
+them is a second host and about an hour of setup, and it is a much easier conversation to have
+as an upgrade than as a promise you have to walk back.
 
-**Nothing is quietly wrong in the meantime.** The width is part of the column's type, so
-PostgreSQL refuses a vector of the wrong size on insert rather than storing something
-meaningless, and the code now reports the disagreement in words before anything is sent. The
-figure of 1024 is from the published model card and has not been verified here, because no
-weights have been pulled on this host; if it is wrong, the check reads the real width off the
-server's own response rather than believing what we asked for.
-
-**Update, 2026-09-07: the check that says this now runs, and it did not before.** The function
-comparing the two widths was written, correct and never called: its own docstring said so and
-named the place it belonged. It is wired in now, so `python -m brain.ops.worker --check` prints
-the disagreement, which means the answer to this question stops depending on somebody
-remembering the question.
-
-It prints and does not refuse, and that took a second change worth knowing about. Everything
-that check's new home reports is a reason a worker must not start, and this is not one: a
-column that disagrees with the model means every embedding job fails and means nothing at all
-for the rest of the queue. Refusing to boot over it would take the whole queue down to protect
-one leg, and would replace the operator's real problem, "no queue driver is installed", with a
-schema decision they cannot make at three in the morning. So the worker now has two lists: what
-stops it, and what is wrong that starting will not fix. This is the first entry in the second.
-
-Nothing here changes the decision or its cost. The one thing it changes is that the window
-where deciding is nearly free is now visible from the command line rather than only from this
-document.
-
-Three ways out, and the cost is different in each.
-
-- **Narrow the column to 1024 and re-embed.** A migration that alters the column and rebuilds
-  the vector index, plus a re-embed of every chunk. Today that second cost is nearly nothing,
-  because no chunk has ever been embedded. It stops being nearly nothing the moment the first
-  real document is ingested, which is the argument for deciding this now rather than later.
-- **Serve a wider local model.** The larger models in the same family are wider still, and
-  pgvector will index at most 2,000 dimensions whatever it will store, so this route means a
-  different family rather than a bigger Qwen3.
-- **Keep the column at 1536 and keep embedding hosted.** Honest, and it gives back the reason
-  item 31 chose to run models locally in the first place.
-
-**What I need is one sentence saying which.** I have not picked for you, and the reason is that
-it interacts with 25 and 31: the inference container is still about 3.3 GB over what this host
-has, and "a smaller embedding model" was already one of the three ways out of that. Choosing a
-column width before choosing the model would spend the same migration twice.
+**One thing that blocks all three, and it is item 44.** The code refuses to produce a service
+level statement at all until a restore drill has actually verified, because a recovery time
+nobody has measured is a number somebody chose. Nothing takes a backup yet, so nothing has ever
+been restored, so today every one of the three options above produces a refusal rather than a
+document. That is deliberate and it is the right behaviour. It also means item 44 comes first:
+answer that one and this one becomes real.
 
 ---
 
-## 35. You renamed the GitHub repository, and it stopped the deploy
 
-**Fixed already, in about twenty minutes, and there is one small decision left for you.**
+## 47. Eleven of the thirteen safety mechanisms in the system have never been switched on, and I need one decision about where scheduled work runs - DECIDED: Option A, a scheduler inside the application container
 
-You renamed the repository from `verz-brain-v2.0` to `Verz-OS-v2.0` this afternoon. The build
-that ran straight afterwards failed:
+**Your decision, 2026-09-09: Option A.** The policy half is built and pushed:
+`brain.ops.schedule` says which of the thirteen are owed a run and which of them this process
+may start. Twelve of the thirteen are its; the audit anchor keeps its external timer, because
+a second caller would give the one working control two.
 
-    invalid tag "ghcr.io/rpsj2230/Verz-OS-v2.0:79204c6": repository name must be lowercase
+The retention sweep is held to report-only until you release it, which is the promise made at
+the bottom of this item and is now a property the type enforces rather than an intention.
 
-The pipeline was naming the container image after the repository, so renaming one renamed the
-other, and container image names may not contain capital letters. Meanwhile the server pulls
-the image by its old name, written into three files.
+**The finding.** The system has thirteen mechanisms that only work if something runs them on a
+schedule: pruning data past its retention window, the permission canaries, the restore drill,
+the backup exposure alert, the refusal digest, the staff directory sync, knowledge
+re-verification, entity resolution calibration, redriving stuck jobs, resuming interrupted
+side effects, the model health probes, and the spend estimator correction. Eleven of them have
+no caller anywhere. Each one is written, tested, documented, and nothing has ever run it.
 
-**The lucky part.** Your new name has capital letters in it, so this arrived as a failed build
-half a minute after the push. Had you renamed it to something lowercase, the build would have
-worked, published the image somewhere nothing looks, reported success, and left the server
-running the old one with every check green. That is the failure you had in August, when
-production sat fourteen commits behind and nothing said so.
+**One of the twelve moved on 2026-09-09 and the move is smaller than it sounds.** The spend
+estimator correction now has a caller: the cost review section of the usage screen asks for it.
+That takes it out of the list of mechanisms nothing calls and puts it in a shorter list of
+mechanisms whose caller is a screen nobody opens on a schedule. It is one link of the chain
+rather than the chain, and the registry says so rather than counting it as wired.
 
-The image name is now written out rather than derived, four files that name it are held equal
-by a test, and production is live on the current commit again. Nothing is outstanding.
+The thirteenth is the audit anchor, and it works: a GitHub Actions timer calls a web address in
+the system every day, and that publishes the tamper-evident seal on the audit trail. It is the
+one that runs, and it is the reason I can tell you the others do not: the check that found
+them had to get the working one right first.
 
-**The decision.** The image is still called `verz-brain-v2.0` while the repository is called
-`Verz-OS-v2.0`. Two options:
+**How bad is this right now.** Not bad, and I want to be accurate. Nothing has degraded,
+because none of these has ever run and there is no client data in the system yet. The reason
+it is worth waking up to is the direction it goes: **the console screens being built now will
+say the estate is protected.** A retention screen that shows a 30-day window is telling the
+truth about the policy and nothing about whether a single row has ever been deleted. That gap
+between what a screen says and what is happening is the failure mode, and it arrives quietly
+on the day somebody trusts the screen.
 
-1. **Leave it.** The image name is an internal address that only the pipeline and the server
-   use. Nothing is wrong with it, and it costs nothing. My recommendation.
-2. **Rename the image to match.** Tidier to read, and it has to be done in one step: publish
-   under the new name and change what the server pulls at the same moment, or the server
-   spends that deploy pulling something that is no longer published. Ten minutes and a
-   deploy, and worth doing only if the mismatch will bother you every time you see it.
+There is now a check that goes red if a mechanism that was wired stops being wired, or if the
+written record and the code disagree in either direction. It is deliberately not red today:
+a check that fails the day it lands is a check somebody switches off.
 
-**One thing to know for next time**, not a complaint: a rename is the kind of change that
-looks free and reaches the build, the registry and the server. If you tell me before or just
-after, I can have the three files moved in the same minute rather than finding it in a red
-build.
+**What I need from you: where should scheduled work run.** This is a decision about your
+server rather than about the code, which is why it is here.
 
----
+- **Option A, recommended: a small scheduler inside the application container.** Every one of
+  the thirteen already has a function that answers "is this due", so the scheduler is a loop
+  that asks each of them and puts a job on the queue. No new container, no host configuration,
+  and it works on the small deployment profile, which is the one you are running. It needs a
+  lock so that two copies of the app do not both run the same sweep, and the database already
+  provides the kind of lock that does this. About a day of work, and it ships with the product,
+  so every client after you gets it by installing.
+- **Option B: more GitHub Actions timers, like the audit anchor.** Nothing changes on your
+  server and the pattern is proven, because one of these already works that way. I recommend
+  against it beyond the anchor, and the reason is the whole shape of this product: a
+  client-hosted system whose safety mechanisms are triggered from our GitHub account is a
+  system we operate on their behalf. The client cannot see the schedule, cannot change it, and
+  loses it if the relationship ends. It is the right answer for exactly one thing, publishing a
+  seal to a repository we hold, and the wrong answer for every other one.
+- **Option C: timers on the server itself.** Standard, reliable, and it puts the schedule
+  outside the product, so every client installs it by hand from a runbook and their thirteen
+  timers drift from ours. It also means the installer has to write files as root.
 
-## 33. "Shadow-pinned thirty days" - which of the two things does it mean?
+I recommend A, and leaving the audit anchor where it is until A has been running long enough
+to trust.
 
-**Small, and it decides a safety property rather than a feature.**
-
-Your work breakdown lists two agents with a supervision constraint in their titles:
-
-- **SEM Agent**, shadow-pinned, human commits budget changes
-- **AR and Renewal Chaser**, shadow-pinned **thirty days**
-
-The first is built. "A human commits budget changes" is something the system can refuse: the
-agent may prepare a change and may not apply one, and that is enforced by the gate rather
-than by asking the agent nicely in its instructions.
-
-The second I did not build, because the system cannot currently express it and I do not want
-to guess which of two very different things you meant.
-
-**Reading one: review after thirty days.** The agent stays supervised. After a month somebody
-looks at what it did and decides whether to trust it further. Nothing changes on its own.
-
-**Reading two: becomes autonomous after thirty days.** The pin expires. On day thirty-one the
-agent starts chasing customers for money without anybody watching, because a timer ran out.
-
-I would build the first and would want to argue with you before building the second. An agent
-that gains authority on a date nobody diarised is the one kind of change that happens when
-nobody is paying attention, which is exactly when you would want it not to.
-
-**Either way there is a small piece of work**, because today a supervision level has no time
-attached to it at all. Reading one needs a review date and a reminder. Reading two needs an
-expiry, and I would want it to be loud rather than silent.
-
-No rush: the chaser is one of twenty-three agent templates and six are written so far.
-
----
-
-## 32. Three passwords, and then people can actually sign in
-
-**Update, 8 September: this is done apart from two steps of yours.** Keycloak is deployed and
-answering on the server, the realm imported, and you have signed in. What is left is the
-housekeeping in the steps you were given: delete the temporary `admin` account now that your
-own exists, then change `KEYCLOAK_ADMIN_PASSWORD` in Coolify to a fresh value. **Do not delete
-that variable** - the stack refuses to start without it, and it is the way back in if every
-administrator is ever lost.
-
-
-**Small, and it is the last thing between the console and a working login.**
-
-Answering 29 turned up something bigger than a missing address: **there is no Keycloak.**
-Not on the server, not in any deployment file. Keycloak is the piece that holds your staff
-list and decides who is who; the whole permission model rests on it. The realm, which is the
-configuration describing your roles and departments, was written and reviewed and had nowhere
-to run.
-
-It is written now, sized from measurement rather than a guess. I ran a throwaway copy on your
-server for a few minutes to find out what it actually needs: at 512 MB the operating system
-killed it, at 768 MB it settled at 477 MB with room to spare. It has been removed; the server
-is back to where it was.
-
-That test also found a real bug and fixed it. **The realm file would not have imported at
-all.** It carries explanatory comments, which is why it is readable, and Keycloak rejects any
-field it does not recognise. It refuses the file outright. The reviewed version keeps its
-comments and a stripped copy is generated for the import, so both the explanation and the
-import survive.
-
-**What I need from you: three passwords.** I will not create or store passwords on your
-behalf, so these are yours to set in Coolify:
-
-    KEYCLOAK_ADMIN              a username, for example: admin
-    KEYCLOAK_ADMIN_PASSWORD     used once to create your real account, then removed
-    KEYCLOAK_DB_PASSWORD        Keycloak's own database, never typed by a person
-
-**And one decision, where I have a recommendation.** Keycloak needs its own web address,
-separate from the Brain's, because it is a separate system your browser is redirected to.
-I suggest `https://id.194.233.66.89.sslip.io`, which works the same way your existing
-address does and will be replaced alongside it when you buy a domain.
-
-**The memory.** It needs 1 GB in total, and today the budget is 256 MB short. That
-disappears the moment you remove your other project, which frees 2.4 GB. So either order
-works: remove the project first and this fits with room to spare, or say the word and I will
-deploy it now and re-measure.
+**One thing to know either way.** Turning these on is not free of consequences: the retention
+sweep deletes things. That is its job, and the first time it runs on a system that has been
+accumulating rows since installation it will delete a great deal at once. When we wire it, it
+runs in a dry-run mode first and reports what it would remove, and you look at that report
+before it is allowed to remove anything. I will not turn that one on silently.
 
 ---
 
-# Answered
+
+## 48. A department head cannot read their own department's activity, and the fix is one line from you - DECIDED: Option A
+
+**Your decision, 2026-09-09: Option A.**
+
+**The finding.** An audit entry records four things a permission can be written against: what
+happened, what kind of thing it happened to, which thing, and who did it. It does not record a
+department. A department head's permissions are written against their department, so their
+audit permissions match no entry at all, and their activity page is empty. Not filtered:
+empty. I found this while building that page, and the page would have been empty for every
+reader it exists for while passing every test, because a test fixture uses a company-wide
+permission and never notices.
+
+I ran both halves rather than reasoning about them. A reader whose audit permission is scoped
+to a department sees nought rows. The same reader with the same permission scoped to a named
+person sees that person's rows and nobody else's. So the recommendation below is not a theory
+about what the permission model could do; it is what it does today.
+
+Two tasks on the plan are blocked by it: all-activity with department filters, and the
+department head's own activity view. A third, usage and tokens by department, is blocked by
+the same shape in a different table.
+
+**Why I have not just fixed it.** The obvious fix is to record the department on every audit
+entry, and that is a decision about the record this system keeps longest. Today an audit row
+says what somebody did. With a department on it, the sequence of rows says where they worked
+and when they moved, kept for as long as the audit trail is kept, which is years. That is a
+different thing to hold about a person, and it is not mine to decide at two in the morning.
+
+**Options.**
+
+- **Option A, recommended: write a department head's audit permissions against the people
+  rather than against the department.** Permissions can already name a set of people, and the
+  staff directory already knows who is in a department, so the grant becomes "may read the
+  audit trail for these fifteen people" and is rewritten by the directory sync when somebody
+  joins or leaves. Nothing new is retained, no column is added, and the permission says
+  exactly whose activity that head may read, which is a thing you can review on a screen.
+
+  Two costs, and the second is the one I would want you to hear. It goes briefly stale between
+  a transfer and the next sync. And audit permissions are per kind of thing rather than one
+  permission: there is one for entries about people, one for entries about grants, one for
+  agents, connectors, sessions and so on, eight in all. So a department head is eight grants
+  rather than one, and whoever writes them has to decide which of the eight a head should
+  have. That is a real question and it is a better one than the one this item is about,
+  because the answer is a list you can read.
+- **Option B: record the department on every audit entry.** Every department view then works
+  directly and simply, including the two blocked tasks. The cost is the one above: the audit
+  trail becomes a record of where each person worked over time. There is a second, quieter
+  cost, which is that a department written at the time of the event will disagree with the
+  org chart after somebody transfers, so the system would then have two answers to "which
+  department was that", and the code would have to say which one every screen means.
+- **Option C: leave it and say so.** Department heads read grants, budgets, knowledge coverage
+  and their people's work, and do not read the audit trail; the audit trail is for the auditor
+  and the super administrator. This is a defensible product decision rather than a fault, and
+  it costs nothing.
+
+I recommend A. It answers the question without changing what is kept, and the thing it
+produces, a permission that names the people it covers, is easier to review than a permission
+that names a department and relies on a column agreeing with it.
+
+**Nothing is broken today.** Nobody is being shown data they should not see; the failure is in
+the other direction, and there is no client data in the ledger yet. The department budget page
+does work and shipped tonight, because a budget is written against a department and does not
+have this problem.
+
+---
+
+
+## 50. Thirty of the remaining tasks are things people do on the week of a migration, and the percentage counts them as if I could build them - DECIDED: a generated checklist, and the security ones gate the cutover
+
+**Your decision, 2026-09-09, and it is neither of the options as I wrote them.** You
+asked for the third option, the separate checklist, and said the objection to it had to go
+rather than the option: the percentage must reflect buildable work *and* there must be no
+security hole. Those are separable and I had folded them together, so this is the version that
+does both.
+
+1. The thirty leaves are flagged in the work breakdown as work for people, so the tracker
+   reports buildable done and acts outstanding as two numbers.
+2. `docs/delivery-checklist.md` is **generated** from those flags rather than written, so it
+   cannot go short and cannot drift. A flagged leaf missing from it fails the test suite.
+3. The subset with a security consequence, revoking OAuth grants, recording the date access
+   actually ended, the restore drill, gates the **cutover**: `brain.migration.decommission`
+   refuses to report a completed cutover while any of them is unrecorded. That is the answer
+   to "a list nothing gates is a list nobody reads", and it gates the day rather than the
+   build.
+4. The four leaves naming one company's own skills and Lark groups stay recorded as
+   unbuildable here, because a product every client installs cannot hold them.
+
+**The decision.** The tracker says 1045 of 1251 tasks are done. Thirty of the 206 that are
+left cannot be done by writing code, by me or by anybody: they are acts. "Announce the switch
+before removing their bot." "Revoke every OAuth grant." "Record the date access actually
+ended." "Twenty real questions as the acceptance set." "Restore drill executed in front of the
+client." Every one of those has to happen and none of them is a commit.
+
+They are all in M37, and they are the reason that module has stayed the largest open block all
+week while I have closed twenty-two leaves inside it. What I should do about the tracker is
+your call, and there are three options below.
+
+**Why it matters rather than being tidy-up.** The percentage is the number you look at to know
+how the build is going, and it is currently mixing two things that behave differently. Code
+tasks close when I write them. These close when a person does something on a specific day with
+a specific client, which cannot start before there is a client to do it with. So the number
+will keep rising until it reaches about 86 percent and then stop, and the stop will not mean
+the build stalled.
+
+**Three of the thirty are worse than uncountable, they are unbuildable on purpose.** Four
+leaves name one company's things: twelve house skills by count, four skills by name, which
+Lark groups each agent sits in, and what the outgoing vendor produced that people still rely
+on. This repository is the product every client installs, and the first rule in `CLAUDE.md` is
+that no company's details go in the source. Those four cannot be code here without breaking
+that rule, and I have not tried to make them fit.
+
+**What I did instead, so you can see the shape.** The generic half of the same work is now
+built and tested: what the old system holds and what happens to each item, what is carried and
+what is re-derived, the parallel-running period and its cutover criteria, the decommission, the
+agent rebuild, the skills and the learning. Nine modules, none of which names a vendor or a
+company. The parts that are left are the parts that only exist on the day.
+
+**Options.**
+
+- **Mark them in the work breakdown as work for people, and show two numbers.** The tracker
+  would say something like "1045 of 1221 buildable, plus 30 to do on the week". One flag per
+  leaf in `docs/wbs/*.js`, an afternoon, and it makes the percentage mean one thing again.
+  This is the recommendation: the work stays visible, which matters because forgetting to
+  revoke an OAuth grant is how an outgoing vendor keeps reading a client's email.
+- Leave it. Nothing breaks, the number tops out below a hundred, and you and I both know why.
+  This is a real option if you would rather I spend the afternoon on something else, and I
+  would rather that too if you have a preference for what.
+- Move them out of the work breakdown into a separate delivery checklist. Cleanest tracker,
+  and the risk is the one thing I would not accept: a list nothing gates is a list nobody
+  reads, and these thirty are exactly the ones with a security consequence.
+
+**One thing I will do either way**, because it costs nothing: the four leaves that name a
+company's things are recorded here as unbuildable rather than left looking merely undone, so
+nobody spends a day trying to make them fit.
+
 
 ## 31. Wave 2's last seven jobs - DECIDED: Option A, models behind the inference server
 
