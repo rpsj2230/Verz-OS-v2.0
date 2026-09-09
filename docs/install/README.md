@@ -55,8 +55,10 @@ each has a caller by `test_controls.py`.
 
 Six things, gathered here so they are not discovered one at a time.
 
-**You cannot run this install to completion today.** No release archive is published by
-anything, and the fourth step of the installer fetches one. See install.md.
+**You cannot run this install to completion today.** The fourth step of the installer
+fetches a release archive, a workflow to publish one exists since 2026-09-10, and no release
+has been tagged, so there is nothing at that address yet. A workflow that exists is not an
+archive that exists. See install.md.
 
 **After a complete install the console is reachable from nowhere.** Nothing publishes a port,
 and no compose file in this product declares a reverse proxy. See network.md.

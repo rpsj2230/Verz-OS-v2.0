@@ -55,8 +55,11 @@ caller that may answer it.
 **Reported rather than raised, and deliberately not a gate.** Every finding is true on
 arrival. `brain.ops.sweeps` records at length that a check which is red the day it lands is a
 check somebody switches off, so what pins these is a test asserting the exact set, in the
-shape `test_connections.py` uses for the four undeclared clients. A fifth relative bind mount
-fails a test; it does not fail a deploy that was already failing for four other reasons.
+shape `test_connections.py` uses for the clients that go round the pooler. That set was four
+undeclared clients when this was written and is the empty set since 2026-09-10, which is the
+point of asserting a set rather than a count: the check survived the finding being fixed. A
+fifth relative bind mount fails a test; it does not fail a deploy that was already failing for
+four other reasons.
 
 Rejected: writing the aggregate anyway, with the four defects carried into it. The precedent
 was there, because `docker-compose.langfuse.yml` and `docker-compose.inference.yml` are both

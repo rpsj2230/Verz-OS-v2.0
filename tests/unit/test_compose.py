@@ -4,10 +4,14 @@ M0.4.2 asks for `docker-compose.full.yml`, and it is not written. Every test her
 the four reasons, asserted against the parsed compose files rather than against a paragraph,
 so the day a reason stops being true a test fails and says which one.
 
-The pinned sets are deliberate and they are the shape `test_connections.py` uses for the four
-undeclared clients: a check that tolerates four findings tolerates five, and the fifth is the
-one nobody reads about. These tests are expected to fail when somebody fixes a finding, and
-that failure is the notification.
+The pinned sets are deliberate and they are the shape `test_connections.py` uses for the
+clients that go round the pooler: a check that tolerates four findings tolerates five, and the
+fifth is the one nobody reads about. That set was four when this was written and has been empty
+since 2026-09-10, which is what an exact set buys over a count: the check went on working
+through the fix rather than being deleted with it.
+
+These tests are expected to fail when somebody fixes a finding, and that failure is the
+notification.
 
 Read with `yaml.safe_load` rather than grepped, in both directions: a bind mount inside a
 comment is not a mount, and a service whose limit is written in a comment has no limit.

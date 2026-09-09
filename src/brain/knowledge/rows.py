@@ -59,8 +59,12 @@ with. There is no argument to validate here, which is a shorter argument.
 
 *Compile the scope to SQLAlchemy expression objects here rather than reusing
 `brain.core.scope_sql.compile_where`.* It would remove the one `text()` call in this module,
-and it would put a third rendering of the scope grammar in the repository beside
-`Clause.to_sql` and `compile_where`. The LIKE escaping alone is worth not writing twice: a
+and it would put a **second** rendering of the scope grammar in the repository. This paragraph
+said "a third, beside `Clause.to_sql` and `compile_where`" until 2026-09-10, when the first of
+those was deleted: it was a copy that hard-coded the JSON path so it could not use a promoted
+column, and that never called `assert_conjunctive`, which is the check stopping a scope
+widening rather than narrowing. So there is one renderer now, and the argument against a
+second is stronger rather than weaker. The LIKE escaping alone is worth not writing twice: a
 stored prefix of `web_` narrows in Python and widens in SQL, and the copy that gets that
 wrong is the one nobody re-reads.
 

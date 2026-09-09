@@ -769,10 +769,13 @@ class Reach:
     def admits(self, row: Mapping[str, object]) -> bool:
         """Whether this caller may see one chunk row: the Python side of `reach_predicate`.
 
-        Two evaluators of one rule, exactly as `brain.core.scope.Clause` has `matches` and
-        `to_sql`, and for the same reason: the SQL runs against the whole table and the
-        Python one is the only thing that can be tested at its own boundary on a machine
-        with no PostgreSQL. Both are built from the same `Reach`, and the department branch
+        Two evaluators of one rule, for the reason `brain.core.scope_sql.compile_where`
+        sits beside `brain.core.scope.Clause.matches`: the SQL runs against the whole table
+        and the Python one is the only thing that can be tested at its own boundary on a
+        machine with no PostgreSQL. This named `Clause.to_sql` as the example until
+        2026-09-10, when that method was deleted as a second renderer of the scope grammar;
+        the pairing it illustrated is real and lives across two modules rather than on one
+        class. Both are built from the same `Reach`, and the department branch
         below is `Scope.matches`, so the audited clause evaluator is not reimplemented here.
         """
         if row.get("deleted_at") is not None:
