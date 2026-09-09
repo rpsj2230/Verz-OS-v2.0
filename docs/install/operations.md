@@ -1,16 +1,17 @@
 # Backup, monitoring, logging and health checks
 
 **Read this section first, before the rest of the page.** Thirteen mechanisms in this system
-are meant to run on a schedule. Twelve of them have no caller of any kind: the code is written,
+are meant to run on a schedule. Eleven of them have no caller of any kind: the code is written,
 it is tested, and nothing anywhere invokes it. That includes the one that takes a backup, the
 one that measures how long you have gone without a copy, and the one that proves a copy can be
-restored.
+restored. A twelfth has a caller and no schedule, which is one link of a chain rather than the
+chain, and the table below says so per mechanism rather than in a count.
 
 So this page is in two halves. What answers today, which is the health checks and the audit
 ledger. And what is written down and switched off, which is nearly everything else.
 
 You are not being handed a monitored system. You are being handed a system with the monitoring
-built and not wired, and told which twelve pieces those are.
+built and not wired, and told which pieces those are, by name, in a table the code checks.
 
 ## Health checks, which do work
 
@@ -128,28 +129,41 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## The twelve mechanisms nothing runs
+## Eleven of the thirteen mechanisms are started by nothing
 
-Named individually, because "monitoring is not wired" is a sentence somebody skims.
+Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
+column is the registry's own word for what starts each one, and this table is checked against
+that registry in both directions: a mechanism this install carries and the table does not name
+fails a test, and so does a row whose last column disagrees with the code.
 
-| Mechanism | What it would guard |
-| --- | --- |
-| `retention_sweep` | that nothing is kept past the window its data class was given |
-| `canary_run` | that the gate still refuses today what it refused yesterday |
-| `restore_drill` | that the copies being taken can actually be restored |
-| `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short |
-| `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it |
-| `directory_sync` | that the roster follows employment: joiners, movers and leavers |
-| `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards |
-| `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data |
-| `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left |
-| `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried |
-| `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing |
-| `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran |
+That check exists because this section was wrong. It read "the twelve mechanisms nothing runs"
+on the morning of 2026-09-09 and eleven was already true, because one had acquired a caller and
+the heading, the table and the count were three hand-kept copies of a fact the code holds.
 
-The thirteenth, `audit_anchor`, does run. It is reached by an external scheduled job calling an
-HTTP route, and it is what makes it detectable if entries are ever removed from the end of the
-audit ledger.
+<!-- checked: every scheduled mechanism and whether anything starts it -->
+
+| Mechanism | What it would guard | Started by |
+| --- | --- | --- |
+| `retention_sweep` | that nothing is kept past the window its data class was given | `nothing` |
+| `canary_run` | that the gate still refuses today what it refused yesterday | `nothing` |
+| `restore_drill` | that the copies being taken can actually be restored | `nothing` |
+| `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
+| `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `nothing` |
+| `directory_sync` | that the roster follows employment: joiners, movers and leavers | `nothing` |
+| `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `nothing` |
+| `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
+| `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `nothing` |
+| `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `nothing` |
+| `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
+| `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `nothing` |
+| `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
+
+Three words appear in that last column and they are not degrees of the same thing. `nothing`
+means no call site of any kind. `in_process` means another module calls it and says nothing
+about whether *that* module is ever reached, which for `spend_correction` today means a console
+screen nobody opens on a schedule. `on_a_route` is the only one that runs: an external timer
+calls an HTTP route, and it is what makes it detectable if entries are ever removed from the
+end of the audit ledger.
 
 **A safety mechanism with no caller is worse than no safety mechanism**, because the console
 says the estate is protected. That is why they are listed here by name rather than summarised,
@@ -186,5 +200,5 @@ configuration. Two of the four are configured and documented above: the health c
 every container declares one, and the logging split between the audit ledger and the optional
 trace ledger is real in every profile. The other two are not configuration at all today. The
 backup schedule is a set of constants that nothing runs, no drill has ever verified a restore,
-and eleven of the twelve unwired mechanisms above are the monitoring. A client following this
-page ends with health checks and no backups.
+and almost every mechanism in the table above is the monitoring. A client following this page
+ends with health checks and no backups.

@@ -60,7 +60,7 @@ reads. So the guide is written, and this refuses it when it drifts.
 about a document in this repository rather than about a running system, so the unit suite is
 the thing that has the document in front of it.
 
-Task ids: M42.2.5, M42.2.6
+Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ from typing import Any, Final
 
 from brain.connectors.manifest import ConnectorManifest
 from brain.deployment.installer import Step as InstallStep
+from brain.ops.controls import CONTROLS, Control
 from brain.ops.wiring import PROFILES, assert_known_profile
 from brain.setup_wizard import Step as WizardStep
 
@@ -340,6 +341,10 @@ PORTS_MARKER: Final = "<!-- checked: every port this deployment opens -->"
 
 #: What marks the table this module checks, in the step-by-step install.
 STEPS_MARKER: Final = "<!-- checked: the steps the installer runs -->"
+#: Where the operations chapter lists what runs on a schedule and what starts each one.
+MECHANISMS_MARKER: Final = (
+    "<!-- checked: every scheduled mechanism and whether anything starts it -->"
+)
 
 #: One connector's section heading, which is its manifest name in a code span. Matched rather
 #: than searched for by name, so a heading for a connector nobody has is a finding.
@@ -651,6 +656,69 @@ def _connector_cell_gaps(manifest: ConnectorManifest, cells: Sequence[str]) -> t
 #: seven is spelled differently on the left of it, `manifest` in four modules and
 #: `<name>_manifest` in three, so a scan by function name would have found four connectors and
 #: reported the other three as absent. The annotation is the one thing all seven share.
+# --------------------------------------------------- the operations guide (M42.2.8)
+def started_by_cell(one: Control) -> str:
+    """How the guide names what starts a control, in the registry's own vocabulary.
+
+    The enum value rather than a sentence, because the sentence is `handover_lines`' job and a
+    second prose rendering here would be a second thing to keep in step. What a client reads
+    beside it in the chapter is prose; what this compares is the word.
+    """
+    return one.invoked_by.value
+
+
+def mechanism_gaps(guide: str, *, controls: Sequence[Control] | None = None) -> tuple[str, ...]:
+    """Every way the operations chapter and the control registry disagree (M42.2.8).
+
+    **The chapter said "the twelve mechanisms nothing runs" and eleven of them did not.** One
+    control acquired a caller on 2026-09-09 and the heading, the table and the count were three
+    hand-maintained copies of a fact the registry already holds. That is the drift this check
+    exists for, and it is the one a client feels: an operations chapter that names twelve
+    mechanisms as unwired is a chapter somebody reads once, believes, and does not re-read on
+    the day the twelfth is switched on.
+
+    Both directions and the value as well as the membership. A control with no row is a
+    mechanism the client was never told about. A row naming no control is a mechanism that was
+    removed from the product and is still being planned around. And a row whose "started by"
+    disagrees with the registry is the worst of the three, because it is the column the reader
+    acts on: a mechanism recorded as running that nothing calls is exactly the sentence
+    `brain.ops.controls.handover_lines` refuses to let a handover pack print.
+
+    `controls` is a parameter defaulting to the registry, for the reason
+    `brain.ops.recovery.backup_policy_gaps` takes the same shape: a check that can only be run
+    against the healthy declaration cannot be shown to fail.
+    """
+    rows = CONTROLS if controls is None else tuple(controls)
+    findings: list[str] = []
+    stated: dict[str, str] = {}
+    for cells in table_after(guide, MECHANISMS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the "
+                "mechanism, what it guards and what starts it"
+            )
+            continue
+        stated[bare(cells[0])] = bare(cells[2])
+    declared = {one.name: started_by_cell(one) for one in rows}
+    findings.extend(
+        f"{name}: a mechanism this install carries and the operations chapter does not name, "
+        "so the client was never told it exists"
+        for name in sorted(set(declared) - set(stated))
+    )
+    findings.extend(
+        f"{name}: a row for a mechanism this install does not carry, so the client is "
+        "planning around something that is not here"
+        for name in sorted(set(stated) - set(declared))
+    )
+    findings.extend(
+        f"{name}: the chapter says it is started by {stated[name]!r} and the registry says "
+        f"{declared[name]!r}, which is the column somebody acts on"
+        for name in sorted(set(stated) & set(declared))
+        if stated[name] != declared[name]
+    )
+    return tuple(findings)
+
+
 MANIFEST_BUILDER: Final = "ConnectorManifest"
 
 

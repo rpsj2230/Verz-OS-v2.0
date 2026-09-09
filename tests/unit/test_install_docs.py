@@ -17,7 +17,7 @@ The registers are read here rather than inside the module, in the split `brain.o
 `brain.deployment.requirements` both keep: `yaml.safe_load` and `Path.read_text` belong in the
 test, so what is checked is the deployment rather than a second copy of it kept in Python.
 
-Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6
+Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8
 """
 
 from __future__ import annotations
@@ -46,10 +46,12 @@ from brain.deployment.installer import Step as InstallStep
 from brain.deployment.requirements import COMPOSE_FILES_FOR, exposed_ports, files_for, spec_for
 from brain.deployment.variables import parse_env
 from brain.knowledge.visibility import KnowledgeVisibility
+from brain.ops.controls import control
 from brain.ops.install_docs import (
     A_BLANK_DEFAULT_AND_AN_EMPTY_ONE_ARE_THE_SAME_LINE_ON_A_SERVER,
     CONNECTORS_MARKER,
     MANIFEST_BUILDER,
+    MECHANISMS_MARKER,
     NO_CEILING,
     PORTS_MARKER,
     STEPS_MARKER,
@@ -67,6 +69,7 @@ from brain.ops.install_docs import (
     default_cell,
     integration_gaps,
     interpolations,
+    mechanism_gaps,
     minted_variables,
     port_gaps,
     profiles_cell,
@@ -231,6 +234,7 @@ def a_table(marker: str, header: str, *rows: str) -> str:
 
 VALUES_HEADER = "| Variable | Profiles | Comes from | Default | What it is for |"
 PORTS_HEADER = "| Service | Port | Who may reach it |"
+MECHANISMS_HEADER = "| Mechanism | What it would guard | Started by |"
 STEPS_HEADER = "| Step | What it does | If it fails |"
 CONNECTORS_HEADER = "| Connector | Transport | Pinned to | Access | Enforces | Ceiling |"
 
@@ -923,3 +927,96 @@ def test_the_documents_the_checks_read_are_all_present() -> None:
         "update-and-rollback.md",
     }
     assert {one.name for one in GUIDES.glob("*.md")} == expected
+
+
+# ==================================================================== mechanism_gaps
+def test_the_operations_chapter_names_every_scheduled_mechanism_and_what_starts_it() -> None:
+    """**M42.2.8. The leaf asks for backup, monitoring, logging and health-check
+    configuration, and the part of it a document can get wrong on its own is the list.**
+
+    This section was wrong when the check was written. It read "the twelve mechanisms nothing
+    runs" and eleven was already true, because one had acquired a caller that morning and the
+    heading, the table and a later paragraph were three hand-kept copies of a fact the registry
+    holds. A client reads a chapter like that once and does not re-read it on the day the
+    twelfth is switched on.
+
+    Delete this and the chapter goes back to being prose about a register, which is the
+    arrangement `brain.launch` refuses for the handover pack and for the same reason."""
+    assert mechanism_gaps(guide("operations.md")) == ()
+
+
+def test_a_mechanism_the_chapter_does_not_name_is_a_finding() -> None:
+    """A mechanism this install carries and the client was never told about. It is the
+    direction that matters most, because the chapter reads as complete either way.
+
+    Delete this and a control added later is invisible to every client who installed before
+    it."""
+    found = mechanism_gaps(
+        a_table(
+            MECHANISMS_MARKER,
+            MECHANISMS_HEADER,
+            "| `canary_run` | that the gate still refuses what it refused | `nothing` |",
+        ),
+        controls=(control("canary_run"), control("restore_drill")),
+    )
+
+    assert found == (
+        "restore_drill: a mechanism this install carries and the operations chapter does not "
+        "name, so the client was never told it exists",
+    )
+
+
+def test_a_row_for_a_mechanism_this_install_does_not_carry_is_a_finding() -> None:
+    """The other direction: a client planning around something that is not here. Quieter than
+    the first, because it reads as coverage rather than as a gap.
+
+    Delete this and a mechanism removed from the product stays in the chapter for ever."""
+    found = mechanism_gaps(
+        a_table(
+            MECHANISMS_MARKER,
+            MECHANISMS_HEADER,
+            "| `canary_run` | that the gate still refuses what it refused | `nothing` |",
+            "| `gone_away` | something that was removed | `nothing` |",
+        ),
+        controls=(control("canary_run"),),
+    )
+
+    assert found == (
+        "gone_away: a row for a mechanism this install does not carry, so the client is "
+        "planning around something that is not here",
+    )
+
+
+def test_a_row_that_disagrees_about_what_starts_a_mechanism_is_a_finding() -> None:
+    """**The column somebody acts on.** A mechanism recorded as running that nothing calls is
+    the sentence `handover_lines` refuses to let a handover pack print, and here it would be
+    printed in a chapter the client keeps.
+
+    Delete this and the membership can be right while every answer in the last column is
+    wrong, which is the state a table like this reaches first."""
+    found = mechanism_gaps(
+        a_table(
+            MECHANISMS_MARKER,
+            MECHANISMS_HEADER,
+            "| `canary_run` | that the gate still refuses what it refused | `on_a_route` |",
+        ),
+        controls=(control("canary_run"),),
+    )
+
+    assert found == (
+        "canary_run: the chapter says it is started by 'on_a_route' and the registry says "
+        "'nothing', which is the column somebody acts on",
+    )
+
+
+def test_a_mechanism_row_with_too_few_cells_is_a_finding() -> None:
+    """A two-column row states a mechanism and no answer about what starts it, and the check
+    above would read the second cell as the answer.
+
+    Delete this and a malformed row is read as a claim about the wrong column."""
+    found = mechanism_gaps(
+        a_table(MECHANISMS_MARKER, MECHANISMS_HEADER, "| `canary_run` | only two |"),
+        controls=(control("canary_run"),),
+    )
+
+    assert any("every row states the mechanism" in one for one in found)
