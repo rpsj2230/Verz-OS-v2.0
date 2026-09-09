@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**18 items are open, and they are not equally urgent.** They had accumulated into one
+**19 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -28,6 +28,12 @@ thirty days" was meant to mean, and the answer decides a safety property. Item 3
 you want the evaluation tool the plan named, or the one I used instead. Item 46 asks which pair of
 recovery figures goes into a client agreement, and gives you the three pairs and a
 recommendation. None of them blocks anything; all three are quick.
+
+**One is about the tracker rather than the system.** Item 50: thirty of the two hundred
+tasks still open are things people do on the week of a migration rather than things anybody can
+build, and four of them name one company's own skills and groups, which cannot go into a
+product every client installs. Three options and a recommendation; nothing is blocked either
+way.
 
 **Two need one command each on the server, and neither is urgent.** Item 49: your server's
 own identifier used to be a default inside the deploy scripts, so it shipped to every client
@@ -78,6 +84,56 @@ happened in.
 ---
 
 # Open
+
+## 50. Thirty of the remaining tasks are things people do on the week of a migration, and the percentage counts them as if I could build them
+
+**The decision.** The tracker says 1045 of 1251 tasks are done. Thirty of the 206 that are
+left cannot be done by writing code, by me or by anybody: they are acts. "Announce the switch
+before removing their bot." "Revoke every OAuth grant." "Record the date access actually
+ended." "Twenty real questions as the acceptance set." "Restore drill executed in front of the
+client." Every one of those has to happen and none of them is a commit.
+
+They are all in M37, and they are the reason that module has stayed the largest open block all
+week while I have closed twenty-two leaves inside it. What I should do about the tracker is
+your call, and there are three options below.
+
+**Why it matters rather than being tidy-up.** The percentage is the number you look at to know
+how the build is going, and it is currently mixing two things that behave differently. Code
+tasks close when I write them. These close when a person does something on a specific day with
+a specific client, which cannot start before there is a client to do it with. So the number
+will keep rising until it reaches about 86 percent and then stop, and the stop will not mean
+the build stalled.
+
+**Three of the thirty are worse than uncountable, they are unbuildable on purpose.** Four
+leaves name one company's things: twelve house skills by count, four skills by name, which
+Lark groups each agent sits in, and what the outgoing vendor produced that people still rely
+on. This repository is the product every client installs, and the first rule in `CLAUDE.md` is
+that no company's details go in the source. Those four cannot be code here without breaking
+that rule, and I have not tried to make them fit.
+
+**What I did instead, so you can see the shape.** The generic half of the same work is now
+built and tested: what the old system holds and what happens to each item, what is carried and
+what is re-derived, the parallel-running period and its cutover criteria, the decommission, the
+agent rebuild, the skills and the learning. Nine modules, none of which names a vendor or a
+company. The parts that are left are the parts that only exist on the day.
+
+**Options.**
+
+- **Mark them in the work breakdown as work for people, and show two numbers.** The tracker
+  would say something like "1045 of 1221 buildable, plus 30 to do on the week". One flag per
+  leaf in `docs/wbs/*.js`, an afternoon, and it makes the percentage mean one thing again.
+  This is the recommendation: the work stays visible, which matters because forgetting to
+  revoke an OAuth grant is how an outgoing vendor keeps reading a client's email.
+- Leave it. Nothing breaks, the number tops out below a hundred, and you and I both know why.
+  This is a real option if you would rather I spend the afternoon on something else, and I
+  would rather that too if you have a preference for what.
+- Move them out of the work breakdown into a separate delivery checklist. Cleanest tracker,
+  and the risk is the one thing I would not accept: a list nothing gates is a list nobody
+  reads, and these thirty are exactly the ones with a security consequence.
+
+**One thing I will do either way**, because it costs nothing: the four leaves that name a
+company's things are recorded here as unbuildable rather than left looking merely undone, so
+nobody spends a day trying to make them fit.
 
 ## 49. Two of your deploy scripts now refuse to run until one file exists on the server, and it does not exist yet
 
