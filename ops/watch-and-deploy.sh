@@ -23,8 +23,13 @@
 set -eu
 
 IMAGE="${WATCH_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0}"
-UUID="${WATCH_UUID:-c74hlhygvg7scjttu8ydwnqi}"
 REPO="${WATCH_REPO:-rpsj2230/verz-brain-v2.0}"
+# No default identifier. It named one deployment's Coolify service until 2026-09-09, which
+# made this script address that machine's containers by name on whatever box it was installed
+# on: `docker inspect app-<somebody else's uuid>` returns nothing, the watcher reads that as
+# "no container running" and deploys. The image and the repository above keep defaults because
+# they are the product's own coordinates and are the same for every install.
+UUID="${WATCH_UUID:?set WATCH_UUID to this deployment's Coolify service identifier}"
 DIR="${WATCH_DIR:-/data/coolify/services/$UUID}"
 #: Deployment records, newest last. Read by /build/deployments.
 RECORD="${WATCH_RECORD:-/var/lib/brain/deployments.jsonl}"

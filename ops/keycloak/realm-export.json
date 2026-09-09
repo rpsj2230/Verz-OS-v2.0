@@ -219,10 +219,10 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": false,
       "redirectUris": [
-        "https://brain.194.233.66.89.sslip.io/auth/callback",
+        "https://origin.not-configured.example/auth/callback",
         "http://localhost:5173/auth/callback"
       ],
-      "webOrigins": ["https://brain.194.233.66.89.sslip.io", "http://localhost:5173"],
+      "webOrigins": ["https://origin.not-configured.example", "http://localhost:5173"],
       "_comment": [
         "brain-identity alone, and the three that used to sit beside it are gone.",
         "",
@@ -252,8 +252,8 @@
         "user.info.response.signature.alg": "RS256",
         "backchannel.logout.session.required": "true",
         "backchannel.logout.revoke.offline.tokens": "true",
-        "backchannel.logout.url": "https://brain.194.233.66.89.sslip.io/auth/backchannel-logout",
-        "post.logout.redirect.uris": "https://brain.194.233.66.89.sslip.io/signed-out##http://localhost:5173/signed-out"
+        "backchannel.logout.url": "https://origin.not-configured.example/auth/backchannel-logout",
+        "post.logout.redirect.uris": "https://origin.not-configured.example/signed-out##http://localhost:5173/signed-out"
       },
       "_comment": [
         "webOrigins is an explicit origin and never '*' or '+'. A wildcard here lets any",
@@ -261,14 +261,30 @@
         "backchannel.logout.session.required true makes Keycloak send the sid, which is",
         "what SessionRegistry.end_session needs; end_all_for covers the case where it does",
         "not arrive or the session was never seen by this replica.",
-        "redirectUris name the deployment this realm is imported into, and the risk the",
-        "previous .invalid placeholders were guarding against is real: a stale redirect URI",
-        "in a realm import is an open redirect, because Keycloak will hand a code to any",
-        "address listed here. So they are exact paths rather than a wildcard, there are only",
-        "two, and the second is localhost for development. Rupash gave the address on",
-        "2026-09-06 and said a purchased domain will replace the sslip.io one later; when it",
-        "does, these three entries and backchannel.logout.url change together or sign-in",
-        "breaks in a way that looks like Keycloak being wrong."
+        "redirectUris name the deployment this realm is imported into, and the risk is real:",
+        "a stale redirect URI in a realm import is an open redirect, because Keycloak will",
+        "hand a code to any address listed here. So they are exact paths rather than a",
+        "wildcard, there are only two, and the second is localhost for development.",
+        "",
+        "https://origin.not-configured.example is a placeholder and not an address. It",
+        "appears four times, here, in webOrigins, in backchannel.logout.url and in",
+        "post.logout.redirect.uris, and brain.ops.realm_import.importable_realm replaces",
+        "every one of them with this installation's own origin on the way into Keycloak.",
+        "That is why they cannot drift apart: they are one value written four times rather",
+        "than four values somebody has to remember to change together.",
+        "",
+        "It named one deployment's host until 2026-09-09, and the consequence was not",
+        "cosmetic. Keycloak matches redirect_uri exactly against this list, so a second",
+        "client importing this realm got an allowlist naming somebody else's server: their",
+        "console's sign-in was refused at Keycloak with 'Invalid parameter: redirect_uri',",
+        "before the login form, and nothing near that page said why. The origin is",
+        "configuration and it is INSTALL_OIDC_REDIRECT_URIS, which brain.install declares",
+        "required with no default for exactly this reason.",
+        "",
+        "The placeholder is a reserved documentation domain, so it can never resolve and can",
+        "never be registered, and importable_realm refuses to emit a realm that still",
+        "carries it. A plausible-looking default host here would be the same defect with a",
+        "different spelling: it would import, and sign-in would fail somewhere else."
       ]
     },
     {

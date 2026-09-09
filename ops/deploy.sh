@@ -9,15 +9,31 @@
 # This exists because every deploy otherwise needed someone to click a button, which made
 # progress depend on a person being at a screen.
 #
-# Usage: ops/deploy.sh
+# Usage:
+#   set -a; . ./.env; set +a      # DEPLOY_HOST, DEPLOY_UUID and DEPLOY_URL live there
+#   ops/deploy.sh
+#
 # Task ids: M38.1.3
 
 set -eu
 
-HOST="${DEPLOY_HOST:-verz-vps}"
-UUID="${DEPLOY_UUID:-c74hlhygvg7scjttu8ydwnqi}"
+# **The three values below have no defaults, and until 2026-09-09 they had one deployment's.**
+# A shell fallback is the same defect as writing the host into the source, with the extra
+# property that removing the value from the environment file changes nothing: the fallback
+# answers first, so the file looks clean and the script still reaches that machine. A refusal
+# costs one line in a shell profile; a wrong default costs a deploy onto somebody else's box,
+# and the failure only shows up if that box happens to answer differently.
+#
+# `:?` rather than a hand-written test because `set -eu` is already on and the message it
+# prints names the variable, which is the whole of what a reader needs. This is the shape the
+# compose files already use for `KEYCLOAK_DB_PASSWORD`.
+HOST="${DEPLOY_HOST:?set DEPLOY_HOST to the ssh destination; see ops/DEPLOY.md}"
+UUID="${DEPLOY_UUID:?set DEPLOY_UUID to the Coolify service identifier; see ops/DEPLOY.md}"
+URL="${DEPLOY_URL:?set DEPLOY_URL to the address this deployment answers on}"
 DIR="/data/coolify/services/$UUID"
-URL="${DEPLOY_URL:-https://brain.194.233.66.89.sslip.io}"
+# These two are the product's own coordinates rather than a deployment's: every install pulls
+# the same published image, so a default here is a fact about what is being deployed and not
+# about where.
 REPO="${DEPLOY_REPO:-rpsj2230/verz-brain-v2.0}"
 IMAGE="${DEPLOY_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0}"
 

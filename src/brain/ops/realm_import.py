@@ -33,14 +33,52 @@ is a `Map<String, String>`, so Keycloak neither validates nor rejects its keys. 
 the realm's two mapper comments live there and why they are left alone: removing them would
 be removing configuration, not documentation, and the two are indistinguishable from outside.
 
-Task ids: none
+---
+
+**And the realm named one deployment's server, which broke every other client's sign-in.**
+Until 2026-09-09 `redirectUris`, `webOrigins`, `backchannel.logout.url` and
+`post.logout.redirect.uris` all carried the first deployment's host as a literal, and this
+module only stripped comments. Keycloak matches `redirect_uri` exactly against the registered
+list, so a second client importing that realm had an allowlist naming somebody else's server:
+their console's authorisation request was refused before the login form, with
+`Invalid parameter: redirect_uri`, and nothing near that page named the realm. It was invisible
+to `brain.ops.independence` as well, which read `src`, `migrations`, the console and `docs`
+and not `ops`, so the gate written to refuse exactly this value was green over it.
+
+**So the origin is substituted here, and here is the only place it can be.** It has to be one
+seam, because four fields have to agree; `importable_realm` is the seam every import already
+passes through, both the `keycloak-realm` compose service and `ops/keycloak/setup.sh`. The
+setup wizard was the other candidate and it is the wrong one: it writes the environment file
+and never touches the realm, and the realm is imported by a container that starts before
+anybody has opened the wizard. Keycloak's own `--import-realm` was the third, and it cannot
+be told what this install is called.
+
+**The value is `INSTALL_OIDC_REDIRECT_URIS` rather than a new setting**, because
+`brain.install` already declares it, already requires it, already refuses to default it, and
+its stated meaning is "the redirect URIs the realm will accept". A second setting naming the
+same address would be `install.ONE_READER_OR_TWO_DEFAULTS` exactly: two values that agree on
+every machine where both are set.
+
+**Rejected: a default host in the file.** That is what was there, spelled differently. A
+realm that imports with a plausible address configures somebody's identity provider with an
+allowlist nobody chose, and the failure surfaces at a login page rather than at the import.
+The placeholder is a reserved documentation domain that can never resolve, and this module
+refuses to emit a realm still carrying it, so the failure is the import, loudly, naming the
+setting to supply. See `A_DEFAULT_ADDRESS_IMPORTS_AND_A_MISSING_ONE_STOPS`.
+
+Task ids: M41.1.5
 """
 
 from __future__ import annotations
 
 import json
+import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
+from urllib.parse import urlsplit
+
+from brain.install import InstallError, value_of
 
 #: The prefix that marks a key as documentation rather than configuration. One character,
 #: chosen because Keycloak has no field starting with it and never will: its representations
@@ -88,13 +126,178 @@ def strip_comments(node: Any, *, inside_free_form: bool = False) -> Any:
     return node
 
 
-def importable_realm(source: Path) -> str:
-    """The reviewed realm as JSON Keycloak accepts, ready to write beside it.
+#: The setting the realm's addresses come from. Declared, required and defaultless in
+#: `brain.install`, and this module is its consumer: before 2026-09-09 nothing read it at all,
+#: which is why a required setting could be correct on a client's server while their realm
+#: still named somebody else's.
+ORIGIN_SETTING: Final = "INSTALL_OIDC_REDIRECT_URIS"
+
+#: The address in the reviewed realm, which is not an address.
+#:
+#: A reserved documentation domain under RFC 2606, so it can never be registered and never
+#: resolves, and `brain.ops.independence.is_reserved` recognises it rather than reporting it.
+#: Written as a whole origin rather than as a token like `${...}` so that the reviewed file
+#: stays a set of parseable absolute URLs: `console/tests/auth-realm.test.ts` reads the paths
+#: back out of it with `new URL`, and a token would make that file unreadable rather than
+#: unconfigured.
+PLACEHOLDER_ORIGIN: Final = "https://origin.not-configured.example"
+
+#: Why a placeholder is not just another default.
+A_DEFAULT_ADDRESS_IMPORTS_AND_A_MISSING_ONE_STOPS: Final = (
+    "A realm carrying a plausible host imports cleanly and configures a client's identity "
+    "provider with a redirect allowlist nobody chose, and the failure appears at their login "
+    "page as an invalid redirect_uri, nowhere near the file that caused it. A placeholder "
+    "this module refuses to emit fails at the import instead, with the name of the setting "
+    "to supply, before Keycloak has been given anything."
+)
+
+#: Why one origin and not a list.
+THE_REALM_TAKES_ONE_ORIGIN_BECAUSE_KEYCLOAK_TAKES_ONE_LOGOUT_URL: Final = (
+    "backchannel.logout.url is a single string in Keycloak's client representation, so a "
+    "realm built from two origins is a realm that is right for one of them and silently "
+    "wrong for the other: sessions ended at the identity provider are never pushed to the "
+    "second. Refusing is the smaller failure, and it is a failure at import rather than a "
+    "logout that appears to work."
+)
+
+
+class RealmError(Exception):
+    """Raised when the realm cannot be made importable for this installation."""
+
+
+def install_origin(redirect_uris: str) -> str:
+    """The one origin this installation's console is served from.
+
+    Derived from the configured redirect URIs rather than asked for separately, and taken as
+    scheme plus authority rather than by stripping a known path, so it does not have to agree
+    with `brain.setup_wizard.CALLBACK_PATH` about what the console's callback is called.
+
+    See `THE_REALM_TAKES_ONE_ORIGIN_BECAUSE_KEYCLOAK_TAKES_ONE_LOGOUT_URL`.
+    """
+    origins: list[str] = []
+    for entry in (one.strip() for one in redirect_uris.split(",")):
+        if not entry:
+            continue
+        split = urlsplit(entry)
+        if not split.scheme or not split.netloc:
+            msg = (
+                f"{ORIGIN_SETTING} contains {entry!r}, which is not an absolute URL, so this "
+                "realm has no origin to register and no sign-in could complete"
+            )
+            raise RealmError(msg)
+        origin = f"{split.scheme}://{split.netloc}"
+        if origin not in origins:
+            origins.append(origin)
+    if not origins:
+        msg = f"{ORIGIN_SETTING} names no redirect URI, so the console has nowhere to return to"
+        raise RealmError(msg)
+    if len(origins) > 1:
+        msg = (
+            f"{ORIGIN_SETTING} spans {len(origins)} origins ({', '.join(sorted(origins))}). "
+            f"{THE_REALM_TAKES_ONE_ORIGIN_BECAUSE_KEYCLOAK_TAKES_ONE_LOGOUT_URL}"
+        )
+        raise RealmError(msg)
+    return origins[0]
+
+
+def substitute(node: Any, *, origin: str) -> Any:
+    """The realm with every placeholder address replaced by this installation's own.
+
+    Walked over the parsed structure and applied to every string, deliberately, rather than
+    to the four fields that carry it today. The four are `redirectUris`, `webOrigins`,
+    `backchannel.logout.url` and `post.logout.redirect.uris`, and the realm's own comment
+    records that they have to change together or sign-in breaks in a way that looks like
+    Keycloak being wrong. A walk makes "together" structural: a fifth address added to the
+    file is substituted on the day it is written, by nobody.
+
+    **Values only, never keys.** A key in this document is a field name Keycloak looks up by
+    string, so rewriting one renames a setting rather than addressing it, and the rename is
+    silent: Keycloak ignores a property it does not recognise. `unconfigured_addresses` looks
+    at keys as well for exactly that reason, so a placeholder somewhere the substitution
+    cannot reach is refused rather than shipped.
+    """
+    if isinstance(node, dict):
+        return {key: substitute(value, origin=origin) for key, value in node.items()}
+    if isinstance(node, list):
+        return [substitute(item, origin=origin) for item in node]
+    if isinstance(node, str):
+        return node.replace(PLACEHOLDER_ORIGIN, origin)
+    return node
+
+
+def unconfigured_addresses(node: Any, *, path: str = "realm") -> list[str]:
+    """Every place the realm still names the placeholder rather than this installation.
+
+    Read after the substitution rather than trusted, for the reason `ops/keycloak/setup.sh`
+    reads the realm back after importing it: the transform and the check are two different
+    questions, and one of them is "did anything get missed".
+
+    **Keys are read as well as values, which is what makes this a check rather than a
+    restatement of `substitute`.** That function rewrites values and deliberately not keys,
+    because a key is a field name Keycloak looks up. So the two are not duals: a placeholder
+    that has ended up in a field name is somewhere the substitution cannot reach, and this is
+    the only thing that would notice before the realm was written.
+    """
+    found: list[str] = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if PLACEHOLDER_ORIGIN in key:
+                found.append(f"{path}.{key} (a field name)")
+            found.extend(unconfigured_addresses(value, path=f"{path}.{key}"))
+    elif isinstance(node, list):
+        for index, item in enumerate(node):
+            found.extend(unconfigured_addresses(item, path=f"{path}[{index}]"))
+    elif isinstance(node, str) and PLACEHOLDER_ORIGIN in node:
+        found.append(path)
+    return found
+
+
+def importable_realm(source: Path, env: Mapping[str, str] | None = None) -> str:
+    """The reviewed realm as JSON Keycloak accepts, addressed to this installation.
 
     Returns text rather than writing, so a caller decides where it goes and a test can read
     it without a temporary directory.
+
+    `env` defaults to the real environment for the reason `brain.install.value_of` takes the
+    same parameter: a value read through a module-level import cannot be tested at more than
+    one setting. The read goes through `value_of` and not through `os.environ`, which is what
+    keeps `brain.ops.independence.second_readers` satisfied and, more to the point, means an
+    unset value raises `InstallError` naming the setting instead of defaulting to anything.
     """
-    return json.dumps(strip_comments(json.loads(source.read_text(encoding="utf-8"))), indent=2)
+    origin = install_origin(value_of(ORIGIN_SETTING, env))
+    realm = substitute(
+        strip_comments(json.loads(source.read_text(encoding="utf-8"))), origin=origin
+    )
+    remaining = unconfigured_addresses(realm)
+    if remaining:
+        msg = (
+            f"{len(remaining)} address(es) in the realm still name the placeholder "
+            f"({', '.join(remaining)}). {A_DEFAULT_ADDRESS_IMPORTS_AND_A_MISSING_ONE_STOPS}"
+        )
+        raise RealmError(msg)
+    return json.dumps(realm, indent=2)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Write the importable realm to standard output, for `ops/keycloak/setup.sh`.
+
+    **This exists to delete a second implementation, not to add a command.** That script
+    stripped the comments itself with `jq 'walk(del(._comment))'`, which is a text-shaped
+    answer to a structural question: it removes the two `_comment` keys inside `config` maps
+    as well, and those are configuration Keycloak stores verbatim, so the shell path quietly
+    imported a different realm from the compose path. It also had nowhere to put the
+    installation's own origin. One transform with tests answers both.
+    """
+    args = argv if argv is not None else sys.argv[1:]
+    if len(args) != 1:
+        print("usage: python -m brain.ops.realm_import <realm-export.json>", file=sys.stderr)
+        return 2
+    try:
+        print(importable_realm(Path(args[0])))
+    except (RealmError, InstallError) as exc:
+        print(f"realm_import: {exc}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def comment_keys(node: Any, *, path: str = "realm", inside_free_form: bool = False) -> list[str]:
@@ -119,3 +322,7 @@ def comment_keys(node: Any, *, path: str = "realm", inside_free_form: bool = Fal
                 comment_keys(item, path=f"{path}[{index}]", inside_free_form=inside_free_form)
             )
     return found
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

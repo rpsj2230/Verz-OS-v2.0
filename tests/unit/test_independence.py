@@ -35,10 +35,13 @@ from brain.install import (
 )
 from brain.ops.independence import (
     ALLOWED_HOSTS,
+    SEARCHED,
     compose_services,
     environment_reads,
     independence_gaps,
     is_reserved,
+    is_reserved_range,
+    searched_files,
     second_readers,
     value_shaped_literals,
     vendor_hosts,
@@ -517,3 +520,148 @@ def test_a_client_host_in_a_literal_is_reported_and_a_docstring_is_not() -> None
 
     assert any("records.acme-corporation.invalid-tld" in one for one in found), found
     assert not any("example-not-reserved.com" in one for one in found), found
+
+
+# --- the areas a client value actually lands in -------------------------------------------
+
+
+def _a_repository(root: Path) -> Path:
+    """A tree with one file in each place the sweep decides about.
+
+    Built rather than probed against this repository, because what is being tested is the
+    rule and this checkout is deliberately green. Every host below is on a domain nobody can
+    register, so a test here can never be answered by something real.
+    """
+    (root / "ops" / "deploy").mkdir(parents=True)
+    (root / "docs").mkdir()
+    (root / "src").mkdir()
+
+    (root / ".env.example").write_text(
+        "DEPLOY_URL=https://brain.first-client.invalid-tld\n", encoding="utf-8", newline="\n"
+    )
+    (root / "ops" / "runbook.md").write_text(
+        "Open https://panel.first-client.invalid-tld and paste the token.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    (root / "ops" / "deploy" / "brain-deploy").write_text(
+        '#!/bin/sh\ncurl "https://api.first-client.invalid-tld/deploy"\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    (root / "docs" / "log.md").write_text(
+        "Measured against https://notes.first-client.invalid-tld on Tuesday.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return root
+
+
+def test_the_environment_file_an_install_copies_is_swept(tmp_path: Path) -> None:
+    """**The one artefact handed to a client was the one artefact not checked.**
+    `brain.deployment.installer.PLAN` copies `.env.example` to `/opt/brain/.env` on their
+    server, and it carried this deployment's host, its Coolify identifier and its address
+    until 2026-09-09. It is a file rather than an area, which is why it needed
+    `SEARCHED_FILES`: sweeping the repository root instead would read `uv.lock` and every
+    generated artefact beside it.
+
+    Delete this and the file the installer hands over goes back to being unread, which is a
+    gate that is green about everywhere except where the values are."""
+    found = value_shaped_literals(_a_repository(tmp_path))
+
+    assert any(".env.example" in one and "brain.first-client" in one for one in found), found
+
+
+def test_the_operational_files_are_swept_whatever_they_are_called(tmp_path: Path) -> None:
+    """**`ops` reads every file, and an allowlist of suffixes is what went wrong.** The values
+    were in a realm export, a Markdown runbook and shell scripts with no suffix at all, and
+    those were exactly the file types nobody had thought to name. So the rule is the area and
+    not the extension: nothing in `ops` is neither shipped into the image nor followed by a
+    person on a server.
+
+    The extensionless script is the case worth asserting, because it is the one a suffix list
+    cannot express and the one `ops/deploy/` is full of.
+
+    Delete this and `ops` can be narrowed back to a list of extensions, which passes on the
+    day it is written and misses the next file type somebody adds."""
+    found = value_shaped_literals(_a_repository(tmp_path))
+
+    assert any("ops/runbook.md" in one for one in found), found
+    assert any("ops/deploy/brain-deploy" in one for one in found), found
+
+
+def test_the_markdown_the_build_serves_is_a_known_gap_and_not_an_accident(tmp_path: Path) -> None:
+    """What is read is a property of the area, and `docs` reads the pages and not the log.
+
+    This is a gap and it is recorded as one: `docs/needs-rupash.md` is served at
+    `/build/needs-rupash` and held sixteen findings when this was measured on 2026-09-09. It
+    is left open deliberately rather than by omission, because widening `docs` in the same
+    change that widened `ops` would take a green gate red on somebody else's file, and a gate
+    that is red on arrival is a gate that gets switched off.
+
+    Delete this and the gap stops being a decision and becomes a thing nobody noticed."""
+    found = value_shaped_literals(_a_repository(tmp_path))
+
+    assert not any("docs/log.md" in one for one in found), found
+    assert SEARCHED["docs"] is not None and ".md" not in SEARCHED["docs"]
+
+
+def test_the_sweep_can_say_what_it_read(tmp_path: Path) -> None:
+    """A check that cannot name what it looked at has a green meaning "nothing was found
+    somewhere", and this one was green over `ops` and `.env.example` for as long as it
+    existed because nobody could ask.
+
+    Delete this and `brain.deployment.audit` loses the only way it has of proving it is not a
+    second opinion about a file the gate already reads."""
+    root = _a_repository(tmp_path)
+    read = {one.relative_to(root).as_posix() for one in searched_files(root)}
+
+    assert ".env.example" in read
+    assert "ops/deploy/brain-deploy" in read
+    assert "docs/log.md" not in read
+
+
+def test_this_products_build_provenance_is_allowed_and_is_not_a_name_to_pass_a_check() -> None:
+    """**The two allowlist entries added on 2026-09-09, held to their reason.**
+    `A_BLOCKLIST_OF_ONE_CLIENTS_NAMES_PASSES_FOR_EVERY_OTHER_CLIENT` argues against solving
+    this with a list, and the argument applies just as hard to widening one: an entry added
+    because it made the sweep pass is how the check stops working.
+
+    So each is tied to the thing that needs it rather than to itself. A Sigstore verification
+    is an assertion about two fixed strings, the workflow identity and the issuer that minted
+    the certificate, and both are read out of the scripts that verify rather than repeated
+    here. Neither can become a client's, exactly as `ghcr.io` beside them cannot.
+
+    Delete this and either entry can stay in the list after the check that needed it is gone,
+    which is an allowlist entry with no reason and the beginning of a longer one."""
+    verifying = "\n".join(
+        (REPO / "ops" / one).read_text(encoding="utf-8")
+        for one in ("deploy.sh", "watch-and-deploy.sh")
+    )
+
+    assert "--certificate-identity-regexp" in verifying
+    assert "https://github.com/" in verifying
+    assert "https://token.actions.githubusercontent.com" in verifying
+
+    assert {"github.com", "token.actions.githubusercontent.com"} <= ALLOWED_HOSTS
+
+
+def test_a_private_range_is_allowed_and_a_private_address_is_not() -> None:
+    """**The distinction is the prefix length and nothing else.**
+    `ops/automation/egress.conf` says `acl sandbox src 172.16.0.0/12`, which is the sandbox
+    network on every install and names nobody. `10.4.0.17` on its own is the shape of a
+    client's own directory or database host, and that is the value an implementer hardcodes
+    because it is the only one they can see.
+
+    Strict, so an address written with a mask is still an address, and more than one address,
+    so a `/32` host cannot be spelled as a range.
+
+    Delete this and the rule can be widened to "any private address", which waves through the
+    one thing it exists to catch."""
+    assert is_reserved_range("10.0.0.0/8")
+    assert is_reserved_range("172.16.0.0/12 is the sandbox")
+
+    assert not is_reserved_range("10.4.0.17")
+    assert not is_reserved_range("10.4.0.17/8"), "host bits set: that is an address and a mask"
+    assert not is_reserved_range("203.0.113.9/32"), "one address is a host, not a range"
+    assert not is_reserved_range("198.51.100.7/24"), "not a private range"

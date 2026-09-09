@@ -18,6 +18,12 @@ trap 'rm -rf "$WORK"' EXIT
 PASS=0
 FAIL=0
 
+# The watcher has no default service identifier any more, on purpose: one deployment's lived
+# there until 2026-09-09 and a script that guesses which containers to inspect is a script
+# that reports "nothing running" on the wrong box and deploys. So the harness supplies one,
+# and it is visibly not a real identifier.
+STUB_UUID="stub-service"
+
 # The stub reads its behaviour from files, so each scenario is a few echoes rather than a
 # separate fake binary.
 mkdir -p "$WORK/bin" "$WORK/compose"
@@ -78,6 +84,7 @@ run_case() {
   set +e
   STATE="$STATE" PATH="$WORK/bin:$PATH" \
     WATCH_RECORD="$rec" WATCH_FAILDIR="$WORK/failed" WATCH_DIR="$WORK/compose" \
+    WATCH_UUID="$STUB_UUID" \
     WATCH_READY_TRIES=1 WATCH_READY_GAP=0 \
     sh "$HERE/watch-and-deploy.sh" >"$WORK/out" 2>&1
   set -e
@@ -134,7 +141,7 @@ check_ids() {
 
   rec="$WORK/records.jsonl"; rm -f "$rec"; rm -rf "$WORK/failed"
   set +e
-  STATE="$STATE" PATH="$WORK/bin:$PATH"     WATCH_RECORD="$rec" WATCH_FAILDIR="$WORK/failed" WATCH_DIR="$WORK/compose"     WATCH_READY_TRIES=1 WATCH_READY_GAP=0     sh "$HERE/watch-and-deploy.sh" >"$WORK/out" 2>&1
+  STATE="$STATE" PATH="$WORK/bin:$PATH"     WATCH_RECORD="$rec" WATCH_FAILDIR="$WORK/failed" WATCH_DIR="$WORK/compose"     WATCH_UUID="$STUB_UUID"     WATCH_READY_TRIES=1 WATCH_READY_GAP=0     sh "$HERE/watch-and-deploy.sh" >"$WORK/out" 2>&1
   set -e
 
   got="$(grep -o '"task_ids":"[^"]*"' "$rec" 2>/dev/null | tail -1 | cut -d'"' -f4)"

@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**17 items are open, and they are not equally urgent.** They had accumulated into one
+**18 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -29,7 +29,12 @@ you want the evaluation tool the plan named, or the one I used instead. Item 46 
 recovery figures goes into a client agreement, and gives you the three pairs and a
 recommendation. None of them blocks anything; all three are quick.
 
-**Three are decisions to take before something starts rather than faults to fix.** Item 43: three things in the deployment files that would break a fresh install, each with options and a recommendation, and none of it affecting what runs today.
+**Two need one command each on the server, and neither is urgent.** Item 49: your server's
+own identifier used to be a default inside the deploy scripts, so it shipped to every client
+along with the product; it has been taken out, and one file on your server has to hold it
+instead. Nothing breaks until somebody reinstalls those scripts, and the command is in the
+item. Item 43: three things in the deployment files that would break a fresh install, each
+with options and a recommendation, and none of it affecting what runs today.
 
 **And two more of the same kind.** Item 41: four
 services would connect straight to the database with nothing limiting how many connections
@@ -73,6 +78,67 @@ happened in.
 ---
 
 # Open
+
+## 49. Two of your deploy scripts now refuse to run until one file exists on the server, and it does not exist yet
+
+**What you do, and it is one command.** Nothing is broken today and nothing will break on its
+own. Do this before the next time anybody reinstalls the deploy scripts on the server.
+
+1. Open Coolify in your browser and go to the Company Brain resource. The address bar ends in
+   a long string of letters and digits: that is the service identifier. Copy it.
+2. Open a terminal and connect to the server over ssh, the way you normally do. The
+   host alias is not written down here on purpose: this page is served by the product
+   and the whole point of the change below is that your server's coordinates are not
+   in this repository any more.
+3. Paste this, replacing `PASTE_IT_HERE` with what you copied in step 1:
+
+   ```
+   printf %s 'PASTE_IT_HERE' > /root/.coolify-service-uuid
+   ```
+
+4. Check it took, which prints the identifier back:
+
+   ```
+   cat /root/.coolify-service-uuid
+   ```
+
+If you would rather not go to Coolify for it, the server already knows the value twice over:
+`ls /data/coolify/services` names one directory and that name is the identifier, and
+`docker ps --format '{{.Names}}' | grep '^app-'` prints it with `app-` in front.
+
+**Why it changed.** That identifier, the ssh host name and the address the system answers on
+were written into six files in this repository as defaults. They are your deployment's
+details, and this repository is the product every client installs: `.env.example` is copied
+onto the client's own server during installation, so all three arrived on somebody else's
+machine with your server's coordinates already in them. Worse than untidy, a shell default is
+invisible: removing the value from the environment file changed nothing, because the fallback
+answered first, so the file looked clean and the script still reached your box.
+
+They are gone now. Each script refuses with a message naming what to set instead of guessing,
+and the sweep that is meant to catch a client value in this repository has been widened to
+read `ops/` and `.env.example`, which it could not see before.
+
+**Why this needs you rather than me.** I do not change the live server, and writing that file
+is a change to the live server. The value is also not one I should put back into the
+repository even in a document, which is the point of the change.
+
+**What happens if you do nothing.** Today, nothing. The scripts running on the server right
+now are the copies installed in August and they still hold the old value, so deploys keep
+working exactly as they do today. The refusal only appears when somebody reinstalls them from
+this repository, and then it appears every two minutes in the system journal, where nobody is
+looking. That is the failure this item exists to get ahead of.
+
+**Options.**
+
+- **Write the file, which is the recommendation.** One command, thirty seconds, and it also
+  makes the next server you deploy onto work the same way as this one.
+- Leave it and write the file only when you next reinstall the scripts. This works, and it
+  relies on somebody reading the installer's error at the moment they are standing at the
+  machine. The installer does check and does refuse loudly, so this is a real option rather
+  than a trap.
+- Put the identifier back into the scripts as a default. I would argue against it: it is the
+  arrangement that put your server's address into a file that gets copied to other people's
+  machines, and the sweep that now watches for that would go red.
 
 ## 48. A department head cannot read their own department's activity, and the fix is one line from you
 

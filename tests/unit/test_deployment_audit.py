@@ -32,29 +32,25 @@ from brain.deployment.audit import (
     history_gaps,
     unswept_files,
 )
-from brain.ops.independence import SEARCHED
+from brain.ops.independence import SEARCHED, SEARCHED_FILES, searched_files
 
 REPO = Path(__file__).resolve().parents[2]
 
-#: The files in this repository that carry a client value today, as of 2026-09-08.
+#: The files in this repository that carry a client value today, as of 2026-09-09.
 #:
-#: Every one of them reaches a client's server. `.env.example` is the file
-#: `docs/repository-map.md` says an install copies, and it carries this deployment's host name,
-#: its deployment identifier and its address under DEPLOY_HOST, DEPLOY_UUID and DEPLOY_URL.
-#: `ops/keycloak/realm-export.json` is the realm every client's Keycloak is built from and it
-#: names this deployment's callback URL as a redirect URI, which is exactly what
-#: `brain.install.INSTALL_OIDC_REDIRECT_URIS` is required and defaultless to prevent.
+#: **This list was ten entries and is two, and the shrinking is the record of the fix.** Eight
+#: of them were `.env.example` and files under `ops/`: the environment file an install copies
+#: onto a client's server, the realm every client's Keycloak is built from, the deploy scripts
+#: that repeated the same host as a shell default, and the runbooks that told an administrator
+#: to open it. All eight were cleaned on 2026-09-09 and both areas are now inside
+#: `brain.ops.independence`, which is a hard gate, so they cannot come back quietly.
+#:
+#: What is left is the two workflows. They are this repository's own release pipeline rather
+#: than the product, which is an argument for a different fix and not for no fix, and neither
+#: is gated by anything today.
 CARRYING_A_CLIENT_VALUE: tuple[str, ...] = (
-    ".env.example",
     ".github/workflows/anchor.yml",
     ".github/workflows/deploy.yml",
-    "ops/DEPLOY.md",
-    "ops/automation/egress.conf",
-    "ops/deploy.sh",
-    "ops/keycloak/realm-export.json",
-    "ops/vps/brain-firewall.sh",
-    "ops/vps/traefik-coolify-panel.yaml",
-    "ops/watch-and-deploy.sh",
 )
 
 
@@ -86,18 +82,24 @@ def test_the_areas_this_reads_are_the_ones_the_independence_sweep_does_not() -> 
     `tests/invariants/test_single_implementation.py` exists for.
 
     Delete this and somebody widens `SEARCHED`, this module keeps running, and one of the two
-    starts disagreeing about a host with nothing to say which."""
+    starts disagreeing about a host with nothing to say which. That is not hypothetical: on
+    2026-09-09 `SEARCHED` grew `ops` and `SEARCHED_FILES` grew `.env.example`, this test went
+    red, and shrinking `UNSWEPT` to match is what it went red for."""
     for pattern in UNSWEPT:
         area = pattern.split("/")[0]
         assert area not in SEARCHED, f"{pattern} is already swept by brain.ops.independence"
+        assert pattern not in SEARCHED_FILES, f"{pattern} is already gated as a single file"
 
 
-def test_the_environment_file_and_the_identity_realm_carry_this_deployments_own_server() -> None:
-    """**The finding this module was written to make visible.** `.env.example` is copied by
-    every install, and `ops/keycloak/realm-export.json` is imported into every client's
-    Keycloak. Both name this deployment's host, so a second client's sign-in is configured to
-    redirect to the first client's server, which is the exact failure
-    `brain.install.INSTALL_OIDC_REDIRECT_URIS` refuses to have a default for.
+def test_the_workflows_are_what_is_left_carrying_this_deployments_own_server() -> None:
+    """**The finding this module was written to make visible, and it worked.** It reported ten
+    files on 2026-09-08, eight of them `.env.example` and files under `ops/`: the environment
+    file every install copies, the realm imported into every client's Keycloak, the deploy
+    scripts repeating the host as a shell default, and the runbooks naming it in prose. Those
+    eight are fixed and both areas are inside `brain.ops.independence` now, which is a gate.
+
+    The two that remain are workflows, and they are pinned rather than waved through: a file
+    joining this list is a client value that has just been committed somewhere nothing gates.
 
     This test is expected to fail as each file is cleaned, and that failure is the
     notification. Delete it and the audit M42.4.1 asks for has nothing to report against."""
@@ -142,17 +144,27 @@ def test_a_work_address_an_address_and_a_client_host_are_each_reported() -> None
     assert all("commented" not in one for one in findings)
 
 
-def test_only_text_files_are_read_and_the_ones_that_are_read_include_the_realm() -> None:
-    """A realm export is JSON, a firewall rule is shell and a runbook is Markdown, and all
-    three carry a host. A binary read as text produces findings that point at nothing, which
-    is worse than missing it: somebody has to check each one.
+def test_only_text_files_are_read_and_the_realm_is_read_by_the_gate_instead() -> None:
+    """A workflow is YAML and a build input has no suffix at all, and both carry a host. A
+    binary read as text produces findings that point at nothing, which is worse than missing
+    it: somebody has to check each one.
 
-    Delete this and the audit either stops reading the realm or starts reporting an image."""
+    The second half is the handover. The realm and the environment file were read here until
+    2026-09-09 and are read by `brain.ops.independence` now, which is a gate rather than a
+    report, so reading them here as well would be two modules with one opinion each about
+    whether a host belongs to a client.
+
+    Delete this and the audit either starts reporting an image, or quietly grows a second
+    answer about the realm alongside the gate's."""
     read = {one.relative_to(REPO).as_posix() for one in unswept_files(REPO)}
 
-    assert "ops/keycloak/realm-export.json" in read
-    assert ".env.example" in read
+    assert ".github/workflows/deploy.yml" in read
     assert all(Path(one).suffix in TEXT_SUFFIXES for one in read)
+
+    gated = {one.relative_to(REPO).as_posix() for one in searched_files(REPO)}
+    for handed_over in ("ops/keycloak/realm-export.json", ".env.example"):
+        assert handed_over not in read, f"{handed_over} is read here and gated as well"
+        assert handed_over in gated, f"{handed_over} is read by neither this module nor the gate"
 
 
 # --- git history -----------------------------------------------------------------------
@@ -237,18 +249,38 @@ def test_git_failing_is_refused_rather_than_read_as_an_empty_history(tmp_path: P
         history_gaps(tmp_path, ["one.env"])
 
 
-def test_the_history_of_this_repositorys_environment_and_compose_files_holds_no_surprise() -> None:
-    """Measured rather than hoped. Every value history holds for these paths is one the
-    working tree still holds, so the exposure is the current files and not a year of forgotten
-    ones, and the fix is an edit rather than a rotation.
+def test_the_values_taken_out_of_these_files_are_still_in_their_history() -> None:
+    """**Measured rather than hoped, and the answer changed on 2026-09-09.** Until then every
+    value history held for these paths was one the working tree still held, so the exposure
+    was the current files and the fix was an edit. Then the current files were fixed, and this
+    is now the state the history walk was written for and had never seen: the paths are clean
+    and the log is not.
 
-    This is expected to fail if somebody commits and then removes a client value, which is
-    exactly when it should be read. Delete it and history stops being checked at all."""
+    That gap is the whole point of reading history. A value removed from a file is gone from
+    the next checkout and from nowhere else - every clone, fork, CI cache and backup still has
+    it - so the remaining question is not "which file" but whether each value is a credential
+    to rotate or a host to accept as public. See
+    `A_VALUE_IN_HISTORY_IS_DISCLOSED_AND_CANNOT_BE_UNCOMMITTED`.
+
+    Read against the files themselves rather than against `configuration_gaps`, because these
+    paths are no longer in `UNSWEPT`: asking the working-tree scanner about them would compare
+    history with an area it does not read and pass for the wrong reason.
+
+    Delete this and the removal looks complete, which is the belief this module exists to
+    refuse."""
+    allowed = allowed_hosts_for(REPO)
     from_history = {one.split(": ", 1)[-1] for one in history_gaps(REPO, HISTORY_PATHS)}
-    in_the_tree = {one.split(": ", 1)[-1] for one in configuration_gaps(REPO)}
+    still_in_the_files = {
+        one.split(": ", 1)[-1]
+        for path in HISTORY_PATHS
+        for one in client_values_in(
+            (REPO / path).read_text(encoding="utf-8"), where=path, allowed=allowed
+        )
+    }
 
     assert from_history, "the history walk found nothing at all, which means it did not run"
-    assert from_history <= in_the_tree, sorted(from_history - in_the_tree)
+    assert not still_in_the_files, sorted(still_in_the_files)
+    assert from_history - still_in_the_files == from_history
 
 
 def test_a_path_deleted_in_a_revision_is_skipped_and_a_real_git_failure_is_not(

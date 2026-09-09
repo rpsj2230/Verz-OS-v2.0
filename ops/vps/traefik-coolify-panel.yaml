@@ -5,17 +5,25 @@
 # so this adds a route and touches no existing one.
 #
 # Port 8000 stays open; closing it is a firewall decision, not this file.
+#
+# **This is a template and not a working file.** Replace <coolify-hostname> in both rules
+# with the panel's own name on the server this is copied to, and <coolify-container> with the
+# name of the Coolify container on that host's Docker network. It carried one deployment's
+# hostname until 2026-09-09, which meant that copying this file onto a second server produced
+# a route Let's Encrypt would try to certify for somebody else's name. A placeholder that
+# Traefik refuses to route is the failure worth having: it is loud, immediate, and it is not
+# a certificate request against a host you do not own.
 http:
   routers:
     coolify-panel-https:
-      rule: "Host(`coolify.194.233.66.89.sslip.io`)"
+      rule: "Host(`<coolify-hostname>`)"
       entryPoints:
         - https
       service: coolify-panel
       tls:
         certResolver: letsencrypt
     coolify-panel-http:
-      rule: "Host(`coolify.194.233.66.89.sslip.io`)"
+      rule: "Host(`<coolify-hostname>`)"
       entryPoints:
         - http
       middlewares:
@@ -25,7 +33,7 @@ http:
     coolify-panel:
       loadBalancer:
         servers:
-          - url: "http://coolify:8080"
+          - url: "http://<coolify-container>:8080"
   middlewares:
     coolify-panel-to-https:
       redirectScheme:

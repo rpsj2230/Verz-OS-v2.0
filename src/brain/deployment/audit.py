@@ -15,6 +15,21 @@ origin as a web origin and its address in two logout attributes. `brain.install`
 cannot happen, and a realm file with the value written into it walks straight past that
 declaration: the sweep reads `src`, the realm is JSON in `ops`, and the two never meet.
 
+**Those two areas are now the sweep's, and this module gave them up rather than keeping a
+second opinion about them.** On 2026-09-09 `brain.ops.independence.SEARCHED` grew `ops` and
+`SEARCHED_FILES` grew `.env.example`, and the twenty-six findings this module was reporting
+were fixed. Keeping them here as well would leave two modules answering "is this host a
+client's" with nothing to say which one is right, which is the failure
+`tests/invariants/test_single_implementation.py` exists for. So `UNSWEPT` is what is still
+genuinely unswept: the build inputs and the workflows. Shrinking it is the module working, not
+the module retreating, and the day `docs/*.md` or `.github` joins the gate this list gets
+shorter again.
+
+**The half that could not move is git history**, and it is now the larger half. Every value
+removed from `ops` and `.env.example` on 2026-09-09 is still in the log, so this module went
+from reporting a working tree that agreed with its history to reporting the gap between them,
+which is the state the check was written for and had never yet seen.
+
 **Git history is the half that cannot be fixed by an edit**, and saying so is most of the value
 of checking it. A value removed from the working tree is still in every clone, so the finding
 is not "fix this file" but "this value is disclosed, rotate it". Reading it is cheap and the
@@ -77,14 +92,16 @@ A_VALUE_IN_HISTORY_IS_DISCLOSED_AND_CANNOT_BE_UNCOMMITTED: Final = (
 )
 
 #: What `brain.ops.independence.SEARCHED` does not cover, and every entry is a place a client
-#: value has actually been found. Globs rather than names so a second workflow or a ninth
-#: operational script is covered on the day it is written.
+#: value has actually been found. Globs rather than names so a second workflow is covered on
+#: the day it is written.
+#:
+#: `.env.example` and `ops/**/*` were here until 2026-09-09 and are the sweep's now. This list
+#: shrinking is the intended direction: an entry here is an area nothing gates, and the fix
+#: for one is to gate it rather than to keep reporting it.
 UNSWEPT: Final[tuple[str, ...]] = (
-    ".env.example",
     "Dockerfile",
     "Makefile",
     "alembic.ini",
-    "ops/**/*",
     ".github/workflows/*.yml",
 )
 

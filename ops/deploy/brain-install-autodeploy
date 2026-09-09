@@ -21,6 +21,15 @@ for required in /usr/local/bin/brain-autodeploy /usr/local/bin/brain-deploy; do
   fi
 done
 
+# Checked here as well as in the two scripts, because this is the moment a person is standing
+# at the machine. Both of them refuse without it, and a timer that refuses every two minutes
+# from now on fails into the journal, which is where nobody is looking at install time.
+if [ ! -s /root/.coolify-service-uuid ]; then
+  echo "missing /root/.coolify-service-uuid - write this deployment's Coolify service" >&2
+  echo "identifier into it first, or the timer refuses on every run." >&2
+  exit 1
+fi
+
 cat > /etc/systemd/system/brain-autodeploy.service <<'UNIT'
 [Unit]
 Description=Deploy Company Brain when a new image is published

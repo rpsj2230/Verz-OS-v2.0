@@ -17,11 +17,22 @@ digest `sha256:131e228179c16705a9cb6c31fc15ef05a18bed91f892d0d3048e5e3d278d5f53`
 
 ## The target box
 
-`verz-vps` - 194.233.66.89, Docker 29.7.2, 11.7 GiB RAM, 86 GiB free disk.
+**Every value in this runbook that names a machine is a placeholder**, written as
+`<deploy-host>`, `<deploy-uuid>` and `<deploy-url>`. They are the three variables in
+`.env.example`, and `ops/deploy.sh` refuses to run until they are set rather than falling
+back to any of them. This file named one deployment's server until 2026-09-09, which is a
+runbook telling the next administrator to open somebody else's panel and paste their token
+into it.
 
-**It is shared.** At last check it ran 29 containers using about 4.5 GiB, including
-Coolify itself, a Dify stack, Langfuse, Activepieces, and the existing Coolify project
-`verz-brain-platform`. That project is live and must not be touched.
+- `<deploy-host>` the ssh destination, as spelled in `~/.ssh/config`
+- `<deploy-uuid>` the Coolify service identifier, the last path segment of that resource's URL
+- `<deploy-url>` the address this deployment answers on, with its scheme
+
+The box this was measured on at the time: Docker 29.7.2, 11.7 GiB RAM, 86 GiB free disk.
+
+**It may be shared, and this one was.** At last check it ran 29 containers using about
+4.5 GiB, including Coolify itself, a Dify stack, Langfuse, Activepieces, and an unrelated
+Coolify project. Anything already on the box is live and must not be touched.
 
 Two consequences, already handled in `docker-compose.yml`:
 
@@ -47,8 +58,8 @@ Coolify: **Keys & Tokens → Docker Registries → Add**, registry `ghcr.io`, us
 
 ### 2. Create the project
 
-In Coolify: **Projects → + New**, name it `verz-brain-v2`. Do not add resources to
-`verz-brain-platform`; that is the other live project.
+In Coolify: **Projects → + New**, and give it a name of its own. Do not add resources to a
+project that is already there; those belong to something else that is live.
 
 Inside the new project add a **Docker Compose** resource, source this repository, compose
 file `docker-compose.yml`.
@@ -85,7 +96,7 @@ gh secret set COOLIFY_SERVICE_UUID --repo rpsj2230/verz-brain-v2.0
 gh secret set COOLIFY_TOKEN --repo rpsj2230/verz-brain-v2.0
 ```
 
-Values: `http://194.233.66.89:8000`, `c74hlhygvg7scjttu8ydwnqi`, and the API token.
+Values: the Coolify panel's own address, `<deploy-uuid>`, and the API token.
 
 After that, every merge to `main` that passes CI deploys on its own.
 

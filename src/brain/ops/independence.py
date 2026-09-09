@@ -29,15 +29,51 @@ is about values the running system uses, so it reads string literals and assignm
 leaves docstrings and comments alone, which is also why it can be a hard gate rather than an
 advisory one.
 
+**Three: the areas are where a value lands, not where the product is written, and until
+2026-09-09 they were the second thing.** `SEARCHED` held `src`, `migrations`, `console/src`
+and `docs`, which is the whole of the product and none of the places one deployment's own
+address is actually spelled. Running these same matchers over `ops` gave twenty-four hits and
+over `.env.example` two, and three of them were not cosmetic: the Keycloak realm every client
+imports named one deployment's host in its redirect allowlist, the environment file the
+installer copies to `/opt/brain/.env` carried that deployment's host, identifier and address,
+and the deploy scripts repeated the same values as shell defaults so removing them from the
+environment changed nothing. The sweep that exists to enforce the first rule of `CLAUDE.md`
+was green because it was not looking where the rule breaks.
+
+So `ops` and `.env.example` are searched, and the two are added differently on purpose.
+`ops` is an area; `.env.example` is one file, and `SEARCHED_FILES` exists rather than an area
+called `.` because searching the repository root would sweep `uv.lock` and every generated
+artefact beside it.
+
+**What is read is a property of the area rather than one list for all of them.** `src` and
+the console hold code, `docs` holds the pages the application serves, and `ops` holds nothing
+that is not either shipped into the image or followed by a person on a server. So `ops` reads
+every file. An allowlist of suffixes there is precisely how this went wrong the first time:
+the file types that carried the values (`.sh`, `.json`, `.md`, and scripts with no suffix at
+all) were the ones nobody had thought to name, and a check that is silent about what it did
+not read is the failure this module was written about. Over-reading a file that is not text
+produces a visible finding somebody spends a minute on; under-reading produces nothing, which
+is what happened.
+
+**What this widening does not close, measured rather than assumed.** `docs/*.md` is not read,
+and on 2026-09-09 it held sixteen hits, every one of them in `docs/needs-rupash.md`, which is
+served at `/build/needs-rupash` and is therefore as deployed as the HTML beside it. They are
+a real finding and they are left open here deliberately: that page is a decision log owned
+elsewhere, and widening `docs` to Markdown in the same change that widens `ops` would take a
+gate that is green and make it red on somebody else's file, which is the state in which a gate
+gets switched off. It is one line of `SEARCHED` on the day those pages are fixed.
+
 Task ids: M41.1.1, M41.3.2
 """
 
 from __future__ import annotations
 
 import ast
+import ipaddress
 import re
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 from brain.install import INSTALL_PREFIX, INSTALLATION
@@ -57,17 +93,46 @@ A_COMMENT_CANNOT_BE_DEPLOYED: Final = (
     "gate instead of an advisory one nobody can keep green."
 )
 
-#: Where a client value would actually land.
+#: What is read inside an area of code. HTML and JavaScript because the build pages are both,
+#: and a link tag is exactly the shape of value this is looking for.
+READ_SUFFIXES: Final[frozenset[str]] = frozenset({".py", ".ts", ".tsx", ".html", ".js"})
+
+#: Read every file in the area, whatever it is called. See the header: an allowlist of
+#: suffixes is what let `ops` carry one deployment's host in four file types nobody had
+#: listed, and a check that is quiet about what it declined to read is the failure this
+#: module is about.
+EVERY_FILE: Final = None
+
+#: Where a client value would actually land, and what is read in each place.
 #:
 #: `docs` is here and M41.1.1 does not name it, deliberately. Those pages are served by the
 #: running application at `/build`, so they are as deployed as anything in `src`, and leaving
 #: them out is how the first version of this sweep came back green while four pages fetched a
 #: stylesheet from Google on every load from inside the client's network.
-SEARCHED: Final[tuple[str, ...]] = ("src", "migrations", "console/src", "docs")
+#:
+#: `ops` joined on 2026-09-09 for the same argument one step further on. Its realm export is
+#: imported into every client's Keycloak, its policies and proxy configuration are mounted
+#: into their containers, and its runbooks are followed by a person on their server. None of
+#: that is source and all of it is deployed.
+SEARCHED: Final[Mapping[str, frozenset[str] | None]] = MappingProxyType(
+    {
+        "src": READ_SUFFIXES,
+        "migrations": READ_SUFFIXES,
+        "console/src": READ_SUFFIXES,
+        "docs": READ_SUFFIXES,
+        "ops": EVERY_FILE,
+    }
+)
 
-#: What is read inside those areas. HTML and JavaScript because the build pages are both,
-#: and a link tag is exactly the shape of value this is looking for.
-READ_SUFFIXES: Final[frozenset[str]] = frozenset({".py", ".ts", ".tsx", ".html", ".js"})
+#: Single files that are searched wherever they sit, because they are artefacts rather than
+#: areas.
+#:
+#: `.env.example` is the one file `brain.deployment.installer.PLAN` copies onto a client's
+#: server, at `/opt/brain/.env`, and it is the file the whole of `brain.install` exists to
+#: keep neutral. It carried this deployment's host, its Coolify identifier and its address
+#: until 2026-09-09, outside every area the sweep read: the one artefact handed over was the
+#: one artefact not checked.
+SEARCHED_FILES: Final[tuple[str, ...]] = (".env.example",)
 
 #: Compose is searched too, and separately, because it is YAML rather than Python.
 COMPOSE_GLOB: Final = "docker-compose*.yml"
@@ -178,6 +243,17 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         "schema.org",
         "ghcr.io",
         "quay.io",
+        # This product's own provenance, and the two entries are one fact in two halves.
+        # `ops/deploy.sh` and `ops/watch-and-deploy.sh` verify the image's signature before
+        # running it, and a Sigstore verification is an assertion about two fixed strings:
+        # the workflow identity, which lives under `github.com`, and the issuer that minted
+        # the certificate, which is `token.actions.githubusercontent.com` for every GitHub
+        # Actions run there has ever been. Neither is an address anything connects to on a
+        # client's server and neither can become a client's, exactly as `ghcr.io` above
+        # cannot. Removing them would leave the check unable to name what it verifies
+        # against, which is the whole of the check.
+        "github.com",
+        "token.actions.githubusercontent.com",
         "docs.pydantic.dev",
         "mypy.readthedocs.io",
         "www.postgresql.org",
@@ -214,6 +290,46 @@ ALLOWED_IPS: Final[frozenset[str]] = frozenset(
     {"127.0.0.1", "0.0.0.0", "255.255.255.255"}  # noqa: S104  an allowlist, not a bind
 )
 
+#: An IPv4 immediately followed by a prefix length, which makes it a range and not a host.
+CIDR: Final = re.compile(r"\A(\d{1,3}(?:\.\d{1,3}){3})/(\d{1,2})(?![\d.])")
+
+#: Why a private range is allowed where a private address is not.
+#:
+#: `ops/automation/egress.conf` says `acl sandbox src 172.16.0.0/12`, which is the sandbox
+#: network on every install of this product and names nobody. But `10.4.0.17` written on its
+#: own is exactly the shape of a client's internal server, and a rule allowing private
+#: addresses would wave through the client's own directory host, which is the value somebody
+#: hardcodes while it is the only one they can see. So the prefix length is the whole of the
+#: distinction: with one, the literal answers "which range", without one it answers "which
+#: machine", and only the first is a property of the product.
+A_PRIVATE_RANGE_IS_A_RANGE_AND_A_PRIVATE_ADDRESS_IS_A_MACHINE: Final = (
+    "An RFC 1918 block written with its prefix length names a range every installation of "
+    "this product has, and identifies nobody. The same block's addresses written without one "
+    "name a machine, and a client's own directory or database host is a private address: "
+    "allowing those would let the one value an implementer can see be the one that ships."
+)
+
+
+def is_reserved_range(text: str) -> bool:
+    """True when `text` begins with a CIDR block naming a range reserved for private use.
+
+    Strict, so `10.4.0.17/8` is not a range: a network whose host bits are set is somebody
+    writing an address and a mask, and the address is the part that names a machine. And more
+    than one address, so `203.0.113.9/32` stays a finding, which is the other way a host can
+    be spelled as though it were a range.
+
+    See `A_PRIVATE_RANGE_IS_A_RANGE_AND_A_PRIVATE_ADDRESS_IS_A_MACHINE`.
+    """
+    match = CIDR.match(text)
+    if match is None:
+        return False
+    try:
+        network = ipaddress.ip_network(match.group(0), strict=True)
+    except ValueError:
+        return False
+    return network.num_addresses > 1 and (network.is_private or network.is_link_local)
+
+
 #: Where a vendor endpoint may be declared. `channels` as well as `connectors`, because a
 #: channel adapter reaches a vendor for the same reason a connector does: `BOT_FRAMEWORK_ISSUER`
 #: in `channels/teams.py` is where Microsoft is, for every client this system will ever have.
@@ -235,14 +351,35 @@ VENDOR_CONSTANT_SUFFIXES: Final[tuple[str, ...]] = (
 THE_READER: Final = "src/brain/install.py"
 
 
+def searched_files(repo: Path) -> tuple[Path, ...]:
+    """Every file this sweep reads, in the order it reads them.
+
+    Public, and it is the question nobody could ask for as long as it was not. A check that
+    cannot say what it looked at is a check whose green means "nothing was found somewhere",
+    and this one was green over `ops` and `.env.example` for as long as it existed. A caller
+    can now compare its own list against this one, which is how `brain.deployment.audit`
+    proves it is not a second opinion about the same file.
+    """
+    return tuple(_searched_files(repo))
+
+
 def _searched_files(repo: Path) -> Iterator[Path]:
-    for area in SEARCHED:
+    for area, suffixes in SEARCHED.items():
         root = repo / area
         if not root.is_dir():
             continue
         for path in sorted(root.rglob("*")):
-            if path.suffix in READ_SUFFIXES and "__pycache__" not in path.parts:
+            # `is_file` rather than trusting the suffix, and it is not decoration now that one
+            # area reads everything: `rglob` yields directories too, and a directory named for
+            # a suffix would be opened and read.
+            if not path.is_file() or "__pycache__" in path.parts:
+                continue
+            if suffixes is None or path.suffix in suffixes:
                 yield path
+    for name in SEARCHED_FILES:
+        path = repo / name
+        if path.is_file():
+            yield path
     yield from sorted(repo.glob(COMPOSE_GLOB))
 
 
@@ -306,8 +443,9 @@ def value_shaped_literals(repo: Path) -> tuple[str, ...]:
                 if host not in ALLOWED_HOSTS and host not in vendors and not is_reserved(host):
                     found.append(f"{where}:{number}: a client host, {match.group(1)!r}")
             for match in IPV4.finditer(literal):
-                if match.group(0) not in ALLOWED_IPS:
-                    found.append(f"{where}:{number}: an address, {match.group(0)!r}")
+                if match.group(0) in ALLOWED_IPS or is_reserved_range(literal[match.start() :]):
+                    continue
+                found.append(f"{where}:{number}: an address, {match.group(0)!r}")
     return tuple(found)
 
 

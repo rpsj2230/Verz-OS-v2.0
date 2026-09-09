@@ -36,6 +36,11 @@ SOURCE="$DIR/realm-export.json"
 # `which kcadm.sh` that finds a different version's client is worse than not finding one.
 KCADM="${KCADM:-kcadm.sh}"
 
+# The interpreter that has this repository importable. On the server that is the application
+# image's own python, which is where `brain.ops.realm_import` lives and where the
+# `keycloak-realm` compose service already runs the same transform.
+PYTHON="${PYTHON:-python}"
+
 fail() {
   echo "setup.sh: $1" >&2
   exit 1
@@ -46,15 +51,17 @@ fail() {
 [ -f "$SOURCE" ] || fail "cannot find $SOURCE"
 command -v "$KCADM" >/dev/null 2>&1 || fail "$KCADM is not on PATH; it ships with Keycloak"
 
-# jq is required rather than optional. The realm file carries `_comment` keys explaining
-# every decision in it, and Keycloak's importer rejects properties it does not recognise,
-# so the comments have to come out on the way in.
+# jq is required rather than optional, for reading kcadm's output back below.
 #
-# Rejected: dropping the comments from the file so no filter is needed. The settings that
-# matter here are the ones whose consequence is invisible (directAccessGrantsEnabled,
-# webOrigins, revokeRefreshToken), and a reviewer reading an uncommented realm export has
-# no way to tell a deliberate choice from a default.
-command -v jq >/dev/null 2>&1 || fail "jq is required to strip the _comment keys before import"
+# It no longer prepares the realm. That was `jq 'walk(del(._comment))'` here, which is a
+# second implementation of `brain.ops.realm_import` and was wrong in two ways at once: it
+# deleted the two `_comment` keys inside `config` maps, which Keycloak stores verbatim and
+# which are therefore configuration rather than documentation, and it had nowhere to put
+# this installation's own origin, so the shell path imported a realm still naming the
+# placeholder. Both paths now go through the same tested transform. See the module.
+command -v jq >/dev/null 2>&1 || fail "jq is required to read the settings back after import"
+command -v "$PYTHON" >/dev/null 2>&1 \
+  || fail "$PYTHON is required: the realm is prepared by brain.ops.realm_import"
 
 case "$URL" in
   https://*) ;;
@@ -68,7 +75,12 @@ esac
 
 TMP=$(mktemp)
 trap 'rm -f "$TMP"' EXIT INT TERM
-jq 'walk(if type == "object" then del(._comment) else . end)' "$SOURCE" > "$TMP"
+# Strips the comments and writes this installation's own origin into the four addresses the
+# reviewed realm leaves as a placeholder. It refuses rather than defaulting when
+# INSTALL_OIDC_REDIRECT_URIS is unset, which is the failure worth having: the alternative is
+# a realm that imports and whose redirect allowlist names a host nobody here chose.
+"$PYTHON" -m brain.ops.realm_import "$SOURCE" > "$TMP" \
+  || fail "could not prepare the realm; the message above names what is missing"
 
 echo "==> logging in to $URL as $ADMIN_USER (realm $ADMIN_REALM)"
 "$KCADM" config credentials \
@@ -123,10 +135,11 @@ The issuer string must match byte for byte. brain.identity.oidc compares it exac
 purpose: normalising a trailing slash is how a hostile issuer whose hostname merely starts
 the same way gets accepted by a comparison somebody wrote to be forgiving.
 
-Still to do by hand, because neither belongs in a file that gets copied between
-environments:
-  * set redirectUris and webOrigins on brain-console to the real hostname; the file ships
-    .invalid placeholders so a stale realm import cannot become an open redirect
+redirectUris and webOrigins are no longer a manual step: they are written from
+INSTALL_OIDC_REDIRECT_URIS by brain.ops.realm_import on the way in, along with
+backchannel.logout.url and post.logout.redirect.uris, so all four agree by construction.
+
+Still to do by hand:
   * add the client's SAML identity provider from the disabled template, and check it
     against brain.identity.oidc.SamlFederation before enabling it
 EOF

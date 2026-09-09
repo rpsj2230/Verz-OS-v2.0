@@ -11,7 +11,10 @@
 
 set -eu
 
-HOST="${DEPLOY_HOST:-verz-vps}"
+# No default host. See the argument in ops/deploy.sh: a fallback here means removing the
+# value from the environment file changes nothing, and this script installs a systemd timer
+# on whatever machine it reaches.
+HOST="${DEPLOY_HOST:?set DEPLOY_HOST to the ssh destination; see ops/DEPLOY.md}"
 INTERVAL="${WATCH_INTERVAL:-3min}"
 
 echo "==> installing the deploy watcher on $HOST, every $INTERVAL"

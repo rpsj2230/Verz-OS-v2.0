@@ -1,9 +1,13 @@
 #!/bin/sh
 # Blocks port 8000 (the Coolify panel) from the public internet.
 #
-# The panel is served over HTTPS on coolify.194.233.66.89.sslip.io instead, with a real
-# Let's Encrypt certificate. Before this, the login page answered plain HTTP on a public
-# IP and the password crossed the internet in clear on every sign-in.
+# The panel is served over HTTPS on <coolify-hostname> instead, with a real Let's Encrypt
+# certificate; see ops/vps/traefik-coolify-panel.yaml, which is where that name is set for a
+# given deployment. Before this, the login page answered plain HTTP on a public IP and the
+# password crossed the internet in clear on every sign-in.
+#
+# The hostname is a placeholder rather than a value. This file is in the product, and a
+# deployment's own panel address is not: it named one server here until 2026-09-09.
 #
 # ufw cannot do this alone: Docker publishes the port to 0.0.0.0 and inserts its own
 # iptables rules ahead of ufw, so `ufw deny 8000` never sees the packet. DOCKER-USER is
@@ -17,4 +21,4 @@
 set -eu
 iptables -C DOCKER-USER -p tcp -m conntrack --ctorigdstport 8000 -j DROP 2>/dev/null \
   || iptables -I DOCKER-USER -p tcp -m conntrack --ctorigdstport 8000 -j DROP
-echo "port 8000 blocked; panel is at https://coolify.194.233.66.89.sslip.io"
+echo "port 8000 blocked; the panel is at the hostname set in traefik-coolify-panel.yaml"

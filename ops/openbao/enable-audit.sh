@@ -20,7 +20,8 @@
 # on Monday can be unaudited on Tuesday with nothing having failed. `bao audit list` is
 # the check, and it belongs in whatever runbook covers restarting this.
 #
-# Usage: ssh verz-vps 'sh -s' < ops/openbao/enable-audit.sh
+# Usage: ssh <deploy-host> 'sh -s' < ops/openbao/enable-audit.sh
+#        where <deploy-host> is this deployment's own server; see ops/DEPLOY.md
 # Task ids: M31.3.2.6
 
 set -eu

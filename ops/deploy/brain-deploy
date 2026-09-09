@@ -16,9 +16,28 @@
 # mechanism that needs a token to exist at all is one more thing that can be missing.
 set -euo pipefail
 
-SERVICE_DIR="/data/coolify/services/c74hlhygvg7scjttu8ydwnqi"
-TOKEN_FILE="/root/.coolify-deploy-token"
+# WHERE THE SERVICE IDENTIFIER COMES FROM, AND WHY NOT FROM THIS FILE. It was written here
+# until 2026-09-09, three times: in the compose directory and in two container names. That is
+# one deployment's identifier in a script this repository ships, and it fails in the direction
+# nobody checks - `docker inspect app-<somebody else's uuid>` prints nothing and exits
+# non-zero, which every branch below reads as "not running yet".
+#
+# A file rather than an environment variable because this runs from a systemd unit and from a
+# `command=` restriction in authorized_keys, neither of which carries an environment worth
+# relying on. The file already existed for the Coolify API call below; it is now the one
+# source for the identifier, and its absence is a refusal rather than a guess.
 UUID_FILE="/root/.coolify-service-uuid"
+TOKEN_FILE="/root/.coolify-deploy-token"
+if [ ! -s "$UUID_FILE" ]; then
+  echo "$UUID_FILE is missing or empty: write this deployment's Coolify service" >&2
+  echo "identifier into it (it is the last path segment of that resource's URL)." >&2
+  exit 1
+fi
+UUID="$(cat "$UUID_FILE")"
+
+SERVICE_DIR="/data/coolify/services/$UUID"
+APP="app-$UUID"
+DB="db-$UUID"
 IMAGE="ghcr.io/rpsj2230/verz-brain-v2.0:latest"
 HEALTH_URL="http://127.0.0.1:8000"
 
@@ -27,11 +46,10 @@ log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 log "pulling $IMAGE"
 docker pull -q "$IMAGE" >/dev/null
 
-if [ -s "$TOKEN_FILE" ] && [ -s "$UUID_FILE" ]; then
-  uuid="$(cat "$UUID_FILE")"
-  log "asking Coolify to deploy service $uuid"
+if [ -s "$TOKEN_FILE" ]; then
+  log "asking Coolify to deploy service $UUID"
   code=$(curl -sS -o /tmp/coolify-deploy.out -w '%{http_code}' \
-    -X POST "http://127.0.0.1:8000/api/v1/deploy?uuid=$uuid" \
+    -X POST "http://127.0.0.1:8000/api/v1/deploy?uuid=$UUID" \
     -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
     -H "Content-Type: application/json") || code=000
   cat /tmp/coolify-deploy.out || true
@@ -66,10 +84,10 @@ docker compose up -d --force-recreate --no-deps app
 # the container crash-loops is the failure this whole exercise was about.
 for i in $(seq 1 30); do
   sleep 4
-  status=$(docker inspect --format '{{.State.Health.Status}}' app-c74hlhygvg7scjttu8ydwnqi 2>/dev/null || echo unknown)
+  status=$(docker inspect --format '{{.State.Health.Status}}' "$APP" 2>/dev/null || echo unknown)
   if [ "$status" = "healthy" ]; then
     log "app is healthy after $((i * 4))s"
-    docker exec db-c74hlhygvg7scjttu8ydwnqi psql -U brain -d brain -tAc \
+    docker exec "$DB" psql -U brain -d brain -tAc \
       'select version_num from alembic_version' 2>/dev/null | sed 's/^/alembic: /' || true
     exit 0
   fi
