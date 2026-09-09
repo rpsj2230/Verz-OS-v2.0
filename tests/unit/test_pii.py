@@ -811,3 +811,319 @@ def test_a_benchmark_is_never_cut_through_an_identifier() -> None:
         assert len(detect(paragraph * repeats)) == repeats * per_paragraph
     with pytest.raises(ValueError, match="times nothing"):
         benchmark_text(0)
+
+
+# ------------------------------------------------------ the shape of a detection itself
+def test_a_detection_that_covers_no_characters_is_refused() -> None:
+    """A zero-width span replaces nothing and still counts as a finding, so a scrub reports
+    that it redacted something and the text goes out unchanged. Reversed offsets are the same
+    failure with a negative slice.
+
+    Delete this and the branch is unreachable, and a detector returning `start == end` is
+    counted as protection."""
+    for start, end in ((5, 5), (7, 3)):
+        with pytest.raises(ValueError, match="spans nothing"):
+            Detection(kind=EntityKind.NRIC, start=start, end=end, confidence=1.0)
+
+
+def test_a_detection_confidence_outside_zero_to_one_is_refused() -> None:
+    """Confidence is compared against a threshold, so a value outside the range makes every
+    comparison meaningless in one direction: zero passes nothing and a hundred passes
+    everything.
+
+    Zero is refused as well as the negative, because a detection nothing is confident about is
+    a detection nothing should count.
+
+    Delete this and a model returning a percentage rather than a fraction scores every span at
+    a hundred and every threshold in the file stops applying."""
+    for bad in (0.0, -0.1, 1.5, 100.0):
+        with pytest.raises(ValueError, match="not a confidence"):
+            Detection(kind=EntityKind.NRIC, start=0, end=9, confidence=bad)
+
+
+# ------------------------------------------------------------ the NRIC check letter
+def test_the_m_series_takes_its_own_offset_and_its_own_reversed_table() -> None:
+    """**The branch with no public worked example, which is why it is worth pinning at all.**
+
+    The M series adds three rather than four to the weighted total and then reverses the index
+    into the F/G table. Both halves are this module's reading of a reverse-engineered
+    algorithm and neither is checkable against a published example, so what a test buys is
+    that the reading cannot drift silently: it says what this file believes today.
+
+    The S branch is the one worked example the algorithm is usually quoted with, and the other
+    three are asserted as differences rather than as literals, which is what makes the offset
+    and the reversal visible instead of restated.
+
+    Delete this and either half of the M branch can be changed with nothing going red."""
+    digits = "1234567"
+
+    assert nric_check_letter("S", digits) == "D"
+    assert nric_check_letter("T", digits) != nric_check_letter("S", digits)
+    assert nric_check_letter("G", digits) != nric_check_letter("F", digits)
+
+    # The M branch is pinned to a value rather than to a difference, and that is the only
+    # thing that can hold both halves of it. Asserted as "not the same as F", either half
+    # can be removed and the answer stays different from F's by the other half alone: drop
+    # the offset and the reversal still moves the index, drop the reversal and the offset
+    # still moves the total. The letter is this file's reading of an algorithm with no
+    # published worked example, so what it pins is what this file believes today, which is
+    # the whole of what a test here can be worth.
+    assert nric_check_letter("M", digits) == "X"
+    assert nric_check_letter("M", "7654321") == "U"
+
+
+def test_a_string_that_is_not_shaped_like_an_nric_has_no_checksum_to_hold() -> None:
+    """The checksum answers False rather than raising for anything the pattern does not match,
+    because it is called on candidates and a candidate is whatever a person typed.
+
+    Delete this and the branch is unreachable, and the first caller to hand it a phone number
+    gets an unpacking error out of a confidence signal."""
+    for not_an_nric in ("hello", "S123456D", "", "SS1234567D"):
+        assert nric_checksum_holds(not_an_nric) is False
+
+    assert nric_checksum_holds("S1234567D") is True
+
+
+# --------------------------------------------------------------- the registers refuse
+def test_a_presidio_recogniser_with_an_impossible_threshold_is_refused() -> None:
+    """A threshold of zero admits every span the model emits, including the ones it scored at
+    nothing, and one above one admits none. Either way the number reads as a filter and is not
+    one.
+
+    Delete this and the register can carry a recogniser whose threshold does nothing, which
+    looks in review exactly like one that does."""
+    for bad in (0.0, -0.5, 1.01):
+        with pytest.raises(ValueError, match="threshold"):
+            BuiltIn(
+                presidio_name="EMAIL_ADDRESS",
+                score_threshold=bad,
+                why_not_local="the local patterns do not cover it",
+            )
+
+
+def test_a_model_label_with_no_text_is_refused() -> None:
+    """**A label with no text asks the model for nothing and matches everything**, which is the
+    one input to a zero-shot extractor that fails open rather than closed.
+
+    Delete this and a blank label reaches the model, which is asked to find spans of nothing in
+    particular and obliges."""
+    with pytest.raises(ValueError, match="asks the model for nothing"):
+        GlinerLabel(
+            label="   ",
+            kind=EntityKind.UNPATTERNED_NAME,
+            score_threshold=0.5,
+            why_the_default_recognisers_miss_it="the pattern recognisers see no names",
+        )
+
+
+def test_a_model_label_with_an_impossible_threshold_is_refused() -> None:
+    """The same argument as the Presidio register one function up, and the register it guards
+    holds the only filter on a model's output.
+
+    Delete this and a label admits every span the extractor emits."""
+    for bad in (0.0, 1.5):
+        with pytest.raises(ValueError, match="not a confidence"):
+            GlinerLabel(
+                label="person",
+                kind=EntityKind.UNPATTERNED_NAME,
+                score_threshold=bad,
+                why_the_default_recognisers_miss_it="the pattern recognisers see no names",
+            )
+
+
+# ------------------------------------------------ what the coverage check is looking for
+def test_a_kind_with_no_recogniser_and_no_exemption_is_reported() -> None:
+    """The check that says every declared kind is actually looked for. A kind in the enum that
+    no pattern, no exemption and no model label covers is a category of personal data this
+    module names and never finds, which reads on a coverage page as covered.
+
+    Driven by handing the check empty registers, which is what the parameters are for: a check
+    that can only be run against the healthy declaration cannot be shown to fail.
+
+    Delete this and the coverage report is a list of what somebody remembered."""
+    findings = configuration_gaps(recognisers=(), gliner_labels=())
+
+    assert any("no recogniser and no exemption" in one for one in findings)
+
+
+def test_a_presidio_recogniser_both_enabled_and_declined_is_reported() -> None:
+    """Two registers disagreeing about one name is a decision taken twice and differently, and
+    whichever is read last wins at runtime.
+
+    Delete this and the two lists can drift, and which one applies depends on the order
+    somebody happens to read them in."""
+    declined = next(iter(PRESIDIO_DECLINED))
+
+    findings = configuration_gaps(
+        built_ins=(
+            BuiltIn(
+                presidio_name=declined,
+                score_threshold=0.5,
+                why_not_local="testing the contradiction",
+            ),
+        )
+    )
+
+    assert any("both enabled and declined" in one for one in findings)
+
+
+def test_a_model_label_asked_for_twice_is_reported() -> None:
+    """The same label twice means its spans arrive twice and one of the two thresholds
+    silently governs both, which is a filter that depends on iteration order.
+
+    Delete this and a duplicated label is a quiet double-count in every detection total."""
+    once = GLINER_LABELS[0]
+
+    findings = configuration_gaps(gliner_labels=(once, once))
+
+    assert any("asked for twice" in one for one in findings)
+
+
+# ---------------------------------------------------------------- merging and clipping
+def test_two_touching_ranges_are_one_range_and_two_separate_ones_are_not() -> None:
+    """The floor a later span is clipped against. Merged wrongly, a span already covered is
+    redacted a second time and the text grows a label inside a label; not merged at all, the
+    floor is a list of overlapping ranges and the walk over it is wrong.
+
+    Both cases in one test, because the boundary is the whole content: touching is merged and
+    a one-character gap is not.
+
+    Delete this and the merge can be written with `<` instead of `<=`, and two ranges that meet
+    exactly stay separate."""
+    touching = pii._covered(
+        (
+            Detection(kind=EntityKind.NRIC, start=0, end=5, confidence=1.0),
+            Detection(kind=EntityKind.NRIC, start=5, end=9, confidence=1.0),
+        )
+    )
+    apart = pii._covered(
+        (
+            Detection(kind=EntityKind.NRIC, start=0, end=5, confidence=1.0),
+            Detection(kind=EntityKind.NRIC, start=6, end=9, confidence=1.0),
+        )
+    )
+
+    assert touching == ((0, 9),)
+    assert apart == ((0, 5), (6, 9))
+
+
+def test_a_span_that_ends_inside_a_covered_block_yields_nothing_after_it() -> None:
+    """The early return in the clipping walk. Without it the walk carries on past the end of
+    the span it is clipping and can emit a piece starting after that span finished, which is a
+    redaction of characters nothing detected.
+
+    Delete this and a span running into a covered block can produce a trailing piece."""
+    span = Detection(kind=EntityKind.UNPATTERNED_NAME, start=2, end=6, confidence=0.9)
+    covered = ((0, 4), (5, 10))
+
+    pieces = tuple(pii._outside(span, covered, [end for _, end in covered]))
+
+    assert [(one.start, one.end) for one in pieces] == [(4, 5)]
+
+
+def test_a_span_beginning_inside_an_earlier_replacement_is_skipped_not_nested() -> None:
+    """The scrub walks spans in order and refuses to start one inside text it has already
+    replaced. Without the check the second span's opening bracket lands inside the first
+    label, and the output holds a label inside a label.
+
+    Delete this and two overlapping detections that reach the scrub produce text no model can
+    read and no person can either."""
+    text = "S1234567D and more"
+    overlapping = (
+        Detection(kind=EntityKind.NRIC, start=0, end=9, confidence=1.0),
+        Detection(kind=EntityKind.UNPATTERNED_NAME, start=4, end=9, confidence=0.9),
+    )
+
+    assert scrub(text, detections=overlapping) == "[sg_nric] and more"
+
+
+# ------------------------------------------------------ reading a model's answer back
+def a_span(**overrides: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "label": GLINER_LABELS[0].label,
+        "start": 0,
+        "end": 9,
+        "score": 0.9,
+    }
+    return base | overrides
+
+
+def test_a_span_offset_that_is_not_a_whole_number_is_refused() -> None:
+    """**A boolean is an integer in Python and is not an offset.** A response holding `true`
+    where a start was due would index the text at one and produce a span one character wide
+    that nothing detected.
+
+    Delete this and the type check admits `True`, which is the one non-integer that passes
+    `isinstance(value, int)`."""
+    for bad in (True, 1.5, "3", None):
+        with pytest.raises(PiiError, match="not an offset"):
+            decode_entity_spans("S1234567D", {ENTITY_SPANS_KEY: [a_span(start=bad)]})
+
+
+def test_a_span_label_that_is_not_a_string_is_refused() -> None:
+    """The label decides which declared kind a span becomes, so a non-string one reaches the
+    lookup as a key nothing holds.
+
+    Delete this and the failure moves from a sentence naming the response to a lookup error
+    somewhere else."""
+    with pytest.raises(PiiError, match="which is not one"):
+        decode_entity_spans("S1234567D", {ENTITY_SPANS_KEY: [a_span(label=7)]})
+
+
+def test_a_span_score_that_is_not_a_number_is_refused() -> None:
+    """The same trap as the offset: `True` is an instance of `int`, so a response holding
+    `true` as a score would become a confidence of one and pass every threshold in the file.
+
+    Delete this and the highest-confidence spans in the system are the ones whose score was a
+    boolean."""
+    for bad in (True, "0.9", None):
+        with pytest.raises(PiiError, match="which is not one"):
+            decode_entity_spans("S1234567D", {ENTITY_SPANS_KEY: [a_span(score=bad)]})
+
+
+def test_a_span_score_outside_zero_to_one_is_refused() -> None:
+    """A model returning a percentage rather than a fraction scores every span at ninety and
+    passes every threshold, which is the filter switching itself off.
+
+    Delete this and the thresholds in `GLINER_LABELS` stop being able to reject anything."""
+    for bad in (0.0, -0.1, 90.0):
+        with pytest.raises(PiiError, match="not a confidence"):
+            decode_entity_spans("S1234567D", {ENTITY_SPANS_KEY: [a_span(score=bad)]})
+
+
+# ------------------------------------------------------------------- the cost measurement
+def test_a_clock_that_went_backwards_is_refused_rather_than_recorded() -> None:
+    """A negative interval is not a fast run, it is a machine whose clock moved, and averaging
+    it into a budget makes the budget say the work is cheaper than it is.
+
+    Delete this and a clock adjustment during a measurement produces a published figure that
+    nothing can explain."""
+    ticks = iter((10.0, 5.0))
+
+    with pytest.raises(ValueError, match="clock went backwards"):
+        measure_scrub(
+            "S1234567D",
+            clock=lambda: next(ticks),
+            hardware="a test",
+            basis="a test",
+            excludes="a test",
+            taken_on=date(2030, 1, 1),
+            samples=1,
+        )
+
+
+def test_a_timing_run_with_no_samples_is_refused() -> None:
+    """Zero samples produce an empty list, and every statistic over it is either an exception
+    or a zero that reads as a measurement of something very fast.
+
+    Delete this and a caller passing zero publishes a cost of nothing."""
+    with pytest.raises(ValueError, match="measured nothing"):
+        measure_scrub(
+            "S1234567D",
+            clock=time.perf_counter,
+            hardware="a test",
+            basis="a test",
+            excludes="a test",
+            taken_on=date(2030, 1, 1),
+            samples=0,
+        )

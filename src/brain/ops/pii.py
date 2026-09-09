@@ -559,13 +559,26 @@ def gliner_label_for(label: str) -> GlinerLabel:
     raise PiiError(msg)
 
 
-def configuration_gaps() -> tuple[str, ...]:
+def configuration_gaps(
+    *,
+    kinds: Iterable[EntityKind] | None = None,
+    recognisers: Sequence[Recogniser] | None = None,
+    built_ins: Sequence[BuiltIn] | None = None,
+    gliner_labels: Sequence[GlinerLabel] | None = None,
+) -> tuple[str, ...]:
     """Every entity kind with nowhere to be found, and every duplicated responsibility.
 
     Two directions, because both have happened elsewhere in this codebase. A kind with no
     recogniser is a label that can never be produced, so a caller checking for it waits
     forever. A kind covered both locally and by a built-in is two answers to one question,
     and the loser is whichever one the merge happens to drop.
+
+    **Every register is a parameter defaulting to this module's own**, for the reason
+    `brain.ops.recovery.backup_policy_gaps` takes the same shape: a check that can only be run
+    against the healthy declaration cannot be shown to fail, and one nobody has seen fail is
+    one nobody knows works. A mutation audit found all three findings below unreachable on
+    2026-09-09, which is what a check with no way to be given a broken input looks like from
+    the outside.
 
     The model's labels count as somewhere for a kind to come from, which is what lets
     `UNPATTERNED_NAME` exist with no regex behind it. That is a real weakening of the check
@@ -579,14 +592,23 @@ def configuration_gaps() -> tuple[str, ...]:
     character makes two overlapping answers additive instead of a race. The duplication this
     reports is between a *pattern* and a model, where one of the two is genuinely dead code.
     """
+    # Resolved here rather than as default arguments, and the difference is not style: a
+    # default binds when the module is imported, so a test that reassigns one of these
+    # registers to try a broken one gets the healthy register back. That is the bug this
+    # parameterisation exists to remove, arriving through the parameterisation itself.
+    kinds = EntityKind if kinds is None else kinds
+    recognisers = RECOGNISERS if recognisers is None else recognisers
+    built_ins = PRESIDIO_BUILT_INS if built_ins is None else built_ins
+    gliner_labels = GLINER_LABELS if gliner_labels is None else gliner_labels
+
     findings: list[str] = []
-    model_kinds = {declared.kind for declared in GLINER_LABELS}
-    have = {r.kind for r in RECOGNISERS} | _KINDS_WITHOUT_OWN_RECOGNISER | model_kinds
-    for kind in EntityKind:
+    model_kinds = {declared.kind for declared in gliner_labels}
+    have = {r.kind for r in recognisers} | _KINDS_WITHOUT_OWN_RECOGNISER | model_kinds
+    for kind in kinds:
         if kind not in have:
             findings.append(f"{kind.value}: declared as a kind with no recogniser and no exemption")
-    local_names = {r.kind.name for r in RECOGNISERS}
-    for built_in in PRESIDIO_BUILT_INS:
+    local_names = {r.kind.name for r in recognisers}
+    for built_in in built_ins:
         if built_in.presidio_name in local_names:
             findings.append(
                 f"{built_in.presidio_name}: covered locally and by Presidio; one of the two is dead"
@@ -595,8 +617,8 @@ def configuration_gaps() -> tuple[str, ...]:
             findings.append(f"{built_in.presidio_name}: both enabled and declined")
 
     seen: set[str] = set()
-    pattern_kinds = {r.kind for r in RECOGNISERS}
-    for declared in GLINER_LABELS:
+    pattern_kinds = {r.kind for r in recognisers}
+    for declared in gliner_labels:
         if declared.label in seen:
             findings.append(
                 f"{declared.label}: asked for twice, so its spans arrive twice and one "
@@ -677,8 +699,12 @@ def _outside(
         if block_start > cursor:
             yield _clip(span, cursor, block_start)
         cursor = max(cursor, block_end)
-        if cursor >= span.end:
-            return
+        # There is deliberately no `if cursor >= span.end: return` here, and there was one
+        # until a mutation showed it could not change what this yields. Once the cursor is
+        # past the span's end, every later block starts before it, so `block_start > cursor`
+        # is false and nothing is emitted, and the trailing piece below is guarded by the
+        # same comparison. It saved iterations and read as though it were keeping a piece
+        # from being emitted after the span finished, which it was never able to do.
         index += 1
     if cursor < span.end:
         yield _clip(span, cursor, span.end)

@@ -220,11 +220,13 @@ uv run python -m brain.ops.guards src/brain/x.py --carry migrations/versions/002
 **It lived in `.scratch/` until 2026-09-09, and `.scratch/` is in `.gitignore`.** Every
 sentence in this section told the reader to run a file no clone contains, which is the same
 shape as a scheduled control nobody calls: correct, documented, and absent from every
-direction except the one that matters. It is a module now, with tests, and the two paragraphs
-below it are the two ways to get it wrong. It has found roughly forty real
-defects in two days and almost every one was the same shape: a validator that is written,
-correct, and never once run, because every object any test builds is valid. Knowing where it
-has already been saves running it again, and knowing where it has not is the more useful half.
+direction except the one that matters. It is a module now, with tests, and the paragraphs
+below are the two ways to get it wrong.
+
+It has found roughly seventy real defects in three days and almost every one was the same
+shape: a validator that is written, correct, and never once run, because every object any test
+builds is valid. The list below is where it has been, which saves running it again; where it
+has not been is the more useful half, and the paragraph after the list is why.
 
 Audited with no survivors remaining: `core/redaction.py` (six real, fixed),
 `identity/roles.py` (eight real and one removed as unreachable), `connectors/throttle.py`,
@@ -236,7 +238,8 @@ Audited with no survivors remaining: `core/redaction.py` (six real, fixed),
 candidates, six real and two that could not fire), `audit/ledger.py` (four real, fixed),
 `identity/oidc.py` (seven real, fixed), `gate/ingress.py`, `core/scope_sql.py` (ten
 candidates: six real, one a second copy of a check the type already makes, three that
-could not fire), and every module under `migration/`.
+could not fire), `ops/pii.py` (twenty candidates: eighteen real, two that could not fire),
+and every module under `migration/`.
 
 `gate/leash.py` has since been re-run with the right scope, and the result is the point of the
 episode recorded above. Against the twenty-four test files that import it, the audit finds
@@ -277,11 +280,10 @@ comprehension, an `or` fallback on a return and a conditional expression are non
 `ast.If` and none of them is mutated, so a module can come back with a clean table and half its
 decisions unwatched. `brain.ops.guards.decisions_not_mutated` lists every one it could not
 address and the command prints them under the table, which is the difference between a gap and
-a silence. `migration/skills.py` has five `if`
-statements and five comprehension filters; `knowledge/search.py`'s `lexical_legs` has no `if`
-statement at all and two, a filter and a fallback. `brain.ops.guards.decisions_not_mutated`
-counts them for you. Mutate those by hand, and count the decisions rather than the
-statements before believing a survivor count of zero.
+a silence. `migration/skills.py` has five `if` statements and five comprehension filters;
+`knowledge/search.py`'s `lexical_legs` has no `if` statement at all and two decisions, a filter
+and a fallback. Mutate those by hand, and count the decisions rather than the rows before
+believing a survivor count of zero.
 
 **Mutate the constants too, not only the branches.** This is the sibling of the docstring rule
 above and it caught three separate authors on 2026-09-06, in one afternoon. A test that asserts
