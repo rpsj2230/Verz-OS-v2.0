@@ -455,6 +455,7 @@ each of those has exactly one test file, so there was nothing else to miss.
 | `src/brain/tables/` | SQLAlchemy models. Ten schemas; see `brain.db.SCHEMAS`. |
 | `src/brain/console/` | Every administrative surface. Each one decides what a reader may see and writes nothing. |
 | `src/brain/orchestration/` | Multi-agent runs: the fold that narrows a reach at every hop, and the fan-out budget. |
+| `src/brain/migration/` | Moving a company off the system it already runs. Seven modules, and every one is a refusal: only knowledge carries across, a vector never does, an entity seed has nowhere to hold the old system's access, and a rebuilt agent starts at Shadow. |
 | `src/brain/browsing/` | An agent with hands. Four refusals: the planner cannot read the page, the policy cannot change mid-run, the credential never reaches the model, the rubric predates the run. |
 | `migrations/versions/` | Alembic. Every new table enables row-level security. |
 | `docs/wbs/*.js` | The work breakdown. `docs/wbs.json` is compiled from it. |
