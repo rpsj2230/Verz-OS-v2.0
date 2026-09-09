@@ -74,7 +74,7 @@ makes an install unpinned. `BRAIN_RELEASE_URL` is where the release archive is f
 | `check the machine` | Confirms Docker and Compose v2 are installed, before anything is written. | Install Docker Engine 24 or newer with the compose plugin and run it again. Nothing has been written yet. |
 | `check the machine is large enough` | Compares total memory against what this profile needs. | Use a larger machine, or install `lite`. An install that starts on a machine that cannot hold it fails later, one container at a time, as whichever service asks for memory last is killed. |
 | `create the install directory` | Makes `/opt/brain`. Everything lives in one directory, so an uninstall is one removal. | Run it as a user that can write `/opt/brain`. |
-| `download and unpack the release` | Fetches one archive of one tag and unpacks it, then records the tag in `/opt/brain/RELEASE`. Never a clone: a build that fetches a second repository is how a client ends up running a copy a fix never reached. | Check the tag exists and that the server can reach the release host. Nothing has been started, so it is safe to run again. **See "What you cannot do today": no release archive is published yet.** |
+| `download and unpack the release` | Fetches one archive of one tag and unpacks it, then records the tag in `/opt/brain/RELEASE`. Never a clone: a build that fetches a second repository is how a client ends up running a copy a fix never reached. | Check the tag exists and that the server can reach the release host. Nothing has been started, so it is safe to run again. **See "What you cannot do today": the archive is built by a workflow that has never been run, and nothing has been tagged, so there is nothing at that address yet.** |
 | `change into the release directory` | Changes into `/opt/brain` before running compose. | The previous step reported success and left nothing behind, so the archive unpacked somewhere else. Remove it and run again. |
 | `write the environment file from the template` | Copies `.env.example` to `.env`. The template is copied, never edited in place. | Copy it yourself into `/opt/brain/.env` and run again; the step writes nothing else. |
 | `mint this installation's secrets` | Generates the database password, the application role password and the setup code with `openssl rand`, under `umask 077`, and appends them with the instant the code was minted. | Install `openssl` and run again. The file is written in one go, so a failure leaves nothing half-minted. |
@@ -132,11 +132,21 @@ behind a value somebody printed once and probably still has.
 
 Three things, stated here rather than discovered at the terminal.
 
-**No release archive is published.** The pipeline publishes a signed container image and
-nothing else. The fourth step fetches `$BRAIN_RELEASE_URL`, and there is no workflow in this
-repository that produces an archive for that address to point at. Until there is, the compose
-files and the `ops/` directory have to reach `/opt/brain` some other way, and the sequence above
-is a plan rather than something you can run start to finish.
+**No release has been published yet, so there is nothing at `$BRAIN_RELEASE_URL` today.** What
+has changed is that something now produces one. A workflow builds the archive on a tag and
+publishes it with its notes, and it spells no file list of its own: it asks
+`brain.deployment.release` what the archive carries, and refuses to publish when a path the
+install reads is missing from it, when a path the archive must never carry has reached it, or
+when a value belonging to one company has reached a file every other company would receive.
+The archive carries the compose files, `ops/`, the environment template, the migrations,
+`alembic.ini` and these pages, and it carries no `.git`, no `.github`, no source and no
+history, which is why a client receives an archive rather than a copy of the repository.
+
+Two things are still true and both matter. **Nothing has been tagged, so no archive exists to
+fetch**, and until one does the fourth step has nothing to download and the compose files have
+to reach `/opt/brain` some other way. And **the workflow has never run**: it is written and
+tested against the declaration it builds from, and it has not been executed once, which is not
+the same as a release somebody has installed from.
 
 **There is no rendered `install.sh` either.** The script is produced by a function from the
 plan, and no build step writes its output anywhere a client could fetch. That is why this page
@@ -159,10 +169,13 @@ bodies that disagree, and two services pointed at a database nothing creates.
 | The step list, and the order | `test_install_docs.py`, against the install plan |
 | The sizing table | `test_deployment_requirements.py`, against the compose files |
 | The requirements list | `test_deployment_requirements.py` |
+| That the archive carries every file the install reads, and none it must not | `test_deployment_release.py`, and the release workflow refuses to publish without it |
+| **That the archive works, because one has ever been unpacked on a server** | **nobody. No release has been published and the workflow has never run.** |
 | **What each step does, and what to do when it fails** | **nobody. Prose, kept true by hand.** |
 | **Everything under "Why the credentials are minted here", "The setup code" and "After the wizard"** | **nobody. Prose, kept true by hand.** |
 
 ## Task ids
 
 M42.2.3 is not claimed. See "What you cannot do today": the fourth step fetches an archive that
-nothing publishes, so nobody can follow this page to a working install yet.
+is now built by a workflow and has still never been published, so nobody can follow this page
+to a working install yet.

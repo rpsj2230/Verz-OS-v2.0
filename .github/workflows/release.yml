@@ -1,0 +1,101 @@
+name: Release
+
+# One archive of one tag, published where the fourth step of the installer can fetch it.
+#
+# Nothing about what a client receives is written in this file. The file list, the refusals,
+# where the migrations live and the notes all come from `brain.deployment.release`, and the
+# module header argues why: an exclusion list written here would ship every file added after
+# the day somebody wrote it, and a list written in two places is two lists that agree until
+# one of them is edited. `tests/unit/test_deployment_release.py` asserts that this file spells
+# no path the archive carries or refuses.
+#
+# Task ids: M42.3.8
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing tag to build the archive for
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  UV_VERSION: "0.12.9"
+
+jobs:
+  archive:
+    name: Publish the archive and its notes
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          # Full history and every tag. The notes are computed against the release before
+          # this one, and a shallow clone has no previous tag to compute against: it would
+          # report a release carrying migrations as carrying none, which is the one sentence
+          # in the notes a client acts on.
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - name: What the archive would carry, and everything wrong with it
+        # Before the tar and not after. A missing bind-mount source or a client value in a
+        # carried file is a release that must not be published, rather than one to withdraw
+        # once somebody has installed it.
+        run: uv run python -m brain.deployment.release gaps
+
+      - name: The file list, asked of the module rather than written here
+        run: uv run python -m brain.deployment.release files > "$RUNNER_TEMP/files.txt"
+
+      - name: Build the archive
+        # One top-level directory, because the installer unpacks with --strip-components=1.
+        # Sorted and with ownership zeroed so two builds of one tag are the same bytes.
+        run: |
+          tar -czf "$RUNNER_TEMP/brain-$TAG.tar.gz" --sort=name --owner=0 --group=0 \
+            --numeric-owner --transform "s,^,brain-$TAG/," -T "$RUNNER_TEMP/files.txt"
+
+      - name: The archive is that list and nothing else
+        # The list is an allowlist, so this cannot fail on today's declaration. It is here for
+        # the day somebody adds a flag to the command above: a build that quietly carried one
+        # more file than it was asked for would look exactly like this one.
+        run: |
+          tar -tzf "$RUNNER_TEMP/brain-$TAG.tar.gz" | sed "s,^brain-$TAG/,," | sort \
+            > "$RUNNER_TEMP/inside.txt"
+          sort "$RUNNER_TEMP/files.txt" > "$RUNNER_TEMP/asked.txt"
+          diff "$RUNNER_TEMP/asked.txt" "$RUNNER_TEMP/inside.txt"
+
+      - name: The notes, in plain English, with the database answer derived
+        # The tag message is what the person tagging wrote: an `Urgency:` line and one line per
+        # thing that changed. Everything else is computed. The directory to diff comes from the
+        # module for the same reason the file list does.
+        run: |
+          git tag -l --format='%(contents)' "$TAG" > "$RUNNER_TEMP/message.txt"
+          where=$(uv run python -m brain.deployment.release migrations-path)
+          previous=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          if [ -n "$previous" ]; then
+            git diff --name-only --diff-filter=A "$previous" "$TAG" -- "$where" \
+              > "$RUNNER_TEMP/added.txt"
+          else
+            git ls-tree -r --name-only "$TAG" -- "$where" > "$RUNNER_TEMP/added.txt"
+          fi
+          xargs uv run python -m brain.deployment.release notes "$TAG" \
+            "$RUNNER_TEMP/message.txt" < "$RUNNER_TEMP/added.txt" > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$TAG" --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" "$RUNNER_TEMP/brain-$TAG.tar.gz"
