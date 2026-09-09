@@ -26,11 +26,20 @@ it is out of the archive because no profile composes it, not because a rule name
 
 **The include list is derived from the install, not chosen.** The environment template is
 there because the plan copies it; each compose file is there because `files_for` names it for
-some profile; the four `ops/...` paths are there because a service in one of those files
-bind-mounts them, and a bind mount that resolves to nothing starts the container anyway with
-no error at all. `archive_gaps` computes that set from the plan and the compose documents and
-reports anything the archive would not carry, because **a mismatch between the archive and the
-install plan is a failure a client meets on their own server and nobody here ever sees**.
+some profile; the four `ops/...` settings are there because the plan copies them into the
+install's settings directory, which four services then mount by absolute path.
+
+Until 2026-09-10 those four were derived the other way, from the compose files bind-mounting
+`./ops/...`, and item 43 of `docs/needs-rupash.md` closed that shape: a relative source is
+resolved against the directory the compose file was read from, and a deployment that stores
+its own copy resolves it to nothing and starts the container anyway with no error at all. The
+paths are the same four and the reason the archive owes them has moved from the compose files
+to the plan, which is where `paths_the_install_reads` already looks. `mounts_in` is kept
+because the shape it refuses is one edit away from coming back.
+
+`archive_gaps` computes that set from the plan and the compose documents and reports anything
+the archive would not carry, because **a mismatch between the archive and the install plan is a
+failure a client meets on their own server and nobody here ever sees**.
 
 **Whether a release changes the database is read out of the release, never typed into it.**
 A person typing "no schema change" on a release that has one is the exact failure the field
@@ -38,6 +47,31 @@ exists to prevent, so there is no field to type: `ReleaseNotes.database` folds
 `brain.deployment.compatibility.changes_in` over the migrations the release carries, and the
 same reader with its two arguments swapped answers whether going back is safe. See
 `WHETHER_IT_CHANGES_THE_DATABASE_IS_READ_AND_NEVER_TYPED`.
+
+**Moving an install between releases is the other half, and the half nothing recorded.**
+`brain.deployment.installer.PLAN` writes the tag it unpacked into `/opt/brain/RELEASE` and
+writes nothing that selects an image, so a fresh install pinned to a tag runs containers that
+resolve `${APP_IMAGE:-...:latest}` and the two facts disagree from the first day. That is one
+finding. The second is worse for a rollback: `RELEASE` is the only version fact an install
+holds, an update overwrites it, and nothing anywhere records what it overwrote. So
+`update_plan` **copies the marker before it writes over it**, which is the whole of what makes
+`rollback_plan` possible, and `rollback_plan` refuses when that copy is missing rather than
+guessing. See `RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE` and
+`A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES`.
+
+**A rollback re-pins code and leaves the schema.** Migrations run forward at startup under an
+advisory lock and nothing runs a downgrade against a client's data, so going back is safe
+exactly when the newer migrations were compatible for the older code, which
+`ReleaseNotes.going_back` already answers at release time. On the server the answerable
+question is narrower and worth more: whether the database sits at a revision the release being
+gone back to does not carry. `rollback_plan` asks the database for its applied revision and
+looks for it in the target archive, and refuses loudly when it is not there rather than
+recreating old code in front of a newer schema.
+
+Rejected: a second reader of the rollback direction. `ReleaseNotes.going_back` is
+`changes_in` with its two arguments swapped and it is the answer at release time; the plan's
+check is a different question asked of a running database, not a second opinion on the same
+one.
 
 Rejected: building the archive here, in Python, and having the workflow call one function. It
 reads well and it puts a tar writer in a module whose whole job is a declaration, for no gain:
@@ -57,7 +91,7 @@ wrong in the direction that costs a client a week of exposure. Urgency is a pers
 so it is stated, and what is enforced is that it is stated at all and that a release breaking
 the schema cannot be called routine.
 
-Task ids: M42.3.8
+Task ids: M42.3.6, M42.3.8
 """
 
 from __future__ import annotations
@@ -73,7 +107,15 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from brain.deployment.compatibility import VERSIONS, Verdict, changes_in
-from brain.deployment.installer import INSTALL_HOME, PLAN, Step
+from brain.deployment.installer import (
+    IMAGE_VARIABLE,
+    INSTALL_ENV_FILE,
+    INSTALL_HOME,
+    PLAN,
+    Step,
+    compose_files_argument,
+    step_named,
+)
 from brain.deployment.requirements import files_for
 from brain.ops.compose import ComposeDoc, ComposeFiles
 from brain.ops.wiring import PROFILES
@@ -144,6 +186,56 @@ A_NOTE_A_CLIENT_CANNOT_ACT_ON_IS_A_COMMIT_SUBJECT: Final = (
     "the one field written for somebody outside this repository, and it reads as coverage: "
     "the release has notes, and nobody can act on them. Plain English is the requirement and "
     "this is the part of it a machine can hold."
+)
+
+#: Why an install can be pinned to a tag and running something else from the day it was built.
+THE_MARKER_AND_THE_RUNNING_IMAGE_ARE_TWO_DIFFERENT_FACTS: Final = (
+    "The install writes the tag it unpacked into a marker file and writes nothing into the "
+    "environment file that selects an image, so every container of a fresh install falls back "
+    "to the compose default, which ends in latest. The marker and the running image therefore "
+    "disagree from the first install, and an update that only moved the marker would go on "
+    "disagreeing while reporting a version. Pinning is writing the image variable beside the "
+    "marker, and these two scripts are the only thing in this repository that does it."
+)
+
+#: Why an update writes down what it is replacing before it replaces it.
+RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE: Final = (
+    "An install holds one version fact, the tag in its marker file, and an update overwrites "
+    "it. So a rollback has nothing to go back to unless the old value was copied first, and "
+    "copied before the overwrite rather than after. The other order fails silently and in the "
+    "worst way: the copy exists, it holds a real tag, and it holds the tag that was just "
+    "installed, so the rollback re-pins the release it was meant to be leaving and everything "
+    "about it reports success."
+)
+
+#: Why the rollback refuses rather than working the previous release out for itself.
+A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES: Final = (
+    "What a rollback could guess from is the tag it is already on, whatever the release host "
+    "offers today, or whatever else is in the local image store, and every one of those is a "
+    "guess about a server nobody here can see. It is run at the worst moment of somebody's "
+    "week, so it either goes back to the release this install was actually on or it stops and "
+    "names the file that is missing. There is no third answer worth having."
+)
+
+#: Why `latest` is refused as the target of an update.
+LATEST_IS_AN_UNPIN_WEARING_AN_UPDATES_CLOTHES: Final = (
+    "A client who updates to latest has not moved to a release, they have stopped being "
+    "pinned: the next pull changes the running version with nobody having decided anything, "
+    "and the marker beside it goes on naming a tag that is no longer a fact. It is the same "
+    "refusal brain.deployment.installer makes of a default release tag, at the other end of "
+    "the same install."
+)
+
+#: Why a rollback is a code change, and what is checkable about that on a server.
+A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA: Final = (
+    "Migrations run forward at startup under an advisory lock and nothing in this product "
+    "runs a downgrade against a client's data, so going back re-pins the code and leaves the "
+    "schema where the newer release left it. That is safe exactly when the newer migrations "
+    "were compatible for the older code, which ReleaseNotes.going_back answers at release "
+    "time and nothing on a server can re-derive. What a server can answer is narrower and is "
+    "worth more at that moment: if the database is at a revision the target release does not "
+    "carry, the rollback is old code in front of a newer schema and it says so rather than "
+    "recreating the containers and finding out from the logs."
 )
 
 
@@ -230,6 +322,14 @@ INCLUDED: Final[tuple[Rule, ...]] = (
         "ops/seaweedfs",
         "the object store's credentials file and its provisioning script, both bind-mounted. "
         "The second is named as an entrypoint, so its absence at least fails loudly",
+    ),
+    Rule(
+        "ops/update",
+        "the update and rollback scripts, which are the only two things on a client's server "
+        "that write the image variable, so an install that does not carry them is one whose "
+        "marker and running image can only ever drift further apart. They are carried by the "
+        "release you are on rather than fetched at the moment you need them, because the "
+        "moment you need the rollback is the moment you are least able to fetch anything",
     ),
     Rule(
         "migrations",
@@ -402,6 +502,10 @@ WRITTEN_BY_THE_INSTALL: Final[tuple[re.Pattern[str], ...]] = (
     re.compile(r"\bcp\s+\"?[^\"\s]+\"?\s+\"?" + re.escape(INSTALL_HOME) + r"/([\w./-]+)"),
 )
 
+#: The fourth way, and the one that cannot be a destination pattern: `mkdir` creates every
+#: operand it is given, however many there are. See `paths_the_install_reads`.
+MAKES_A_DIRECTORY: Final = re.compile(r"mkdir\b")
+
 
 def paths_the_install_reads(plan: Sequence[Step] = PLAN) -> tuple[str, ...]:
     """Every path under the install directory the plan reads and does not write itself.
@@ -411,6 +515,14 @@ def paths_the_install_reads(plan: Sequence[Step] = PLAN) -> tuple[str, ...]:
     here would go on naming one. The written set is computed the same way and from the same
     text, so the tarball the install downloads and the environment file it creates are not
     mistaken for things the archive should have carried.
+
+    **A `mkdir` is read line by line rather than by a pattern, and it has to be.** Every other
+    way the plan writes has one destination in a fixed position, so a regular expression can
+    name it: after the redirect, after `-o`, second argument of `cp`. `mkdir` takes any number
+    of operands and creates all of them, and the settings step passes it three, so a pattern
+    capturing "the path after the command" would have counted two of the three as files the
+    archive owes the install. That is the affordable direction again: a release refusing to
+    build over a directory it was never supposed to carry.
     """
     read: set[str] = set()
     written: set[str] = set()
@@ -419,6 +531,9 @@ def paths_the_install_reads(plan: Sequence[Step] = PLAN) -> tuple[str, ...]:
             read.update(UNDER_THE_INSTALL_HOME.findall(fragment))
             for pattern in WRITTEN_BY_THE_INSTALL:
                 written.update(pattern.findall(fragment))
+            for line in fragment.splitlines():
+                if MAKES_A_DIRECTORY.match(line.strip()):
+                    written.update(UNDER_THE_INSTALL_HOME.findall(line))
     return tuple(sorted(read - written))
 
 
@@ -870,20 +985,610 @@ def notes_from_tag_message(
     return ReleaseNotes(tag=tag, what_changed=changed, urgency=Urgency(word), migrations=migrations)
 
 
+# --------------------------------------------------- moving an install between two releases
+#: The file an update copies the marker into before it writes the new tag over it. Beside the
+#: marker rather than inside the environment file, because it is one install's own history and
+#: nothing reads it but the rollback.
+PREVIOUS_MARKER: Final = "PREVIOUS_RELEASE"
+
+#: The tag that is not one. See `LATEST_IS_AN_UNPIN_WEARING_AN_UPDATES_CLOTHES`.
+NOT_A_RELEASE_TAG: Final = "latest"
+
+#: The variable that selects every container of an install.
+#:
+#: `docker-compose.staging.yml` keeps `STAGING_IMAGE` deliberately and no profile composes it,
+#: so nothing here reads it: staging exists to run a build production has not taken yet, and
+#: one variable for both would be a staging stack that can only ever run what production runs.
+#: `brain.deployment.installer.release_pinning_gaps` is what holds that boundary; this is the
+#: one name on the install side of it.
+THE_IMAGE_VARIABLE: Final = "APP_IMAGE"
+
+#: The one question the rollback asks of a running database.
+#:
+#: Written whole rather than composed from a table name, because there is one form of it and
+#: assembling it would be a second thing to get wrong. The table is unqualified in alembic's own
+#: configuration, which puts it in the connection's default schema, and `migrations/env.py`
+#: names no other one; the test asserts that second half against the file rather than against
+#: this line.
+APPLIED_REVISION_QUERY: Final = "select version_num from public.alembic_version"
+
+#: How the install records the tag it unpacked: a printf of the release variable straight into
+#: a file under the install directory. Read out of the plan rather than spelled a second time,
+#: because that marker is the whole of what an update has to go on, and a second spelling would
+#: be right until the day somebody renamed the file in one place.
+RECORDS_THE_TAG: Final = re.compile(
+    r'printf\s+"%s\\n"\s+"\$(\w+)"\s*>\s*"' + re.escape(INSTALL_HOME) + r'/(\w+)"'
+)
+
+
+def release_marker(plan: Sequence[Step] = PLAN) -> tuple[str, str]:
+    """The variable the install pins and the file it writes it into, as the one pair they are.
+
+    Both halves come off one line of the plan and are returned together because they are one
+    fact: the marker is only meaningful as the value of that variable, and a caller that had
+    to fetch them separately could pair a renamed file with the old variable and render a
+    script that pins nothing.
+
+    Refuses rather than defaulting, for the reason `brain.deployment.installer.step_named`
+    refuses: a caller handed a default writes a script that reads a file no install has, which
+    fails on somebody else's server with a message about a missing file.
+    """
+    for step in plan:
+        found = RECORDS_THE_TAG.search(step.run)
+        if found is not None:
+            return found.group(1), found.group(2)
+    msg = (
+        f"no step of the install writes a release tag into a file under {INSTALL_HOME}, so "
+        "nothing on a server says which release it is on and an update has nothing to record. "
+        f"{A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES}"
+    )
+    raise ReleaseError(msg)
+
+
+def image_repository(files: ComposeFiles) -> str:
+    """The published image an install pins a tag of, read off the compose files.
+
+    Read rather than written down, for the same reason `_compose_rules` derives the include
+    list: the reference is already in every compose file, and a copy of it in this module would
+    be the copy that stops matching. Only the default is read, because that is where the image
+    name lives: `${APP_IMAGE:-name:tag}` names the image and `${APP_IMAGE}` names nothing.
+
+    Two refusals, and they fail for different people. No reference at all means these scripts
+    would write a variable nothing reads, which is a pin that pins nothing and reports success.
+    Two different repositories means a script that pins one of them, so an install runs two
+    builds of one product, which is the failure `release_pinning_gaps` describes arriving
+    through the update rather than through a compose file.
+    """
+    found: set[str] = set()
+    for name in sorted(files):
+        for body in _services_in(files[name]).values():
+            if not isinstance(body, Mapping):
+                continue
+            match = IMAGE_VARIABLE.match(str(body.get("image", "")))
+            if match is None or match.group(1) != THE_IMAGE_VARIABLE:
+                continue
+            default = match.group(2) or ""
+            if ":" in default:
+                found.add(default.rsplit(":", 1)[0])
+    if not found:
+        msg = (
+            f"no service in these compose files chooses an image through {THE_IMAGE_VARIABLE} "
+            "with a default naming one, so there is no image reference for an update to pin "
+            f"and writing {THE_IMAGE_VARIABLE} would put a variable nothing reads into the "
+            "environment file"
+        )
+        raise ReleaseError(msg)
+    if len(found) > 1:
+        msg = (
+            f"{THE_IMAGE_VARIABLE} selects {sorted(found)} in these compose files, so a script "
+            "pinning a tag of one of them leaves the rest wherever they were and the install "
+            "runs two builds of one product"
+        )
+        raise ReleaseError(msg)
+    return found.pop()
+
+
+def refusal(condition: str, message: str) -> str:
+    """One guard of these plans, as the shell it is: run the test, or fail with the reason.
+
+    **The message is checked for the three characters a double-quoted shell string acts on
+    rather than prints.** This is the one place in this repository where prose is compiled into
+    shell, and a `$` in a refusal expands to nothing at the exact moment somebody most needs to
+    read it: the operator sees a sentence with a hole in it and no indication there was ever a
+    word there. A backtick is worse than a hole, because it runs.
+    """
+    for char in ('"', "$", "`"):
+        if char in message:
+            msg = (
+                f"{message!r} carries {char!r}, which the shell acts on rather than prints, so "
+                "the refusal reaches the person reading it with a word missing or a command run"
+            )
+            raise ReleaseError(msg)
+    return f'{condition} || fail "{message}"'
+
+
+def _an_install_is_here(marker: str) -> Step:
+    """The step both plans open with: this directory holds an install, and it holds its file.
+
+    Two tests rather than one, and the second is not decoration. The step that pins the image
+    rewrites the environment file, and an absent one would be created holding the pin and
+    nothing else: every credential the install minted gone, replaced by one line, with the
+    script reporting that it had pinned the release.
+    """
+    return Step(
+        name="check this directory holds an install",
+        run=(
+            refusal(
+                f'test -s "{INSTALL_HOME}/{marker}"',
+                "there is no release marker here, so this directory is not an install this "
+                "script can move. Install first",
+            )
+            + "\n"
+            + refusal(
+                f'test -s "{INSTALL_HOME}/{INSTALL_ENV_FILE}"',
+                "there is no environment file here, and the pin is written into it. Install "
+                "first, or put the file back from your own copy of it",
+            )
+        ),
+        why=(
+            "everything below reads or rewrites one of these two files, and both failures are "
+            "quiet without this: a missing marker is a rollback with nothing to record, and a "
+            "missing environment file is one the pin step would create holding the pin alone"
+        ),
+        on_failure=(
+            f"nothing has been changed. Check {INSTALL_HOME} is the directory the install was "
+            "made in, and that you are running this as a user that can read it"
+        ),
+        changes=False,
+    )
+
+
+def _onto_this_release(variable: str, plan: Sequence[Step] = PLAN) -> tuple[Step, ...]:
+    """The five steps that put an install on the release it has just unpacked.
+
+    One tuple rather than two copies, because an update and a rollback do exactly the same
+    thing from here and differ only in how they decided which tag.
+
+    **Two of the five are the installer's own, taken by name.** The settings step is first
+    because a release that adds a fifth file four containers might mount would otherwise reach
+    a server with nobody creating it, and a bind mount whose source does not exist is the one
+    failure that starts the container anyway: its own guard is per file, so an allowlist a
+    client has edited is not touched. The readiness step is last because readiness is what
+    tells a person the swap worked, and a second copy of that check here would be a second
+    answer to the only question either script is run to have answered.
+    """
+    pinned = f'"$BRAIN_REPOSITORY:${variable}"'
+    environment = f"{INSTALL_HOME}/{INSTALL_ENV_FILE}"
+    return (
+        step_named("create the settings the containers mount", plan),
+        Step(
+            name="pin the image this install runs",
+            # Rewritten rather than appended to, because a second APP_IMAGE line lower down the
+            # file is the one compose reads and the first is the one a person finds.
+            run=(
+                "umask 077\n"
+                "{\n"
+                f'  grep -v "^{THE_IMAGE_VARIABLE}=" "{environment}" || true\n'
+                f'  printf "{THE_IMAGE_VARIABLE}=%s\\n" {pinned}\n'
+                f'}} > "{environment}.pinned"\n'
+                f'mv "{environment}.pinned" "{environment}"'
+            ),
+            why=THE_MARKER_AND_THE_RUNNING_IMAGE_ARE_TWO_DIFFERENT_FACTS,
+            on_failure=(
+                f"the file is rewritten beside itself and moved into place, so a failure here "
+                f"leaves {environment} as it was. Check the directory is writable and run this "
+                "again"
+            ),
+            changes=True,
+            already_done=f'grep -qxF "{THE_IMAGE_VARIABLE}=$BRAIN_REPOSITORY:${variable}" '
+            f'"{environment}"',
+        ),
+        Step(
+            name="pull the image this release publishes",
+            run="docker compose $BRAIN_COMPOSE_FILES pull --quiet",
+            why=(
+                "pulled before anything is recreated, so a registry that cannot be reached "
+                "fails while the containers of the release you are on are still serving"
+            ),
+            on_failure=(
+                "check this server can reach the image registry, then run this again. The pin "
+                "is already written, so repeating this costs nothing"
+            ),
+            changes=True,
+            # Keyed on the pinned image rather than on any image being present, which is the
+            # guard the install uses and is exactly wrong here: an update runs against a server
+            # that already has images, so that test is true before the pull and the one step
+            # the script exists for would be skipped.
+            already_done=f"docker image inspect {pinned} >/dev/null 2>&1",
+        ),
+        Step(
+            name="recreate the containers on the pinned image",
+            run="docker compose $BRAIN_COMPOSE_FILES up -d",
+            why=(
+                "compose recreates the containers whose image changed and leaves the rest, and "
+                "the application runs its own migrations at startup under an advisory lock "
+                "before readiness passes"
+            ),
+            on_failure=(
+                "read `docker compose $BRAIN_COMPOSE_FILES ps` for the container that is not "
+                "running, then its logs. Bringing the stack up again is safe"
+            ),
+            changes=True,
+            # Named no service, because more than one service of a profile runs this image and
+            # naming one would report success while another stayed behind. Both halves are
+            # required: something is running the pin, and nothing is running a different tag of
+            # it, so a stack that is entirely down does not count as already done.
+            already_done=(f'running_images | grep -qxF {pinned} && test -z "$(off_the_pin)"'),
+        ),
+        step_named("wait for the application to report ready", plan),
+    )
+
+
+def update_plan(plan: Sequence[Step] = PLAN) -> tuple[Step, ...]:
+    """Moving an install forward to a named release, in the order it has to happen.
+
+    **The third step is the one this plan is shaped around.** It copies the marker before the
+    fourth step writes over it, so an update that fails anywhere after it still leaves a
+    rollback something to go back to, and an update that fails before it has changed nothing.
+    See `RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE`.
+
+    Its guard is the comparison that makes a second run safe rather than destructive. Run
+    twice, an unguarded copy would record the release that was just installed as the one to go
+    back to; guarded on the marker already naming the target, the second run skips it and the
+    real previous release survives.
+
+    Four of the steps are the installer's own, taken by name. Fetching and unpacking one archive
+    of one tag is the same act whether the directory is empty or holds the release before it,
+    and the failure of a second copy of it is that only one of the two would be corrected.
+    """
+    variable, marker = release_marker(plan)
+    return (
+        Step(
+            name="refuse a tag that pins nothing",
+            run=refusal(
+                f'test "${variable}" != "{NOT_A_RELEASE_TAG}"',
+                "latest is not a release tag: updating to it stops this install being pinned, "
+                "so the next pull changes the version with nobody deciding anything. Name the "
+                "release you mean to install",
+            ),
+            why=LATEST_IS_AN_UNPIN_WEARING_AN_UPDATES_CLOTHES,
+            on_failure=(
+                "run this again with the tag of the release you mean to install. Nothing has "
+                "been read or written yet"
+            ),
+            changes=False,
+        ),
+        _an_install_is_here(marker),
+        Step(
+            name="record the release this update replaces",
+            run=f'cp "{INSTALL_HOME}/{marker}" "{INSTALL_HOME}/{PREVIOUS_MARKER}"',
+            why=RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE,
+            on_failure=(
+                "do not continue: this copy is the only thing a rollback reads, and every step "
+                f"after it changes what is running. Check {INSTALL_HOME} is writable and run "
+                "this again"
+            ),
+            changes=True,
+            already_done=f'test "$(cat "{INSTALL_HOME}/{marker}")" = "${variable}"',
+        ),
+        step_named("download and unpack the release", plan),
+        step_named("change into the release directory", plan),
+        *_onto_this_release(variable, plan),
+    )
+
+
+def rollback_plan(plan: Sequence[Step] = PLAN) -> tuple[Step, ...]:
+    """Moving an install back to the release the last update recorded, or refusing to.
+
+    **It takes no tag, and that is the design rather than a convenience.** The release to go
+    back to is read out of the file the update wrote, so the script cannot be pointed at a
+    release this install was never on, and when that file is missing it stops. See
+    `A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES`.
+
+    **The archive is fetched, read, and only then unpacked**, which is why this does not reuse
+    the installer's download step the way `update_plan` does. The check that matters runs
+    against the migrations the target release carries, and it has to run while the install is
+    still whole: unpacked first, a refusal would leave the older release's files on disk and
+    its marker claiming a tag the containers are not running, which is a worse state than the
+    one being refused. See `A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA`.
+
+    The last step removes the record it acted on. A rollback goes back one release: leaving the
+    record would make a second run re-pin the release this one just left, so two scripts would
+    oscillate between two tags, each reporting success. Removed, the second run refuses and
+    asks for a decision, which is what going back two releases actually needs.
+    """
+    variable, marker = release_marker(plan)
+    archive = f"{INSTALL_HOME}/going-back-${variable}.tar.gz"
+    return (
+        _an_install_is_here(marker),
+        Step(
+            name="refuse without a record of the release being left",
+            run=refusal(
+                f'test -s "{INSTALL_HOME}/{PREVIOUS_MARKER}"',
+                "nothing here records the release this install was on before its last update, "
+                "so there is no release to go back to. Update once with the update script, "
+                "which writes it, or install the tag you want by name",
+            ),
+            why=A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES,
+            on_failure=(
+                "nothing has been changed. An install that has never been updated by the "
+                "update script has no record, and the release you want has to be named"
+            ),
+            changes=False,
+        ),
+        Step(
+            name="read the release this rollback goes back to",
+            run=(
+                f'{variable}="$(cat "{INSTALL_HOME}/{PREVIOUS_MARKER}")"\n'
+                f'say "going back to ${variable}"\n'
+                + refusal(
+                    f'test "${variable}" != "{NOT_A_RELEASE_TAG}"',
+                    "the release recorded here is latest, which is not a release: going back "
+                    "to it would leave this install unpinned. Name the tag you want instead",
+                )
+                + "\n"
+                + refusal(
+                    'test -n "${BRAIN_RELEASE_URL:-}"',
+                    "set BRAIN_RELEASE_URL to the archive of the release printed above and "
+                    "run this again",
+                )
+            ),
+            why=(
+                "the tag is printed before it is needed, because the archive for it is what "
+                "the operator has to supply and they cannot supply it until they know which "
+                "release this is going back to"
+            ),
+            on_failure=(
+                "nothing has been changed. The tag is in the file this step read, and the "
+                "archive for it is the one the release was published with"
+            ),
+            changes=False,
+        ),
+        Step(
+            name="fetch the archive of that release",
+            run=(
+                f'curl -fsSL "$BRAIN_RELEASE_URL" -o "{archive}.part"\n'
+                f'mv "{archive}.part" "{archive}"'
+            ),
+            why=(
+                "downloaded beside itself and moved into place, so the guard on this step "
+                "cannot be satisfied by a transfer that stopped halfway. Named for the tag, so "
+                "a download for one release is never mistaken for another's"
+            ),
+            on_failure=(
+                "check this server can reach the release host and that the archive for that "
+                "tag exists. Nothing about the running install has changed"
+            ),
+            changes=True,
+            already_done=f'test -s "{archive}"',
+        ),
+        Step(
+            name="check the database is not past that release",
+            run=(
+                'applied="$(docker compose $BRAIN_COMPOSE_FILES exec -T db '
+                f'psql -qtAX -U brain -d brain -c "{APPLIED_REVISION_QUERY}")"\n'
+                + refusal(
+                    'test -n "$applied"',
+                    "the database did not answer with the migration revision it is on, so "
+                    "nothing here can say whether it is past the release you are going back "
+                    "to. Check the database container is running",
+                )
+                + "\n"
+                + refusal(
+                    f'tar -xzOf "{archive}" --wildcards "*/migrations/versions/*.py" '
+                    '| grep -qxF "revision = \\"$applied\\""',
+                    "this database has been migrated past what the release you are going back "
+                    "to carries, so re-pinning it would put older code in front of a newer "
+                    "schema. Nothing has been changed. Going back from here means the backup "
+                    "taken before the update that moved it",
+                )
+            ),
+            why=A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA,
+            on_failure=(
+                "nothing has been changed and nothing has been recreated. Read the sentence "
+                "the step printed: it is either a database that cannot be reached or a schema "
+                "the older release does not know about, and they need different answers"
+            ),
+            changes=False,
+        ),
+        Step(
+            name="unpack it and record which release this install is on",
+            run=(
+                f'tar -xzf "{archive}" -C "{INSTALL_HOME}" --strip-components=1\n'
+                f'printf "%s\\n" "${variable}" > "{INSTALL_HOME}/{marker}"'
+            ),
+            why=(
+                "the marker is written in the same step as the unpack, so the tag a server "
+                "reports is the tag whose files are in the directory it reports it from"
+            ),
+            on_failure=(
+                f"the archive is still at {archive}. Unpack it by hand into {INSTALL_HOME} "
+                "with one directory stripped, then run this again"
+            ),
+            changes=True,
+            already_done=f'test "$(cat "{INSTALL_HOME}/{marker}")" = "${variable}"',
+        ),
+        step_named("change into the release directory", plan),
+        *_onto_this_release(variable, plan),
+        Step(
+            name="forget the release this rollback left",
+            run=f'rm -f "{INSTALL_HOME}/{PREVIOUS_MARKER}"',
+            why=(
+                "a rollback goes back one release. Left in place, the record would send a "
+                "second run back to the release this one just left, so the two scripts "
+                "oscillate between two tags with each run reporting success"
+            ),
+            on_failure=(
+                "the install is already back on the release it was asked for; only the record "
+                f"is left. Remove {INSTALL_HOME}/{PREVIOUS_MARKER} by hand"
+            ),
+            changes=True,
+            already_done=f'test ! -f "{INSTALL_HOME}/{PREVIOUS_MARKER}"',
+        ),
+    )
+
+
+def _profile_case(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
+    """The compose file list per profile, as the shell chooses between them.
+
+    **These scripts take the profile and the installer bakes it in**, because the two are run
+    by people who know different things. Whoever runs the installer is choosing the profile at
+    that moment; whoever runs an update is standing in front of an install whose profile was
+    chosen months ago, and nothing the install leaves on disk records which one it was. So the
+    choice is an argument with the three answers spelled out, and a fourth profile appears here
+    the day it is declared rather than the day somebody remembers.
+    """
+    arms = [
+        f'  {profile}) BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}" ;;'
+        for profile in profiles
+    ]
+    names = " ".join(profiles)
+    return (
+        'case "$BRAIN_PROFILE" in',
+        *arms,
+        f'  *) fail "unknown profile; one of: {names}" ;;',
+        "esac",
+    )
+
+
+def _helpers() -> tuple[str, ...]:
+    """The shell functions both scripts use, including the two that read what is running."""
+    return (
+        'say() { printf "%s\\n" "$1"; }',
+        'fail() { printf "%s\\n" "$1" >&2; exit 1; }',
+        "running_images() {",
+        "  docker compose $BRAIN_COMPOSE_FILES ps --quiet | while read -r one; do",
+        '    docker inspect --format "{{.Config.Image}}" "$one"',
+        "  done",
+        "}",
+        "off_the_pin() {",
+        '  running_images | grep -F "$BRAIN_REPOSITORY:" '
+        '| grep -vxF "$BRAIN_REPOSITORY:$BRAIN_RELEASE"',
+        "}",
+    )
+
+
+def _render(generator: str, preamble: Sequence[str], steps: Sequence[Step], done: str) -> str:
+    """One plan as the shell it is, numbered against its own length.
+
+    The same shape as `brain.deployment.installer.render` and deliberately not shared with it.
+    The loop is nine lines; what differs is everything around it, because that renderer bakes
+    one profile's memory and service figures into a script for a machine that has nothing on it
+    yet, and these two are run against an install that already exists. Sharing it would mean a
+    parameterised preamble, which is more machinery than the nine lines it saves.
+    """
+    total = len(steps)
+    lines = [
+        "#!/bin/sh",
+        f"# Generated by brain.deployment.release.{generator}. Do not edit: edit the plan and",
+        "# regenerate, or the script and the plan disagree and the plan is the tested one.",
+        "set -eu",
+        "",
+        *preamble,
+        "",
+    ]
+    for number, step in enumerate(steps, 1):
+        heading = f"step {number} of {total}: {step.name}"
+        lines.append(f"# {heading}")
+        if step.already_done:
+            lines.append(f"if {step.already_done}; then")
+            lines.append(f'  say "{heading} - already done, skipping"')
+            lines.append("else")
+            lines.append(f'  say "{heading}"')
+            lines.extend(f"  {one}" for one in step.run.splitlines())
+            lines.append("fi")
+        else:
+            lines.append(f'say "{heading}"')
+            lines.extend(step.run.splitlines())
+        lines.append("")
+    lines.append(f'say "{done}"')
+    return "\n".join(lines) + "\n"
+
+
+def render_update(
+    *, repository: str, plan: Sequence[Step] = PLAN, profiles: Sequence[str] = PROFILES
+) -> str:
+    """The update script, as the shell it is.
+
+    `repository` is passed rather than read, for the reason `installer.render` takes its
+    figures: rendering a script is not a good enough excuse to open a file, and a caller who
+    has the compose documents has it from `image_repository`.
+    """
+    variable, _ = release_marker(plan)
+    usage = "usage: update.sh <profile> <release tag>"
+    preamble = [
+        f'BRAIN_PROFILE="${{1:?{usage}}}"',
+        f'{variable}="${{2:?{usage}}}"',
+        f'BRAIN_HOME="{INSTALL_HOME}"',
+        f'BRAIN_REPOSITORY="{repository}"',
+        'BRAIN_RELEASE_URL="${BRAIN_RELEASE_URL:?set BRAIN_RELEASE_URL to the release archive}"',
+        "",
+        *_helpers(),
+        "",
+        *_profile_case(profiles),
+        "",
+        f'say "Updating the $BRAIN_PROFILE profile in $BRAIN_HOME to ${variable}."',
+    ]
+    return _render(
+        "render_update",
+        preamble,
+        update_plan(plan),
+        f"Done. This install is on ${variable} and pinned to it.",
+    )
+
+
+def render_rollback(
+    *, repository: str, plan: Sequence[Step] = PLAN, profiles: Sequence[str] = PROFILES
+) -> str:
+    """The rollback script, as the shell it is.
+
+    It takes no tag. `BRAIN_RELEASE_URL` is checked inside a step rather than demanded in the
+    preamble, which is the one thing here that reads as an inconsistency and is not: the tag
+    whose archive the operator has to supply is read out of the install, so demanding the URL
+    before the script has printed the tag would be refusing to run over a value nobody could
+    have known to set.
+    """
+    variable, _ = release_marker(plan)
+    usage = "usage: rollback.sh <profile>"
+    preamble = [
+        f'BRAIN_PROFILE="${{1:?{usage}}}"',
+        f'BRAIN_HOME="{INSTALL_HOME}"',
+        f'BRAIN_REPOSITORY="{repository}"',
+        f'{variable}=""',
+        "",
+        *_helpers(),
+        "",
+        *_profile_case(profiles),
+        "",
+        'say "Going back one release on the $BRAIN_PROFILE profile in $BRAIN_HOME."',
+    ]
+    return _render(
+        "render_rollback",
+        preamble,
+        rollback_plan(plan),
+        f"Done. This install is back on ${variable} and pinned to it.",
+    )
+
+
 # ------------------------------------------------------------------ what the workflow asks
 USAGE: Final = (
     "usage: python -m brain.deployment.release "
-    "files | gaps | migrations-path | notes <tag> <message file> [migration file ...]"
+    "files | gaps | migrations-path | update-script | rollback-script | "
+    "notes <tag> <message file> [migration file ...]"
 )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """The four questions the release workflow asks, so the workflow spells no path itself.
+    """What the release workflow asks, so the workflow spells no path itself, and two more.
 
     `migrations-path` looks like an odd thing to expose and it is the point: the workflow asks
     git which migration files a tag added, which needs the directory, and a directory typed
     into a workflow is a second declaration of where migrations live. It is
     `brain.deployment.compatibility.VERSIONS` here and nowhere else.
+
+    The two script commands are not asked by the workflow at all. They are how the checked-in
+    files under `ops/update/` are produced, and the test that compares those files against
+    these renderings is what keeps a generated artefact from drifting away from its generator.
     """
     args = list(sys.argv[1:] if argv is None else argv)
     command, rest = (args[0], args[1:]) if args else ("", [])
@@ -903,6 +1608,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if command == "migrations-path":
         print(VERSIONS.relative_to(REPO).as_posix())
+        return 0
+    if command in {"update-script", "rollback-script"}:
+        render = render_update if command == "update-script" else render_rollback
+        print(render(repository=image_repository(compose_documents())), end="")
         return 0
     if command == "notes" and len(rest) >= 2:
         tag, message = rest[0], Path(rest[1]).read_text(encoding="utf-8")

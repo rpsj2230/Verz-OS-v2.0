@@ -18,23 +18,43 @@ Named `test_deployment_release.py` rather than `test_release.py`, which is alrea
 `brain.release` and its wave tags. The package convention is the answer: every other module
 under `brain.deployment` is tested in a file named after it.
 
-Task ids: M42.3.8
+**The third half is the two scripts, and its tests run them.** An update and a rollback are
+shell, and a test asserting the text of a script is satisfied by a script that will not run, so
+every refusal below is exercised by cutting the rendered script at the step under test and
+running it against a throwaway directory shaped like an install. What that catches and text
+never would: a guard that is inverted, a copy that takes the wrong file, and a second run that
+overwrites the one record a rollback has.
+
+Task ids: M42.3.6, M42.3.8
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+import tarfile
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from brain.deployment.installer import INSTALL_HOME, PLAN, Step
+from brain.deployment.installer import INSTALL_ENV_FILE, INSTALL_HOME, PLAN, Step, step_named
 from brain.deployment.release import (
     A_BREAKING_SCHEMA_CHANGE_IS_NEVER_ROUTINE,
+    A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA,
+    A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES,
+    APPLIED_REVISION_QUERY,
     EXCLUDED,
     INCLUDED,
+    LATEST_IS_AN_UNPIN_WEARING_AN_UPDATES_CLOTHES,
+    NOT_A_RELEASE_TAG,
+    PREVIOUS_MARKER,
+    RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE,
+    THE_IMAGE_VARIABLE,
     URGENCY,
     DatabaseChange,
     Level,
@@ -47,13 +67,20 @@ from brain.deployment.release import (
     carried_paths,
     compose_documents,
     database_change,
+    image_repository,
     included_by,
     install_needs,
     mounts_in,
     notes_from_tag_message,
     paths_the_install_reads,
+    refusal,
     refused_by,
+    release_marker,
+    render_rollback,
+    render_update,
     rollback_change,
+    rollback_plan,
+    update_plan,
 )
 from brain.deployment.requirements import files_for
 from brain.ops.compose import relative_bind_mounts
@@ -61,6 +88,10 @@ from brain.ops.wiring import PROFILES
 
 REPO = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO / ".github" / "workflows" / "release.yml"
+SCRIPTS = REPO / "ops" / "update"
+
+#: The repository the compose files select, read once so every rendering below is the real one.
+REPOSITORY = image_repository(compose_documents())
 
 
 # ------------------------------------------------------------------ migration fixtures
@@ -251,16 +282,49 @@ def test_compiled_bytecode_is_not_a_file_of_this_repository(tmp_path: Path) -> N
 
 
 # ==================================================== what the install expects to be there
-def test_the_environment_template_is_the_one_file_the_plan_reads_from_the_archive() -> None:
+def test_the_template_and_the_four_settings_are_what_the_plan_reads_from_the_archive() -> None:
     """Read out of the plan rather than listed, so a step that starts reading a second file is
     a second file the archive owes it. The tarball the install downloads, the RELEASE marker it
-    writes and the environment file it creates are all under the same directory and none of
-    them is the archive's to carry.
+    writes, the environment file it creates and the three settings directories it makes are all
+    under the same directory and none of them is the archive's to carry.
+
+    **This was one file until 2026-09-10 and is five.** Item 43 of `docs/needs-rupash.md` moved
+    four settings files out of relative bind mounts and into a step that copies them from the
+    release into `/opt/brain/settings`, so the reason the archive owes them moved from the
+    compose files to the plan. The set is the same four paths, which is the point: it is
+    derived from wherever the install actually reads them.
 
     Delete this and the derivation can quietly start counting written files as needed ones,
     which reads as the archive being incomplete and sends somebody looking for a file nobody
     ships."""
-    assert paths_the_install_reads(PLAN) == (".env.example",)
+    assert paths_the_install_reads(PLAN) == (
+        ".env.example",
+        "ops/automation/egress.conf",
+        "ops/langfuse/clickhouse-memory.xml",
+        "ops/seaweedfs/provision.sh",
+        "ops/seaweedfs/s3.json",
+    )
+
+
+def test_a_directory_the_install_makes_is_not_one_the_archive_owes_it() -> None:
+    """The fourth way the plan writes, and the one that cannot be a destination pattern.
+    `mkdir` creates every operand it is given and the settings step passes it three, so a
+    pattern naming "the path after the command" would have counted two of the three as files
+    the archive owes the install, and the release would refuse to build over directories it was
+    never supposed to carry.
+
+    Delete this and the mkdir handling can be replaced by a pattern that looks equivalent and
+    silently drops every operand after the first."""
+    plan = (
+        a_step(
+            name="make three",
+            run=f'mkdir -p "{INSTALL_HOME}/one" "{INSTALL_HOME}/two" "{INSTALL_HOME}/three"',
+            changes=True,
+            already_done=f'test -d "{INSTALL_HOME}/three"',
+        ),
+    )
+
+    assert paths_the_install_reads(plan) == ()
 
 
 def test_a_file_a_step_starts_reading_becomes_a_file_the_archive_owes_it() -> None:
@@ -305,14 +369,25 @@ def test_every_relative_bind_mount_is_a_path_the_archive_carries() -> None:
     directory there and starts the container, so a memory ceiling, an egress allowlist and a
     set of object-store credentials go missing with every health check green.
 
-    Delete this and a fifth mount added to a compose file is a silently misconfigured container
-    on somebody else's machine, found by nobody."""
-    mounts = mounts_in(compose_documents())
+    **There are none left, and that is why the second half of this test exists.** Item 43
+    removed all four on 2026-09-10, so asserting over the repository's own documents would now
+    be a loop over nothing wearing the clothes of a check. The constructed document is what
+    keeps the rule measured: a mount added back has to be a path the archive carries, and one
+    that is not is a finding rather than a silence.
 
-    assert mounts, "no bind mounts were read at all, so this test is watching nothing"
-    for one in mounts:
-        assert one in install_needs(), one
+    Delete this and a mount added to a compose file is a silently misconfigured container on
+    somebody else's machine, found by nobody."""
+    assert mounts_in(compose_documents()) == (), (
+        "a relative bind mount is back; every one of them has to be a path the archive carries"
+    )
+
+    carried = {"services": {"one": {"volumes": ["./ops/seaweedfs/s3.json:/etc/x:ro"]}}}
+    invented = {"services": {"one": {"volumes": ["./ops/nothing/here.conf:/etc/x:ro"]}}}
+
+    for one in mounts_in({"a.yml": carried}):
         assert included_by(one), f"{one} is bind-mounted and the archive does not carry it"
+    assert mounts_in({"a.yml": carried}) == ("ops/seaweedfs/s3.json",)
+    assert not included_by(mounts_in({"a.yml": invented})[0])
 
 
 def test_the_two_readers_of_the_bind_mounts_agree() -> None:
@@ -320,8 +395,17 @@ def test_the_two_readers_of_the_bind_mounts_agree() -> None:
     this answers the archive's as paths. Two readers of one thing is how they come to disagree,
     so the agreement is asserted rather than assumed.
 
+    Both readers see nothing in this repository since item 43, so the agreement is also
+    asserted on a constructed document. Two readers that agree because neither is looking is
+    the same tick with none of the meaning.
+
     Delete this and one of the two can stop seeing a mount, which shows up as an archive that
     is complete by its own arithmetic."""
+    invented = {"a.yml": {"services": {"one": {"volumes": ["./ops/x.conf:/etc/x:ro"]}}}}
+    assert mounts_in(invented) == ("ops/x.conf",)
+    assert len(relative_bind_mounts(invented)) == 1
+    assert "./ops/x.conf" in relative_bind_mounts(invented)[0]
+
     documents = compose_documents()
     reported = relative_bind_mounts(documents)
 
@@ -746,3 +830,600 @@ def test_the_release_workflow_refuses_before_it_builds_and_publishes_what_it_bui
     assert order["gaps"] < order["tar"] < order["publish"]
     assert '--notes-file "$RUNNER_TEMP/notes.md"' in steps[order["publish"]]
     assert "--strip-components" not in "\n".join(steps), "the installer strips, not the build"
+
+
+# ======================================== moving an install between two releases (M42.3.6)
+def a_shell() -> str:
+    """The POSIX shell on this machine, or a skip, matching `test_deployment_installer.py`."""
+    shell = shutil.which("sh")
+    if shell is None:  # pragma: no cover - CI runs on Linux, where sh always exists
+        pytest.skip("no POSIX shell on this machine to run the rendered script")
+    return shell
+
+
+def an_install(root: Path, *, release: str = "v1.0.0", previous: str = "") -> Path:
+    """A directory shaped like an install: the marker, the environment file, maybe the record."""
+    root.mkdir(parents=True, exist_ok=True)
+    root.joinpath("RELEASE").write_text(f"{release}\n", encoding="utf-8", newline="\n")
+    root.joinpath(INSTALL_ENV_FILE).write_text(
+        "POSTGRES_PASSWORD=kept\n", encoding="utf-8", newline="\n"
+    )
+    if previous:
+        root.joinpath(PREVIOUS_MARKER).write_text(f"{previous}\n", encoding="utf-8", newline="\n")
+    return root
+
+
+def through(script: str, name: str) -> str:
+    """The rendered script down to the end of the step with this name.
+
+    Cut rather than run whole, because every step after the refusals talks to docker or to the
+    release host. What is kept is the preamble and the steps in front of the one being tested,
+    so the guard runs in the script it was rendered into rather than in a fixture of one line.
+    """
+    parts = script.split("\n# step ")
+    kept = [parts[0]]
+    for part in parts[1:]:
+        kept.append(part)
+        if part.split("\n", 1)[0].split(": ", 1)[1] == name:
+            return "\n# step ".join(kept)
+    msg = f"no step named {name!r} in the rendered script"
+    raise AssertionError(msg)
+
+
+def run_script(
+    script: str, *, home: Path, args: Sequence[str] = ("lite",), url: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """One cut script against a throwaway install directory.
+
+    The install directory is substituted for the install home, and that is the only rewrite.
+    These plans spell that path the way the install plan spells it and nothing parameterises
+    it, and what is under test is what a guard does rather than which directory it looks in.
+    """
+    return subprocess.run(
+        [a_shell(), "-s", "--", *args],
+        input=script.replace(INSTALL_HOME, home.as_posix()),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
+        env={**os.environ, "BRAIN_RELEASE_URL": url},
+    )
+
+
+def an_archive(path: Path, revisions: Sequence[str]) -> Path:
+    """A release archive carrying one migration file per revision, as the workflow builds one."""
+    root = path.parent / "built"
+    versions = root / f"brain-{path.stem}" / "migrations" / "versions"
+    versions.mkdir(parents=True, exist_ok=True)
+    for one in revisions:
+        versions.joinpath(f"{one}_x.py").write_text(
+            f'revision = "{one}"\ndown_revision = None\n', encoding="utf-8", newline="\n"
+        )
+    with tarfile.open(path, "w:gz") as archive:
+        archive.add(root / f"brain-{path.stem}", arcname=f"brain-{path.stem}")
+    return path
+
+
+# ---------------------------------------------------------------- what an install records
+def test_the_install_records_which_release_it_unpacked_and_never_which_image_it_runs() -> None:
+    """**The finding this leaf turns on, asserted rather than argued.** The install plan writes
+    the tag into a marker file and writes nothing that selects an image, so every container of
+    a fresh install falls back to a compose default ending in `latest`: the marker and the
+    running image disagree from the first day, and an update that only moved the marker would
+    go on disagreeing while reporting a version.
+
+    Delete this and the pin step can be dropped from both plans with every other test here
+    still green, because nothing else asserts that anything anywhere writes the image
+    variable."""
+    assert release_marker(PLAN) == ("BRAIN_RELEASE", "RELEASE")
+    assert [one.name for one in PLAN if THE_IMAGE_VARIABLE in one.run + one.already_done] == []
+
+    defaults = {
+        str(body.get("image", ""))
+        for document in compose_documents().values()
+        for body in dict(document.get("services") or {}).values()
+        if isinstance(body, dict)
+    }
+    assert any(
+        one.startswith(f"${{{THE_IMAGE_VARIABLE}:-") and one.endswith(":latest}")
+        for one in defaults
+    )
+
+    pinning = [one for one in update_plan() if THE_IMAGE_VARIABLE in one.run]
+    assert [one.name for one in pinning] == ["pin the image this install runs"]
+    # Writes it, rather than merely naming it. The step reads the old line out as well as
+    # writing the new one, so a check for the name alone passes with the write removed.
+    assert f'printf "{THE_IMAGE_VARIABLE}=%s\\n"' in pinning[0].run
+
+
+def test_a_plan_that_writes_no_release_tag_anywhere_is_refused_rather_than_defaulted() -> None:
+    """The marker is read off the install plan rather than spelled a second time, so a rename
+    there reaches both scripts. A default would render scripts that read a file no install has,
+    which fails on somebody else's server with a message about a missing file.
+
+    Delete this and the reader can start returning a constant pair and pass, which is a rename
+    of the marker that silently keeps working here and stops working on a server."""
+    with pytest.raises(ReleaseError, match="nothing on a server says which release"):
+        release_marker((a_step(name="do nothing at all", run="true"),))
+    assert "guess" in A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES
+
+
+# --------------------------------------------------------------- recording, and its order
+def test_the_update_records_the_release_it_replaces_before_it_writes_the_new_one() -> None:
+    """**The ordering the whole update is shaped around.** The step that copies the marker sits
+    in front of the step that overwrites it, so an update that fails anywhere after it still
+    leaves a rollback something to go back to. The other order records the tag that was just
+    installed, and it fails silently: the file exists, it holds a real tag, and it is the wrong
+    one.
+
+    Delete this and the two steps can be swapped, which changes nothing about whether the
+    script runs and turns every rollback into a re-pin of the release being left."""
+    names = [one.name for one in update_plan()]
+
+    assert names.index("record the release this update replaces") < names.index(
+        "download and unpack the release"
+    )
+    assert "the tag that was just installed" in (
+        RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE
+    )
+
+
+def test_the_update_writes_down_the_release_that_was_there_before_it(tmp_path: Path) -> None:
+    """The ordering above, as what actually lands on disk. Run against a directory holding one
+    release, the recording step leaves a file naming that release and not the one being
+    installed.
+
+    Delete this and the index comparison above is satisfied by a step that copies the wrong
+    file, or writes the target tag, or writes nothing at all."""
+    home = an_install(tmp_path / "install", release="v1.0.0")
+    script = through(
+        render_update(repository=REPOSITORY), "record the release this update replaces"
+    )
+
+    done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
+
+    assert done.returncode == 0, done.stderr
+    assert home.joinpath(PREVIOUS_MARKER).read_text(encoding="utf-8").strip() == "v1.0.0"
+
+
+def test_a_second_run_of_the_update_does_not_record_the_release_it_just_installed(
+    tmp_path: Path,
+) -> None:
+    """The guard that makes the copy safe to repeat. Once the marker names the target, the
+    recording step has nothing to do: an unguarded copy run twice would record the release that
+    was just installed as the one to go back to, which is a rollback to where you already are.
+
+    Delete this and the step loses its guard, and the second run of an update that failed
+    somewhere later destroys the only record of the release before it."""
+    home = an_install(tmp_path / "install", release="v1.1.0", previous="v1.0.0")
+    script = through(
+        render_update(repository=REPOSITORY), "record the release this update replaces"
+    )
+
+    done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
+
+    assert done.returncode == 0, done.stderr
+    assert "already done, skipping" in done.stdout
+    assert home.joinpath(PREVIOUS_MARKER).read_text(encoding="utf-8").strip() == "v1.0.0"
+
+
+# ------------------------------------------------------------------- the three refusals
+def test_a_rollback_with_nothing_recorded_refuses_rather_than_guessing(tmp_path: Path) -> None:
+    """**The refusal the second half of this leaf is about.** What a rollback could guess from
+    is the tag it is already on or whatever the release host offers today, and both are guesses
+    about a server nobody here can see. It is run at the worst moment of somebody's week, so it
+    either goes back to the release this install was on or it stops and names the missing file.
+
+    Delete this and the rollback can fall back to a default, which is a script that reports
+    success and puts the install back on the release it was already running."""
+    home = an_install(tmp_path / "install", release="v1.1.0")
+    script = through(
+        render_rollback(repository=REPOSITORY), "refuse without a record of the release being left"
+    )
+
+    done = run_script(script, home=home)
+
+    assert done.returncode == 1
+    assert "nothing here records the release" in done.stderr
+    assert "guess" in A_ROLLBACK_THAT_GUESSES_IS_WORSE_THAN_ONE_THAT_REFUSES
+
+
+def test_a_rollback_with_a_record_reads_it_and_says_where_it_is_going(tmp_path: Path) -> None:
+    """The positive half, and a guard tested only by its refusals is satisfied by a script that
+    refuses everything. The tag is printed before the archive for it is demanded, because the
+    operator cannot supply that archive until they know which release this is going back to.
+
+    Delete this and the refusal above can be made unconditional, which is a rollback that never
+    rolls anything back."""
+    home = an_install(tmp_path / "install", release="v1.1.0", previous="v1.0.0")
+    script = through(
+        render_rollback(repository=REPOSITORY), "read the release this rollback goes back to"
+    )
+
+    done = run_script(script, home=home, url="https://example.invalid/archive.tar.gz")
+
+    assert done.returncode == 0, done.stderr
+    assert "going back to v1.0.0" in done.stdout
+
+
+def test_a_rollback_that_knows_its_tag_and_not_where_to_fetch_it_says_which_tag(
+    tmp_path: Path,
+) -> None:
+    """The one asymmetry between the two scripts. The update demands the archive URL in its
+    preamble; the rollback cannot, because the tag whose archive is wanted is read out of the
+    install, so refusing before the tag is printed would refuse over a value nobody could have
+    known to set.
+
+    Delete this and the URL check moves into the preamble, where it fails with a sentence that
+    does not say which release the operator is being asked to find."""
+    home = an_install(tmp_path / "install", release="v1.1.0", previous="v1.0.0")
+    script = through(
+        render_rollback(repository=REPOSITORY), "read the release this rollback goes back to"
+    )
+
+    done = run_script(script, home=home, url="")
+
+    assert done.returncode == 1
+    assert "going back to v1.0.0" in done.stdout
+    assert "BRAIN_RELEASE_URL" in done.stderr
+
+
+@pytest.mark.parametrize(
+    ("rendered", "step", "args", "previous"),
+    [
+        (
+            render_update(repository=REPOSITORY),
+            "refuse a tag that pins nothing",
+            ("lite", NOT_A_RELEASE_TAG),
+            "",
+        ),
+        (
+            render_rollback(repository=REPOSITORY),
+            "read the release this rollback goes back to",
+            ("lite",),
+            NOT_A_RELEASE_TAG,
+        ),
+    ],
+    ids=["update", "rollback"],
+)
+def test_neither_script_will_put_an_install_on_a_tag_that_pins_nothing(
+    tmp_path: Path, rendered: str, step: str, args: Sequence[str], previous: str
+) -> None:
+    """**Updating to `latest` is an unpin wearing an update's clothes.** The client has not
+    moved to a release, they have stopped being pinned: the next pull changes the running
+    version with nobody deciding anything, and the marker goes on naming a tag. Both directions
+    refuse it, because a record written by an install that was never pinned would send a
+    rollback there too.
+
+    Delete this and the one word that undoes release pinning is the one word a hurried operator
+    types, and both scripts accept it."""
+    home = an_install(tmp_path / "install", release="v1.1.0", previous=previous)
+
+    done = run_script(
+        through(rendered, step), home=home, args=args, url="https://example.invalid/a"
+    )
+
+    assert done.returncode == 1
+    assert NOT_A_RELEASE_TAG in done.stderr
+    assert "not a release" in done.stderr
+    assert "pinned" in LATEST_IS_AN_UNPIN_WEARING_AN_UPDATES_CLOTHES
+
+
+def test_an_update_names_a_real_tag_and_gets_past_the_refusal(tmp_path: Path) -> None:
+    """The positive sibling of the refusal above, for the reason CLAUDE.md gives: a guard
+    tested only by what it rejects is satisfied by one that rejects everything, and an update
+    script that refuses every tag is worse than none.
+
+    Delete this and the refusal can be widened to any tag at all and stay green."""
+    home = an_install(tmp_path / "install", release="v1.0.0")
+    script = through(render_update(repository=REPOSITORY), "refuse a tag that pins nothing")
+
+    done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
+
+    assert done.returncode == 0, done.stderr
+
+
+def test_a_directory_with_no_environment_file_is_refused_before_anything_rewrites_one(
+    tmp_path: Path,
+) -> None:
+    """The second half of the opening check, and it is not decoration. The pin step rewrites
+    the environment file; against a directory that has none it would create one holding the pin
+    and nothing else, so every credential the install minted would be gone and the script would
+    report that it had pinned the release.
+
+    Delete this and the quietest way to destroy an install is to run the update script in the
+    wrong directory."""
+    home = tmp_path / "install"
+    home.mkdir()
+    home.joinpath("RELEASE").write_text("v1.0.0\n", encoding="utf-8", newline="\n")
+    script = through(render_update(repository=REPOSITORY), "check this directory holds an install")
+
+    done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
+
+    assert done.returncode == 1
+    assert "no environment file" in done.stderr
+
+
+def test_an_unknown_profile_is_refused_by_name_rather_than_composing_nothing(
+    tmp_path: Path,
+) -> None:
+    """These scripts take the profile because nothing an install leaves on disk records which
+    one it was, and a typed profile that matched no arm would leave the compose file list
+    empty: `docker compose up -d` with no `-f` would then recreate whatever a single default
+    file names and report success.
+
+    Delete this and a misspelled profile silently recreates part of an install."""
+    home = an_install(tmp_path / "install")
+    preamble = render_update(repository=REPOSITORY).split("\n# step ")[0]
+
+    done = run_script(preamble, home=home, args=("lightweight", "v1.1.0"), url="https://x.invalid")
+
+    assert done.returncode == 1
+    assert "unknown profile" in done.stderr
+
+
+# ------------------------------------------------------- the database the rollback leaves
+def test_a_rollback_refuses_when_the_database_is_past_the_release_it_goes_back_to(
+    tmp_path: Path,
+) -> None:
+    """**A rollback re-pins the code and leaves the schema.** Migrations run forward at startup
+    under an advisory lock and nothing runs a downgrade against a client's data, so going back
+    puts the older code in front of whatever the newer release left. The answerable version of
+    that on a server is whether the database sits at a revision the target release does not
+    carry, and it is asked of the archive before anything is unpacked or recreated.
+
+    Delete this and the check becomes a line of shell nobody has run, which is the same thing
+    as no check: the failure it exists for arrives as an application that will not start, after
+    the containers have already been recreated."""
+    archive = an_archive(tmp_path / "v1.0.0.tar.gz", ("0001", "0002"))
+    step = next(
+        one for one in rollback_plan() if one.name == "check the database is not past that release"
+    )
+    line = next(one for one in step.run.splitlines() if "--wildcards" in one)
+    preamble = 'fail() { printf "%s\\n" "$1" >&2; exit 1; }\n'
+    # The archive is named relatively and the shell is run in its directory, because GNU tar
+    # reads a Windows path as a remote host and fails before it has opened anything.
+    checked = line.replace(f"{INSTALL_HOME}/going-back-$BRAIN_RELEASE.tar.gz", archive.name)
+
+    def asked(revision: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [a_shell(), "-s"],
+            input=f'{preamble}applied="{revision}"\n{checked}\n',
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+            cwd=archive.parent,
+        )
+
+    ahead, level = asked("0003"), asked("0002")
+
+    assert ahead.returncode == 1
+    assert "migrated past what the release you are going back to carries" in ahead.stderr
+    assert level.returncode == 0, level.stderr
+    assert "downgrade" in A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA
+
+
+def test_the_rollback_asks_the_database_which_revision_it_is_on() -> None:
+    """The other half of the check, which the archive fixture above cannot exercise: the
+    revision is read out of the running database rather than guessed from what the install
+    directory happens to hold, and an unanswered read is its own refusal with its own sentence.
+
+    Delete this and the read can be replaced by a value from the install directory, which is
+    the release's own idea of where the schema should be rather than where it is."""
+    step = next(
+        one for one in rollback_plan() if one.name == "check the database is not past that release"
+    )
+
+    # Against the alembic configuration rather than against the constant itself: the query names
+    # the table in the connection's default schema, and it is right exactly while nothing in the
+    # migration environment moves it.
+    assert "version_table" not in (REPO / "migrations" / "env.py").read_text(encoding="utf-8")
+    assert "alembic_version" in APPLIED_REVISION_QUERY
+    assert APPLIED_REVISION_QUERY in step.run
+    assert "exec -T db psql" in step.run
+    assert "did not answer with the migration revision" in step.run
+    assert not step.changes, "the check writes nothing, so it can be run before any decision"
+
+
+def test_the_rollback_reads_the_archive_before_it_unpacks_it() -> None:
+    """Why this plan does not reuse the installer's download step the way the update does. The
+    check has to run while the install is still whole: unpacked first, a refusal would leave
+    the older release's files on disk with the marker naming a tag the containers are not
+    running, which is a worse state than the one being refused.
+
+    Delete this and the two steps can be reordered into the shape that reads more naturally and
+    leaves an install describing itself wrongly every time the check fires."""
+    names = [one.name for one in rollback_plan()]
+
+    assert (
+        names.index("fetch the archive of that release")
+        < names.index("check the database is not past that release")
+        < names.index("unpack it and record which release this install is on")
+    )
+
+
+def test_a_rollback_forgets_the_record_it_acted_on(tmp_path: Path) -> None:
+    """A rollback goes back one release. Left in place, the record would send a second run back
+    to the release this one just left, so the two scripts oscillate between two tags with every
+    run reporting success. Removed, the second run refuses and asks for a decision, which is
+    what going back two releases actually needs.
+
+    Delete this and the last step can go, and the pair becomes a loop somebody discovers by
+    running it twice."""
+    plan = rollback_plan()
+
+    assert plan[-1].name == "forget the release this rollback left"
+    assert f'rm -f "{INSTALL_HOME}/{PREVIOUS_MARKER}"' == plan[-1].run
+
+    home = an_install(tmp_path / "install", release="v1.0.0", previous="v1.0.0")
+    home.joinpath(PREVIOUS_MARKER).unlink()
+    done = run_script(
+        through(
+            render_rollback(repository=REPOSITORY),
+            "refuse without a record of the release being left",
+        ),
+        home=home,
+    )
+    assert done.returncode == 1
+
+
+# ------------------------------------------------------------------- what the scripts are
+def test_the_image_an_update_pins_is_read_off_the_compose_files() -> None:
+    """The reference is already in every compose file, so a copy of it in the module would be
+    the copy that stops matching. Only the default is read, because that is where the image
+    name lives: `${APP_IMAGE}` with no default names no image at all.
+
+    Delete this and the repository becomes a literal somebody keeps in step by hand, which is
+    the arrangement that puts a client's containers on an image that stopped being published."""
+    assert image_repository(compose_documents()) == REPOSITORY
+    assert f"${{{THE_IMAGE_VARIABLE}:-{REPOSITORY}:latest}}" in {
+        str(body.get("image", ""))
+        for document in compose_documents().values()
+        for body in dict(document.get("services") or {}).values()
+        if isinstance(body, dict)
+    }
+
+
+def test_compose_files_selecting_two_repositories_or_none_are_refused() -> None:
+    """Both refusals, against documents built to fail, because a check that can only be run
+    against the healthy declaration has no test for the case it exists to find. No reference is
+    a pin that sets a variable nothing reads and reports success. Two references is one script
+    pinning half an install, which is the failure `release_pinning_gaps` describes arriving
+    through the update instead of through a compose file.
+
+    Delete this and both refusals survive a mutation run, for the reason
+    `brain.ops.starter.starter_gaps` records: no test could hand them a bad case."""
+    with pytest.raises(ReleaseError, match="no service"):
+        image_repository({"a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}}}"}}}})
+    with pytest.raises(ReleaseError, match="two builds of one product"):
+        image_repository(
+            {
+                "a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:-one/x:v1}}"}}},
+                "b.yml": {"services": {"job": {"image": f"${{{THE_IMAGE_VARIABLE}:-two/y:v1}}"}}},
+            }
+        )
+    assert (
+        image_repository(
+            {"a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:-one/x:v1}}"}}}}
+        )
+        == "one/x"
+    )
+
+
+def test_a_refusal_the_shell_would_act_on_rather_than_print_is_refused() -> None:
+    """This is the one place in the repository where prose is compiled into shell. A `$` in a
+    refusal expands to nothing at the exact moment somebody most needs to read it, so the
+    operator gets a sentence with a hole in it and no sign a word was ever there, and a
+    backtick does not leave a hole at all: it runs.
+
+    Delete this and a reason written with a variable name in it reaches a client's terminal as
+    a gap, on the day their update stopped."""
+    assert refusal("test -f x", "there is no x here") == 'test -f x || fail "there is no x here"'
+    for bad in ("set $HOME first", 'quote "this"', "run `date` first"):
+        with pytest.raises(ReleaseError, match="acts on rather than prints"):
+            refusal("test -f x", bad)
+
+
+@pytest.mark.parametrize(
+    "rendered",
+    [render_update(repository=REPOSITORY), render_rollback(repository=REPOSITORY)],
+    ids=["update", "rollback"],
+)
+def test_each_rendered_script_is_valid_shell(rendered: str) -> None:
+    """A test asserting the text of a script is satisfied by a script that will not run, which
+    is the argument `test_deployment_installer.py` makes about the installer. These two are
+    worse if they will not run: they are executed on the day an install is already broken.
+
+    Delete this and a quoting mistake in a refusal ships as a rollback that fails on its first
+    line, at the one moment nobody has a working system to debug with."""
+    checked = subprocess.run(
+        [a_shell(), "-n"], input=rendered, capture_output=True, text=True, check=False, timeout=60
+    )
+
+    assert checked.returncode == 0, checked.stderr
+
+
+@pytest.mark.parametrize("name", ["update.sh", "rollback.sh"])
+def test_the_committed_scripts_are_what_the_module_renders(name: str) -> None:
+    """A generated file checked into a repository is a copy that drifts, and this is the check
+    that stops it: the file a client's server receives is the plan this suite tests, or the
+    suite is red. The installer has no such file at all, and `docs/install/install.md` says so;
+    these two are carried because the moment somebody needs the rollback is the moment they are
+    least able to fetch anything.
+
+    Delete this and the plan and the shipped script part company, and the tested one is not the
+    one that runs."""
+    render = render_update if name == "update.sh" else render_rollback
+
+    assert SCRIPTS.joinpath(name).read_text(encoding="utf-8") == render(repository=REPOSITORY)
+
+
+def test_the_archive_carries_the_two_scripts_and_the_install_does_not_read_them() -> None:
+    """They reach a client's server with the release, because a rollback script fetched at the
+    moment it is needed is one more thing that can be unreachable. They are not in
+    `install_needs`, and that is right rather than an oversight: no step of the install reads
+    them and no compose file mounts them, so they are carried because an include names them.
+
+    Delete this and the include can be dropped, and a client's server holds a marker it cannot
+    act on."""
+    for name in ("ops/update/update.sh", "ops/update/rollback.sh"):
+        assert included_by(name), name
+        assert not refused_by(name), name
+        assert name not in install_needs()
+    assert set(carried_paths(REPO)) >= {"ops/update/update.sh", "ops/update/rollback.sh"}
+
+
+def test_each_profile_has_an_arm_naming_the_compose_files_that_profile_composes() -> None:
+    """The profile is an argument because nothing an install leaves on disk records which one
+    it was, so the three answers are spelled out and a fourth profile appears here the day it
+    is declared rather than the day somebody remembers.
+
+    Delete this and a profile added to the product has no arm, and an update against an install
+    of it composes nothing."""
+    for rendered in (render_update(repository=REPOSITORY), render_rollback(repository=REPOSITORY)):
+        arms = {
+            line.strip().split(")", 1)[0]: line
+            for line in rendered.splitlines()
+            if "BRAIN_COMPOSE_FILES=" in line and line.startswith("  ")
+        }
+        assert set(arms) == set(PROFILES)
+        for profile in PROFILES:
+            for name in files_for(profile):
+                assert f"-f {INSTALL_HOME}/{name}" in arms[profile]
+
+
+def test_both_scripts_end_on_the_installers_own_readiness_check() -> None:
+    """Readiness is what tells a person the swap worked, and it is the installer's step object
+    rather than a copy of it: a second copy would be a second answer to the only question
+    either script is run to have answered, and only one of the two would ever be corrected.
+
+    Delete this and the check can be rewritten here as liveness, which passes for a container
+    that is up and cannot reach its database."""
+    ready = step_named("wait for the application to report ready")
+
+    assert update_plan()[-1] is ready
+    assert rollback_plan()[-2] is ready
+    assert "download and unpack the release" in [one.name for one in update_plan()]
+    assert step_named("download and unpack the release") in update_plan()
+
+
+def test_both_scripts_create_a_settings_file_a_new_release_adds() -> None:
+    """Four containers read a settings file at startup, mounted by absolute path from a
+    directory the install creates once. A release that adds a fifth would reach a server with
+    nobody creating it, and a bind mount whose source does not exist is the failure that starts
+    the container anyway, with every health check green.
+
+    The installer's own step is used, so its per-file guard comes with it: a file already there
+    is left alone, which is what makes an edited egress allowlist survive an update.
+
+    Delete this and an update refreshes the release directory and not the settings beside it,
+    which is the exact failure the settings directory was introduced to close, arriving one
+    release later."""
+    settings = step_named("create the settings the containers mount")
+
+    for plan in (update_plan(), rollback_plan()):
+        names = [one.name for one in plan]
+        assert settings in plan
+        assert names.index(settings.name) > names.index("change into the release directory")
+        assert names.index(settings.name) < names.index("pin the image this install runs")
