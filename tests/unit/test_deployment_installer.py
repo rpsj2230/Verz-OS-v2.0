@@ -1,9 +1,15 @@
-"""One command, twelve steps, safe to run twice, and printing no value it minted.
+"""One command, safe to run twice, and printing no value it minted.
 
 The four properties the installer rests on. Three of them are refusals on `Step`, which means
 they are enforced when the plan is written rather than when a script is reviewed, and the
 fourth is the answer to the question this module exists to settle: whether one command needs
 the aggregate compose file `brain.ops.compose` argues against.
+
+The step count is not in this docstring and used to be. It said twelve, the plan holds
+fourteen since item 43 added the two steps that create the settings four containers mount and
+the database the trace ledger connects to, and a number written in a sentence is the one that
+stops being true. `test_every_step_that_writes_something_says_when_it_is_already_done` asserts
+it against `len(PLAN)`, which is the only place it belongs.
 
 The rendered script is checked structurally and then handed to `sh -n`, because a test that
 asserted the text would be satisfied by a script that is not valid shell.
@@ -19,14 +25,20 @@ import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
 
 from brain.deployment.installer import (
+    CREATED_DATABASES,
     INSTALL_ENV_FILE,
     INSTALL_HOME,
+    INSTALL_SETTINGS,
+    MOUNTED_SETTINGS,
     PLAN,
+    TRACE_LEDGER_ROLE,
+    TRACE_LEDGER_SERVICE,
     InstallerError,
     Step,
     compose_argv,
@@ -37,10 +49,13 @@ from brain.deployment.installer import (
     release_pinning_gaps,
     render,
     services_without_a_healthcheck,
+    settings_not_created,
+    settings_nothing_mounts,
     step_named,
     value_leaks_in,
 )
 from brain.deployment.requirements import files_for
+from brain.ops.compose import databases_needed, described_services, mounted_paths
 from brain.ops.leases import SealedSecret
 from brain.ops.wiring import PROFILES, WiringError, components_for
 
@@ -95,12 +110,15 @@ def test_one_command_installs_the_lite_profile_today_with_nothing_in_the_way() -
     assert "publishes a port" in blockers[0]
 
 
-def test_the_larger_profiles_are_blocked_by_the_deployment_and_not_by_the_packaging() -> None:
+def test_the_larger_profiles_are_blocked_by_one_thing_and_it_is_not_the_packaging() -> None:
     """The other half of the answer, and the half that stops it being an optimistic one.
-    `standard` cannot come up because a budgeted component has no service; `full` adds a
-    service declared twice with bodies that disagree and two services connecting to a database
-    nothing creates. None of the three is fixed by writing an aggregate file, and none is
-    caused by not having one.
+
+    **This test measured five findings for `full` until 2026-09-10 and now measures two**,
+    because three of them were the three parts of `docs/needs-rupash.md` item 43 and all three
+    were fixed rather than excused: the object store is described once, the trace ledger's
+    database is created by the plan, and the settings four containers read are created by it
+    too. What is left for `standard` and `full` is a component with no service anywhere, which
+    no packaging decision can close, and the port, which is a requirement on the server.
 
     This test is expected to fail as each is fixed, and that failure is the notification.
     Delete it and "one command" is claimed for profiles that cannot start."""
@@ -109,26 +127,115 @@ def test_the_larger_profiles_are_blocked_by_the_deployment_and_not_by_the_packag
     assert any("presidio-analyzer" in one for one in standard)
 
     full = one_command_blockers("full", parsed(files_for("full")))
-    assert len(full) == 5
+    assert len(full) == 2
     assert any("presidio-analyzer" in one for one in full)
-    assert any("seaweedfs" in one and "-f flags" in one for one in full)
-    assert sum("connects to database 'langfuse'" in one for one in full) == 2
+    assert any("publishes a port" in one for one in full)
+    # The three that were closed, each asserted as absent by the words the finding used, so a
+    # reintroduction fails here rather than reading as an unchanged count.
+    assert not any("-f flags" in one for one in full)
+    assert not any("connects to database" in one for one in full)
+    assert not any("no step of the install creates it" in one for one in full)
 
 
 def test_the_relative_bind_mounts_are_not_counted_against_the_installer() -> None:
-    """The distinction the whole module turns on. Those four mounts are empty for a deployment
-    that stores its own copy of a compose file with no repository beside it. This installer
-    unpacks the release into one directory and names every `-f` file absolutely underneath it,
-    so the compose project directory is the release directory and `./ops/...` resolves.
+    """The distinction the whole module turns on. Those four mounts were empty for a
+    deployment that stores its own copy of a compose file with no repository beside it. This
+    installer unpacks the release into one directory and names every `-f` file absolutely
+    underneath it, so the compose project directory is the release directory and `./ops/...`
+    would have resolved even before item 43 named the paths absolutely.
+
+    Both halves are still asserted, because the distinction outlives the mounts: `-f` paths are
+    absolute under the release directory, and no finding here is about where a compose file was
+    read from.
 
     Delete this and somebody folds the bind mounts into the blocker list, concludes the
     installer cannot work, and writes the aggregate file to fix it."""
     files = parsed(files_for("full"))
     from brain.ops.compose import relative_bind_mounts
 
-    assert len(relative_bind_mounts(files)) == 4
+    assert relative_bind_mounts(files) == ()
     assert all("bind mount" not in one for one in one_command_blockers("full", files))
     assert compose_files_argument("lite") == f"-f {INSTALL_HOME}/docker-compose.lite.yml"
+
+
+# --- the settings the containers mount ---------------------------------------------------
+
+
+def test_every_settings_file_a_container_mounts_is_one_the_install_creates() -> None:
+    """**Part one of item 43, and the check is in both directions because only one of them is
+    ever found by using the system.**
+
+    Four containers read a settings file at startup. A mount with no file behind it is a
+    container that starts with an empty directory in its place and no error anywhere, and what
+    three of them are missing is a memory ceiling, an egress allowlist and a set of
+    object-store credentials, so the container looks identical either way. The other direction
+    is never found at all: a file the install creates that nothing mounts reads as
+    configuration being honoured.
+
+    Asked of every profile for the first direction, because a profile that mounts something
+    nobody creates cannot come up, and of the whole product for the second, because every
+    profile composes a subset.
+
+    Delete this and a renamed mount is a container running without its configuration, or a
+    renamed settings file is a copy nothing opens, and neither has a symptom."""
+    for profile in sorted(PROFILES):
+        assert settings_not_created(parsed(files_for(profile))) == (), profile
+    assert settings_nothing_mounts(parsed(files_for("full"))) == ()
+
+    # And the join is real rather than vacuous: all four are mounted, by four services.
+    mounts = {
+        (service, source)
+        for _, service, source in mounted_paths(parsed(files_for("full")))
+        if source.startswith(INSTALL_SETTINGS)
+    }
+    assert len(mounts) == len(MOUNTED_SETTINGS) == 4
+    assert {service for service, _ in mounts} == {
+        "automation-egress",
+        "langfuse-clickhouse",
+        "seaweedfs",
+        "seaweedfs-init",
+    }
+
+
+def test_a_settings_file_nobody_creates_and_a_settings_file_nobody_mounts_are_both_found() -> None:
+    """The positive case for a pair of checks whose real answer is an empty tuple. An all-clear
+    with no proof that it can ever be otherwise is the failure `brain.ops.sweeps` keeps
+    finding, and both directions here return `()` against the repository.
+
+    Delete this and either check could be made to report nothing at all without a test
+    noticing, which is the state the repository would agree with."""
+    invented = {"a.yml": {"services": {"one": {"volumes": ["/srv/typo.conf:/etc/x:ro"]}}}}
+    found = settings_not_created(invented)
+    assert len(found) == 1
+    assert "'/srv/typo.conf'" in found[0] and "no step of the install creates it" in found[0]
+
+    orphaned = settings_nothing_mounts({"a.yml": {"services": {}}})
+    assert len(orphaned) == len(MOUNTED_SETTINGS)
+    assert all("no service anywhere mounts it" in one for one in orphaned)
+
+    # A named volume is docker's to make and is not a path that can be absent, which is the
+    # one exclusion either check has and the one that would make them useless if it widened.
+    a_volume = {"a.yml": {"services": {"one": {"volumes": ["data:/var/lib"]}}}}
+    assert settings_not_created(a_volume) == ()
+
+
+def test_the_settings_step_copies_from_the_release_into_the_settings_directory() -> None:
+    """The step reads the templates out of the unpacked release and writes them somewhere that
+    an update does not replace, which is the same relationship the environment file has with
+    `.env.example`. Both ends are asserted because the pair is the whole design: reading from
+    the settings directory instead of the release would make the copy a self-assignment, and
+    writing into the release directory would put a client's edited egress allowlist in the path
+    the next unpack overwrites.
+
+    Delete this and the step can be pointed at one directory twice, which passes every other
+    test here and creates nothing."""
+    step = step_named("create the settings the containers mount")
+
+    for one in MOUNTED_SETTINGS:
+        assert f'cp "{INSTALL_HOME}/ops/{one}" "{INSTALL_SETTINGS}/{one}"' in step.run
+        assert f'test -f "{INSTALL_SETTINGS}/{one}"' in step.already_done
+    assert f"{INSTALL_HOME}/ops" != INSTALL_SETTINGS
+    assert INSTALL_SETTINGS.startswith(f"{INSTALL_HOME}/")
 
 
 def test_a_profile_nobody_declared_cannot_be_installed_or_rendered() -> None:
@@ -155,7 +262,7 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
 
     Delete this and a step added next year makes the whole installer unsafe to re-run, with
     nothing to say which one."""
-    assert len(PLAN) == 12
+    assert len(PLAN) == 14
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"
@@ -253,6 +360,107 @@ def test_a_step_nobody_declared_is_refused_rather_than_answered_with_nothing() -
         step_named("mint the secrets")
 
 
+# --- the databases the compose files do not create ---------------------------------------
+
+
+def test_the_install_creates_exactly_the_databases_the_files_ask_for() -> None:
+    """**Part two of item 43, and the equality is the whole test.** `POSTGRES_DB` creates one
+    database on an empty data directory and the trace ledger's two services connect to a
+    second one, so on a fresh install they failed with a message about a missing database
+    rather than about the missing decision.
+
+    Equality rather than a subset, in both directions at once. A database the files need and
+    the plan does not create is two containers that cannot start. A database the plan creates
+    that nothing connects to is a role and a database on a client's server that nobody can
+    account for, which is the direction nothing else would ever report.
+
+    The constant is then held to the step, because a name in a tuple creates nothing: what the
+    plan says it creates and what the step's shell creates are two statements of one fact, and
+    the second is the one that runs on a client's server.
+
+    Delete this and a third database added to a connection string ships as a container that
+    cannot start, or `CREATED_DATABASES` keeps creating one after the service that used it has
+    gone."""
+    assert set(databases_needed(parsed(files_for("full")))) == set(CREATED_DATABASES)
+    assert CREATED_DATABASES == (("db", "langfuse"),)
+
+    step = step_named("create the databases the compose files do not")
+    for _, database in CREATED_DATABASES:
+        assert f"create database {database} owner {TRACE_LEDGER_ROLE}" in step.run
+        assert f"datname = '{database}'" in step.already_done
+
+
+def test_the_login_the_install_creates_is_the_one_the_trace_ledger_signs_in_with() -> None:
+    """A role created under a name nothing connects with is an install that reports success
+    and a stack that cannot start, and nothing else here would compare the two: the connection
+    string is in a compose file and the `create role` is in a shell fragment.
+
+    Read out of `DATABASE_URL` rather than restated, so this tests the deployment rather than
+    testing the constant against itself.
+
+    Delete this and renaming the role in the plan, or the user in the URL, leaves two names
+    that only meet on a client's server."""
+    langfuse = parsed(("docker-compose.langfuse.yml",))["docker-compose.langfuse.yml"]
+    urls = {
+        urlsplit(str(body["environment"]["DATABASE_URL"]))
+        for body in langfuse["services"].values()
+        if body and "DATABASE_URL" in (body.get("environment") or {})
+    }
+
+    assert urls, "the trace ledger no longer holds a connection string to read"
+    assert {one.username for one in urls} == {TRACE_LEDGER_ROLE}
+    assert {one.path.lstrip("/").split("?")[0] for one in urls} == {CREATED_DATABASES[0][1]}
+    assert TRACE_LEDGER_SERVICE in langfuse["services"]
+
+
+def test_the_database_step_does_nothing_on_a_profile_with_no_trace_ledger() -> None:
+    """One plan runs on every profile, and `lite` deploys no trace ledger. A step that created
+    the database anyway would put a role and a database on a client's server for a component
+    that machine does not run, which is the thing the second half of the equality test above
+    exists to refuse.
+
+    Asked of the composed project rather than of the profile name, because that is the
+    question that matters: does this install run something that connects to it. Both the guard
+    and the body ask it, so the step is skipped on lite rather than running and finding nothing
+    to do.
+
+    Delete this and the two can drift apart, and the interesting drift is the silent one: a
+    body that runs where the guard said there was nothing to do."""
+    step = step_named("create the databases the compose files do not")
+
+    asks = f"config --services | grep -qx {TRACE_LEDGER_SERVICE}"
+    assert asks in step.run
+    assert asks in step.already_done
+    assert step.already_done.startswith("! docker compose"), (
+        "the guard has to be true when this profile runs no trace ledger, not false"
+    )
+
+
+def test_the_trace_ledger_password_never_reaches_a_command_line() -> None:
+    """**The exposure `value_leaks_in` cannot see, so it is asserted here instead.** The
+    obvious spelling is `psql -v name=<value>`, which puts a client's credential into the argv
+    of a process every local user on that host can read out of `/proc` for as long as it runs,
+    and argv is not an output builtin so the leak check would have passed it without a word.
+
+    The statement is built by `sed` out of the environment file and delivered on psql's
+    standard input, so the value is never anywhere but the file and the pipe. Asserted as the
+    absence of the two shapes that would expose it and the presence of the one that does not,
+    because the absence alone is satisfied by a step that does not create the role at all.
+
+    Delete this and the next person to simplify this step reaches for `-v` and it looks
+    correct in review."""
+    step = step_named("create the databases the compose files do not")
+
+    assert "create role" in step.run
+    assert f'sed -n "s/^LANGFUSE_POSTGRES_PASSWORD={chr(92)}(' in step.run
+    assert "-v LANGFUSE_POSTGRES_PASSWORD" not in step.run
+    assert "$(" not in step.run, "a command substitution puts the value in a shell variable"
+    assert value_leaks_in(step.run) == ()
+    # And it refuses to run at all on an install that has not set one, rather than creating a
+    # role with an empty password that the trace ledger would then fail to sign in with.
+    assert 'grep -q "^LANGFUSE_POSTGRES_PASSWORD=."' in step.run
+
+
 # --- the rendered script ---------------------------------------------------------------
 
 
@@ -268,13 +476,23 @@ def test_the_install_directory_is_the_one_every_message_and_runbook_names() -> N
     Delete this and the path can be changed to anything, including one that does not exist on
     the distribution the client is running."""
     assert INSTALL_HOME == "/opt/brain"
-    # And every step that writes under it guards on a path under it. A step whose idempotence
-    # test looks somewhere else is a step that reports it is done by reading the wrong thing.
+    # And every step that writes guards on the place it writes. A step whose idempotence test
+    # looks somewhere else is a step that reports it is done by reading the wrong thing.
+    #
+    # Two places, not one, and saying so is the point. The step that creates the trace ledger's
+    # database reads the environment file under INSTALL_HOME and writes nothing there, so a
+    # rule keyed on the path appearing in `run` would have demanded it guard on a file it does
+    # not create. What it writes is a database, and asking the database is the honest guard.
     for step in PLAN:
-        if step.changes and INSTALL_HOME in step.run:
-            assert INSTALL_HOME in step.already_done, (
-                f"{step.name} writes under {INSTALL_HOME} and guards on something else"
-            )
+        if not step.changes:
+            continue
+        writes_a_database = "psql" in step.run
+        if not writes_a_database and INSTALL_HOME not in step.run:
+            continue
+        looks_at = "psql" if writes_a_database else INSTALL_HOME
+        assert looks_at in step.already_done, (
+            f"{step.name} writes to {looks_at} and guards on something else"
+        )
 
 
 def test_a_redirect_exempts_a_line_only_when_it_is_the_last_thing_on_it() -> None:
@@ -537,11 +755,26 @@ def test_the_health_report_prints_what_ready_means_for_every_component() -> None
     wearing readiness' clothes. Every component in `brain.ops.wiring` carries a `ready_when`
     sentence for this moment and nothing had ever printed one.
 
+    The healthcheck line is asserted per service rather than as one substring anywhere in the
+    report, and that is not symmetry. The report reads each service's body out of the file that
+    describes it, and the object store is named in the trace ledger's file and described in the
+    object store's: taken from the naming file it has no healthcheck, so the report would tell
+    an operator to check by hand a container that has one. A single "has a healthcheck" in the
+    whole report passes either way, because eighteen other services have one.
+
     Delete this and the post-install check goes back to reporting that containers exist."""
-    report = health_report("full", parsed(files_for("full")))
+    files = parsed(files_for("full"))
+    report = health_report("full", files)
     for one in components_for("full"):
         assert one.ready_when in report, f"{one.name} has a readiness sentence nobody prints"
     assert "has a healthcheck" in report
+
+    for service, where in described_services(files).items():
+        body = files[where[0]]["services"][service]
+        if body.get("healthcheck"):
+            assert f"{service}: has a healthcheck" in report, (
+                f"{service} declares a healthcheck and the report says to check it by hand"
+            )
 
 
 def test_every_long_running_service_declares_a_healthcheck_and_the_one_shots_do_not() -> None:

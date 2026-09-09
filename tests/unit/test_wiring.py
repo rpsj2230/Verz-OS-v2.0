@@ -164,10 +164,20 @@ def test_every_deployed_service_carries_an_explicit_memory_limit(compose: str) -
     """The rule applied to what is actually deployed, not only to what is planned. A
     service added to a compose file with no `deploy.resources.limits.memory` is an
     unlimited container on a shared host, and nothing else in the repository would notice
-    it."""
+    it.
+
+    **Described services rather than named ones, since 2026-09-10.** A file may name a
+    service with no body under it, which joins it to the project and describes none of it:
+    `docker-compose.langfuse.yml` does that for `seaweedfs` so that the object store is
+    described once, in its own file, rather than twice with the running configuration decided
+    by the order of the `-f` flags. See
+    `brain.ops.compose.A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION`. Such
+    a name deploys no container and can carry no limit, and the file that describes it is in
+    this list too, so nothing stops being checked."""
     raw = yaml.safe_load((REPO / compose).read_text(encoding="utf-8"))
     limits = _compose_memory_limits(compose)
-    missing = sorted(set(raw["services"]) - set(limits))
+    described = {service for service, body in raw["services"].items() if body}
+    missing = sorted(described - set(limits))
     assert not missing, f"{compose}: services with no memory limit: {missing}"
 
 

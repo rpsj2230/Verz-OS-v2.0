@@ -26,10 +26,24 @@ the `-f` flags either way, and the flag list is the better home for it: an order
 `COMPOSE_FILES_FOR` is a decision a reviewer can read, where a merge fossilised into an
 aggregate file is a decision nobody can see was made.
 
+**Three of the four are closed, and the plan is where two of them were closed.**
+`docs/needs-rupash.md` item 43 decided all three on 2026-09-09. The settings four containers
+read at startup are created by a step of this plan and mounted by absolute path, so what a
+container reads no longer depends on where its compose file was stored: see `INSTALL_SETTINGS`
+and `settings_not_created`. The trace ledger's database and login are created by another step,
+before anything that needs them is started: see `CREATED_DATABASES`. The object store is
+described once, in its own file, and named with no body in the trace ledger's, which is a
+reference rather than a second copy that a test would have to hold equal for ever. What is left
+is `presidio-analyzer`, and it is the one that cannot be closed by a decision about deployment
+files, because closing it means choosing an image, a port and a readiness probe for a container
+nobody here has run.
+
 **So the honest answer is per profile, and it is computed rather than asserted.**
-`one_command_blockers` asks the four questions of a profile's own file set. `lite` is one file,
-four services and no blockers: one command works today. `standard` and `full` are blocked, and
-by defects in the profiles rather than by the shape of the command.
+`one_command_blockers` asks those questions of a profile's own file set, and it asks two more:
+whether anything publishes a port, and whether every settings file a container mounts is one
+this plan creates. `lite` is one file, four services and one finding, which is the port. Since
+2026-09-10 `standard` and `full` report the same finding and one more, which is the component
+with no service, and both of those are true of any packaging.
 
 **The other rule this module keeps is that a client's values move through the installer and
 never into it.** A script that echoes what it set has put a password in a terminal scrollback
@@ -82,6 +96,8 @@ from brain.ops.compose import (
     components_with_no_service,
     databases_nothing_creates,
     declared_services,
+    described_services,
+    mounted_paths,
     services_declared_differently,
 )
 from brain.ops.wiring import assert_known_profile, components_for
@@ -126,6 +142,76 @@ INSTALL_HOME: Final = "/opt/brain"
 #: The environment file the install owns. One per server, gitignored everywhere, and a copy of
 #: the template with values filled in. See `brain.deployment.variables`.
 INSTALL_ENV_FILE: Final = ".env"
+
+#: Where the settings four containers read at startup live on the server.
+#:
+#: **A path, because the alternative was a directory that moves.** Every one of these was
+#: mounted `./ops/whatever` until 2026-09-10, and compose resolves a relative source against
+#: the directory the compose file was read from. The deployment path this system uses stores
+#: its own copy of a compose file with no repository beside it, so docker created an empty
+#: directory there and started the container: three of the four carry a memory ceiling, an
+#: egress allowlist and a set of object-store credentials, and a container missing any of them
+#: looks exactly like one that has them. Naming the source absolutely is what makes what a
+#: container reads independent of where its compose file was stored.
+#:
+#: Its own directory rather than the release's `ops/`, and that is the same relationship
+#: `INSTALL_ENV_FILE` has with `.env.example`: the release ships the templates, the install
+#: copies them once into the deployment's own directory, and the deployment's copy is what runs.
+#: A client who edits the egress allowlist keeps that edit across an update, because the guard
+#: on the step is per file. The release directory is replaced wholesale by the next unpack, so
+#: a settings file living there would be silently overwritten by an update instead.
+INSTALL_SETTINGS: Final = f"{INSTALL_HOME}/settings"
+
+#: The settings files the compose files mount, named the same way in the release and on the
+#: server, so the copy is a path join rather than a mapping somebody maintains.
+#:
+#: `settings_not_created` compares this against what the compose documents actually mount, in
+#: both directions. A missing row is found the first time a container comes up without its
+#: configuration, which is exactly the failure that has no symptom; a row for a file nothing
+#: mounts is never found at all, because it reads as coverage.
+MOUNTED_SETTINGS: Final[tuple[str, ...]] = (
+    "automation/egress.conf",
+    "langfuse/clickhouse-memory.xml",
+    "seaweedfs/provision.sh",
+    "seaweedfs/s3.json",
+)
+
+#: The databases this install creates, as (compose service of the server, database).
+#:
+#: `POSTGRES_DB` on the official image creates exactly one database on an empty data
+#: directory, and the trace ledger points two services at a second one, so on a fresh install
+#: they failed to start with a message about a missing database rather than about the missing
+#: decision. Option A of `docs/needs-rupash.md` item 43: the install creates it, and the trace
+#: ledger gets a database and a login of its own rather than sharing the one that holds the
+#: company's records.
+#:
+#: The server is half of the pair on purpose. A `langfuse` database on somebody else's server
+#: is a different fact from one on ours, and a constant that named only the database would
+#: excuse the wrong finding. `databases_needed` produces the same shape out of the compose
+#: files, and a test holds the two sets equal so a third database added to a connection string
+#: fails rather than shipping as a container that cannot start.
+CREATED_DATABASES: Final[tuple[tuple[str, str], ...]] = (("db", "langfuse"),)
+
+#: The service whose presence in a composed project means this install needs the trace
+#: ledger's database. Read out of the composed project rather than from the profile name, so
+#: the question the step asks is the one that matters: does this install run something that
+#: connects to it.
+TRACE_LEDGER_SERVICE: Final = "langfuse-web"
+
+#: The role the trace ledger signs in as, which is also the database it signs in to. Both are
+#: read out of `DATABASE_URL` in `docker-compose.langfuse.yml` by a test rather than trusted
+#: to this constant, because a role created under a name nothing connects with is an install
+#: that reports success and a stack that cannot start.
+TRACE_LEDGER_ROLE: Final = "langfuse"
+
+#: The variable carrying the trace ledger's password. Named here because the step reads it
+#: twice, once to refuse an install that has not set one and once to build the statement
+#: that creates the login. A test holds it equal to what the compose files interpolate.
+#:
+#: The suppression is the rule reading the name rather than the value: this holds the name
+#: of a variable and never a credential, which is the same distinction
+#: `brain.deployment.variables.is_secret_name` makes about a path to one.
+_TRACE_PASSWORD: Final = "LANGFUSE_POSTGRES_PASSWORD"  # noqa: S105
 
 #: A name that could be a credential's, wherever it appears on the line.
 #:
@@ -281,6 +367,74 @@ class Step:
             raise InstallerError(msg)
 
 
+def _in_the_database(query: str) -> str:
+    """A one-column query run inside the database container, true when it returns a row.
+
+    `-tA` so the answer is the value and nothing else, and `grep -qx 1` rather than reading
+    psql's exit code, because psql exits 0 for a query that succeeds and returns nothing,
+    which is the answer that has to mean no.
+    """
+    return (
+        f'docker compose $BRAIN_COMPOSE_FILES exec -T db psql -tAc "{query}" '
+        "-U brain -d brain | grep -qx 1"
+    )
+
+
+def _role_exists() -> str:
+    """True when the trace ledger's login is already there."""
+    # The interpolated value is a constant of this module and the result is a shell fragment
+    # printed into a script, never a query this process sends anywhere.
+    return _in_the_database(
+        f"select 1 from pg_roles where rolname = '{TRACE_LEDGER_ROLE}'"  # noqa: S608
+    )
+
+
+def _database_exists() -> str:
+    """True when the trace ledger's database is already there."""
+    # A constant of this module, as above.
+    return _in_the_database(
+        f"select 1 from pg_database where datname = '{CREATED_DATABASES[0][1]}'"  # noqa: S608
+    )
+
+
+def _creates_the_role() -> str:
+    """The login the trace ledger signs in with, written straight out of the file into psql.
+
+    **The statement is built by `sed` and delivered on standard input, and both halves of that
+    are the point.** The obvious spelling is `psql -v name=<value>`, which puts a client's
+    credential into the argv of a process every local user on that host can read out of
+    `/proc` for as long as it runs, and `value_leaks_in` would not have said a word about it
+    because argv is not an output builtin. The second obvious spelling puts the value in a
+    shell variable first, which is the same exposure one step later. Transforming the line in
+    the file into the statement means the value is never anywhere but the file and the pipe.
+
+    A password carrying a quote makes this a syntax error rather than a security problem:
+    psql refuses the statement, `ON_ERROR_STOP=1` makes the step fail, and the person reads
+    `on_failure`. That is the right direction for a value the client chose.
+    """
+    quote = chr(92) + "("
+    unquote = chr(92) + ")"
+    group = chr(92) + "1"
+    return (
+        f'sed -n "s/^{_TRACE_PASSWORD}={quote}.*{unquote}/create role {TRACE_LEDGER_ROLE} '
+        f'login password \'{group}\';/p" "{INSTALL_HOME}/{INSTALL_ENV_FILE}" | '
+        "docker compose $BRAIN_COMPOSE_FILES exec -T db psql -v ON_ERROR_STOP=1 "
+        "-U brain -d brain"
+    )
+
+
+def _creates_the_database() -> str:
+    """The database itself, owned by the login above rather than by the superuser.
+
+    Owned, because the owner is what lets the trace ledger create its own tables without
+    being given rights over anything else on this server.
+    """
+    return (
+        "docker compose $BRAIN_COMPOSE_FILES exec -T db psql -v ON_ERROR_STOP=1 -U brain "
+        f'-d brain -c "create database {CREATED_DATABASES[0][1]} owner {TRACE_LEDGER_ROLE}"'
+    )
+
+
 #: The install, in the order it runs. The count in the output is `len(PLAN)`, so a person
 #: reading "step 4 of 12" knows how much is left.
 #:
@@ -391,6 +545,43 @@ PLAN: Final[tuple[Step, ...]] = (
         already_done=f'test -f "{INSTALL_HOME}/{INSTALL_ENV_FILE}"',
     ),
     Step(
+        # The sibling of the step above it, and it is the same argument twice: the release
+        # ships a template, the install copies it once into the deployment's own directory,
+        # and the deployment's copy is what runs. Guarded per file rather than on the
+        # directory, so a settings file added by a later release is created on the next run
+        # and a client's edited egress allowlist is not overwritten by one.
+        name="create the settings the containers mount",
+        run="\n".join(
+            [
+                "mkdir -p "
+                + " ".join(
+                    f'"{INSTALL_SETTINGS}/{one}"'
+                    for one in sorted({one.rsplit("/", 1)[0] for one in MOUNTED_SETTINGS})
+                ),
+                *(
+                    f'test -f "{INSTALL_SETTINGS}/{one}" || '
+                    f'cp "{INSTALL_HOME}/ops/{one}" "{INSTALL_SETTINGS}/{one}"'
+                    for one in MOUNTED_SETTINGS
+                ),
+            ]
+        ),
+        why=(
+            "four containers read one of these at startup and every one of them was mounted "
+            "from beside the compose file, which a deployment that stores its own copy "
+            "resolves to a path that does not exist. Docker creates an empty directory there "
+            "and starts the container, so a memory ceiling, an egress allowlist and a set of "
+            "object-store credentials all go missing with nothing anywhere reporting it. See "
+            "INSTALL_SETTINGS"
+        ),
+        on_failure=(
+            f"check the release unpacked its ops directory into {INSTALL_HOME}/ops, then run "
+            "this again. Each file is copied only if it is not already there, so nothing you "
+            "have edited is overwritten"
+        ),
+        changes=True,
+        already_done=" && ".join(f'test -f "{INSTALL_SETTINGS}/{one}"' for one in MOUNTED_SETTINGS),
+    ),
+    Step(
         name="mint this installation's secrets",
         # The setup code and the instant it was minted are one value in two lines, and they
         # are in this group rather than in a step of their own so that one guard and one
@@ -459,6 +650,51 @@ PLAN: Final[tuple[Step, ...]] = (
         changes=True,
         already_done=(
             "docker compose $BRAIN_COMPOSE_FILES ps --status running --services | grep -qx db"
+        ),
+    ),
+    Step(
+        # Between the database starting and everything else starting, because that is the only
+        # window in which the server is up and the services that need this database have not
+        # been asked to connect to it yet.
+        #
+        # **The password never reaches a command line or a shell variable.** See
+        # `_creates_the_role`: the line in the environment file is transformed into the
+        # statement by `sed` and delivered on psql's standard input, so the value is never
+        # anywhere but the file and the pipe.
+        name="create the databases the compose files do not",
+        run="\n".join(
+            [
+                f"if docker compose $BRAIN_COMPOSE_FILES config --services | "
+                f"grep -qx {TRACE_LEDGER_SERVICE}; then",
+                f'  grep -q "^{_TRACE_PASSWORD}=." "{INSTALL_HOME}/{INSTALL_ENV_FILE}" || '
+                f'fail "set {_TRACE_PASSWORD} in {INSTALL_HOME}/{INSTALL_ENV_FILE}: this '
+                'profile runs the trace ledger and it signs in with it"',
+                f"  {_role_exists()} || {_creates_the_role()}",
+                f"  {_database_exists()} || {_creates_the_database()}",
+                "fi",
+            ]
+        ),
+        why=(
+            "POSTGRES_DB creates exactly one database on an empty data directory, and the "
+            "trace ledger's two services connect to a second one. Nothing created it, so a "
+            "fresh install of this profile failed with a message about a missing database "
+            "rather than about the missing decision. Its own database and its own login, so "
+            "a fault in the trace ledger cannot reach the company's records. See "
+            "CREATED_DATABASES and docs/needs-rupash.md item 43"
+        ),
+        on_failure=(
+            "read `docker compose $BRAIN_COMPOSE_FILES logs db`. Both statements are guarded "
+            "by an existence check, so running this again after fixing the cause repeats "
+            "neither of them"
+        ),
+        changes=True,
+        # True when this profile runs nothing that needs the database, and true again once it
+        # is there. The first half is what makes one plan right for every profile: lite has no
+        # trace ledger, and a step that created its database anyway would be creating a thing
+        # nothing on that server can use.
+        already_done=(
+            f"! docker compose $BRAIN_COMPOSE_FILES config --services | "
+            f"grep -qx {TRACE_LEDGER_SERVICE} || {_database_exists()}"
         ),
     ),
     Step(
@@ -555,24 +791,85 @@ def compose_files_argument(profile: str, *, home: str = INSTALL_HOME) -> str:
     return " ".join(f"-f {home}/{name}" for name in files_for(profile))
 
 
+def _settings_created() -> frozenset[str]:
+    """Every path the settings step puts on the server, as the compose files would name it."""
+    return frozenset(f"{INSTALL_SETTINGS}/{one}" for one in MOUNTED_SETTINGS)
+
+
+def settings_not_created(files: ComposeFiles) -> tuple[str, ...]:
+    """Every host path a container in this set mounts that no step of the install creates.
+
+    The failure this catches has no symptom, which is why it is computed rather than
+    remembered. Three of the four settings files carry a memory ceiling, an egress allowlist
+    and a set of object-store credentials, and docker starts a container with an empty
+    directory where a missing source should be rather than refusing, so a container without
+    its configuration looks exactly like one that has it.
+
+    Named volumes are deliberately not here and it is not an omission. Docker creates one on
+    first use, so it is not a path that can be absent, which is the whole of what this asks.
+
+    Per profile, because that is the question the one command has: a profile that mounts a
+    settings file the install does not create cannot come up. The other direction is a
+    question about the product and is `settings_nothing_mounts`.
+    """
+    created = _settings_created()
+    mounted: dict[str, tuple[str, str]] = {}
+    for name, service, source in mounted_paths(files):
+        mounted.setdefault(source, (name, service))
+    return tuple(
+        f"{mounted[source][0]}: {mounted[source][1]!r} mounts {source!r} and no step of the "
+        "install creates it, so the container starts with an empty directory in its place"
+        for source in sorted(set(mounted) - created)
+    )
+
+
+def settings_nothing_mounts(files: ComposeFiles) -> tuple[str, ...]:
+    """Every settings file the install creates that no service in this set mounts.
+
+    **The direction that is never found by using the system**, which is why it is a check at
+    all: a file nobody opens reads as configuration that is being honoured, and it is what a
+    renamed mount leaves behind. `MOUNTED_SETTINGS` would go on carrying it, the step would go
+    on copying it, and the container that used to read it would be starting without it.
+
+    Asked of the whole product rather than of one profile, and the scope is the point. Every
+    profile composes a subset of these files, so a settings file that only the automation
+    canvas mounts is legitimately unmounted in `lite`, and a check that reported that per
+    profile would report three findings about `lite` that are not defects in anything.
+    """
+    mounted = {source for _, _, source in mounted_paths(files)}
+    return tuple(
+        f"the install creates {source!r} and no service anywhere mounts it, which reads as "
+        "configuration that is being honoured and is a file nothing opens"
+        for source in sorted(_settings_created() - mounted)
+    )
+
+
 def one_command_blockers(profile: str, files: ComposeFiles) -> tuple[str, ...]:
     """What stops `compose_argv(profile)` producing a working install, on these documents.
 
     The same four questions `brain.ops.compose` asks of an aggregate file, asked of a profile's
-    own file set, plus the one an aggregate file never had to answer: nothing here publishes a
-    port, so a complete install is reachable from other containers and from nowhere else.
+    own file set, plus two an aggregate file never had to answer: nothing here publishes a
+    port, so a complete install is reachable from other containers and from nowhere else, and
+    every settings file a container mounts has to be one the install puts there.
 
     **Relative bind mounts are deliberately not a blocker here**, and that is the difference
     between this and the aggregate. They are empty only for a deployment that stores its own
     copy of a compose file with no repository beside it, and this installer unpacks the release
     into one directory and runs compose from inside it. See
-    `MOUNTS_RESOLVE_ONLY_FROM_THE_RELEASE_DIRECTORY`.
+    `MOUNTS_RESOLVE_ONLY_FROM_THE_RELEASE_DIRECTORY`. What replaced them is the stronger
+    question `settings_not_created` asks, which does not care where the file was read from.
+
+    **`CREATED_DATABASES` is passed here and nowhere else.** `brain.ops.compose` describes what
+    the documents say, and a database created by a step of the install is exactly the fact no
+    document says. Passing it from the module that owns the plan keeps one answer to what the
+    install creates, rather than a second list inside a check.
     """
     assert_known_profile(profile)
     blockers = [
         *components_with_no_service(profile, files),
         *services_declared_differently(files),
-        *databases_nothing_creates(files),
+        *databases_nothing_creates(files, created_by_the_install=CREATED_DATABASES),
+        *settings_not_created(files),
     ]
     if not published_ports(files):
         blockers.append(
@@ -750,8 +1047,9 @@ def health_report(profile: str, files: ComposeFiles) -> str:
     """
     assert_known_profile(profile)
     lines = [f"After deploying the {profile} profile, check each of these in order.", ""]
+    described = described_services(files)
     for service, where in sorted(declared_services(files).items()):
-        body = _services(files[where[0]]).get(service)
+        body = _services(files[described.get(service, where)[0]]).get(service)
         declared = isinstance(body, dict) and bool(body.get("healthcheck"))
         state = "has a healthcheck" if declared else "has no healthcheck; check it by hand"
         lines.append(f"{service}: {state}")
@@ -768,9 +1066,15 @@ def services_without_a_healthcheck(files: ComposeFiles) -> tuple[str, ...]:
     A container with no healthcheck is `running` the instant its process starts, so
     `depends_on: service_healthy` cannot wait for it and a person reading `docker compose ps`
     is reading liveness. Reported rather than raised, for the reason `release_pinning_gaps` is.
+
+    Asked of the file that describes each service rather than of the first file that names it.
+    Alphabetically the trace ledger comes before the object store, and it names `seaweedfs`
+    with no body under it, so a walk over the naming files would read that empty declaration,
+    find nothing in it and skip the service: the check would go quiet on the one service in
+    these files that is named twice, which is the direction nobody notices.
     """
     found: list[str] = []
-    for service, where in sorted(declared_services(files).items()):
+    for service, where in sorted(described_services(files).items()):
         body = _services(files[where[0]]).get(service)
         if not isinstance(body, dict):
             continue

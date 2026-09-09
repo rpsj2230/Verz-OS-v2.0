@@ -106,6 +106,14 @@ services:
     environment:
       POSTGRES_USER: brain
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # `POSTGRES_DB` creates exactly one database on an empty data directory, so the second
+      # one the trace ledger needs is created by a step of the install rather than here. It is
+      # deliberately not a second variable on this service: `docker-compose.yml` is in the
+      # standard profile, so a trace ledger setting written here would be a value the guide
+      # then tells every standard install to set for a component it does not run. See the step
+      # named "create the databases the compose files do not" in
+      # `brain.deployment.installer.PLAN`, which reads it out of the install's own environment
+      # file and pipes it to psql.
       POSTGRES_DB: brain
     volumes:
       # PostgreSQL 18 changed this. Earlier images took the volume at

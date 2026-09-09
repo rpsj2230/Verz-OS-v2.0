@@ -127,7 +127,15 @@ services:
       - automation
       - egress
     volumes:
-      - ./ops/automation/egress.conf:/etc/squid/squid.conf:ro
+      # **Absolute, and of the four settings files this is the one that mattered most.**
+      # `./ops/automation/egress.conf` is resolved against the directory the compose file was
+      # read from, and the deployment path this system uses stores its own copy with no
+      # repository beside it: docker creates an empty directory there and squid starts with a
+      # configuration nobody wrote. The allowlist is the only thing between an assembled flow
+      # and the internet, and a proxy with no allowlist looks exactly like one that has it.
+      # `/opt/brain/settings` is created and filled by the installer; see
+      # `brain.deployment.installer.INSTALL_SETTINGS` and `settings_not_created`.
+      - /opt/brain/settings/automation/egress.conf:/etc/squid/squid.conf:ro
     expose:
       - "3128"
     deploy:

@@ -34,6 +34,25 @@
 # **Not published to the host.** `expose` rather than `ports`. The S3 gateway holds every
 # asset, export and backup this system has, and the host has neighbours.
 #
+# **This file is where the object store is described, and it is the only one.**
+# `docker-compose.langfuse.yml` needs the same container and names it with no body under it,
+# which joins the service to the project and describes none of it. Until 2026-09-10 it carried
+# a second body instead, missing `-s3.config` and the identities file below, so which of the
+# two ran was decided by the order of the `-f` flags and one of the orders started an S3
+# gateway with no access control at all. See
+# `brain.ops.compose.A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION` for why
+# the answer is a reference rather than two bodies a test holds equal.
+#
+# **The two settings files are named absolutely, and that is the fix rather than a tidy-up.**
+# They used to read `./ops/seaweedfs/...`, which compose resolves against the directory the
+# compose file was read from. The deployment path this system uses stores its own copy of a
+# compose file with no repository beside it, so that path did not exist, and docker created an
+# empty directory there and started the container: an S3 gateway with no identities file has no
+# access control, and it looks exactly like one that has. `/opt/brain/settings` is created and
+# filled by the installer, from `brain.deployment.installer.INSTALL_SETTINGS`, and
+# `settings_not_created` compares the two ends so a mount added here without a file to fill it
+# is a finding rather than an empty directory.
+#
 # Task ids: M32.3.1.1
 
 services:
@@ -59,7 +78,11 @@ services:
       - seaweedfs:/data
       # Read-only. The identities file names who may reach the S3 gateway, and a process
       # that could rewrite its own access control is one that has none.
-      - ./ops/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+      #
+      # Absolute, not `./ops/...`. See the header: a relative source is resolved against
+      # wherever the compose file was read from, and this deployment reads it from a
+      # directory with no repository in it.
+      - /opt/brain/settings/seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
     expose:
       - "8333"
     deploy:
@@ -87,7 +110,10 @@ services:
     environment:
       WEED_MASTER: "seaweedfs:9333"
     volumes:
-      - ./ops/seaweedfs/provision.sh:/opt/provision.sh:ro
+      # Absolute for the same reason as the identities file above, and this is the one of the
+      # four that used to fail loudly: an entrypoint that is a directory exits rather than
+      # starting a container that looks provisioned.
+      - /opt/brain/settings/seaweedfs/provision.sh:/opt/provision.sh:ro
     deploy:
       resources:
         limits:

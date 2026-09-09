@@ -29,12 +29,28 @@
 # | langfuse-worker | 384M | 288M old-space | same, smaller heap because it batches |
 # | langfuse-clickhouse | 1024M | 768M server usage | mark cache, merge buffers, allocator |
 # | langfuse-cache | 128M | 96M maxmemory | Redis fragmentation, which runs 1.2 to 1.5x |
-# | seaweedfs | 256M | 192MiB GOMEMLIMIT | Go's non-heap: stacks, the binary, mmap'd index |
+#
+# The fifth container of the trace stack is `seaweedfs`, and its pair is in
+# `docker-compose.objectstore.yml` where the service is described. It is 256M against a
+# 192MiB `GOMEMLIMIT`, for Go's non-heap: stacks, the binary and the mmap'd index.
 #
 # `GOMEMLIMIT` is the Go equivalent and it is a soft limit, which is the point: as the
 # heap approaches it the collector runs harder instead of the kernel killing the process.
 # A Go service under a cgroup limit with no `GOMEMLIMIT` collects on its own schedule,
 # discovers the ceiling by being killed, and restarts with a cold index.
+#
+# **The `langfuse` database is created by the install, not by this file.** `POSTGRES_DB` on
+# the official image creates exactly one database on an empty data directory and `db` creates
+# `brain`, so until 2026-09-10 both services below pointed at a database that was never
+# anybody's job to make: on a fresh install they would have failed to start with a message
+# about a missing database rather than about a missing decision. The step named "create the
+# databases the compose files do not" in `brain.deployment.installer.PLAN` creates the role and
+# the database before anything is started, and `brain.ops.compose.databases_needed` is what
+# holds the plan and these connection strings to the same answer.
+#
+# Its own database and its own login, rather than the `brain` database with one login covering
+# both, which was the other option and is the one that puts the trace ledger's tables beside
+# the company's records. See `docs/needs-rupash.md` item 43.
 #
 # **Why web and worker do not go through PgBouncer.** Both are wired `direct` in
 # `brain.ops.wiring`, and `pooler_misuse` checks that rather than leaving it to whoever
@@ -52,6 +68,26 @@
 # composing this file beside the object store gets one container rather than two. A full
 # install must run exactly one, which is why it is named here rather than duplicated
 # under a Langfuse prefix.
+#
+# **Named here and described there, since 2026-09-10.** This file used to carry a second
+# body for that service, and the two disagreed: this copy had no `-s3.config` and did not
+# mount the identities file, so the configuration that ran was decided by the order of the
+# `-f` flags and one of the orders was an S3 gateway with no access control. Both files were
+# correct read on their own, which is why nothing else here would have noticed.
+#
+# The two ways out are not equally good. Making the copies identical is faster and leaves two
+# bodies that are equal only while a test compares them, which is a maintenance obligation
+# with no end and is how a second copy becomes permanent. So the description lives in
+# `docker-compose.objectstore.yml` and this file names the service with nothing under it. See
+# `docs/needs-rupash.md` item 43.
+#
+# **Every settings file this stack mounts is now named absolutely.** Same item, first part.
+# A source beginning `./` is resolved against wherever the compose file was read from, and the
+# deployment path this system uses stores its own copy of a compose file with no repository
+# beside it, so docker created an empty directory and started the container with none of the
+# configuration the mount was carrying. `/opt/brain/settings` is created and filled by a step
+# of the install; `brain.deployment.installer.settings_not_created` compares what the files
+# mount against what the plan creates, in both directions.
 #
 # **Both services now declare a connection limit, and until 2026-09-09 neither did.**
 # `DATABASE_URL` below goes straight to `db` for the reason in the pooler paragraph, so
@@ -201,7 +237,12 @@ services:
       # Read-only, and a file rather than a shell heredoc in the command. A config built
       # by `echo` inside a YAML scalar is not reviewable, and this one decides whether
       # the server sizes itself for its cgroup or for the host.
-      - ./ops/langfuse/clickhouse-memory.xml:/etc/clickhouse-server/config.d/memory.xml:ro
+      #
+      # Absolute rather than `./ops/...`: see the header. A relative source is resolved
+      # against wherever the compose file was read from, and a ClickHouse that did not get
+      # this file sizes its caches for the whole host and is killed by its cgroup, which
+      # presents as a restart loop with nothing in the application log.
+      - /opt/brain/settings/langfuse/clickhouse-memory.xml:/etc/clickhouse-server/config.d/memory.xml:ro
       - langfuse-clickhouse:/var/lib/clickhouse
     ulimits:
       nofile:
@@ -255,45 +296,24 @@ services:
       timeout: 3s
       retries: 5
 
-  # The S3-compatible store. One per host: see the header. A `standard` install already
-  # runs this for the object store, and a full install composes both files against this
-  # one service rather than starting a second gateway over the same data path.
-  seaweedfs:
-    image: chrislusf/seaweedfs:3.80
-    restart: unless-stopped
-    environment:
-      # Soft limit: the collector works harder as the heap approaches it, rather than the
-      # kernel killing the process at the cgroup ceiling. 192 MiB against 256 MiB leaves
-      # the Go runtime's non-heap: goroutine stacks, the binary itself, and the mmap'd
-      # LevelDB index, none of which GOMEMLIMIT counts and all of which the cgroup does.
-      GOMEMLIMIT: "192MiB"
-    command:
-      [
-        "server",
-        "-dir=/data",
-        "-s3",
-        "-s3.port=8333",
-        "-master.volumeSizeLimitMB=1024",
-        "-volume.index=leveldb",
-      ]
-    volumes:
-      - seaweedfs:/data
-    expose:
-      - "8333"
-    deploy:
-      resources:
-        limits:
-          memory: 256M
-    healthcheck:
-      # The S3 gateway, not the master. The master answers while the volume server is
-      # still registering, which is the window where a bucket list returns empty rather
-      # than failing, and an empty list is what a caller treats as "no traces yet".
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8333/status"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
+  # The S3-compatible store, named here and described in `docker-compose.objectstore.yml`.
+  #
+  # **The name with no body under it is the whole point.** Langfuse 3 needs an S3-compatible
+  # store and the trace stack is five containers, so the dependency has to be visible in this
+  # file: a reader must not have to know that another file happens to be composed alongside.
+  # But a body here would be a second description of one container, and the one that ran would
+  # be whichever file came later in the `-f` list. That is what this file used to be, and its
+  # copy was missing `-s3.config` and the identities file, so one of the two orders started an
+  # S3 gateway with no access control on it and neither file was wrong on its own.
+  #
+  # An empty declaration contributes nothing to the merge, so the description in the object
+  # store's file wins in every order. See
+  # `brain.ops.compose.A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION`, and
+  # `COMPOSE_FILES_FOR` in `brain.deployment.requirements` for the guarantee that every profile
+  # composing this file composes that one. Composing this file on its own now fails rather than
+  # starting an unconfigured gateway, which is the honest outcome: the trace ledger has never
+  # been a complete deployment by itself.
+  seaweedfs: {}
 
 volumes:
   langfuse-clickhouse:
-  seaweedfs:

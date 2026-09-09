@@ -16,31 +16,41 @@ describe the profile: a client with a larger machine runs `full`, and that is wh
 is for. What such a file owes its reader is the size of host it needs, and `host_mib_for`
 computes it rather than leaving it to be guessed.
 
-**What does stop the file being written, in the order a reader meets them.**
+**What does stop the file being written, and what used to.** One of the four is left, and the
+other three were closed on 2026-09-10 by `docs/needs-rupash.md` item 43. Each is still computed
+here, because a reason that stops being recomputed is a reason that comes back.
 
 A component of the profile has no service anywhere. `components_with_no_service` names it, and
 the aggregate cannot be complete while a container in the budget has no declaration to copy.
 Writing one would mean choosing an image, a port and a readiness probe for a container nobody
 here has run, which is the one thing a file whose whole purpose is to be the profile must not
-do.
+do. **This is the one that is still open.**
 
-One service is declared twice, with different bodies. `docker-compose.langfuse.yml` names
+One service was declared twice, with different bodies. `docker-compose.langfuse.yml` names
 `seaweedfs` deliberately, so that a project composing it beside the object store gets one
-container rather than two, and its copy is missing the S3 configuration the object store's
-copy mounts. Compose settles that by argument order, so which of the two runs depends on the
+container rather than two, and its copy was missing the S3 configuration the object store's
+copy mounts. Compose settles that by argument order, so which of the two ran depended on the
 order of the `-f` flags. See `TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER`.
-An aggregate file has to choose one, and choosing is a decision about the object store.
+The trace ledger now **names** the service and does not describe it: an empty declaration joins
+the service to the project and says nothing a second file could contradict, which is why
+`described_services` is the set this module compares and `declared_services` is not. Making the
+two copies equal instead was the option that was refused, because two copies are equal only
+while something compares them and the comparison is what makes the second copy permanent.
 
-Four services take something they need at startup from a bind mount beside the compose file,
+Four services took something they need at startup from a bind mount beside the compose file,
 and an aggregate is precisely the form that gets deployed as a stored copy with no repository
-beside it. See `A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE`, which is the same trap
-`docker-compose.keycloak.yml` already works around for the realm by shipping it inside the
-image and writing it into a named volume.
+beside it. See `A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE`. All four now name an
+absolute path under the install's own settings directory, which the installer creates, so what
+a container reads no longer depends on where the compose file happened to be read from.
+`brain.deployment.installer.settings_not_created` is the check on the join, in both directions.
 
-Two services connect to a database that nothing creates. `databases_nothing_creates` reads it
-out of the connection strings rather than out of a note, which is the direction
+Two services connect to a database that no compose file creates. `databases_nothing_creates`
+reads it out of the connection strings rather than out of a note, which is the direction
 `brain.ops.connections.undeclared_clients` reads in and for the same reason: a deployment that
-was never started is described by what it declares, and nothing else.
+was never started is described by what it declares, and nothing else. It is still true of the
+files, and it is no longer true of the deployment: `created_by_the_install` is how a caller
+that knows what the install plan creates asks the narrower question, and the plan is the only
+caller that may answer it.
 
 **Reported rather than raised, and deliberately not a gate.** Every finding is true on
 arrival. `brain.ops.sweeps` records at length that a check which is red the day it lands is a
@@ -68,7 +78,7 @@ Task ids: none
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Final
 from urllib.parse import urlsplit
 
@@ -99,6 +109,29 @@ A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE: Final = (
     "script named as an entrypoint, so that one at least exits. The answer is the one "
     "`docker-compose.keycloak.yml` already uses for the realm: the file arrives inside the "
     "image and a one-shot container writes it into a named volume."
+)
+
+#: Why a service named in a second file with no body is a reference and not a second copy.
+#:
+#: Compose merges every `-f` file into one project, and a key with no body contributes nothing
+#: to the merge: the result is the described declaration whichever order the flags are in.
+#: That is what makes it a reference rather than a second description, and it is the whole
+#: difference between this and keeping two bodies equal. Two bodies are equal only while
+#: something compares them, and the comparison is the maintenance obligation: every edit to one
+#: has to be copied to the other or a test goes red, for ever, which is how a second copy
+#: becomes permanent.
+#:
+#: It is deliberately not silent about the dependency. The name stays in the file, so a reader
+#: of the trace ledger still sees that it needs an object store, which is what
+#: `wiring.AN_UNDECLARED_DEPENDENCY_IS_SATISFIED_BY_ACCIDENT_UNTIL_IT_IS_NOT` asks for, and
+#: composing that file on its own now fails to start rather than starting an S3 gateway with no
+#: access control on it.
+A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION: Final = (
+    "A service named in a second compose file with no body under it adds nothing to the "
+    "merge, so the running configuration is the one described file's whatever order the -f "
+    "flags are in. That is a reference to a declaration, not a copy of one, and it is the "
+    "only shape that removes the argument-order question without creating two bodies that a "
+    "test then has to hold equal for ever."
 )
 
 #: Why two declarations of one service are worse than two services.
@@ -143,10 +176,11 @@ BASELINE_FILE: Final = "docker-compose.yml"
 THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET: Final = (
     "The full profile is 19 containers across 8 compose files, reserving 12096 MiB, and it "
     "needs a host with 12864 MiB to spare once the component that has no service is deployed "
-    "too. Four things stop it being written as one file: presidio-analyzer is budgeted and "
-    "has no service anywhere, seaweedfs is declared twice with different bodies, 4 services "
-    "take something they need at startup from a bind mount that a stored compose resolves to "
-    "nothing, and 2 services connect to a database that nothing in these files creates."
+    "too. One thing stops it being written as one file: presidio-analyzer is budgeted and has "
+    "no service anywhere. The other three are closed. 0 services take something they need at "
+    "startup from a bind mount that a stored compose resolves to nothing, seaweedfs is "
+    "described once and named twice, and the 2 services connecting to a database no compose "
+    "file creates are pointed at one the install creates before it starts them."
 )
 
 
@@ -168,18 +202,43 @@ def declared_services(files: ComposeFiles) -> dict[str, tuple[str, ...]]:
     return {service: tuple(where) for service, where in found.items()}
 
 
-def services_declared_differently(files: ComposeFiles) -> tuple[str, ...]:
-    """Services declared in more than one file whose declarations disagree.
+def described_services(files: ComposeFiles) -> dict[str, tuple[str, ...]]:
+    """Every service name against the files that describe it, in filename order.
 
-    Two identical declarations are not reported, and that is the useful half rather than a
+    Not the same question as `declared_services`, and the difference is the whole of the
+    object store's arrangement. A file may **name** a service with no body under it, which
+    joins that service to the project and describes none of it, and every question this module
+    asks about a body has to skip such a name or it reads an absence as a disagreement. See
+    `A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION`.
+
+    A service with no description anywhere is absent from this mapping rather than present
+    with an empty tuple, so a caller cannot iterate it and silently do nothing.
+    """
+    found: dict[str, list[str]] = {}
+    for name in sorted(files):
+        for service, body in _services_in(files[name]).items():
+            if isinstance(body, Mapping) and body:
+                found.setdefault(service, []).append(name)
+    return {service: tuple(where) for service, where in found.items()}
+
+
+def services_declared_differently(files: ComposeFiles) -> tuple[str, ...]:
+    """Services described in more than one file whose descriptions disagree.
+
+    Two identical descriptions are not reported, and that is the useful half rather than a
     softening: naming one service in two files is how the object store is shared between the
     trace ledger and the profile that also runs it on its own, which is deliberate and
     documented. What is not safe is the two copies drifting, because the winner is then
     decided by the order of the `-f` flags. See
     `TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER`.
+
+    **A name with no body is not a second description and is not reported.** That is the shape
+    the trace ledger uses now, and it is a refinement of this check rather than a relaxation
+    of it: an empty body contributes nothing to the merge, so there is no order in which it
+    could win and nothing for a reviewer to be surprised by.
     """
     found: list[str] = []
-    for service, where in sorted(declared_services(files).items()):
+    for service, where in sorted(described_services(files).items()):
         if len(where) < 2:
             continue
         first = _services_in(files[where[0]])[service]
@@ -196,24 +255,41 @@ def services_declared_differently(files: ComposeFiles) -> tuple[str, ...]:
     return tuple(found)
 
 
+def mounted_paths(files: ComposeFiles) -> tuple[tuple[str, str, str], ...]:
+    """Every mount whose source is a path on the host, as (file, service, source).
+
+    One reader of the volumes block, because two questions are asked of it and they used to be
+    asked by two walks: whether a path is relative, and whether anything creates it. A named
+    volume is docker's to make and is not a path, which is the whole of the test: it has no
+    separator in it and does not begin with one.
+    """
+    found: list[tuple[str, str, str]] = []
+    for name in sorted(files):
+        for service, body in sorted(_services_in(files[name]).items()):
+            for source in _mount_sources(body):
+                if source.startswith((".", "~", "/")) or "/" in source:
+                    found.append((name, service, source))
+    return tuple(found)
+
+
 def relative_bind_mounts(files: ComposeFiles) -> tuple[str, ...]:
     """Every mount whose source is a path beside the compose file rather than a named volume.
 
     Reported per service rather than per path, because the thing an operator has to act on is
     a container that will come up without its configuration. See
     `A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE`.
+
+    Empty since 2026-09-10, and kept because the check is what stops it filling again: the
+    four that used to be here are absolute paths under the install's settings directory now,
+    and the next `./ops/...` somebody adds is one edit away from being back.
     """
-    found: list[str] = []
-    for name in sorted(files):
-        for service, body in sorted(_services_in(files[name]).items()):
-            for source in _mount_sources(body):
-                if source.startswith((".", "~")):
-                    found.append(
-                        f"{name}: {service!r} mounts {source!r} from beside the compose file, "
-                        "so a deployment that stores its own copy starts the container with "
-                        "an empty directory there and no error anywhere"
-                    )
-    return tuple(found)
+    return tuple(
+        f"{name}: {service!r} mounts {source!r} from beside the compose file, so a deployment "
+        "that stores its own copy starts the container with an empty directory there and no "
+        "error anywhere"
+        for name, service, source in mounted_paths(files)
+        if source.startswith((".", "~"))
+    )
 
 
 def components_with_no_service(profile: str, files: ComposeFiles) -> tuple[str, ...]:
@@ -246,16 +322,42 @@ def unbudgeted_services(profile: str, files: ComposeFiles) -> tuple[str, ...]:
     assert_known_profile(profile)
     budgeted = {one.name for one in components_for(profile)}
     baseline = set(_services_in(files[BASELINE_FILE])) if BASELINE_FILE in files else set()
+    described = described_services(files)
     return tuple(
-        f"{service!r} is deployed by {where[0]!r} at {_service_mib(files, service)} MiB and is "
-        f"neither a component of profile {profile!r} nor part of the deployed baseline, so no "
-        "figure in the budget includes it"
+        f"{service!r} is deployed by {described.get(service, where)[0]!r} at "
+        f"{_service_mib(files, service)} MiB and is neither a component of profile "
+        f"{profile!r} nor part of the deployed baseline, so no figure in the budget includes it"
         for service, where in sorted(declared_services(files).items())
         if service not in budgeted and service not in baseline
     )
 
 
-def databases_nothing_creates(files: ComposeFiles) -> tuple[str, ...]:
+def databases_needed(files: ComposeFiles) -> tuple[tuple[str, str], ...]:
+    """Every (server, database) pair a service connects to that its own server does not create.
+
+    The structured half of `databases_nothing_creates`, and it exists so that what the install
+    plan creates can be compared against what the deployment asks for as sets rather than by
+    searching a sentence for a name. A pair rather than a database name, because a `langfuse`
+    database on somebody else's server is a different fact from one on ours, and a check that
+    forgot the server would excuse the wrong thing.
+    """
+    creates = _databases_created(files)
+    found: set[tuple[str, str]] = set()
+    for name in sorted(files):
+        for body in _services_in(files[name]).values():
+            for value in _environment(body).values():
+                target = _postgres_target(value)
+                if target is None:
+                    continue
+                host, database = target
+                if host in creates and database != creates[host]:
+                    found.add((host, database))
+    return tuple(sorted(found))
+
+
+def databases_nothing_creates(
+    files: ComposeFiles, *, created_by_the_install: Sequence[tuple[str, str]] = ()
+) -> tuple[str, ...]:
     """Services holding a connection string for a database no server in this set creates.
 
     Read out of the deployment rather than out of a note, for the reason
@@ -266,7 +368,15 @@ def databases_nothing_creates(files: ComposeFiles) -> tuple[str, ...]:
 
     Only servers this set declares are checked. A hostname nobody here declares is somebody
     else's server, and what databases it holds is not visible from a compose file.
+
+    **`created_by_the_install` is the one thing a compose file cannot say about itself.** A
+    database created by a step of the install exists before the service that needs it starts,
+    and no amount of reading these documents would show that. It is a parameter rather than a
+    list here so that this module keeps describing the files and nothing else, and so that the
+    only caller who may pass it is the one that owns the plan the pairs come out of. The
+    default is empty, which is the question the aggregate compose file has to answer.
     """
+    excused = set(created_by_the_install)
     creates = _databases_created(files)
     found: set[str] = set()
     for name in sorted(files):
@@ -276,7 +386,7 @@ def databases_nothing_creates(files: ComposeFiles) -> tuple[str, ...]:
                 if target is None:
                     continue
                 host, database = target
-                if host not in creates or database == creates[host]:
+                if host not in creates or database == creates[host] or target in excused:
                     continue
                 found.add(
                     f"{service!r} connects to database {database!r} on {host!r}, and {host!r} "
@@ -294,8 +404,10 @@ def deployment_mib(files: ComposeFiles) -> int:
     reason: the failure is in the affordable direction. Eighteen of nineteen services costed
     is a profile that looks like it fits by the size of the one that was skipped.
 
-    A service declared twice is costed at the larger of its declarations, because the larger
-    is what the host has to honour if that is the declaration the flag order selects.
+    A service described twice is costed at the larger of its descriptions, because the larger
+    is what the host has to honour if that is the description the flag order selects. A service
+    named twice and described once is costed once, which is the same sentence with the second
+    copy taken out of it.
     """
     return sum(_service_mib(files, service) for service in declared_services(files))
 
@@ -425,13 +537,19 @@ def _postgres_target(url: str) -> tuple[str, str] | None:
 
 
 def _service_mib(files: ComposeFiles, service: str) -> int:
-    """The memory limit on one service, refusing a service that declares none."""
+    """The memory limit on one service, refusing a service that describes none.
+
+    Asked of the files that describe the service rather than of the files that name it, so a
+    reference contributes no limit and does not have to carry one. A service that is named
+    everywhere and described nowhere is refused rather than costed at nothing, which is the
+    same refusal for the same reason: the failure would be in the affordable direction.
+    """
     limits: list[int] = []
-    for name in declared_services(files).get(service, ()):
+    for name in described_services(files).get(service, ()):
         body = _services_in(files[name])[service]
         limits.append(_limit_mib(body, where=f"{name}: {service}"))
     if not limits:
-        msg = f"no compose file in this set declares {service!r}"
+        msg = f"no compose file in this set describes {service!r}"
         raise ComposeError(msg)
     return max(limits)
 

@@ -24,6 +24,7 @@ import pytest
 import yaml
 
 from brain.ops.compose import (
+    A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION,
     A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE,
     BASELINE_FILE,
     FULL_PROFILE_FILES,
@@ -31,10 +32,13 @@ from brain.ops.compose import (
     TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER,
     ComposeError,
     components_with_no_service,
+    databases_needed,
     databases_nothing_creates,
     declared_services,
     deployment_mib,
+    described_services,
     host_mib_for,
+    mounted_paths,
     relative_bind_mounts,
     services_declared_differently,
     unbudgeted_mib,
@@ -109,25 +113,56 @@ def test_one_component_of_the_full_profile_has_no_service_anywhere() -> None:
     assert declared >= {one.name for one in components_for("full")} - missing
 
 
-def test_the_object_store_is_declared_twice_and_the_two_declarations_disagree() -> None:
-    """`docker-compose.langfuse.yml` names `seaweedfs` on purpose, so that a project composing
-    it beside the object store gets one container rather than two. Its copy is missing the
-    `-s3.config` flag and the credentials file the object store's copy mounts, so which of the
-    two runs is decided by the order of the `-f` flags and one of the orders starts an S3
-    gateway with no credential configuration at all.
+def test_the_object_store_is_described_once_and_named_twice() -> None:
+    """**The second of the four reasons, closed on 2026-09-10 by item 43 of needs-rupash.**
 
-    Neither file is wrong on its own, which is why nothing else in this repository would
-    notice. Asserted on the keys that differ rather than on the count, because the count stays
-    at one while the disagreement moves to something else.
+    `docker-compose.langfuse.yml` names `seaweedfs` on purpose, so that a project composing it
+    beside the object store gets one container rather than two. Until that decision it carried
+    a second body as well, missing the `-s3.config` flag and the identities file the object
+    store's copy mounts, so which of the two ran was decided by the order of the `-f` flags and
+    one of the orders started an S3 gateway with no access control at all.
 
-    Delete this and the two copies drift further with nothing comparing them, which is the
-    exact failure `test_repo_shape.py` already guards for the lite pair."""
-    found = services_declared_differently(profile_files())
+    It now names the service with nothing under it, which contributes nothing to the merge and
+    therefore cannot win in any order. Both halves are asserted, because the empty declaration
+    is the fix and its absence would look identical to a file that had simply dropped the
+    dependency: the name has to still be there, and the body has to still be empty.
+
+    Delete this and the second body comes back, and neither file is wrong on its own, which is
+    why nothing else in this repository would notice."""
+    files = profile_files()
+
+    assert services_declared_differently(files) == ()
+    assert "seaweedfs" in files["docker-compose.langfuse.yml"]["services"]
+    assert not files["docker-compose.langfuse.yml"]["services"]["seaweedfs"]
+    assert declared_services(files)["seaweedfs"] == (
+        "docker-compose.langfuse.yml",
+        "docker-compose.objectstore.yml",
+    )
+    assert described_services(files)["seaweedfs"] == ("docker-compose.objectstore.yml",)
+    assert "order" in TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER
+    assert "merge" in A_NAME_WITH_NO_BODY_IS_A_REFERENCE_AND_NOT_A_SECOND_DECLARATION
+
+
+def test_a_second_body_for_one_service_would_still_be_reported() -> None:
+    """The check has to keep working now that the tree is clean, and a check that can only be
+    run against a healthy declaration cannot be shown to fail.
+
+    Asserted on the keys that differ rather than on the count, because the count stays at one
+    while the disagreement moves to something else.
+
+    Delete this and `services_declared_differently` could return `()` unconditionally, which
+    is the shape the tree would agree with."""
+    described = {"image": "x", "command": ["a"]}
+    found = services_declared_differently(
+        {
+            "a.yml": {"services": {"shared": described}},
+            "b.yml": {"services": {"shared": dict(described, command=["b"])}},
+        }
+    )
 
     assert len(found) == 1, found
-    assert found[0].startswith("'seaweedfs' is declared in"), found
-    assert "'command'" in found[0] and "'volumes'" in found[0], found
-    assert "order" in TWO_DECLARATIONS_OF_ONE_SERVICE_ARE_SETTLED_BY_ARGUMENT_ORDER
+    assert found[0].startswith("'shared' is declared in"), found
+    assert "'command'" in found[0], found
 
 
 def test_two_identical_declarations_of_one_service_are_not_a_finding() -> None:
@@ -150,30 +185,41 @@ def test_two_identical_declarations_of_one_service_are_not_a_finding() -> None:
     }
     assert len(services_declared_differently(differing)) == 1
 
+    # And a name with no body is not a declaration at all, in either spelling of nothing. It
+    # adds nothing to the merge, so there is no order in which it could win, which is what
+    # makes it a reference rather than the second copy this check exists to find.
+    for empty in ({}, None):  # type: dict[str, Any] | None
+        named: dict[str, Any] = {
+            "a.yml": {"services": {"shared": body}},
+            "b.yml": {"services": {"shared": empty}},
+        }
+        assert services_declared_differently(named) == ()
+        assert described_services(named) == {"shared": ("a.yml",)}
+        assert declared_services(named) == {"shared": ("a.yml", "b.yml")}
 
-def test_every_mount_a_stored_compose_would_resolve_to_nothing_is_named() -> None:
-    """**The trap an aggregate file walks straight into.** A file deployed as a stored copy
-    has no repository beside it, so `./ops/...` names a path that does not exist, and Docker
-    creates an empty directory there and starts the container rather than refusing.
 
-    Three of these four carry the thing that makes their container safe or usable: ClickHouse's
-    memory ceiling, the automation sandbox's egress allowlist and the object store's S3
-    credentials. A container missing any of them looks exactly like one that has them.
+def test_no_mount_is_left_that_a_stored_compose_would_resolve_to_nothing() -> None:
+    """**The third of the four reasons, closed on 2026-09-10 by item 43 of needs-rupash.**
 
-    Pinned by service so that moving a file into the image fails here, which is the moment the
-    aggregate becomes writable.
+    A file deployed as a stored copy has no repository beside it, so `./ops/...` named a path
+    that did not exist, and Docker creates an empty directory there and starts the container
+    rather than refusing. Three of the four carried the thing that makes their container safe
+    or usable: ClickHouse's memory ceiling, the automation sandbox's egress allowlist and the
+    object store's S3 credentials. A container missing any of them looks exactly like one that
+    has them.
 
-    Delete this and the aggregate can be written carrying all four, and the first deployment
-    of it is a stack that starts, reports healthy, and is missing its configuration."""
-    found = relative_bind_mounts(profile_files())
+    All four now name an absolute path under the install's settings directory, which is what
+    makes what a container reads independent of where its compose file was stored. The count
+    is asserted as well as the emptiness, because a check that found nothing because it was
+    looking at nothing would produce the same tuple.
 
-    assert {line.split("'")[1] for line in found} == {
-        "automation-egress",
-        "langfuse-clickhouse",
-        "seaweedfs",
-        "seaweedfs-init",
-    }, found
-    assert all("./ops/" in line for line in found), found
+    Delete this and the next `./ops/...` somebody adds is a container that starts, reports
+    healthy, and is missing its configuration."""
+    files = profile_files()
+
+    assert relative_bind_mounts(files) == ()
+    assert len(mounted_paths(files)) == 4, mounted_paths(files)
+    assert all(source.startswith("/opt/brain/") for _, _, source in mounted_paths(files))
     assert "empty directory" in A_RELATIVE_BIND_MOUNT_IS_EMPTY_IN_A_STORED_COMPOSE
 
 
@@ -197,12 +243,28 @@ def test_a_named_volume_and_an_absolute_path_are_not_reported_as_relative_mounts
     assert len(found) == 1, found
     assert "'three'" in found[0], "the long spelling of a bind mount is a bind mount"
 
+    # `mounted_paths` is the other half of the same walk and answers the wider question: a
+    # named volume is docker's to make and cannot be absent, and everything else is a path
+    # somebody has to create. Both absolute mounts are here and the volume is not.
+    assert {source for _, _, source in mounted_paths(files)} == {
+        "/etc/hosts",
+        "/srv/data",
+        "./ops/x.conf",
+    }
+
 
 def test_the_trace_ledger_connects_to_a_database_nothing_in_the_profile_creates() -> None:
-    """**The reason the profile could not come up even on a host large enough for it.**
-    Langfuse's two services point at `db` and ask for a database called `langfuse`. The `db`
-    service creates `brain` and nothing else: `POSTGRES_DB` creates exactly one database on an
-    empty data directory, and there is no second one anywhere in these eight files.
+    """**The reason the profile could not come up even on a host large enough for it, and it
+    is still true of these documents.** Langfuse's two services point at `db` and ask for a
+    database called `langfuse`. The `db` service creates `brain` and nothing else:
+    `POSTGRES_DB` creates exactly one database on an empty data directory, and there is no
+    second one anywhere in these eight files.
+
+    That is what an aggregate compose file would inherit, which is why the default answer here
+    stays the unforgiving one. What changed on 2026-09-10 is the deployment rather than the
+    documents: a step of the install creates it, and `created_by_the_install` is how the
+    module that owns the plan asks the narrower question. See
+    `test_deployment_installer.py::test_the_install_creates_exactly_the_databases_the_files_ask_for`.
 
     Read out of the connection strings rather than out of a note, which is the direction
     `undeclared_clients` reads in and for the same reason: a stack nobody has started is
@@ -210,10 +272,27 @@ def test_the_trace_ledger_connects_to_a_database_nothing_in_the_profile_creates(
 
     Delete this and the aggregate gets written and deployed, and the first symptom is two
     containers restarting against a database that was never anybody's job to create."""
-    found = databases_nothing_creates(profile_files())
+    files = profile_files()
+    found = databases_nothing_creates(files)
 
     assert {line.split("'")[1] for line in found} == {"langfuse-web", "langfuse-worker"}, found
     assert all("'langfuse'" in line and "'db'" in line for line in found), found
+    assert databases_needed(files) == (("db", "langfuse"),)
+
+
+def test_a_database_the_install_creates_is_no_longer_reported_and_only_that_one() -> None:
+    """The parameter is the one thing a compose file cannot say about itself, so its edges are
+    asserted rather than assumed. Excusing the pair silences the finding; excusing the same
+    database on a different server does not, and that is the half that matters, because a
+    constant naming only the database would have excused the wrong thing.
+
+    Delete this and `created_by_the_install` can be widened to a database name, and a service
+    pointed at somebody else's server passes a check that never looked at the server."""
+    files = profile_files()
+
+    assert databases_nothing_creates(files, created_by_the_install=(("db", "langfuse"),)) == ()
+    assert len(databases_nothing_creates(files, created_by_the_install=(("other", "langfuse"),)))
+    assert len(databases_nothing_creates(files, created_by_the_install=(("db", "other"),)))
 
 
 def test_a_service_pointed_at_a_database_its_server_creates_is_not_reported() -> None:
@@ -454,7 +533,11 @@ def test_the_written_reason_carries_the_figures_the_files_actually_produce() -> 
     assert f"reserving {deployment_mib(files)} MiB" in reason
     assert f"{host_mib_for('full', files)} MiB to spare" in reason
     assert f"{len(relative_bind_mounts(files))} services take something" in reason
-    assert f"{len(databases_nothing_creates(files))} services connect to a database" in reason
+    assert f"the {len(databases_nothing_creates(files))} services connecting to a" in reason
+    # The one clause with no number in it, because it is about one service either way. The
+    # sentence claims it is described once, and that claim is the check rather than the count.
+    assert "described once and named twice" in reason
+    assert services_declared_differently(files) == ()
 
 
 def test_a_document_with_no_services_block_is_read_as_empty_rather_than_refused() -> None:
