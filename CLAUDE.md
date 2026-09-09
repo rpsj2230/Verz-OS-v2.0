@@ -240,7 +240,8 @@ candidates, six real and two that could not fire), `audit/ledger.py` (four real,
 candidates: six real, one a second copy of a check the type already makes, three that
 could not fire), `ops/pii.py` (twenty candidates: eighteen real, two that could not fire),
 `identity/lifecycle.py` (twelve candidates, nine real and three the module already argues
-are unreachable and kept), and every module under `migration/`.
+are unreachable and kept), `resolution/merge.py` (eight real, fixed), and every module
+under `migration/`.
 
 `gate/leash.py` has since been re-run with the right scope, and the result is the point of the
 episode recorded above. Against the twenty-four test files that import it, the audit finds

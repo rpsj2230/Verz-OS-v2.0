@@ -54,6 +54,7 @@ from brain.resolution.merge import (
     PreImage,
     Restoration,
     ReviewedMerge,
+    UnmergeAudit,
     capture_pre_image,
     invalidations_for,
     merge,
@@ -792,6 +793,158 @@ def test_a_merge_cannot_be_produced_without_the_pre_image_it_would_be_reversed_f
                 authority=automatic(),
             ),
             invalidations=(),
+        )
+
+
+# ------------------------------------------ the audit and the outcome agree (M14.5.4)
+def test_a_merge_audit_with_no_id_cannot_be_cited_by_the_unmerge_that_reverses_it() -> None:
+    """The id is how an unmerge names the merge it is reversing, so an audit without one
+    records that something happened and nothing that can be undone.
+
+    Delete this and a merge decided by a caller that forgot the id is recorded, reversible by
+    nobody, and looks in the trail exactly like one that is."""
+    with pytest.raises(ResolutionError, match="cannot be cited by the unmerge"):
+        MergeAudit(
+            merge_id="   ",
+            survivor_id="e1",
+            merged_id="e2",
+            decided_at=NOW,
+            authority=automatic(),
+        )
+
+
+def test_every_timestamp_on_this_path_is_refused_when_it_is_naive() -> None:
+    """**Four places, and each one is compared against an aware instant somewhere else.** A
+    naive timestamp compares as though it were UTC whatever clock wrote it, so a merge decided
+    at nine in Singapore records as decided at nine in London and orders wrongly against the
+    unmerge that reverses it.
+
+    All four in one test because they are one rule, and separately because each is a different
+    entry point: the audit, the unmerge record, the merge itself and the unmerge itself.
+
+    Delete this and the four branches are unreachable, and the ordering the whole reversal
+    story rests on is decided by whichever machine wrote the row."""
+    naive = NOW.replace(tzinfo=None)
+    graph = {"e1": entity("e1"), "e2": entity("e2")}
+
+    with pytest.raises(ResolutionError, match="naive decided_at"):
+        MergeAudit(
+            merge_id="mg-1",
+            survivor_id="e1",
+            merged_id="e2",
+            decided_at=naive,
+            authority=automatic(),
+        )
+    with pytest.raises(ResolutionError, match="naive merge timestamp"):
+        merge(
+            survivor_id="e1",
+            merged_id="e2",
+            entities=graph,
+            authority=automatic(),
+            at=naive,
+            merge_id="mg-1",
+        )
+
+    outcome = merge(
+        survivor_id="e1",
+        merged_id="e2",
+        entities=graph,
+        authority=automatic(),
+        at=NOW,
+        merge_id="mg-1",
+    )
+    with pytest.raises(ResolutionError, match="naive unmerge timestamp"):
+        unmerge(
+            outcome.pre_image,
+            entities={**graph, "e2": outcome.merged},
+            merge_id="mg-1",
+            unmerge_id="un-1",
+            at=naive,
+            performed_by="rupash",
+            reason="the finance team said these are two clients",
+        )
+    with pytest.raises(ResolutionError, match="naive reversed_at"):
+        UnmergeAudit(
+            unmerge_id="un-1",
+            merge_id="mg-1",
+            survivor_id="e1",
+            restored_id="e2",
+            reversed_at=naive,
+            performed_by="rupash",
+            reason="the finance team said these are two clients",
+        )
+
+
+def test_an_outcome_whose_entity_is_not_the_one_the_audit_merged_is_refused() -> None:
+    """The audit trail and the graph have to describe the same event. An outcome writing one
+    entity while its audit names another leaves a merge recorded against a company nobody
+    merged, and the entity that was merged with no record of it at all.
+
+    Its sibling on the survivor pointer is already tested; this is the merged side and the
+    third field, the timestamp, is below.
+
+    Delete this and the two halves of one merge can disagree about which entity it was."""
+    outcome = merge(
+        survivor_id="e1",
+        merged_id="e2",
+        entities={"e1": entity("e1"), "e2": entity("e2")},
+        authority=automatic(),
+        at=NOW,
+        merge_id="mg-1",
+    )
+
+    with pytest.raises(ResolutionError, match="is not the one the audit says was merged"):
+        MergeOutcome(
+            merged=replace(entity("e3"), merged_into="e1", merged_at=NOW),
+            pre_image=outcome.pre_image,
+            audit=outcome.audit,
+            invalidations=(),
+        )
+
+
+def test_an_outcome_that_stopped_being_current_at_another_time_than_the_audit_is_refused() -> None:
+    """The third field of the same agreement, and the one a reader would assume follows from
+    the other two. It does not: the entity carries its own `merged_at` and the audit carries
+    `decided_at`, and nothing but this compares them.
+
+    A difference there is an entity that stopped being current before or after the decision
+    that stopped it, which is the ordering an unmerge reads to know what to restore.
+
+    Delete this and the trail can say a merge was decided at noon and the graph can say the
+    entity went at nine."""
+    outcome = merge(
+        survivor_id="e1",
+        merged_id="e2",
+        entities={"e1": entity("e1"), "e2": entity("e2")},
+        authority=automatic(),
+        at=NOW,
+        merge_id="mg-1",
+    )
+
+    with pytest.raises(ResolutionError, match="at a different time than the audit records"):
+        MergeOutcome(
+            merged=replace(outcome.merged, merged_at=LATER),
+            pre_image=outcome.pre_image,
+            audit=outcome.audit,
+            invalidations=(),
+        )
+
+
+def test_an_entity_cannot_be_merged_into_itself() -> None:
+    """Following the pointer would never reach a surviving entity: the row points at itself,
+    every resolution walk that follows it loops, and the entity is current and not current at
+    once.
+
+    Delete this and a resolver job whose two candidates collapsed to one id writes a record
+    that no read path can get out of."""
+    with pytest.raises(ResolutionError, match="cannot be merged into itself"):
+        merge(
+            survivor_id="e1",
+            merged_id="e1",
+            entities={"e1": entity("e1")},
+            authority=automatic(),
+            at=NOW,
+            merge_id="mg-1",
         )
 
 
