@@ -16,10 +16,18 @@ SQL themselves, and `connectors/projection.py` reuses `gate.provenance.Freshness
 declaring its own bands. A manual audit is worth exactly as much as the last time somebody
 ran it, which is why it is written down here instead.
 
-**What this does not do.** It counts definitions by name across the source tree. It cannot
-tell that two differently-named functions do the same thing, and it is not meant to: the
-failure it addresses is the literal one, where somebody writes `compile_where` again because
-they did not know the first one existed. A conceptual duplicate needs a reader.
+**Most of what is here counts definitions by name, and that is not enough on its own.** A
+name check catches somebody writing `compile_where` a second time because they did not know
+the first one existed. It misses somebody writing it once and calling it something else, and
+that is not hypothetical: `core/scope.py` carried a complete second scope-to-SQL renderer
+called `to_sql` from the first commit until 2026-09-09, in plain sight, in `core/`, invisible
+to the invariant guarding the rule it reimplemented.
+
+So the last three tests in this file count by *shape* instead, reading each function's own
+code for what it does rather than for what it is called. That is still not a general
+duplicate detector and is not meant to be: it knows one shape, the one that decides who sees
+a row, because that is the rule this repository can least afford two answers to. A conceptual
+duplicate of anything else still needs a reader.
 
 Task ids: M0.6.4
 """
@@ -293,24 +301,47 @@ def test_the_module_the_documents_used_to_name_still_computes_no_reach() -> None
 
 # --- a second renderer, whatever it is called ------------------------------------------------
 
-#: The one module that may turn a scope into SQL, and the one that currently also does.
+#: The one module that may turn a scope into SQL.
 #:
-#: `core/scope.py` holds `Scope.to_sql` and `Clause.to_sql`, which render `row_data ->> field`
-#: themselves. They are a second implementation of the rule that decides who can see what, and
-#: the two already disagree: a bare string where `compile_where` requires a tuple is accepted
-#: by one and refused by the other. `to_sql` also hard-codes the JSON path, so it cannot use a
-#: promoted column, and it never calls `assert_conjunctive`, which is the check that stops a
-#: scope widening rather than narrowing.
-#:
-#: Recorded as a known exception rather than fixed here, because deleting it is a decision with
-#: two test files behind it and it is item 40 in `docs/needs-rupash.md`. Recorded rather than
-#: ignored, because the whole failure was that nobody knew it existed.
+#: `core/scope.py` held `Scope.to_sql` and `Clause.to_sql`, a complete second renderer of the
+#: rule that decides who can see what. The owner decided on 2026-09-09 to delete them, as item
+#: 40 of `docs/needs-rupash.md`, on three grounds that are all about the second copy being the
+#: *worse* one rather than merely redundant: it hard-coded `row_data ->> field` so it could
+#: never use a promoted column, it never called `assert_conjunctive`, which is the check that
+#: stops a scope widening rather than narrowing, and it had nowhere to record that an
+#: impossible scope was impossible.
 SANCTIONED_RENDERER = "core/scope_sql.py"
-KNOWN_SECOND_RENDERER = "core/scope.py"
+
+#: Every function under `src/brain` allowed to turn a scope or a clause into SQL, by module.
+#:
+#: Two, not one, and both live in the sanctioned module. `compile_where` walks the clauses and
+#: emits the predicate; `ColumnLayout.column_for` decides whether a field is a real column or a
+#: jsonb lookup. They are pinned separately because splitting a renderer across two functions is
+#: how the next one arrives without either half looking like a renderer.
+SANCTIONED_RENDERING_FUNCTIONS: dict[str, tuple[str, ...]] = {
+    SANCTIONED_RENDERER: ("column_for", "compile_where"),
+}
+
+#: The jsonb text operator. Building one in code means turning a field named in a predicate
+#: into a column expression, which is the first half of rendering a scope whatever else the
+#: function goes on to do.
+JSON_FIELD_REFERENCE = "->>"
+
+#: The comparison shapes a compiled predicate is made of, each written against a bound
+#: parameter. Bound rather than bare, deliberately: `ops/sweeps.py` and `ops/schema_check.py`
+#: both hold catalogue queries containing `LIKE` and `= ANY(`, and neither is rendering a
+#: scope. The `:` is what makes this the shape of a predicate compiled from somebody's grant.
+PREDICATE_FRAGMENT_MARKERS = (" = :", " = ANY(:", " LIKE :", " ESCAPE ")
+
+#: How a function shows that it is reading the clause grammar rather than writing SQL of its
+#: own: it dispatches on `Op`, or it walks `.clauses`.
+GRAMMAR_ATTRIBUTES = frozenset({"clauses"})
 
 
-def _modules_rendering_a_json_path() -> set[str]:
-    """Every module whose *code* builds a `->>` fragment, ignoring comments and docstrings.
+def _code_strings(
+    holder: ast.FunctionDef | ast.AsyncFunctionDef, documented: set[int]
+) -> list[str]:
+    """Every string constant in this function's code, with docstrings left out.
 
     Parsed rather than grepped, and that distinction is the whole reason this works:
     `knowledge/rows.py` mentions `fields ->> 'name'` twice, in a comment and in a docstring,
@@ -318,9 +349,51 @@ def _modules_rendering_a_json_path() -> set[str]:
     and a grep cannot tell the difference, which is how a check like this ends up either
     useless or switched off.
     """
-    found: set[str] = set()
+    return [
+        node.value
+        for node in ast.walk(holder)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in documented
+    ]
+
+
+def _reads_the_clause_grammar(holder: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether this function takes a scope apart: `Op.SOMETHING`, or an attribute `.clauses`."""
+    for node in ast.walk(holder):
+        if not isinstance(node, ast.Attribute):
+            continue
+        if isinstance(node.value, ast.Name) and node.value.id == "Op":
+            return True
+        if node.attr in GRAMMAR_ATTRIBUTES:
+            return True
+    return False
+
+
+def _scope_sql_renderers() -> dict[str, tuple[str, ...]]:
+    """Every function under `src/brain` that turns a scope or a clause into SQL, by module.
+
+    Two shapes count, and the second is the one a name check cannot see.
+
+    A function builds a **column expression** when its code contains `->>`. There is exactly
+    one reason to write that operator: a field named in a predicate has to become something a
+    WHERE clause can compare. That alone is enough, without any other evidence, because it is
+    the half of rendering that a second implementation would most plausibly extract into a
+    helper of its own and thereby hide.
+
+    A function **compiles a predicate** when it both emits one of the bound-parameter
+    comparison shapes and reads the clause grammar. Either signal alone is ordinary: `seed.py`
+    deletes rows with `= ANY(:targets)` and never looks at a clause, while a dozen modules
+    build scopes out of `Op.EQ` and emit no SQL at all. Together they are a renderer, whatever
+    it is called, because there is nothing else that walks a grant's clauses and produces SQL
+    from them.
+    """
+    found: dict[str, set[str]] = {}
     for path in sorted(SRC.rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"))
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:  # pragma: no cover - a file that will not parse fails elsewhere
+            continue
         documented = {
             id(node.body[0].value)
             for node in ast.walk(tree)
@@ -329,51 +402,89 @@ def _modules_rendering_a_json_path() -> set[str]:
             and isinstance(node.body[0], ast.Expr)
             and isinstance(node.body[0].value, ast.Constant)
         }
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Constant)
-                and isinstance(node.value, str)
-                and "->>" in node.value
-                and id(node) not in documented
-            ):
-                found.add(str(path.relative_to(SRC)).replace(chr(92), "/"))
-    return found
+        for holder in ast.walk(tree):
+            if not isinstance(holder, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            strings = _code_strings(holder, documented)
+            builds_a_column = any(JSON_FIELD_REFERENCE in one for one in strings)
+            emits_a_fragment = any(
+                marker in one for one in strings for marker in PREDICATE_FRAGMENT_MARKERS
+            )
+            if builds_a_column or (emits_a_fragment and _reads_the_clause_grammar(holder)):
+                where = str(path.relative_to(SRC)).replace(chr(92), "/")
+                found.setdefault(where, set()).add(holder.name)
+    return {where: tuple(sorted(names)) for where, names in sorted(found.items())}
 
 
 def test_no_second_scope_to_sql_renderer_arrives_under_another_name() -> None:
-    """**The gap this file had, found by an agent building the match cascade.**
+    """**The gap this file had, found by an agent building the match cascade, and widened on
+    2026-09-09 when the renderer it had recorded as an exception was deleted.**
 
     Every test above counts definitions by *name*. That catches somebody writing
     `compile_where` twice and misses somebody writing it once and calling it `to_sql`, which is
-    exactly what `core/scope.py` did: a full scope-to-SQL renderer, sitting in `core/`, invisible
-    to the invariant guarding the rule it reimplements.
+    exactly what `core/scope.py` did: a full scope-to-SQL renderer, sitting in `core/`,
+    invisible to the invariant guarding the rule it reimplements.
 
-    So this counts by shape instead. A module whose code builds a `->>` fragment is turning a
-    scope into SQL whatever the function is called, because that operator is how a field inside
-    the JSON payload becomes a column expression.
+    So this counts by shape instead, and by function rather than by module. The earlier version
+    asked which *modules* contained a `->>` in code, which was enough to name the second
+    renderer once somebody already suspected it and not enough to catch the next one: a module
+    can hold a renderer and a hundred other things, and half a renderer looks like neither.
+    `_scope_sql_renderers` reads what each function does instead.
 
-    Pinned as an exact set rather than "no more than two", because a check that tolerates two
-    tolerates three on the day somebody adds one, and the whole value here is that the number
-    is watched. When item 40 is decided, deleting `core/scope.py`'s renderer makes this fail,
-    which is the right direction: the test then says the exception is gone and should be
-    removed from the constant above.
+    Pinned as an exact map rather than as "no more than two", because a check that tolerates
+    two tolerates three on the day somebody adds one, and the whole value here is that the
+    number is watched. The answer to a failure here is to read the new entry and decide, not to
+    loosen the comparison. If the new entry really is part of the one renderer, it belongs in
+    `SANCTIONED_RENDERING_FUNCTIONS` with a sentence saying why.
 
     Delete this and the next renderer is discovered by a permission being wrong."""
-    found = _modules_rendering_a_json_path()
+    found = _scope_sql_renderers()
 
-    assert found == {SANCTIONED_RENDERER, KNOWN_SECOND_RENDERER}, (
-        "a module builds scope SQL that neither compile_where nor the recorded exception owns"
+    assert found == SANCTIONED_RENDERING_FUNCTIONS, (
+        "a function builds scope SQL that compile_where does not own; read it and decide, "
+        "rather than adding it to the constant to make this pass"
+    )
+
+
+def test_the_renderer_deleted_from_core_scope_has_not_come_back() -> None:
+    """The specific claim, asserted on its own so a failure says what went wrong rather than
+    handing the reader a map to compare by eye. Written in the same shape as
+    `test_the_module_the_documents_used_to_name_still_computes_no_reach` above, and for the
+    same reason a mutation found there: an absence asserted against a scan that read nothing is
+    true for every state the source could be in, so what was read is asserted first.
+
+    `core/scope.py` is where the second renderer lived, and it is a completely reasonable place
+    to put one back. `Scope` is the object a person needing scope SQL is already holding, and a
+    method on it is easier to find than a function in another module, which is precisely why the
+    copy that skipped `assert_conjunctive` was the one anybody new would have reached for.
+
+    Both assertions name what was read. This file is read out of a working tree that other
+    sessions write to, and on 2026-09-09 this test went red once inside a sixty-second run and
+    green on every run after it, while the test above it passed in the same run off the same
+    scan function. A bare `assert x not in y` failing there tells the next reader only that it
+    failed, which is indistinguishable from the renderer genuinely being back.
+
+    Delete this and the deletion survives only as a paragraph in a docstring."""
+    found = _scope_sql_renderers()
+
+    assert SANCTIONED_RENDERER in found, (
+        f"nothing was read, so the absence below proves nothing. Found: {found}"
+    )
+    assert "core/scope.py" not in found, (
+        f"core/scope.py renders scope SQL again, in {found.get('core/scope.py')}"
     )
 
 
 def test_the_sanctioned_renderer_is_the_one_everything_actually_calls() -> None:
-    """The positive half. The test above would pass on a tree where `compile_where` had been
-    deleted and everything used the second renderer, because it only counts who *renders*.
+    """The positive half. The test above counts who *renders*, and would pass just as happily
+    on a tree where `compile_where` had been deleted and nothing rendered a scope at all.
 
-    So this counts who *calls*: every module needing scope SQL imports `compile_where`, and
-    nothing imports `Scope.to_sql`, which is why the second renderer is loaded rather than live.
+    So this counts who *calls*. Every module needing scope SQL imports `compile_where` from the
+    sanctioned module, and more than a couple of them do, which is what makes it the live
+    implementation rather than a module somebody could quietly stop using.
 
-    Delete this and the exception above can quietly become the implementation."""
+    Delete this and the one renderer can be orphaned without any test having an opinion, which
+    is the state the deleted one was in for as long as it existed."""
     callers = {
         str(path.relative_to(SRC)).replace(chr(92), "/")
         for path in sorted(SRC.rglob("*.py"))

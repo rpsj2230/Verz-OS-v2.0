@@ -1,5 +1,12 @@
 """Predicate evaluation, SQL rendering, and the capability grammar.
 
+**The rendering tests below used to call `Scope.to_sql` and `Clause.to_sql`, deleted on
+2026-09-09.** Every property they asserted is a property of turning a scope into SQL rather
+than of the method that used to do it, so each one is now asserted against
+`brain.core.scope_sql.compile_where`, which is the one renderer. Three properties are new,
+and they are the three the deleted renderer could not hold: a promoted column, a refusal
+before compiling, and an impossible scope that says it is impossible.
+
 Task ids: M0.2.2, M0.2.3
 """
 
@@ -12,6 +19,7 @@ from pydantic import ValidationError
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
+from brain.core.scope_sql import ColumnLayout, PredicateRefusedError, compile_where
 
 
 # ------------------------------------------------------------- evaluation
@@ -48,42 +56,91 @@ def test_field_names_must_be_lowercase_identifiers() -> None:
             Clause(field=bad, op=Op.EQ, value="x")
 
 
-# ---------------------------------------------------------------- to_sql
-def test_any_renders_as_true() -> None:
-    sql, params = Clause(field="department", op=Op.ANY).to_sql("p")
-    assert sql == "TRUE"
-    assert params == {}
+# ---------------------------------------------------------- compile_where
+def test_an_unrestricted_clause_renders_as_true_beside_a_real_one() -> None:
+    """An `ANY` clause tests nothing and must compile to something that admits every row,
+    or a scope declaring a field without restricting it would narrow by accident.
+
+    Asserted beside a real clause deliberately. A scope of nothing but `ANY` clauses is
+    unrestricted and short-circuits to `TRUE` before any clause is rendered, so a version
+    with a broken `ANY` arm passes that case and fails this one.
+
+    Delete this and the arm that renders an unrestricted clause is never reached by a test,
+    and it is the arm whose only wrong answers are `FALSE` and a crash.
+    """
+    mixed = Scope(
+        clauses=(
+            Clause(field="department", op=Op.ANY),
+            Clause(field="tier", op=Op.EQ, value="managed"),
+        )
+    )
+
+    compiled = compile_where(mixed)
+
+    assert compiled.where == "(TRUE AND row_data ->> 'tier' = :s1)"
+    assert compiled.params == {"s1": "managed"}
 
 
 def test_in_renders_as_a_parameterised_array() -> None:
-    sql, params = Clause(field="department", op=Op.IN, value=("a", "b")).to_sql("p")
-    assert "= ANY(:p)" in sql
-    assert params == {"p": ["a", "b"]}
+    """The members reach the database as one bound parameter, never as a rendered list.
+
+    Delete this and a membership test could be built by joining the values into the SQL,
+    which is a scope's own values becoming query text.
+    """
+    scope = Scope(clauses=(Clause(field="department", op=Op.IN, value=("a", "b")),))
+
+    compiled = compile_where(scope, param_prefix="p")
+
+    assert "= ANY(:p0)" in compiled.where
+    assert compiled.params == {"p0": ["a", "b"]}
 
 
 def test_prefix_renders_as_like_with_the_wildcard_in_the_parameter() -> None:
-    """The `%` goes in the value, never in the SQL string - otherwise a value containing
-    `%` would change the shape of the query."""
-    sql, params = Clause(field="scope_path", op=Op.PREFIX, value="web.").to_sql("p")
-    assert "LIKE :p" in sql
-    assert params == {"p": "web.%"}
+    """The `%` goes in the value, never in the SQL string. Otherwise a value containing
+    `%` would change the shape of the query.
+
+    Delete this and the wildcard can migrate into the fragment, where a stored value is
+    suddenly part of the pattern's structure rather than its content.
+    """
+    scope = Scope(clauses=(Clause(field="scope_path", op=Op.PREFIX, value="web."),))
+
+    compiled = compile_where(scope, param_prefix="p")
+
+    assert "LIKE :p0" in compiled.where
+    assert compiled.params == {"p0": "web.%"}
 
 
 def test_multiple_clauses_render_as_a_conjunction_with_distinct_parameters() -> None:
-    s = Scope(
+    """Two clauses are two bound names. One name for both would bind the second value into
+    the first placeholder, which is a permission bug that reads as a typo.
+
+    Delete this and a renderer that reuses one parameter name compiles a scope of two
+    department tests into a scope of one.
+    """
+    scope = Scope(
         clauses=(
             Clause(field="department", op=Op.EQ, value="maintenance"),
             Clause(field="tier", op=Op.EQ, value="managed"),
         )
     )
-    sql, params = s.to_sql()
-    assert sql.count("AND") == 1
-    assert len(params) == 2
+
+    compiled = compile_where(scope)
+
+    assert compiled.where.count("AND") == 1
+    assert compiled.params == {"s0": "maintenance", "s1": "managed"}
 
 
 def test_a_custom_parameter_prefix_avoids_collisions() -> None:
-    _, params = Scope.department("maintenance").to_sql("caller")
-    assert list(params) == ["caller0"]
+    """Two fragments compiled for one query need parameter names that cannot collide, which
+    is why the prefix is an argument and why `CompiledPredicate.and_` refuses a collision
+    rather than merging over it.
+
+    Delete this and the prefix can stop being honoured, which shows up as one scope's value
+    bound into another scope's placeholder.
+    """
+    compiled = compile_where(Scope.department("maintenance"), param_prefix="caller")
+
+    assert list(compiled.params) == ["caller0"]
 
 
 # -------------------------------------------------------- is_unrestricted
@@ -154,19 +211,32 @@ def test_a_prefix_wildcard_is_neutralised_before_it_reaches_like() -> None:
     to reach `web_` also reaches `webXnorth`, so a grant meant for one team reaches every
     team whose name differs by one character.
 
-    Found by the agent building M2, reported rather than worked around, and fixed here at
-    the type rather than downstream, so no caller can render an unescaped pattern.
+    Found by the agent building M2, reported rather than worked around, and fixed at the
+    renderer rather than downstream, so no caller can render an unescaped pattern.
+
+    Delete this and a grant meant for one team reaches every team whose name differs from
+    it by one character, and the query looks correct in every log.
     """
-    sql, params = Clause(field="d", op=Op.PREFIX, value="web_").to_sql("p")
-    assert "ESCAPE" in sql
-    assert params["p"] == r"web\_%"
+    scope = Scope(clauses=(Clause(field="d", op=Op.PREFIX, value="web_"),))
+
+    compiled = compile_where(scope, param_prefix="p")
+
+    assert "ESCAPE" in compiled.where
+    assert compiled.params["p0"] == r"web\_%"
 
 
 def test_a_percent_in_a_prefix_cannot_match_everything() -> None:
     """`web%` unescaped is "anything starting with web", which is what the author wrote,
-    and `%` alone would be every row in the table."""
-    _, params = Clause(field="d", op=Op.PREFIX, value="%").to_sql("p")
-    assert params["p"] == r"\%%"
+    and `%` alone would be every row in the table.
+
+    Delete this and the widest possible predicate is one character an author can type into
+    a console field.
+    """
+    scope = Scope(clauses=(Clause(field="d", op=Op.PREFIX, value="%"),))
+
+    compiled = compile_where(scope, param_prefix="p")
+
+    assert compiled.params["p0"] == r"\%%"
 
 
 def test_a_backslash_is_escaped_before_the_wildcards_are() -> None:
@@ -174,24 +244,108 @@ def test_a_backslash_is_escaped_before_the_wildcards_are() -> None:
 
     `chr(92)` rather than a literal, because this exact test was first written with one
     backslash too few and passed a backspace character instead, which proves nothing.
+
+    Delete this and the escaping can be reordered into a pattern where the added escapes
+    are themselves escaped, which turns every wildcard back on.
     """
     backslash = chr(92)
-    _, params = Clause(field="d", op=Op.PREFIX, value=f"a{backslash}b").to_sql("p")
-    assert params["p"] == f"a{backslash}{backslash}b%"
+    scope = Scope(clauses=(Clause(field="d", op=Op.PREFIX, value=f"a{backslash}b"),))
+
+    compiled = compile_where(scope, param_prefix="p")
+
+    assert compiled.params["p0"] == f"a{backslash}{backslash}b%"
 
 
 def test_a_membership_clause_cannot_hold_a_bare_string() -> None:
-    """`matches` requires a tuple and admits nothing; `to_sql` called `list("abc")` and
-    admitted three values nobody wrote. The SQL side was the wider one."""
+    """`matches` requires a tuple and admits nothing, while a renderer calling `list("abc")`
+    admits three values nobody wrote. The SQL side was the wider one, so the type refuses
+    the shape and neither evaluator ever sees it.
+
+    Delete this and one scope means two things, and the meaning that decides what a person
+    actually receives is the wider one.
+    """
     with pytest.raises(ValidationError, match="needs a tuple"):
         Clause(field="d", op=Op.IN, value="abc")
 
 
 def test_a_prefix_clause_cannot_hold_a_non_string() -> None:
-    """`matches` admits nothing; `to_sql` rendered `str(None)` into `LIKE 'None%'`, which
-    matches any row whose value happens to start with "None"."""
+    """`matches` admits nothing, while a renderer taking `str(None)` produces `LIKE 'None%'`,
+    which matches any row whose value happens to start with "None".
+
+    Delete this and a clause that matches nothing in Python matches real rows in SQL.
+    """
     with pytest.raises(ValidationError, match="needs a string"):
         Clause(field="d", op=Op.PREFIX, value=None)
+
+
+# ------------------------------- what the deleted second renderer could not do
+def test_a_promoted_field_compiles_to_its_column_rather_than_a_json_lookup() -> None:
+    """**The first of the three measured reasons `Scope.to_sql` was deleted on 2026-09-09.**
+    The fourth is structural and is argued in `brain.core.scope`'s module docstring.
+
+    It emitted `row_data ->> 'department'` and nothing else, because the JSON path was
+    written into the method. `compile_where` is given a `ColumnLayout`, so a field with a
+    real column compiles to that column and the query can use its index. The same scope
+    compiled by the deleted renderer was a scan, and a scope that cannot use an index is
+    the kind of slowness that arrives as thin results under load rather than as an error.
+
+    Both halves are asserted, because a layout that ignored `promoted` and one that applied
+    it to every field each pass one of them.
+
+    Delete this and the layout can quietly stop being honoured, which is exactly the state
+    the deleted renderer was permanently in.
+    """
+    scope = Scope(
+        clauses=(
+            Clause(field="department", op=Op.EQ, value="web"),
+            Clause(field="tier", op=Op.EQ, value="managed"),
+        )
+    )
+    layout = ColumnLayout(promoted=frozenset({"department"}), alias="k")
+
+    compiled = compile_where(scope, layout)
+
+    assert "k.department = :s0" in compiled.where
+    assert "k.row_data ->> 'tier' = :s1" in compiled.where
+
+
+def test_a_scope_that_would_never_match_is_refused_rather_than_compiled() -> None:
+    """**The second reason, and the one that made the deleted renderer the less safe of the
+    pair: it never called `assert_conjunctive`.**
+
+    `assert_conjunctive` is the check standing between a stored predicate and a scope that
+    could mean one thing to `Clause.matches` and another to SQL. `Scope.to_sql` skipped it
+    entirely, so a clause of `IN` with an empty member list rendered as
+    `row_data ->> 'd' = ANY(:s0)` with `[]` bound, and an `EQ` against the empty string
+    rendered as a comparison no projected row can satisfy.
+
+    **`compile_where` is the one that was right.** Both of those are scopes somebody wrote
+    by mistake, and both fail closed at the database, so the cost of compiling them is not a
+    leak. It is that the author is told nothing, learns nothing, and has a saved grant that
+    silently grants nothing. Refusing at compile time is where an author can still fix it.
+
+    Delete this and the check that stops a stored predicate widening can be removed from
+    `compile_where` with the suite green.
+    """
+    empty_membership = Scope(clauses=(Clause(field="d", op=Op.IN, value=()),))
+    empty_equality = Scope(clauses=(Clause(field="d", op=Op.EQ, value=""),))
+
+    with pytest.raises(PredicateRefusedError, match="empty member list"):
+        compile_where(empty_membership)
+    with pytest.raises(PredicateRefusedError, match="empty value"):
+        compile_where(empty_equality)
+
+    # The sibling the refusals need: a scope that is merely narrow still compiles.
+    assert compile_where(Scope.department("web")).where == "(row_data ->> 'department' = :s0)"
+
+
+# The third reason `Scope.to_sql` was deleted is that an impossible scope had nowhere to say
+# so: it rendered both contradictory clauses and returned a fragment matching nothing, which
+# is indistinguishable at the far end of a query from an empty table. There is no test for it
+# here on purpose. `tests/invariants/test_scope_invariants.py` already asserts that property
+# and records the deletion in its docstring, and a second copy of a test is the same mistake
+# as a second copy of a renderer, one layer up. A mutation confirmed which of the two catches
+# it: `test_an_impossible_scope_compiles_to_false_and_says_so`, in the invariants file.
 
 
 def test_the_shapes_that_merely_match_nothing_are_still_allowed() -> None:

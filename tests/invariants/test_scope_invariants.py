@@ -330,8 +330,10 @@ def test_a_predicate_that_would_widen_in_sql_is_refused_before_it_compiles() -> 
     with pytest.raises(ValidationError, match="needs a tuple"):
         Clause(field="department", op=Op.IN, value="abc")
 
-    # And the same for a PREFIX that is not a string: `matches` admits nothing while
-    # `to_sql` renders str(None) and produces LIKE 'None%', which matches real rows.
+    # And the same for a PREFIX that is not a string: `matches` admits nothing while a
+    # renderer taking str(None) produces LIKE 'None%', which matches real rows. This named
+    # `Scope.to_sql` until that second renderer was deleted on 2026-09-09; the argument is
+    # about any renderer, which is why the shape is refused at the type.
     with pytest.raises(ValidationError, match="needs a string"):
         Clause(field="department", op=Op.PREFIX, value=None)
 
@@ -535,7 +537,16 @@ def test_an_identifier_that_could_close_a_quote_is_refused() -> None:
 def test_an_impossible_scope_compiles_to_false_and_says_so() -> None:
     """An impossible scope is fail-closed and indistinguishable, at the far end of a
     query, from an empty table or a permission bug. The flag is the only way a caller can
-    say "your scopes do not overlap" instead of "no results"."""
+    say "your scopes do not overlap" instead of "no results".
+
+    **This is also the third reason `Scope.to_sql` was deleted on 2026-09-09.** That second
+    renderer returned a bare fragment, so it had nowhere to carry this fact at all: it emitted
+    both contradictory clauses and left the caller holding an empty result set with no way to
+    tell why it was empty. A property a type cannot express is not a property somebody
+    remembers to check.
+
+    Delete this and the flag can stop being set, which turns a refusal a caller can name back
+    into a silence that reads as missing data."""
     impossible = compose((department_scope("web"), department_scope("finance")))
     compiled = compile_where(impossible)
     assert compiled.where == "FALSE"

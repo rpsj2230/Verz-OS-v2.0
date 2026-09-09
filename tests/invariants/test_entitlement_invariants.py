@@ -14,6 +14,7 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent, Denied, to_public
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
+from brain.core.scope_sql import compile_where
 
 pytestmark = pytest.mark.invariant
 
@@ -196,17 +197,37 @@ def test_inv6_naive_expiry_is_rejected() -> None:
 
 # ------------------------------------------------------------------ INV-7
 def test_inv7_scope_sql_never_interpolates_a_value() -> None:
-    """INV-7: predicate rendering is parameterised. A client name cannot become SQL."""
+    """INV-7: predicate rendering is parameterised. A client name cannot become SQL.
+
+    Asserted against `compile_where` since 2026-09-09, when `Scope.to_sql` was deleted as a
+    second renderer of this rule. The invariant belongs to whichever function renders the
+    predicate, and there is now exactly one.
+
+    Delete this and a department name typed into a console form can close a quote and
+    become query text, in the function that decides which rows a person receives.
+    """
     s = Scope(clauses=(Clause(field="department", op=Op.EQ, value="'; DROP TABLE grants--"),))
-    sql, params = s.to_sql()
-    assert "DROP TABLE" not in sql
-    assert "DROP TABLE" in next(iter(params.values()))
+
+    compiled = compile_where(s)
+
+    assert "DROP TABLE" not in compiled.where
+    assert "DROP TABLE" in next(iter(compiled.params.values()))
 
 
 def test_inv7_unrestricted_scope_renders_true() -> None:
-    sql, params = Scope.unrestricted().to_sql()
-    assert sql == "TRUE"
-    assert params == {}
+    """An unrestricted scope compiles to a predicate that admits every row, and to no bound
+    parameters at all.
+
+    The failure this guards is the opposite of the usual one: a renderer that emitted an
+    empty string for no clauses would produce a query with no WHERE clause, which reads the
+    same and means the same, right up until it is composed with another fragment.
+
+    Delete this and the company-wide grant is the case nothing checks.
+    """
+    compiled = compile_where(Scope.unrestricted())
+
+    assert compiled.where == "TRUE"
+    assert compiled.params == {}
 
 
 # ------------------------------------------------------------------ regression
@@ -225,7 +246,19 @@ def test_scope_normalises_duplicate_clauses() -> None:
 
 
 def test_scope_clause_order_does_not_affect_identity() -> None:
+    """Two scopes admitting the same rows must be the same object and must compile to the
+    same SQL, because the serialisation is what `EntitlementSet.ent_hash` reads and the hash
+    is the cache key.
+
+    The compiled half matters separately from the object half: normalisation could be
+    correct on the model and lost by a renderer that iterated the clauses as given, and then
+    two identical scopes would produce two fragments and two bound-parameter maps.
+
+    Delete this and the same caller can miss their own cache entry and appear in traces as a
+    different principal.
+    """
     a = Clause(field="department", op=Op.EQ, value="maintenance")
     b = Clause(field="tier", op=Op.EQ, value="managed")
+
     assert Scope(clauses=(a, b)) == Scope(clauses=(b, a))
-    assert Scope(clauses=(a, b)).to_sql() == Scope(clauses=(b, a)).to_sql()
+    assert compile_where(Scope(clauses=(a, b))) == compile_where(Scope(clauses=(b, a)))

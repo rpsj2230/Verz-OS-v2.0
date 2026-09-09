@@ -9,6 +9,44 @@ reading their grants, you would have to solve a satisfiability problem. Conjunct
 means composing scopes can only ever narrow, so the reachable set of any grant set is
 computable by inspection.
 
+**This module used to render its own SQL and no longer does.** `Scope.to_sql` and
+`Clause.to_sql` were deleted on 2026-09-09 by the owner's decision on item 40 of
+`docs/needs-rupash.md`. The only renderer is `brain.core.scope_sql.compile_where`, and the
+Python half of the pair is `matches` below. Do not add a second one back, whatever it is
+called: `tests/invariants/test_single_implementation.py` now reads the source for the shape
+rather than for the name, because the name is what the old check watched and the old copy
+was called something else.
+
+Four reasons. The first is structural and the other three were measured, by compiling the
+same scope both ways and reading what came back:
+
+**It was a second answer to the question this system exists to answer.** Two renderings of
+"who may see which row" are reasonable in isolation and drift, and the one that drifts is
+found by a permission being wrong rather than by a test. That is what the
+single-implementation invariant forbids, and the invariant missed this one because it counted
+the name `compile_where`.
+
+**It hard-coded the JSON path, so it could not use a promoted column.** `to_sql` always
+emitted `row_data ->> 'department'`. `compile_where` takes a `ColumnLayout` and emits
+`k.department` for a field that has a real column, which is the difference between a scope an
+index can serve and a scope that becomes a scan.
+
+**It never called `assert_conjunctive`, which is the check that stops a scope widening
+rather than narrowing.** A clause of `IN` with an empty member list rendered as
+`row_data ->> 'd' = ANY(:s0)` with `[]` bound; `compile_where` refuses the same scope before
+compiling anything.
+
+**It could not say an impossible scope was impossible.** Two contradictory equalities
+rendered as a conjunction of both, which returns nothing and is indistinguishable from an
+empty table; `compile_where` returns `FALSE` with `certainly_empty` set, so the caller can
+say why the answer was empty.
+
+The item also recorded the two disagreeing on `IN` given a bare string. That half has since
+moved and the record should not be read as current: `Clause` refuses that shape at
+construction, and the duplicate check inside `_check_clause` was removed as unreachable
+earlier the same day, so the two now agree on every clause the type can hold. The four
+reasons above are the ones that still hold, and none of them needed a divergence to matter.
+
 Task ids: M0.2.2
 """
 
@@ -33,14 +71,6 @@ class Op(enum.StrEnum):
     ANY = "any"
 
 
-def _escape_like(value: str) -> str:
-    """Neutralise LIKE wildcards so a prefix means the same thing in SQL as in Python.
-
-    Backslash first, or the escapes added afterwards would themselves be escaped.
-    """
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 class Clause(BaseModel):
     """One field test."""
 
@@ -62,11 +92,15 @@ class Clause(BaseModel):
 
         Two shapes genuinely diverge, and in both the SQL side is the wider one:
 
-        - `IN` given a bare string. `matches` requires a tuple and admits nothing, while
-          `to_sql` calls `list("abc")` and admits "a", "b" and "c" as three values.
-        - `PREFIX` given a non-string. `matches` admits nothing, while `to_sql` renders
-          `str(None)` and produces `LIKE 'None%'`, which matches any row whose value
-          starts with "None".
+        - `IN` given a bare string. `matches` requires a tuple and admits nothing, while a
+          renderer calling `list("abc")` admits "a", "b" and "c" as three values.
+        - `PREFIX` given a non-string. `matches` admits nothing, while a renderer taking
+          `str(None)` produces `LIKE 'None%'`, which matches any row whose value starts
+          with "None".
+
+        Both sentences named `to_sql` until it was deleted on 2026-09-09. The renderer they
+        describe is now `brain.core.scope_sql.compile_where`, which reaches neither shape
+        because this validator refuses both before a `Clause` exists to compile.
         """
         if self.op is Op.IN and not isinstance(self.value, tuple):
             msg = (
@@ -96,32 +130,6 @@ class Clause(BaseModel):
         if self.op is Op.IN:
             return isinstance(self.value, tuple) and actual_s in self.value
         return isinstance(self.value, str) and actual_s.startswith(self.value)
-
-    def to_sql(self, param_prefix: str) -> tuple[str, dict[str, Any]]:
-        """Render to a parameterised SQL fragment. Never interpolates a value.
-
-        The rule this has to satisfy is stronger than "no injection": the SQL must admit
-        exactly the rows `matches` admits. Anywhere the two disagree, the SQL side is the
-        one that runs against the whole table.
-        """
-        col = f"row_data ->> '{self.field}'"
-        match self.op:
-            case Op.ANY:
-                return "TRUE", {}
-            case Op.EQ:
-                return f"{col} = :{param_prefix}", {param_prefix: self.value}
-            case Op.IN:
-                return f"{col} = ANY(:{param_prefix})", {param_prefix: list(self.value or ())}
-            case Op.PREFIX:
-                # LIKE reads % and _ as wildcards; str.startswith does not. Without
-                # escaping, a stored prefix of `web_` narrows in Python and widens in SQL,
-                # matching `webXnorth` as well as `web_north`. Escape first, then say so
-                # with ESCAPE, because the default escape character is backslash only by
-                # convention and not in every configuration.
-                return (
-                    f"{col} LIKE :{param_prefix} ESCAPE '\\'",
-                    {param_prefix: f"{_escape_like(str(self.value))}%"},
-                )
 
 
 class Scope(BaseModel):
@@ -163,17 +171,6 @@ class Scope(BaseModel):
         """Conjunction. The result can only be narrower than either input, never wider,
         which is the property the whole permission model rests on."""
         return Scope(clauses=self.clauses + other.clauses)
-
-    def to_sql(self, param_prefix: str = "s") -> tuple[str, dict[str, Any]]:
-        if not self.clauses:
-            return "TRUE", {}
-        frags: list[str] = []
-        params: dict[str, Any] = {}
-        for i, c in enumerate(self.clauses):
-            frag, p = c.to_sql(f"{param_prefix}{i}")
-            frags.append(frag)
-            params.update(p)
-        return "(" + " AND ".join(frags) + ")", params
 
     def is_unrestricted(self) -> bool:
         return len(self.clauses) == 0 or all(c.op is Op.ANY for c in self.clauses)
