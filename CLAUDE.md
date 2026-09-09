@@ -232,8 +232,9 @@ Audited with no survivors remaining: `core/redaction.py` (six real, fixed),
 `ops/retune.py`, `ops/scaling.py`, `ops/partitioning.py`, every module under `browsing/`, and
 `console/spend_view.py`, `console/model_matrix.py`, `console/approvals.py`,
 `console/scoped_authority.py`, `knowledge/search.py` (three real, fixed),
-`deployment/compatibility.py` (two real, fixed), `ops/install_docs.py`, and every module under
-`migration/`.
+`deployment/compatibility.py` (two real, fixed), `ops/install_docs.py`, `status.py` (eight
+candidates, six real and two that could not fire), `audit/ledger.py` (four real, fixed), and
+every module under `migration/`.
 
 `gate/leash.py` has since been re-run with the right scope, and the result is the point of the
 episode recorded above. Against the twenty-four test files that import it, the audit finds

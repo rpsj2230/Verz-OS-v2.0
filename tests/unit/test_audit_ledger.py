@@ -23,6 +23,7 @@ from brain.audit.ledger import (
     REDACTED,
     AuditAction,
     AuditChain,
+    AuditEntry,
     BreakReason,
     LegalHold,
     changed_fields,
@@ -304,6 +305,132 @@ def a_hold(**kw: object) -> LegalHold:
         "placed_at": NOW - timedelta(days=1),
     }
     return LegalHold(**(base | kw))  # type: ignore[arg-type]
+
+
+def test_a_nested_mapping_keeps_the_names_that_are_field_names_and_no_others() -> None:
+    """**A key carries content, and a nested mapping is where a sentence gets in as one.**
+
+    A before-and-after state is recorded as the names of the fields that changed, which is
+    what makes it recordable at all: the names are vocabulary and the values are the company's
+    data. The filter is what keeps that true. Without it a mapping keyed
+    `{"the client asked to leave": true}` records that sentence, joined to the real field names
+    beside it, in a record kept longer than anything else in the system.
+
+    Found by mutating the filter rather than the branch: it lives inside a comprehension, so
+    the guard audit cannot address it and says so, and this is the hand-written half.
+
+    Delete this and the key filter can be dropped with every other redaction test still
+    green."""
+    redacted = redact_details(
+        {
+            "changed": {
+                "client.margin": 12,
+                "the client asked to leave": True,
+            }
+        }
+    )
+
+    assert redacted["changed"] == "client.margin"
+
+
+def test_a_nested_mapping_with_no_field_names_at_all_is_redacted_whole() -> None:
+    """The empty case, which is not the same as an empty string: a mapping whose every key is
+    a sentence must not record as nothing, because nothing reads as "this field did not
+    change".
+
+    Delete this and the fallback can be an empty join, and a redaction becomes an absence."""
+    redacted = redact_details({"changed": {"the client asked to leave": True}})
+
+    assert redacted["changed"] == REDACTED
+
+
+def test_a_sentence_wearing_a_verb_is_not_a_capability_and_does_not_go_in() -> None:
+    """**The value that would otherwise walk into the ledger through the front door.**
+
+    `_is_recordable` admits a capability, and it checks the shape before it checks the verb.
+    Without the shape check, `read:the client is two months overdue on 12,400` passes: the
+    verb is `read`, and everything after the colon is a fact about a client sitting in a
+    record kept longer than anything else and readable by everyone with audit access.
+
+    A mutation audit found nothing reaching that branch. The existing test for the redactor
+    exercises the two guards on the details mapping and never this one, because the value it
+    hands over does not look like a capability at all.
+
+    Delete this and the ledger admits any sentence beginning with one of five verbs and a
+    colon."""
+    with pytest.raises(ValidationError, match="would put a value in the ledger"):
+        AuditEntry(
+            seq=0,
+            at=NOW,
+            actor_id="u_rupash",
+            action=AuditAction.GRANT,
+            subject="principal:u_weiling",
+            ent_hash=ENT,
+            trace_id="trace1",
+            details={"note": "read:the client is two months overdue on 12,400"},
+            prev_hash=GENESIS_HASH,
+            entry_hash="0" * DIGEST_CHARS,
+        )
+
+
+def test_a_real_capability_is_still_recordable() -> None:
+    """The positive case for the guard above, and the reason it cannot simply be tightened
+    until nothing passes: a capability is exactly what an audit entry about a grant is for.
+
+    Delete this and the shape check can be narrowed until a grant cannot record what was
+    granted."""
+    entry = AuditEntry(
+        seq=0,
+        at=NOW,
+        actor_id="u_rupash",
+        action=AuditAction.GRANT,
+        subject="principal:u_weiling",
+        ent_hash=ENT,
+        trace_id="trace1",
+        details={"capability": "read:client.name"},
+        prev_hash=GENESIS_HASH,
+        entry_hash="0" * DIGEST_CHARS,
+    )
+
+    assert entry.details["capability"] == "read:client.name"
+
+
+def test_a_details_key_that_is_not_a_field_name_is_refused() -> None:
+    """The other half of the same validator, and a key carries content as readily as a value:
+    `{"the client asked to leave": "true"}` is a sentence in a ledger with a boolean beside it.
+
+    Both halves matter and only one was reachable. The existing test hands over a bad value
+    under a good key, so the key branch had never run.
+
+    Delete this and half the check is decoration."""
+    with pytest.raises(ValidationError, match="is not a field name"):
+        AuditEntry(
+            seq=0,
+            at=NOW,
+            actor_id="u_rupash",
+            action=AuditAction.GRANT,
+            subject="principal:u_weiling",
+            ent_hash=ENT,
+            trace_id="trace1",
+            details={"the client asked to leave": "true"},
+            prev_hash=GENESIS_HASH,
+            entry_hash="0" * DIGEST_CHARS,
+        )
+
+
+def test_a_hold_with_a_naive_timestamp_is_refused() -> None:
+    """A hold is the thing that stops an erasure, and it is compared against `now` in UTC. A
+    naive timestamp compares as though it were UTC whatever clock wrote it, so a hold placed
+    at nine in Singapore reads as placed at nine in London and is inactive for eight hours,
+    during which the sweep it exists to stop can run.
+
+    Both fields, because a naive release time ends a hold early in exactly the same way.
+
+    Delete this and the branch is unreachable, which is the shape this repository has now
+    found forty times."""
+    for field in ("placed_at", "released_at"):
+        with pytest.raises(ValidationError, match="timezone-aware"):
+            a_hold(**{field: NOW.replace(tzinfo=None)})
 
 
 def test_a_hold_that_names_nothing_is_refused() -> None:
