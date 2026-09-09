@@ -15,13 +15,22 @@ what the pack owns is the completeness claim rather than the content. See
 `A_HANDOVER_DOCUMENT_THAT_RESTATES_A_REGISTER_IS_A_SECOND_REGISTER`.
 
 **A service level statement is the one document in the pack that can be refused by
-arithmetic, and it is refused three ways.** `brain.ops.reliability.RECOVERY_OBJECTIVES` holds
+arithmetic, and it is refused four ways.** `brain.ops.reliability.RECOVERY_OBJECTIVES` holds
 a recovery point and a recovery time per profile, and its own comment says the figures exist
 and the document does not; this is the document. It will not state a recovery point the
-backup schedule cannot deliver, it will not state a recovery time no drill has measured, and
-it will not state one the last drill took longer than. Each of those is a promise the client
-signs and only the first is visible to anybody reading the schedule. See
+backup schedule cannot deliver, it will not state one the copies that actually exist cannot
+deliver, it will not state a recovery time no drill has measured, and it will not state one
+the last drill took longer than. Each of those is a promise the client signs. See
 `A_PROMISE_THE_SCHEDULE_CANNOT_MEET_IS_STILL_A_PROMISE_THE_CLIENT_SIGNS`.
+
+**The second of those four is new on 2026-09-10 and the statement was signable without it.**
+Until then the recovery point was checked against `SCHEDULE` alone, which is a declaration of
+what ought to be copied and which nothing had ever executed: measured that day,
+`worst_scheduled_exposure_seconds()` returned 3600 against `lite`'s promise of 86400, so the
+refusal passed comfortably on an estate holding no copies whatsoever. A schedule is an
+intention and a copy is a fact, and a document a client signs may only rest on the second.
+`brain.ops.backup_manifest` reads real copies back for the first time, which is what makes the
+measured answer available at all. See `A_SCHEDULE_IS_AN_INTENTION_AND_A_COPY_IS_A_FACT`.
 
 **The subprocessor list names who may process and not who has.** Deriving it from observed
 traffic gives a list that is correct on the day it is written and wrong the first time a
@@ -61,9 +70,13 @@ from brain.console.screens import SCREENS, Screen
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.ops.recovery import (
     SCHEDULE,
+    Backup,
+    Coverage,
     Scheduled,
     Verification,
+    exposure_seconds,
     last_verified_restore,
+    scheduled_exposure_seconds,
     worst_scheduled_exposure_seconds,
 )
 from brain.ops.reliability import (
@@ -98,6 +111,16 @@ A_PROMISE_THE_SCHEDULE_CANNOT_MEET_IS_STILL_A_PROMISE_THE_CLIENT_SIGNS: Final = 
     "nothing measures it except a drill: an unmeasured recovery time is a guess in a "
     "contract, and a measured one the last drill exceeded is a figure somebody has watched "
     "the system miss. All three are refused here rather than rendered with a caveat."
+)
+
+#: Why the schedule is not enough on its own to state a recovery point.
+A_SCHEDULE_IS_AN_INTENTION_AND_A_COPY_IS_A_FACT: Final = (
+    "`SCHEDULE` says how often each thing ought to be copied. It is a declaration, and for "
+    "as long as nothing executed it the recovery-point refusal was comparing a promise "
+    "against another promise. An estate with no copies at all passed it. What a client signs "
+    "has to rest on copies that exist, so the exposure is measured from the newest copy of "
+    "each coverage and a coverage with no copy is an unbounded exposure rather than a slow "
+    "one, which is a different finding and a worse one."
 )
 
 #: Why the subprocessor list is not derived from what has actually been called.
@@ -211,16 +234,27 @@ def service_level(
     profile: str,
     *,
     verifications: Sequence[Verification],
+    backups: Sequence[Backup],
+    now: datetime,
     schedule: Sequence[Scheduled] = SCHEDULE,
     objectives: Sequence[RecoveryObjective] | None = None,
 ) -> ServiceLevel:
     """The service level statement for a profile, or a refusal naming what does not add up.
 
-    Three refusals, and each is a promise the client would otherwise sign. The schedule must
-    be able to deliver the stated recovery point; a drill must have verified, because an
-    unmeasured recovery time is a guess in a contract; and the measured time must be inside
-    the stated one, because a figure the last drill exceeded is a figure somebody has watched
-    the system miss. See `A_PROMISE_THE_SCHEDULE_CANNOT_MEET_IS_STILL_A_PROMISE_THE_CLIENT_SIGNS`.
+    Four refusals, and each is a promise the client would otherwise sign. The schedule must be
+    able to deliver the stated recovery point; **the copies that actually exist must be able
+    to deliver it too**; a drill must have verified, because an unmeasured recovery time is a
+    guess in a contract; and the measured time must be inside the stated one, because a figure
+    the last drill exceeded is a figure somebody has watched the system miss. See
+    `A_PROMISE_THE_SCHEDULE_CANNOT_MEET_IS_STILL_A_PROMISE_THE_CLIENT_SIGNS` and
+    `A_SCHEDULE_IS_AN_INTENTION_AND_A_COPY_IS_A_FACT`.
+
+    `backups` and `now` are required rather than defaulted to nothing and to the clock. A
+    default of no copies would make the new refusal fire on every caller that had not been
+    updated, which is a check that is red on arrival; a default of an empty sequence that
+    passed would be worse, because it would mean the absence of copies reads as compliance.
+    Requiring both makes every caller say what it observed and when, which is the same shape
+    every other function in `brain.ops.recovery` takes.
 
     The profile itself is checked by `brain.ops.reliability.recovery_objective`, which
     refuses a profile nothing declares rather than returning a `None` a renderer prints as a
@@ -242,6 +276,25 @@ def service_level(
             f"{A_PROMISE_THE_SCHEDULE_CANNOT_MEET_IS_STILL_A_PROMISE_THE_CLIENT_SIGNS}"
         )
         raise LaunchError(msg)
+    for coverage in Coverage:
+        if scheduled_exposure_seconds(coverage, schedule) is None:
+            continue
+        measured_exposure = exposure_seconds(backups, coverage, now=now)
+        if measured_exposure is None:
+            msg = (
+                f"the {profile} profile promises a recovery point of {objective.rpo_seconds}s "
+                f"and nothing has ever copied {coverage.value}, so the exposure on it is not "
+                f"a slow number, it is unbounded. {A_SCHEDULE_IS_AN_INTENTION_AND_A_COPY_IS_A_FACT}"
+            )
+            raise LaunchError(msg)
+        if measured_exposure > objective.rpo_seconds:
+            msg = (
+                f"the {profile} profile promises a recovery point of {objective.rpo_seconds}s "
+                f"and the newest copy of {coverage.value} restores to "
+                f"{measured_exposure:.0f}s ago. "
+                f"{A_SCHEDULE_IS_AN_INTENTION_AND_A_COPY_IS_A_FACT}"
+            )
+            raise LaunchError(msg)
     verified = last_verified_restore(verifications)
     if verified is None:
         msg = (
@@ -478,6 +531,8 @@ def assemble(
     *,
     configured_providers: Iterable[str],
     verifications: Sequence[Verification],
+    backups: Sequence[Backup],
+    now: datetime,
     owners: Sequence[Owner],
     screen_runbooks: Mapping[str, str],
     launched_on: date,
@@ -495,9 +550,18 @@ def assemble(
     point hears that rather than hearing about a missing runbook. Then every remaining gap is
     collected and raised together, for the reason in
     `A_PACK_WITH_A_MISSING_SECTION_IS_NOT_A_SHORTER_PACK`.
+
+    `backups` and `now` are passed straight through to `service_level` and are required here
+    for the same reason they are required there: a pack assembled without observing the
+    copies would state a recovery point on an estate that holds none.
     """
     level = service_level(
-        profile, verifications=verifications, schedule=schedule, objectives=objectives
+        profile,
+        verifications=verifications,
+        backups=backups,
+        now=now,
+        schedule=schedule,
+        objectives=objectives,
     )
     named = subprocessors(configured_providers)
     findings = pack_gaps(

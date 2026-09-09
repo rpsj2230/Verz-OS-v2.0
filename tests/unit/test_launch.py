@@ -17,7 +17,7 @@ Task ids: M30.5.4, M37.4.2.2, M37.4.2.4, M37.4.3.1, M37.4.3.2, M37.4.3.3, M37.4.
 from __future__ import annotations
 
 import inspect
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -39,7 +39,7 @@ from brain.launch import (
     subprocessors,
 )
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
-from brain.ops.recovery import SCHEDULE, Coverage, Method, Scheduled, Verification
+from brain.ops.recovery import SCHEDULE, Backup, Coverage, Method, Scheduled, Verification
 from brain.ops.reliability import (
     MATRIX,
     RECOVERY_OBJECTIVES,
@@ -97,6 +97,41 @@ def every_screen_covered() -> dict[str, str]:
     return {one.key: f"how to work the {one.key} screen" for one in SCREENS}
 
 
+#: The instant every recovery figure below is measured against.
+#:
+#: 2999 for the reason CLAUDE.md records: a fixture with a plausible date in it is a clock and
+#: it goes off on a morning nobody chose. `brain.ops.recovery.exposure_seconds` refuses a copy
+#: that restores to a moment after `now`, so the copies below are built relative to this.
+MEASURED_AT = datetime(2999, 6, 1, 12, 0, tzinfo=UTC)
+
+
+def a_copy(coverage: Coverage, *, seconds_ago: float) -> Backup:
+    """One copy of one coverage, that recent. Full rather than continuous, because only
+    continuous archiving may restore past the moment it finished and these are simple."""
+    when = MEASURED_AT - timedelta(seconds=seconds_ago)
+    return Backup(
+        backup_id=f"{coverage.value}-{seconds_ago:.0f}",
+        coverage=coverage,
+        method=Method.FULL,
+        destination="s3://backups",
+        started_at=when - timedelta(seconds=1),
+        finished_at=when,
+        recoverable_to=when,
+        size_bytes=1_048_576,
+    )
+
+
+def copies(seconds_ago: float = 60.0) -> tuple[Backup, ...]:
+    """One copy of every coverage the schedule covers, all equally recent.
+
+    Every coverage, because the refusal is per coverage: an estate that copies its database
+    hourly and has never copied its configuration has an unbounded exposure on the second, and
+    a helper that supplied only the first would make every test below pass for the wrong
+    reason.
+    """
+    return tuple(a_copy(one, seconds_ago=seconds_ago) for one in Coverage)
+
+
 # --- what we promise (M30.5.4, M37.4.2.2) ------------------------------------------------
 
 
@@ -116,10 +151,131 @@ def test_a_recovery_point_the_backup_schedule_cannot_deliver_is_refused_not_stat
     with pytest.raises(LaunchError, match="slowest copy on the schedule"):
         service_level(
             "standard",
+            backups=copies(),
+            now=MEASURED_AT,
             verifications=[a_verified_restore(100.0)],
             schedule=SCHEDULE,
             objectives=tight,
         )
+
+
+def test_an_estate_that_holds_no_copies_at_all_cannot_state_a_recovery_point() -> None:
+    """**This is the finding item 46 turned up and it made the statement signable on nothing.**
+
+    Until 2026-09-10 the recovery point was checked against `SCHEDULE` alone, and `SCHEDULE`
+    is a declaration of what ought to be copied that nothing had ever executed. Measured that
+    day: `worst_scheduled_exposure_seconds()` returned 3600 against `lite`'s promise of 86400,
+    so the refusal passed comfortably while the estate held no copies whatsoever. A schedule
+    is an intention and a copy is a fact.
+
+    Reported as unbounded rather than as a large number, because those are different findings:
+    a slow copy is a figure somebody can compare against a promise, and no copy at all is not
+    a figure. `worst_scheduled_exposure_seconds` draws the same distinction for the schedule.
+
+    Delete this and a client can sign a recovery point on a system that has never been copied,
+    which is the document doing the opposite of its job."""
+    with pytest.raises(LaunchError, match="it is unbounded"):
+        service_level(
+            "standard",
+            backups=[],
+            now=MEASURED_AT,
+            verifications=[a_verified_restore(100.0)],
+        )
+
+
+def test_a_coverage_the_schedule_covers_and_nothing_has_copied_is_named() -> None:
+    """The per-coverage half. An estate copying its database hourly and never copying its
+    configuration has an unbounded exposure on the second, and a check that looked at the
+    newest copy of anything would report the estate as healthy.
+
+    An install restored with last month's realm and policies is a different install, which is
+    the sentence `SCHEDULE` already carries about configuration.
+
+    Delete this and one well-copied coverage vouches for every other."""
+    only_the_database = [a_copy(Coverage.DATABASE, seconds_ago=60.0)]
+
+    with pytest.raises(LaunchError, match="nothing has ever copied"):
+        service_level(
+            "standard",
+            backups=only_the_database,
+            now=MEASURED_AT,
+            verifications=[a_verified_restore(100.0)],
+        )
+
+
+def test_copies_that_have_fallen_behind_the_promise_are_refused_however_good_the_schedule_is() -> (
+    None
+):
+    """The other way the two disagree, and it is the ordinary failure rather than the
+    dramatic one: everything is scheduled, everything is configured, and the copies stopped a
+    week ago. The schedule still says hourly and the estate is a week behind.
+
+    Asserted against a `standard` objective of four hours with copies eight hours old, so the
+    schedule's answer would pass and the measurement does not.
+
+    **The recovery time in this fixture is deliberately not the recovery point, and a mutation
+    is why.** Both were four hours in the first version, so comparing the measured exposure
+    against the recovery time instead of the recovery point produced the same verdict and no
+    test could tell the two apart. A fixture whose two figures happen to be equal cannot
+    distinguish them, which is the same trap CLAUDE.md records about a constant compared
+    against itself. Twenty-four hours here, and eight hours of exposure sits inside it.
+
+    Delete this and a backup job that silently stopped is invisible to the one document whose
+    job is to promise it works."""
+    fits = (an_objective("standard", rpo=14_400, rto=86_400),)
+
+    with pytest.raises(LaunchError, match="restores to"):
+        service_level(
+            "standard",
+            backups=copies(seconds_ago=28_800.0),
+            now=MEASURED_AT,
+            verifications=[a_verified_restore(100.0)],
+            objectives=fits,
+        )
+
+
+def test_copies_inside_the_promise_are_stated_rather_than_refused() -> None:
+    """The positive case, and without it a refusal that refused everything would pass all
+    three tests above. A guard tested only by what it stops is satisfied by one that stops
+    everything, which here would be a system that can never hand over a pack.
+
+    Delete this and the fourth refusal can be made unconditional with the suite green."""
+    fits = (an_objective("standard", rpo=14_400, rto=14_400),)
+
+    stated = service_level(
+        "standard",
+        backups=copies(seconds_ago=600.0),
+        now=MEASURED_AT,
+        verifications=[a_verified_restore(100.0)],
+        objectives=fits,
+    )
+
+    assert stated.rpo_seconds == 14_400
+
+
+def test_a_coverage_nothing_schedules_is_not_asked_for_a_copy() -> None:
+    """The asymmetry that keeps this from being red on arrival. `worst_scheduled_exposure_seconds`
+    ignores a coverage nothing schedules, and reports it through `backup_policy_gaps` instead,
+    because an unbounded exposure and an unscheduled one are different findings. The measured
+    check follows the same rule: it asks about the coverages the schedule covers, so removing
+    a coverage from the schedule removes it from both questions at once rather than turning a
+    silent gap into a refusal nobody can act on.
+
+    Delete this and narrowing the schedule makes the statement harder to produce rather than
+    easier, which is backwards."""
+    database_only = tuple(one for one in SCHEDULE if one.coverage is Coverage.DATABASE)
+    fits = (an_objective("standard", rpo=14_400, rto=14_400),)
+
+    stated = service_level(
+        "standard",
+        backups=[a_copy(Coverage.DATABASE, seconds_ago=600.0)],
+        now=MEASURED_AT,
+        verifications=[a_verified_restore(100.0)],
+        schedule=database_only,
+        objectives=fits,
+    )
+
+    assert stated.profile == "standard"
 
 
 def test_a_recovery_point_the_schedule_does_deliver_is_stated_with_the_interval_beside_it() -> None:
@@ -142,7 +298,12 @@ def test_a_recovery_point_the_schedule_does_deliver_is_stated_with_the_interval_
     )
 
     stated = service_level(
-        "standard", verifications=[a_verified_restore(100.0)], schedule=hourly, objectives=fits
+        "standard",
+        backups=copies(),
+        now=MEASURED_AT,
+        verifications=[a_verified_restore(100.0)],
+        schedule=hourly,
+        objectives=fits,
     )
 
     assert stated.rpo_seconds == 7_200
@@ -162,7 +323,9 @@ def test_a_recovery_time_no_drill_has_ever_measured_is_refused() -> None:
     Delete this and a client signs a recovery time on an install whose backups have never
     been restored."""
     with pytest.raises(LaunchError, match="guess in a contract"):
-        service_level("standard", verifications=[a_failed_restore()])
+        service_level(
+            "standard", backups=copies(), now=MEASURED_AT, verifications=[a_failed_restore()]
+        )
 
 
 def test_a_recovery_time_the_last_verified_drill_exceeded_is_refused() -> None:
@@ -175,7 +338,13 @@ def test_a_recovery_time_the_last_verified_drill_exceeded_is_refused() -> None:
     slow = (an_objective("standard", rpo=14_400, rto=3_600),)
 
     with pytest.raises(LaunchError, match="last verified restore took"):
-        service_level("standard", verifications=[a_verified_restore(7_200.0)], objectives=slow)
+        service_level(
+            "standard",
+            backups=copies(),
+            now=MEASURED_AT,
+            verifications=[a_verified_restore(7_200.0)],
+            objectives=slow,
+        )
 
 
 def test_a_statement_carries_the_drills_own_measurement_and_the_date_it_was_taken() -> None:
@@ -191,7 +360,13 @@ def test_a_statement_carries_the_drills_own_measurement_and_the_date_it_was_take
     older = a_verified_restore(60.0, at=datetime(2026, 1, 1, tzinfo=UTC))
     newer = a_verified_restore(9_000.0, at=datetime(2026, 2, 1, tzinfo=UTC))
 
-    stated = service_level("standard", verifications=[older, newer], objectives=fits)
+    stated = service_level(
+        "standard",
+        backups=copies(),
+        now=MEASURED_AT,
+        verifications=[older, newer],
+        objectives=fits,
+    )
 
     assert stated.measured_rto_seconds == 9_000.0
     assert stated.measured_at == datetime(2026, 2, 1, tzinfo=UTC)
@@ -209,7 +384,13 @@ def test_a_statement_for_an_install_that_copies_nothing_is_refused() -> None:
     Separate from the too-slow case above because the two are different findings and only one
     of them is a number, which is the distinction `brain.ops.recovery` already makes."""
     with pytest.raises(LaunchError, match="nothing is scheduled to be copied"):
-        service_level("standard", verifications=[a_verified_restore(100.0)], schedule=())
+        service_level(
+            "standard",
+            backups=copies(),
+            now=MEASURED_AT,
+            verifications=[a_verified_restore(100.0)],
+            schedule=(),
+        )
 
 
 def test_every_declared_profile_can_state_a_service_level_against_the_real_schedule() -> None:
@@ -222,7 +403,12 @@ def test_every_declared_profile_can_state_a_service_level_against_the_real_sched
     Delete this and the schedule can be relaxed to daily while three signed agreements
     continue to promise an hour."""
     for objective in RECOVERY_OBJECTIVES:
-        stated = service_level(objective.profile, verifications=[a_verified_restore(1.0)])
+        stated = service_level(
+            objective.profile,
+            backups=copies(),
+            now=MEASURED_AT,
+            verifications=[a_verified_restore(1.0)],
+        )
         assert stated.scheduled_exposure_seconds <= stated.rpo_seconds
 
 
@@ -523,6 +709,8 @@ def test_an_incomplete_pack_raises_with_every_finding_rather_than_the_first() ->
     with pytest.raises(LaunchError) as raised:
         assemble(
             "standard",
+            backups=copies(),
+            now=MEASURED_AT,
             configured_providers=["anthropic"],
             verifications=[a_verified_restore(1.0)],
             owners=[
@@ -550,6 +738,8 @@ def test_the_arithmetic_refusals_run_before_the_missing_paperwork() -> None:
     with pytest.raises(LaunchError, match="slowest copy on the schedule"):
         assemble(
             "standard",
+            backups=copies(),
+            now=MEASURED_AT,
             configured_providers=["anthropic"],
             verifications=[a_verified_restore(1.0)],
             owners=three_owners(),
@@ -569,6 +759,8 @@ def test_a_complete_pack_carries_every_section_as_objects_and_not_as_prose() -> 
     Delete this and every refusal above is satisfied by a function that refuses everything."""
     pack = assemble(
         "standard",
+        backups=copies(),
+        now=MEASURED_AT,
         configured_providers=["anthropic", "openai"],
         verifications=[a_verified_restore(1.0)],
         owners=three_owners(),
