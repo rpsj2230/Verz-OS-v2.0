@@ -85,6 +85,7 @@ MIGRATION_DECLINE = VERSIONS / "0017_upgrade_decline.py"
 MIGRATION_MEMORY = VERSIONS / "0018_memory_stores.py"
 MIGRATION_FAST_PATH = VERSIONS / "0019_fast_path_rule.py"
 MIGRATION_RESOLUTION = VERSIONS / "0020_entity_resolution.py"
+MIGRATION_CONTROL_RUN = VERSIONS / "0025_control_run.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -179,6 +180,12 @@ RESOLUTION_TABLES: tuple[str, ...] = (
     "er.link",
 )
 
+#: And the one 0025 adds: an attempt to run a scheduled control, appended and never updated
+#: except to record that it finished. It points at nothing, deliberately. The registry of
+#: controls is a compiled constant rather than a table, so a foreign key would need a mirror
+#: of that constant, and the name is held to it by a check constraint generated from it.
+CONTROL_RUN_TABLES: tuple[str, ...] = ("ops.control_run",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -193,6 +200,7 @@ ALL_TABLES = (
     + MEMORY_TABLES
     + FAST_PATH_TABLES
     + RESOLUTION_TABLES
+    + CONTROL_RUN_TABLES
 )
 
 
@@ -884,6 +892,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     memory = migration_module(MIGRATION_MEMORY)
     fast_path = migration_module(MIGRATION_FAST_PATH)
     resolution = migration_module(MIGRATION_RESOLUTION)
+    control_run = migration_module(MIGRATION_CONTROL_RUN)
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -897,6 +906,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert memory.TABLES == MEMORY_TABLES
     assert fast_path.TABLES == FAST_PATH_TABLES
     assert resolution.TABLES == RESOLUTION_TABLES
+    assert control_run.TABLES == CONTROL_RUN_TABLES
     # The package tuple is the migrations end to end. Stated as an equality rather than as a
     # set comparison, because the order is what a downgrade depends on.
     end_to_end = (
@@ -913,6 +923,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(memory.TABLES)
         + tuple(fast_path.TABLES)
         + tuple(resolution.TABLES)
+        + tuple(control_run.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -931,6 +942,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(memory.TABLES),
         set(fast_path.TABLES),
         set(resolution.TABLES),
+        set(control_run.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

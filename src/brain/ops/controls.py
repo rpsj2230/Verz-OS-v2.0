@@ -240,6 +240,13 @@ NOT_A_SCHEDULE: Final[Mapping[str, str]] = MappingProxyType(
             "is the same arithmetic as the deployment check and is evaluated when somebody "
             "is deciding where to run this, not on a schedule"
         ),
+        "brain.ops.schedule_runner:due_now": (
+            "the scheduler asking which of the controls below are owed a run, which is this "
+            "registry's own question rather than a mechanism that guards anything. "
+            "Registering it as a control would put a row in the handover pack claiming that "
+            "asking the question protects the estate, and would make the scheduler a "
+            "fourteenth thing needing a scheduler"
+        ),
     }
 )
 

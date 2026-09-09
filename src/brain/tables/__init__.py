@@ -79,6 +79,7 @@ from brain.tables.resolution import (
     EntityLinkRow,
 )
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
+from brain.tables.schedule import ControlRunRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
 
@@ -153,6 +154,13 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "er.alias",
     "er.identifier",
     "er.link",
+    # 0025_control_run. Points at nothing. The control it names lives in
+    # `brain.ops.controls.CONTROLS`, which is a compiled constant rather than a table because
+    # the set of mechanisms that must keep running is a fact about the product; a foreign key
+    # would need a table mirroring that constant, and a mirror of a constant is the second
+    # copy this repository refuses. The name is held to the registry by a check constraint
+    # generated from it instead.
+    "ops.control_run",
 )
 
 __all__ = [
@@ -165,6 +173,7 @@ __all__ = [
     "CapabilityPackAssignmentRow",
     "CapabilityPackRow",
     "CapabilityRegistryRow",
+    "ControlRunRow",
     "ConversationRow",
     "DepartmentRow",
     "DirectoryRoleGrantRow",
