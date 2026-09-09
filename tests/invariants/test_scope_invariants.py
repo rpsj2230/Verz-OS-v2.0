@@ -38,8 +38,11 @@ from brain.core.scope import Clause, Op, Scope
 from brain.core.scope_sql import (
     ColumnLayout,
     PredicateRefusedError,
+    check_grammar,
+    clause_entails,
     compile_where,
     is_unsatisfiable,
+    parse_predicate,
     scope_narrows,
 )
 
@@ -363,12 +366,168 @@ def test_a_compiled_predicate_never_interpolates_a_value() -> None:
         assert any(INJECTION in str(v) for v in compiled.params.values())
 
 
+# ------------------------------------- the grammar of a scope that arrives from a table
+def test_a_membership_clause_holding_a_bare_string_cannot_be_built_at_all() -> None:
+    """**The dangerous shape, refused by the type rather than by the grammar check.**
+
+    A bare string is one member per character in SQL and matches nothing at all in Python, so
+    the two evaluators disagree in the direction that widens. `Clause` refuses it, which is
+    why `check_grammar` no longer has a branch for it: a mutation audit found that branch
+    unreachable, because every clause the grammar check ever sees has been through the type.
+
+    Asserted here rather than only in the scope tests, because this file is where somebody
+    reading about the SQL compiler looks, and the refusal is the reason the compiler is
+    allowed to assume the shape.
+
+    Delete this and the one shape where the database is wider than the process becomes
+    representable again."""
+    with pytest.raises(ValidationError, match="needs a tuple"):
+        Clause(field="department", op=Op.IN, value="web")
+
+
+def test_a_membership_clause_with_an_empty_or_non_string_member_is_a_violation() -> None:
+    """An empty member matches a row whose field is the empty string, which no projected row
+    carries, so it is a member that can only ever widen the list without adding anything a
+    person meant. A non-string member renders as text in SQL and compares as itself in
+    Python, which is the same two-halves disagreement one test up.
+
+    Delete this and the member check is unreachable, and a list holding one bad entry passes
+    on the strength of the good ones."""
+    found = check_grammar(Scope(clauses=(Clause(field="department", op=Op.IN, value=("web", "")),)))
+
+    assert [one.reason for one in found] == ["has a member that is not a non-empty string"]
+    # A non-string member is the type's job rather than this check's, and saying so here is
+    # what stops somebody adding a second copy of it below.
+    with pytest.raises(ValidationError):
+        Clause(field="department", op=Op.IN, value=("web", 7))  # type: ignore[arg-type]
+
+
+def test_a_stored_list_matcher_with_a_non_string_member_is_refused() -> None:
+    """The same rule one layer out, where a predicate arrives from the table rather than being
+    built in code. Both layers matter: this one refuses the document, the one above refuses the
+    scope somebody assembled.
+
+    Delete this and a list matcher holding a number is parsed into a clause the grammar check
+    would then have to catch, and a scope that fails a check somewhere else is a scope that was
+    accepted here."""
+    with pytest.raises(PredicateRefusedError, match="must be a string"):
+        parse_predicate({"department": ["web", 7]})
+
+
+def test_a_stored_prefix_matcher_needs_a_non_empty_string() -> None:
+    """An empty prefix matches every row, which is a scope written as a no-op wearing the shape
+    of a restriction, and a non-string prefix does not render the same way in SQL and in
+    Python.
+
+    Delete this and `{"department": {"prefix": ""}}` parses into a clause that restricts
+    nothing and reads as though it restricts something."""
+    for bad in ("", 7, None):
+        with pytest.raises(PredicateRefusedError, match="needs a non-empty string"):
+            parse_predicate({"department": {"prefix": bad}})
+
+
+def test_an_any_matcher_written_any_other_way_is_refused() -> None:
+    """`{"any": true}` and nothing else. `{"any": false}` is what somebody writes meaning "no
+    rows", and it would parse into the clause that matches every row, which is the widest
+    possible reading of the narrowest possible intent.
+
+    `1` is included because JSON does not distinguish it from `true` in every producer, and
+    this check is `is not True` rather than a truthiness test for exactly that reason.
+
+    Delete this and the one matcher whose whole meaning is "unrestricted" can be produced by a
+    document that says the opposite."""
+    for bad in (False, 1, "true", None):
+        with pytest.raises(PredicateRefusedError, match="an any matcher is written"):
+            parse_predicate({"department": {"any": bad}})
+
+    assert parse_predicate({"department": {"any": True}}).clauses[0].op is Op.ANY
+
+
+# --------------------------------------------------- what the satisfiability check ignores
+def test_an_any_clause_is_ignored_when_deciding_whether_a_scope_can_match() -> None:
+    """`ANY` restricts nothing, so it can never make a scope impossible, and folding it into
+    the per-field analysis would make it look like a second value the field has to hold at
+    once.
+
+    Delete this and a scope carrying an unrestricted clause beside a real one reads as
+    impossible, which compiles to `false` and hides every row the real clause admits."""
+    scope = Scope(
+        clauses=(
+            Clause(field="department", op=Op.ANY),
+            Clause(field="department", op=Op.EQ, value="web"),
+        )
+    )
+
+    assert is_unsatisfiable(scope) is False
+
+
+def test_two_membership_lists_that_share_nothing_make_a_scope_impossible() -> None:
+    """Two `IN` clauses on one field are an intersection, and an empty one can never match. It
+    is what composing two grants produces when neither is wrong on its own.
+
+    Delete this and the intersection is computed and then not looked at, so a scope that can
+    match nothing is compiled and run against the table on every request."""
+    scope = Scope(
+        clauses=(
+            Clause(field="department", op=Op.IN, value=("web", "design")),
+            Clause(field="department", op=Op.IN, value=("finance",)),
+        )
+    )
+
+    assert is_unsatisfiable(scope) is True
+
+
+def test_a_membership_list_no_member_of_which_matches_the_prefix_is_impossible() -> None:
+    """The second emptiness check, and it is a different one: the members survive their own
+    intersection and then none of them starts with the prefix the same field carries.
+
+    Delete this and `department IN ('finance') AND department LIKE 'web%'` is asked of the
+    database on every request, which is a scan that can only ever return nothing."""
+    scope = Scope(
+        clauses=(
+            Clause(field="department", op=Op.IN, value=("finance", "legal")),
+            Clause(field="department", op=Op.PREFIX, value="web"),
+        )
+    )
+
+    assert is_unsatisfiable(scope) is True
+
+
+# ------------------------------------------------------------------- entailment is sound
+def test_an_unrestricted_clause_entails_nothing_narrower_than_itself() -> None:
+    """**The one guard here whose failure is a permission bug rather than a wasted query.**
+
+    Entailment answers "does every row matching the narrow clause also match the wide one",
+    and a caller uses it to let a narrow grant stand in for a wide one. A narrow clause of
+    `ANY` matches every row, so it entails nothing except another `ANY`, and answering True
+    would let an unrestricted clause be treated as covered by a departmental one.
+
+    The wide side is checked too, because `ANY` on that side is a real True and the two must
+    not be collapsed.
+
+    Delete this and the analysis stops failing towards False, which is the property its own
+    docstring is written around."""
+    unrestricted = Clause(field="department", op=Op.ANY)
+    narrow = Clause(field="department", op=Op.EQ, value="web")
+
+    assert clause_entails(unrestricted, narrow) is False
+    assert clause_entails(narrow, unrestricted) is True
+    assert clause_entails(unrestricted, unrestricted) is True
+
+
 def test_an_identifier_that_could_close_a_quote_is_refused() -> None:
     """Column names and table aliases cannot be parameterised, so they are constrained
     rather than quoted. Quoting only moves the problem to the quote character."""
     for bad in ("row_data'; --", 'row"data', "row data", "RowData", ""):
         with pytest.raises(PredicateRefusedError):
             ColumnLayout(jsonb_column=bad)
+    # The alias is the third identifier this renders and it had no test. It is prefixed onto
+    # every column name, so a quote in it closes the one the column would have been inside.
+    for bad in ("t'; --", 't"1', "t 1", "T"):
+        with pytest.raises(PredicateRefusedError):
+            ColumnLayout(jsonb_column="row_data", alias=bad)
+    # And the empty alias is the ordinary case rather than a violation: it means no prefix.
+    assert ColumnLayout(jsonb_column="row_data", alias="").alias == ""
     with pytest.raises(PredicateRefusedError):
         compile_where(department_scope("web"), param_prefix="s'; --")
 

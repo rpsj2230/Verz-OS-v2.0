@@ -113,9 +113,18 @@ def check_grammar(scope: Scope) -> list[GrammarViolation]:
 def _check_clause(clause: Clause) -> list[GrammarViolation]:
     """The value shape must match the operator, on both evaluators.
 
-    This is the whole point of the validator. `Clause` types `value` as
-    `str | tuple[str, ...] | None` for all four operators, so every mismatched pairing
-    constructs cleanly and then behaves differently in Python and in SQL.
+    **Two pairings are not checked here and the reason is that `Clause` refuses them.** Its
+    validator takes exactly the shapes where SQL is wider than Python, `IN` with a bare string
+    and `PREFIX` with a non-string, because those are the two where the database admits rows
+    the in-process check does not. A `Clause` therefore cannot carry either, and the branches
+    that used to test for them here were unreachable: a mutation audit found them on
+    2026-09-09 and this is what the removal is.
+
+    That leaves this function the job it actually has, which is the wider one. `Clause` refuses
+    only the divergent shapes and says so; every other odd pairing constructs cleanly, matches
+    nothing in both evaluators, and is a scope somebody wrote by mistake. Refusing those is
+    authoring-time sanity and belongs here, at the moment a scope is saved, rather than in a
+    type that has to keep them representable so a test can be written about them.
     """
     out: list[GrammarViolation] = []
     where = f"{clause.field} {clause.op}"
@@ -140,17 +149,11 @@ def _check_clause(clause: Clause) -> list[GrammarViolation]:
                     GrammarViolation(where, "has an empty value, which no projected row carries")
                 )
         case Op.IN:
-            if not isinstance(clause.value, tuple):
-                # The dangerous case: `list("abc")` is three members in SQL and no match
-                # at all in Python, so a string here is wider on the side that counts.
-                out.append(
-                    GrammarViolation(
-                        where,
-                        "needs a tuple of strings; a bare string becomes one member per "
-                        "character in SQL and matches nothing in Python",
-                    )
-                )
-            elif not clause.value:
+            # No `isinstance(clause.value, tuple)` branch: `Clause` refuses a bare string,
+            # because that is one of the two shapes where SQL is wider than Python, and a
+            # second copy here could only ever be reached by a clause built through
+            # `model_construct`. See this function's docstring.
+            if not clause.value:
                 out.append(
                     GrammarViolation(where, "has an empty member list, so it can never match")
                 )
@@ -322,10 +325,14 @@ def is_unsatisfiable(scope: Scope) -> bool:
     answers False the scope may still return nothing for reasons in the data. That is the
     safe direction, since the only thing this decides is whether to bother asking.
     """
+    # There is deliberately no `if clause.op is Op.ANY: continue` here, and there was one
+    # until a mutation showed it could not change an answer. An `ANY` clause carries no value,
+    # so it joins neither the equalities, the prefixes nor the membership intersection below,
+    # and a field whose only clause is `ANY` comes back satisfiable either way. The branch
+    # read as though it were keeping an unrestricted clause from making a scope look
+    # impossible, which is a thing it was never able to do.
     by_field: dict[str, list[Clause]] = {}
     for clause in scope.clauses:
-        if clause.op is Op.ANY:
-            continue
         by_field.setdefault(clause.field, []).append(clause)
     return any(_field_is_unsatisfiable(clauses) for clauses in by_field.values())
 
@@ -347,8 +354,10 @@ def _field_is_unsatisfiable(clauses: Sequence[Clause]) -> bool:
             members = set(clause.value)
             candidates = members if candidates is None else candidates & members
     if candidates is not None:
-        if not candidates:
-            return True
+        # One emptiness test rather than two. The first used to sit above the prefix filter
+        # and a mutation showed it could not change an answer: an empty intersection stays
+        # empty through the filter and is caught below. Two tests read as two cases and are
+        # one, which is the shape this repository removes rather than keeps.
         candidates = {v for v in candidates if all(v.startswith(p) for p in prefixes)}
         if not candidates:
             return True
@@ -374,9 +383,15 @@ def clause_entails(narrow: Clause, wide: Clause) -> bool:
         return True
     if narrow.field != wide.field:
         return False
-    if narrow.op is Op.ANY:
-        return False
 
+    # There is no `if narrow.op is Op.ANY: return False` here and there was one, which a
+    # mutation showed could not fire: the match below has no arm beginning with `ANY`, so an
+    # unrestricted narrow clause falls through to the same False. The property it was standing
+    # next to is the one that matters and it is asserted directly by
+    # `test_an_unrestricted_clause_entails_nothing_narrower_than_itself`: an unrestricted
+    # clause entails nothing except another unrestricted one, because a wrong True here is
+    # what would let a narrow grant stand in for a wide one. If an `ANY` arm is ever added to
+    # that match, this is the sentence that says why it must return False.
     match (narrow.op, wide.op):
         case (Op.EQ, Op.EQ):
             return narrow.value == wide.value
