@@ -704,6 +704,17 @@ source, without a migration.
 
 ## 40. A second copy of the rule that decides who can see what - DECIDED: delete it
 
+**Built 2026-09-10.** Both are deleted, every rendering property their tests asserted
+moved to `compile_where` intact, and the invariant was widened to catch a renamed copy by what
+its code does rather than by its name: building a JSON column expression at all, or emitting a
+bound comparison while also reading the clause grammar. Written back as `Clause.as_filter`, with
+no test naming `to_sql`, a second renderer is caught.
+
+One line of the evidence above no longer reproduces and is left as written rather than quietly
+corrected. The `IN`-with-a-bare-string divergence was measured before an unreachable branch was
+removed from `compile_where` earlier the same day, so the two now agree on that input. The other
+three were re-measured and stand, and the decision rested on all four.
+
 **Your decision, 2026-09-09: delete it**, on the recommendation below.
 
 The recommendation, recorded because you asked why the item did not carry one: delete
@@ -748,6 +759,16 @@ this system asks.
 
 
 ## 41. Four services connect straight to the application database and nothing budgets them - DECIDED: the four bounds below, and a refusal so an understatement cannot repeat
+
+**Built 2026-09-10, and the arithmetic above has moved.** The four are declared, so the
+database's demand is 50 rather than 20 and 47 connections are spare rather than 77. The worst
+case behind the pooler is 1312 MiB against a 2048 MiB container rather than the 832 MiB the
+written reason claimed, and that text moved with it.
+
+The refusal is in the list that stops a worker starting rather than the list of things that are
+wrong but starting will not fix, and the argument is in the code: an unbounded pool is not one
+leg of the queue, it is every client of that database including the administrator, and by the
+time anybody reads a finding the connections are held.
 
 **Your decision, 2026-09-09: go with the recommendation.** You also asked why there was
 no recommendation in the first place, and that was my mistake rather than a judgement about
@@ -823,6 +844,17 @@ Langfuse ones interact with whether Langfuse is deployed at all, which is item 2
 
 ## 43. Three things in the deployment files that break a fresh install - DECIDED: Option A on all three
 
+**Built 2026-09-10. The `full` profile is down from five blockers to two**, and neither
+of the two is one of these three. The settings four containers mount are created by an install
+step, per file, so an update never overwrites an edited egress allowlist. The trace ledger's
+database and role are created between the database starting and everything else, only on a
+profile that runs it, with the password piped to standard input rather than passed on a command
+line. And the object store is described once: the trace ledger's file names it with an empty
+body, which contributes nothing to a merge, so there is no second copy for a test to hold equal.
+
+The two blockers left on `full` are a component that is budgeted and has no service at all, and
+the reverse proxy, which is a requirement on the server rather than a file in this repository.
+
 **Your decision, 2026-09-09: Option A on each of the three.** The settings file is
 created during install, the trace ledger's database is created during install, and the file
 store is described once in its own deployment file with the tracing file referring to it.
@@ -894,6 +926,19 @@ the same change and I would rather do it once.
 
 
 ## 44. Nothing takes a backup of your database, and the shelf for one is already built - DECIDED: Option C, the nightly dump now and the restore drill with M30
+
+**Built 2026-09-10, and the sentence "nothing writes to it" is no longer true.** The
+copy runs nightly at 02:00 on a timer, writes to the bucket that was already waiting, and writes
+a small manifest beside the artefact describing what it actually did. The record of a copy must
+not live only inside the thing being copied: a row saying the database was backed up at 02:00 is
+in the database the copy exists to replace.
+
+**What you run, once, as root on the server:** `ops/backup/brain-install-backup`. It discovers
+the database container, the bucket and the object store from the running system rather than
+taking them as arguments, for the reason item 49 cost a wrong value.
+
+The last paragraph of this item stands unchanged and is the important one: a copy nobody has
+read back is a file, not a backup. Nothing reads one back, deliberately, and that is M30.
 
 **Your decision, 2026-09-09: Option C, A now and B later.** In your words, the nightly
 dump is not wasted work when M30 arrives: it becomes the thing M30's restore drill restores
@@ -999,6 +1044,22 @@ takes is a bill. Neither is a coding question.
 
 
 ## 46. Your client agreement will promise a recovery point and a recovery time. These are the numbers, and I need you to pick which set - DECIDED: Option A
+
+**2026-09-10: reading the code to record your choice turned up a fault worth knowing
+about.** The statement refused three ways and the recovery-point refusal compared your promise
+against the backup *schedule*, which is a declaration of what ought to be copied and which
+nothing had ever executed. Measured: the schedule answered 3600 seconds against `lite`'s promise
+of 86400, so it passed comfortably on a system that had never been backed up once.
+
+A schedule is an intention and a copy is a fact. There is a fourth refusal now: for every
+coverage the schedule covers, the newest copy that actually exists has to be inside the stated
+recovery point, and a coverage with no copy at all is reported as unbounded rather than as a
+large number. That only became possible because item 44's manifests can be read back.
+
+**This item is still open in the way that matters and that is correct.** No drill has verified a
+restore, so all three options still produce a refusal rather than a document. Signing the `lite`
+figures becomes real on the day a drill runs, and both halves of the promise will then rest on
+something observed.
 
 **Your decision, 2026-09-09: Option A.**
 
