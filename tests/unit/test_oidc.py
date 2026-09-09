@@ -180,6 +180,45 @@ def test_a_compact_token_splits_into_a_header_a_payload_and_a_signature():
     assert token.signing_input == wire.rsplit(".", 1)[0].encode()
 
 
+def test_a_payload_that_is_a_json_array_is_refused_rather_than_indexed():
+    """**Valid JSON is not a JWT.** `[]` and `"hello"` both parse, so the segment decodes
+    cleanly and only this guard stops a list being handed on as a claim set. Without it the
+    first `payload["sub"]` raises a `TypeError` from inside the validator, which is a crash on
+    the sign-in path where a refusal belongs, and a crash is a different answer to a caller
+    than a refusal is.
+
+    Both halves are checked because a forged header is the more interesting one: the header is
+    what names the algorithm and the key.
+
+    Delete this and the branch is unreachable, and a token anybody can write turns a refusal
+    into a stack trace."""
+    for header, claims in (({"alg": "RS256"}, ["not", "an", "object"]), (["nope"], payload())):
+        wire = ".".join(
+            (
+                base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip("="),
+                base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip("="),
+                base64.urlsafe_b64encode(b"sig").decode().rstrip("="),
+            )
+        )
+        with pytest.raises(TokenRefusedError) as caught:
+            parse_unverified(wire)
+        assert caught.value.reason is TokenRefusal.MALFORMED
+
+
+def test_a_subject_that_is_a_number_or_an_empty_string_is_refused():
+    """**The claim that becomes a principal id.** A directory that returns `sub` as an integer
+    is not hypothetical, and neither is one that returns an empty string for a deleted account.
+    Either one flows into the lookup key, so the guard is the difference between a refusal and
+    a principal identified by `0` or by nothing at all.
+
+    Delete this and the type check on every string claim is unreachable, which is every claim
+    that names a person."""
+    for bad in (12345, "", None):
+        with pytest.raises(TokenRefusedError) as caught:
+            check(raw(sub=bad))
+        assert caught.value.reason is TokenRefusal.MISSING_CLAIM
+
+
 def test_a_token_with_five_segments_is_refused():
     """Five segments is a JWE. Without this it would be split into three by a lenient parser
     and its ciphertext read as a payload, which is nonsense that reaches the validator."""
@@ -434,6 +473,26 @@ def test_a_cache_entry_older_than_its_ttl_is_refetched():
     assert fetch.calls == 2
 
 
+def test_a_key_already_in_the_cache_is_returned_without_asking_the_provider():
+    """The ordinary path, and the one nothing asserted. Every test around this exercises a
+    miss: an unknown id, a flood of them, a stale set served during an outage. With the hit
+    unasserted, `key_for` could refetch on every single sign-in and only the provider would
+    know.
+
+    The call count is what makes this a test about the cache rather than about the answer.
+
+    Delete this and the cache can stop being a cache while every other test in this section
+    still passes."""
+    fetch = Fetcher((signing_key(),))
+    cache = JwksCache(fetch)
+    cache.keys_for(ISSUER, NOW)
+
+    found = cache.key_for(ISSUER, KID, NOW + timedelta(minutes=1))
+
+    assert found.kid == KID
+    assert fetch.calls == 1
+
+
 def test_an_unrecognised_key_id_triggers_exactly_one_refetch():
     """This is what makes a routine key rotation invisible to users instead of an outage
     lasting until the TTL expires."""
@@ -557,6 +616,53 @@ def identity(*groups: str) -> MappedIdentity:
         email="priya@example.com",
         groups=groups,
     )
+
+
+def test_a_group_with_no_rule_produces_no_grant_rather_than_an_empty_one():
+    """A person in ten directory groups of which one is mapped gets one grant. The skip is
+    what makes that true, and without it the loop reaches a `RoleGrant` built from `None`.
+
+    Asserted on the grants rather than on the count, so a rule matching the wrong group fails
+    too.
+
+    Delete this and every group anybody is in becomes a row, which is a directory writing the
+    platform's roles."""
+    rules = [GroupRoleRule(group="/brain/member", role=Role.MEMBER)]
+
+    grants = role_grants_from_groups(
+        identity("/finance/all", "/brain/member", "/social/football"),
+        person(),
+        rules,
+        now=NOW,
+    )
+
+    assert [one.role for one in grants] == [Role.MEMBER]
+
+
+def test_an_issuer_too_long_to_record_as_a_grantor_is_refused():
+    """`granted_by` is `idp:` plus the issuer and the column holds 128 characters. Silently
+    truncated, two issuers with a long common prefix record as the same grantor, and the row
+    that says which directory appointed somebody stops being able to say it.
+
+    Refused rather than truncated, because a truncated provenance reads as a real one.
+
+    Delete this and the bound is unreachable and the failure moves to an insert."""
+    long_issuer = "https://" + "a" * 200 + ".example.com"
+
+    with pytest.raises(IdentityError, match="too long to record"):
+        role_grants_from_groups(
+            MappedIdentity(
+                subject=SUBJECT,
+                issuer=long_issuer,
+                display_name="Priya Menon",
+                primary_department="web",
+                email="priya@example.com",
+                groups=("/brain/member",),
+            ),
+            person(),
+            [GroupRoleRule(group="/brain/member", role=Role.MEMBER)],
+            now=NOW,
+        )
 
 
 def test_an_idp_group_maps_to_a_platform_role():

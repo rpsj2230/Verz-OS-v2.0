@@ -30,6 +30,7 @@ from datetime import UTC, datetime, timedelta
 from types import ModuleType
 
 import pytest
+from pydantic import BaseModel
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
@@ -349,6 +350,72 @@ def leaky_by_return(identity: MappedIdentity) -> tuple[Grant, ...]:
 def leaky_by_field(identity: MappedIdentity) -> LeakyResult:
     """A sync whose signature is unchanged and whose result now carries capabilities."""
     raise NotImplementedError
+
+
+class LeakyModel(BaseModel):
+    """The same mistake in a pydantic model rather than a dataclass.
+
+    Both shapes are used for result types across this repository, and the walker reads their
+    fields through two different attributes. A fixture of one kind leaves the other branch
+    unreached, which is what a mutation audit found.
+    """
+
+    roles: frozenset[Role]
+    capabilities: tuple[Capability, ...]
+
+
+class NestedResult(BaseModel):
+    """A capability two levels down, which this check states plainly that it does not see.
+
+    A model rather than a dataclass, and the difference is what makes this test able to fail.
+    This file carries `from __future__ import annotations`, so a dataclass field's `type` is
+    the string somebody wrote and the walk stops at it whatever the recursion bound says.
+    Pydantic resolves its annotations, so `model_fields` hands back the real class and the
+    bound is the only thing deciding how far this goes.
+    """
+
+    inner: LeakyModel
+
+
+def leaky_by_model_field(identity: MappedIdentity) -> LeakyModel:
+    """A sync whose result is a model carrying capabilities."""
+    raise NotImplementedError
+
+
+def nested_two_levels_down(identity: MappedIdentity) -> NestedResult:
+    """A sync whose result holds a result that carries capabilities."""
+    raise NotImplementedError
+
+
+def test_a_result_model_carrying_capabilities_is_refused_as_well_as_a_dataclass() -> None:
+    """**The same mistake in the other of the two shapes this repository uses for results.**
+
+    The walker reads a pydantic model's fields through `model_fields` and a dataclass's
+    through `dataclasses.fields`, and the existing fixture is a dataclass, so the model branch
+    had never run. Half a check that reads as a whole one is the shape this repository keeps
+    finding.
+
+    Delete this and adding `capabilities` to any pydantic result type passes, which is most of
+    the result types here."""
+    with pytest.raises(IdentityError, match="never confer a capability"):
+        assert_no_capability_from_claims(leaky_by_model_field)
+
+
+def test_the_check_looks_one_level_down_and_says_so_rather_than_looking_further() -> None:
+    """**A stated limit, pinned so it stays a decision rather than becoming an accident.**
+
+    One level is what the function's docstring argues for: the way the rule breaks in practice
+    is a `capabilities` field added to the result type in a hurry, not a capability buried two
+    types deep. Looking further is not free either, because the walk is over annotations and
+    every extra level widens what a string annotation can be mistaken for.
+
+    So a capability two levels down passes, and that is the gap. It is written down here
+    rather than left for somebody to discover, and the day the depth changes this test is what
+    says the limit moved.
+
+    Delete this and the recursion bound is unreachable, and a change to it lands with nothing
+    recording that the check now sees further or less far than it did."""
+    assert_no_capability_from_claims(nested_two_levels_down)
 
 
 def test_an_identity_provider_claim_can_never_confer_a_capability() -> None:
