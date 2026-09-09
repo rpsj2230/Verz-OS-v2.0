@@ -641,6 +641,74 @@ def test_a_row_this_cannot_read_does_not_become_a_shorter_loop() -> None:
     assert [one.rule for one in changes] == ["check constraint this cannot place"]
 
 
+def test_a_loop_whose_target_does_not_match_its_rows_falls_back_rather_than_unrolling() -> None:
+    """A tuple of pairs walked with a single name, which is `for row in ROWS` over two-value
+    rows.
+
+    The unrolled pass cannot bind one name to two values, and the branch that notices gives up
+    on the whole unroll rather than binding the first value or the last. Either of those would
+    be a reading that names a table, and a reading that names the wrong table is worse than one
+    that names none: the flattened fallback leaves the loop variable holding four values, so
+    the substitution cannot be resolved and the statement is reported as unreadable, which is
+    what it is.
+
+    Delete this and the give-up branch is unreachable, and the next change to `bindings` can
+    make a partial unroll that places a constraint on a table nobody wrote.
+    """
+    text = (
+        "from alembic import op\n"
+        'revision = "9001"\n'
+        'down_revision = "9000"\n'
+        'ROWS = (("know", "chunk"), ("know", "doc"))\n'
+        "def upgrade() -> None:\n"
+        "    for row in ROWS:\n"
+        '        op.execute(f"DROP TABLE know.{row}")\n'
+        "def downgrade() -> None:\n"
+        "    pass\n"
+    )
+
+    changes = changes_in(text)
+
+    assert [one.rule for one in changes] == ["op.execute with no readable argument"]
+    assert changes[0].verdict is Verdict.UNREADABLE
+
+
+def test_a_loop_over_an_iterable_with_no_rows_still_binds_its_name_to_the_strings() -> None:
+    """The other half of the same statement, and the one every unpacked declaration needs.
+
+    `ALL = (*RLS, *GRANTS)` is a tuple whose elements are unpackings rather than strings, so
+    the row reader cannot see rows in it at all and the loop is never unrolled. The flattened
+    reading is then the only reading there is, and it has to bind the loop's name to the
+    strings, or the body reads a name holding nothing and every statement in the loop
+    disappears. A migration whose statements disappear is a migration that passes.
+
+    Both statements are asserted, not just the count, because a binding that carried only the
+    first would leave the second unlooked at while the file still reported one finding.
+
+    Delete this and the binding goes, and `for statement in ALL: op.execute(statement)` reads
+    as a migration that executes nothing.
+    """
+    text = (
+        "from alembic import op\n"
+        'revision = "9001"\n'
+        'down_revision = "9000"\n'
+        'RLS = ("DROP TABLE know.chunk",)\n'
+        'GRANTS = ("REVOKE SELECT ON know.doc FROM brain_app",)\n'
+        "ALL = (*RLS, *GRANTS)\n"
+        "def upgrade() -> None:\n"
+        "    for statement in ALL:\n"
+        "        op.execute(statement)\n"
+        "def downgrade() -> None:\n"
+        "    pass\n"
+    )
+
+    changes = changes_in(text)
+
+    assert [one.verdict for one in changes] == [Verdict.BREAKING, Verdict.BREAKING]
+    assert "know.chunk" in changes[0].detail
+    assert "know.doc" in changes[1].detail
+
+
 def test_a_tuple_of_statements_is_read_through_the_name_that_holds_it() -> None:
     """Every migration here keeps its SQL in a module-level tuple and executes it by name.
 
