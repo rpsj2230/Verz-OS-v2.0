@@ -76,6 +76,7 @@ from brain.identity.lifecycle import (
     Reconfirmation,
     ReconfirmReason,
     Standing,
+    StarterQuestion,
     Step,
     Surface,
     Transition,
@@ -435,6 +436,161 @@ def test_a_starter_assignment_reaching_further_than_its_department_is_refused() 
             department=WEB,
             proposed_department=WEB,
         )
+
+
+def test_a_naive_timestamp_anywhere_on_this_path_is_refused() -> None:
+    """Every decision in this module is a comparison against `now`, and a naive timestamp
+    compares as though it were UTC whatever clock wrote it. On the leaver path that is eight
+    hours in which a departure has not happened yet.
+
+    Driven through `provision`, which is the entry point a caller reaches first, so the
+    refusal arrives at the boundary rather than inside an arithmetic.
+
+    Delete this and the branch is unreachable, which is what an audit found: three modules
+    carry these same three lines privately and only two of them were watched."""
+    with pytest.raises(LifecycleError, match="timezone-aware"):
+        provision(
+            idp(),
+            principal_id=JOINER,
+            employment=Employment.STAFF,
+            department=WEB,
+            granted_by=ADMIN,
+            reason="joined the team",
+            now=NOW.replace(tzinfo=None),
+        )
+
+
+def test_a_joiner_who_does_not_start_on_the_starter_role_is_refused() -> None:
+    """**M26.1.2 says a joiner starts as one role and this is what makes that a rule.** A
+    provisioning record carrying any other role is a person onboarded above the floor, and
+    every later check in this module reads the record rather than the intent.
+
+    Delete this and the constant is documentation: a caller can build a provisioning holding
+    Super Admin and nothing in the type says no."""
+    provisioned = joined()
+    elevated = provisioned.role_grant.model_copy(update={"role": Role.SUPER_ADMIN})
+
+    with pytest.raises(LifecycleError, match="a joiner starts as"):
+        Provisioning(
+            principal=provisioned.principal,
+            role_grant=elevated,
+            assignment=provisioned.assignment,
+            department=WEB,
+            proposed_department=WEB,
+        )
+
+
+def test_a_pack_assignment_for_somebody_else_is_refused() -> None:
+    """The same comparison as the role grant one, on the other row a joiner arrives with.
+    Both are needed: the role grant carries a principal id and the assignment carries a
+    subject, so one check cannot cover the other.
+
+    Delete this and a loop over a joiner list that reuses an assignment produces a person
+    holding somebody else's pack, with a role grant that is correctly their own."""
+    mine = joined()
+    theirs = joined(principal_id="u_other")
+
+    with pytest.raises(LifecycleError, match="somebody other than the principal"):
+        Provisioning(
+            principal=mine.principal,
+            role_grant=mine.role_grant,
+            assignment=theirs.assignment,
+            department=WEB,
+            proposed_department=WEB,
+        )
+
+
+def test_a_joiner_who_does_not_start_on_the_starter_pack_is_refused() -> None:
+    """The pack is where a joiner's whole reach comes from, so the wrong slug is the wrong
+    reach with everything else about the record correct.
+
+    Delete this and `STARTER_PACK` is a suggestion, and the pack a joiner lands on is
+    whichever one the caller happened to pass."""
+    provisioned = joined()
+    other_pack = provisioned.assignment.model_copy(update={"pack_slug": "not-the-starter-pack"})
+
+    with pytest.raises(LifecycleError, match="a joiner starts on the"):
+        Provisioning(
+            principal=provisioned.principal,
+            role_grant=provisioned.role_grant,
+            assignment=other_pack,
+            department=WEB,
+            proposed_department=WEB,
+        )
+
+
+def test_a_starter_assignment_that_does_not_reach_the_joiners_department_is_refused() -> None:
+    """The first of the two scope checks, and the one that is about the joiner being able to
+    work at all: an assignment bound to a department they are not in leaves them holding a
+    pack that reaches nothing they can see.
+
+    Its sibling above refuses the opposite failure, a scope that reaches their department by
+    reaching every department. Both are needed and neither implies the other.
+
+    Delete this and a joiner can be onboarded into Web with a pack bound to Sales, which
+    reads as provisioned and answers nothing."""
+    provisioned = joined()
+    elsewhere = provisioned.assignment.model_copy(update={"scope": department_scope(SALES)})
+
+    with pytest.raises(LifecycleError, match="does not reach"):
+        Provisioning(
+            principal=provisioned.principal,
+            role_grant=provisioned.role_grant,
+            assignment=elsewhere,
+            department=WEB,
+            proposed_department=WEB,
+        )
+
+
+# ============================================ M26.1.4 the starter questions themselves
+def test_a_starter_question_that_names_no_department_is_refused() -> None:
+    """**A starter question without the placeholder is a question about the company.** The
+    template is filled with the joiner's own department and nothing else, so one that does not
+    name it is offered to a new joiner as an invitation to ask something company-wide on their
+    first day.
+
+    Delete this and the placeholder is a convention, and the first question added without it
+    is the one nobody notices."""
+    with pytest.raises(LifecycleError, match="not department-scoped"):
+        StarterQuestion(template="what does the company do", capabilities=(CLIENT_NAME,))
+
+
+def test_a_starter_question_naming_no_capability_is_refused() -> None:
+    """A question with no capability is offered to everybody, including somebody holding
+    nothing, and then answered for nobody.
+
+    Delete this and the offer list can fill with questions that pass the reach filter by
+    requiring nothing to pass it with."""
+    with pytest.raises(LifecycleError, match="names no capability"):
+        StarterQuestion(template="what is happening in {department}", capabilities=())
+
+
+def test_a_department_that_is_not_a_slug_cannot_have_questions_scoped_to_it() -> None:
+    """The department is interpolated into every template and compared against every scope, so
+    a value that is not a slug produces questions naming something no row carries and a scope
+    test that is nonsense.
+
+    Delete this and a blank or punctuated department reaches the template and the joiner is
+    offered questions about a place that does not exist."""
+    reach = entitlement(JOINER, grant_in(CLIENT_NAME, WEB))
+
+    for bad in ("", "Web", "web team", "web;drop"):
+        with pytest.raises(LifecycleError, match="not a department slug"):
+            welcome_questions(reach, bad, now=NOW)
+
+
+# ================================================ M26.3 what a leaver must stop reaching
+def test_an_automation_with_no_id_or_no_owner_is_refused() -> None:
+    """ "Whose work stops when this person goes" is the only question this record answers, so
+    an automation with no id cannot be stopped and one with no owner is never reviewed, and
+    the review is the only thing that ever stops it.
+
+    Delete this and a leaver's plan can list automations that name nothing, which reads as
+    coverage."""
+    with pytest.raises(LifecycleError, match="needs an id"):
+        Automation(automation_id="  ", owner_principal_id=JOINER)
+    with pytest.raises(LifecycleError, match="needs an owner"):
+        Automation(automation_id="auto_1", owner_principal_id=" ")
 
 
 def test_a_provisioning_cannot_carry_another_persons_rows() -> None:

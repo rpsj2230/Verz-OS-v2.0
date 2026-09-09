@@ -239,7 +239,8 @@ candidates, six real and two that could not fire), `audit/ledger.py` (four real,
 `identity/oidc.py` (seven real, fixed), `gate/ingress.py`, `core/scope_sql.py` (ten
 candidates: six real, one a second copy of a check the type already makes, three that
 could not fire), `ops/pii.py` (twenty candidates: eighteen real, two that could not fire),
-and every module under `migration/`.
+`identity/lifecycle.py` (twelve candidates, nine real and three the module already argues
+are unreachable and kept), and every module under `migration/`.
 
 `gate/leash.py` has since been re-run with the right scope, and the result is the point of the
 episode recorded above. Against the twenty-four test files that import it, the audit finds
