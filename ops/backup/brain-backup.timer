@@ -1,0 +1,18 @@
+[Unit]
+Description=Take a copy of the Company Brain database every night
+
+[Timer]
+# 02:00 local rather than a fixed interval from boot. A copy taken at the same moment every
+# night is one a person can reason about ("last night's copy"), and one taken every 24 hours
+# from whenever the host last rebooted drifts to whatever time the last outage happened to be.
+OnCalendar=*-*-* 02:00:00
+# The one thing an interval gives that a calendar does not: a host that was off at 02:00 takes
+# the copy when it comes back rather than skipping a night in silence.
+Persistent=true
+# The database is quiet at two in the morning and a minute of jitter costs nothing, which
+# leaves the exact second free for anything else scheduled on the hour.
+RandomizedDelaySec=60
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

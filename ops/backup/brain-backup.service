@@ -1,0 +1,19 @@
+[Unit]
+Description=Take a copy of the Company Brain database and describe it
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# Every value the script needs is read from this file, and the file is written by
+# `brain-install-backup` from what is already on the server. A unit carrying the values inline
+# would put one install's database name into a file this repository ships.
+EnvironmentFile=/etc/brain-backup.env
+ExecStart=/usr/local/bin/brain-backup
+# A dump of a small database takes seconds and of a large one takes minutes. Thirty minutes is
+# not a prediction: it is the point past which something has gone wrong in a way that will not
+# resolve itself, and a oneshot with no timeout hangs for ever holding the timer's next run.
+TimeoutStartSec=1800
+# The work directory is the only thing this writes outside the bucket, and it removes what it
+# writes. `PrivateTmp` is deliberately not set: the path is configured, a person needs to be
+# able to look at a partial file after a failure, and a private tmp would hide it.

@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# Install and start the nightly database copy. Run once, as root, on the server.
+#
+# This is a script rather than a list of commands to paste for the reason
+# `brain-install-autodeploy` gives: installing a systemd unit is a privileged change to the
+# machine and should be one reviewable thing somebody deliberately runs, not six lines copied
+# out of a chat window in the right order.
+#
+# WHY IT DISCOVERS THE VALUES RATHER THAN TAKING THEM AS ARGUMENTS. The database container's
+# name, the bucket and the object store's address are all facts about the install this is being
+# run on, and every one of them was the same class of value that put one deployment's host into
+# six files in this repository until 2026-09-09. Read from the running system, they are right
+# on every server; typed into a page for somebody to copy, they are right on exactly one. Item
+# 49 in `docs/needs-rupash.md` is the whole story and it cost a wrong identifier.
+#
+# It is idempotent: running it again rewrites the units and the environment file and restarts
+# the timer, which is what you want after editing any of them.
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "run this as root: it writes to /etc/systemd/system" >&2
+  exit 1
+fi
+
+for required in docker aws; do
+  if ! command -v "$required" >/dev/null 2>&1; then
+    echo "missing $required, which the copy needs. Install it and run this again." >&2
+    exit 1
+  fi
+done
+
+if [ ! -x /usr/local/bin/brain-backup ]; then
+  echo "missing /usr/local/bin/brain-backup - copy ops/backup/brain-backup there first" >&2
+  exit 1
+fi
+
+# The database container, discovered. Every install's is named `db-<its own identifier>`, which
+# is the same shape `brain-deploy` reads and the same one item 49 records: a name derived from
+# the machine is right everywhere, a name typed in is right once.
+DB_CONTAINER="$(docker ps --format '{{.Names}}' | grep '^db-' | head -1 || true)"
+if [ -z "$DB_CONTAINER" ]; then
+  echo "no container named db-* is running, so there is nothing to copy from." >&2
+  echo "Start the stack and run this again." >&2
+  exit 1
+fi
+
+DB_NAME="${BRAIN_DB_NAME:-brain}"
+DB_USER="${BRAIN_DB_USER:-brain}"
+BUCKET="${BRAIN_BACKUP_BUCKET:-backups}"
+
+# The object store's address. Taken from the environment when the operator sets it, and
+# otherwise from the file store container's own published port on this host, which is where
+# every install's is. No default naming a host: see the header.
+ENDPOINT="${BRAIN_BACKUP_ENDPOINT:-}"
+if [ -z "$ENDPOINT" ]; then
+  STORE="$(docker ps --format '{{.Names}}' | grep '^seaweedfs' | head -1 || true)"
+  if [ -z "$STORE" ]; then
+    echo "no file store container is running and BRAIN_BACKUP_ENDPOINT is not set, so" >&2
+    echo "nothing says where copies should go. Set it and run this again." >&2
+    exit 1
+  fi
+  ENDPOINT="http://127.0.0.1:8333"
+fi
+
+# Refused rather than defaulted, because a copy that cannot authenticate to the bucket fails
+# every night into the journal, which is where nobody is looking. The credentials belong to the
+# install and this script does not mint, print or store them: they are read from the operator's
+# environment and written to a file only root can read.
+: "${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID to a key that may write to the backups bucket}"
+: "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY to that key's secret}"
+
+umask 077
+cat > /etc/brain-backup.env <<ENVFILE
+BRAIN_DB_CONTAINER=$DB_CONTAINER
+BRAIN_DB_NAME=$DB_NAME
+BRAIN_DB_USER=$DB_USER
+BRAIN_BACKUP_BUCKET=$BUCKET
+BRAIN_BACKUP_ENDPOINT=$ENDPOINT
+AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+ENVFILE
+chmod 600 /etc/brain-backup.env
+
+cat > /etc/systemd/system/brain-backup.service <<'UNIT'
+[Unit]
+Description=Take a copy of the Company Brain database and describe it
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/brain-backup.env
+ExecStart=/usr/local/bin/brain-backup
+# Thirty minutes is not a prediction of how long a dump takes. It is the point past which
+# something has gone wrong in a way that will not resolve itself, and a oneshot with no
+# timeout hangs for ever holding the timer's next run.
+TimeoutStartSec=1800
+UNIT
+
+cat > /etc/systemd/system/brain-backup.timer <<'UNIT'
+[Unit]
+Description=Take a copy of the Company Brain database every night
+
+[Timer]
+# A fixed time rather than an interval from boot: "last night's copy" is a thing a person can
+# reason about, and every-24-hours-from-boot drifts to whatever time the last outage was.
+OnCalendar=*-*-* 02:00:00
+# A host that was off at 02:00 takes the copy when it comes back rather than skipping a night
+# in silence.
+Persistent=true
+RandomizedDelaySec=60
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload
+systemctl enable --now brain-backup.timer
+
+echo
+echo "--- what it will copy ---"
+echo "  container: $DB_CONTAINER"
+echo "  database:  $DB_NAME"
+echo "  bucket:    s3://$BUCKET at $ENDPOINT"
+echo
+echo "--- next run ---"
+systemctl list-timers brain-backup.timer --no-pager | head -3 || true
+echo
+echo "Installed. Take one now to prove it works, rather than finding out in the morning:"
+echo "  systemctl start brain-backup.service && journalctl -u brain-backup.service -n 20 --no-pager"
+echo
+echo "A copy nobody has read back is a file, not a backup. Reading one back is M30's work"
+echo "and it is deliberately not here: see docs/needs-rupash.md item 44."

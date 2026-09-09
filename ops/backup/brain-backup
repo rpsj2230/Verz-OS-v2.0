@@ -1,0 +1,115 @@
+#!/bin/sh
+# The nightly database copy, and the manifest that describes it.
+#
+# Needs Rupash item 44 chose option C: take the copy now, and let the verified restore drill
+# arrive with M30. This is the "now" half. Everything around it already existed: the `backups`
+# bucket, its 35-day retention, its versioning, and `brain.ops.recovery`, which knows what a
+# copy is and how much exposure a schedule leaves. Nothing wrote to any of it.
+#
+# WHY A MANIFEST BESIDE THE ARTEFACT RATHER THAN A ROW IN THE DATABASE. A row saying "the
+# database was copied at 02:00" lives in the database the copy exists to replace, so the one
+# morning anybody needs it is the morning it is gone. `brain.ops.backup_manifest` reads these
+# back and its header carries the argument in full.
+#
+# WHY THE SIZE IS MEASURED HERE AND NOT READ BACK FROM THE BUCKET. A dump command that exits
+# zero having written nothing is the commonest silent backup failure there is, and it is
+# invisible in every listing that shows a name and a timestamp. Measuring the artefact on disk
+# before uploading means a truncated upload disagrees with its own manifest instead of being
+# described by it, and `brain.ops.recovery.Backup` refuses a copy of no bytes outright.
+#
+# WHY `-Fc` RATHER THAN PLAIN SQL. The custom format is compressed, and it is the only format
+# PostgreSQL's own loader can read selectively, which is what a partial recovery needs. Nothing
+# in this repository reads one back, deliberately: M30 owns that, and the test in
+# `tests/unit/test_seed.py` refuses any loader under `ops/` at all, because loading is the
+# direction that copies one stack's data into another. A copy nobody has read back is a file,
+# which `brain.ops.recovery.A_BACKUP_NOBODY_HAS_RESTORED_IS_A_FILE` says at length.
+#
+# WHY THIS TAKES NO HOST, NO BUCKET ADDRESS AND NO CREDENTIAL AS A DEFAULT. Every one of those
+# is a value belonging to the install this runs on, and this file ships in the product every
+# client installs. `ops/deploy.sh` had one deployment's host as a shell fallback until
+# 2026-09-09 and the lesson is written into it: a default answers first, so removing the value
+# from the environment changes nothing and the file looks clean while the script still reaches
+# somebody else's machine. Every value below is `:?`, which names what is missing and stops.
+#
+# Task ids: M30.3.1, M30.3.2
+
+set -eu
+
+BRAIN_DB_CONTAINER="${BRAIN_DB_CONTAINER:?set BRAIN_DB_CONTAINER to this install's database container}"
+BRAIN_DB_NAME="${BRAIN_DB_NAME:?set BRAIN_DB_NAME to the database to copy}"
+BRAIN_DB_USER="${BRAIN_DB_USER:?set BRAIN_DB_USER to a role that may read every schema}"
+BRAIN_BACKUP_BUCKET="${BRAIN_BACKUP_BUCKET:?set BRAIN_BACKUP_BUCKET to the bucket copies go to}"
+BRAIN_BACKUP_ENDPOINT="${BRAIN_BACKUP_ENDPOINT:?set BRAIN_BACKUP_ENDPOINT to the object store address}"
+BRAIN_BACKUP_WORK_DIR="${BRAIN_BACKUP_WORK_DIR:-/var/tmp/brain-backup}"
+
+log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; }
+fail() { printf '%s\n' "$1" >&2; exit 1; }
+
+command -v docker >/dev/null || fail "docker is not on PATH; this runs beside the containers"
+command -v aws >/dev/null || fail "the aws cli is not installed; it is how objects are uploaded"
+
+mkdir -p "$BRAIN_BACKUP_WORK_DIR"
+
+# The identifier is the moment the copy began, to the second, plus the coverage. Two runs in
+# the same second on one host cannot happen because systemd will not start a second run of a
+# oneshot unit while the first is going, and two hosts copying one database is a configuration
+# somebody chose rather than an accident this should paper over.
+STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+BACKUP_ID="database-$(date -u +%Y%m%dT%H%M%SZ)"
+ARTEFACT="$BRAIN_BACKUP_WORK_DIR/$BACKUP_ID.dump"
+MANIFEST="$BRAIN_BACKUP_WORK_DIR/$BACKUP_ID.manifest.json"
+
+log "copying $BRAIN_DB_NAME from $BRAIN_DB_CONTAINER"
+
+# `-T` because there is no terminal on a timer, and without it docker exec fails on a unit
+# started by systemd while working perfectly when a person runs the same line by hand. That
+# difference is the kind that gets found at three in the morning rather than at the desk.
+#
+# The redirect is outside the container on purpose: writing inside it and copying out would
+# need space in the container's filesystem, which on a database container is the volume the
+# database is using.
+if ! docker exec -T "$BRAIN_DB_CONTAINER" \
+    pg_dump -U "$BRAIN_DB_USER" -d "$BRAIN_DB_NAME" -Fc > "$ARTEFACT"; then
+    rm -f "$ARTEFACT"
+    fail "pg_dump failed; nothing was uploaded and the partial file has been removed"
+fi
+
+FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+# `wc -c` rather than `stat`, whose flags differ between GNU and BSD and whose failure on the
+# wrong one is a size of nothing rather than an error.
+SIZE_BYTES="$(wc -c < "$ARTEFACT" | tr -d ' ')"
+[ "$SIZE_BYTES" -gt 0 ] || fail "pg_dump exited zero and wrote nothing; refusing to upload it"
+
+log "wrote $SIZE_BYTES bytes"
+
+# `recoverable_to` equals `finished_at` for a full copy, and only continuous archiving may
+# claim to restore past the moment it finished. `brain.ops.recovery.Backup` refuses anything
+# else, so writing the started time here would be refused on read rather than believed.
+cat > "$MANIFEST" <<MANIFEST_JSON
+{
+  "backup_id": "$BACKUP_ID",
+  "coverage": "database",
+  "method": "full",
+  "destination": "s3://$BRAIN_BACKUP_BUCKET",
+  "started_at": "$STARTED_AT",
+  "finished_at": "$FINISHED_AT",
+  "recoverable_to": "$FINISHED_AT",
+  "size_bytes": $SIZE_BYTES
+}
+MANIFEST_JSON
+
+# The artefact first and the manifest second, and the order is the whole of the failure mode.
+# A manifest uploaded before its artefact describes a copy that is not there yet, and a reader
+# between the two uploads counts a copy nobody can read. The other way round, a failed manifest
+# upload leaves an artefact nothing describes, which is a finding rather than a false promise.
+log "uploading to s3://$BRAIN_BACKUP_BUCKET"
+aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$ARTEFACT" \
+    "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.dump" >/dev/null \
+    || fail "the artefact did not upload; no manifest has been written, so nothing claims a copy exists"
+aws --endpoint-url "$BRAIN_BACKUP_ENDPOINT" s3 cp "$MANIFEST" \
+    "s3://$BRAIN_BACKUP_BUCKET/$BACKUP_ID.manifest.json" >/dev/null \
+    || fail "the copy uploaded and its manifest did not; the artefact is there and undescribed"
+
+rm -f "$ARTEFACT" "$MANIFEST"
+log "done: $BACKUP_ID"

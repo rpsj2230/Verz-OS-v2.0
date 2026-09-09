@@ -394,25 +394,92 @@ def test_a_table_whose_name_is_not_an_identifier_stops_the_seed_rather_than_bein
     assert "not an ordinary identifier" in why
 
 
-def test_nothing_in_this_repository_copies_a_database_from_one_stack_to_another() -> None:
-    """The other half of "never production data". The guard stops the seeder; this stops the
-    shortcut that goes around it, which is a restore into staging to reproduce a bug.
+#: The one file under `ops/` allowed to name `pg_dump`, and it is a path rather than a flag.
+#:
+#: A perishable exemption, in the shape `brain.ops.controls.NOT_A_SCHEDULE` takes: the test
+#: below asserts the file exists, so an exemption that outlives the thing it exempts fails
+#: rather than sitting there waiting to cover whatever takes the name next.
+THE_ONLY_TAKER = "ops/backup/brain-backup"
 
-    The moment that is possible somebody does it, and staging runs with weaker limits on the
-    same network as a test harness. Deleting this lets a convenience script land in `ops/`
-    with nothing objecting.
-    """
-    repo = Path(__file__).resolve().parents[2]
-    offenders = [
-        f"{path.relative_to(repo)}:{number}"
+
+def _ops_lines(repo: Path) -> list[tuple[str, int, str]]:
+    """Every line of every non-Markdown file under `ops/`, with where it came from."""
+    return [
+        (path.relative_to(repo).as_posix(), number, line)
         for path in sorted((repo / "ops").rglob("*"))
         if path.is_file() and path.suffix != ".md"
         for number, line in enumerate(
             path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1
         )
-        if "pg_dump" in line or "pg_restore" in line or "pg_basebackup" in line
     ]
-    assert not offenders, f"something copies a database wholesale: {offenders}"
+
+
+def test_nothing_in_this_repository_loads_a_database_from_one_stack_into_another() -> None:
+    """The other half of "never production data". The guard stops the seeder; this stops the
+    shortcut that goes around it, which is a restore into staging to reproduce a bug.
+
+    The moment that is possible somebody does it, and staging runs with weaker limits on the
+    same network as a test harness.
+
+    **This banned three commands until 2026-09-10 and now bans a direction, which is what it
+    always meant.** `pg_restore` writes into a database and `pg_basebackup` reads a whole
+    cluster off whatever host it is pointed at; both are a copy crossing a boundary and
+    neither has an honest use in this repository. `pg_dump` reads, and reading this install's
+    own database into this install's own bucket is the nightly copy Needs Rupash item 44 asked
+    for. A blanket ban would have refused the backup this system needs in order to have one,
+    which is a guard that eventually gets deleted rather than narrowed.
+
+    Delete this and a convenience script that restores production into staging lands in `ops/`
+    with nothing objecting."""
+    repo = Path(__file__).resolve().parents[2]
+    offenders = [
+        f"{where}:{number}"
+        for where, number, line in _ops_lines(repo)
+        if "pg_restore" in line or "pg_basebackup" in line
+    ]
+    assert not offenders, f"something loads a database from elsewhere: {offenders}"
+
+    taking = [
+        f"{where}:{number}"
+        for where, number, line in _ops_lines(repo)
+        if "pg_dump" in line and where != THE_ONLY_TAKER
+    ]
+    assert not taking, (
+        f"only {THE_ONLY_TAKER} may take a copy, and these also do: {taking}. A second taker "
+        "is a second answer to what a backup is, and the one nobody reviewed is the one that "
+        "writes somewhere else"
+    )
+
+
+def test_the_one_file_allowed_to_take_a_copy_exists_and_only_takes_one() -> None:
+    """**An exemption naming a file that is gone is an exemption waiting to cover the next
+    file that takes the name.** `brain.ops.controls.NOT_A_SCHEDULE` refuses its own stale
+    entries for the same reason, and this is that rule for this one.
+
+    The second half is what makes the exemption narrow rather than a hole: the taker may read,
+    and it may not write into a database, load anything back, or reach a second host. A file
+    exempted from the rule above that then did the thing the rule is about would be the whole
+    guard undone by one line in one file.
+
+    Delete this and the exemption becomes a name in a constant that nothing checks."""
+    repo = Path(__file__).resolve().parents[2]
+    taker = repo / THE_ONLY_TAKER
+
+    assert taker.is_file(), (
+        f"{THE_ONLY_TAKER} does not exist and is still exempted, so the exemption now covers "
+        "whatever is written at that path next"
+    )
+
+    source = taker.read_text(encoding="utf-8")
+    for forbidden in ("pg_restore", "pg_basebackup", "psql"):
+        assert forbidden not in source, (
+            f"{THE_ONLY_TAKER} names {forbidden}, so the one file allowed to read a database "
+            "also writes to one, which is the guard above undone in the place it exempted"
+        )
+    assert "pg_dump" in source, (
+        f"{THE_ONLY_TAKER} is exempted from the copy rule and takes no copy, so the exemption "
+        "is covering a file that does not need it"
+    )
 
 
 def test_the_guard_looks_in_every_schema_that_exists() -> None:
