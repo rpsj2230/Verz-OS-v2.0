@@ -151,9 +151,14 @@ def closed_task_ids(repo: Path, ref: str = "HEAD") -> tuple[set[str], list[dict[
     never body prose.
     """
     raw = _git("log", ref, "--pretty=format:%H%x1f%ct%x1f%s%x1f%b%x1e", cwd=repo)
-    if not raw:
-        return set(), []
 
+    # There is deliberately no `if not raw: return set(), []` here, and there was one until a
+    # mutation showed it could not change an outcome. An empty string splits into one empty
+    # entry, that entry has fewer than three fields, the loop skips it, and the function
+    # returns the same empty pair the guard returned. A repository with no commits and a
+    # machine with no git both arrive that way, so the path is exercised on every fresh
+    # install rather than being rare: a guard that runs often and decides nothing is the
+    # worst kind, because it reads as the thing keeping the reader safe.
     found: set[str] = set()
     #: Ids already settled by a newer commit. See the loop below.
     decided: set[str] = set()
@@ -228,6 +233,12 @@ def closed_since(repo: Path, when: datetime, ref: str = "HEAD") -> set[str]:
         # \x1f as whitespace, so a bare strip eats the unit separator and a one-line
         # message then splits wrongly. The same trap as in `closed_task_ids` above.
         parts = entry.lstrip("\r\n").split("\x1f", 2)
+        # Reachable only by a commit message holding two record separators with nothing but
+        # digits between them, which is the one shape the `int()` below does not refuse for
+        # us: every other single-field entry is text, raises `ValueError` and is skipped
+        # there. Narrow, and it is the difference between skipping a record and an
+        # `IndexError` that takes the build status page down, so it stays and there is a test
+        # that writes exactly that message.
         if len(parts) < 2:
             continue
         try:

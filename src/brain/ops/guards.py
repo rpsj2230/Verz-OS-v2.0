@@ -30,8 +30,10 @@ be written up as having seven unreachable guards, three of them security checks,
 none. Naming too many is the opposite failure and it is not theoretical either: followed to a
 fixed point, `ops/admission.py` is reachable from a hundred and five test files, which is the
 whole suite thirty-three times over, so the audit does not get run at all. `reaching` takes a
-depth, one hop is usually right, and the rule is to widen it when a survivor is still standing
-rather than in advance. See `A_SCOPE_NOBODY_RUNS_IS_WORTH_LESS_THAN_A_NARROW_ONE_SOMEBODY_DOES`.
+depth. Zero is the module and the tests that name it, which is the cheap first pass; one adds
+the modules that import it and their tests. The rule is to widen when a survivor is still
+standing rather than in advance, and for a foundational module zero is the only depth that
+gets run at all. See `A_SCOPE_NOBODY_RUNS_IS_WORTH_LESS_THAN_A_NARROW_ONE_SOMEBODY_DOES`.
 
 **A first-pass survivor is a candidate and never a finding**, and `audit` will not let a
 caller forget which of the two they have: the report it returns says how many test files it
@@ -266,11 +268,21 @@ def _python_files(root: Path) -> Iterable[Path]:
 def reaching(target: str, *, depth: int = 1, src: Path | None = None) -> set[str]:
     """Every module that imports `target` within `depth` hops, including it.
 
-    See `A_SCOPE_NOBODY_RUNS_IS_WORTH_LESS_THAN_A_NARROW_ONE_SOMEBODY_DOES` for why this takes
-    a depth rather than running to a fixed point.
+    **Zero is a real depth and is the cheap first pass.** It is the module alone, so
+    `covering_tests` then returns the files that name it, which for most modules is one. That
+    is what makes auditing affordable at all, and it is the scope whose survivors are
+    candidates rather than findings.
+
+    Zero is also the only workable depth for a foundational module. `core/entitlement.py` is
+    reachable from two hundred and thirty-nine test files at one hop, because everything
+    imports it, and by the argument in
+    `A_SCOPE_NOBODY_RUNS_IS_WORTH_LESS_THAN_A_NARROW_ONE_SOMEBODY_DOES` a scope that large does
+    not get run. This function refused zero until 2026-09-09, on the stated grounds that it
+    would drop the module's own tests, which was simply wrong: the module is in the set from
+    the first line, so its own tests are exactly what comes back.
     """
-    if depth < 1:
-        msg = f"a depth of {depth} reaches nothing, not even the module itself"
+    if depth < 0:
+        msg = f"a depth of {depth} is not a number of hops"
         raise GuardAuditError(msg)
     root = SRC if src is None else src
     graph = {module_name(path): _imports(path) for path in _python_files(root)}

@@ -186,14 +186,29 @@ def test_a_path_outside_the_package_has_no_module_name() -> None:
         module_name(Path("scripts/whatever.py"))
 
 
-def test_a_depth_below_one_reaches_nothing_at_all() -> None:
-    """Zero hops is not "just the module": the module's own tests import it, so a depth of zero
-    would drop them and leave the audit with no test file to run.
+def test_depth_zero_is_the_module_alone_and_is_the_cheap_first_pass() -> None:
+    """**The scope that makes auditing affordable, and the one this refused until it was used
+    on a foundational module.**
 
-    Delete this and a caller passing zero gets a scope with nothing in it and a table of
-    survivors that means nothing."""
-    with pytest.raises(GuardAuditError, match="reaches nothing"):
-        reaching("brain.status", depth=0)
+    `core/entitlement.py` is reachable from two hundred and thirty-nine test files at one hop,
+    because everything imports it, and a scope that size does not get run. Zero is the module
+    alone, so the tests that come back are the ones naming it, which is one file for most
+    modules and is where every audit should start.
+
+    Delete this and the tool refuses the only affordable pass over the modules that matter
+    most, which is the state it shipped in."""
+    assert reaching("brain.status", depth=0) == {"brain.status"}
+    assert reaching("brain.status", depth=1) > {"brain.status"}
+
+
+def test_a_negative_depth_is_not_a_number_of_hops() -> None:
+    """Below zero there is nothing to mean. Refused rather than clamped, because a clamp turns
+    a caller's arithmetic error into a scope they did not ask for and cannot see.
+
+    Delete this and a computed depth that came out negative audits at whatever the clamp
+    chose."""
+    with pytest.raises(GuardAuditError, match="not a number of hops"):
+        reaching("brain.status", depth=-1)
 
 
 def test_a_module_nothing_declares_is_refused_rather_than_returning_an_empty_set() -> None:

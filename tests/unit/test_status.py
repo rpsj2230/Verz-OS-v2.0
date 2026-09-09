@@ -535,6 +535,11 @@ def test_the_tracker_and_the_status_page_put_each_leaf_in_the_same_wave() -> Non
     assert _tracker_leaves_per_wave() == _wbs_leaves_per_wave()
 
 
+#: The record and line separators, written as code points so this file stays readable.
+SEPARATOR = chr(30)
+NEWLINE = chr(10)
+
+
 def tmp_repo() -> Path:
     """A throwaway git repository under the system temporary directory.
 
@@ -558,13 +563,16 @@ def _empty_repo() -> Path:
 def test_a_repository_with_no_commits_reports_nothing_closed_rather_than_raising() -> None:
     """**The first thing this reads is `git log`, and a fresh repository has none.**
 
-    That is not hypothetical: the installer creates the client's repository before anything is
-    committed to it, and the same branch answers a machine with no git on the path, because
-    `_git` returns the empty string for both.
+    Not hypothetical: the installer creates the client's repository before anything is
+    committed to it, and the same path answers a machine with no git, because `_git` returns
+    the empty string for both.
 
-    Delete this and the branch is unreachable, and the first status page generated on a fresh
-    install is a traceback rather than a page saying nothing is done yet.
-    """
+    There is no guard for it and there was one until a mutation showed it changed nothing: an
+    empty string splits into one empty entry, the field count skips it, and the loop falls out
+    to the same empty pair. This asserts the property rather than the guard, which is what the
+    repository does everywhere it has removed a branch that could not fire.
+
+    Delete this and the behaviour on a fresh install is nobody's claim."""
     closed, recent = status.closed_task_ids(_empty_repo())
 
     assert closed == set()
@@ -603,6 +611,51 @@ def test_a_record_separator_inside_a_commit_message_does_not_break_the_reader() 
     since = status.closed_since(repo, datetime.now(UTC) - timedelta(days=1))
 
     assert "M0.1.1" in closed
+    assert "M0.1.1" in since
+
+
+def test_a_message_holding_a_bare_number_between_two_separators_is_skipped() -> None:
+    """**The one entry the timestamp parser cannot refuse for us.**
+
+    A commit message containing two record separators splits the log into an extra entry with
+    no field separators in it. Almost every such entry is prose, so `int()` raises and the
+    reader skips it; one made of digits parses, compares against the cutoff, and the next line
+    asks for a field that is not there. The difference is an `IndexError` that takes the build
+    status page down against a record quietly skipped.
+
+    The number is far in the future so it is inside any window this is asked about, which is
+    what makes the guard the only thing standing in front of the index.
+
+    Delete this and the field-count guard in `closed_since` is unreachable, and one strange
+    commit message stops the status page from being generated at all.
+    """
+    import subprocess
+    from datetime import UTC, datetime, timedelta
+
+    repo = tmp_repo()
+    for command in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.email", "t@example.invalid"],
+        ["git", "config", "user.name", "T"],
+    ):
+        subprocess.run(command, cwd=repo, check=True, timeout=30)
+    (repo / "a.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, timeout=30)
+    hostile = (
+        "M0.1.1 done"
+        + NEWLINE * 2
+        + "Closes: M0.1.1"
+        + NEWLINE * 2
+        + SEPARATOR
+        + "9999999999"
+        + SEPARATOR
+        + NEWLINE
+    )
+    (repo / "msg.txt").write_text(hostile, encoding="utf-8")
+    subprocess.run(["git", "commit", "-q", "-F", "msg.txt"], cwd=repo, check=True, timeout=30)
+
+    since = status.closed_since(repo, datetime.now(UTC) - timedelta(days=1))
+
     assert "M0.1.1" in since
 
 
