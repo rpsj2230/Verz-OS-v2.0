@@ -38,6 +38,13 @@ capabilities becomes `<redacted>`. Nothing here loosens that, and nothing here a
 either: there is no method that collects the capabilities across rows, because assembling
 them is rebuilding the map the single-capability rule exists to prevent.
 
+**One member of the vocabulary does not answer to the rules above, and that is the point of
+it.** A `record_read` entry says somebody looked at a personnel record, so it is a map of who
+is interested in whom rather than a record of who authorised what. Its subject kind is
+`principal` like a grant's, which means that without a branch of its own every holder of
+`read:audit.principal` would have acquired the read log the day it shipped. `_may_see` asks
+`brain.audit.reads.may_read_a_read_entry` instead, and that module carries the argument.
+
 Scope: domain logic, like `brain.audit.ledger`. Nothing here opens a connection. It takes the
 entries it is given, which means whatever loads them still owes this view a window; see the
 report for what that costs.
@@ -65,6 +72,7 @@ from brain.audit.ledger import (
     AuditEntry,
     redact_details,
 )
+from brain.audit.reads import may_read_a_read_entry
 from brain.core.entitlement import Capability, EntitlementSet
 
 #: The noun the audit capabilities are written against: `read:audit.principal`,
@@ -310,7 +318,16 @@ class AuditView:
     def _may_see(self, entry: AuditEntry) -> bool:
         """Whether this reader is entitled to this entry.
 
-        Two ways in, and no third.
+        Two ways in for the ledger, one exception for the read log, and no third.
+
+        **A read entry answers to `brain.audit.reads` and not to the rules below.** Its
+        subject kind is `principal`, so without this branch every holder of
+        `read:audit.principal` would have acquired the read log the day it shipped, and that
+        is the obvious wrong answer Needs Rupash item 45 warns about:
+        `THE_READ_LOG_ANSWERS_TO_ITS_OWN_NOUN_SO_NO_AUDIT_WILDCARD_REACHES_IT`. The branch is
+        first rather than last, because the self-entry rule below would otherwise admit half
+        of it before this was consulted, and a rule that fires late is a rule that only
+        narrows what somebody has already been shown.
 
         **The entry is about the reader.** A person may read their own audit trail: it is
         what a subject access request asks for, and every fact in it is a fact about them.
@@ -330,6 +347,10 @@ class AuditView:
         depend on a mapping the view cannot check, which is a permission decision taken by
         the caller.
         """
+        if entry.action is AuditAction.RECORD_READ:
+            return may_read_a_read_entry(
+                entry, reader=self._reader, now=self._now, row=_scope_row(entry)
+            )
         if entry.subject == f"principal:{self._reader.principal_id}":
             return True
         capability = CAPABILITY_BY_KIND.get(entry.subject.partition(":")[0])

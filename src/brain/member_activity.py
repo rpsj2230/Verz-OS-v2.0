@@ -67,19 +67,24 @@ and the certificate is where one appears.
 Scope: domain logic. Nothing here opens a connection, delivers anything or reads a clock; `now`
 and the windows are parameters, as in every module this one calls.
 
-**Two leaves of M40 are not claimed and both are named in the body above and below.** M40.2.1.5
-asks for recent threads continued from any channel: `brain.chat.turns.Turn` carries a principal,
-an instant and an agent, and no thread id and no channel, so there is nothing to group by and
-nothing to say which surface a turn arrived on. `brain.tables.chat.ConversationRow` is declared
-and nothing in `src` queries it. M40.4.2.4 asks which agents have read this person's HR record
-from the audit ledger: `brain.audit.ledger.AuditAction` is closed, pinned by an invariant test,
-and none of its eight members is a read; `SUBJECT_KINDS` has no member for a personnel record;
-and an ordinary entitled read is in the trace rather than in the ledger. Both need a decision
-and a migration rather than a surface. `member_notes` reports them.
+**One leaf of M40 is still not claimed and it is named below.** M40.2.1.5 asks for recent
+threads continued from any channel: `brain.chat.turns.Turn` carries a principal, an instant and
+an agent, and no thread id and no channel, so there is nothing to group by and nothing to say
+which surface a turn arrived on. `brain.tables.chat.ConversationRow` is declared and nothing in
+`src` queries it. `member_notes` reports it.
+
+**M40.4.2.4 was the second of those until 2026-09-10 and is now built, narrowly.** Needs Rupash
+item 45 chose Option A: a read is written down for personnel records and anything carrying a
+salary and for nothing else, under one new action. `brain.audit.reads` holds the declared set,
+the argument per entry, the rule about who may read the result and the retention; this module
+holds the page the person reads. **Nothing here decides any of that.** `who_read_my_record`
+narrows to the person's own entries and hands them to `brain.audit.view`, so the surface and
+the console see one visibility rule rather than two, and a widening of the set changes this
+file not at all.
 
 Task ids: M40.2.1.1, M40.2.1.2, M40.2.1.3, M40.2.1.4, M40.2.2.1, M40.2.2.2, M40.2.2.3
 Task ids: M40.2.2.4, M40.2.2.5, M40.4.1.1, M40.4.1.2, M40.4.1.3, M40.4.1.4, M40.4.2.1
-Task ids: M40.4.2.2, M40.4.2.3
+Task ids: M40.4.2.2, M40.4.2.3, M40.4.2.4
 """
 
 from __future__ import annotations
@@ -100,6 +105,8 @@ from brain.agents.model import (
     visible_agent_ids,
 )
 from brain.agents.template import EffectiveAgent, SignedManifest, TemplateInstance, materialise
+from brain.audit.ledger import AuditAction, AuditEntry
+from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditView
 from brain.builder.publish import widened_capabilities
 from brain.channels.adapter import ChannelCapabilities, Feature
 from brain.chat.turns import Turn, TurnKind
@@ -1241,6 +1248,120 @@ def export_my_history(
     )
 
 
+# ---------------------------------------- who has read my record (M40.4.2.4)
+#: The subject kind a read entry is filed under, and the only one this page reads.
+#:
+#: Named rather than spelled inline twice, because the string appears in the narrowing and in
+#: nothing else: a page that read a second kind would be showing this person reads of somebody
+#: else's record, and `brain.audit.reads` argues at length for why the person is the index.
+MY_READS_SUBJECT_KIND: Final = "principal"
+
+
+@dataclass(frozen=True)
+class RecordRead:
+    """One read of this person's record, as they read it (M40.4.2.4).
+
+    **What is on this row is what `brain.audit.reads` allows on the ledger row, and no more.**
+    Who read it, when, through which agent if there was one, and what kind of record it was.
+    There is no field for what was returned and there could not be:
+    `AN_ENTRY_NAMES_THE_RECORD_KIND_AND_NEVER_WHAT_ONE_READER_WAS_SHOWN` says why two rows that
+    varied with the reader would tell this person what a colleague was refused, and that
+    applies to the declarations that matched as much as to the fields themselves.
+
+    `agent_id` is empty when a person read the record at a console themselves. That is a real
+    distinction rather than a missing value, and it is the honest rendering of an absent detail
+    rather than a placeholder reading `<redacted>`.
+    """
+
+    at: datetime
+    #: The principal who made the read. The person, never the agent; the agent is beside it.
+    actor_id: str
+    #: The agent it went through, or empty when a person did it directly.
+    agent_id: str
+    #: The kind of record that was read. A property of the record, never of the answer.
+    record_kind: str
+
+
+@dataclass(frozen=True)
+class ReadsOfMyRecord:
+    """A page of the reads of one person's record (M40.4.2.4).
+
+    **No total and no field that could hold one**, following `LearnedAboutMe`. There is also
+    no count property here, and the difference from that type is deliberate: every row on that
+    page is one this person owns, so counting them counts what was shown, whereas this page is
+    a window over a ledger and a number beside it invites the reading "this is how many times
+    my record has been read", which is true only of the window and only of what was logged.
+
+    `next_cursor` is `brain.audit.view.AuditPage`' own, unchanged. It is present exactly when
+    a further visible row exists, which is a fact about this person's own view.
+    """
+
+    subject_id: str
+    reads: tuple[RecordRead, ...]
+    next_cursor: str | None
+
+
+def who_read_my_record(
+    entries: Sequence[AuditEntry],
+    *,
+    principal_id: str,
+    reader: EntitlementSet,
+    now: datetime,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    limit: int = DEFAULT_PAGE_SIZE,
+    cursor: str | None = None,
+) -> ReadsOfMyRecord:
+    """Who has read this person's personnel record, and through which agent (M40.4.2.4).
+
+    Needs Rupash item 45, Option A. What reaches the ledger at all is
+    `brain.audit.reads.WRITTEN_DOWN`, which is two entries, and nothing in this signature can
+    widen it: this function reads a ledger and never writes one.
+
+    **The narrowing is on the input and not on the output, which is the part that matters.**
+    Rows are removed before the view is built, so `brain.audit.view.AuditView` fills its page
+    from what remains and a short page means this person has reached the end of their own
+    reads. Filtering afterwards would leave a page whose length was decided by rows that were
+    then taken out of it, which is the one thing a page length must never be able to say.
+
+    **The visibility rule is the view's and is not restated here.** A person always sees the
+    entries about themselves, which is the whole of this leaf, and
+    `brain.audit.reads.may_read_a_read_entry` is where that is decided along with the answer to
+    who else may. A second predicate here would be a second answer, and the permissive one is
+    the one that ships.
+
+    `is_own` does the ownership comparison, as everywhere else on this surface, so this page
+    and a query narrowed the same way agree about what personal means.
+
+    Oldest first, because that is the order `AuditView` reads a ledger in and a page that
+    reversed it would need its own cursor.
+    """
+    _assert_own_reach(reader, principal_id, "this page")
+    mine = [
+        one
+        for one in entries
+        if one.action is AuditAction.RECORD_READ
+        and one.subject.partition(":")[0] == MY_READS_SUBJECT_KIND
+        and is_own(principal_id, one.subject.partition(":")[2])
+    ]
+    page = AuditView(mine, reader=reader, now=now).page(
+        AuditFilter(since=since, until=until), limit=limit, cursor=cursor
+    )
+    return ReadsOfMyRecord(
+        subject_id=principal_id,
+        reads=tuple(
+            RecordRead(
+                at=row.at,
+                actor_id=row.actor_id,
+                agent_id=row.details.get("agent", ""),
+                record_kind=row.details.get("record_kind", ""),
+            )
+            for row in page.rows
+        ),
+        next_cursor=page.next_cursor,
+    )
+
+
 # --------------------------------------------------- asking for a deletion (M40.4.2.3)
 @dataclass(frozen=True)
 class DeletionRequest:
@@ -1368,6 +1489,8 @@ MEMBER_SURFACE: Final[tuple[type, ...]] = (
     LearningOptOut,
     StoredThing,
     StoredAboutMe,
+    RecordRead,
+    ReadsOfMyRecord,
     DeletionRequest,
     DeletionRoute,
 )
@@ -1389,6 +1512,7 @@ PERSONAL_CALLS: Final[tuple[Callable[..., Any], ...]] = (
     undo_all,
     export_my_history,
     opt_out,
+    who_read_my_record,
 )
 
 #: Field names that would put somebody else's budget on a personal one.
@@ -1480,24 +1604,28 @@ def member_gaps(
 
 
 def member_notes() -> tuple[str, ...]:
-    """The two M40 leaves this module decides it cannot honestly build.
+    """The M40 leaf this module decides it cannot honestly build.
 
     Separate from `member_gaps` for the reason `brain.console.agent_output.
     retention_enforcement_gaps` is separate from `artifact_gaps`: that one is a deployment
     check and a check that is red on the day it lands is a check somebody switches off. This
     one is red today and is meant to be.
 
-    Both findings are about a missing field rather than a missing screen, which is why
-    neither is worked around here: inventing either would put a value on a record whose
-    absence is argued for somewhere else.
+    The finding is about a missing field rather than a missing screen, which is why it is not
+    worked around here: inventing one would put a value on a record whose absence is argued
+    for somewhere else.
+
+    **It was two until 2026-09-10.** The second said that which agents read a person's record
+    could not be answered from the ledger, and it stopped being true when Needs Rupash item 45
+    was decided and `brain.audit.reads` was written: `AuditAction.RECORD_READ` is the tenth
+    member, the subject is the person rather than a new kind, and `who_read_my_record` is the
+    page. What is still owed there is the retention, and it is reported by
+    `brain.audit.reads.read_log_gaps` rather than here, because it is a fact about the ledger
+    and not about this surface.
     """
     return (
         "recent threads across channels cannot be assembled: brain.chat.turns.Turn carries a "
         "principal, an instant and an agent id, and no thread id and no channel, so there is "
         "nothing to group a thread by and nothing saying which surface a turn arrived on; "
         "brain.tables.chat.ConversationRow is declared and nothing in src queries it",
-        "which agents read a person's record cannot be answered from the ledger: "
-        "brain.audit.ledger.AuditAction is closed and pinned by an invariant test, none of "
-        "its members is a read, SUBJECT_KINDS has no member for a personnel record, and an "
-        "ordinary entitled read is written to the trace rather than to the ledger",
     )

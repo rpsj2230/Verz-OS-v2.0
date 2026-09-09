@@ -361,6 +361,12 @@ CALLS: dict[str, dict[str, object]] = {
         "digest": "a" * 64,
         "reason_code": "wrong_ticket",
     },
+    "record_read": {
+        "subject_id": "u_weiling",
+        "entity": "personnel",
+        "disclosed": ("name", "salary"),
+        "agent_id": "hr_desk",
+    },
 }
 
 

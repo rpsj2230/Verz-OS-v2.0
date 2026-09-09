@@ -153,6 +153,32 @@ class AuditAction(enum.StrEnum):
     Eight characters, well inside the column's sixteen. `approval_decision` is nineteen and
     would not have fitted, which is the constraint `COMPOSE_CHANGE` ran into first.
 
+    RECORD_READ was added on 2026-09-10, and it is the tenth. Needs Rupash item 45 chose to
+    answer "which agents have read my HR record" for a narrow set (M40.4.2.4), and that
+    question had no member at all: `brain.member_activity.member_notes` reported it as
+    unanswerable, and the item describes this list as eight members, which it stopped being
+    the day before when `approval` landed. Count the enum rather than the paragraph.
+
+    **This member breaks the shape of the list, and that is the decision rather than the
+    count.** Every one of the nine above records a change to what somebody may do. A read
+    changes nothing: it is the first member that records something happening *within* the
+    permissions rather than to them, and admitting one is admitting that the ledger is no
+    longer only a record of authority. The narrowness of `brain.audit.reads.WRITTEN_DOWN` is
+    what keeps that admission proportionate, and if that set ever grows to everything, this
+    member is the thing to argue about again.
+
+    It goes in the ledger anyway because there is nowhere else it can go. A read log that can
+    be edited proves nothing, and this is the only append-only, hash-chained, tamper-evident
+    store here; the trace holds no row identity and is kept a month, and the payload store
+    holds content and is kept thirty days. Recording it under an existing member was rejected
+    for the reason `COMPOSE_CHANGE` gives against GRANT: DENY is a refusal and a read that
+    succeeded is not one, PUBLISH is an artefact leaving, BREAK_GLASS is an authorisation, and
+    filling any of them breaks the query it exists to serve.
+
+    Eleven characters. `read` alone was rejected as a value rather than as a length: the
+    ledger records reads of a declared set of records and not every read in the system, and a
+    member called `read` invites exactly the reading this one is not.
+
     **Adding one moves no existing digest.** `compute_entry_hash` takes the action per entry
     and `HASH_SCHEMA` is a literal, so an unused member is invisible to every hash already
     written and every chain still verifies. What it does need is a migration, because
@@ -177,6 +203,9 @@ class AuditAction(enum.StrEnum):
     #: A person decided a suspended action: approved it, rejected it, took the work over or
     #: approved an amended version. The verdict is in the details, for the reason above.
     APPROVAL = "approval"
+    #: A record in `brain.audit.reads.WRITTEN_DOWN` was read, and shown. Never every read:
+    #: the declared set is two entries and `record_read` refuses anything outside it.
+    RECORD_READ = "record_read"
 
 
 # --------------------------------------------------------------------- redaction

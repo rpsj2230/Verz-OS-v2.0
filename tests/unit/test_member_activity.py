@@ -1192,21 +1192,25 @@ def test_the_diagnostic_reports_every_way_this_surface_could_answer_for_somebody
     assert MonthlyActivity in MEMBER_SURFACE
 
 
-def test_the_two_declined_leaves_name_the_field_that_is_missing() -> None:
-    """The findings `member_notes` reports, asserted against the modules they are about so a
-    note cannot go stale silently in either direction.
+def test_the_declined_leaf_names_the_field_that_is_missing() -> None:
+    """The finding `member_notes` reports, asserted against the module it is about so a note
+    cannot go stale silently in either direction.
 
     A `Turn` carries no thread and no channel, which is why threads across surfaces cannot be
-    assembled here; and `AuditAction` has no member meaning a read, with `SUBJECT_KINDS`
-    carrying nothing for a personnel record, which is why the HR question cannot be answered
-    from the ledger. Both are asserted on the real vocabularies rather than on the sentence.
+    assembled here, and that is asserted on the real type rather than on the sentence.
 
-    Delete this and the day somebody adds either field, the notes keep saying it is missing and
-    the two leaves stay unclaimed for a reason that stopped being true.
+    **There were two of these and now there is one.** The second said the HR read question
+    could not be answered from the ledger, and this test is what would have kept saying so
+    after it stopped being true: it asserted `AuditAction` had no member meaning a read.
+    Needs Rupash item 45 was decided, `AuditAction.RECORD_READ` is the tenth member, and the
+    assertion is inverted here rather than removed, so the note and the vocabulary cannot
+    disagree in that direction either.
+
+    Delete this and the day somebody adds a thread id, the note keeps saying it is missing and
+    the leaf stays unclaimed for a reason that stopped being true.
     """
     assert not set(Turn.__dataclass_fields__) & {"thread_id", "conversation_id", "channel"}
-    assert not {one for one in AuditAction if "read" in one.value}
+    assert {one for one in AuditAction if "read" in one.value} == {AuditAction.RECORD_READ}
     assert "record" not in SUBJECT_KINDS
-    assert len(member_notes()) == 2
+    assert len(member_notes()) == 1
     assert "no thread id and no channel" in member_notes()[0]
-    assert "none of" in member_notes()[1]

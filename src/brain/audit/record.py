@@ -50,6 +50,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Final, Protocol
 
 from brain.audit.ledger import DIGEST, SUBJECT_KINDS, AuditAction, AuditEntry
+from brain.audit.reads import ReadLogError, read_details, written_down_because
 from brain.core.entitlement import Capability
 
 if TYPE_CHECKING:
@@ -151,6 +152,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "break_glass": AuditAction.BREAK_GLASS,
         "compose_change": AuditAction.COMPOSE_CHANGE,
         "approval": AuditAction.APPROVAL,
+        "record_read": AuditAction.RECORD_READ,
     }
 )
 
@@ -231,7 +233,7 @@ class AuditRecorder:
             details=details,
         )
 
-    # ------------------------------------------------------------ the seven actions
+    # ------------------------------------------------------- one method per declared action
 
     def grant(
         self,
@@ -425,6 +427,61 @@ class AuditRecorder:
         if reason_code:
             details["reason_code"] = reason_code
         return self._write(AuditAction.APPROVAL, subject("leash", suspension_id), details)
+
+    def record_read(
+        self,
+        *,
+        subject_id: str,
+        entity: str,
+        disclosed: Sequence[str],
+        agent_id: str = "",
+    ) -> AuditEntry:
+        """Record that a record in the declared sensitive set was read (M40.4.2.4).
+
+        The tenth action, and the only one that records something happening inside the
+        permissions rather than to them. `brain.audit.ledger.AuditAction` carries the argument
+        for admitting it and `brain.audit.reads` carries the set, the retention and the rule
+        about who may read the result.
+
+        **There is no parameter by which a caller can widen the set.** `disclosed` is the
+        field names the reader was actually shown and it decides membership only:
+        `written_down_because` computes the reasons from `brain.audit.reads.WRITTEN_DOWN`, and
+        a read that table does not cover raises rather than writing a quiet nothing. That is
+        `AN_ORDINARY_READ_IS_REFUSED_AND_NEVER_WRITTEN_QUIETLY`, and it is what stops Option A
+        from becoming Option B one call site at a time.
+
+        **`disclosed` never reaches the entry, and neither do the reasons it produced.** The
+        details carry the kind of record and the agent, because those are properties of the
+        record and of the run rather than of what one reader was shown, and two entries that
+        varied with the reader would tell the subject which fields the other reader was
+        refused. `AN_ENTRY_NAMES_THE_RECORD_KIND_AND_NEVER_WHAT_ONE_READER_WAS_SHOWN` carries
+        the argument and the version of it that was wrong.
+
+        A read that was shown nothing is refused rather than written, per
+        `A_RECORD_NOBODY_WAS_SHOWN_WAS_NOT_READ`: the redactor drops a record whose fields the
+        caller may not see, and recording that would put a denial on the subject's page as
+        though it were a disclosure.
+
+        The subject is the person the record is about, under the `principal` kind, because
+        that is the index the question is asked by and `brain.audit.view` already admits a
+        person to their own entries. A blank one is refused rather than filed under an empty
+        principal, which would produce a row nobody can find and which the person it is about
+        would never be shown.
+        """
+        if not subject_id.strip():
+            msg = (
+                "a read entry with no subject is one the person it is about can never be "
+                "shown, since brain.audit.view admits them by matching their own principal, "
+                "and it is also a row that says somebody's record was read without saying "
+                "whose"
+            )
+            raise ReadLogError(msg)
+        reasons = written_down_because(entity, disclosed)
+        return self._write(
+            AuditAction.RECORD_READ,
+            subject("principal", subject_id),
+            read_details(reasons, entity=entity, agent_id=agent_id),
+        )
 
     def entity_merge(
         self,

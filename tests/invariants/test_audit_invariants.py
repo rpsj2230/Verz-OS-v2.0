@@ -204,8 +204,14 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     code path, invents a string for it, and nothing anywhere notices that no entry was
     ever written. Pinning the exact member set here means a ninth action is a deliberate
     edit in two files rather than an omission in one, in either direction: a member added
-    without a test fails, and a member removed fails too. It has done its job twice now, on
-    `compose_change` and on `approval`.
+    without a test fails, and a member removed fails too. It has done its job three times
+    now, on `compose_change`, on `approval` and on `record_read`.
+
+    `record_read` is the one member that is not a change to what somebody may do, and it is
+    here because Needs Rupash item 45 chose to answer "which agents have read my HR record"
+    for a narrow set. `brain.audit.ledger.AuditAction` argues for admitting it and
+    `brain.audit.reads` holds the set, which is two entries. If that set ever grows to
+    everything, this member is the thing to argue about again.
 
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
@@ -221,6 +227,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "break glass": AuditAction.BREAK_GLASS,
         "compose change": AuditAction.COMPOSE_CHANGE,
         "approval": AuditAction.APPROVAL,
+        "record read": AuditAction.RECORD_READ,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -233,6 +240,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "break_glass",
         "compose_change",
         "approval",
+        "record_read",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen
