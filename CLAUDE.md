@@ -208,8 +208,20 @@ must not happen is a survivor being quietly dropped from the table.
 import a stale `.pyc`, which produces false *survivals*. It cannot produce a false catch, so
 earlier passes stay sound, but a mutation run without it will lie to you in the safe direction.
 
-**Where the guard audit has been, as of 2026-09-09.** `.scratch/guard_audit.py` mutates every
-`if` in a module and reports the ones no test can reach. It has found roughly forty real
+**Where the guard audit has been, as of 2026-09-09.** `brain.ops.guards` mutates every `if`
+in a module and reports the ones no test can reach:
+
+```
+uv run python -m brain.ops.guards src/brain/ops/admission.py            # one hop
+uv run python -m brain.ops.guards src/brain/ops/admission.py 2          # widen it
+uv run python -m brain.ops.guards src/brain/x.py --carry migrations/versions/0024_x.py
+```
+
+**It lived in `.scratch/` until 2026-09-09, and `.scratch/` is in `.gitignore`.** Every
+sentence in this section told the reader to run a file no clone contains, which is the same
+shape as a scheduled control nobody calls: correct, documented, and absent from every
+direction except the one that matters. It is a module now, with tests, and the two paragraphs
+below it are the two ways to get it wrong. It has found roughly forty real
 defects in two days and almost every one was the same shape: a validator that is written,
 correct, and never once run, because every object any test builds is valid. Knowing where it
 has already been saves running it again, and knowing where it has not is the more useful half.
@@ -257,12 +269,15 @@ looks exactly like a module nobody needed to audit**, and the only way to tell i
 What follows is what running it costs, which is the thing worth knowing before you start.
 
 **A condition inside a comprehension is invisible to the audit, and there are usually more of
-them than there are `if` statements.** `.scratch/guard_audit.py` walks `ast.If`. A filter in a
-list comprehension, an `or` fallback on a return, a conditional expression: none of those is an
-`ast.If` and none is mutated, and the audit does not mention them, so a module can come back
-with a clean table and half its decisions unwatched. `migration/skills.py` has five `if`
-statements and six comprehension filters; `knowledge/search.py`'s `lexical_legs` has no `if` in
-it at all and three decisions. Mutate those by hand, and count the decisions rather than the
+them than there are `if` statements.** The audit walks `ast.If`. A filter in a list
+comprehension, an `or` fallback on a return and a conditional expression are none of them an
+`ast.If` and none of them is mutated, so a module can come back with a clean table and half its
+decisions unwatched. `brain.ops.guards.decisions_not_mutated` lists every one it could not
+address and the command prints them under the table, which is the difference between a gap and
+a silence. `migration/skills.py` has five `if`
+statements and five comprehension filters; `knowledge/search.py`'s `lexical_legs` has no `if`
+statement at all and two, a filter and a fallback. `brain.ops.guards.decisions_not_mutated`
+counts them for you. Mutate those by hand, and count the decisions rather than the
 statements before believing a survivor count of zero.
 
 **Mutate the constants too, not only the branches.** This is the sibling of the docstring rule
@@ -412,7 +427,7 @@ eighty-five modules and a hundred and five test files, because one hop lands in 
 and two more land in `brain.app`, which imports the estate. Thirty-three guards against a
 hundred and five files is the whole suite thirty-three times over, so it does not get run, and
 a scope nobody runs is worth less than a narrow one somebody does. One hop gave forty-two
-files, which took minutes and caught three of the seven candidates. `.scratch/test_set.py`
+files, which took minutes and caught three of the seven candidates. `brain.ops.guards.reaching`
 takes the depth as an argument for exactly this reason: widen it when a survivor is still
 standing, not before.
 
@@ -420,9 +435,9 @@ So: **for a module anything else imports, work the test set out from the import 
 than guessing it**, and print the set. A cheap first pass against one file is fine and is what
 makes auditing a module affordable at all, but a first-pass survivor is a candidate and never
 a finding. Re-check it against every test file that imports the module before writing a word
-about it. `.scratch/recheck_survivors.py` is that second stage, and the console modules'
-nineteen real findings the same day are what the first stage is worth when its scope happens
-to be right: each of those has exactly one test file, so there was nothing else to miss.
+about it. Passing a larger depth is that second stage, and the console modules' nineteen real
+findings the same day are what the first stage is worth when its scope happens to be right:
+each of those has exactly one test file, so there was nothing else to miss.
 
 ---
 

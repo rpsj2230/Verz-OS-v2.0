@@ -546,6 +546,131 @@ def tmp_repo() -> Path:
     return Path(tempfile.mkdtemp(prefix="brain-status-"))
 
 
+def _empty_repo() -> Path:
+    """A git repository with no commits in it, which is what an installer leaves behind."""
+    import subprocess
+
+    repo = tmp_repo()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, timeout=30)
+    return repo
+
+
+def test_a_repository_with_no_commits_reports_nothing_closed_rather_than_raising() -> None:
+    """**The first thing this reads is `git log`, and a fresh repository has none.**
+
+    That is not hypothetical: the installer creates the client's repository before anything is
+    committed to it, and the same branch answers a machine with no git on the path, because
+    `_git` returns the empty string for both.
+
+    Delete this and the branch is unreachable, and the first status page generated on a fresh
+    install is a traceback rather than a page saying nothing is done yet.
+    """
+    closed, recent = status.closed_task_ids(_empty_repo())
+
+    assert closed == set()
+    assert recent == []
+
+
+def test_a_record_separator_inside_a_commit_message_does_not_break_the_reader() -> None:
+    """A commit whose message contains the record separator splits into two entries, and the
+    second holds no field separators at all.
+
+    Both readers guard against it and both guards are here: `closed_task_ids` needs three
+    fields and `closed_since` needs two, and neither can assume the log it parses was written
+    only by git's format string. A message can hold any byte somebody types.
+
+    Delete this and one strange commit message turns the whole log into fields that are read
+    off by one, silently, and the tracker under-counts with nothing to say so.
+    """
+    import subprocess
+    from datetime import UTC, datetime, timedelta
+
+    repo = tmp_repo()
+    for command in (
+        ["git", "init", "-q"],
+        ["git", "config", "user.email", "t@example.invalid"],
+        ["git", "config", "user.name", "T"],
+    ):
+        subprocess.run(command, cwd=repo, check=True, timeout=30)
+    (repo / "a.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, timeout=30)
+    (repo / "msg.txt").write_text(
+        "M0.1.1 done\n\nCloses: M0.1.1\n\nand then \x1e a separator\n", encoding="utf-8"
+    )
+    subprocess.run(["git", "commit", "-q", "-F", "msg.txt"], cwd=repo, check=True, timeout=30)
+
+    closed, _ = status.closed_task_ids(repo)
+    since = status.closed_since(repo, datetime.now(UTC) - timedelta(days=1))
+
+    assert "M0.1.1" in closed
+    assert "M0.1.1" in since
+
+
+def _wbs(modules: int, leaves_per_module: int, wave: int = 0) -> dict[str, object]:
+    """A work breakdown with nothing closed against it, for the next-up tests below."""
+    return {
+        "wave_names": {str(wave): "a wave"},
+        "modules": [
+            {
+                "id": f"M{index}",
+                "name": f"module {index}",
+                "wave": wave,
+                "leaf_ids": [f"M{index}.1.{leaf}" for leaf in range(1, leaves_per_module + 1)],
+            }
+            for index in range(modules)
+        ],
+    }
+
+
+def test_the_next_up_list_stops_at_five_however_much_is_open() -> None:
+    """**Two breaks, one inside the leaf loop and one outside it, and both are load-bearing.**
+
+    Without the inner one the module being scanned contributes every open leaf it has. Without
+    the outer one the inner break fires at five and the next module starts appending, so the
+    count runs past five and never comes back to it: the test is `== 5` and the list is already
+    there.
+
+    A page showing forty next-up tasks is a page nobody reads, which is the failure this
+    silently produces.
+
+    Delete this and the cap is decoration.
+    """
+    built = status.build_status(_empty_repo(), _wbs(modules=3, leaves_per_module=9))
+
+    assert len(built.next_up) == 5
+
+
+def test_next_up_names_only_the_wave_being_worked() -> None:
+    """The list answers "what is next", and next means next in the wave somebody is in. A leaf
+    from a later wave in that list sends whoever reads it to work that cannot start.
+
+    Delete this and the page proposes work from a wave whose dependencies do not exist yet.
+    """
+    wbs = _wbs(modules=2, leaves_per_module=2)
+    modules = wbs["modules"]
+    assert isinstance(modules, list)
+    modules[1]["wave"] = 4
+
+    built = status.build_status(_empty_repo(), wbs)
+
+    assert built.next_up
+    assert all(leaf.startswith("M0.") for leaf in built.next_up), built.next_up
+
+
+def test_the_entry_point_refuses_a_repository_with_no_work_breakdown() -> None:
+    """CI runs `main` before the image is built, so the missing-file branch is the one that
+    decides what happens when the work breakdown is not where it should be.
+
+    `main` takes the repository as a parameter with the derived path as its default, and that
+    parameter exists for this: a function that can only be pointed at this repository has a
+    branch nothing can reach, and CI is where it would first run.
+
+    Delete this and the branch goes back to being unreachable, and a missing WBS in CI is a
+    traceback rather than a sentence naming the path.
+    """
+    assert status.main(_empty_repo()) == 1
+
+
 def test_a_commit_message_outside_the_machines_codepage_does_not_take_the_page_down() -> None:
     """**A commit body quoting a Chinese phrase made `build_status` raise on 2026-09-09.**
 

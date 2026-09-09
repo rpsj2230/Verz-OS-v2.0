@@ -216,8 +216,14 @@ def closed_since(repo: Path, when: datetime, ref: str = "HEAD") -> set[str]:
     cutoff = when.timestamp()
     found: set[str] = set()
     for entry in raw.split("\x1e"):
-        if not entry.strip():
-            continue
+        # There is deliberately no `if not entry.strip(): continue` here, and there was one
+        # until a mutation showed it could not change an outcome. Every entry that `strip()`
+        # empties holds no `\x1f`, so it splits into one part and the length test below
+        # catches it. The format ends every record with the separator, so the last entry is
+        # always empty and this path runs on every call: a guard that runs constantly and
+        # decides nothing is worse than an absent one, because it reads as the thing keeping
+        # the loop safe.
+        #
         # `lstrip` of line endings only, never `strip()`: Python counts \x1c through
         # \x1f as whitespace, so a bare strip eats the unit separator and a one-line
         # message then splits wrongly. The same trap as in `closed_task_ids` above.
@@ -406,9 +412,16 @@ def leaf_sentences(path: Path) -> dict[str, str]:
     return found
 
 
-def main() -> int:
-    """Write docs/status.json. Runs in CI before the image is built."""
-    repo = Path(__file__).resolve().parents[2]
+def main(repo: Path | None = None) -> int:
+    """Write docs/status.json. Runs in CI before the image is built.
+
+    `repo` is a parameter with the derived path as its default, and the argument for it is the
+    refusal below. A function that can only ever be pointed at this repository has a
+    missing-file branch nothing can reach, so the one line that decides what happens when the
+    work breakdown is absent goes untested, and CI is where it would first run. It is also how
+    `brain.ops.recovery.backup_policy_gaps` is written and for the same stated reason.
+    """
+    repo = Path(__file__).resolve().parents[2] if repo is None else repo
     wbs_path = repo / "docs" / "wbs.json"
     if not wbs_path.exists():
         print(f"no WBS at {wbs_path}")
