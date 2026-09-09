@@ -29,6 +29,7 @@ from brain.identity.roles import Role
 from brain.identity.staff_adapters import (
     ACCOUNT_DISABLE_BIT,
     ADAPTER_SOURCES,
+    CHOOSABLE_SOURCES,
     GOOGLE_SHEET,
     GOOGLE_WORKSPACE,
     LARK,
@@ -42,17 +43,21 @@ from brain.identity.staff_adapters import (
     MicrosoftEntraSource,
     RosterUnavailableError,
     SpreadsheetSource,
+    choices_and_adapters_that_do_not_match,
     source_strings_the_trust_table_does_not_know,
 )
 from brain.identity.staff_source import (
     DEFAULT_TRUST,
+    STAFF_SOURCE_SETTING,
     Asserts,
     GroupRule,
     Roster,
     StaffRecord,
     StaffSource,
+    StaffSourceError,
     assertions_from,
     departments_from,
+    selected_source,
     trust_for,
 )
 from tests.fixtures import roster_payloads as recorded
@@ -1084,3 +1089,50 @@ def test_every_adapter_returns_a_real_roster_from_its_recorded_payload() -> None
         assert isinstance(roster, Roster), name
         assert roster.people, f"{name} produced nobody"
         assert all(one.display_name for one in roster.people), name
+
+
+def test_every_staff_list_this_file_parses_is_one_an_install_can_choose_and_the_reverse() -> None:
+    """The two lists that have to stay in step, and they fail differently. A parser no install
+    can choose is dead code that reads as live, because it has tests and a docstring naming it
+    as one of the places a client keeps their people. A choice nothing parses is worse: it is
+    offered on a setup screen, picked, and then there is nothing to read the list with, on the
+    client's own server rather than here.
+
+    Asserted against the real lists, and the reporting itself is asserted against made-up ones
+    below, because a check that always returns nothing looks identical to one that is passing.
+
+    Delete this and a seventh adapter can be written that no install can select, or a seventh
+    option offered that nothing can read."""
+    assert choices_and_adapters_that_do_not_match() == ()
+    assert set(CHOOSABLE_SOURCES) == set(ADAPTER_SOURCES)
+
+
+def test_a_parser_nobody_can_choose_and_a_choice_nothing_parses_are_reported_separately() -> None:
+    """The findings the check above is expected never to produce, produced deliberately, so
+    that its empty answer on the real lists is evidence rather than a tautology.
+
+    Both directions in one test because the pair is the point: a single set difference would
+    report one of them and be silent about the other, and the silent one is the one that
+    reaches a client.
+
+    Delete this and the check can be reduced to a function returning an empty tuple, and every
+    test of it stays green."""
+    orphaned = choices_and_adapters_that_do_not_match(parsed=("lark",), choosable=())
+    unreadable = choices_and_adapters_that_do_not_match(parsed=(), choosable=("lark",))
+
+    assert orphaned == ("'lark' is parsed here and is not a staff source any install can choose",)
+    assert unreadable == ("'lark' can be chosen at install time and nothing here parses it",)
+
+
+def test_a_source_string_no_install_can_choose_is_offered_by_nothing() -> None:
+    """The hazard the check above guards, shown rather than described, and it is the sibling of
+    the near-miss demotion earlier in this file. A source string spelled differently in the two
+    lists does not raise anywhere: the adapter parses, the trust resolves, and the only symptom
+    is that no setup screen ever offers it.
+
+    Delete this and the pairing above looks like bookkeeping rather than the thing that keeps
+    a written adapter reachable."""
+    assert GOOGLE_WORKSPACE in CHOOSABLE_SOURCES
+
+    with pytest.raises(StaffSourceError):
+        selected_source({STAFF_SOURCE_SETTING: "google-workspace"})

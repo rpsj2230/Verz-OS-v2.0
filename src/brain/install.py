@@ -224,6 +224,31 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         ),
         default="none",
     ),
+    Setting(
+        name="INSTALL_STAFF_SOURCE",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "Where this company keeps the list of who works here: spreadsheet, google_sheet, "
+            "google_workspace, microsoft_entra, lark, ldap, or none. A separate question from "
+            "the brokered directory above, because a roster is a list read on a schedule and "
+            "a sign-in source is a live protocol, and a spreadsheet can only be the first. "
+            "The default is none, meaning no list is read and people are created in the "
+            "console: there is no default source because a default would make whichever "
+            "company was set up first the shape every later one inherits."
+        ),
+        default="none",
+    ),
+    Setting(
+        name="INSTALL_STAFF_SOURCE_LOCATION",
+        belongs=Belongs.IDENTITY,
+        meaning=(
+            "Where that staff list is: the sheet's identifier, the directory tenant, or the "
+            "directory address including the base a search starts from. `unset` is the value "
+            "meaning nobody has said, so a source that was chosen and pointed nowhere refuses "
+            "rather than reading a company with nobody in it."
+        ),
+        default="unset",
+    ),
     # --- models and providers, M41.1.6
     Setting(
         name="INSTALL_MODEL_PROFILE",

@@ -53,6 +53,14 @@ anywhere reporting it. So the strings are constants, they are checked against `D
 rather than against themselves, and a caller who wants a different trust changes the trust
 rather than the name. See `A_SOURCE_STRING_THAT_MATCHES_NOTHING_IS_A_SILENT_DEMOTION`.
 
+**Those strings are also what a client's install chooses by name**, which makes them a third
+thing to keep in step: `staff_source.SELECTABLE` is the set an install may pick from and
+`ADAPTER_SOURCES` is the set this file can parse. `choices_and_adapters_that_do_not_match`
+reports both directions, because they fail differently. A parser nothing can choose is dead
+code wearing a docstring that says otherwise; a choice nothing parses is offered on a setup
+screen, picked, and then has nothing to read the list with, on the client's server rather than
+here.
+
 **`RosterReading` is not a second protocol method.** `StaffSource` has exactly one method and
 must keep having exactly one, for the reason `A_SPREADSHEET_CANNOT_BE_AUTHENTICATED_AGAINST`
 gives. `roster()` is that method and every adapter here satisfies it. `reading()` is more of
@@ -74,12 +82,13 @@ Task ids: M1.6.4, M1.6.5, M1.6.6
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
 from brain.identity.staff_source import (
     DEFAULT_TRUST,
+    SELECTABLE,
     Asserts,
     Roster,
     StaffRecord,
@@ -884,3 +893,48 @@ def source_strings_the_trust_table_does_not_know() -> tuple[str, ...]:
     departments and roles with nothing raised anywhere.
     """
     return tuple(one for one in ADAPTER_SOURCES if one not in DEFAULT_TRUST)
+
+
+#: The staff sources an install may choose that this file is expected to have a parser for.
+#:
+#: Derived from `SELECTABLE` rather than written again, so the two cannot drift by one being
+#: edited. The option that reads no list is not in it: `none` is the absence of a source and a
+#: parser for it would be a parser for nothing.
+CHOOSABLE_SOURCES: Final[tuple[str, ...]] = tuple(
+    one.name for one in SELECTABLE if one.reads_a_list
+)
+
+
+def choices_and_adapters_that_do_not_match(
+    parsed: Iterable[str] = ADAPTER_SOURCES,
+    choosable: Iterable[str] = CHOOSABLE_SOURCES,
+) -> tuple[str, ...]:
+    """Where the list a client chooses from and the list this file can parse disagree.
+
+    Two directions and they fail differently, which is why both are reported rather than one
+    set difference. **A parser no install can choose is dead code that looks live**: it has
+    tests, it appears in this module's docstring as one of the sources a client keeps their
+    people in, and no setup screen will ever offer it. **A choice with no parser is worse**,
+    because it is offered, chosen, and then there is nothing to read the list with, on the
+    client's server rather than here.
+
+    The same shape as `source_strings_the_trust_table_does_not_know` above and separate from it
+    on purpose: that one is about a name the trust table has never heard of, which demotes
+    silently, and this one is about a name nobody can pick or nobody can parse.
+
+    Both lists are parameters defaulting to the real ones, for the reason
+    `brain.ops.independence.independence_gaps` takes `extra_allowed`: a check whose findings
+    nothing can reproduce is indistinguishable from one that returns nothing, and this one is
+    expected to be empty on every run of this repository.
+    """
+    can_choose = set(choosable)
+    can_parse = set(parsed)
+    found = [
+        f"{one!r} is parsed here and is not a staff source any install can choose"
+        for one in sorted(can_parse - can_choose)
+    ]
+    found.extend(
+        f"{one!r} can be chosen at install time and nothing here parses it"
+        for one in sorted(can_choose - can_parse)
+    )
+    return tuple(found)
