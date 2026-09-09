@@ -586,3 +586,69 @@ def test_a_delivery_row_names_one_event_and_one_subscriber() -> None:
         Delivery(event_id="", subscriber_id="sub_finance")
     with pytest.raises(OutboxError, match="unroutable"):
         Delivery(event_id="ev_1", subscriber_id=" ")
+
+
+# ---------------------------------------- the identifiers an event and a row are keyed by
+def test_an_event_id_longer_than_an_identifier_is_refused() -> None:
+    """The id is what a subscriber deduplicates on, and delivery is at least once. A value
+    long enough to be truncated by whatever stores it deduplicates against a prefix, so two
+    different events collapse into one and the second is dropped as a repeat.
+
+    The bound is read from `MAX_IDENTIFIER_CHARS` rather than written here, so a change to the
+    column moves both.
+
+    Delete this and the branch is unreachable: the empty-id case above it is tested and this
+    one never was."""
+    with pytest.raises(OutboxError, match="is not an identifier"):
+        an_event(event_id="e" * (MAX_IDENTIFIER_CHARS + 1))
+
+    assert an_event(event_id="e" * MAX_IDENTIFIER_CHARS)
+
+
+def test_an_entity_that_is_not_a_name_is_refused() -> None:
+    """A subscriber matches on the entity, so a value outside the name grammar is an event
+    nobody receives: it is written, it is delivered to nothing, and every subscription that
+    should have matched it reports no traffic rather than an error.
+
+    Delete this and one malformed producer silently stops a whole class of event reaching
+    anybody."""
+    for bad in ("automation run", "Automation_Run", "", "automation-run;drop"):
+        with pytest.raises(OutboxError, match="is not a name"):
+            an_event(entity=bad)
+
+
+def test_a_record_id_that_is_empty_or_too_long_is_refused() -> None:
+    """An event points at a record and does not carry one, so the pointer is the whole of what
+    a consumer has. Empty is a pointer at nothing; over the bound is a pointer that whatever
+    stores it may truncate into a different record.
+
+    Both halves in one test because they are one condition, and the message says so.
+
+    Delete this and an event arrives naming a record nobody can fetch."""
+    for bad in ("", "   ", "r" * (MAX_IDENTIFIER_CHARS + 1)):
+        with pytest.raises(OutboxError, match="empty or longer than"):
+            an_event(record_id=bad)
+
+
+def test_a_subscriber_with_no_id_or_no_endpoint_is_refused() -> None:
+    """A subscriber with no id cannot be deactivated by anybody, which is the one control an
+    operator has over a subscription that has started misbehaving. One with no endpoint is a
+    row that matches events and delivers them nowhere, so the events read as delivered.
+
+    Delete this and both branches are unreachable, and a subscription created from a form with
+    an empty field looks exactly like a working one."""
+    with pytest.raises(OutboxError, match="cannot be deactivated"):
+        a_subscriber(subscriber_id="   ")
+    with pytest.raises(OutboxError, match="names no endpoint"):
+        a_subscriber(endpoint=" ")
+
+
+def test_a_delivery_reporting_a_negative_number_of_attempts_is_refused() -> None:
+    """Attempts are counted, and the count is what the backoff and the give-up threshold are
+    computed from. A negative one is arithmetic that went wrong upstream, and it buys the row
+    extra attempts rather than fewer: it sits below every threshold this module has.
+
+    Delete this and a row that should have been given up on is retried for as long as the
+    number stays negative."""
+    with pytest.raises(OutboxError, match="reports -1 attempts"):
+        Delivery(event_id="ev_1", subscriber_id="sub_finance", attempts=-1)
