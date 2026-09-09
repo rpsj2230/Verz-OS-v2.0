@@ -176,6 +176,32 @@ def test_a_condition_still_ambiguous_after_the_context_limit_is_not_anchored(
 
 
 # ------------------------------------------------------------------------- the test set
+def test_the_import_graph_is_read_once_and_handed_out_unchangeable() -> None:
+    """**The cache is what makes a survey of the tree possible, and immutability is what makes
+    the cache safe.**
+
+    Without it, asking which tests reach one module costs a parse of `src` and of `tests`, and
+    asking about every module costs that squared: a run over the six hundred modules here did
+    not finish. With it, ten seconds.
+
+    A cached mutable is a shared mutable, so both answers are frozen. The identity check is
+    what says the second call did not parse again, and the type check is what says the first
+    caller cannot edit every later caller's answer.
+
+    Delete this and either half can go: the cache, which makes the tool unusable for deciding
+    what to audit, or the freezing, which makes one caller's edit everybody's.
+    """
+    from brain.ops.guards import _graph, _imports
+
+    first = _imports(Path("src/brain/status.py"))
+    second = _imports(Path("src/brain/status.py"))
+
+    assert first is second
+    assert isinstance(first, frozenset)
+    with pytest.raises(TypeError):
+        _graph(Path("src"))["brain.status"] = frozenset()  # type: ignore[index]
+
+
 def test_a_path_outside_the_package_has_no_module_name() -> None:
     """A path this cannot name is a path whose imports it cannot match, so the test set would
     come back empty and the audit would report every guard as a survivor.

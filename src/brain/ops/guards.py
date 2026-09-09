@@ -57,9 +57,11 @@ from __future__ import annotations
 
 import ast
 import sys
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final
 
 from brain.ops.mutation import Mutation, Report, verify
@@ -243,12 +245,23 @@ def module_name(path: Path) -> str:
     return ".".join(parts[parts.index("brain") :])
 
 
-def _imports(path: Path) -> set[str]:
-    """Every dotted name a file imports, in both `import x.y` and `from x import y` forms."""
+@cache
+def _imports(path: Path) -> frozenset[str]:
+    """Every dotted name a file imports, in both `import x.y` and `from x import y` forms.
+
+    Cached, and the cache is what makes a survey possible at all: without it, asking which
+    tests reach one module costs a parse of `src` and of `tests`, and asking about every module
+    in the tree costs that squared. `brain.ops.controls` carries the same three caches for the
+    same reason and its tests clear them, which is the shape to copy if this is ever pointed at
+    a tree that changes under it.
+
+    A `frozenset` rather than a `set` because a cached mutable is a shared mutable, and the one
+    caller that edited a returned set would be editing every later caller's answer.
+    """
     try:
         tree = ast.parse(path.read_bytes().decode("utf-8"))
     except SyntaxError:
-        return set()
+        return frozenset()
     names: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -256,13 +269,23 @@ def _imports(path: Path) -> set[str]:
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.add(node.module)
             names.update(f"{node.module}.{one.name}" for one in node.names)
-    return names
+    return frozenset(names)
 
 
 def _python_files(root: Path) -> Iterable[Path]:
     for path in sorted(root.rglob("*.py")):
         if "__pycache__" not in path.parts:
             yield path
+
+
+@cache
+def _graph(root: Path) -> Mapping[str, frozenset[str]]:
+    """Every module under `root` and what it imports, read once.
+
+    A `MappingProxyType` rather than a dict, for the reason the `frozenset` above is frozen: a
+    cached mapping handed out raw is one any caller can edit for every later caller.
+    """
+    return MappingProxyType({module_name(path): _imports(path) for path in _python_files(root)})
 
 
 def reaching(target: str, *, depth: int = 1, src: Path | None = None) -> set[str]:
@@ -285,7 +308,7 @@ def reaching(target: str, *, depth: int = 1, src: Path | None = None) -> set[str
         msg = f"a depth of {depth} is not a number of hops"
         raise GuardAuditError(msg)
     root = SRC if src is None else src
-    graph = {module_name(path): _imports(path) for path in _python_files(root)}
+    graph = _graph(root)
     if target not in graph:
         msg = f"{target} is not a module under {root}"
         raise GuardAuditError(msg)
