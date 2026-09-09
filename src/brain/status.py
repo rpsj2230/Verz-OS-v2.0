@@ -115,12 +115,28 @@ def claimed_ids(subject: str, body: str) -> set[str]:
 
 
 def _git(*args: str, cwd: Path | None = None) -> str:
+    """Git's output as text, decoded as UTF-8 whatever the machine's codepage is.
+
+    **`text=True` alone decodes with the platform's ANSI codepage, and that is a bug rather
+    than a preference.** Git writes commit messages as UTF-8. On Windows the default is
+    cp1252, so the first commit message containing a character it does not have takes the
+    whole status page down: on 2026-09-09 a commit body quoting a Chinese phrase made
+    `build_status` raise, and what raised was a decode inside `subprocess.run`, so the
+    traceback named this line and not the commit. A curly quote pasted from a word processor
+    does the same thing.
+
+    `errors="replace"` rather than strict, because everything read here is a subject line, a
+    body and a task id, and a replacement character in a subject is harmless while refusing to
+    build the page is not. The ids themselves are ASCII by their own grammar, so no
+    replacement can change one.
+    """
     try:
         return subprocess.run(  # noqa: S603
             ["git", *args],  # noqa: S607
             cwd=cwd,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
+            errors="replace",
             check=True,
             timeout=30,
         ).stdout.strip()

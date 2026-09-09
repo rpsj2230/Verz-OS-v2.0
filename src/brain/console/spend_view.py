@@ -56,6 +56,18 @@ about the same shape, and the argument carries here unchanged. A row count besid
 which is a count of runs and therefore of activity the reader may not have. And a residual
 bucket for rows out of reach, which is the hidden count with a label on it.
 
+**The cost review is the one section here that reads two modules and it has to.** A variance
+without the correction beside it is a number somebody is asked to worry about with nothing to
+do; a corrected estimator without the variance is a factor with no evidence next to it.
+`cost_review` renders the pair, and it carries `long_enough` on the object rather than in a
+caption for the same reason `Report.machine_included` is on the object: a renderer cannot show
+a corrected factor without the qualifier that says how much of a month it was measured over.
+
+That section is also why `brain.ops.retune` is imported by anything at all.
+`brain.ops.controls` records `spend_correction` as a control, and until this screen existed
+the estimator correction was called from a module nothing imported, which
+`chains_worth_checking` reports as a caller as unreached as the control itself.
+
 Task ids: M21.3.1, M21.3.2, M21.3.3, M21.3.5, M21.3.6
 """
 
@@ -72,7 +84,9 @@ from typing import Final
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.ops.budgets import Allowance, BudgetPeriod
-from brain.ops.spend import Actual, Dimension, Refusal, Rung, spend_by
+from brain.ops.retune import Distribution as SpendWindow
+from brain.ops.retune import Variance, post_launch_correction, variance
+from brain.ops.spend import Actual, Correction, Dimension, Observation, Refusal, Rung, spend_by
 
 
 class SpendViewError(Exception):
@@ -132,6 +146,16 @@ A_COST_LEDGER_HAS_NO_QUESTION_IN_IT: Final = (
     "whether the run fanned out, and how many tools it called."
 )
 
+
+#: Why the review shows the variance and the corrected factor together.
+A_VARIANCE_WITH_NO_CORRECTION_BESIDE_IT_IS_A_WORRY_WITH_NO_ACTION: Final = (
+    "Spending twice the projection is a fact somebody can act on only next to what the "
+    "estimator now says, and a corrected factor on its own is a number with no evidence "
+    "beside it. Shown apart, the first reads as an alarm nobody can answer and the second as "
+    "a change nobody asked for. The screen carries both or neither, and it carries whether "
+    "the window was long enough on the object rather than in a caption, so a renderer cannot "
+    "show the factor without the qualifier."
+)
 
 # ---------------------------------------------------------------- who may read what (M21.3.1)
 #: The capability a usage report is read behind, taken from the screen that shows it rather
@@ -472,3 +496,42 @@ def friction(
         rungs[one.rung] = rungs.get(one.rung, 0) + 1
         causes[one.cause] = causes.get(one.cause, 0) + 1
     return Friction(by_rung=MappingProxyType(rungs), by_cause=MappingProxyType(causes))
+
+
+# ------------------------------------------------- the cost review after launch (M37.5.3)
+@dataclass(frozen=True)
+class CostReview:
+    """What the first window actually cost, against what was projected, and what follows.
+
+    `long_enough` is repeated from the variance rather than left to be read off it, because
+    the correction below is the figure a renderer will show large and the qualifier belongs on
+    the same object. See `A_VARIANCE_WITH_NO_CORRECTION_BESIDE_IT_IS_A_WORRY_WITH_NO_ACTION`.
+    """
+
+    variance: Variance
+    correction: Correction
+    long_enough: bool
+
+
+def cost_review(
+    *,
+    projected_minor: int,
+    measured: SpendWindow,
+    prior: Correction,
+    observations: Sequence[Observation],
+) -> CostReview:
+    """The pair a person reads thirty days after launch.
+
+    Both halves come from `brain.ops.retune`, which owns the window rule, rather than being
+    recomputed here: this module decides what a reader may see and the arithmetic belongs
+    where the argument for it is. `post_launch_correction` returns the prior unchanged with a
+    reason when the window is short, so a review rendered in the first fortnight shows a
+    variance, an uncorrected factor and a sentence saying why, which is the honest version of
+    that screen rather than an empty one.
+    """
+    measured_variance = variance(projected_minor=projected_minor, measured=measured)
+    return CostReview(
+        variance=measured_variance,
+        correction=post_launch_correction(prior, observations, measured),
+        long_enough=measured_variance.long_enough,
+    )

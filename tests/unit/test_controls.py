@@ -596,7 +596,11 @@ def test_nothing_an_installed_system_would_call_reads_the_repository_from_disk(
     for cached in caches:
         cached.cache_clear()
     try:
-        assert len(orphans()) == len(CONTROLS) - 1
+        # Two of the thirteen are not orphans now: the audit anchor runs on a route and a
+        # timer, and the spend correction has a caller and no schedule. The figure is derived
+        # from the registry rather than written, so a control changing state moves it.
+        wired = sum(1 for one in CONTROLS if one.invoked_by is not Invocation.NOTHING)
+        assert len(orphans()) == len(CONTROLS) - wired
         assert len(handover_lines()) == len(CONTROLS)
         assert advisories()
         assert overdue(last_run={}, now=NOW)

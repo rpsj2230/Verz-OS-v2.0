@@ -535,6 +535,55 @@ def test_the_tracker_and_the_status_page_put_each_leaf_in_the_same_wave() -> Non
     assert _tracker_leaves_per_wave() == _wbs_leaves_per_wave()
 
 
+def tmp_repo() -> Path:
+    """A throwaway git repository under the system temporary directory.
+
+    A directory of its own rather than `tmp_path`, because this file's tests are plain
+    functions and adding a fixture parameter to one of them would be the only one.
+    """
+    import tempfile
+
+    return Path(tempfile.mkdtemp(prefix="brain-status-"))
+
+
+def test_a_commit_message_outside_the_machines_codepage_does_not_take_the_page_down() -> None:
+    """**A commit body quoting a Chinese phrase made `build_status` raise on 2026-09-09.**
+
+    Git writes commit messages as UTF-8. `subprocess.run(text=True)` decodes with the
+    platform's ANSI codepage, which on this machine is cp1252, so the first message holding a
+    character cp1252 does not have took the whole build status page with it. The traceback
+    named the line in `status.py` rather than the commit, which is why it took a while to
+    read. A curly quote pasted out of a word processor does the same thing.
+
+    Run against a real repository built here rather than by patching `subprocess`, because
+    what is being tested is the decoding of git's actual bytes and a patched `run` would
+    return whatever the test handed it.
+
+    Delete this and the reader goes back to the platform default, and the page breaks again
+    the first time somebody writes a commit message in their own language, which for this
+    product is a first-class case rather than an edge one.
+    """
+    import subprocess
+
+    repo = tmp_repo()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True, timeout=30)
+    subprocess.run(
+        ["git", "config", "user.email", "t@example.invalid"], cwd=repo, check=True, timeout=30
+    )
+    subprocess.run(["git", "config", "user.name", "T"], cwd=repo, check=True, timeout=30)
+    (repo / "a.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, timeout=30)
+    # The phrase is the one that broke it, plus a curly quote, which is the likelier source.
+    message = "SLA \u6761\u6b3e and a \u201ccurly\u201d quote\n\nCloses: M0.1.1\n"
+    (repo / "msg.txt").write_text(message, encoding="utf-8")
+    subprocess.run(["git", "commit", "-q", "-F", "msg.txt"], cwd=repo, check=True, timeout=30)
+
+    closed, recent = status.closed_task_ids(repo)
+
+    assert "M0.1.1" in closed
+    assert recent, "the commit was read"
+
+
 def test_the_generated_status_agrees_with_the_wbs_about_the_waves() -> None:
     """The other half of the same property, and the half that decides what `/build` shows.
 

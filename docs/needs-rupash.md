@@ -7,7 +7,7 @@ paragraph in which three different items each claimed to be "the newest", so her
 sorted by what they actually need from you. Nothing below is a request to read code.
 
 **One is the most important thing on this page and it is new.** Item 47: thirteen mechanisms
-in the system only work if something runs them on a schedule, and twelve of them are run by
+in the system only work if something runs them on a schedule, and eleven of them are run by
 nothing at all. Nothing has gone wrong yet, because none of them has ever run and there is no
 client data in the system. What it needs from you is one decision about where scheduled work
 lives on your server, with three options and a recommendation.
@@ -259,19 +259,25 @@ have this problem.
 
 ---
 
-## 47. Twelve of the thirteen safety mechanisms in the system have never been switched on, and I need one decision about where scheduled work runs
+## 47. Eleven of the thirteen safety mechanisms in the system have never been switched on, and I need one decision about where scheduled work runs
 
 **The finding.** The system has thirteen mechanisms that only work if something runs them on a
 schedule: pruning data past its retention window, the permission canaries, the restore drill,
 the backup exposure alert, the refusal digest, the staff directory sync, knowledge
 re-verification, entity resolution calibration, redriving stuck jobs, resuming interrupted
-side effects, the model health probes, and the spend estimator correction. Twelve of them have
+side effects, the model health probes, and the spend estimator correction. Eleven of them have
 no caller anywhere. Each one is written, tested, documented, and nothing has ever run it.
+
+**One of the twelve moved on 2026-09-09 and the move is smaller than it sounds.** The spend
+estimator correction now has a caller: the cost review section of the usage screen asks for it.
+That takes it out of the list of mechanisms nothing calls and puts it in a shorter list of
+mechanisms whose caller is a screen nobody opens on a schedule. It is one link of the chain
+rather than the chain, and the registry says so rather than counting it as wired.
 
 The thirteenth is the audit anchor, and it works: a GitHub Actions timer calls a web address in
 the system every day, and that publishes the tamper-evident seal on the audit trail. It is the
-one that runs, and it is the reason I can tell you the other twelve do not: the check that
-found them had to get the working one right first.
+one that runs, and it is the reason I can tell you the others do not: the check that found
+them had to get the working one right first.
 
 **How bad is this right now.** Not bad, and I want to be accurate. Nothing has degraded,
 because none of these has ever run and there is no client data in the system yet. The reason
@@ -301,7 +307,7 @@ server rather than about the code, which is why it is here.
   client-hosted system whose safety mechanisms are triggered from our GitHub account is a
   system we operate on their behalf. The client cannot see the schedule, cannot change it, and
   loses it if the relationship ends. It is the right answer for exactly one thing, publishing a
-  seal to a repository we hold, and the wrong answer for the other twelve.
+  seal to a repository we hold, and the wrong answer for every other one.
 - **Option C: timers on the server itself.** Standard, reliable, and it puts the schedule
   outside the product, so every client installs it by hand from a runbook and their thirteen
   timers drift from ours. It also means the installer has to write files as root.

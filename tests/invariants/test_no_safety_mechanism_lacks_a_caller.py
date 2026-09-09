@@ -66,9 +66,17 @@ KNOWN_ORPHANS = frozenset(
         "queue_redrive",
         "side_effect_resume",
         "model_health_probes",
-        "spend_correction",
     }
 )
+
+#: Controls that have a caller and are still not run, which is the state between the two.
+#:
+#: `spend_correction` left `KNOWN_ORPHANS` on 2026-09-09 because the cost review section of
+#: `brain.console.spend_view` asks for it, and it is not thereby running: nothing opens that
+#: screen on a schedule. The set exists so that leaving the orphan list is recorded as the
+#: small move it is rather than as an arrival, and so that a control moving here and then
+#: quietly back is visible.
+WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction"})
 
 
 def test_every_control_names_functions_that_exist() -> None:
@@ -188,6 +196,29 @@ def test_the_registry_has_nothing_else_wrong_with_it() -> None:
     lost its schedule entry.
     """
     assert registry_gaps() == ()
+
+
+def test_a_control_with_a_caller_and_no_schedule_is_recorded_as_neither() -> None:
+    """**The state between an orphan and a running control, named so it cannot be skipped
+    over in either direction.**
+
+    `spend_correction` has a caller: the cost review section of `brain.console.spend_view`
+    asks `brain.ops.retune.post_launch_correction` for it. It is not running, because nothing
+    opens that screen on a schedule, and the registry records `IN_PROCESS` rather than
+    anything stronger.
+
+    Asserted as a set equality against the registry, in both directions, for the same reason
+    `KNOWN_ORPHANS` is: a control that quietly slid back to having no caller would otherwise
+    pass, and so would one that became genuinely scheduled without anybody moving it.
+
+    Delete this and leaving the orphan list reads as arriving, which is the overstatement this
+    whole file is written against."""
+    from brain.ops.controls import Invocation as Started
+
+    in_process = {one.name for one in CONTROLS if one.invoked_by is Started.IN_PROCESS}
+
+    assert in_process == WIRED_BUT_NOT_SCHEDULED
+    assert set() == WIRED_BUT_NOT_SCHEDULED & KNOWN_ORPHANS
 
 
 def test_a_control_that_is_reachable_is_reachable_from_something_reachable() -> None:

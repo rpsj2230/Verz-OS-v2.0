@@ -634,7 +634,11 @@ CONTROLS: Final[tuple[Control, ...]] = (
         ),
         every=_WEEKLY,
         severity=Severity.NOTICED,
-        invoked_by=Invocation.NOTHING,
+        # Called by `brain.ops.retune.post_launch_correction`, which the cost review section
+        # of `brain.console.spend_view` reads. That is one link and not a schedule: nothing
+        # runs that screen weekly, so this row moved out of the orphan list and into the list
+        # of chains worth checking, which is a smaller claim and the true one.
+        invoked_by=Invocation.IN_PROCESS,
     ),
 )
 

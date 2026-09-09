@@ -23,6 +23,7 @@ import pytest
 from brain.console.screens import screen
 from brain.console.spend_view import (
     QUANTILES,
+    CostReview,
     Distribution,
     Friction,
     Line,
@@ -30,6 +31,7 @@ from brain.console.spend_view import (
     Setback,
     SpendViewError,
     cost_per_answer,
+    cost_review,
     dearest,
     distribution,
     friction,
@@ -50,7 +52,17 @@ from brain.ops.budgets import (
     BudgetPeriod,
     BudgetRow,
 )
-from brain.ops.spend import Actual, Dimension, Refusal, Rung, total_minor
+from brain.ops.retune import MEASUREMENT_WINDOW_DAYS
+from brain.ops.retune import Distribution as SpendWindow
+from brain.ops.spend import (
+    NO_CORRECTION,
+    Actual,
+    Dimension,
+    Observation,
+    Refusal,
+    Rung,
+    total_minor,
+)
 
 NOW = datetime(2026, 3, 10, 12, 0, tzinfo=UTC)
 USAGE = Capability(value="read:usage")
@@ -622,3 +634,70 @@ def test_a_list_of_the_dearest_nothing_is_refused() -> None:
     for none_at_all in (0, -1):
         with pytest.raises(SpendViewError, match="is not a list"):
             dearest(empty, none_at_all)
+
+
+# ------------------------------------------- the cost review after launch (M37.5.3)
+def _dear_runs(count: int) -> tuple[Observation, ...]:
+    return tuple(Observation(estimated_minor=100, actual_minor=200) for _ in range(count))
+
+
+def test_the_cost_review_shows_the_variance_and_the_corrected_factor_together() -> None:
+    """**A variance with no correction beside it is a worry with no action.** Spending twice
+    the projection is something a person can act on only next to what the estimator now says,
+    and a corrected factor on its own is a number with no evidence beside it.
+
+    Delete this and the screen can show one of them, and whichever it shows is the half that
+    reads as either an alarm nobody can answer or a change nobody asked for."""
+    review = cost_review(
+        projected_minor=500,
+        measured=SpendWindow(readings=(1000,), over_days=MEASUREMENT_WINDOW_DAYS),
+        prior=NO_CORRECTION,
+        observations=_dear_runs(60),
+    )
+
+    assert isinstance(review, CostReview)
+    assert review.variance.ratio == 2.0
+    assert review.correction.factor > NO_CORRECTION.factor
+    assert review.long_enough is True
+
+
+def test_a_review_inside_the_first_month_shows_a_variance_and_an_uncorrected_factor() -> None:
+    """The honest version of that screen in the first fortnight rather than an empty one: a
+    variance, the prior unchanged, and a sentence saying how much of a month was measured.
+
+    `long_enough` is on the object rather than in a caption, which is the same argument
+    `Report.machine_included` makes: a renderer cannot show the factor without the qualifier.
+
+    Delete this and the obvious tightening is to refuse a short window, and the cost review is
+    switched off for the month it is most worth reading."""
+    review = cost_review(
+        projected_minor=500,
+        measured=SpendWindow(readings=(1000,), over_days=3),
+        prior=NO_CORRECTION,
+        observations=_dear_runs(60),
+    )
+
+    assert review.long_enough is False
+    assert review.variance.ratio == 2.0
+    assert review.correction.factor == NO_CORRECTION.factor
+    assert str(MEASUREMENT_WINDOW_DAYS) in review.correction.reason
+
+
+def test_the_review_says_it_is_short_on_the_object_and_not_only_in_the_variance() -> None:
+    """The qualifier is repeated onto the review rather than left to be read off the variance,
+    because the correction is the figure a renderer shows large and the two would otherwise sit
+    on different objects.
+
+    Compared against the variance's own answer rather than against a literal, so the two can
+    never disagree.
+
+    Delete this and `long_enough` can drift from the variance it came from."""
+    for days in (1, MEASUREMENT_WINDOW_DAYS):
+        review = cost_review(
+            projected_minor=500,
+            measured=SpendWindow(readings=(1000,), over_days=days),
+            prior=NO_CORRECTION,
+            observations=_dear_runs(60),
+        )
+
+        assert review.long_enough is review.variance.long_enough
