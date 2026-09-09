@@ -397,23 +397,118 @@ def test_a_build_or_an_untagged_image_would_be_reported() -> None:
     assert any("no tag" in one for one in findings)
 
 
-def test_release_pinning_is_spread_over_three_variables_and_defaults_to_latest() -> None:
-    """**M42.1.4 does not work today and this is the measurement.** One image,
-    `ghcr.io/rpsj2230/verz-brain-v2.0`, is selected by `APP_IMAGE`, `BRAIN_IMAGE` and
-    `STAGING_IMAGE`, so a client who pins by setting one of them leaves the rest on their own
-    defaults: the container that imports the identity realm would be a different build from
-    the application it was built beside. Every default is `:latest`, so an install that pins
-    nothing is not pinned at all and its version changes on the next pull.
+def test_one_variable_now_selects_every_container_of_this_product() -> None:
+    """**M42.1.4, and this test read the opposite until 2026-09-09.**
 
-    This test is expected to fail when the variables are unified, and that failure is the
-    notification. Delete it and "release pinning per client" is claimed by a mechanism that
-    pins some of the containers."""
+    It was named "release pinning is spread over three variables and defaults to latest", and
+    it was the measurement of a leaf that did not work: an install's containers were selected
+    by `APP_IMAGE` and by `BRAIN_IMAGE`, so a client who pinned one of them left the realm
+    importer on the other's default and could run two builds of one product at once. The guide
+    said so out loud, in a row telling the reader to keep the two equal by hand, which is a
+    version pin that depends on somebody remembering.
+
+    One variable now, so a client holds a version back by setting one thing and no container
+    escapes it. That is the leaf: pinning per client without a fork.
+
+    The third variable, `STAGING_IMAGE`, is not part of that and is deliberately still its own.
+    Staging exists to run a build production has not taken yet, so a staging stack reading
+    production's variable is a staging stack that cannot stage. The test two below is that
+    boundary, and this assertion is written as a filter on the findings rather than as an empty
+    tuple so it keeps measuring the property it names while the `:latest` default is still a
+    separate open question.
+
+    Delete this and the variables drift apart again with nothing saying so."""
     findings = release_pinning_gaps(every_compose_file())
-    selected = [one for one in findings if "is selected by" in one]
 
-    assert len(selected) == 1
-    assert "'APP_IMAGE', 'BRAIN_IMAGE', 'STAGING_IMAGE'" in selected[0]
-    assert len(findings) - len(selected) == 6, "six services default to a moving tag"
+    assert [one for one in findings if "is selected by" in one] == []
+
+
+def test_every_image_still_defaults_to_a_moving_tag_and_that_is_a_decision() -> None:
+    """**Not the leaf, and a decision rather than a defect.**
+
+    M42.1.4 asks that a client who pins can hold a version back, and that works. This is the
+    other question: what happens to a client who pins nothing.
+    `${APP_IMAGE:-...:latest}` means an install that pins nothing follows whatever `latest`
+    points at on the day it pulls. The obvious repair is `:?`, the same shape `ops/deploy.sh`
+    took for the host it used to guess, and it was tried and reverted on 2026-09-09 for a
+    reason worth recording: the image name lives in the default, so a reference with no default
+    names no image, and the duplicate-variable check one test up goes blind. Removing the
+    default would trade a finding somebody can act on for a check that reports nothing.
+
+    It is also a live decision rather than a tidy-up. This deployment's automatic deploy pulls
+    `latest`, so requiring the variable stops it until somebody sets one. That is Needs Rupash
+    item 51.
+
+    The count is asserted so a seventh service added with a moving tag fails here rather than
+    joining a number nobody re-derives.
+
+    Delete this and the open half of the question stops being measured, and the reason item 51
+    is on the page at all is a sentence in a commit message."""
+    findings = release_pinning_gaps(every_compose_file())
+
+    assert len([one for one in findings if "follows whatever latest" in one]) == 6
+
+
+def test_a_second_variable_selecting_one_image_inside_one_stack_is_still_a_finding() -> None:
+    """The check has to keep working now that the tree is clean, and a check that can only be
+    run against a healthy declaration cannot be shown to fail.
+
+    Both defaults name one image, which is what makes this the case the check is for. The
+    first draft gave the first service `${APP_IMAGE:?set it}`, and a reference with no default
+    names no image, so the two services were two different images and the document could not
+    have produced the finding it asserts.
+
+    **Two files rather than one, because that is the shape the real defect had.** The
+    application declared `APP_IMAGE` in `docker-compose.yml` and the realm importer declared
+    `BRAIN_IMAGE` in `docker-compose.keycloak.yml`, and the two are one install because
+    neither file names a project of its own. A version of this written against a single
+    document passed while the grouping key was the file name, which is a check that would
+    have found nothing in the tree it was written for.
+
+    Delete this and the tree passing is the only evidence the check does anything."""
+    application = {"services": {"app": {"image": "${APP_IMAGE:-ghcr.io/x/brain:v1.2.3}"}}}
+    beside_it = {"services": {"realm": {"image": "${OTHER_IMAGE:-ghcr.io/x/brain:v1.2.3}"}}}
+
+    found = release_pinning_gaps(
+        {"docker-compose.yml": application, "docker-compose.keycloak.yml": beside_it}
+    )
+
+    assert any("one install runs two builds of one product" in one for one in found)
+
+
+def test_a_stack_of_its_own_may_pin_the_same_image_separately() -> None:
+    """**The other side of that check, and getting it wrong cost a full suite run.**
+
+    On 2026-09-09 the duplicate-variable finding was acted on by pointing every image
+    reference in the repository at `APP_IMAGE`, staging included. Staging is where a candidate
+    release is tried before production takes it, so one variable for both is a staging stack
+    that can only ever run what production already runs, which is not a staging stack.
+
+    A file that declares `name:` is its own compose project rather than an overlay merged into
+    the install, and that is the distinction the check now makes. It is read out of the files
+    rather than kept as a list of exceptions here, so a second stack added later is right
+    without anybody remembering this.
+
+    Delete this and the next reader unifies the variables again, because the finding says to
+    and nothing says not to."""
+    overlay = {"services": {"app": {"image": "${APP_IMAGE:-ghcr.io/x/brain:v1.2.3}"}}}
+    beside_it = {
+        "name": "brain-staging",
+        "services": {"app": {"image": "${STAGING_IMAGE:-ghcr.io/x/brain:v1.2.3}"}},
+    }
+
+    assert release_pinning_gaps({"a.yml": overlay, "b.yml": beside_it}) == ()
+
+    two_inside_the_named_one = {
+        "name": "brain-staging",
+        "services": {
+            "app": {"image": "${STAGING_IMAGE:-ghcr.io/x/brain:v1.2.3}"},
+            "worker": {"image": "${STAGING_WORKER_IMAGE:-ghcr.io/x/brain:v1.2.3}"},
+        },
+    }
+    found = release_pinning_gaps({"b.yml": two_inside_the_named_one})
+
+    assert any("inside one stack" in one for one in found), "a name is not an exemption"
 
 
 def test_an_image_pinned_to_a_tag_by_one_variable_is_reported_as_clean() -> None:

@@ -103,7 +103,7 @@ services:
     # `service_completed_successfully` above rather than a healthcheck: this exits when it is
     # done, and Keycloak must not start before the file exists or it starts with no realm and
     # every sign-in fails with no cause visible near the login page.
-    image: ${BRAIN_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
+    image: ${APP_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
     restart: "no"
     command:
       - python

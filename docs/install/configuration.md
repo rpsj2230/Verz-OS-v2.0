@@ -50,7 +50,7 @@ somebody wrote, and it is the reason the table is worth reading.
 
 | Variable | Profiles | Comes from | Default | What it is for |
 | --- | --- | --- | --- | --- |
-| `APP_IMAGE` | every profile | you | yes | The published image this install runs, by tag. Pinning it is how you hold a version back while other installs move on. |
+| `APP_IMAGE` | every profile | you | yes | The published image this install runs, by tag, and every container of it reads this one variable, the realm importer included. Setting it holds the whole install back rather than some of the containers. It still defaults to `:latest`, which means an install that pins nothing follows whatever that points at on the day it pulls; see Needs Rupash item 51 for why that default is still here. |
 | `APP_ROLE_PASSWORD` | every profile | installer | none | The password for the database role the application connects as. Never the same as the database superuser's: if it is, the pooler's ceiling and the connections it reserves are one leaked value away from being nobody's ceiling. |
 | `AUTOMATION_DB_PASSWORD` | full | you | none | The automation canvas's own database. It is a separate database with a separate login, and that is deliberate: the canvas runs work somebody assembled in a browser. |
 | `AUTOMATION_ENCRYPTION_KEY` | full | you | none | What the automation canvas encrypts its own stored connections with. |
@@ -59,7 +59,6 @@ somebody wrote, and it is the reason the table is worth reading.
 | `BRAIN_COMMIT_SHA` | every profile | you | yes | Which build is running, shown on `/health/ready`. The image bakes its own in, so setting it here replaces a true answer with whatever your deployment tool happens to know. Leave it. |
 | `BRAIN_CORS_ORIGINS` | every profile | you | none | The origins the console and the chat widget may be served from. Empty means no cross-origin access at all, which is the safe answer and the one to keep until you embed the widget on your own site. |
 | `BRAIN_ENV` | every profile | you | yes | `development`, `staging` or `production`. Production turns off the interactive API documentation, which otherwise lists every tool and capability the system has. Set it to `production`. |
-| `BRAIN_IMAGE` | standard, full | you | yes | The image the Keycloak realm helper runs, which is this product's own image. Keep it equal to `APP_IMAGE`. |
 | `BRAIN_INFERENCE_URL` | every profile | you | none | Where text is sent to have a model read it. Leave it empty on `lite`: startup refuses this on a profile that deploys no inference server, because a value copied from another install sends your documents to a host you did not choose. |
 | `BRAIN_LANGFUSE_HOST` | every profile | you | none | Where request traces are sent. Leave it empty unless this profile runs the trace ledger. |
 | `BRAIN_LANGFUSE_PUBLIC_KEY` | every profile | you | none | The trace ledger's public key. Half of a pair, and meant to be copied. |

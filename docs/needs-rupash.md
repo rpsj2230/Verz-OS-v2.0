@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**19 items are open, and they are not equally urgent.** They had accumulated into one
+**20 items are open, and they are not equally urgent.** They had accumulated into one
 paragraph in which three different items each claimed to be "the newest", so here they are
 sorted by what they actually need from you. Nothing below is a request to read code.
 
@@ -28,6 +28,12 @@ thirty days" was meant to mean, and the answer decides a safety property. Item 3
 you want the evaluation tool the plan named, or the one I used instead. Item 46 asks which pair of
 recovery figures goes into a client agreement, and gives you the three pairs and a
 recommendation. None of them blocks anything; all three are quick.
+
+**One is three numbered steps and the first one changes nothing.** Item 51: every container
+defaults to the `latest` image, so an install that pins nothing is not pinned at all. Making the
+version required would stop your automatic deploy until a value exists, so step one is to put
+that value in Coolify, where it changes nothing, and step two is to tell me. Half of this is
+already fixed: one variable now pins every container of an install instead of two.
 
 **One is about the tracker rather than the system.** Item 50: thirty of the two hundred
 tasks still open are things people do on the week of a migration rather than things anybody can
@@ -84,6 +90,62 @@ happened in.
 ---
 
 # Open
+
+## 51. Every container defaults to `latest`, and the fix stops your automatic deploy until you set one value
+
+**The decision.** Should an install that sets nothing run whatever `latest` points at, or should
+it refuse to start until somebody names a version? One of those is what you have today.
+
+**Recommendation: change it, and set the value on your server first.** The steps are in order
+and the second one is the one that matters.
+
+1. Open Coolify, go to the Company Brain resource, and look at its environment variables. If
+   `APP_IMAGE` is not there, add it, with the value `ghcr.io/rpsj2230/verz-brain-v2.0:latest`
+   for now. That is exactly what the compose file resolves to today, so this step changes
+   nothing about what runs.
+2. Tell me, and I will change the compose files so the variable is required rather than
+   defaulted. Nothing breaks, because step 1 put the value where the compose file reads it.
+3. From then on, holding a version back is one edit in Coolify: set `APP_IMAGE` to
+   `ghcr.io/rpsj2230/verz-brain-v2.0:<the tag you want>` instead of `latest`.
+
+**What is already fixed, so you know what is left.** One install's containers used to be
+selected by two different variables, `APP_IMAGE` and `BRAIN_IMAGE`. The container that imports
+your identity settings read the second one, so a client who pinned the first left that one on
+its own default and the realm importer could be a different build from the application it was
+built beside. The configuration guide even told the reader to keep the two equal by hand, which
+is a version pin that depends on somebody remembering. That is done: one variable now, and
+setting it holds the whole install back.
+
+A third variable, `STAGING_IMAGE`, is deliberately still separate, and the first attempt at
+this unified that one too. Staging is where a candidate release is tried before your live
+server takes it, so a staging stack that reads the same variable as production can only ever
+run what production already runs, which is not a staging stack. A test that had been written
+for a different reason caught it. Nothing there needs you.
+
+**One figure moved as a side effect and it is worth a sentence.** The realm importer runs the
+same image as the application, and while the two named it through different variables the
+sizing table counted it as a second image to download. The `standard` profile's disk figure
+drops from 38 GiB to 36 and `full` from 50 to 48. Nothing got smaller; the old figures included
+a pull that does not happen.
+
+**Why I did not just do the rest.** Two reasons, and the second is the one I would want to
+know.
+
+The first is yours: your server deploys automatically when a new image is published, and it
+finds that image through the default. Making the variable required stops that deploy until the
+value exists, and I do not change your live server.
+
+The second is a real trade in the code. The image's name lives inside the default. Take the
+default away and the compose file no longer says which image the service runs, so the check
+that found the three-variable problem in the first place cannot see this product's containers
+any more and goes quiet. I tried it, watched that check go blind, and put it back. Step 1 above
+is what makes the change safe without losing the check, because the value moves to the place
+the check does not need to read.
+
+**What happens if you do nothing.** Your installs follow `latest`. That is fine while there is
+one install and you are the person publishing the images. It stops being fine at the second
+client, because "hold this client back on last month's release" is then a fork rather than a
+setting, which is the thing M42.1.4 exists to prevent.
 
 ## 50. Thirty of the remaining tasks are things people do on the week of a migration, and the percentage counts them as if I could build them
 

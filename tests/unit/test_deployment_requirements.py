@@ -48,11 +48,18 @@ REPO = Path(__file__).resolve().parents[2]
 
 #: What each profile needs, pinned. Memory is computed from the files; cores and disk are the
 #: two ratios applied to them. A change to any of the three fails here with the profile named.
+#:
+#: Standard and full each lost 2 GiB of disk on 2026-09-09, and the deployment did not get
+#: smaller. The realm importer is built from this repository and runs the same image as the
+#: application, and it selected that image through `BRAIN_IMAGE` while the application
+#: selected it through `APP_IMAGE`. `images_in` counts distinct references, so two names for
+#: one pull were two pulls, and the figure a client sized a disk against included a download
+#: that never happens. Unifying the variable is what let it dedupe.
 EXPECTED: dict[str, tuple[int, int, int, int]] = {
     # profile: (memory MiB, containers, cores, disk GiB)
     "lite": (3968, 4, 2, 28),
-    "standard": (9920, 12, 5, 38),
-    "full": (12864, 19, 7, 50),
+    "standard": (9920, 12, 5, 36),
+    "full": (12864, 19, 7, 48),
 }
 
 
@@ -118,6 +125,38 @@ def test_the_standard_and_full_profiles_still_budget_a_component_with_no_service
         assert "presidio-analyzer" in findings[0]
 
     assert components_with_no_service("lite", files_of("lite")) == ()
+
+
+def test_the_sizing_table_a_client_reads_says_what_the_compose_files_say() -> None:
+    """**The figures in `install.md` were not checked against anything until 2026-09-09.**
+
+    They are what somebody buys a server against, and they had been written by hand from a
+    run of `spec_for` on the day the document was written. Two of the four disk figures went
+    stale the same day the realm importer stopped being counted as a second pull, and nothing
+    would have said so: the deployment tests all read the compose files, and the document is
+    the one surface that does not.
+
+    This is the shape the operations chapter had a week earlier, where a checked table
+    replaced three prose counts of "twelve" that were one out. A number in a document of
+    record is worse than no number, because a reader takes it for the current position.
+
+    Delete this and the sizing table drifts from the deployment with the tests still green,
+    and the reader who notices is the one whose disk filled."""
+    table = (REPO / "docs" / "install" / "install.md").read_text(encoding="utf-8")
+    rows = {
+        one.split("|")[1].strip().strip("`"): one
+        for one in table.splitlines()
+        if one.startswith("| `") and "GiB" in one
+    }
+
+    assert sorted(rows) == sorted(EXPECTED), "every profile has a row and no row is invented"
+    for profile, row in rows.items():
+        memory, containers, cores, disk = EXPECTED[profile]
+        cells = [one.strip() for one in row.split("|")]
+        assert f"{memory} MiB" in cells, f"{profile}: memory"
+        assert f"{cores}" in cells, f"{profile}: cores"
+        assert f"{disk} GiB" in cells, f"{profile}: disk"
+        assert f"{containers}" in cells, f"{profile}: containers"
 
 
 # --- the specification -----------------------------------------------------------------

@@ -61,7 +61,7 @@ Rejected: `git clone` for the release. It is one line shorter and it is the shap
 `brain.ops.independence.duplication_gaps` refuses in a build input, for the reason that ends
 with a client running a copy nobody fixed. The installer fetches one archive of one tag.
 
-Task ids: M42.1.3, M42.3.1, M42.3.4, M42.5.3, M42.5.15
+Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15
 """
 
 from __future__ import annotations
@@ -669,26 +669,50 @@ def rebuild_gaps(files: ComposeFiles) -> tuple[str, ...]:
 IMAGE_VARIABLE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::[-?]([^}]*))?\}$")
 
 
+#: A compose file with no `name:` is an overlay: `docker compose -f a -f b` merges it into the
+#: one project, so its services are containers of the same install. A file that declares its
+#: own name starts beside that install rather than inside it.
+THE_SHARED_STACK: Final = ""
+
+
+def _stack(document: Any) -> str:
+    """Which compose project this file's services belong to."""
+    declared = document.get("name") if hasattr(document, "get") else None
+    return declared if isinstance(declared, str) and declared else THE_SHARED_STACK
+
+
 def release_pinning_gaps(files: ComposeFiles) -> tuple[str, ...]:
     """Everything that stops a client holding one version back without forking (M42.1.4).
 
     Two shapes, and the first is the one nobody sees. A client pins by setting the variable
-    that selects the image. When *one* image is selected by more than one variable, setting
-    one of them pins some containers and leaves the rest on whatever the other variable
-    resolves to, so an install can run two builds of one product at once and every version
-    figure it reports is true of only part of it.
+    that selects the image. When *one* image is selected by more than one variable **within
+    one stack**, setting one of them pins some containers and leaves the rest on whatever the
+    other variable resolves to, so an install can run two builds of one product at once and
+    every version figure it reports is true of only part of it.
 
-    The second is the default. `${VAR:-name:latest}` means an install that pins nothing is not
-    pinned at all, and the release it runs changes under it on the next pull.
+    **Within one stack, because a second stack is the point rather than the defect.** On
+    2026-09-09 this check's finding was acted on by pointing every image reference in the
+    repository at `APP_IMAGE`, staging included, and staging is where a candidate release is
+    tried before production takes it: one variable for both is a staging stack that can only
+    ever run what production already runs. `test_staging_does_not_reuse_a_production_credential`
+    caught it, and the distinction is in the compose files themselves rather than in a list of
+    exceptions here: the staging file declares `name:`, so it is its own project, and every
+    other file is an overlay merged into the install.
+
+    The second shape is the default. `${VAR:-name:latest}` means an install that pins nothing
+    is not pinned at all, and the release it runs changes under it on the next pull. That one
+    is per service and is not scoped to a stack, because a staging stack that follows a moving
+    tag is still an install whose version changed under it.
 
     Reported rather than raised, in the shape `test_compose.py` uses: this is true on arrival,
     and a check that is red the day it lands is a check somebody switches off. What pins it is
     a test asserting the exact set, so a fourth variable fails rather than joining a list
     nobody reads.
     """
-    selected: dict[str, set[str]] = {}
+    selected: dict[tuple[str, str], set[str]] = {}
     found: list[str] = []
     for name in sorted(files):
+        stack = _stack(files[name])
         for service, body in sorted(_services(files[name]).items()):
             if not isinstance(body, dict):
                 continue
@@ -698,18 +722,19 @@ def release_pinning_gaps(files: ComposeFiles) -> tuple[str, ...]:
             variable, default = match.group(1), match.group(2) or ""
             image = default.rsplit(":", 1)[0] if ":" in default else default
             if image:
-                selected.setdefault(image, set()).add(variable)
+                selected.setdefault((stack, image), set()).add(variable)
             if default.endswith(":latest"):
                 found.append(
                     f"{name}: {service!r} defaults to {default!r}, so an install that pins "
                     "nothing follows whatever latest points at on the day it pulls"
                 )
-    for image, variables in sorted(selected.items()):
+    for (_stack_name, image), variables in sorted(selected.items()):
         if len(variables) < 2:
             continue
         found.append(
-            f"{image!r} is selected by {sorted(variables)}, so pinning one of them leaves "
-            "the rest on their own default and one install runs two builds of one product"
+            f"{image!r} is selected by {sorted(variables)} inside one stack, so pinning one "
+            "of them leaves the rest on their own default and one install runs two builds "
+            "of one product"
         )
     return tuple(found)
 
