@@ -158,6 +158,22 @@ jobs:
         # are the three ways it is wrong that a diff does not show: a rename written as a
         # drop plus an add, a not-null column with no default, and schema mixed with data.
         run: uv run python -m brain.ops.migration_policy
+      - name: A migration leaves the release before it working
+        # M30.2.6, and it is deliberately not a sweep. Every member of `brain.ops.sweeps` is
+        # a property of the whole repository: row-level security on every table, one tool
+        # grammar, no client value anywhere. This is a rule applied to one directory at the
+        # moment a file is added to it, which is the shape `brain.ops.migration_policy`
+        # already has and is why it runs beside it rather than inside the registry.
+        #
+        # It is here rather than in `tests`, where the migrations already run forward and
+        # back, because that job proves a migration works against its own code and this asks
+        # whether it works against the release the deploy has not yet replaced. That pair is
+        # never in one room, on a runner or on a server, so nothing else can ask.
+        #
+        # Read the output rather than the tick. It ends in a count of statements the check
+        # could not read and a list of what it does not cover; a green line here is a
+        # narrower claim than it looks and the run says so itself.
+        run: uv run python -m brain.deployment.compatibility
 
   # The console's guards ran nowhere but a laptop until 2026-09-07.
   #
