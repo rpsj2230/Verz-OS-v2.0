@@ -27,6 +27,22 @@ was never opened and one that opened and saw nothing are the same empty result a
 opposite things, which is the distinction `brain.migration.inventory` is built around. See
 `A_DISABLED_JOB_AND_A_STOPPED_JOB_ARE_DIFFERENT_FACTS`.
 
+**A completed cutover is refused while any act with a security consequence is unrecorded**,
+and that is the newest of the refusals here. Five leaves of the plan are things a person does
+rather than code anybody could write, and their absence is not untidiness: an OAuth grant
+nobody withdrew is how an outgoing vendor keeps reading a client's mail after the account is
+believed closed, and a date nobody recorded cannot be reconstructed afterwards. They are named
+in `brain.migration.checklist.CUTOVER_GATED_ACTS` and `CompletedCutover` cannot be built while
+one of them is missing. That is what makes the delivery checklist something other than a list:
+it gates the day rather than the build. See `AN_ACT_NOBODY_RECORDED_IS_AN_ACT_NOBODY_DID`.
+
+They are refused here and not folded into `decommission_gaps`, which is the tidier-looking
+design and answers a different question. That function reports what is still true of the old
+system; two of the gated acts are about the client's own tenant and the client's own backup and
+are not facts about the old system at all. Folding them in would also make the default empty
+tuple of acts mean "nothing was required", which is the permissive reading of an absence and
+the one this repository refuses everywhere else.
+
 **The final backup's retention is derived and never typed.** M37.1.4.4 says the final backup is
 retained per the retention policy, and the policy is `brain.ops.retention.BACKUP_RETENTION_DAYS`.
 A date typed into a decommission record is a date somebody worked out on the day, which is how
@@ -53,6 +69,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
 
+from brain.migration.checklist import CUTOVER_GATED_ACTS
 from brain.migration.inventory import MigrationError
 from brain.ops.retention import BACKUP_RETENTION_DAYS
 
@@ -79,6 +96,17 @@ A_DISABLED_JOB_AND_A_STOPPED_JOB_ARE_DIFFERENT_FACTS: Final = (
     "silence after the disable rather than a flag, and a job disabled and never watched "
     "afterwards is not verified: an observation window nobody opened and one that opened and "
     "saw nothing are the same empty result, and they mean opposite things."
+)
+
+#: Why the acts with a security consequence stop a cutover being reported complete.
+AN_ACT_NOBODY_RECORDED_IS_AN_ACT_NOBODY_DID: Final = (
+    "Five leaves of the plan are things a person does on the week of a migration, and each of "
+    "them leaves a way in if it is skipped: a grant nobody withdrew, an application still "
+    "installed in the tenant, a bot still sitting in a group, a date nobody wrote down, a "
+    "backup nobody has read back. None of them can be verified from here, so what is recorded "
+    "is that somebody did it and who says so. An unrecorded act and an act nobody did are the "
+    "same absence from this side, and the permissive reading of that absence is how every one "
+    "of them gets missed, so the cutover is refused rather than reported with a note."
 )
 
 #: Why archiving is not the first thing that happens.
@@ -233,6 +261,33 @@ class FinalBackup:
         return self.taken_at + timedelta(days=retention_days)
 
 
+# ------------------------------------------------------ the acts a person does on the week
+@dataclass(frozen=True)
+class ActRecord:
+    """One item off the delivery checklist, and who says it happened.
+
+    `recorded_by` is not administrative. Nothing here can reach the outgoing system, so the
+    whole content of this record is somebody's word that they did it, and a word with no name
+    on it is a tick. It is the same distinction `ScheduledJob` draws between a job that was
+    disabled and a job somebody watched.
+    """
+
+    leaf: str
+    performed_at: datetime
+    recorded_by: str
+
+    def __post_init__(self) -> None:
+        if not self.leaf.strip():
+            msg = "an act record names no task, so nothing can be found on the checklist"
+            raise DecommissionError(msg)
+        if not self.recorded_by.strip():
+            msg = (
+                f"the act recorded against {self.leaf!r} says who did it nowhere, and nothing "
+                "here can check it, so an unattributed record is a tick"
+            )
+            raise DecommissionError(msg)
+
+
 # ------------------------------------------------------------- the order of it (M37.1.4.1)
 @dataclass(frozen=True)
 class Decommission:
@@ -244,6 +299,9 @@ class Decommission:
     revocations: tuple[Revocation, ...] = ()
     jobs: tuple[ScheduledJob, ...] = ()
     final_backup: FinalBackup | None = None
+    #: What somebody did on the week, off `docs/delivery-checklist.md`. Empty by default and
+    #: empty is not "none were required": the five that gate are required whatever this holds.
+    acts: tuple[ActRecord, ...] = ()
 
     def __post_init__(self) -> None:
         if self.read_only_at is not None and self.read_only_at < self.cut_over_at:
@@ -268,6 +326,59 @@ class Decommission:
                 f"the old system was archived at {self.archived_at} and made read-only at "
                 f"{self.read_only_at}, which is the wrong way round. "
                 f"{AN_ARCHIVE_TAKEN_WHILE_SOMEBODY_CAN_STILL_WRITE_IS_ALREADY_OUT_OF_DATE}"
+            )
+            raise DecommissionError(msg)
+
+
+# --------------------------------------------------------- what a cutover may be reported as
+def security_acts_outstanding(record: Decommission) -> tuple[str, ...]:
+    """The acts with a security consequence that nobody has recorded doing.
+
+    Ordered by task id rather than by the order somebody happened to record them, so two
+    reports of the same cutover read the same way and a diff between them says something. See
+    `AN_ACT_NOBODY_RECORDED_IS_AN_ACT_NOBODY_DID`.
+    """
+    recorded = {one.leaf for one in record.acts}
+    return tuple(
+        f"{leaf}: {what}"
+        for leaf, what in sorted(CUTOVER_GATED_ACTS.items())
+        if leaf not in recorded
+    )
+
+
+def may_report_complete(record: Decommission) -> bool:
+    """Whether this cutover can be reported complete, asked without raising."""
+    return not security_acts_outstanding(record)
+
+
+@dataclass(frozen=True)
+class CompletedCutover:
+    """A cutover reported complete, which cannot be built while a gated act is unrecorded.
+
+    A dataclass rather than a function returning a boolean, and the reason is the same one the
+    three moments above are timestamps rather than flags: the refusal has to sit where the
+    claim is made. Somewhere there is a screen, a report or a handover pack that says the
+    cutover is done, and whatever writes it constructs this. There is no arrangement of these
+    fields that says so while an act is outstanding, in the way
+    `brain.migration.skills.arriving` has nowhere to put another platform's approval.
+
+    It carries the whole record rather than a summary, because the question asked afterwards
+    is never "was it complete" on its own, it is "what did complete mean on that day".
+    """
+
+    record: Decommission
+    reported_by: str
+
+    def __post_init__(self) -> None:
+        if not self.reported_by.strip():
+            msg = "a completed cutover was reported by nobody"
+            raise DecommissionError(msg)
+        outstanding = security_acts_outstanding(self.record)
+        if outstanding:
+            msg = (
+                f"the cutover at {self.record.cut_over_at} cannot be reported complete: "
+                f"{len(outstanding)} act(s) with a security consequence are unrecorded. "
+                f"{'; '.join(outstanding)}. {AN_ACT_NOBODY_RECORDED_IS_AN_ACT_NOBODY_DID}"
             )
             raise DecommissionError(msg)
 

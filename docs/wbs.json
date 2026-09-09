@@ -99,7 +99,9 @@
     "Adversarial corpus: injection attempts in documents and tool results",
     "Factory helpers for principals, scopes and grants"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M1",
@@ -189,7 +191,9 @@
     "Console page to choose, configure and test a staff source before it runs",
     "Scheduled sync with a dry run showing what would be added and removed"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M2",
@@ -217,7 +221,9 @@
     "Department creation wizard with starter scopes",
     "Cross-department behaviour: intersect, state the gap, offer request-access"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M3",
@@ -301,7 +307,9 @@
     "Compose the answer with citations and freshness",
     "Attach the trace reference for explainability"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M4",
@@ -349,7 +357,9 @@
     "Property-based tests over nested shapes",
     "Redaction counts and field names recorded, values never"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M5",
@@ -405,7 +415,9 @@
     "Provider residency registry with documented storage location",
     "Refusal path when no compliant rung exists"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M6",
@@ -459,7 +471,9 @@
     "Output-length instruction separate from effort setting",
     "Per-lane effort pinning to avoid cache invalidation"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M7",
@@ -521,7 +535,9 @@
     "Sell price visible while cost and margin are restricted",
     "Classification editor in the console"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M8",
@@ -557,7 +573,9 @@
     "Timeout and expiry behaviour on every escalation",
     "Takeover signal fed to the circuit breaker"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M9",
@@ -583,7 +601,9 @@
     "Follow-up handling with retained context",
     "Correction handling that feeds the learning signal"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M10",
@@ -647,7 +667,9 @@
     "Email adapter, inbound and outbound",
     "REST API with key management"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M11",
@@ -735,7 +757,9 @@
     "HubSpot",
     "Google Drive or Microsoft 365"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M12",
@@ -777,7 +801,9 @@
     "run_skill_script as the single execution tool, sandboxed and leashed",
     "SOP import accepting messy Word and Confluence documents"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M13",
@@ -893,7 +919,9 @@
     "Memory never exported under any setting",
     "Visibility: private, organisation, catalogue"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M14",
@@ -981,7 +1009,9 @@
     "The same cascade applied to projects",
     "Privacy: hashed join keys only, never full contact records"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M15",
@@ -1021,7 +1051,9 @@
     "Deduplication across planes",
     "Retrieval logging for the learning signal"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M16",
@@ -1085,7 +1117,9 @@
     "Department admin view of department memory",
     "Tier three review queue with a budget alarm when it grows"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M17",
@@ -1143,7 +1177,9 @@
     "Signing and delivery guarantees",
     "Subscriber management in the console"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M18",
@@ -1185,7 +1221,9 @@
     "Per-subtask cost and duration surfaced to the user",
     "Partial-failure handling with a stated gap"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M19",
@@ -1267,7 +1305,9 @@
     "Write capability behind envelope approval",
     "Assisted ceiling on writes unless a per-surface exception is signed"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M20",
@@ -1315,7 +1355,9 @@
     "Router collision check",
     "Publish record with who, when and the diff"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M21",
@@ -1359,7 +1401,9 @@
     "Budget consumption against pace",
     "Every refusal and degradation with its cause"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M22",
@@ -1395,7 +1439,9 @@
     "Load test at peak concurrency",
     "Documented first bottleneck at ten and one hundred times"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M23",
@@ -1421,7 +1467,9 @@
     "Repeated permission-denied pattern alerting",
     "Automated traffic identification and exclusion from metrics"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M24",
@@ -1451,7 +1499,9 @@
     "Data processing record per connector",
     "PDPA breach assessment workflow with the correct clock"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M25",
@@ -1485,7 +1535,9 @@
     "Bulk export for eDiscovery with an audit row and a required reason",
     "Knowledge export preserving scope metadata"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M26",
@@ -1527,7 +1579,9 @@
     "Personal knowledge and memory disposition policy",
     "Audit record retained regardless"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M27",
@@ -1637,7 +1691,9 @@
     "Rate limits and what is currently being throttled",
     "Capacity: connections, memory and pool sizes against what is deployed"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M28",
@@ -1669,7 +1725,9 @@
     "One click converts it into a permanent regression test with mocked tools",
     "Two-tier quality: automated evaluation on every request, human annotation on a daily sample"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M29",
@@ -1723,7 +1781,9 @@
     "Isolation tier per point: in-process, sidecar, sandbox",
     "Core contract test: a plugin cannot see an unredacted result it did not produce, and cannot widen entitlements"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M30",
@@ -1807,7 +1867,9 @@
     "Dashboard against target",
     "RPO and RTO per profile written into the client agreement"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M31",
@@ -1893,7 +1955,9 @@
     "Rotation without redeploy",
     "Audit device enabled and shipped to the ledger"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M32",
@@ -1991,7 +2055,9 @@
     "Documented rule: deterministic automations only, never agent control flow",
     "Test proving a flow cannot reach data outside the caller's entitlements"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M33",
@@ -2081,7 +2147,9 @@
     "Client notification on every elevation",
     "Automatic expiry and revocation"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M34",
@@ -2135,7 +2203,9 @@
     "Upgrade and rollback procedure",
     "Restore drill procedure"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M35",
@@ -2179,7 +2249,9 @@
     "Installable shell",
     "Push for approvals, deferred with a stated trigger"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M36",
@@ -2239,7 +2311,9 @@
     "Documented first bottleneck at ten and one hundred times",
     "Results recorded against the SLO table"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M37",
@@ -2405,7 +2479,188 @@
     "Estimator correction from actuals",
     "Budget thresholds retuned with real distribution rather than assumptions"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {
+    "M37.2.1.1": {
+     "kind": "UNBUILDABLE",
+     "gate": false,
+     "why": "the count and the names are one company's authored estate, and a product every client installs cannot hold them"
+    },
+    "M37.2.1.2": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.1.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.1.4": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.1.5": {
+     "kind": "UNBUILDABLE",
+     "gate": false,
+     "why": "one company's chat groups, named. The register that holds the answer is generic; the answer is not"
+    },
+    "M37.2.1.6": {
+     "kind": "UNBUILDABLE",
+     "gate": false,
+     "why": "names the outgoing vendor and what it made for one company"
+    },
+    "M37.2.2.1": {
+     "kind": "UNBUILDABLE",
+     "gate": false,
+     "why": "four of one company's skills by name. `brain.migration.skills` is the generic half and is built"
+    },
+    "M37.2.5.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.5.2": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.5.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.5.4": {
+     "kind": "ACT",
+     "gate": true,
+     "why": "a bot left in a group keeps receiving that group's messages. Removing the tenant installation is the authorisation half and this is the delivery half, and either one left undone leaves the outgoing vendor reading the client's internal chat"
+    },
+    "M37.2.5.5": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.6.1": {
+     "kind": "ACT",
+     "gate": true,
+     "why": "every grant is a live credential on somebody else's service and cancelling the subscription does not withdraw one. This is how an outgoing vendor keeps reading a client's mail after everybody believes the account is closed"
+    },
+    "M37.2.6.2": {
+     "kind": "ACT",
+     "gate": true,
+     "why": "a tenant installation is a tenant-level grant. Removing the app from every group removes what staff see and leaves the scopes it was installed with, which is the same failure as an unrevoked grant one layer up"
+    },
+    "M37.2.6.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.6.4": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.2.6.5": {
+     "kind": "ACT",
+     "gate": true,
+     "why": "without it there is no evidence of when access ended, and the last invoice is the date everybody reaches for instead. It is the fact an incident review or an audit asks for, and it cannot be reconstructed afterwards"
+    },
+    "M37.3.1.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.1.2": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.1.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.1.4": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.2.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.2.2": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.2.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.3.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.3.2": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.3.3.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.4.1.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.4.1.3": {
+     "kind": "ACT",
+     "gate": true,
+     "why": "a backup nobody has read back is a file, which is the refusal `brain.ops.recovery` already makes about the live system and `FinalBackup.verified` makes about the last copy of the old one. In front of the client is what makes it evidence rather than a claim, and the cutover is the last moment it can be asked for"
+    },
+    "M37.4.1.4": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.4.1.5": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.4.2.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.4.2.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    }
+   },
+   "act_groups": {
+    "M37.2": "Replacing AnyGen",
+    "M37.2.1": "What is actually in there",
+    "M37.2.2": "Skills come across, they are not rewritten",
+    "M37.2.5": "Cutover in Lark, where staff will notice",
+    "M37.2.6": "Decommission a SaaS, which is not the same as a server",
+    "M37.3": "Pilot and rollout",
+    "M37.3.1": "Pilot",
+    "M37.3.2": "Departmental rollout",
+    "M37.3.3": "Training",
+    "M37.4": "Acceptance and commercial close",
+    "M37.4.1": "Acceptance",
+    "M37.4.2": "Contract artifacts"
+   }
   },
   {
    "id": "M38",
@@ -2537,7 +2792,9 @@
     "M38.4.2.3": 5,
     "M38.4.2.4": 5,
     "M38.4.2.5": 5
-   }
+   },
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M39",
@@ -2691,7 +2948,9 @@
     "Failure after a threshold pauses the automation and notifies the owner",
     "Every automation appears in the scheduled job registry with what it guards"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M40",
@@ -2805,7 +3064,9 @@
     "Same approval reachable from Lark and from the web without double action",
     "Mobile layout treated as the primary case for approvals"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M41",
@@ -2857,7 +3118,9 @@
     "Repository structure a reader can navigate: what is application, what is configured per client, what is never edited, where migrations, scripts and documentation live",
     "Verz is one deployment: its values live in a per-install file and never in this repository"
    ],
-   "leaf_waves": {}
+   "leaf_waves": {},
+   "leaf_acts": {},
+   "act_groups": {}
   },
   {
    "id": "M42",
@@ -2966,7 +3229,9 @@
     "M42.4.4": 6,
     "M42.4.5": 6,
     "M42.4.6": 6
-   }
+   },
+   "leaf_acts": {},
+   "act_groups": {}
   }
  ]
 }

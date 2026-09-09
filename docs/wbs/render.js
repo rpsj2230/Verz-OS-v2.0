@@ -2,6 +2,7 @@ const fs = require("fs");
 const SCH = require(__dirname + "/schedule.js");
 const SPR = {LAUNCH:{},WAVE:{},NAMES:{},START:"2026-09-08",LEAVES_PER_TRACK_DAY:14,INTEGRATION_DAYS:1};
 const MODS = [].concat(require(__dirname + "/wbs-a.js"), require(__dirname + "/wbs-b.js"), require(__dirname + "/wbs-c.js"), require(__dirname + "/wbs-d.js"), require(__dirname + "/wbs-e.js"), require(__dirname + "/wbs-f.js"));
+const ACT = require(__dirname + "/acts.js");
 // ---- scheduling helpers
 // Guarded, because a non-finite count here is an infinite loop with no error and no
 // output. On 2026-09-07 a wave holding leaves but no module of its own made `days`
@@ -32,6 +33,23 @@ const MODWAVE = Object.fromEntries(TREE.map(m => [m.id, m.wave]));
 let LEAVES = 0, NODES = 0, MAXD = 0;
 function walk(n, d) { NODES++; MAXD = Math.max(MAXD, d); if (!n.k.length) LEAVES++; else n.k.forEach(c => walk(c, d + 1)); }
 TREE.forEach(m => m.k.forEach(t => walk(t, 2)));
+
+// Leaf sentence by id, from this file's own numbering rather than from export.js's. The two
+// programs number the tree separately and always have; checking the act flags against each
+// one separately is what makes a repointed id fail whichever is run first, instead of failing
+// in the one that happens to run second.
+const TEXT_OF = {};
+TREE.forEach(m => {
+  const readIds = (n, id) => { if (!n.k.length) { TEXT_OF[id] = n.n; return } n.k.forEach((c, i) => readIds(c, id + "." + (i + 1))) };
+  m.k.forEach((t, i) => readIds(t, m.id + "." + (i + 1)));
+});
+// Throws rather than rendering a tracker whose flags point at work nobody chose.
+const ACT_COUNT = ACT.check(id => TEXT_OF[id]);
+//: Leaves a commit can close. The percentage at the top of this page still counts every leaf,
+//: so it agrees with /build, which reads status.json and cannot be taught about acts from
+//: here. The buildable pair is shown beside it and labelled, because two pages built from one
+//: WBS disagreeing about a headline number is a defect this tracker has already shipped once.
+const BUILDABLE = LEAVES - ACT_COUNT;
 
 // A leaf can belong to a later wave than its module. M38's pipeline is wave 0, but "what
 // is live after wave 3" cannot be done before wave 3. Counting by module would both put
@@ -149,7 +167,13 @@ function renderNode(node, id, depth) {
   let h = `<li class="n d${depth}${leaf ? " leaf" : ""}" data-id="${id}">`;
   h += `<div class="row">`;
   const dt = DATE[id];
-  h += leaf ? `<input type="checkbox" class="cb" id="cb-${id}" data-id="${id}" data-wave="${waveOfLeaf(id, MODWAVE[id.split(".")[0]])}" data-due="${dt?iso(dt):""}"><label class="lbl" for="cb-${id}"><span class="tid">${id}</span><span class="txt">${esc(node.n)}</span><span class="due" data-due="${dt?iso(dt):""}">${dt?fmt(dt):""}</span></label>`
+  const act = ACT.ACTS[id];
+  // The flag rides on the checkbox because that is what the counter walks, and the chip sits
+  // in the label because a leaf nobody can commit has to be readable as one on the page and
+  // not only in a total at the top.
+  const actAttrs = act ? ` data-act="${act.kind}"${act.gate ? ` data-gate="1"` : ""}` : "";
+  const actChip = act ? `<span class="act${act.gate ? " gate" : ""}" title="${esc(act.gate ? "Gates the cutover: " + act.why : act.why || "Work for a person on the week of the migration, not a commit")}">${act.kind === "UNBUILDABLE" ? "NOT CODE HERE" : "ON THE WEEK"}${act.gate ? " · GATES CUTOVER" : ""}</span>` : "";
+  h += leaf ? `<input type="checkbox" class="cb" id="cb-${id}" data-id="${id}" data-wave="${waveOfLeaf(id, MODWAVE[id.split(".")[0]])}" data-due="${dt?iso(dt):""}"${actAttrs}><label class="lbl" for="cb-${id}"><span class="tid">${id}</span><span class="txt">${esc(node.n)}</span>${actChip}<span class="due" data-due="${dt?iso(dt):""}">${dt?fmt(dt):""}</span></label>`
             : `<span class="tid">${id}</span><span class="txt grp">${esc(node.n)}</span><span class="prog" data-for="${id}"></span>`;
   h += `</div>`;
   if (!leaf) {
@@ -250,6 +274,9 @@ li.d3>.row .txt.grp{font-size:13.5px;color:var(--body)}
 .lbl{display:flex;gap:8px;cursor:pointer;flex:1}
 li.leaf.done .txt{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--ok)}
 li.leaf.done .lbl::after{content:"DONE";font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;color:var(--ok);background:var(--ok-bg);padding:2px 5px;border-radius:2px;align-self:flex-start;margin-top:1px;flex:none}
+.act{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;color:var(--warn);background:var(--warn-bg);padding:2px 5px;border-radius:2px;align-self:flex-start;margin-top:1px;flex:none;white-space:nowrap;cursor:help}
+.act.gate{color:#B4342E;background:var(--warn-bg);box-shadow:inset 0 0 0 1px #B4342E}
+li.leaf .cb[data-act]{accent-color:var(--warn)}
 .prog{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none;padding-top:3px}
 .prog.full{color:var(--ok);font-weight:700}
 .due{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none;padding-top:3px;margin-left:auto;white-space:nowrap}
@@ -291,6 +318,8 @@ footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-fa
       <span><b id="cDone">0</b> done</span>
       <span><b id="cTotal">${LEAVES}</b> total</span>
       <span><b id="cLeft">${LEAVES}</b> remaining</span>
+      <span title="Leaves a commit can close. The percentage counts every leaf, so it agrees with /build."><b id="cBuild">0</b> of ${BUILDABLE} buildable</span>
+      <span title="Work for a person on the week of the migration, which no commit can close."><b id="cActs">${ACT_COUNT}</b> acts on the week</span>
       <span><b id="cMods">0</b>/${TREE.length} modules complete</span>
     </div>
     <div class="acts">
@@ -343,9 +372,18 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
 
   function refresh(){
     var done=0, byWave={}, byMod={};
+    // Two numbers rather than one, decided 2026-09-09. buildDone counts only the leaves a
+    // commit can close, and actsLeft counts the ones a person does on the week of the
+    // migration. Folded together the figure stops rising around 86 percent and the stop does
+    // not mean the build stalled. The headline percentage above still counts every leaf,
+    // because /build reads status.json and the two pages have to agree about it.
+    var buildDone=0, actsLeft=0;
     boxes.forEach(function(b){
       var id=b.getAttribute("data-id");
       var mod=id.split(".")[0];
+      var isAct=b.getAttribute("data-act")!==null;
+      if(isAct&&!state[id])actsLeft++;
+      if(!isAct&&state[id])buildDone++;
       // The leaf's own wave, not its module's. A leaf can sit later than its module: M38's
       // pipeline is wave 0, and "what is live after wave 3" cannot be done before wave 3.
       // This read the module wave and put seventeen of M38 leaves into wave 0 denominator,
@@ -377,6 +415,8 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     document.getElementById("fill").style.width=p+"%";
     document.getElementById("cDone").textContent=done;
     document.getElementById("cLeft").textContent=total-done;
+    document.getElementById("cBuild").textContent=buildDone;
+    document.getElementById("cActs").textContent=actsLeft;
 
     // group progress
     [].slice.call(document.querySelectorAll(".prog")).forEach(function(el){
@@ -472,4 +512,5 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
 
 fs.writeFileSync(__dirname + "/../tracker.html", html);
 console.log("modules", TREE.length, "| nodes", NODES, "| LEAF TASKS", LEAVES, "| max depth", MAXD);
+console.log("acts no commit can close:", ACT_COUNT, "| buildable:", BUILDABLE);
 console.log("leaves by wave:", JSON.stringify(waves));

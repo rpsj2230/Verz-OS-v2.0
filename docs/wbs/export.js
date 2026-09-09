@@ -12,6 +12,7 @@ const MODS = [].concat(
   require(path.join(__dirname, "wbs-f.js"))
 );
 const SCH = require(path.join(__dirname, "schedule.js"));
+const ACT = require(path.join(__dirname, "acts.js"));
 
 // Leaf numbering must match render.js exactly, or a commit closing M0.2.4 would tick a
 // different box in the tracker than the one the status page counts.
@@ -35,6 +36,38 @@ function leaves(node, prefix, out) {
   keys.forEach((key, i) => out.push([`${prefix}.${kids.length + i + 1}`, key]));
 }
 
+// The name of every node that is not a leaf, by id. Only used for the ones holding a flagged
+// leaf, and gathered by walking the tree the same way `leaves` does rather than by a second
+// numbering: a heading over the wrong group is the same class of error as a flag on the wrong
+// leaf, and it is the one a reader of the delivery checklist would believe.
+function groups(node, prefix, out) {
+  const kids = node.s || [];
+  kids.forEach((child, i) => {
+    if (typeof child === "string") return;
+    const id = `${prefix}.${i + 1}`;
+    out[id] = child.n;
+    groups(child, id, out);
+  });
+}
+
+//: Every leaf sentence in the whole breakdown, by id. Built before the modules so the flags
+//: can be checked against it once, rather than per module where a flag naming a leaf in
+//: another module would look like a flag naming no leaf at all.
+const ALL_TEXTS = {};
+const ALL_GROUPS = {};
+MODS.forEach((m) => {
+  (m.tasks || []).forEach((t, i) => {
+    const pairs = [];
+    leaves(t, `${m.id}.${i + 1}`, pairs);
+    pairs.forEach(([id, text]) => (ALL_TEXTS[id] = text));
+    ALL_GROUPS[`${m.id}.${i + 1}`] = t.n;
+    groups(t, `${m.id}.${i + 1}`, ALL_GROUPS);
+  });
+});
+// Throws rather than writing a stale `wbs.json`, so a leaf that moved under a flag is a build
+// failure and not a checklist quietly listing different work. See the header of acts.js.
+const ACT_COUNT = ACT.check((id) => ALL_TEXTS[id]);
+
 const modules = MODS.map((m) => {
   const pairs = [];
   (m.tasks || []).forEach((t, i) => leaves(t, `${m.id}.${i + 1}`, pairs));
@@ -47,6 +80,19 @@ const modules = MODS.map((m) => {
     const w = (SCH.LEAF_WAVE || {})[id];
     if (w !== undefined && w !== modWave) leaf_waves[id] = w;
   });
+  const leaf_acts = {};
+  const act_groups = {};
+  ids.forEach((id) => {
+    const flag = ACT.ACTS[id];
+    if (!flag) return;
+    leaf_acts[id] = { kind: flag.kind, gate: flag.gate === true, why: flag.why || "" };
+    // Every ancestor of the leaf that is a group, which is every prefix from the task down.
+    const parts = id.split(".");
+    for (let cut = 2; cut < parts.length; cut++) {
+      const gid = parts.slice(0, cut).join(".");
+      if (ALL_GROUPS[gid] !== undefined) act_groups[gid] = ALL_GROUPS[gid];
+    }
+  });
   return {
     id: m.id,
     name: m.name,
@@ -58,6 +104,14 @@ const modules = MODS.map((m) => {
     // against itself wearing a different hat.
     leaf_texts: pairs.map((one) => one[1]),
     leaf_waves,
+    // Leaves no commit can close, by id, with the kind and whether the leaf gates the
+    // cutover. Absent from a module holding none, for the reason `leaf_waves` is: the common
+    // case should be silence rather than 1218 entries saying nothing.
+    leaf_acts,
+    // The headings above those leaves, so the generated checklist can be read by somebody who
+    // is not holding the tracker open. Only the ancestors of a flagged leaf, so a module with
+    // no acts carries nothing.
+    act_groups,
   };
 });
 
@@ -70,4 +124,9 @@ const out = {
 
 fs.writeFileSync(path.join(__dirname, "..", "wbs.json"), JSON.stringify(out, null, 1));
 const total = modules.reduce((a, m) => a + m.leaf_ids.length, 0);
+const gated = Object.values(ACT.ACTS).filter((one) => one.gate === true).length;
 console.log(`wrote wbs.json: ${modules.length} modules, ${total} leaves`);
+console.log(
+  `  of which ${ACT_COUNT} are acts no commit can close, ${gated} of them gating the cutover;` +
+    ` ${total - ACT_COUNT} buildable`
+);
