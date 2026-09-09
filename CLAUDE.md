@@ -219,7 +219,9 @@ Audited with no survivors remaining: `core/redaction.py` (six real, fixed),
 `launch.py`, `setup_wizard.py`, `ops/crash.py`, `ops/controls.py`, `ops/alerting.py`,
 `ops/retune.py`, `ops/scaling.py`, `ops/partitioning.py`, every module under `browsing/`, and
 `console/spend_view.py`, `console/model_matrix.py`, `console/approvals.py`,
-`console/scoped_authority.py`.
+`console/scoped_authority.py`, `knowledge/search.py` (three real, fixed),
+`deployment/compatibility.py` (two real, fixed), `ops/install_docs.py`, and every module under
+`migration/`.
 
 `gate/leash.py` has since been re-run with the right scope, and the result is the point of the
 episode recorded above. Against the twenty-four test files that import it, the audit finds
@@ -237,8 +239,31 @@ test reaches, because `first_bottleneck` filters an idle source out before anyth
 That last one is worth reading twice. It is this repository's recurring defect in its purest
 form, and the docstring saying what the guard does is what made it look covered.
 
-So the audit has now been over every module it can reach, and the useful record is no longer
-where it has been but what running it costs. See the scope rule below.
+**And then `knowledge/search.py` was audited on the same day and had three.** That sentence
+above, "the audit has now been over every module it can reach", was written a few hours before
+and was false when written: the list of audited modules was a list of the ones somebody had
+happened to audit, and reading it as a list of the ones that needed it is the same mistake as
+reading a green test run as evidence about the code. The module it missed decides what a
+reader may retrieve.
+
+The three are the shape you now expect: a vector column of no width, and both halves of the
+guard on the pattern converter. Those two are the guard on a defect that actually shipped,
+where `(?:` inside a check constraint was read by SQLAlchemy as a bind parameter and rendered
+as the word NULL, so the constraint that went out looked like a regex and was a different one.
+The guard against it recurring was written, argued in a docstring, and reached by nothing.
+
+So the useful record is not where the audit has been. It is that **a module nobody has audited
+looks exactly like a module nobody needed to audit**, and the only way to tell is to run it.
+What follows is what running it costs, which is the thing worth knowing before you start.
+
+**A condition inside a comprehension is invisible to the audit, and there are usually more of
+them than there are `if` statements.** `.scratch/guard_audit.py` walks `ast.If`. A filter in a
+list comprehension, an `or` fallback on a return, a conditional expression: none of those is an
+`ast.If` and none is mutated, and the audit does not mention them, so a module can come back
+with a clean table and half its decisions unwatched. `migration/skills.py` has five `if`
+statements and six comprehension filters; `knowledge/search.py`'s `lexical_legs` has no `if` in
+it at all and three decisions. Mutate those by hand, and count the decisions rather than the
+statements before believing a survivor count of zero.
 
 **Mutate the constants too, not only the branches.** This is the sibling of the docstring rule
 above and it caught three separate authors on 2026-09-06, in one afternoon. A test that asserts
