@@ -227,9 +227,18 @@ twenty-one guards and **no survivors at all**. The seven the one-file run report
 artefact of the scope, top to bottom, and the module they were reported against was the one
 whose guards a reader would least want to doubt.
 
-One is still unfinished. `ops/admission.py` produced seven first-pass survivors that were
-never re-checked against the import graph, so they are candidates and not findings, and the
-leash result is the reason to treat them that way rather than as a list to go and fix.
+`ops/admission.py` was the last unfinished module and is now done, and it is the case that
+shows the two-stage rule paying for itself in both directions. Its seven first-pass survivors
+were three artefacts and four real defects: a budget with a zero mean service time, which is
+the divisor in Little's law; a vendor ceiling of zero, which binds at 0x and sits at the top
+of the ladder for ever; a negative demand, which sorts before every real bottleneck; and a
+division-by-zero guard in `Demand.binds_at` that a passing test's docstring describes and no
+test reaches, because `first_bottleneck` filters an idle source out before anything divides.
+That last one is worth reading twice. It is this repository's recurring defect in its purest
+form, and the docstring saying what the guard does is what made it look covered.
+
+So the audit has now been over every module it can reach, and the useful record is no longer
+where it has been but what running it costs. See the scope rule below.
 
 **Mutate the constants too, not only the branches.** This is the sibling of the docstring rule
 above and it caught three separate authors on 2026-09-06, in one afternoon. A test that asserts
@@ -371,6 +380,16 @@ nineteen test files exercise. It reported seven unreachable guards, three of the
 checks on the resume path, and the report was written up and briefed to an agent before
 anybody re-measured. Four were real. Three were already covered by
 `tests/invariants/test_leash_invariants.py` and the run had simply not been shown it.
+
+**Worked out from the import graph does not mean the transitive closure**, and this is the
+other half of the rule. Followed to a fixed point, `ops/admission.py` is reachable from
+eighty-five modules and a hundred and five test files, because one hop lands in `ops/limits.py`
+and two more land in `brain.app`, which imports the estate. Thirty-three guards against a
+hundred and five files is the whole suite thirty-three times over, so it does not get run, and
+a scope nobody runs is worth less than a narrow one somebody does. One hop gave forty-two
+files, which took minutes and caught three of the seven candidates. `.scratch/test_set.py`
+takes the depth as an argument for exactly this reason: widen it when a survivor is still
+standing, not before.
 
 So: **for a module anything else imports, work the test set out from the import graph rather
 than guessing it**, and print the set. A cheap first pass against one file is fine and is what

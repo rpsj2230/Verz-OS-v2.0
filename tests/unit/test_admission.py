@@ -16,6 +16,7 @@ M22.2.4, M22.3.1, M22.3.2, M22.3.4
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 
 import pytest
@@ -128,6 +129,29 @@ def test_a_budget_of_zero_is_refused_because_it_reads_as_configured() -> None:
     row still reads as a budget. Removing the capability is a different change."""
     with pytest.raises(ValueError, match="minimum is 1"):
         Budget(resource=Resource.MODEL_CALLS, limit=0)
+
+
+def test_a_budget_with_no_service_time_is_refused() -> None:
+    """Little's law divides by the mean service time, so a budget carrying zero is a budget
+    whose queue estimate is a division by zero and whose concurrency figure is infinite. It
+    arrives from a configuration row rather than from code, which is why the guard is at the
+    row and not at the arithmetic.
+
+    Found by a mutation audit re-run against the forty-two test files that reach this module
+    rather than the three that name it. Delete this and the guard is unreachable again."""
+    with pytest.raises(ValueError, match="non-positive service time"):
+        Budget(resource=Resource.MODEL_CALLS, limit=10, mean_service_seconds=0.0)
+
+
+def test_a_budget_with_a_negative_service_time_is_refused() -> None:
+    """The other side of the same guard, and the one a subtraction of two timestamps produces
+    when they arrive the wrong way round. A negative service time gives a negative concurrency
+    and every request is admitted.
+
+    Delete this and the guard can be written as `== 0`, which is green for the zero case
+    above and admits everything for this one."""
+    with pytest.raises(ValueError, match="non-positive service time"):
+        Budget(resource=Resource.MODEL_CALLS, limit=10, mean_service_seconds=-1.0)
 
 
 def test_a_globally_budgeted_resource_cannot_be_keyed_by_connector() -> None:
@@ -559,6 +583,50 @@ def test_a_source_nobody_calls_is_not_a_bottleneck_at_any_scale() -> None:
     zero would put an unused connector at the top of the ladder for ever."""
     demands = (Demand(ceiling=Ceiling(name="idle", per_day=10), calls_per_day=0),)
     assert first_bottleneck(demands, multiplier=100.0) is None
+
+
+def test_a_ceiling_of_zero_is_refused() -> None:
+    """A source that may not be called at all is not a ceiling of zero, it is a connector that
+    is switched off, and the two are a different console screen. Left in, every demand against
+    it binds at 0x and it sits permanently at the top of the ladder, which is the same failure
+    as the division by zero below wearing a different number.
+
+    Delete this and a vendor row typed as 0 while somebody looks up the real figure becomes a
+    permanent red bottleneck nobody can clear."""
+    with pytest.raises(ValueError, match="non-positive daily limit"):
+        Ceiling(name="unstated", per_day=0)
+
+
+def test_a_negative_demand_is_refused() -> None:
+    """Demand is counted, so a negative one is an arithmetic error upstream, and it does not
+    fail loudly: `binds_at` returns a negative multiple, which sorts before every real
+    bottleneck and takes the top of the ladder from the source that is actually about to
+    fail.
+
+    Delete this and a subtraction of two call counts in the wrong order silently rewrites the
+    ladder."""
+    with pytest.raises(ValueError, match="is negative"):
+        Demand(ceiling=Ceiling(name="x", per_day=10), calls_per_day=-1)
+
+
+def test_a_demand_of_nothing_binds_at_no_multiple_at_all() -> None:
+    """**Asked of `binds_at` directly, because the ladder never reaches it.**
+
+    `test_a_source_nobody_calls_is_not_a_bottleneck_at_any_scale` above builds exactly this
+    demand and its docstring names this branch, and it does not exercise it: `first_bottleneck`
+    filters on `calls_per_day * multiplier >= per_day`, which is false for zero calls at every
+    multiplier, so the demand is discarded before anything divides. The test passes with the
+    branch deleted, which would then be a `ZeroDivisionError` the first time any other caller
+    sorted a ladder that included an idle source.
+
+    That is this repository's recurring defect in its exact form: a guard whose behaviour is
+    described in a passing test's docstring and reached by no test at all.
+
+    Delete this and the branch goes back to being unreachable."""
+    idle = Demand(ceiling=Ceiling(name="idle", per_day=10), calls_per_day=0)
+
+    assert idle.binds_at() == math.inf
+    assert Demand(ceiling=Ceiling(name="busy", per_day=10), calls_per_day=5).binds_at() == 2.0
 
 
 def test_an_unraisable_ceiling_says_so_in_its_reason() -> None:
