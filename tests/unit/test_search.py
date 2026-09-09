@@ -46,9 +46,12 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.db import metadata
 from brain.knowledge.item import KnowledgeState
-from brain.knowledge.search import (
+from brain.knowledge.search import (  # the two private helpers below are guards, see their tests
     CANDIDATE_DEPTH,
     CHUNK,
+    CJK_LEXICAL_INDEX,
+    CJK_REGCONFIG_SQL,
+    CJK_TSVECTOR,
     DEPARTMENTS_SETTING,
     EMBEDDING_DIMENSIONS,
     EMBEDDING_MODEL_CHARS,
@@ -56,16 +59,23 @@ from brain.knowledge.search import (
     INDEXES,
     ITERATIVE_SCAN,
     KNOWLEDGE_READ,
+    LANGUAGE_TAG_CHARS,
     MAX_CANDIDATE_DEPTH,
     PRINCIPAL_SETTING,
     REGCONFIG_SQL,
     RETRIEVABLE_STATE_VALUES,
     SEARCH_CONFIG,
     SLUG_SQL_PATTERN,
+    TEXT_FIELDS_THE_DATABASE_CANNOT_FILL,
     Reach,
     SearchError,
+    Vector,
+    _posix_pattern,
+    chunk_text_fields,
+    cjk_lexical_query,
     hybrid,
     iterative_scan_statements,
+    lexical_legs,
     lexical_query,
     reach_for,
     reach_predicate,
@@ -519,6 +529,215 @@ def test_the_search_column_is_weighted_rather_than_flat() -> None:
         assert f"coalesce({column}, '')), '{weight}')" in generated
     assert "GENERATED ALWAYS AS" in generated
     assert "STORED" in generated
+
+
+# --------------------------------------------------- the guards on the DDL helpers
+def test_a_vector_column_of_no_width_is_refused() -> None:
+    """A width of zero renders `VECTOR(0)`, which PostgreSQL refuses at migration time with a
+    message about the type rather than about the column, and a negative one renders something
+    that is not a type at all.
+
+    Found by a mutation audit over every condition in this module: the guard was written,
+    correct, and reachable by nothing.
+
+    Delete this and the branch is unreachable again, and the failure moves from an import in
+    a test run to a migration on a client's server."""
+    with pytest.raises(SearchError, match="is not a vector width"):
+        Vector(0)
+
+
+def test_a_pattern_that_still_carries_a_colon_after_conversion_is_refused() -> None:
+    """**The guard on the guard, and the reason it exists shipped once.**
+
+    `CheckConstraint` wraps its argument in `sqlalchemy.text`, which reads `:name` as a bind
+    parameter. A `(?:` in a Python pattern therefore rendered as the word NULL inside the
+    constraint: it looked like a regex, it was a different regex, and nothing about the model
+    or the migration said so. The conversion removes the non-capturing groups; this refuses a
+    colon that survived by any other route, such as a character class or a literal.
+
+    Delete this and the one thing standing between another colon and another silently wrong
+    constraint is unreachable, which is what it was until this test."""
+    with pytest.raises(SearchError, match="still carries a colon"):
+        _posix_pattern("^[a-z]+:[0-9]+$")
+
+
+def test_a_pattern_carrying_a_construct_postgres_does_not_have_is_refused() -> None:
+    """The second half of the same guard. A lookahead or a named group is Python-only, so a
+    constraint built from one is refused by PostgreSQL when the migration runs, which is the
+    worst moment to find out: the deploy has already started.
+
+    Written with a lookahead rather than another non-capturing group, because the conversion
+    removes those and this has to survive it.
+
+    Delete this and only the colon half is watched, and the pattern that reaches a client's
+    database is the one nobody could run here."""
+    with pytest.raises(SearchError, match="does not have"):
+        _posix_pattern("^(?=[a-z])[a-z0-9]+$")
+
+
+def test_a_pattern_the_conversion_can_handle_comes_back_without_its_colons() -> None:
+    """The positive case for both refusals, and the property the conversion exists for: a
+    non-capturing group becomes an ordinary one, which matches identically and carries no
+    colon.
+
+    Delete this and `_posix_pattern` can be tightened until it refuses the patterns this
+    module actually uses, and the failure is at import."""
+    assert _posix_pattern("^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$") == "^[a-z][a-z0-9]*(_[a-z0-9]+)*$"
+
+
+# ------------------------------------------------- the Han leg (M35.1.2.1, M35.1.2.3)
+#: A Chinese phrase and the two-character term inside it, which is the case the whole leg
+#: exists for. Written as escapes rather than as characters so this file stays readable in a
+#: terminal that cannot render them, and so a copy through a lossy clipboard cannot silently
+#: change the test.
+A_HAN_PHRASE = "\u5ba2\u6237\u670d\u52a1\u6761\u6b3e"
+A_HAN_TERM = "\u6761\u6b3e"
+
+
+def test_a_two_character_term_shares_a_token_with_the_phrase_that_contains_it() -> None:
+    """**The failure the column exists for, stated as the property that fixes it.**
+
+    PostgreSQL's parser has no Chinese dictionary, so a run of Han characters is one token and
+    a query for a term inside a longer phrase matches nothing. Overlapping bigrams give every
+    adjacent pair its own token, so any term of two characters or more shares a token with the
+    text containing it.
+
+    Asserted as an intersection of the two token sets rather than as a literal list of
+    bigrams, because a list here is the tokeniser's output written down twice and would agree
+    with it for every segmentation it could produce.
+
+    Delete this and the column can be filled with the whole phrase, which indexes and matches
+    nothing a person would type."""
+    indexed = set(chunk_text_fields(A_HAN_PHRASE)["cjk"].split())
+    asked = set(chunk_text_fields(A_HAN_TERM)["cjk"].split())
+
+    assert asked
+    assert asked <= indexed
+
+
+def test_the_han_leg_asks_with_the_configuration_its_column_was_built_with() -> None:
+    """The same argument as the English leg one file-section above, and it matters more here:
+    `english` would stem a bigram against a stop list written for another language and would
+    do it differently at index time and query time depending on what the pair looked like.
+
+    Both halves are read from `CJK_REGCONFIG_SQL`, so this says the one constant reaches both
+    places rather than saying two literals agree.
+
+    Delete this and the index and the query can drift to different configurations, and the
+    symptom is a Chinese query that returns nothing while the index sits there looking used."""
+    assert CJK_REGCONFIG_SQL in CJK_TSVECTOR
+    sql = rendered_sql(cjk_lexical_query(A_HAN_TERM, reach=NARROW))
+
+    assert f"websearch_to_tsquery({CJK_REGCONFIG_SQL}" in sql
+    generated = str(CreateTable(CHUNK).compile(dialect=POSTGRES))
+    assert f"to_tsvector({CJK_REGCONFIG_SQL}, coalesce(cjk, ''))" in generated
+
+
+def test_the_han_query_is_segmented_by_the_same_function_that_segmented_the_text() -> None:
+    """A bigram index asked with a whole phrase matches nothing, which is the same failure the
+    column was added to fix arriving from the query side.
+
+    The bound parameter is compared against what `chunk_text_fields` would have written for
+    the same text, so the two sides are asserted to agree rather than both asserted against a
+    literal.
+
+    Delete this and the query side can pass the raw question, and every Chinese search returns
+    nothing at all."""
+    compiled = cjk_lexical_query(A_HAN_PHRASE, reach=NARROW).compile(dialect=POSTGRES)
+    expected = chunk_text_fields(A_HAN_PHRASE)["cjk"]
+
+    assert expected in compiled.params.values()
+    assert A_HAN_PHRASE not in compiled.params.values()
+
+
+def test_the_han_leg_reaches_only_the_callers_rows() -> None:
+    """The reach predicate is conjoined into the same `WHERE` the `LIMIT` applies to, exactly
+    as the English leg does. A second leg is a second place to leave the predicate out, and
+    leaving it out returns other people's rows ranked by relevance.
+
+    Delete this and the newest search path is the one with no permission check in it."""
+    sql = rendered_sql(cjk_lexical_query(A_HAN_TERM, reach=NARROW))
+
+    assert "owner_id" in sql
+    assert "LIMIT" in sql
+    assert sql.count("SELECT") == 1
+
+
+def test_the_han_index_is_partial_on_the_same_predicate_as_the_english_one() -> None:
+    """A retired chunk in a GIN index is postings nobody may read, and re-chunking a document
+    retires a document's worth at once.
+
+    Delete this and the second index is the one that keeps the postings of every deleted
+    chunk, which is a disclosure risk the first index does not have."""
+    rendered_index = str(CreateIndex(CJK_LEXICAL_INDEX).compile(dialect=POSTGRES))
+
+    assert "USING gin" in rendered_index
+    assert "WHERE deleted_at IS NULL" in rendered_index
+
+
+def test_a_question_is_asked_of_every_script_it_contains() -> None:
+    """**A mixed question is not a majority vote.** "SLA \u6761\u6b3e" is two words in two
+    scripts and the answer may be in a document holding either, so running one leg on the
+    strength of a character count discards half the question.
+
+    Delete this and a question with three Latin words and one Chinese term asks only the
+    English leg, and the Chinese term is silently dropped."""
+    assert lexical_legs(f"SLA {A_HAN_TERM}") == ("tsv", "tsv_cjk")
+    assert lexical_legs("service level") == ("tsv",)
+    assert lexical_legs(A_HAN_TERM) == ("tsv_cjk",)
+
+
+def test_a_question_with_no_letters_at_all_still_asks_the_english_leg() -> None:
+    """A number or a reference is neither script, and answering "no legs" would make the
+    search return nothing for a question somebody typed.
+
+    Delete this and asking for an invoice number returns an empty result rather than a
+    lexical match."""
+    assert lexical_legs("2026") == ("tsv",)
+    assert lexical_legs("") == ("tsv",)
+
+
+def test_a_chunk_with_too_little_text_records_no_language_rather_than_english() -> None:
+    """**M35.1.2.3, and the nullable column is the load-bearing part.** A detector that always
+    answers turns "we could not tell" into "English", which is a claim nothing downstream can
+    distinguish from a measurement. A row saying unknown can be improved later; one saying
+    English will not be looked at again.
+
+    Delete this and the obvious tidy-up is a default of `en`, and every two-word chunk in the
+    corpus becomes a confident English row."""
+    assert chunk_text_fields("OK")["language"] is None
+    assert (
+        chunk_text_fields("a chunk with plenty of English words in it to be sure")["language"]
+        == "en"
+    )
+
+
+def test_every_column_the_database_cannot_fill_is_filled_by_the_one_builder() -> None:
+    """`cjk` is the only column on this table the database cannot compute, so it is the only
+    one with a second place to forget it, and `chunk_text_fields` is that place made single.
+
+    The declared list and the builder's keys are compared, and the list is written out in the
+    module rather than derived from the builder, so the two can disagree. Derived, this test
+    would move both sides together and be green for every list either could hold.
+
+    Delete this and a column can be added to the declared list with nothing filling it, or
+    filled by the builder without being declared, and either way a chunk is written that is
+    invisible to a Chinese query while looking indexed."""
+    built = chunk_text_fields("a chunk with plenty of English words in it to be sure")
+
+    assert set(TEXT_FIELDS_THE_DATABASE_CANNOT_FILL) == set(built)
+
+
+def test_the_language_column_is_wide_enough_for_every_tag_the_detector_produces() -> None:
+    """Anchored against `brain.locale.SCRIPT_LANGUAGE` rather than against a number written
+    here, so a third language whose tag does not fit fails this instead of being truncated
+    into a fourth language nobody declared.
+
+    Delete this and adding a locale silently starts writing truncated tags, which read as
+    real ones."""
+    from brain.locale import SCRIPT_LANGUAGE
+
+    assert max(len(tag) for tag in SCRIPT_LANGUAGE.values()) <= LANGUAGE_TAG_CHARS
 
 
 def test_the_vector_leg_orders_by_distance_and_limits_in_the_same_statement() -> None:

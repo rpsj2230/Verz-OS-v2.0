@@ -119,7 +119,7 @@ against and what `tests/unit/test_search.py` holds the migration to. Moving it i
 
 Nothing here opens a connection, reads a clock or embeds anything. It builds statements.
 
-Task ids: M15.2.1, M15.2.2, M15.2.3, M15.2.4, M15.2.6, M15.2.7
+Task ids: M15.2.1, M15.2.2, M15.2.3, M15.2.4, M15.2.6, M15.2.7, M35.1.2.1, M35.1.2.3
 """
 
 from __future__ import annotations
@@ -129,7 +129,7 @@ import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Final, assert_never, cast
+from typing import Any, Final, TypedDict, assert_never, cast
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import TSVECTOR
@@ -152,6 +152,7 @@ from brain.knowledge.chunking import BlockKind
 from brain.knowledge.fusion import RRF_K, Fused, Ranking, fuse
 from brain.knowledge.item import ITEM_ID_PATTERN, RETRIEVABLE_STATES, KnowledgeState
 from brain.knowledge.visibility import OWNER_FIELD, VISIBILITY_ORDER, Visibility
+from brain.locale import Script, detect, lexical_tokens, script_counts
 
 
 class SearchError(Exception):
@@ -209,6 +210,30 @@ if not re.fullmatch(r"[a-z][a-z_]*", SEARCH_CONFIG):  # pragma: no cover - a con
 #: `to_tsvector('english', unaccent(body))` is refused, and folding accents in an index
 #: needs an immutable wrapper of the kind M14's normalisation leaf calls for.
 REGCONFIG_SQL: Final = f"'{SEARCH_CONFIG}'"
+
+#: The configuration the Han bigram column is indexed and queried with (M35.1.2.1).
+#:
+#: `simple` rather than `english`, and the reason is what the tokens are. A bigram like
+#: `客户` is not an English word, and `english` would stem it, fold it against a stop list
+#: written for English and change it differently at index time and query time depending on
+#: what it happened to look like. `simple` lowercases and stops, which is the whole of what a
+#: token that is already a segment needs.
+CJK_CONFIG: Final = "simple"
+
+if not re.fullmatch(r"[a-z][a-z_]*", CJK_CONFIG):  # pragma: no cover - a constant
+    _cjk_msg = f"{CJK_CONFIG!r} is not a text search configuration name"
+    raise SearchError(_cjk_msg)
+
+#: The Han configuration as it appears in SQL, immutable for the same reason as the one above.
+CJK_REGCONFIG_SQL: Final = f"'{CJK_CONFIG}'"
+
+#: The generated column over the bigrams the application writes.
+#:
+#: Unweighted, unlike the English column. Weighting exists to say a title match beats a body
+#: match, and the bigram column holds one field: the tokens for the whole chunk, produced by
+#: one call. Weighting a single field is a `setweight` that changes no ranking and reads as
+#: though it does.
+CJK_TSVECTOR: Final = f"to_tsvector({CJK_REGCONFIG_SQL}, coalesce(cjk, ''))"
 
 
 def _weighted_tsvector(config_sql: str) -> str:
@@ -370,6 +395,13 @@ SECTION_CHARS: Final = 300
 #: every vector query and an unbounded column there invites somebody to store a description.
 EMBEDDING_MODEL_CHARS: Final = 200
 
+#: The width of a language tag column. Sixteen, which holds `zh-Hans-SG` twice over.
+#:
+#: Anchored below by the longest tag `brain.locale.SCRIPT_LANGUAGE` can produce rather than by
+#: a comment, so a third language whose tag does not fit fails a test instead of being
+#: truncated into a fourth language nobody declared.
+LANGUAGE_TAG_CHARS: Final = 16
+
 #: The column recording which model produced a row's vector.
 #:
 #: Defined here rather than in `brain.knowledge.embedding`, which is where it started, because
@@ -422,6 +454,33 @@ CHUNK: Final = sa.Table(
     # leg while looking indexed. Left nullable because the expression cannot produce NULL
     # anyway; a NOT NULL here would be a constraint that can never fire.
     sa.Column("tsv", TSVECTOR(), sa.Computed(WEIGHTED_TSVECTOR, persisted=True)),
+    # The Han bigrams, written by the application, and the one column on this table the
+    # database cannot compute for itself.
+    #
+    # **That is a deviation from the argument three lines above and it is worth stating
+    # rather than burying.** `tsv` is generated precisely so there is no second place to
+    # forget it. This cannot be: PostgreSQL's parser has no Chinese dictionary, so a run of
+    # Han characters is one token and a two-character term inside a longer phrase matches
+    # nothing. The segmentation is `brain.locale.lexical_tokens` and it is Python. Writing it
+    # in PL/pgSQL would be a second implementation of a rule this repository refuses to
+    # duplicate anywhere else, and installing an extension makes the product depend on
+    # something a client's managed database may not offer.
+    #
+    # The mitigation is that there is one way to build the text fields of a row,
+    # `chunk_text_fields`, and a test pins every application-written column to it. A column
+    # missed there is a chunk that is invisible to Chinese queries while looking indexed,
+    # which is exactly the failure the generated column above avoids, so it gets the same
+    # care by a different route.
+    sa.Column("cjk", sa.Text(), nullable=True),
+    sa.Column("tsv_cjk", TSVECTOR(), sa.Computed(CJK_TSVECTOR, persisted=True)),
+    # The dominant language, or NULL for a chunk with too little text to say (M35.1.2.3).
+    #
+    # Nullable is the load-bearing part, and `brain.locale.DetectedLanguage.tag` is nullable
+    # for the same reason: a detector that always answers turns "we could not tell" into
+    # "English", which is a claim nothing downstream can distinguish from a measurement. A
+    # row saying unknown can be improved later; one saying English will not be looked at
+    # again.
+    sa.Column("language", sa.String(LANGUAGE_TAG_CHARS), nullable=True),
     # Nullable, because embedding is asynchronous. A NOT NULL would make writing a chunk
     # depend on the embedding provider being reachable, so an outage there would stop
     # ingestion rather than delay the vector leg.
@@ -497,6 +556,20 @@ CHUNK: Final = sa.Table(
 LEXICAL_INDEX: Final = sa.Index(
     "ix_chunk_tsv",
     CHUNK.c.tsv,
+    postgresql_using="gin",
+    postgresql_where=sa.text("deleted_at IS NULL"),
+)
+
+#: The Han lexical index (M35.1.2.1). Partial on the same predicate and for the same reason.
+#:
+#: A second index rather than a second expression in the first one, because a `tsvector ||
+#: tsvector` over two configurations produces one column in which an English stem and a Han
+#: bigram are indistinguishable, and a query for either would match postings written by the
+#: other. Two columns and two queries keep the two vocabularies apart, which is what makes a
+#: Chinese query's ranking mean anything.
+CJK_LEXICAL_INDEX: Final = sa.Index(
+    "ix_chunk_tsv_cjk",
+    CHUNK.c.tsv_cjk,
     postgresql_using="gin",
     postgresql_where=sa.text("deleted_at IS NULL"),
 )
@@ -920,6 +993,90 @@ def lexical_query(question: str, *, reach: Reach, depth: int = CANDIDATE_DEPTH) 
         .order_by(relevance.desc(), CHUNK.c.chunk_id.asc())
         .limit(_depth(depth))
     )
+
+
+#: The columns of `chunk` no database expression can fill, so the application must.
+#:
+#: Written out rather than derived as "every column with no `Computed` and no default", for
+#: the reason `brain.memory.tiers.CHANGES_WHAT_ANYBODY_MAY_SEE` is written out: derived, this
+#: and `chunk_text_fields` would agree by construction and the test comparing them would move
+#: both sides together. Written out, adding a column here without filling it fails a test.
+TEXT_FIELDS_THE_DATABASE_CANNOT_FILL: Final[tuple[str, ...]] = ("cjk", "language")
+
+
+class ChunkTextFields(TypedDict):
+    """The application-written text columns, typed so a caller cannot confuse the two.
+
+    `cjk` is always a string and is empty for a chunk with no Han in it, which is a real
+    value: the generated tsvector over an empty string is an empty tsvector, and the chunk is
+    correctly absent from the Han index. `language` is genuinely optional and the two must not
+    share a type, or a caller writing `fields["cjk"] or None` would look reasonable.
+    """
+
+    cjk: str
+    language: str | None
+
+
+def chunk_text_fields(body: str) -> ChunkTextFields:
+    """The application-written text columns for one chunk, from its body alone.
+
+    One function so there is one place these are produced, which is the mitigation for `cjk`
+    not being a generated column. A caller that builds a row any other way writes a chunk that
+    is invisible to Chinese queries and indistinguishable from an indexed one.
+
+    `language` is `None` rather than a fallback when there was not enough text to tell. See
+    the column comment: an unknown that says so can be improved and an unknown that says
+    English cannot.
+    """
+    detected = detect(body)
+    return ChunkTextFields(cjk=" ".join(lexical_tokens(body)), language=detected.tag)
+
+
+def cjk_lexical_query(question: str, *, reach: Reach, depth: int = CANDIDATE_DEPTH) -> Select[Any]:
+    """The Han leg of the lexical search (M35.1.2.1).
+
+    The question is segmented by the same function that segmented the text, and asked with the
+    same configuration the column was built with. Both halves matter and for the same reason
+    `SEARCH_CONFIG` is one constant: a bigram index queried with whole-phrase tokens matches
+    nothing, and a bigram index queried under `english` matches whatever stemming leaves.
+
+    `websearch_to_tsquery` rather than `plainto_tsquery` for the reason `_tsquery` gives, and
+    it is doing less work here: the tokens handed to it are already segments, so what it
+    parses is the quoting and negation a person typed around them.
+    """
+    query = sa.func.websearch_to_tsquery(
+        sa.literal_column(CJK_REGCONFIG_SQL),
+        sa.bindparam(QUESTION_PARAM, " ".join(lexical_tokens(question)), type_=sa.Text),
+    )
+    relevance = sa.func.ts_rank_cd(CHUNK.c.tsv_cjk, query)
+    return (
+        sa.select(CHUNK.c.chunk_id, relevance.label("relevance"))
+        .where(sa.and_(reach_predicate(reach), CHUNK.c.tsv_cjk.op("@@")(query)))
+        .order_by(relevance.desc(), CHUNK.c.chunk_id.asc())
+        .limit(_depth(depth))
+    )
+
+
+def lexical_legs(question: str) -> tuple[str, ...]:
+    """Which lexical columns a question should be asked against, in order.
+
+    **A question is asked of every script it contains rather than of its majority.** "SLA
+    条款" is two words in two scripts and the answer is in a document that may hold either, so
+    running one leg on the strength of a character count discards the other half of the
+    question. That is the same argument `brain.locale.SECTION_SHARE` makes about indexing a
+    mixed document, from the query side, and there is no share threshold here on purpose: a
+    query is a handful of characters, so a threshold over it is a coin toss.
+
+    Latin first when both are present, because it is the leg that exists for every install and
+    the fused ranking upstream is stable in the order the legs arrive.
+    """
+    scripts = script_counts(question)
+    found = [
+        name
+        for script, name in ((Script.LATIN, "tsv"), (Script.HAN, "tsv_cjk"))
+        if script in scripts
+    ]
+    return tuple(found) or ("tsv",)
 
 
 def vector_query(
