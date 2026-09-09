@@ -165,14 +165,42 @@ jobs:
           COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
           SERVICE_UUID: ${{ secrets.COOLIFY_SERVICE_UUID }}
           TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          # The same three read as repository variables, which is the other place a person
+          # setting these up lands: the Actions settings page has Secrets and Variables side
+          # by side and only one of them is read below. Nothing is printed but whether each
+          # is empty, so this distinguishes the two without putting a value anywhere.
+          URL_VAR: ${{ vars.COOLIFY_URL }}
+          UUID_VAR: ${{ vars.COOLIFY_SERVICE_UUID }}
           SHA: ${{ needs.build.outputs.sha }}
         run: |
+          # WHY THIS PRINTS BEFORE IT DECIDES. On 2026-09-09 all three secrets existed on
+          # this repository, created 2026-09-04, and this job reported all three missing on
+          # every run in between. The warning named them correctly and the cause was not in
+          # it, so the run said what was wrong and not where. These four lines say where.
+          # They print presence and never a value; GitHub masks the values anyway, and a
+          # diagnostic that depends on masking is one that leaks the day masking changes.
+          state() { if [ -n "$2" ]; then echo "  $1: set"; else echo "  $1: empty"; fi; }
+          echo "what this job can see:"
+          state "secrets.COOLIFY_URL" "$COOLIFY_URL"
+          state "secrets.COOLIFY_TOKEN" "$TOKEN"
+          state "secrets.COOLIFY_SERVICE_UUID" "$SERVICE_UUID"
+          state "vars.COOLIFY_URL" "$URL_VAR"
+          state "vars.COOLIFY_SERVICE_UUID" "$UUID_VAR"
+
           # Named, so the summary below can say which one is missing rather than "some
           # secret". A deploy that cannot happen is worth being specific about.
+          #
+          # WHY `if` RATHER THAN `&&`. This was three `[ -z "$X" ] && missing=...` lines,
+          # and every `run:` block here is `bash -eo pipefail`. A whole `&&` list is the
+          # command whose status `-e` reads, so the first line where the value was present
+          # would have exited 1 and killed the step before the deploy call. It never fired
+          # because all three have been empty on every run, which means the bug was hidden
+          # by the fault it sits behind and would have surfaced on the first run that
+          # worked. A test that only breaks once it starts passing is worth writing down.
           missing=""
-          [ -z "$COOLIFY_URL" ]   && missing="$missing COOLIFY_URL"
-          [ -z "$TOKEN" ]         && missing="$missing COOLIFY_TOKEN"
-          [ -z "$SERVICE_UUID" ]  && missing="$missing COOLIFY_SERVICE_UUID"
+          if [ -z "$COOLIFY_URL" ];  then missing="$missing COOLIFY_URL"; fi
+          if [ -z "$TOKEN" ];        then missing="$missing COOLIFY_TOKEN"; fi
+          if [ -z "$SERVICE_UUID" ]; then missing="$missing COOLIFY_SERVICE_UUID"; fi
           if [ -n "$missing" ]; then
             # A warning rather than a silent pass. This step exited 0 for months while the
             # summary below printed "Deployed", so every run looked like a deploy and the

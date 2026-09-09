@@ -607,51 +607,53 @@ the same change and I would rather do it once.
 
 ---
 
-## 42. The pipeline cannot tell the server to deploy, and says so as a warning
+## 42. You set the three deploy secrets five days ago and the pipeline still says they are missing
 
-**Three secrets are missing from GitHub, and until they are set every deploy depends on a
-timer.**
+**You were right and this item was wrong, so read this one before doing anything.** It used to
+ask you to create three GitHub secrets. They exist. Measured on 2026-09-09 against
+`rpsj2230/Verz-OS-v2.0`:
 
-The Deploy workflow builds the image, publishes it, and then tries to call Coolify's API to
-say "there is a new image, pull it". That last call needs three values it does not have, so it
-prints:
+```
+COOLIFY_SERVICE_UUID   created 2026-09-04T12:12:45Z
+COOLIFY_TOKEN          created 2026-09-04T12:12:46Z
+COOLIFY_URL            created 2026-09-04T12:12:44Z
+COOLIFY_WEBHOOK_URL    created 2026-09-04T11:48:00Z
+```
+
+And the Deploy run at 09:05 on 2026-09-09, five days after that, still ended with:
 
 ```
 no deploy: missing secret(s) COOLIFY_URL COOLIFY_TOKEN COOLIFY_SERVICE_UUID.
 The image is published; the server was not told.
 ```
 
-**and the workflow still reports success**, because a warning is not a failure.
+So the problem is not the one this item described. The secrets are on the repository, the
+workflow reads them by the right names, the repository is not a fork, there are no deployment
+environments that could be gating them, and the file that ran is the file on `main`. The job
+simply receives three empty strings.
 
-Nothing is broken today. `brain-autodeploy.timer` on the server polls for a new image every
-two minutes and picks it up anyway, which is why production is current. The risk is the shape
-of the arrangement rather than its result: the only thing deploying anything is a timer nobody
-watches, the pipeline reports success whether or not the server ever hears, and the day the
-timer is disabled or the image tag changes, deploys stop with a green tick on every run.
+**Nothing is needed from you while this is open.** Your server is current: the timer on it
+polls for a new image every two minutes and picks up every build, which is why deploys have
+been working the whole time this item claimed they could not.
 
-### What I need you to do
+**What I did instead of guessing.** The run now prints, before it decides anything, whether
+each of the three arrives as a secret and whether the two safe ones arrive as a repository
+*variable*. GitHub's Actions settings page has Secrets and Variables side by side and only one
+of them is read; that is the cheapest remaining explanation and the run will now say so
+outright. No value is printed, only the word `set` or `empty`.
 
-Four values, then one paste each. All of it is in Coolify.
+**And a second fault was sitting behind the first, which is the part worth reading.** The
+missing-secret check was three lines of the shape `[ -z "$X" ] && missing="$missing X"`. Every
+`run:` block in GitHub Actions is `bash -eo pipefail`, and a whole `&&` list is the command
+whose exit status `-e` reads. When the value is present, the test is false, the line exits 1
+and the step dies before it ever calls Coolify. It has never happened, because all three have
+been empty on every run. It would have happened on the first run where the secrets arrived:
+the check would have broken at the moment it started to matter. Both are `if` statements now.
 
-1. Open Coolify at `http://194.233.66.89:8000`. It is firewalled off from the internet, so
-   open an SSH tunnel first: run `ssh -L 8000:localhost:8000 verz-vps` in a terminal and leave
-   it open, then use `http://localhost:8000` in your browser.
-2. **COOLIFY_URL** is `http://194.233.66.89:8000`. That is the value, exactly as written.
-3. **COOLIFY_SERVICE_UUID**: click into the Brain application in Coolify. The address bar ends
-   in a long code, for example `.../application/abc123def456`. The part after the last slash is
-   the value.
-4. **COOLIFY_TOKEN**: top right, your avatar, then **Keys & Tokens**, then **API tokens**.
-   Create one, give it a name like `github-deploy`, and give it permission to deploy. **Copy
-   it when it is shown; Coolify will not show it again.**
-5. Now go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
-6. Click **New repository secret**. Name it `COOLIFY_URL`, paste the value from step 2, save.
-7. Repeat for `COOLIFY_SERVICE_UUID` from step 3, and `COOLIFY_TOKEN` from step 4.
-
-That is all. The next push will call Coolify directly and the warning stops appearing.
-
-**I cannot do step 4 for you**, because it creates a credential, and I do not create or hold
-credentials on your behalf. Steps 2 and 3 are values I could read off the server, and I have
-left them for you as well so all four are in one place while you are in that screen.
+**What happens next without you.** The next push runs it and the answer is in that job's log
+under "what this job can see". If it says the secrets are empty and the variables are set, the
+fix is one move in the GitHub settings page and I will give you the two clicks. If it says
+they are set, the deploy call happens on that same run and this item closes itself.
 
 ---
 
