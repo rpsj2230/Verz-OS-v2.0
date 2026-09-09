@@ -11,6 +11,30 @@
     <meta name="robots" content="noindex, nofollow" />
     <title>Company Brain</title>
     <!--
+      The installable shell (M35.3.2.1). Adding this makes the console installable on a
+      phone and on a desktop, which is the whole of what the leaf asks for: an approval
+      that arrives at eleven at night is answered from a home screen rather than from a
+      browser tab somebody has to find.
+
+      **There is no service worker and there must not be one, which is the decision this
+      comment exists for.** The obvious next step after a manifest is to cache the shell for
+      offline use, and every guide says to. An offline cache of this console is a copy of a
+      client's data sitting on somebody's phone, readable after they leave the company and
+      after their grants are revoked, and it is exactly the disclosure the whole permission
+      model is built to prevent. `scripts/check-boundaries.mjs` refuses a registration, and
+      the manifest deliberately declares no offline behaviour: installable and useless
+      without a network is the correct pair here.
+
+      The icons are SVG rather than PNG so there is one file per purpose and no build step
+      that resizes anything. A maskable variant is separate because a platform that crops to
+      a circle crops the rounded corners off the other one.
+    -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1216" media="(prefers-color-scheme: dark)" />
+    <!--
       The theme is applied before the first paint, and it has to be here rather than in
       React. A stored preference read after hydration means the page renders in the system
       theme first and then swaps, which is the white flash every dark-mode user recognises.

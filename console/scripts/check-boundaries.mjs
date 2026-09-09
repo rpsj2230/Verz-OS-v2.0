@@ -116,6 +116,19 @@ const RULES = [
       "it produces is not the one somebody reading the markup would predict. Nothing here " +
       "needs one: every control is a native element, so the tab order is the source order.",
   },
+  {
+    name: "no service worker",
+    pattern: /serviceWorker|navigator\.serviceWorker|workbox|registerSW/,
+    allow: [],
+    why:
+      "The console is installable and caches nothing, and those two go together. A service " +
+      "worker's whole purpose is to serve something without asking the network, which for " +
+      "this application means a copy of a client's data on somebody's phone: readable after " +
+      "they leave the company, after their grants are revoked, and after the row it came " +
+      "from was deleted. It is the disclosure the entire permission model exists to " +
+      "prevent, arriving through a performance feature. index.html says the same thing " +
+      "beside the manifest link, because that is where somebody adding one would be.",
+  },
 ];
 
 async function sourceFiles(directory) {
