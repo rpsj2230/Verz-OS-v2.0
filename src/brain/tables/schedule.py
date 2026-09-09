@@ -159,6 +159,6 @@ class ControlRunRow(Base):
         ),
         # The scheduler's own question, asked every tick: the newest run of each control, and
         # the newest successful one. Descending because both answers are the first row.
-        Index("control_run_by_control", "name", "started_at", postgresql_using="btree"),
+        Index("ix_control_run_by_control", "name", "started_at", postgresql_using="btree"),
         {"schema": "ops"},
     )

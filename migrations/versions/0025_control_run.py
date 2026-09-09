@@ -116,7 +116,7 @@ def upgrade() -> None:
         schema="ops",
     )
     op.create_index(
-        "control_run_by_control",
+        "ix_control_run_by_control",
         "control_run",
         ["name", "started_at"],
         schema="ops",
@@ -127,5 +127,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("control_run_by_control", table_name="control_run", schema="ops")
+    op.drop_index("ix_control_run_by_control", table_name="control_run", schema="ops")
     op.drop_table("control_run", schema="ops")
