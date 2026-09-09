@@ -27,6 +27,20 @@ bounds the ordinary failure, which is slots sized for a machine we do not have. 
 bound a single job that leaks, and that one is still an OOM kill; the compose file says so
 where an operator will read it.
 
+**The third cap is connections, and it is the only one this container spends out of somebody
+else's budget.** Both memory caps above are spent inside a cgroup limit, so getting one wrong
+kills this container and nothing else. A connection is spent out of a database's ceiling,
+which every other client of that database is spending from too, and the 2026-09-07 outage is
+what that looks like when one client has no bound: the first thing refused is whoever is
+trying to find out why. Both of this worker's direct URLs go round PgBouncer deliberately,
+because the queue needs LISTEN and the checkpointer needs server-side prepared statements, so
+there is nothing between them and the ceiling except a number somebody has to choose.
+`BRAIN_WORKER_POOL_MAX` is that number, `brain.ops.connections` budgets the same figure, and
+`pool_declaration_gaps` refuses a container where the two disagree or where a queue driver is
+importable and nothing has been declared at all. That refusal is a refusal rather than an
+advisory, and `AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` is the argument for
+which of the two lists it belongs in.
+
 **One image and one command run two differently sized containers, and the difference is a
 file somebody else chose.** Everything the general worker does is bounded by something we
 wrote; a parse is bounded by whoever made the document, and 48 MiB of slot cannot hold the
@@ -125,6 +139,7 @@ from brain.knowledge.parse_budget import (
     parse_worker_gaps,
 )
 from brain.ops.checkpoints import channel_policy_gaps, connection_refusals
+from brain.ops.connections import client_named
 from brain.ops.inference import inference_gaps
 from brain.ops.queue import (
     DEPLOY_PLAN,
@@ -144,6 +159,22 @@ from brain.ops.queue import (
 )
 from brain.ops.wiring import WiringError, component
 
+#: Why a queue driver with no declared pool size stops this container from starting.
+AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES: Final = (
+    "A worker holds pools against a database no pooler bounds, because the queue needs "
+    "LISTEN and the checkpointer needs server-side prepared statements and transaction "
+    "pooling carries neither. One of those pools is measured: brain.session."
+    "make_worker_engine keeps five plus five overflow. The other belongs to the queue "
+    "driver, and nothing can be read off a driver nobody has installed, so the figure in "
+    "brain.ops.connections for that half is a judgement. A judgement about a pool "
+    "understates rather than overstates, because the failure nobody writes down is the one "
+    "they have not met yet: we guessed five and the driver opens twenty, and the budget goes "
+    "on reporting spare connections on a database that has none. That is the 2026-09-07 "
+    "outage with a different service in it, and it is silent in exactly the same way. So the "
+    "day a driver becomes importable is the day the number has to be declared rather than "
+    "assumed, and this refuses the start until it is."
+)
+
 # ------------------------------------------------------------------------ the environment
 #: Where the worker looks for its queue. A name of its own rather than `DATABASE_URL`,
 #: because the whole of `queue_url_refusals` is the case where the two are the same string.
@@ -160,6 +191,16 @@ CHECKPOINTER_URL_ENV: Final = "BRAIN_CHECKPOINTER_URL"
 #: The file a running worker touches. In the container's own filesystem rather than shared,
 #: so it says something about this process rather than about the fleet.
 HEARTBEAT_PATH_ENV: Final = "BRAIN_WORKER_HEARTBEAT"
+
+#: How many connections this container may hold against the database it reaches directly.
+#:
+#: A declaration rather than a knob today, and saying so is the point. Nothing in this
+#: repository opens a queue connection, so nothing here reads this value and sizes a pool with
+#: it: what it does is state the bound `brain.ops.connections` budgets for this container, and
+#: `pool_declaration_gaps` refuses a container whose environment and budget disagree. The day
+#: a driver is installed it becomes the number that driver is given, which is why it is named
+#: for the pool rather than for the declaration.
+POOL_MAX_ENV: Final = "BRAIN_WORKER_POOL_MAX"
 
 #: Which `brain.ops.wiring` component this container is. One image and one command run two
 #: differently sized containers, and every piece of arithmetic below is against a limit that
@@ -388,6 +429,89 @@ def component_slot_class_gaps(worker_component: str, slot_class: SlotClass) -> t
     )
 
 
+def declared_pool_max(env: Mapping[str, str]) -> tuple[int | None, tuple[str, ...]]:
+    """The connection bound this container declares, and every reason it could not be read.
+
+    None for an absent variable and None for an unreadable one, with the complaint returned
+    beside it, matching `declared_slots` and `declared_slot_class`: a preflight that raised
+    here would report one problem out of the several a badly configured container usually has.
+
+    A missing variable is not defaulted to what `brain.ops.connections` budgets, and that is
+    the whole mechanism rather than a detail. Substituting the declared figure would make an
+    undeclared container look declared, which is precisely the state
+    `AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` is about: the number would be this
+    repository's guess wearing the deployment's clothes.
+    """
+    raw = (env.get(POOL_MAX_ENV) or "").strip()
+    if not raw:
+        return None, ()
+    try:
+        value = int(raw)
+    except ValueError:
+        return None, (
+            f"{POOL_MAX_ENV}={raw!r} is not a number of connections, so nothing says how many "
+            "this container may hold against a database no pooler bounds",
+        )
+    if value < 1:
+        return None, (
+            f"{POOL_MAX_ENV}={value} bounds this container at no connections at all, which is "
+            "not a smaller pool but a worker that cannot fetch anything",
+        )
+    return value, ()
+
+
+def pool_declaration_gaps(env: Mapping[str, str], *, worker_component: str) -> tuple[str, ...]:
+    """Whether this container's connection bound is declared, and whether it is the budgeted one.
+
+    **A refusal rather than an advisory, and the split is by what the finding costs.**
+    `advisories` holds what is wrong that starting will not fix: a corpus column disagreeing
+    with the served model's width breaks one leg of the queue and refusing to boot over it
+    takes the whole queue down to protect that leg. An unbounded pool is the opposite shape. It
+    is not one leg, it is every client of the database including the administrator, which is
+    what the 2026-09-07 outage was; the fix is one variable in the environment, which is what
+    every other line in `preflight` names; and starting anyway is the one outcome that cannot
+    be walked back, because by the time anybody reads the finding the connections are held.
+
+    **Gated on the driver being importable, so it cannot be red on arrival.** No driver is
+    installed today, so a container omitting the variable is refused nothing: there is no pool
+    to bound, and `brain.ops.sweeps` records at length how a check that is red the day it lands
+    becomes a check somebody switches off. The day a driver is importable is the first day the
+    variable could be wrong, and it is the day this starts asking.
+
+    The agreement half is asked whenever the variable is set, driver or no driver, because both
+    numbers exist today: two copies of one figure are only safe while something compares them,
+    and the copy in `brain.ops.connections` is the one every headroom figure is computed from.
+
+    A component this budget has never heard of is left alone rather than refused, matching
+    `component_slot_class_gaps`: `preflight` has already refused a component
+    `brain.ops.wiring` does not budget, and a third worker container is a deployment decision
+    this function has no basis to make.
+
+    What it cannot check is the one that matters most: whether the declared number is what the
+    driver actually opens. Nothing here connects, and no driver exists to ask. This makes the
+    number somebody's decision rather than nobody's, which is the whole of what a declaration
+    can do.
+    """
+    declared, unreadable = declared_pool_max(env)
+    findings = list(unreadable)
+    budgeted = client_named(worker_component)
+
+    if declared is None and not unreadable and driver_is_installed():
+        findings.append(
+            f"a queue driver is importable and {POOL_MAX_ENV} is not set, so nothing says how "
+            f"many connections {worker_component!r} may hold against a database no pooler "
+            f"bounds. {AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES}"
+        )
+    if declared is not None and budgeted is not None and declared != budgeted.pool_max:
+        findings.append(
+            f"{POOL_MAX_ENV}={declared} and brain.ops.connections budgets "
+            f"{worker_component!r} at {budgeted.pool_max}, so the container and the budget "
+            "describe different pools and every headroom figure is computed from the one "
+            f"nobody deployed. That budget says: {budgeted.why}"
+        )
+    return tuple(findings)
+
+
 def declared_component(env: Mapping[str, str]) -> str:
     """Which component this container is, as its environment says.
 
@@ -455,6 +579,10 @@ def preflight(env: Mapping[str, str]) -> tuple[str, ...]:
         return tuple(findings)
 
     findings.extend(component_slot_class_gaps(worker_component, slot_class))
+    # Connections rather than memory, and the only cap here that binds something outside this
+    # container. Every other figure below is spent inside a cgroup limit; this one is spent out
+    # of a database's ceiling, which every other client of that database is also spending from.
+    findings.extend(pool_declaration_gaps(env, worker_component=worker_component))
     findings.extend(
         concurrency_gaps(allocation, worker_component=worker_component, slot_class=slot_class)
     )

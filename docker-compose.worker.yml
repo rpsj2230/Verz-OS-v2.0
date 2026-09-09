@@ -36,6 +36,27 @@
 # kill, because nothing inside CPython will stop it. What this prevents is the ordinary
 # failure, which is a slot count sized for a machine we do not have.
 #
+# **Capped a third time, and this one is connections rather than memory.** Both of the URLs
+# below that go straight to `db` are outside PgBouncer's bound, deliberately: the queue needs
+# LISTEN and the checkpointer needs server-side prepared statements, and a pooler in
+# transaction mode carries neither. So the only thing bounding them is this container, and
+# until 2026-09-09 nothing did. `BRAIN_WORKER_POOL_MAX` is that bound and
+# `brain.ops.connections` holds the matching `Client` row, which a test compares against this
+# file.
+#
+# | cap | value | where it is set | what it does not cover |
+# | --- | --- | --- | --- |
+# | checkpointer pool | 10 | `brain.session.make_worker_engine`, pool 5 plus 5 overflow | nothing; it is measured |
+# | queue pool | 5 | nowhere yet, because no driver is installed | what the driver actually opens |
+# | declared total | 15 | `BRAIN_WORKER_POOL_MAX` below | it declares rather than enforces; see below |
+#
+# The third row is the honest one. Nothing in this repository opens a queue connection, so
+# this variable is a declaration checked against the budget rather than a knob that binds a
+# pool, and the day a driver is installed it becomes the number that driver has to be given.
+# `brain.ops.worker` refuses to start a container that has a driver and no such declaration,
+# because "we guessed five and the driver opens twenty" is a silent understatement and a
+# silent understatement is the whole of the 2026-09-07 outage.
+#
 # **QUEUE_URL goes straight to the database and DATABASE_URL does not.** Both are set, and
 # the worker compares them: `brain.ops.queue.queue_url_refusals` exists for the case where
 # somebody gives the worker one connection string for both jobs, which is the mistake that is
@@ -100,6 +121,14 @@ services:
       # both containers drained `system` and the general worker could fetch the 50 MiB parse
       # the parse worker was built for, into a 48 MiB slot.
       BRAIN_WORKER_SLOT_CLASS: standard
+      # What this container may hold against `db`, which no pooler bounds. Ten of it is
+      # measured rather than chosen: `brain.session.make_worker_engine` keeps a pool of five
+      # plus five overflow for the checkpointer. The other five is the queue connection, and
+      # it is the half nobody can measure until a driver exists. `brain.ops.connections`
+      # declares the total as a Client row and `brain.ops.worker` compares the two before this
+      # container starts, so the number here and the number the budget is computed from cannot
+      # drift apart.
+      BRAIN_WORKER_POOL_MAX: "15"
       # glibc gives a threaded process up to eight arenas per core and never returns them,
       # so resident memory climbs to a plateau set by the host's core count rather than by
       # the container's limit. On this box that plateau is above 384M. Two arenas costs a

@@ -47,24 +47,43 @@ load-bearing rather than an optimisation, and `THE_POOLER_IS_WHAT_MAKES_THE_CEIL
 so where somebody proposing to remove it will read it. Raising the alarm instead would produce
 a check that is red on arrival, and `brain.ops.sweeps` records why those get switched off.
 
-**The budget could not see a client until somebody wrote it down, and four of them are not
-written down.** `CLIENTS` is a declaration, so a service pointed straight at a database in a
+**The budget could not see a client until somebody wrote it down, and for four of them
+nobody had.** `CLIENTS` is a declaration, so a service pointed straight at a database in a
 compose file is invisible here until a row is added by hand, which is the same silence the
 outage above arrived through: Keycloak's pool was undeclared and unbounded and the budget had
 nothing to say about it. `undeclared_clients` closes the loop from the other side, over the
-compose files rather than over this list, and asked today it names four:
+compose files rather than over this list, and until 2026-09-09 it named four:
 `langfuse-web` and `langfuse-worker` hold `DATABASE_URL` at `db:5432` with no
 `connection_limit` anywhere on it, and `brain-worker` and `brain-parse-worker` hold `QUEUE_URL`
 and `BRAIN_CHECKPOINTER_URL` there. Every one of them bypasses PgBouncer deliberately and for
 a good reason, which is exactly what makes them the case that matters: see
-`A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND`. None is deployed today, and the
-finding is that a budget saying `db` has 77 spare connections is describing a host on which
-four services with no declared pool have not started yet.
+`A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND`.
 
-Reported rather than raised, and kept out of `connection_breaches` for the reason
-`ceiling_costs` is kept out of it: it is true on arrival, `test_connections.py` pins the set
-so a fifth cannot join quietly, and a check that is red the day it lands is a check somebody
-switches off.
+**They are declared now, and the arithmetic moved with them.** `docs/needs-rupash.md` item 41
+records the decision of 2026-09-09 and the provenance of every figure, and `Client.why`
+carries that sentence on the row itself rather than in a comment beside it, because a comment
+is not something a test or a screen can read back. Five each for Langfuse's two, which Prisma
+takes as `connection_limit` on the URL; fifteen for `brain-worker`, of which ten is measured
+rather than chosen; five for `brain-parse-worker`, which configures no checkpointer at all.
+`db` admitted 97 against a declared demand of 20 and now stands at 50, so the spare figure
+this module reports has fallen from 77 to 47 and is at last a figure about the host rather
+than about the four services missing from it.
+
+**Declaring a number is not the same as the number being true, and the half nobody can
+measure is the queue driver's.** Ten of `brain-worker`'s fifteen is
+`brain.session.make_worker_engine`, which keeps a pool of five plus five overflow and is in
+the code today. The other five is a judgement about a driver nobody has installed, and a
+judgement about a pool understates rather than overstates, because the failure nobody writes
+down is the one they have not met yet. `brain.ops.worker` refuses to start a container that
+has a driver and no declared bound, for that reason and in those words; see
+`AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` there.
+
+`undeclared_clients` stays out of `connection_breaches` now that it answers nothing, and the
+reason has changed with it. It was kept out because it was true on arrival and a check that
+is red the day it lands is a check somebody switches off. What keeps it out today is scope:
+it has to be handed the deployment, and `connection_breaches` reads declarations and nothing
+else. `test_connections.py` pins its answer as the empty set rather than as a count, so the
+next service pointed straight at `db` fails a test instead of joining a list.
 
 Scope: declarations and arithmetic. Nothing here opens a connection or reads a server, and it
 reads no file either: `undeclared_clients` takes connection strings somebody else parsed out
@@ -107,10 +126,12 @@ THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE: Final = (
     "The application's database declares max_connections=100 and work_mem=16MB inside a 2048 "
     "MiB container. Worst case that is 512 + 100 * 16 = 2112 MiB, which is more than the "
     "container has, so the declared ceiling could not be honoured if anything ever reached "
-    "it. Nothing does, because PgBouncer bounds real server connections to twenty and the "
-    "worst case behind it is 832 MiB. The pooler is therefore load-bearing rather than an "
-    "optimisation: removing it, or pointing a second client straight at the database, turns "
-    "a configuration nobody has questioned into an out-of-memory kill under load."
+    "it. Nothing does, because every client of it is bounded: PgBouncer holds two hundred "
+    "callers to twenty server connections, the four services that go round it are bounded at "
+    "thirty between them, and the worst case behind all fifty is 1312 MiB. The pooler is "
+    "therefore load-bearing rather than an optimisation, and so is every bound beside it: "
+    "removing the pooler, or adding a fifth direct client with no bound of its own, turns a "
+    "configuration nobody has questioned into an out-of-memory kill under load."
 )
 
 #: Why a service that goes round the pooler is the one this budget has to be told about.
@@ -135,6 +156,25 @@ A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND: Final = (
 #: for as long as the setting has existed, and the arithmetic below has to match the server's
 #: own or the budget describes a different machine.
 POSTGRES_RESERVED_CONNECTIONS: Final = 3
+
+#: What a worker's checkpointer engine keeps open, measured rather than chosen.
+#:
+#: `brain.session.make_worker_engine` is created with `pool_size=5` and `max_overflow=5`, so
+#: ten is the most one worker process can hold for saved graph state. It is written here as
+#: arithmetic rather than folded into the fifteen below, because the two halves of that figure
+#: have completely different standing: this one is in the code and can be read off it, and a
+#: test does exactly that. Change the engine and this row is wrong; nothing else would say so.
+WORKER_CHECKPOINTER_CONNECTIONS: Final = 10
+
+#: What one worker's queue connection is budgeted at, for both worker containers.
+#:
+#: The same number in both because it is the same decision: a queue connection is a LISTEN
+#: and the fetches that follow it, and it does not scale with slots the way the checkpointer
+#: does. It is the half of `brain-worker`'s bound that is a judgement rather than a
+#: measurement, because no queue driver is installed and nothing can be read off one. See
+#: `brain.ops.worker.AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` for what happens
+#: on the day a driver arrives and this number turns out to be smaller than the truth.
+WORKER_QUEUE_CONNECTIONS: Final = 5
 
 
 @dataclass(frozen=True)
@@ -189,11 +229,22 @@ class Client:
     `pool_max` is per replica and `replicas` multiplies it, because two copies of a service
     each holding a full pool is the arithmetic everybody gets wrong the first time they scale
     something horizontally.
+
+    `why` is required and it is the field this class gained on 2026-09-09, when four rows were
+    added at once and each of the four numbers had a different source: one read off a compose
+    file, one off an engine in this repository, one off a decision recorded in
+    `docs/needs-rupash.md`, and one a judgement about software nobody has installed. Written as
+    comments those distinctions survive exactly as long as the next person reading in a hurry.
     """
 
     name: str
     database: str
     pool_max: int
+    #: Where this number came from, in one sentence a reader can check. Not a description of
+    #: the client: the provenance of the figure, because a bound with no provenance is a bound
+    #: nobody will challenge, and the one that caused the outage was a vendor default nobody
+    #: had chosen at all.
+    why: str
     replicas: int = 1
     #: True when this client connects as the owner or superuser of its database. See
     #: `RESERVED_CONNECTIONS_ONLY_RESERVE_FROM_SOMEBODY_ELSE`.
@@ -209,6 +260,13 @@ class Client:
             raise ValueError(msg)
         if self.replicas < 1:
             msg = f"{self.name!r} declares {self.replicas} replicas"
+            raise ValueError(msg)
+        if not self.why.strip():
+            msg = (
+                f"{self.name!r} declares a pool of {self.pool_max} and no reason for it; a "
+                "connection bound whose provenance is nowhere is one nobody can check and "
+                "nobody will argue with, which is how a number stays wrong"
+            )
             raise ValueError(msg)
 
     def demand(self) -> int:
@@ -242,21 +300,77 @@ DATABASES: Final[tuple[Database, ...]] = (
 
 
 #: Everything that opens a connection to one of the databases above.
+#:
+#: Six rows, of which four were added on 2026-09-09 and none of the four is deployed yet. That
+#: is the point rather than a caveat: a bound chosen before a service starts is a decision, and
+#: the same bound chosen after it starts is an incident review. See `Client.why` on each.
 CLIENTS: Final[tuple[Client, ...]] = (
     Client(
-        # Transaction mode, so twenty server connections serve two hundred callers. The
-        # figure is DEFAULT_POOL_SIZE in `docker-compose.yml` and must agree with it.
         name="pgbouncer",
         database="db",
         pool_max=20,
+        why=(
+            "DEFAULT_POOL_SIZE in docker-compose.yml, held equal to it by test. Transaction "
+            "mode is what makes it enough: twenty server connections serve two hundred "
+            "callers, which is also why nothing behind the pooler is declared here as well"
+        ),
     ),
     Client(
-        # KC_DB_POOL_MAX_SIZE. Before 2026-09-07 this was unset, which meant Keycloak's own
-        # default of 100 against a server admitting 30.
         name="keycloak",
         database="keycloak-db",
         pool_max=15,
+        why=(
+            "KC_DB_POOL_MAX_SIZE in docker-compose.keycloak.yml, held equal to it by test. "
+            "Before 2026-09-07 it was unset, which meant Keycloak's own default of 100 "
+            "against a server admitting 30, and that is the outage this module exists for"
+        ),
         connects_as_superuser=True,
+    ),
+    Client(
+        name="langfuse-web",
+        database="db",
+        pool_max=5,
+        why=(
+            "A trace interface rather than anything on the request path, so five serves a "
+            "browser. Prisma takes it as connection_limit on DATABASE_URL in "
+            "docker-compose.langfuse.yml, and without it Prisma sizes the pool from the "
+            "host's core count, which is a number about the machine and not about the work"
+        ),
+    ),
+    Client(
+        name="langfuse-worker",
+        database="db",
+        pool_max=5,
+        why=(
+            "Batched ingestion with one writer, so five is the batch in flight and room "
+            "beside it. Prisma takes it as connection_limit on DATABASE_URL in "
+            "docker-compose.langfuse.yml, the same way the interface above does"
+        ),
+    ),
+    Client(
+        name="brain-worker",
+        database="db",
+        pool_max=WORKER_CHECKPOINTER_CONNECTIONS + WORKER_QUEUE_CONNECTIONS,
+        why=(
+            "Ten of it is measured: brain.session.make_worker_engine keeps a pool of five "
+            "plus five overflow for the checkpointer, which goes straight to the database "
+            "because a saver prepares statements server-side. Five more for the queue "
+            "connection, which is a judgement rather than a measurement while no driver is "
+            "installed. BRAIN_WORKER_POOL_MAX in docker-compose.worker.yml carries the total "
+            "to the container, and brain.ops.worker refuses to start one that has a driver "
+            "and no such declaration"
+        ),
+    ),
+    Client(
+        name="brain-parse-worker",
+        database="db",
+        pool_max=WORKER_QUEUE_CONNECTIONS,
+        why=(
+            "A queue connection and nothing else: this container sets no "
+            "BRAIN_CHECKPOINTER_URL, because a parse is not a graph, so it has none of the "
+            "ten the general worker's checkpointer keeps. BRAIN_WORKER_POOL_MAX in "
+            "docker-compose.parse-worker.yml carries it to the container"
+        ),
     ),
 )
 
@@ -273,6 +387,22 @@ def database(name: str) -> Database:
 def clients_of(name: str) -> tuple[Client, ...]:
     """Every declared client of one database."""
     return tuple(one for one in CLIENTS if one.database == name)
+
+
+def client_named(name: str) -> Client | None:
+    """One declared client by name, or None when this budget has never heard of it.
+
+    None rather than the refusal `database` makes about an unknown name, and the asymmetry is
+    deliberate. A database nobody declared cannot be budgeted at all, so asking about one is a
+    mistake worth raising on. A client nobody declared is the ordinary case for anything behind
+    the pooler and for any container a future deployment adds, and a caller checking whether a
+    container's environment agrees with this budget has to be able to ask about a container
+    that is not in it.
+    """
+    for one in CLIENTS:
+        if one.name == name:
+            return one
+    return None
 
 
 def demand_on(name: str) -> int:
@@ -406,10 +536,13 @@ def undeclared_clients(connections: Mapping[str, Sequence[str]]) -> tuple[str, .
     compose files with `yaml.safe_load`, so what is checked is the deployment rather than a
     second copy of it kept here.
 
-    Deliberately not part of `connection_breaches`. It is true on arrival, and folding it in
-    would make that function red the day this landed, which `brain.ops.sweeps` records at
-    length as how a gate comes to be switched off. What pins it instead is a test asserting
-    the exact set, so a fifth undeclared client fails rather than joining a list nobody reads.
+    Deliberately not part of `connection_breaches`, and the reason changed on 2026-09-09 when
+    the four services it used to name were declared. It was kept out because it was true on
+    arrival, and `brain.ops.sweeps` records at length how a gate that is red the day it lands
+    comes to be switched off. It stays out now for scope: this function has to be handed the
+    deployment, and `connection_breaches` reads declarations and opens nothing. What pins the
+    answer is a test asserting the exact set, which is empty today, so the next service pointed
+    straight at a database fails a test rather than joining a list nobody reads.
     """
     budgeted = {(one.name, one.database) for one in CLIENTS}
     found: list[str] = []

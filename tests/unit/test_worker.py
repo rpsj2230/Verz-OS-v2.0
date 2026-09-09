@@ -26,6 +26,7 @@ import yaml
 from brain.db import SCHEMAS
 from brain.gate.context import TrafficClass
 from brain.ops.checkpoints import connection_refusals
+from brain.ops.connections import client_named
 from brain.ops.queue import (
     CONCURRENCY,
     DRIVER_SCHEMA,
@@ -42,14 +43,18 @@ from brain.ops.queue import (
 )
 from brain.ops.wiring import component
 from brain.ops.worker import (
+    AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES,
     EXIT_MISCONFIGURED,
     EXIT_NO_DRIVER,
     EXIT_NOT_READY,
+    POOL_MAX_ENV,
     advisories,
+    declared_pool_max,
     declared_slots,
     is_ready,
     main,
     plan_for,
+    pool_declaration_gaps,
     preflight,
     slot_env_name,
 )
@@ -235,6 +240,166 @@ def test_an_allocation_over_the_containers_memory_limit_refuses_to_start() -> No
     findings = preflight(_sound_environment(BRAIN_WORKER_SLOTS_HUMAN_ASYNC="100"))
 
     assert any("over the" in f for f in findings), findings
+
+
+# --------------------------------------------------- the connection bound
+def test_a_worker_with_a_queue_driver_and_no_declared_pool_refuses_to_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The refusal `docs/needs-rupash.md` item 41 asks for, and the reason it is a refusal
+    rather than a line in the log.** A worker's connections are spent out of a database's
+    ceiling rather than out of its own cgroup limit, so an unbounded pool is not this
+    container's problem: it is every client of that database, and the first one refused is
+    whoever is trying to find out why. That is the 2026-09-07 outage.
+
+    The finding cannot be produced by this repository as it stands, because no queue driver is
+    importable, so the driver is patched present. That is the same technique
+    `test_the_preflight_surfaces_a_queue_schema_gap_rather_than_swallowing_it` uses and for the
+    same reason: a check whose condition is false today is a check that has never been shown to
+    fire.
+
+    Delete this and the variable can be dropped from a compose file in a tidy-up, and the day
+    a driver is installed the container starts with a pool nobody sized against a budget that
+    goes on reporting spare connections."""
+    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: True)
+    env = _sound_environment()
+    assert POOL_MAX_ENV not in env
+
+    findings = preflight(env)
+
+    assert any(POOL_MAX_ENV in f and "is not set" in f for f in findings), findings
+    assert any("guessed five and the driver opens twenty" in f for f in findings), findings
+
+
+def test_a_worker_with_no_queue_driver_is_not_asked_for_a_pool_it_cannot_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The gate on the refusal above, and it is the half that keeps the check alive. Nothing
+    here opens a queue connection today, so refusing every container that omits the variable
+    would be a check that is red on arrival, which `brain.ops.sweeps` records at length as how
+    a gate comes to be switched off. The day a driver becomes importable is the first day the
+    number could be wrong, and it is the day this starts asking.
+
+    Asserted with the driver patched absent as well as present, because the real environment
+    has no driver and a test relying on that fact alone would pass for a check that never runs
+    at all.
+
+    Delete this and the refusal can be made unconditional, which stops every worker on every
+    install that has not yet been told a number for a pool it does not open."""
+    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: False)
+
+    assert pool_declaration_gaps(_sound_environment(), worker_component="brain-worker") == ()
+
+    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: True)
+    assert pool_declaration_gaps(_sound_environment(), worker_component="brain-worker")
+
+
+def test_a_declared_pool_that_disagrees_with_the_budget_refuses_to_start() -> None:
+    """Two copies of one number, in a compose file and in `brain.ops.connections`, and this is
+    what holds them equal from the container's end. The budget's copy is what every headroom
+    figure on that database is computed from, so a container deployed with a larger one is a
+    database whose spare capacity is a fiction by the difference.
+
+    Asked with no driver installed, deliberately: an agreement between two numbers that both
+    exist can be checked today, unlike the absence above, and gating it on the driver would
+    leave the copies free to drift for as long as there is no driver.
+
+    Delete this and `BRAIN_WORKER_POOL_MAX` can be raised on the container alone, which is the
+    edit that looks like it fixes a backlog."""
+    findings = preflight(_sound_environment(**{POOL_MAX_ENV: "40"}))
+
+    assert any("describe different pools" in f for f in findings), findings
+    declared = client_named("brain-worker")
+    assert declared is not None
+    assert any(str(declared.pool_max) in f for f in findings), findings
+
+
+def test_a_pool_bound_that_is_not_a_number_is_reported_rather_than_ignored() -> None:
+    """The same shape as a mistyped slot count, and it has to be its own finding: an unreadable
+    value falls back to no declaration at all, so without this it would be reported as an
+    absent variable and send whoever reads it to add a line that is already there.
+
+    Delete this and a typo in the bound reads as a missing bound, or worse, as no finding at
+    all on a host with no driver."""
+    findings = preflight(_sound_environment(**{POOL_MAX_ENV: "fifteen"}))
+
+    assert any("is not a number of connections" in f for f in findings), findings
+
+
+def test_a_pool_bound_of_zero_is_refused_rather_than_read_as_no_limit() -> None:
+    """Zero connections is not a smaller pool, it is a worker that cannot fetch anything, and
+    `brain.ops.connections.Client` refuses the same value from the other side because an
+    unbounded client runs at its server's ceiling for ever.
+
+    Delete this and zero reads as "no limit configured", which is exactly the sentence that
+    describes an unbounded pool."""
+    findings = preflight(_sound_environment(**{POOL_MAX_ENV: "0"}))
+
+    assert any("no connections at all" in f for f in findings), findings
+
+
+def test_a_worker_declaring_the_bound_its_budget_gives_it_starts() -> None:
+    """The positive sibling of the four refusals above, and it is the one that says the check
+    can be satisfied at all. A preflight tested only by what it refuses is satisfied by one
+    that refuses everything.
+
+    Both worker components, because they are budgeted at different numbers and a check reading
+    one of them for both would pass every test above.
+
+    Delete this and the bound can become a value nothing accepts, which stops both containers
+    on a host where the driver has just been installed."""
+    for component_name in ("brain-worker", "brain-parse-worker"):
+        declared = client_named(component_name)
+        assert declared is not None
+        env = _sound_environment(**{POOL_MAX_ENV: str(declared.pool_max)})
+
+        assert pool_declaration_gaps(env, worker_component=component_name) == ()
+
+
+def test_a_worker_component_the_budget_has_never_heard_of_is_left_alone() -> None:
+    """A third worker container is a deployment decision this check has no basis to make, and
+    refusing it would put a line nobody can act on into a list whose whole value is that every
+    line names a fix. `preflight` has already refused a component `brain.ops.wiring` does not
+    budget, which is the case worth refusing.
+
+    Delete this and adding a worker container means editing the connection budget before the
+    container can be started even once, which is how the budget becomes something people work
+    around rather than with."""
+    env = _sound_environment(**{POOL_MAX_ENV: "99"})
+
+    assert client_named("brain-third-worker") is None
+    assert pool_declaration_gaps(env, worker_component="brain-third-worker") == ()
+
+
+def test_an_unreadable_bound_is_not_read_as_a_declaration() -> None:
+    """The property that keeps the two findings apart. `declared_pool_max` returns None for an
+    unreadable value, so a container with `BRAIN_WORKER_POOL_MAX=fifteen` has not declared
+    fifteen and has not declared anything, and the agreement check must not compare against a
+    number that was never read.
+
+    Delete this and an unreadable value can be defaulted to the budget's figure, which makes an
+    undeclared container look declared: the exact state
+    `AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` is about."""
+    assert declared_pool_max({POOL_MAX_ENV: "fifteen"})[0] is None
+    assert declared_pool_max({POOL_MAX_ENV: "  "})[0] is None
+    assert declared_pool_max({})[0] is None
+    assert declared_pool_max({POOL_MAX_ENV: " 15 "})[0] == 15
+    assert "understates" in AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES
+
+
+def test_the_deployed_workers_declare_the_bound_the_budget_gives_them() -> None:
+    """The artefact rather than the rule: the general worker's compose file carries a bound and
+    it is the budgeted one, so this deployment would start on a host where a driver has been
+    installed.
+
+    Asserted against `brain.ops.connections` rather than against the number, because the number
+    written twice in two files is the thing that drifts.
+
+    Delete this and the compose file can lose the variable, which is invisible until the day
+    the driver arrives and every worker refuses at once."""
+    declared = client_named("brain-worker")
+    assert declared is not None
+    assert int(_worker_environment()[POOL_MAX_ENV]) == declared.pool_max
 
 
 # --------------------------------------------------- the process layout

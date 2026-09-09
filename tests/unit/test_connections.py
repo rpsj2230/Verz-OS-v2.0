@@ -10,13 +10,22 @@ The declarations are checked against the compose files they describe rather than
 because a budget that has drifted from what is deployed is worse than none: it is a number
 somebody will believe.
 
+Six clients are declared and four of them arrived on 2026-09-09, before any of the four had
+ever been started. Each of those four bounds is asserted against something outside the
+declaration that carries it: a `connection_limit` on a URL, a variable in a container's
+environment, and the pool `brain.session.make_worker_engine` keeps. A test comparing a bound
+against the constant it is written from would pass for every value that constant could hold,
+which is the trap `CLAUDE.md` records three authors falling into in one afternoon.
+
 Task ids: none
 """
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 import yaml
@@ -25,9 +34,11 @@ from brain.ops.connections import (
     A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND,
     POSTGRES_RESERVED_CONNECTIONS,
     THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE,
+    WORKER_CHECKPOINTER_CONNECTIONS,
     Client,
     Database,
     ceiling_costs,
+    client_named,
     clients_of,
     connection_breaches,
     database,
@@ -61,6 +72,58 @@ def every_connection_string() -> dict[str, list[str]]:
             values = environment.values() if isinstance(environment, dict) else environment
             services.setdefault(name, []).extend(str(one) for one in values)
     return services
+
+
+def connection_limit_on(url: str) -> int:
+    """Prisma's pool maximum, read off a connection string the way Prisma reads it.
+
+    A query parameter rather than an environment variable, because that is the only place
+    Prisma takes one. Parsed rather than matched with a substring, so a limit written into the
+    password or into a comment is not a limit.
+    """
+    values = parse_qs(urlsplit(url).query).get("connection_limit", [])
+    assert len(values) == 1, f"no single connection_limit on {url!r}: {values}"
+    return int(values[0])
+
+
+def pool_max_declared_by(name: str, service: str) -> int:
+    """`BRAIN_WORKER_POOL_MAX` out of one worker's compose file."""
+    environment = compose(name)["services"][service]["environment"]
+    assert "BRAIN_WORKER_POOL_MAX" in environment, f"{service} declares no connection bound"
+    return int(environment["BRAIN_WORKER_POOL_MAX"])
+
+
+def worker_engine_pool() -> dict[str, int]:
+    """What `brain.session.make_worker_engine` passes to `create_async_engine`, from its source.
+
+    Read out of the source rather than off a constructed engine, and that is a deliberate
+    choice rather than laziness: `pool_size` is available on the pool object and `max_overflow`
+    is not, so an engine-based version would reach into a private attribute and would break on
+    a SQLAlchemy release rather than on a change to this repository. This is the technique
+    `tests/invariants/test_single_implementation.py` uses for the same reason.
+
+    Fails loudly when the call stops naming both as literals, because the day somebody moves
+    them into a variable is the day this stops watching the number it exists to watch.
+    """
+    tree = ast.parse((REPO / "src" / "brain" / "session.py").read_text(encoding="utf-8"))
+    found: dict[str, int] = {}
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.FunctionDef) and node.name == "make_worker_engine"):
+            continue
+        for call in ast.walk(node):
+            if not isinstance(call, ast.Call):
+                continue
+            for keyword in call.keywords:
+                if keyword.arg not in {"pool_size", "max_overflow"}:
+                    continue
+                assert isinstance(keyword.value, ast.Constant), keyword.arg
+                assert isinstance(keyword.arg, str)
+                assert isinstance(keyword.value.value, int)
+                found[keyword.arg] = keyword.value.value
+    assert set(found) == {"pool_size", "max_overflow"}, (
+        f"make_worker_engine no longer passes both as literals: {found}"
+    )
+    return found
 
 
 def setting(command: list[str], key: str) -> str:
@@ -118,7 +181,23 @@ def test_a_client_that_declares_no_pool_maximum_cannot_be_constructed() -> None:
     Delete this and `pool_max=0` reads as "no limit configured yet" and behaves as "all of
     them, for ever"."""
     with pytest.raises(ValueError, match="unbounded client runs at its server's ceiling"):
-        Client(name="something", database="db", pool_max=0)
+        Client(name="something", database="db", pool_max=0, why="because")
+
+
+def test_a_client_whose_number_came_from_nowhere_cannot_be_constructed() -> None:
+    """**The field four rows arrived with on 2026-09-09 and the reason it is required.** Each
+    of those four numbers has a different source: one is read off a compose file, one off an
+    engine in this repository, one off a decision in `docs/needs-rupash.md`, and one is a
+    judgement about a driver nobody has installed. A reader cannot tell those apart from the
+    figures, and a bound nobody can check is a bound nobody will argue with.
+
+    Refused at construction rather than reported, matching the pool maximum above: the
+    declaration cannot exist in a state the budget would have to describe.
+
+    Delete this and `why=""` becomes the shape of every row added in a hurry, which is the
+    same silence an undeclared client arrives through."""
+    with pytest.raises(ValueError, match="provenance is nowhere"):
+        Client(name="something", database="db", pool_max=5, why="   ")
 
 
 def test_two_replicas_of_one_client_are_counted_twice() -> None:
@@ -127,7 +206,7 @@ def test_two_replicas_of_one_client_are_counted_twice() -> None:
 
     Delete this and the budget is correct until the day somebody adds a replica, which is
     exactly the day it is needed."""
-    one = Client(name="scaled", database="db", pool_max=10, replicas=3)
+    one = Client(name="scaled", database="db", pool_max=10, replicas=3, why="a test")
 
     assert one.demand() == 30
 
@@ -199,6 +278,84 @@ def test_the_pooler_size_agrees_with_the_compose_file() -> None:
     assert int(services["pgbouncer"]["environment"]["DEFAULT_POOL_SIZE"]) == declared.pool_max
 
 
+def test_the_two_langfuse_pools_are_the_limit_their_own_connection_strings_carry() -> None:
+    """**Both of the four numbers that a compose file can be asked about directly.** Prisma
+    takes its pool maximum as `connection_limit` on the URL and nowhere else, so the budget's
+    figure and the deployed figure are two copies of one number in two files, and the whole
+    value of this module is that something compares them.
+
+    Asserted per service rather than as a total, because two fives and a ten add up the same
+    way and only one of those is the deployment.
+
+    Delete this and the budget can say five while the URL says nothing at all, which is
+    Prisma's default: a pool sized from the host's core count, on a database whose ceiling
+    costs more memory than its container has."""
+    services = compose("docker-compose.langfuse.yml")["services"]
+
+    for name in ("langfuse-web", "langfuse-worker"):
+        declared = client_named(name)
+        assert declared is not None, f"{name} has no Client row"
+        assert connection_limit_on(services[name]["environment"]["DATABASE_URL"]) == (
+            declared.pool_max
+        ), name
+
+
+def test_the_two_worker_pools_are_the_bound_their_own_containers_declare() -> None:
+    """The other two, and they are declared in an environment variable rather than on the URL
+    because a worker's bound covers two pools rather than one: the checkpointer engine's and
+    the queue driver's.
+
+    `BRAIN_WORKER_POOL_MAX` is the container's copy and the `Client` row is the budget's, and
+    `brain.ops.worker.pool_declaration_gaps` refuses a container where the two disagree. This
+    is the same comparison made from the other end, so that a compose file edited without the
+    budget fails here rather than only on a host with a queue driver installed.
+
+    Delete this and the deployed bound drifts from the one every headroom figure in this
+    module is computed from."""
+    for file, service in (
+        ("docker-compose.worker.yml", "brain-worker"),
+        ("docker-compose.parse-worker.yml", "brain-parse-worker"),
+    ):
+        declared = client_named(service)
+        assert declared is not None, f"{service} has no Client row"
+        assert pool_max_declared_by(file, service) == declared.pool_max, service
+
+
+def test_the_general_workers_bound_is_the_parse_workers_plus_what_its_engine_keeps() -> None:
+    """**Where the fifteen comes from, asserted against the two things it is made of rather
+    than against itself.** Ten is measured: `brain.session.make_worker_engine` keeps a pool of
+    five plus five overflow for the checkpointer, which goes straight to the database because a
+    saver prepares statements server-side. Five is the queue connection, and the parse worker
+    is exactly that five and nothing else, because it configures no checkpointer at all.
+
+    **Which half of this carries weight is worth being exact about.** The relation between the
+    two rows is an identity while both are built from the same two constants, so it holds for
+    every value they could take and it is not what makes the fifteen right. What makes it right
+    is the line above it, which compares the ten against `brain/session.py` and would fail if
+    that engine were resized; and the test above, which compares both rows against the numbers
+    their containers actually carry, which is what stops the constants moving together
+    unnoticed. What the relation itself pins is the shape: the difference between the two
+    workers is exactly one checkpointer pool, so raising one row without the other fails here.
+
+    Delete this and the ten stops being measured. `make_worker_engine` can be given a larger
+    pool with nothing here noticing, and the budget goes on reporting spare connections that
+    the worker is already holding."""
+    engine = worker_engine_pool()
+    general = client_named("brain-worker")
+    parse = client_named("brain-parse-worker")
+
+    assert general is not None and parse is not None
+    assert engine["pool_size"] + engine["max_overflow"] == WORKER_CHECKPOINTER_CONNECTIONS
+    assert general.pool_max == parse.pool_max + WORKER_CHECKPOINTER_CONNECTIONS
+    # The parse worker's half is a queue connection and nothing else, which is only true while
+    # that container configures no checkpointer. Asserted against its compose file, because the
+    # day somebody gives it one is the day its five is an understatement.
+    parse_environment = compose("docker-compose.parse-worker.yml")["services"][
+        "brain-parse-worker"
+    ]["environment"]
+    assert "BRAIN_CHECKPOINTER_URL" not in parse_environment
+
+
 def test_every_declared_database_has_a_client_and_every_client_a_database() -> None:
     """Both directions. A database nothing declares a client for is either dead or has an
     undeclared client, and an undeclared client is precisely what saturated Keycloak's.
@@ -222,14 +379,18 @@ def test_the_application_ceiling_is_affordable_only_because_of_the_pooler() -> N
     declares 100 connections at 16 MiB of `work_mem` inside a 2048 MiB container, so its
     declared ceiling costs 2112 MiB at worst and could not be honoured if anything reached it.
 
-    Nothing does, because PgBouncer bounds real server connections to twenty. That makes the
-    pooler load-bearing rather than an optimisation, and this is the test that says so: point
-    a second client straight at that database and the ceiling stops being theoretical.
+    Nothing does, because every client of it is bounded: PgBouncer at twenty and the four
+    services that go round it at thirty between them. That makes the pooler load-bearing rather
+    than an optimisation, and it makes each of those four bounds load-bearing in the same way.
+    This is the test that says so, and its second line is where the four declarations of
+    2026-09-09 are spent: it was 512 + 20 * 16 = 832 MiB against 2048 and it is now 1312, so
+    the margin this database is safe by has fallen from 1216 MiB to 736.
 
     Reported by `ceiling_costs` and deliberately not by `connection_breaches`, because a check
     that is red the day it lands is a check somebody switches off.
 
-    Delete this and removing the pooler looks like a simplification."""
+    Delete this and removing the pooler looks like a simplification, and so does adding a fifth
+    direct client with a pool chosen to be generous."""
     one = database("db")
 
     assert one.ceiling_cost_mib() > one.memory_mib
@@ -256,39 +417,70 @@ def test_keycloaks_ceiling_is_affordable_on_its_own() -> None:
 # --- the clients nobody declared ------------------------------------------------------------
 
 
-def test_every_service_that_goes_round_the_pooler_is_named_by_the_budget_or_by_this_test() -> None:
+def test_every_service_that_goes_round_the_pooler_is_declared_by_the_budget() -> None:
     """**The direction the outage came from, checked over the deployment rather than over the
     declaration.** `connection_breaches` asks whether a database's declared clients can
     outnumber its slots, and it cannot ask anything at all about a client nobody declared.
     Keycloak's was undeclared and unbounded, and that is the whole incident.
 
     Four services hold a connection string that reaches `db` with no pooler in the way, and
-    none of them has a `Client`. Every one bypasses PgBouncer for a good reason, which is
-    what makes them the case that matters: the queue needs LISTEN and the checkpointer needs
-    server-side prepared statements, so the services that most need budgeting are exactly the
-    ones the pooler is not bounding.
+    until 2026-09-09 none of them had a `Client`. Every one bypasses PgBouncer for a good
+    reason, which is what makes them the case that matters: the queue needs LISTEN and the
+    checkpointer needs server-side prepared statements, so the services that most need
+    budgeting are exactly the ones the pooler is not bounding.
 
-    The set is pinned rather than merely asserted non-empty, in the shape
-    `test_the_only_breach_is_the_one_that_is_known_and_written_down` uses. A check tolerating
-    four findings tolerates five, and the fifth is the one nobody reads about.
+    The answer is pinned as the exact set rather than as a count, in the shape
+    `test_the_only_breach_is_the_one_that_is_known_and_written_down` uses, and the set is
+    empty. That is the strongest form it can take: the next service pointed straight at one of
+    these databases fails here rather than becoming a fifth finding in a list whose number
+    nobody re-derives.
 
     Delete this and a service can be pointed straight at the application's database in a
     compose file and left out of the budget for ever, which is the state this module was
-    written to end and the state it is still in for these four."""
+    written to end."""
     found = undeclared_clients(every_connection_string())
 
-    assert {line.split("'")[1] for line in found} == {
+    assert found == (), found
+    # Empty because they are declared, not because nothing reaches `db` directly. Both halves
+    # are asserted, because a check that had stopped reading the compose files would produce
+    # exactly the same empty tuple.
+    assert {one.name for one in clients_of("db")} == {
+        "pgbouncer",
         "brain-worker",
         "brain-parse-worker",
         "langfuse-web",
         "langfuse-worker",
-    }, found
-    assert all("'db'" in line for line in found), found
-    # The written reason rests on one fact about this budget, so it is asserted against that
-    # fact rather than read as prose: PgBouncer is the only declared client of the
-    # application's database, which is why anything else reaching it is invisible here.
-    assert [one.name for one in clients_of("db")] == ["pgbouncer"]
+    }
+    direct = {
+        service
+        for service, urls in every_connection_string().items()
+        if any(direct_database_in(url) for url in urls)
+    }
+    assert direct == {
+        "brain-worker",
+        "brain-parse-worker",
+        "keycloak",
+        "langfuse-web",
+        "langfuse-worker",
+    }, direct
     assert "PgBouncer" in A_DIRECT_CLIENT_IS_THE_ONE_THE_POOLER_DOES_NOT_BOUND
+
+
+def test_a_service_that_goes_round_the_pooler_with_no_client_row_is_still_reported() -> None:
+    """The positive case for a check whose real answer is now empty, and without it that check
+    could `return ()` unconditionally with every other test here green.
+
+    Asked with a service name no compose file uses, so it is testing the rule rather than the
+    deployment: any service holding a direct connection string that `CLIENTS` does not name is
+    a pool outside the budget, and the finding says what the budget's spare figure does not
+    know about.
+
+    Delete this and the empty set above stops being evidence of anything."""
+    found = undeclared_clients({"a-new-service": ["postgresql+psycopg://brain:pw@db:5432/brain"]})
+
+    assert len(found) == 1, found
+    assert "'a-new-service'" in found[0] and "'db'" in found[0]
+    assert f"{headroom_on('db')} spare" in found[0]
 
 
 def test_a_caller_behind_the_pooler_is_not_counted_a_second_time() -> None:
@@ -301,12 +493,20 @@ def test_a_caller_behind_the_pooler_is_not_counted_a_second_time() -> None:
     declared is not reported although it connects directly.
 
     Delete this and `direct_database_in` can start returning a database for every URL, which
-    turns this check into noise on the day it would otherwise have said something."""
+    turns this check into noise on the day it would otherwise have said something.
+
+    Asserted against `direct_database_in` on the application's own strings rather than against
+    the findings, because the findings are empty now that the four direct clients are declared,
+    and an absence from an empty tuple is evidence of nothing."""
     services = every_connection_string()
-    reported = {line.split("'")[1] for line in undeclared_clients(services)}
 
     assert "app" in services, sorted(services)
-    assert "app" not in reported, "the application reaches its database through PgBouncer"
+    assert not [url for url in services["app"] if direct_database_in(url)], (
+        "the application reaches its database through PgBouncer"
+    )
+    assert any("pgbouncer" in url for url in services["app"]), (
+        "an application holding no database URL at all would pass the line above"
+    )
 
     # Keycloak is the half that says the skip is doing work rather than never being reached.
     # It holds `KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak`, so it is a direct
@@ -315,7 +515,13 @@ def test_a_caller_behind_the_pooler_is_not_counted_a_second_time() -> None:
     # asserted the second alone and passed while the skip was removed entirely.
     assert direct_database_in("jdbc:postgresql://keycloak-db:5432/keycloak") == "keycloak-db"
     assert any(one.name == "keycloak" for one in clients_of("keycloak-db"))
-    assert "keycloak" not in reported, "Keycloak is declared, and declared is the point"
+    assert undeclared_clients({"keycloak": services["keycloak"]}) == (), (
+        "Keycloak is declared, and declared is the point"
+    )
+    assert undeclared_clients({"not-keycloak": services["keycloak"]}), (
+        "the same strings under an undeclared name have to be reported, or the line above "
+        "passes for a check that reads nothing"
+    )
 
     assert direct_database_in("postgresql+psycopg://brain:pw@pgbouncer:5432/brain") is None
     assert direct_database_in("postgresql+psycopg://brain:pw@db:5432/brain") == "db"

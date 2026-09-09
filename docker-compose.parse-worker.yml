@@ -31,6 +31,15 @@
 # and the kernel's answer is SIGKILL. Containing that means a subprocess with its own rlimit,
 # and there is no subprocess here.
 #
+# **The connection bound is where this container is smaller than the general worker rather
+# than larger.** `QUEUE_URL` below goes straight to `db` because the queue needs LISTEN and a
+# transaction pooler cannot carry one, so nothing outside this container bounds it.
+# `BRAIN_WORKER_POOL_MAX` is five here against fifteen on the general worker, and the ten in
+# between is the checkpointer pool this container has no use for. `brain.ops.connections`
+# holds the matching `Client` row and `brain.ops.worker` refuses to start a container that has
+# a queue driver and no declared bound at all: a pool nobody has sized is one that runs at the
+# server's ceiling, which is the 2026-09-07 outage in a different service.
+#
 # **One parse at a time, and it falls out of the budget rather than being chosen beside it.**
 # The budget is the whole of what is left after the reserve, so two concurrent parses would
 # each be allowed all of it. `SYSTEM` is the class ingestion arrives on, which is why it is
@@ -100,6 +109,13 @@ services:
       # choose one. Declaring a job whole-container is never an advantage; it moves the job to
       # the container that runs one at a time.
       BRAIN_WORKER_SLOT_CLASS: whole_container
+      # What this container may hold against `db`, which no pooler bounds. Five rather than
+      # the general worker's fifteen, and the difference is the ten
+      # `brain.session.make_worker_engine` keeps for a checkpointer this container does not
+      # have: it sets no BRAIN_CHECKPOINTER_URL, because a parse is not a graph. So this is a
+      # queue connection and nothing else. `brain.ops.connections` declares it as a Client row
+      # and `brain.ops.worker` compares the two before this container starts.
+      BRAIN_WORKER_POOL_MAX: "5"
       # glibc gives a threaded process up to eight arenas per core and never returns them, so
       # resident memory climbs to a plateau set by the host's core count rather than by the
       # container's limit. It matters more here than on the general worker, because a parser

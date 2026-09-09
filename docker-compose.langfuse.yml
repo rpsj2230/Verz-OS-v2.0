@@ -53,24 +53,32 @@
 # install must run exactly one, which is why it is named here rather than duplicated
 # under a Langfuse prefix.
 #
-# **Neither service declares a connection limit, and that is the second thing stopping this
-# file being deployed.** `DATABASE_URL` above goes straight to `db` for the reason in the
-# pooler paragraph, so PgBouncer is not bounding either of them, and Langfuse runs Prisma,
-# whose pool defaults to a size derived from the host's core count rather than from anything
-# written here. `brain.ops.connections` calls that shape
+# **Both services now declare a connection limit, and until 2026-09-09 neither did.**
+# `DATABASE_URL` below goes straight to `db` for the reason in the pooler paragraph, so
+# PgBouncer is not bounding either of them, and Langfuse runs Prisma, whose pool otherwise
+# defaults to a size derived from the host's core count rather than from anything written
+# here. `brain.ops.connections` calls that shape
 # `AN_UNBOUNDED_CLIENT_ALWAYS_RUNS_AT_THE_SERVERS_CEILING`, and it is the shape of the
 # 2026-09-07 outage: Keycloak's pool defaulted to a hundred against a server admitting thirty
-# and held every connection idle. `undeclared_clients` names both of these services today,
-# and `tests/unit/test_connections.py` pins that set so a third cannot join quietly. Closing
-# it needs `?connection_limit=N` on both URLs and a `Client` row for each, and N is a sizing
-# decision for a container that has no host to be sized against yet.
+# and held every connection idle. `undeclared_clients` named both of these services until the
+# decision in `docs/needs-rupash.md` item 41, and `tests/unit/test_connections.py` pins that
+# set, which is empty now, so the next service pointed straight at `db` fails a test.
 #
-# The arithmetic it would have to fit: `db` admits 97 connections after the administrator's
-# reserve, PgBouncer is declared at 20, so 77 are unbudgeted. The memory side binds first.
+# **Five each, and the two fives are not the same decision.** The interface is a trace viewer
+# and is on nobody's request path, so five is what serves a browser. The worker batches
+# ingestion behind one writer, so five is the batch in flight and room beside it. Prisma takes
+# the figure as `?connection_limit=5` on the URL, which is why it is written into a connection
+# string rather than into an environment variable of its own, and `brain.ops.connections`
+# holds a `Client` row for each with the same number and the reason on the row.
+#
+# The arithmetic it has to fit: `db` admits 97 connections after the administrator's reserve,
+# and the declared demand is now 50 of them, which is PgBouncer's 20 plus these two fives plus
+# the two workers' fifteen and five. That leaves 47 spare, where it used to leave 77 with four
+# services holding pools nothing had counted. The memory side binds first.
 # `THE_POOLER_IS_WHAT_MAKES_THE_CEILING_SAFE` records that `db` declares 100 connections at
-# 16 MiB of work_mem inside a 2048 MiB container, which is 2112 MiB at worst and is
-# affordable only while real connections stay far below the ceiling. Two Prisma pools and
-# two workers are what "far below" stops meaning.
+# 16 MiB of work_mem inside a 2048 MiB container, which is 2112 MiB at worst and is affordable
+# only while real connections stay far below the ceiling: at 50 the worst case is 1312 MiB,
+# and the two Prisma pools here are 160 MiB of that.
 #
 # **Not claimed: M32.1.1.1.** The service set is written here and has never been started
 # anywhere, because there is no host it fits on. A compose file that has never run is a
@@ -96,7 +104,13 @@ services:
         condition: service_healthy
     environment:
       # Straight to the database. See the pooler note in this file's header.
-      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@db:5432/langfuse
+      #
+      # `connection_limit=5` is Prisma's pool maximum and it is a query parameter because that
+      # is the only place Prisma reads one. Without it the pool is sized from the host's core
+      # count, which on this box is a number about the machine and not about the work.
+      # `brain.ops.connections` declares the matching Client row and a test holds the two
+      # equal, so editing this string without editing that row fails rather than drifting.
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@db:5432/langfuse?connection_limit=5
       CLICKHOUSE_URL: http://langfuse-clickhouse:8123
       CLICKHOUSE_USER: langfuse
       CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
@@ -141,7 +155,10 @@ services:
       langfuse-cache:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@db:5432/langfuse
+      # The same bound as the interface and a different reason for it: this one batches
+      # ingestion behind a single writer. See the header, and the Client row that carries the
+      # sentence in `brain.ops.connections`.
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_POSTGRES_PASSWORD}@db:5432/langfuse?connection_limit=5
       CLICKHOUSE_URL: http://langfuse-clickhouse:8123
       CLICKHOUSE_USER: langfuse
       CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD}
