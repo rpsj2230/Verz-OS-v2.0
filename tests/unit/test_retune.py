@@ -23,12 +23,14 @@ from brain.ops.retune import (
     Distribution,
     Proposal,
     RetuneError,
+    post_launch_correction,
     proposal_gaps,
     retune_alert_fraction,
     retune_daily_burst,
     samples_needed,
     variance,
 )
+from brain.ops.spend import NO_CORRECTION, Observation
 
 MODULE = Path(__file__).resolve().parents[2] / "src" / "brain" / "ops" / "retune.py"
 
@@ -181,7 +183,9 @@ def test_the_share_above_a_figure_is_strict() -> None:
 
 # --------------------------------------------------- measured against the projection
 def test_the_variance_is_a_ratio_over_the_totals() -> None:
-    """Delete this and a hundred quiet days outvote the week the work happened.
+    """M37.5.3.1 is measured spend against the projection after thirty days, and this is the
+    ratio it turns on. Delete this and a hundred quiet days outvote the week the work
+    happened.
 
     A mean of per-period ratios weights a day that cost a penny equally with the day a
     backfill ran, which is the same failure `brain.ops.spend.correct` avoids in the same way.
@@ -215,6 +219,77 @@ def test_a_projection_of_nothing_is_refused() -> None:
     """Delete this and a divide by zero becomes a variance of infinity in a report."""
     with pytest.raises(RetuneError, match="no ratio to an actual"):
         variance(projected_minor=0, measured=_flat(1, 1))
+
+
+# ------------------------------------------------- correcting the estimator from actuals
+def _runs(count: int, estimated: int, actual: int) -> tuple[Observation, ...]:
+    return tuple(Observation(estimated_minor=estimated, actual_minor=actual) for _ in range(count))
+
+
+def test_a_correction_waits_for_the_window_and_not_only_for_the_sample_count() -> None:
+    """**M37.5.3.2, and the reason it is not just a call to `brain.ops.spend.correct`.**
+
+    That function refuses below `MIN_CORRECTION_SAMPLES` runs, which guards against noise and
+    says nothing about time. Two hundred runs over the three days a project was being closed
+    out is plenty of samples and one week of one month, weighted entirely towards what that
+    week happened to be doing, and the factor it produces is applied to every month after.
+
+    The same observations with a full window do move the factor, which is what makes this a
+    check on the window rather than on the runs.
+
+    Delete this and the first fortnight of an installation retunes the estimator against the
+    fortnight, permanently."""
+    busy_three_days = _runs(60, estimated=100, actual=200)
+
+    short = post_launch_correction(
+        NO_CORRECTION, busy_three_days, Distribution(readings=(1, 1, 1), over_days=3)
+    )
+    full = post_launch_correction(
+        NO_CORRECTION,
+        busy_three_days,
+        Distribution(readings=(1,), over_days=MEASUREMENT_WINDOW_DAYS),
+    )
+
+    assert short.factor == NO_CORRECTION.factor
+    assert "short of the" in short.reason
+    assert full.factor > NO_CORRECTION.factor
+
+
+def test_the_window_refusal_returns_the_prior_rather_than_raising() -> None:
+    """The caller is a report rendered every day from launch, and a report that raises for the
+    first month is a report nobody runs. It is the same shape `spend.correct` already uses for
+    too few samples, and the reason says which of the two rules stopped it.
+
+    Delete this and the obvious tightening is to raise, and the cost review is switched off
+    for the month it is most worth reading."""
+    result = post_launch_correction(
+        NO_CORRECTION,
+        _runs(60, estimated=100, actual=200),
+        Distribution(readings=(1,), over_days=1),
+    )
+
+    assert result.samples == NO_CORRECTION.samples
+    assert str(MEASUREMENT_WINDOW_DAYS) in result.reason
+
+
+def test_the_sample_rule_is_still_the_one_in_spend_rather_than_a_second_copy() -> None:
+    """A full window with four runs behind it is still refused, and it is refused by
+    `brain.ops.spend.correct` rather than by anything here. Two copies of a sample rule
+    disagree the first time somebody tunes one of them.
+
+    The reason names runs rather than days, which is how a reader can tell which rule stopped
+    it.
+
+    Delete this and a second threshold can be added here, and the module with the policy in it
+    stops being the one that decides."""
+    result = post_launch_correction(
+        NO_CORRECTION,
+        _runs(2, estimated=100, actual=200),
+        Distribution(readings=(1,), over_days=MEASUREMENT_WINDOW_DAYS),
+    )
+
+    assert result.factor == NO_CORRECTION.factor
+    assert "run(s) is below" in result.reason
 
 
 # ------------------------------------------------------------- retuning a warning fraction

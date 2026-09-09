@@ -61,7 +61,16 @@ Scope: domain logic. Nothing here reads a clock, opens a connection or stores an
 there is no function that returns a `brain.ops.budgets.BudgetRow`: a proposal cannot be
 mistaken for a budget by anybody wiring this up in a hurry.
 
-Task ids: M37.5.3.3
+**Enough samples is not a long enough window, and `brain.ops.spend.correct` cannot tell.**
+That function refuses a correction below `MIN_CORRECTION_SAMPLES` runs, which is the right
+guard against noise and says nothing about time: two hundred runs on the three days a project
+was being closed out is plenty of samples and is one week of one month, weighted entirely
+towards whatever that week was doing. It is exactly the failure `Variance.long_enough` exists
+for, one module along, and `post_launch_correction` is the pairing of the two. It refuses on
+the window and defers to `spend.correct` on everything else, because a second sample rule here
+would be a second copy of a policy that already has one home.
+
+Task ids: M37.5.3.1, M37.5.3.2, M37.5.3.3
 """
 
 from __future__ import annotations
@@ -72,6 +81,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from brain.ops.budgets import DAILY_BURST, DAYS_IN_BUDGET_MONTH, DEFAULT_ALERT_FRACTIONS
+from brain.ops.spend import Correction, Observation, correct
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why every function here returns a proposal and none of them changes a default.
@@ -315,6 +325,46 @@ def variance(*, projected_minor: int, measured: Distribution) -> Variance:
             )
         ),
     )
+
+
+#: Why a correction waits for the window rather than for the sample count alone.
+ENOUGH_SAMPLES_IS_NOT_A_LONG_ENOUGH_WINDOW: Final = (
+    "brain.ops.spend.correct refuses a correction below MIN_CORRECTION_SAMPLES runs, which "
+    "guards against noise and says nothing about time. Two hundred runs over the three days a "
+    "project was being closed out is plenty of samples and one week of one month, weighted "
+    "entirely towards what that week happened to be doing, and the factor it produces is then "
+    "applied to every month afterwards. The window is the second question and this is where "
+    "it is asked."
+)
+
+
+def post_launch_correction(
+    prior: Correction,
+    observations: Sequence[Observation],
+    measured: Distribution,
+) -> Correction:
+    """The estimator corrected from what the first window actually cost (M37.5.3.2).
+
+    Refuses on the window and defers to `brain.ops.spend.correct` on everything else. A second
+    sample rule here would be a second copy of a policy that already has one home, and the two
+    copies would disagree the first time somebody tuned one of them. See
+    `ENOUGH_SAMPLES_IS_NOT_A_LONG_ENOUGH_WINDOW`.
+
+    Returns the prior with a reason rather than raising, in the same shape `spend.correct`
+    already uses for too few samples: the caller is a report rendered every day from launch,
+    and a report that raises for the first month is a report nobody runs.
+    """
+    if not measured.is_long_enough:
+        return Correction(
+            factor=prior.factor,
+            samples=prior.samples,
+            reason=(
+                f"{measured.over_days} day(s) is short of the {MEASUREMENT_WINDOW_DAYS} the "
+                f"ceilings are written over; the prior stands. "
+                f"{ENOUGH_SAMPLES_IS_NOT_A_LONG_ENOUGH_WINDOW}"
+            ),
+        )
+    return correct(prior, observations)
 
 
 # ------------------------------------------------------------- retuned thresholds (M37.5.3.3)
