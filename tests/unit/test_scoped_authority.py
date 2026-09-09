@@ -16,12 +16,19 @@ is not offered it (M33.2.2.1). An adoption is that same ceiling restarting under
 takes the Approvals capability rather than the grant one, and it has a second ceiling of its
 own that nothing was checking (M33.2.2.4).
 
+M33.2.1.2, the department's own activity, is the sixth and is not the same shape as the other
+five: its authority is not a scope at all, because an audit entry carries no department for a
+scope to be written against. The tests for it run a real `AuditView` over real entries with
+the grants `brain.identity.staff_sync.audit_reach_for_head` produces, for the reason recorded
+in item 48: every fixture in this repository that used a company-wide audit grant passed while
+the page was empty for every reader it exists for.
+
 Real `EntitlementSet`s, real `SubjectGrant`s through their own validators, a real
 `RoleGrant`, real `AgentRecord`s and a real `Adoption` throughout. The pack test runs
 `brain.identity.packs.expand` rather than building the expanded rows by hand, because the
 claim being made is about what that function produces.
 
-Task ids: M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
+Task ids: M33.2.1.2, M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
 """
 
 from __future__ import annotations
@@ -38,10 +45,13 @@ from brain.agents.model import (
     AgentRecord,
     entitlement_ceiling,
 )
+from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
+from brain.audit.view import CAPABILITY_BY_KIND, AuditFilter, AuditView
 from brain.console.govern import Placed, may_certify
 from brain.console.reach_view import Operation, PromotionEvidence
 from brain.console.reads import Plane, plane_capability
 from brain.console.scoped_authority import (
+    ACTIVITY_AUTHORITY,
     BUDGET_AUTHORITY,
     COVERAGE_AUTHORITY,
     REACH_AUTHORITY,
@@ -49,11 +59,13 @@ from brain.console.scoped_authority import (
     RUNG_AUTHORITY,
     RUNG_AUTHORITY_SCREEN,
     AuthorityError,
+    activity_basis,
     adoptable,
     appoint,
     approvable,
     authority_gaps,
     ceiling_within_reach,
+    department_activity,
     department_coverage,
     department_pace,
     deputy_runs_at_most,
@@ -77,6 +89,13 @@ from brain.gate.leash import LeashEntry
 from brain.identity.lifecycle import Adoption
 from brain.identity.packs import CapabilityPack, PackAssignment, SubjectGrant, expand
 from brain.identity.roles import DEPUTY_MAX, IdentityError, Role, RoleGrant
+from brain.identity.staff_source import DEFAULT_TRUST, Roster, StaffRecord
+from brain.identity.staff_sync import (
+    AUDIT_PAGE_CAPABILITY,
+    GRANT_LIFETIME,
+    SYNC_INTERVAL,
+    audit_reach_for_head,
+)
 from brain.identity.teams import principal_subject
 from brain.knowledge.item import KnowledgeItem, KnowledgeState
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
@@ -1373,3 +1392,313 @@ def test_the_capability_is_the_budget_screens_own_and_not_one_invented_here() ->
     Delete this and the department budget page is read behind a grant nobody reviews."""
     assert BUDGET_AUTHORITY.value == "read:budget"
     assert screen("budget").read.requires == BUDGET_AUTHORITY
+
+
+# ============================================ what a department did, as its head reads it
+#: When the roster behind the head's grants was read: seven hours before `NOW`, so the next
+#: read is due later today and the reach has not lapsed.
+READ_AT = NOW - timedelta(hours=7)
+
+#: The department's people and one person in another department, so every narrowing has
+#: somebody it has to leave out.
+ACTIVITY_ROSTER = (
+    StaffRecord(work_address="priya@example.com", display_name="Priya", department=MAINTENANCE),
+    StaffRecord(work_address="wei@example.com", display_name="Wei", department=MAINTENANCE),
+    StaffRecord(work_address="sam@example.com", display_name="Sam", department=FINANCE),
+)
+
+ACTIVITY_KNOWN = {
+    "priya@example.com": "u_priya",
+    "wei@example.com": "u_wei",
+    "sam@example.com": "u_sam",
+}
+
+
+def a_head_of(department: str = MAINTENANCE) -> EntitlementSet:
+    """The reach a head actually holds, produced by the sync rather than written here.
+
+    Built through `brain.identity.staff_sync.audit_reach_for_head` and `SubjectGrant.as_grant`
+    on purpose: a fixture that wrote the grants by hand would be this file agreeing with
+    itself about what a head holds, which is how the empty page went unnoticed in the first
+    place.
+    """
+    produced = audit_reach_for_head(
+        Roster(
+            source="google_workspace",
+            people=ACTIVITY_ROSTER,
+            complete=True,
+            asserts=DEFAULT_TRUST["google_workspace"],
+        ),
+        department=department,
+        head_id="u_head",
+        known=ACTIVITY_KNOWN,
+        read_at=READ_AT,
+    )
+    return EntitlementSet(
+        principal_id="u_head", grants=tuple(one.as_grant() for one in produced.to_insert)
+    )
+
+
+def an_activity_ledger(*actors: str) -> tuple[AuditEntry, ...]:
+    """One grant entry per actor named, each about somebody who is not the reader."""
+    chain = AuditChain()
+    return tuple(
+        chain.append(
+            at=NOW - timedelta(hours=index + 1),
+            actor_id=actor,
+            action=AuditAction.GRANT,
+            subject=f"principal:u_subject{index}",
+            ent_hash="a" * 32,
+            trace_id="t1",
+            details={"capability": NAME},
+        )
+        for index, actor in enumerate(actors)
+    )
+
+
+def a_head_view(*actors: str) -> AuditView:
+    return AuditView(an_activity_ledger(*actors), reader=a_head_of(), now=NOW)
+
+
+def test_a_head_reads_their_own_peoples_activity_and_nobody_elses() -> None:
+    """**The leaf, end to end.** The reader's grants are the ones the sync writes, the entries
+    are real and chained, and the visibility decision is `brain.audit.view.AuditView`'s own.
+    What this module adds is the narrowing, and the assertion is that the two together produce
+    this department's people and only them.
+
+    Run through the real view rather than asserted against the filter, because the failure
+    item 48 records is precisely a filter that looks right over a grant that admits nothing:
+    every fixture in the repository used a company-wide grant, so every test passed while the
+    page was empty for every reader it exists for.
+
+    Delete this and the surface can go back to being empty for exactly its own readers, and
+    nothing in the suite would say so."""
+    page = department_activity(
+        a_head_view("u_priya", "u_sam", "u_wei"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei"],
+    )
+
+    assert [row.actor_id for row in page.rows] == ["u_wei", "u_priya"]
+
+
+def test_a_department_this_person_does_not_head_reads_as_one_with_nothing_in_it() -> None:
+    """Empty rather than a refusal, matching `department_coverage` and every other surface in
+    this module: somebody who could tell a department they do not head from one that is not
+    there has been handed the org chart one guess at a time.
+
+    Asserted as an identity between the three answers rather than as three empty pages, which
+    is the strong form: a refusal that differed by a message, a field or a cursor would be the
+    same disclosure arriving through the shape of the reply.
+
+    Delete this and the obvious improvement, raising with the department's name in it, tells
+    an outsider which departments exist."""
+    view = a_head_view("u_priya", "u_wei")
+
+    not_headed = department_activity(view, FINANCE, headed=[MAINTENANCE], members=["u_priya"])
+    invented = department_activity(view, "nowhere", headed=[MAINTENANCE], members=["u_priya"])
+    heads_nothing = department_activity(view, MAINTENANCE, headed=[], members=["u_priya"])
+
+    assert not_headed.model_dump_json() == invented.model_dump_json()
+    assert not_headed.model_dump_json() == heads_nothing.model_dump_json()
+    assert not_headed.rows == ()
+
+
+def test_an_empty_member_list_is_refused_because_a_filter_reads_it_as_everybody() -> None:
+    """`AuditFilter` reads an empty actors set as every actor, on the same reading as an empty
+    scope. Correct for a filter, catastrophic as a fallback: a failed membership query would
+    arrive here as an empty sequence and widen the page to everything the reader's grant
+    admits, under a department's name, with every row on it one they were entitled to see.
+
+    The filter's own reading is asserted here rather than assumed, because it is the entire
+    reason this is a refusal.
+
+    Delete this and the empty case becomes a default, which is
+    `brain.core.department.compose` returning the identity for an empty list of scopes."""
+    view = AuditView(an_activity_ledger("u_priya", "u_wei"), reader=a_head_of(), now=NOW)
+    assert len(view.page(AuditFilter(actors=frozenset())).rows) == 2
+
+    with pytest.raises(ValueError, match="no members"):
+        department_activity(a_head_view("u_priya"), MAINTENANCE, headed=[MAINTENANCE], members=[])
+
+
+def test_a_member_the_grant_does_not_yet_cover_is_absent_and_never_counted() -> None:
+    """**The staleness window, in the direction that fails closed.** Somebody joined this
+    morning, so the directory names them and the grant written at the last sync does not. Their
+    entries are absent, and the page is byte-identical to the page a ledger without them
+    produces: no placeholder, no shorter-page signal, and nothing anywhere that could be
+    subtracted into a count of what was withheld.
+
+    Delete this and the natural repair for a thin page, reporting the members whose entries
+    could not be read, emits exactly the hidden count this system may not emit."""
+    joiner_present = department_activity(
+        a_head_view("u_priya", "u_newcomer", "u_wei"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei", "u_newcomer"],
+    )
+    joiner_absent = department_activity(
+        a_head_view("u_priya", "u_wei"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei", "u_newcomer"],
+    )
+
+    assert [row.actor_id for row in joiner_present.rows] == ["u_wei", "u_priya"]
+    assert joiner_present.next_cursor is None
+    assert len(joiner_present.rows) == len(joiner_absent.rows)
+
+
+def test_somebody_the_directory_has_moved_out_is_dropped_before_the_grant_catches_up() -> None:
+    """The staleness window in the direction that fails open, closed on the way in. The grant
+    still names them because the sync has not run since the transfer; the member list is
+    today's answer, and the filter narrows to it.
+
+    The screen therefore closes the open half of the window immediately and the sync closes it
+    everywhere else at the next run. See
+    `A_FILTER_AND_A_GRANT_THAT_DISAGREE_CAN_ONLY_NARROW`.
+
+    Delete this and a transfer is invisible on the head's own page until the next sync, which
+    is the cost item 48 named and the one thing that could be done about it here."""
+    page = department_activity(
+        a_head_view("u_priya", "u_wei"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya"],
+    )
+
+    assert [row.actor_id for row in page.rows] == ["u_priya"]
+
+
+def test_an_actor_filter_naming_an_outsider_cannot_widen_the_page() -> None:
+    """A caller may narrow by actor and may not replace the member list with one. The two are
+    intersected, so naming somebody outside the department adds nobody, and the head cannot
+    turn their own page into a search over the ledger by passing a name.
+
+    **The second half is the case that actually tests this function.** Naming somebody the
+    head's grant already refuses proves nothing, because the view refuses them whatever this
+    module does with the filter: a mutation replacing the intersection with the caller's own
+    set survived exactly that assertion. The case that bites is somebody the grant still
+    covers and the directory has moved out, which is the staleness window, and there the
+    intersection is the only thing standing between the caller and a row.
+
+    Delete this and `criteria` becomes a way round the department the page is named after."""
+    outsider = department_activity(
+        a_head_view("u_priya", "u_sam", "u_wei"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei"],
+        criteria=AuditFilter(actors=frozenset({"u_priya", "u_sam"})),
+    )
+    moved_out = department_activity(
+        a_head_view("u_priya", "u_wei"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya"],
+        criteria=AuditFilter(actors=frozenset({"u_priya", "u_wei"})),
+    )
+
+    assert [row.actor_id for row in outsider.rows] == ["u_priya"]
+    assert [row.actor_id for row in moved_out.rows] == ["u_priya"]
+
+
+def test_asking_about_somebody_outside_the_department_reads_as_no_activity() -> None:
+    """An intersection of nobody is returned as an empty page and never as the empty filter,
+    which would mean every actor. It is not a refusal either: asking about a person who is not
+    in this department has to read the same as a department where nothing happened, or the
+    refusal answers whether that person exists.
+
+    Delete this and either the page widens to everybody or the shape of the reply tells the
+    reader which names are real."""
+    page = department_activity(
+        a_head_view("u_priya", "u_sam"),
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei"],
+        criteria=AuditFilter(actors=frozenset({"u_sam"})),
+    )
+    quiet = department_activity(
+        a_head_view(), MAINTENANCE, headed=[MAINTENANCE], members=["u_priya"]
+    )
+
+    assert page.model_dump_json() == quiet.model_dump_json()
+
+
+def test_criteria_still_narrow_by_action_and_by_date() -> None:
+    """The positive half of the two refusals above. A filter that is only ever refused or
+    emptied is satisfied by a function that ignores `criteria` entirely, and the date range is
+    what a head actually uses the page with.
+
+    Delete this and the intersection logic can drop every other field of the filter while both
+    refusal tests stay green."""
+    view = a_head_view("u_priya", "u_wei")
+
+    by_action = department_activity(
+        view,
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei"],
+        criteria=AuditFilter(actions=frozenset({AuditAction.REVOKE})),
+    )
+    recent = department_activity(
+        view,
+        MAINTENANCE,
+        headed=[MAINTENANCE],
+        members=["u_priya", "u_wei"],
+        criteria=AuditFilter(since=NOW - timedelta(minutes=90)),
+    )
+
+    assert by_action.rows == ()
+    assert [row.actor_id for row in recent.rows] == ["u_priya"]
+
+
+def test_the_basis_says_when_the_membership_was_read_and_whether_a_read_is_overdue() -> None:
+    """The visible half of the staleness cost. A window nobody is shown is a window nobody
+    has, and the failure worth showing is not the ordinary one: it is a sync that has quietly
+    stopped, leaving the page confidently rendering a department as it was.
+
+    The arithmetic is the sync's own, called and not recomputed, so the page and the scheduler
+    cannot disagree about when a read is due.
+
+    Delete this and a stale page looks exactly like a current one."""
+    fresh = activity_basis(read_at=READ_AT, now=NOW)
+    stopped = activity_basis(read_at=NOW - 3 * SYNC_INTERVAL, now=NOW)
+
+    assert fresh.read_at == READ_AT
+    assert fresh.due_at == READ_AT + SYNC_INTERVAL
+    assert fresh.lapses_at == READ_AT + GRANT_LIFETIME
+    assert not fresh.overdue
+    assert stopped.overdue
+    assert stopped.lapses_at < NOW
+
+
+def test_the_basis_carries_times_and_never_a_number_of_people() -> None:
+    """How stale a reading is, when the next one is due and whether it is late are facts about
+    this reader's own grant. How many people it covers, or how many it has stopped covering,
+    is a count of what somebody may not see arrived at from the other side.
+
+    Read off the fields rather than asserted about one of them, so a count cannot be added
+    later under a name this test did not think of.
+
+    Delete this and the obvious next addition, "covering 14 of 15 people", is the hidden
+    count."""
+    carried = activity_basis(read_at=READ_AT, now=NOW)
+
+    for field, value in vars(carried).items():
+        assert isinstance(value, datetime | bool | type(None)), field
+
+
+def test_the_page_capability_is_the_activity_screens_own_and_the_one_the_sync_writes() -> None:
+    """Three names for one capability, and this is where they are checked against each other:
+    the screen registry's requirement, the literal, and the capability
+    `brain.identity.staff_sync` writes onto a head's grant. Derived from one another the
+    comparison would be a constant against itself; built from different sources, a divergence
+    is a red test rather than a menu entry nobody can reach.
+
+    Delete this and the sync can write a page capability the registry does not ask for, and
+    the head holds a grant that opens nothing."""
+    assert ACTIVITY_AUTHORITY.value == "read:audit"
+    assert screen("audit").read.requires == ACTIVITY_AUTHORITY
+    assert AUDIT_PAGE_CAPABILITY == ACTIVITY_AUTHORITY
+    assert not ACTIVITY_AUTHORITY.covers(CAPABILITY_BY_KIND["principal"])

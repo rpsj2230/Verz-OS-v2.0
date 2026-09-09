@@ -1610,6 +1610,31 @@ def test_the_audit_record_survives_a_departure_and_every_transition() -> None:
         assert plan.action_at(Surface.AUDIT) is Action.WRITE, transition
 
 
+def test_every_transition_rewrites_the_audit_reach_of_a_head_who_was_no_part_of_it() -> None:
+    """The one surface that is somebody else's rows, and the reason it is a member rather than
+    a line inside `GRANTS`.
+
+    A department head's audit permissions name the people rather than the department, because
+    an audit entry carries no department and a department-scoped audit grant matches no entry
+    at all: that is item 48, decided as Option A. So a join adds a name to a head's grant, a
+    move takes one out of one head's and puts it in another's, and a departure takes one out,
+    and in all three the head was no part of the transition. `REPLACE` in every plan, because
+    changing who a scope names is deleting the row and writing the new one, which
+    `A_GRANT_CHANGE_IS_ONE_ACT` requires to be one transaction.
+
+    Delete this and the surface can be quietly dropped back to `NOTHING` with a reason that
+    sounds right, and a leaver goes on being readable by their old head until somebody
+    notices the name on a screen.
+    """
+    for transition in Transition:
+        plan = plan_for(transition)
+        assert plan.action_at(Surface.HEAD_AUDIT_REACH) is Action.REPLACE, transition
+        assert (
+            plan.reason_at(Surface.HEAD_AUDIT_REACH)
+            == lifecycle.A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW
+        ), transition
+
+
 # ==================================================== the package invariants
 def test_nothing_in_this_module_subtracts_at_resolve_time() -> None:
     """M1.4.2 applied here. A suspension is not a column and must never become one.

@@ -101,6 +101,15 @@ for it is the thing M26.3.2 exists to prevent. The default is that it stops:
 `agents_for_adoption` returns records already disabled, and `adopt` is the deliberate act that
 transfers and then starts it, in that order.
 
+**Every surface was about the person moving until 2026-09-10, and one of them is not.** A
+department head's audit permissions name the people rather than the department, because an
+audit entry carries no department; that is item 48 in `docs/needs-rupash.md`, decided as
+Option A. So a join, a move and a departure each rewrite a grant belonging to a head who was
+no part of the transition, and no member of `Surface` covered somebody else's row. It is a
+member rather than a sentence inside `GRANTS`, which means all three plans had to decide
+about it, which is what the enum being closed is for. See
+`A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW`.
+
 No SQLAlchemy model and no migration is written here, and no existing module is edited. Where a
 leaf implies a table (`automation`), this is the type and the rule only. This module is not
 re-exported from `brain.identity`, which is how `oidc` and `sessions` already are: a caller
@@ -299,6 +308,15 @@ class Surface(enum.StrEnum):
     WELCOME = "welcome"
     #: The hash-chained ledger.
     AUDIT = "audit"
+    #: The audit reach a department head holds over their own people, which names them.
+    #:
+    #: The only surface here that is somebody else's rows. Every other member is about the
+    #: person moving, and this one moves because they did: a head's audit grants are written
+    #: against the people rather than against the department, on the owner's decision on item
+    #: 48, so a join, a move and a departure each rewrite a row belonging to a head who was
+    #: not part of the transition. Nothing in the enum covered that, which is why it is a
+    #: member rather than a line inside `GRANTS`.
+    HEAD_AUDIT_REACH = "head_audit_reach"
 
 
 class Action(enum.StrEnum):
@@ -522,6 +540,21 @@ A_STARTER_QUESTION_IS_ANSWERABLE_WITH_THE_STARTER_PACK: Final = (
     "teach a new joiner, on their first day, exactly which things exist and are not theirs."
 )
 
+#: Why a transition rewrites a row belonging to somebody who was not part of it (M26.2.1).
+A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW: Final = (
+    "A department head's audit permissions are written against the people rather than against "
+    "the department, because an audit entry carries no department and a department-scoped "
+    "audit grant matches no entry at all. So the row that says which activity a head may read "
+    "is a list of principals, and a join adds a name to it, a move takes one out of the old "
+    "head's and puts it in the new head's, and a departure takes one out. It is a replace "
+    "rather than a write or a delete in all three, because the reach is one scope on one row "
+    "and changing who it names is deleting the row and writing the new one, which "
+    "A_GRANT_CHANGE_IS_ONE_ACT requires to be one transaction. The rewrite is the directory "
+    "sync's, in brain.identity.staff_sync.audit_reach_for_head, so a transition applied by "
+    "hand between two runs leaves it stale for at most one SYNC_INTERVAL and the console says "
+    "how stale on the page."
+)
+
 #: The arguments that may stand behind `Action.NOTHING`. A step claiming a transition need
 #: not reach a surface has to name one of these, so the claim comes with its reason attached
 #: in the module rather than in a commit message somebody has to find.
@@ -659,6 +692,11 @@ JOIN_PLAN: Final = Plan(
         ),
         Step(Surface.WELCOME, Action.WRITE, A_STARTER_QUESTION_IS_ANSWERABLE_WITH_THE_STARTER_PACK),
         Step(Surface.AUDIT, Action.WRITE, THE_AUDIT_RECORD_OUTLIVES_EVERY_TRANSITION),
+        Step(
+            Surface.HEAD_AUDIT_REACH,
+            Action.REPLACE,
+            A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW,
+        ),
     ),
 )
 
@@ -693,6 +731,11 @@ MOVE_PLAN: Final = Plan(
         ),
         Step(Surface.WELCOME, Action.NOTHING, ONLY_A_JOINER_GETS_A_WELCOME_PATH),
         Step(Surface.AUDIT, Action.WRITE, THE_AUDIT_RECORD_OUTLIVES_EVERY_TRANSITION),
+        Step(
+            Surface.HEAD_AUDIT_REACH,
+            Action.REPLACE,
+            A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW,
+        ),
     ),
 )
 
@@ -717,6 +760,11 @@ LEAVE_PLAN: Final = Plan(
         Step(Surface.KNOWLEDGE_INDEX, Action.NOTHING, A_DEPARTURE_IS_NOT_A_DELETION_REQUEST),
         Step(Surface.WELCOME, Action.NOTHING, ONLY_A_JOINER_GETS_A_WELCOME_PATH),
         Step(Surface.AUDIT, Action.WRITE, THE_AUDIT_RECORD_OUTLIVES_EVERY_TRANSITION),
+        Step(
+            Surface.HEAD_AUDIT_REACH,
+            Action.REPLACE,
+            A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW,
+        ),
     ),
 )
 

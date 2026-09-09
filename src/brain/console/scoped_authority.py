@@ -92,16 +92,29 @@ package: `brain.console.screens.unregistered_tools([])` still returns all thirty
 claimed below is the authority decision, which is the half a screen cannot supply and the half
 that was missing.
 
-Task ids: M33.2.1.3, M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4, M33.2.2.5
+**M33.2.1.2, the department's own activity, was blocked until 2026-09-09 and is here now.** It
+is the one surface in this module whose authority is not a scope, and the reason is the
+finding recorded in `A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING`: an audit entry carries
+no department, so a head's audit grant cannot hold a department clause and there is nothing
+for `within_reach` to test against. The owner's answer, Option A on item 48, is that a head's
+audit permissions name the people instead, written by
+`brain.identity.staff_sync.audit_reach_for_head` and rewritten by the directory sync. What
+this module adds is the narrowing on the way in and `activity_basis`, which puts the age of
+that membership on the screen rather than leaving a stale page looking current.
+
+Task ids: M33.2.1.2, M33.2.1.3, M33.2.1.4, M33.2.2.1, M33.2.2.2, M33.2.2.3, M33.2.2.4
+Task ids: M33.2.2.5
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
 
 from brain.agents.model import AgentRecord, entitlement_ceiling
+from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditPage, AuditView
 from brain.console.operate import CoverageRow, coverage
 from brain.console.reach_view import OPERATION_EFFECT, Operation, PromotionEvidence, may_raise
 from brain.console.screens import screen
@@ -114,6 +127,9 @@ from brain.gate.leash import LeashEntry
 from brain.identity.lifecycle import Adoption
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import DEPUTY_MAX, RoleGrant, appoint_deputy
+from brain.identity.staff_sync import GRANT_LIFETIME
+from brain.identity.staff_sync import due_at as next_read_due
+from brain.identity.staff_sync import is_due as read_is_due
 from brain.knowledge.item import KnowledgeItem
 from brain.ops.budgets import Allowance, BudgetLevel
 from brain.tools.registry import rung_ceiling
@@ -750,8 +766,8 @@ def department_coverage(
     )
 
 
-# ------------------------------------- what a department spent, against pace (M33.2.1.3)
-#: Why there is no department activity view here, and why the block is deeper than a filter.
+# -------------------------------------------- what a department did, as its head reads it
+#: Why this view is narrowed by people and never by the department it is named after.
 #:
 #: `brain.console.global_surfaces.activity_filter` refuses a department lens because an audit
 #: entry carries no department. That is the visible half. The half found on 2026-09-08, while
@@ -766,9 +782,12 @@ def department_coverage(
 #:
 #: A wrapper that narrowed by member ids would therefore have been a surface that is always
 #: empty for exactly the readers it is for, and its tests would have passed: every fixture
-#: would have used a company-wide grant. It is item 48 in `docs/needs-rupash.md` because the
+#: would have used a company-wide grant. It was item 48 in `docs/needs-rupash.md` because the
 #: answer is a decision about what the longest-retained record in the estate says about a
-#: person, and not one to take at two in the morning.
+#: person, and it was decided on 2026-09-09 as Option A: a head's audit permissions are
+#: written against the people rather than against the department, and
+#: `brain.identity.staff_sync.audit_reach_for_head` writes them. The sentence below is still
+#: the finding and is now also the reason this function takes members and not a scope.
 A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING: Final = (
     "An audit entry carries an action, a subject kind, a subject and an actor, and no "
     "department. A scope written against a department therefore matches no entry, because a "
@@ -779,6 +798,164 @@ A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING: Final = (
     "it exists for while passing every test written with a company-wide fixture."
 )
 
+#: Why an empty member list may never be handed to an audit filter.
+#:
+#: `AuditFilter.actors` reads an empty set as every actor, on the same reading as an empty
+#: scope, which is correct for a filter and catastrophic as a fallback. A failed membership
+#: query would arrive here as an empty sequence and turn a department page into every actor
+#: the reader's grant admits, under a department heading. `brain.core.department.compose`
+#: refuses an empty list of scopes rather than returning the identity for exactly this reason
+#: and says so in the same words.
+AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR: Final = (
+    "brain.audit.view.AuditFilter reads an empty actors set as every actor rather than as no "
+    "actor. So a department page handed no members would widen to everything its reader's "
+    "grant admits, with a department's name at the top of it, and every row on the page would "
+    "be one they were entitled to see, which is what makes it unnoticeable. It is refused "
+    "here rather than defaulted, exactly as brain.core.department.compose refuses an empty "
+    "sequence rather than returning the identity."
+)
+
+#: Why the screen's member list and the grant's member list are allowed to disagree.
+A_FILTER_AND_A_GRANT_THAT_DISAGREE_CAN_ONLY_NARROW: Final = (
+    "The members this page filters by are today's directory answer and the members inside the "
+    "head's grant are the last sync's, so during the window between a transfer and the next "
+    "run the two differ. Neither can widen the other: the filter is applied by "
+    "brain.audit.view.AuditView on top of its own visibility decision, so a member the grant "
+    "does not cover is absent and a person the grant still covers but the directory has moved "
+    "out is dropped by the filter. The screen therefore closes the open half of the staleness "
+    "window on the way in, and the grant closes it for everything else at the next run."
+)
+
+#: The capability that opens this page, and the screen it belongs to.
+#:
+#: `screen("audit").read.requires` rather than the string, so this cannot drift from the
+#: registry, and it is the same capability `brain.identity.staff_sync.AUDIT_PAGE_CAPABILITY`
+#: writes. The two are built from different sources on purpose, the registry here and
+#: `brain.audit.view.AUDIT_NOUN` there, and `test_scoped_authority.py` asserts they agree:
+#: derived from one another the comparison would be a constant against itself.
+ACTIVITY_AUTHORITY: Final = screen("audit").read.requires
+
+
+@dataclass(frozen=True)
+class ActivityBasis:
+    """How fresh the membership behind a head's activity view is, as the screen says it.
+
+    Times and never counts. How stale the reading is, when the next one is due and whether it
+    is overdue are all facts about this reader's own grant; how many people are in it or
+    missing from it would be a count of what they cannot see, arrived at from the other side.
+    """
+
+    #: When the roster behind the head's audit grants was read.
+    read_at: datetime
+    #: When the next read is due, or None when the source has never been applied.
+    due_at: datetime | None
+    #: When the grants lapse if no read happens. See `staff_sync.GRANT_LIFETIME`.
+    lapses_at: datetime
+    #: True when the next read was due before now, which is the failure worth showing: a sync
+    #: that has quietly stopped leaves the page confidently rendering an old department.
+    overdue: bool
+
+
+def activity_basis(*, read_at: datetime, now: datetime) -> ActivityBasis:
+    """When the membership behind this page was read, and whether that reading is late.
+
+    The visible half of the staleness cost item 48 records, and the reason it is a function
+    rather than a sentence in a docstring: a window nobody is shown is a window nobody has.
+    `brain.identity.staff_sync.THE_STALENESS_WINDOW` states it once and this puts the three
+    moments a screen needs beside it.
+
+    `due_at` and `is_due` are the sync's own, called and not recomputed. A second arithmetic
+    for when a read is due would be a page saying one thing and the scheduler doing another,
+    and the page is the one somebody believes.
+    """
+    return ActivityBasis(
+        read_at=read_at,
+        due_at=next_read_due(read_at),
+        lapses_at=read_at + GRANT_LIFETIME,
+        overdue=read_is_due(read_at, now),
+    )
+
+
+def department_activity(
+    view: AuditView,
+    department: str,
+    *,
+    headed: Sequence[str],
+    members: Sequence[str],
+    criteria: AuditFilter | None = None,
+    limit: int = DEFAULT_PAGE_SIZE,
+    cursor: str | None = None,
+) -> AuditPage:
+    """What this department's people did, for the person who heads it (M33.2.1.2).
+
+    A narrowing of `brain.audit.view.AuditView.page` and nothing else. That module decides
+    entry by entry what this reader may see and this one adds a filter on top of it, so a head
+    cannot acquire by asking about their department anything they could not have read one
+    entry at a time. `brain.console.auditor.permission_history` is the same shape one surface
+    along and this deliberately does not restate its argument.
+
+    **The narrowing is a set of people, because a department is not a thing an audit entry
+    carries.** See `A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NOTHING` for the finding and
+    `brain.identity.staff_sync.audit_reach_for_head` for the grants that make the reader's own
+    side of it work. `members` is today's directory answer and the grant holds the last sync's;
+    see `A_FILTER_AND_A_GRANT_THAT_DISAGREE_CAN_ONLY_NARROW`.
+
+    **Empty rather than a refusal for a department this person does not head**, matching
+    `department_coverage` and every other surface here: somebody who could tell a department
+    they do not head from one that is not there has been handed the org chart one guess at a
+    time. An empty page is also what a department with nothing in it returns, which is the
+    point.
+
+    `headed` is the departments this person answers for, derived by the caller from their role
+    grants, because that is `brain.identity.roles`' question. It is asked instead of
+    `within_reach(entitlement, ACTIVITY_AUTHORITY, Scope.department(department))`, which every
+    other department surface here can ask and this one cannot: an audit grant scoped to a
+    department is precisely the thing that matches no entry, so a head's real grant does not
+    contain a department clause for that test to succeed against.
+
+    Passing `criteria` narrows further by action, kind and date. Any actors it names are
+    intersected with `members` rather than replacing them, so a caller cannot widen the page
+    by naming somebody outside the department, and an intersection that comes out empty
+    returns an empty page rather than a refusal: asking about somebody who is not in this
+    department has to read the same as a department where nothing happened.
+    """
+    if not department.strip():
+        msg = "a department activity view needs a department; over none it is the company's"
+        raise ValueError(msg)
+    if not members:
+        msg = (
+            f"the {department!r} activity view was given no members. "
+            f"{AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR}"
+        )
+        raise ValueError(msg)
+    if department not in set(headed):
+        return AuditPage()
+
+    wanted = frozenset(members)
+    if criteria is not None and criteria.actors:
+        wanted &= criteria.actors
+    if not wanted:
+        # An intersection of nobody. Returned as an empty page and never as the empty filter,
+        # which `AuditFilter` would read as every actor. See
+        # `AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR`, which is the same trap arriving by
+        # subtraction rather than by an empty argument.
+        return AuditPage()
+
+    base = criteria or AuditFilter()
+    return view.page(
+        AuditFilter(
+            actions=base.actions,
+            subject_kinds=base.subject_kinds,
+            actors=wanted,
+            since=base.since,
+            until=base.until,
+        ),
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+# ------------------------------------- what a department spent, against pace (M33.2.1.3)
 #: The capability a department budget view is read behind: the budget screen's own.
 BUDGET_AUTHORITY: Final = screen("budget").read.requires
 
