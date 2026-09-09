@@ -42,7 +42,15 @@ than present with its thirty days dropped. A rung that raises itself on the thir
 is supervision that ends without anybody deciding it should, and the failure mode is an agent
 becoming autonomous over accounts receivable on a date nobody diarised. "Review after thirty
 days" and "become autonomous after thirty days" are different products and only one of them
-is a guardrail. `docs/needs-rupash.md` carries the question.
+is a guardrail.
+
+**The owner answered that question on 2026-09-09 and the answer is a third thing.** The agent
+stays supervised and is reviewed at thirty days, the review is a measured confidence rather
+than somebody's impression, and below the bar the period extends instead of the pin lapsing.
+`brain.agents.supervision` is that, and it puts the time bound on the review rather than on a
+rung, so `LeashRung` still carries none and nothing in a leash entry can run out. The chaser
+is still absent from here, because what was missing was the pin and what is left is the
+template: a persona, a ceiling and a golden set, which is that leaf's own work.
 
 **A template reaches nothing.** `authority` is a ceiling, and `E_run = E(caller) ∩ ceiling`
 is computed by the one `intersect` there is, in `brain.gate.leash`. Every capability below
@@ -110,8 +118,12 @@ A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS = (
     "ship a permanent pin under a name promising a temporary one, and adding an expiry to "
     "the rung would ship supervision that ends on a date nobody diarised: an agent becoming "
     "autonomous over accounts receivable because a timer ran out. The two readings, review "
-    "after thirty days and autonomy after thirty days, are different products, so the "
-    "template is absent and the question is on the Needs Rupash page."
+    "after thirty days and autonomy after thirty days, are different products, and the owner "
+    "chose neither: the agent stays supervised, the question is asked at thirty days, and a "
+    "measured confidence below the bar extends the period. brain.agents.supervision holds "
+    "that, so the duration lives on a review rather than on a rung and no leash entry can "
+    "run out. The template is still absent because the pin was what was missing and the "
+    "persona, ceiling and golden set are what is left."
 )
 
 
