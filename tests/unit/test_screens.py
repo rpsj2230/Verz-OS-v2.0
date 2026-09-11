@@ -8,9 +8,18 @@ The five leaves claimed here are the console security ones this module implement
 the screens it declares. The menu is computed from grants and never from a role (M27.5.6); it
 publishes no count of what it withheld (M27.5.7); a filter dropdown is intersected with what
 the caller already reaches (M27.5.8); every screen can be narrowed to a department and to a
-person (M27.5.9); and the screens whose subject is the installation are not offered at a
-department's scope (M27.5.10). The screens themselves are declared and not built, which
-`brain.console.screens` says in its own words and `unregistered_tools` says in figures.
+person (M27.5.9); and a screen leaves a department's menu only when somebody has written down
+what it would disclose there (M27.5.10). The screens themselves are declared and not built,
+which `brain.console.screens` says in its own words and `unregistered_tools` says in figures.
+
+**M27.5.10 changed meaning on 2026-09-09 and the tests below are where that is visible.** The
+leaf reads "screens whose subject is the installation are not offered at department scope", and
+five screens sat behind it on the argument that at a department's scope each was either empty
+or a leak. The owner overruled the scoping: a department admin gets every screen the
+requirements call for. Empty is not a reason to withhold a screen, because a scoped surface
+that shows no rows has disclosed nothing and a missing menu heading has; a leak is. One screen
+is left, and the test for it checks the argument against the module whose rows it cites rather
+than taking the argument on trust.
 
 Real `EntitlementSet`s throughout, and real `Screen`s wherever the registry is not itself the
 thing under test. A test that stood a fixture in for either would be checking this module
@@ -21,6 +30,7 @@ Task ids: M27.5.6, M27.5.7, M27.5.8, M27.5.9, M27.5.10
 
 from __future__ import annotations
 
+import ast
 import inspect
 import json
 from dataclasses import fields as dataclass_fields
@@ -31,14 +41,17 @@ from typing import Any
 import pytest
 
 from brain.console import screens as screens_module
+from brain.console.installation import _limit_row
 from brain.console.reads import CONSOLE_CAPABILITY_PREFIX, ConsoleRead, Plane, plane_capability
 from brain.console.screens import (
-    COMPANY_WIDE,
     EVERYWHERE,
+    NOT_AT_DEPARTMENT_SCOPE,
     ONLY_THE_SCREENS,
     SCREEN_COUNT,
     SCREENS,
+    WITHHELD_AT_DEPARTMENT_SCOPE,
     Axis,
+    Disclosure,
     Group,
     Lens,
     Screen,
@@ -53,8 +66,20 @@ from brain.console.screens import (
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.identity.roles import Role
+from brain.ops.limits import Limit, LimitScope
 
 REPO = Path(__file__).resolve().parents[2]
+
+#: One rate limit, so the argument for withholding that screen can be checked against the row
+#: form it cites rather than believed. A principal's own ceiling, which is the case
+#: `A_RATE_LIMIT_NAMES_ITS_SUBJECT_AND_A_SUBJECT_IS_OFTEN_A_PERSON` is about.
+A_LIMIT = Limit(
+    scope=LimitScope.PRINCIPAL,
+    subject="u_busy",
+    period="minute",
+    limit=30,
+    window_seconds=60.0,
+)
 
 #: Inside the bound every entitlement below carries, and outside it. Both are after the day
 #: this was written, so a `now` that is dropped on the way down rather than passed falls back
@@ -311,20 +336,25 @@ def test_an_empty_section_is_absent_rather_than_shown_empty() -> None:
 
 
 def test_a_department_menu_carries_no_heading_for_the_screens_it_leaves_out() -> None:
-    """The two rules meeting. `for_department` drops the screens whose subject is the
-    installation, and `grouped` then finds nothing left under Install, so the heading is gone
-    rather than empty. An empty Install section would announce the four screens behind it.
+    """The two rules meeting. `grouped` drops a section with nothing left in it, so a screen
+    withheld from a department's menu cannot leave a heading behind announcing the screens
+    under it.
+
+    A department admin now reaches all four headings, because three of the four Install screens
+    are theirs. The discriminating case is therefore a caller whose only Install grant is the
+    one withheld screen: their department menu has no Install heading, and their general menu
+    does.
 
     Delete this and the department console grows a heading with nothing under it, which is the
     count of hidden things written as a word instead of as a number."""
     everything = every_capability()
 
-    assert [group for group, _ in grouped(for_department(everything))] == [
-        Group.OPERATE,
-        Group.GOVERN,
-        Group.REPORT,
-    ]
-    assert Group.INSTALL in {group for group, _ in grouped(navigation(everything))}
+    assert [group for group, _ in grouped(for_department(everything))] == list(Group)
+
+    only_the_withheld = holding("read:rate_limit")
+
+    assert [group for group, _ in grouped(navigation(only_the_withheld))] == [Group.INSTALL]
+    assert grouped(for_department(only_the_withheld)) == ()
 
 
 # --- a filter list is itself a listing (M27.5.8) ---------------------------------------------
@@ -475,67 +505,119 @@ def test_screen_gaps_reports_a_screen_registered_under_a_key_another_already_hol
     assert [one for one in gaps if one.startswith("overview is registered twice")], gaps
 
 
-# --- the installation's own screens are not a department's (M27.5.10) ------------------------
+# --- a screen leaves a department's menu only with an argument (M27.5.10) --------------------
 
 
-def test_a_department_menu_leaves_out_the_screens_whose_subject_is_the_installation() -> None:
-    """**M27.5.10.** Narrower rows are the scope's job. What the scope cannot do is a screen
-    whose subject is the deployment: the backup, the release, the connection budget, the staff
-    source. Narrowed to a department each is either empty, which is confusing, or unnarrowed,
-    which is a leak.
+def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_disclose() -> None:
+    """**M27.5.10, as the owner decided it on 2026-09-09.** The leaf says screens whose subject
+    is the installation are not offered at department scope, and the reading that put five
+    screens behind it conflated "empty at that scope" with "a leak at that scope". Only the
+    second is a reason: a screen that renders empty has said the rows this reader may see are
+    none, and withholding it instead is the subtraction disclosure.
 
-    The five keys are written out rather than read from `COMPANY_WIDE`, which is derived from
-    the same flags the function reads: taking them from there would pass for any set of flags
-    at all. `COMPANY_WIDE` is then pinned against the difference.
+    The withheld key is written out here rather than read from `WITHHELD_AT_DEPARTMENT_SCOPE`,
+    which is derived from the same list the function reads: taking it from there would pass for
+    any list at all. The constant is then pinned against the difference.
 
-    The positive half matters more than the negative. A department admin still gets twenty-nine
-    of the thirty-four screens, so this is not passing because `for_department` returns little.
+    The positive half is the decision. Thirty-three of the thirty-four screens are a department
+    admin's, including the four that used to be withheld, so this is not passing because
+    `for_department` returns everything either.
 
-    Delete this and either the install screens appear in a department menu, or somebody removes
-    them by hand in the renderer, where the next one added will be forgotten."""
+    Delete this and the four screens the owner asked for go back behind a flag, or the one that
+    cannot be rendered at that scope joins them with no argument written down."""
     everything = every_capability()
 
     ours = {one.key for one in navigation(everything)}
     theirs = {one.key for one in for_department(everything)}
 
-    assert ours - theirs == {"staff_sources", "install", "recovery", "limits", "connections"}
-    assert set(COMPANY_WIDE) == ours - theirs
-    assert len(theirs) == 29
+    assert ours - theirs == {"limits"}
+    assert set(WITHHELD_AT_DEPARTMENT_SCOPE) == ours - theirs
+    assert len(theirs) == 33
+    assert {"install", "recovery", "connections", "staff_sources"} <= theirs
     assert {"people", "usage", "halt", "audit", "agents"} <= theirs
 
 
 def test_for_department_can_only_narrow_the_menu_navigation_gave_it() -> None:
-    """It is a menu decision and not an authorisation: a caller holding `read:backup` reaches
-    that screen by its address whatever this returns, because the tool decides that. What it
-    must never do is return a screen `navigation` withheld.
+    """It is a menu decision and not an authorisation: a caller holding `read:rate_limit`
+    reaches that screen by its address whatever this returns, because the tool decides that and
+    `installation.throttled_now` narrows the rows. What it must never do is return a screen
+    `navigation` withheld.
 
-    Asserted over three callers, one of whose only grant is for a screen this drops, so the
+    Asserted over three callers, one of whose only grant is for the screen this drops, so the
     empty answer is one of the cases rather than the only one.
 
     Delete this and a filter written as a difference could be inverted into a union, which
-    would put the install screens into exactly the menu they were taken out of."""
-    for held in (every_capability(), holding("read:overview"), holding("read:backup")):
+    would put the withheld screen into exactly the menu it was taken out of."""
+    for held in (every_capability(), holding("read:overview"), holding("read:rate_limit")):
         assert set(for_department(held)) <= set(navigation(held))
 
-    assert for_department(holding("read:backup")) == ()
-    assert [one.key for one in navigation(holding("read:backup"))] == ["recovery"]
+    assert for_department(holding("read:rate_limit")) == ()
+    assert [one.key for one in navigation(holding("read:rate_limit"))] == ["limits"]
+
+    assert [one.key for one in for_department(holding("read:backup"))] == ["recovery"]
 
 
-def test_every_screen_in_the_install_group_is_marked_as_the_installations_own() -> None:
-    """The group and the flag are different things, and the registry has to keep them agreeing
-    in one direction: an Install screen that is not marked would survive `for_department` and
-    sit alone under a heading about the deployment, in a menu for one department.
+def test_a_screen_is_withheld_only_by_naming_the_disclosure_the_row_form_and_the_fix() -> None:
+    """The shape that replaced the flag. A screen cannot leave a department's menu without
+    somebody answering three questions, and the middle one is the load-bearing one: naming the
+    row form means a reviewer can open that module, read the row a grant's scope is matched
+    against, and disagree.
 
-    Staff sources is the case that stops this being a synonym for the group. It is a Govern
-    screen and it is still the installation's own, because where the staff list is linked from
-    is one answer for the company and not one per department.
+    The rate limits argument is checked against the module it cites rather than taken on trust.
+    `brain.ops.limits.LimitScope` really has no department member, so a department-scoped grant
+    really does match no throttling row, and that is what makes this the one screen that cannot
+    be rendered at a department's scope.
 
-    Delete this and the flag drifts from the group, and the day somebody adds an Install screen
-    they get a department menu with a heading about backups in it."""
-    assert {one.key for one in SCREENS if one.group is Group.INSTALL} <= set(COMPANY_WIDE)
-    assert {one.key for one in SCREENS if one.company_wide and one.group is not Group.INSTALL} == {
-        "staff_sources"
-    }
+    Delete this and a `Disclosure` can be written with three empty strings, which is
+    `company_wide=True` with more typing."""
+    assert [one.screen for one in NOT_AT_DEPARTMENT_SCOPE] == ["limits"]
+
+    assert "department" not in {one.value for one in LimitScope}
+    assert set(_limit_row(A_LIMIT)) == {"scope", "subject"}
+    assert Scope.department("maintenance").matches(_limit_row(A_LIMIT)) is False
+
+    for one in NOT_AT_DEPARTMENT_SCOPE:
+        assert one.screen in {other.key for other in SCREENS}
+        for sentence in (one.discloses, one.row_form, one.offered_when):
+            assert len(sentence.split()) >= 8, one.screen
+
+    with pytest.raises(ValueError, match="a flag with a longer name"):
+        Disclosure(
+            screen="install",
+            discloses="it is about the deployment",
+            row_form="there is no row",
+            offered_when="never",
+        )
+
+
+def test_screen_gaps_reports_a_screen_withheld_from_a_department_that_does_not_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The check that keeps the withheld list and the registry in step. A `Disclosure` naming a
+    key nothing registers is an argument about a screen nobody can open, and the screen it was
+    written for is being offered with nothing saying so.
+
+    Patched rather than provoked on the real list, which agrees with the registry, so the branch
+    is watchable at all.
+
+    Delete this and renaming a screen key silently offers the one screen that cannot be
+    rendered at a department's scope."""
+    monkeypatch.setattr(
+        screens_module,
+        "NOT_AT_DEPARTMENT_SCOPE",
+        (
+            Disclosure(
+                screen="rate_limits",
+                discloses="the same sentence the real entry carries, about a key nobody holds",
+                row_form="a row form named at the length the constructor insists on here",
+                offered_when="a screen by this name exists, which is the point of the check",
+            ),
+        ),
+    )
+
+    gaps = screens_module.screen_gaps()
+
+    assert [one for one in gaps if one.startswith("rate_limits is withheld")], gaps
 
 
 # --- the registry keeps its own shape --------------------------------------------------------
@@ -593,12 +675,38 @@ def test_every_screen_is_registered_once_and_the_count_is_pinned() -> None:
     The tools are pinned as well as the keys, because two screens sharing a tool means one of
     them audits under the other's name.
 
+    **And the constant is asserted to be a literal, which a comparison cannot do.** A mutation
+    replacing `SCREEN_COUNT: Final = 34` with `len(SCREENS)` survived every assertion below,
+    because the derived value equals the pin today and a test comparing two numbers cannot see
+    where one of them came from. A pin that is computed from the registry it guards is the
+    trap this docstring already warns about, arriving by a route the same docstring did not
+    close: not `len(SCREENS) == len(SCREENS)` written out, but written once and read twice.
+
+    So the declaration is read out of the source, the way
+    `tests/invariants/test_single_implementation.py` reads its call sites: nothing else can
+    tell a figure somebody committed to from one the code worked out.
+
     Delete this and a screen lost in a merge is noticed when somebody goes looking for it."""
     keys = [one.key for one in SCREENS]
 
     assert len(keys) == len(set(keys))
     assert len(SCREENS) == SCREEN_COUNT == 34
     assert len({one.read.tool for one in SCREENS}) == 34
+
+    declared = ast.parse(Path(screens_module.__file__).read_text(encoding="utf-8"))
+    pins = [
+        node
+        for node in ast.walk(declared)
+        if isinstance(node, ast.AnnAssign)
+        and isinstance(node.target, ast.Name)
+        and node.target.id == "SCREEN_COUNT"
+    ]
+
+    assert len(pins) == 1, "one declaration, so there is one figure to disagree with"
+    assert isinstance(pins[0].value, ast.Constant), (
+        "SCREEN_COUNT is a number somebody wrote down. Computed from SCREENS it guards "
+        "nothing, because the registry it is checked against is the registry it came from"
+    )
 
 
 def test_a_screen_is_found_by_its_key_and_an_unknown_key_is_refused() -> None:

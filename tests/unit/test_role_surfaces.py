@@ -43,7 +43,7 @@ from brain.console.role_surfaces import (
     surface,
     surface_gaps,
 )
-from brain.console.screens import SCREENS, Screen, screen
+from brain.console.screens import SCREENS, WITHHELD_AT_DEPARTMENT_SCOPE, Screen, screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.scope import Clause, Op, Scope
@@ -406,13 +406,24 @@ def test_a_narrower_scope_changes_the_rows_and_never_the_menu() -> None:
     assert wide.scope_for(required) != narrow.scope_for(required)
 
 
-def test_a_department_surface_is_the_same_computation_minus_the_installation_screens() -> None:
-    """The other half of M33.2.1.1: same shape, one subtraction, no second registry. The
-    department surface is exactly the general one without the screens whose subject is the
-    deployment, and both are the same type carrying the same planes.
+def test_a_department_surface_is_the_same_computation_minus_what_it_would_disclose() -> None:
+    """The other half of M33.2.1.1: same shape, one subtraction, no second registry. Both are
+    the same type carrying the same planes.
 
-    The difference is asserted to be non-empty, so a `department_surface` that returned
-    everything would fail rather than satisfy a subset check.
+    **This asserted five dropped screens until 2026-09-10 and now asserts one.** It read
+    `not one.company_wide`, a boolean on the screen set on the argument that at a department's
+    scope each of the five was "either empty or a leak". Those are two different things and
+    only the second is a reason: a screen that renders empty has told the reader that the rows
+    they may see are none, which is what every scoped surface here does, while taking it out of
+    the menu is the subtraction disclosure, because a missing heading says there is something
+    you may not have. The owner overruled the flag in item 38 and the derivation runs the other
+    way now: every screen is offered unless a `Disclosure` names what a department-scoped
+    reader would learn.
+
+    Asserted against `WITHHELD_AT_DEPARTMENT_SCOPE`, which is derived from those disclosures,
+    so withholding a sixth screen means writing the three sentences rather than editing a set
+    here. The difference is still asserted to be non-empty, so a `department_surface` that
+    returned everything fails rather than satisfying a subset check.
 
     Delete this and a department registry can be introduced beside the main one, and the two
     drift in the direction where a department admin sees a screen the install's own menu does
@@ -420,10 +431,13 @@ def test_a_department_surface_is_the_same_computation_minus_the_installation_scr
     narrow = every_capability(scope=in_maintenance())
     whole = surface(narrow)
     scoped = department_surface(narrow)
-    assert scoped.screens == tuple(one for one in whole.screens if not one.company_wide)
+    withheld = set(WITHHELD_AT_DEPARTMENT_SCOPE)
+
+    assert scoped.screens == tuple(one for one in whole.screens if one.key not in withheld)
     assert scoped.planes == whole.planes
     dropped = set(keys(whole.screens)) - set(keys(scoped.screens))
-    assert dropped == {"staff_sources", "install", "recovery", "limits", "connections"}
+    assert dropped == withheld
+    assert dropped, "a subtraction of nothing would satisfy a subset check"
 
 
 def test_the_gaps_report_a_department_menu_offering_what_the_grants_do_not_reach(

@@ -26,11 +26,36 @@ table, that dropdown tells a department admin the names of every department in t
 from a screen whose rows were carefully scoped. `offerable` intersects the values against what
 the caller can already reach and returns no count of what it dropped.
 
-**A department admin is not a smaller Super Admin.** Two differences, and only the first is
-obvious. Their rows are narrower, which the scope already handles. And some screens are not
-theirs at all: a screen whose subject is the installation rather than the work in it, marked
-`company_wide`, has nothing meaningful to show at a department's scope and would either be
-empty or be a leak. The registry says which, and `for_department` is how a caller asks.
+**A department admin gets every screen the requirements call for, and a screen is taken out of
+their menu only by writing down what it would disclose.** This module said something else
+until 2026-09-10, and the sentence it said is worth keeping in view because it is the shape of
+the mistake: five screens were marked `company_wide` on the argument that at a department's
+scope each was "either empty or a leak". Those are two different things and only one of them
+is a reason. A screen that renders empty has told the reader that the rows they may see are
+none, which is what every scoped surface in this system does and discloses nothing; taking it
+out of the menu instead is the subtraction disclosure, because a missing heading says there is
+something here you may not have. A screen that renders somebody else's rows unnarrowed is a
+leak, and that is the only case that survives.
+
+So the derivation runs the other way now. The requirements are M27's four screen groups, which
+name the screens, and M33's department admin, which asks for "everything within their scope,
+same shape as the Super Admin view". Every screen is offered at a department's scope unless a
+`Disclosure` in `NOT_AT_DEPARTMENT_SCOPE` names what a department-scoped reader would learn,
+the row form that cannot carry a department, and what would have to change for the screen to
+be offered. A flag can be set in a moment of tidying; three sentences cannot.
+
+**One screen qualifies today, and it is rate limits.** `brain.ops.limits.LimitScope` has six
+members and not one of them is a department: a limit's subject is a principal, a channel, an
+agent, a connector or a widget origin. `brain.console.installation._limit_row` therefore
+offers a grant's scope `{scope, subject}` and nothing else, and `Clause.matches` refuses a
+field a row does not have, so a department-scoped `read:rate_limit` grant matches no row at
+all while an unrestricted one matches every row in the company. "Who is currently being
+throttled" is a list of who is busy with a number beside each name, and there is no third
+answer at a department's scope. The other four are offered: what release is running, when the
+last backup was and how much memory the profile wants are the same facts for everybody on the
+install, and where the staff list is linked from renders empty at a department's scope, which
+`brain.console.govern_surfaces.A_ROSTER_IS_THE_WHOLE_COMPANYS_LIST_AND_SITS_IN_NO_DEPARTMENT`
+already argues is the correct answer rather than a gap.
 
 **Screens are grouped by the question they answer, not by the module behind them.** Operate is
 "what is happening now", Govern is "who may do what", Report is "what did it cost and was it
@@ -89,13 +114,27 @@ A_FILTER_LIST_IS_A_LISTING_OF_EVERYTHING_IT_OFFERS: Final = (
     "for what was dropped."
 )
 
-#: Why some screens simply do not exist for a department.
-A_SCREEN_ABOUT_THE_INSTALLATION_HAS_NO_DEPARTMENT_SCOPED_MEANING: Final = (
-    "A department admin's rows are narrower, which the scope handles. What the scope does "
-    "not handle is a screen whose subject is the deployment itself: the backup, the release, "
-    "the connection budget, the stop button for everything. Narrowed to a department each of "
-    "those is either empty, which is confusing, or unnarrowed, which is a leak. The registry "
-    "marks them and for_department leaves them out."
+#: Why a screen leaves a department's menu only when somebody writes down what it would say.
+AN_EMPTY_SCREEN_IS_AN_ANSWER_AND_ONLY_A_LEAK_IS_A_REASON_TO_WITHHOLD_ONE: Final = (
+    "Five screens were withheld from a department's menu on the argument that each was "
+    "either empty or a leak at that scope. Those are two different things and only the "
+    "second is a reason. A screen that renders empty has said that the rows this reader may "
+    "see are none, which is what every scoped surface here does; withholding it instead is "
+    "the subtraction disclosure, because a missing heading tells the reader something is "
+    "there that they may not have. A screen that renders somebody else's rows unnarrowed is "
+    "a leak and is the only case that survives. So a department admin is offered every "
+    "screen unless a Disclosure names what they would learn, which row form cannot carry a "
+    "department, and what would have to change for the screen to be offered."
+)
+
+#: Why the withheld list is three sentences per screen rather than a boolean.
+A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT: Final = (
+    "company_wide=True is a keystroke, it reads as a category rather than as a decision, and "
+    "the next person adding a screen about the deployment copies it from the entry above "
+    "without ever asking what the screen would show at a department's scope. A Disclosure "
+    "cannot be written without answering that question, and it cannot be written vaguely "
+    "either: it names the row form, so a reviewer can go and read the module that builds it "
+    "and disagree."
 )
 
 
@@ -187,8 +226,6 @@ class Screen:
     axes: frozenset[Axis]
     #: Who this was designed for. Documentation. Not an authorisation and not consulted.
     intended_for: frozenset[Role]
-    #: True when the subject is the deployment rather than the work in it.
-    company_wide: bool = False
     #: One sentence, for the menu and for whoever has to explain the console to somebody.
     purpose: str = ""
 
@@ -234,13 +271,16 @@ def _screen(
     *,
     axes: Iterable[Axis] = (),
     intended_for: Iterable[Role] = (),
-    company_wide: bool = False,
 ) -> Screen:
     """One registry entry, with the two axes every screen has folded in.
 
     Department and person are added to whatever a screen declares rather than repeated on
     every entry, because the requirement is that they are on everything and a list repeated
     thirty-four times is a list with an omission in it.
+
+    There is deliberately no parameter here for withholding a screen from a department's
+    menu. See `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT`: that decision is
+    a `Disclosure` in one list, where a reviewer reads all of them at once.
     """
     return Screen(
         key=key,
@@ -249,7 +289,6 @@ def _screen(
         read=_read(key, tool, capability, plane),
         axes=EVERYWHERE | frozenset(axes),
         intended_for=frozenset(intended_for) or frozenset({Role.SUPER_ADMIN}),
-        company_wide=company_wide,
         purpose=purpose,
     )
 
@@ -376,7 +415,6 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Where the staff list is linked from: a spreadsheet, Google Workspace, Microsoft, "
         "Lark or a directory. What each source is trusted to assert, and when it last ran.",
-        company_wide=True,
     ),
     _screen(
         "roles",
@@ -618,7 +656,6 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "What is actually running: the release, the migration level, the profile and the "
         "features it turns on. The first question of every support conversation.",
-        company_wide=True,
     ),
     _screen(
         "recovery",
@@ -630,7 +667,6 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "The last backup, the last verified restore, the measured recovery time, and the "
         "control to run a drill.",
         axes=[Axis.PERIOD],
-        company_wide=True,
     ),
     _screen(
         "limits",
@@ -641,7 +677,6 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "The ceilings on requests and what is currently being throttled by them.",
         axes=[Axis.AGENT, Axis.PERIOD],
-        company_wide=True,
     ),
     _screen(
         "connections",
@@ -652,9 +687,83 @@ SCREENS: Final[tuple[Screen, ...]] = (
         Plane.CONFIGURATION,
         "Database connections, memory ceilings and pool sizes against what is deployed. "
         "brain.ops.connections holds the arithmetic; this shows it.",
-        company_wide=True,
     ),
 )
+
+
+@dataclass(frozen=True)
+class Disclosure:
+    """Why one screen is not offered at a department's scope. Never a flag, always an argument.
+
+    Three fields and none of them optional, which is
+    `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT` written as a shape.
+
+    `row_form` is the load-bearing one and it is the reason this is not simply a sentence. It
+    names the module and the keys a grant's scope is matched against, so a reviewer can open
+    that module, read the row, and disagree. A withholding argued only in prose is one nobody
+    can check, and the prose survives the change to the rows that made it untrue.
+
+    `offered_when` is what has to change for the screen to come back. Without it a withheld
+    screen is a permanent state rather than a piece of work, and the next person to read the
+    list has no way to tell which it was.
+    """
+
+    screen: str
+    #: The specific thing a department-scoped reader would learn that is not theirs.
+    discloses: str
+    #: The row form a grant's scope is matched against, named by the module that builds it.
+    row_form: str
+    #: What would have to change for this screen to be offered at a department's scope.
+    offered_when: str
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("discloses", self.discloses),
+            ("row_form", self.row_form),
+            ("offered_when", self.offered_when),
+        ):
+            if len(value.split()) < 8:
+                msg = (
+                    f"{self.screen} is withheld from a department's menu with a {name} of "
+                    f"{value!r}, which is a flag with a longer name. "
+                    f"{A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT}"
+                )
+                raise ValueError(msg)
+
+
+#: Every screen a department admin is not offered, and the argument for each.
+#:
+#: One entry, and the four screens that used to sit beside it are offered now. See the module
+#: docstring for what changed and why: the previous rule conflated a screen that renders empty
+#: with a screen that renders somebody else's rows, and only the second is a reason.
+NOT_AT_DEPARTMENT_SCOPE: Final[tuple[Disclosure, ...]] = (
+    Disclosure(
+        screen="limits",
+        discloses=(
+            "which principals in the company are currently being throttled, with the ceiling "
+            "they are stuck behind and how long they must wait. That is a list of who is busy "
+            "enough to hit a limit, across every department, and it is a directory of people "
+            "assembled from a screen whose subject looks like configuration."
+        ),
+        row_form=(
+            "brain.console.installation._limit_row offers a grant's scope the two fields a "
+            "rate limit has, which are its scope and its subject. brain.ops.limits.LimitScope "
+            "has six members and none of them is a department: a subject is a principal, a "
+            "channel, an agent, a connector or a widget origin. brain.core.scope.Clause."
+            "matches refuses a field the row does not have, so a department-scoped grant "
+            "matches no row at all and an unrestricted one matches every row in the company."
+        ),
+        offered_when=(
+            "a rate limit carries the department its subject belongs to, so a department-"
+            "scoped grant can narrow the throttling list to that department's own people. "
+            "That is a change to brain.ops.limits.Limit rather than to this registry, and "
+            "until it is made there is no third answer between empty and everybody."
+        ),
+    ),
+)
+
+#: The keys `for_department` drops, derived so the two cannot disagree.
+_WITHHELD_KEYS: Final[frozenset[str]] = frozenset(one.screen for one in NOT_AT_DEPARTMENT_SCOPE)
 
 
 def screen(key: str) -> Screen:
@@ -686,14 +795,18 @@ def navigation(entitlement: EntitlementSet, now: Any = None) -> tuple[Screen, ..
 def for_department(entitlement: EntitlementSet, now: Any = None) -> tuple[Screen, ...]:
     """The menu for somebody administering one department rather than the install.
 
-    The grant check is the same one; this drops the screens whose subject is the deployment
-    itself. See `A_SCREEN_ABOUT_THE_INSTALLATION_HAS_NO_DEPARTMENT_SCOPED_MEANING`.
+    The grant check is the same one, and everything it admits is offered except the screens
+    `NOT_AT_DEPARTMENT_SCOPE` names. See
+    `AN_EMPTY_SCREEN_IS_AN_ANSWER_AND_ONLY_A_LEAK_IS_A_REASON_TO_WITHHOLD_ONE` for why the
+    subtraction is that small, and `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT`
+    for why it is a list of arguments rather than a field on the screen.
 
-    Note what this is not: it is not an authorisation. A caller holding `read:backup` reaches
-    the backup screen by its address whatever this returns, because the tool decides that.
-    This decides what is worth putting in a menu.
+    Note what this is not: it is not an authorisation. A caller holding `read:rate_limit`
+    reaches that screen by its address whatever this returns, because the tool decides that,
+    and `brain.console.installation.throttled_now` narrows the rows it returns by the reader's
+    own grant. This decides what is worth putting in a menu.
     """
-    return tuple(one for one in navigation(entitlement, now) if not one.company_wide)
+    return tuple(one for one in navigation(entitlement, now) if one.key not in _WITHHELD_KEYS)
 
 
 def grouped(screens: Sequence[Screen]) -> tuple[tuple[Group, tuple[Screen, ...]], ...]:
@@ -727,7 +840,7 @@ def offerable(values: Iterable[str], reachable: Iterable[str]) -> tuple[str, ...
 def screen_gaps(registered_tools: Iterable[str] = ()) -> tuple[str, ...]:
     """Everything about this registry that would let a screen show more than it should.
 
-    Five checks. The first two hold this module to its own shape and would otherwise be
+    Six checks. The first two hold this module to its own shape and would otherwise be
     review comments that survive exactly as long as the reviewer remembers them.
     """
     gaps: list[str] = []
@@ -762,6 +875,14 @@ def screen_gaps(registered_tools: Iterable[str] = ()) -> tuple[str, ...]:
                 "every screen can be narrowed to a department and to a person"
             )
 
+    for withheld in NOT_AT_DEPARTMENT_SCOPE:
+        if withheld.screen not in seen:
+            gaps.append(
+                f"{withheld.screen} is withheld from a department's menu and is not a screen, "
+                "so the argument for withholding it is about something nobody can open and "
+                "the screen it was meant for is quietly being offered"
+            )
+
     known = set(registered_tools)
     if known:
         for one in SCREENS:
@@ -794,5 +915,12 @@ def unregistered_tools(registered_tools: Iterable[str]) -> tuple[str, ...]:
 #: notice.
 SCREEN_COUNT: Final = 34
 
-#: The screens whose subject is the deployment rather than the work inside it.
-COMPANY_WIDE: Final[tuple[str, ...]] = tuple(one.key for one in SCREENS if one.company_wide)
+#: The screens a department admin is not offered, in registry order.
+#:
+#: Derived from `NOT_AT_DEPARTMENT_SCOPE` rather than written out again, so a screen can be
+#: withheld in one place only and the argument travels with the key. Registry order rather
+#: than declaration order, so a reader comparing this against a menu is comparing two lists in
+#: the same order.
+WITHHELD_AT_DEPARTMENT_SCOPE: Final[tuple[str, ...]] = tuple(
+    one.key for one in SCREENS if one.key in _WITHHELD_KEYS
+)

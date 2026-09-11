@@ -56,6 +56,34 @@ about the same shape, and the argument carries here unchanged. A row count besid
 which is a count of runs and therefore of activity the reader may not have. And a residual
 bucket for rows out of reach, which is the hidden count with a label on it.
 
+**A budget refusal that names a budget the reader could not have read is a disclosure wearing
+an error message.** This is the half of the owner's hard stop that is easy to get wrong while
+looking helpful. `brain.ops.spend.Refusal` names which budget bound, and M21.2.6 argues for
+that: it is the caller's own budget, and a refusal saying only "no" sends a person to a help
+desk that cannot help them. That argument holds for a person's own allowance and stops holding
+one level up. "Your department's monthly budget is used up" tells somebody who cannot read
+their department's spend that the department has a budget, that it is monthly, and that it is
+gone, which is three facts they did not have and a running total they can watch across two
+refusals. So `told_about` asks the same question `visible` asks about a row, through the same
+`may_read_spend`, and a reader outside that reach gets a sentence naming no level, no period,
+no subject and no instant. See
+`A_BUDGET_REFUSAL_NAMING_A_BUDGET_THE_READER_CANNOT_READ_IS_A_DISCLOSURE`.
+
+**What a stop may say out loud is that questions are paused, and `brain.ops.halt` is why.**
+That module argues that a halt is not a permission decision, so it may say so: refusing
+somebody in silence sends them to a support channel to report a bug that is not one. The same
+carries here as long as the sentence names no budget. The line is between the *fact* of a
+budget stop, which discloses nothing about what exists or who may see it, and *which* budget
+stopped, which is somebody's spend.
+
+**A budget refusal and a permission refusal must not look alike to an operator either**, and
+that is the thing the recommendation against a hard stop was worried about made visible rather
+than left silent. `budget_stops` puts every budget currently refusing on the screen at the
+reader's own reach, and `brain.ops.admission.OPERATOR_ACTION` already separates the two at the
+log: QUOTA says raise this allowance or leave it deliberately, PERMISSION says the model is
+working. An operator who cannot tell the two apart goes to look at grants while a department
+sits stopped. See `A_STOPPED_DEPARTMENT_MUST_NOT_READ_AS_A_PERMISSION_PROBLEM`.
+
 **The cost review is the one section here that reads two modules and it has to.** A variance
 without the correction beside it is a number somebody is asked to worry about with nothing to
 do; a corrected estimator without the variance is a factor with no evidence next to it.
@@ -83,7 +111,8 @@ from typing import Final
 
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
-from brain.ops.budgets import Allowance, BudgetPeriod
+from brain.ops.budget_stop import Stop
+from brain.ops.budgets import Allowance, BudgetLevel, BudgetPeriod
 from brain.ops.retune import Distribution as SpendWindow
 from brain.ops.retune import Variance, post_launch_correction, variance
 from brain.ops.spend import Actual, Correction, Dimension, Observation, Refusal, Rung, spend_by
@@ -147,6 +176,29 @@ A_COST_LEDGER_HAS_NO_QUESTION_IN_IT: Final = (
 )
 
 
+#: Why a refusal names the budget to one reader and nothing at all to another.
+A_BUDGET_REFUSAL_NAMING_A_BUDGET_THE_READER_CANNOT_READ_IS_A_DISCLOSURE: Final = (
+    "M21.2.6 asks a refusal to name which budget was hit, and it is right about a person's "
+    "own allowance: it is theirs, and a refusal saying only no sends them to a help desk that "
+    "cannot help them. One level up the same sentence is a disclosure. Your department's "
+    "monthly budget is used up tells somebody who cannot read that department's spend that it "
+    "has a budget, that the budget is monthly, and that it is gone, and a second refusal a "
+    "fortnight later says whether anything was raised in between. So the budget is named to a "
+    "reader whose usage grant already admits that department's rows, and to nobody else, and "
+    "the withheld form carries no level, no period, no subject and no end instant."
+)
+
+#: Why a stopped department must not read like a permission problem, to either reader.
+A_STOPPED_DEPARTMENT_MUST_NOT_READ_AS_A_PERMISSION_PROBLEM: Final = (
+    "A hard stop at a budget is an outage the system causes itself, which is the argument "
+    "that was made against it and lost. What that argument bought instead is that the outage "
+    "is never silent: an operator can see every budget currently refusing, at their own "
+    "reach, on the screen that owns budgets, and brain.ops.admission.OPERATOR_ACTION gives "
+    "QUOTA and PERMISSION different sentences about what to do. An operator who cannot tell "
+    "the two apart spends the afternoon reading grants while a department sits stopped, and "
+    "the person who was refused is told to raise a ticket about their access."
+)
+
 #: Why the review shows the variance and the corrected factor together.
 A_VARIANCE_WITH_NO_CORRECTION_BESIDE_IT_IS_A_WORRY_WITH_NO_ACTION: Final = (
     "Spending twice the projection is a fact somebody can act on only next to what the "
@@ -168,20 +220,37 @@ USAGE_AUTHORITY: Final[Capability] = screen("usage").read.requires
 PLACE_FIELD: Final = "department"
 
 
+def may_read_spend(
+    department: str, entitlement: EntitlementSet, *, now: datetime | None = None
+) -> bool:
+    """Whether this reader's usage grant admits that department's spend.
+
+    `EntitlementSet.scope_for` then `Scope.matches`, which is the pair every other row-level
+    decision in this package makes. It is one function here rather than the same two lines in
+    four places, because the answer now decides more than which rows a report shows: it also
+    decides whether a refusal may name the budget that stopped somebody. Two copies of it
+    would drift on the afternoon somebody widens the report, and the copy that drifts would be
+    the one deciding what an error message is allowed to say.
+
+    A reader holding nothing is admitted to nothing, and finds that out as an empty answer
+    rather than as a refusal, because a refusal that named the capability would tell them a
+    usage report exists.
+    """
+    scope = entitlement.scope_for(USAGE_AUTHORITY, now)
+    if scope is None:
+        return False
+    return scope.matches({PLACE_FIELD: department})
+
+
 def visible(
     actuals: Sequence[Actual], entitlement: EntitlementSet, *, now: datetime | None = None
 ) -> tuple[Actual, ...]:
     """The accounting rows this reader's usage grant admits, in the order given.
 
-    `EntitlementSet.scope_for` then `Scope.matches`, which is the pair every other row-level
-    decision in this package makes and is not re-derived here. A reader holding nothing gets
-    nothing, and gets it as an empty sequence rather than as a refusal, because a refusal that
-    named the capability would tell them a usage report exists.
+    One question per row, through `may_read_spend`, which is the single statement of that
+    question in this module.
     """
-    scope = entitlement.scope_for(USAGE_AUTHORITY, now)
-    if scope is None:
-        return ()
-    return tuple(one for one in actuals if scope.matches({PLACE_FIELD: one.department}))
+    return tuple(one for one in actuals if may_read_spend(one.department, entitlement, now=now))
 
 
 @dataclass(frozen=True)
@@ -485,17 +554,131 @@ def friction(
     department's, both come from closed vocabularies, and neither names a person, an amount or
     a capability. See `brain.ops.spend.A_REFUSAL_CARRIES_NO_FIGURE`.
     """
-    scope = entitlement.scope_for(USAGE_AUTHORITY, now)
-    if scope is None:
-        return Friction(by_rung=MappingProxyType({}), by_cause=MappingProxyType({}))
     rungs: dict[Rung, int] = {}
     causes: dict[str, int] = {}
     for one in setbacks:
-        if not scope.matches({PLACE_FIELD: one.department}):
+        if not may_read_spend(one.department, entitlement, now=now):
             continue
         rungs[one.rung] = rungs.get(one.rung, 0) + 1
         causes[one.cause] = causes.get(one.cause, 0) + 1
     return Friction(by_rung=MappingProxyType(rungs), by_cause=MappingProxyType(causes))
+
+
+# --------------------------------------- a budget that is refusing until the period rolls
+#: What somebody outside a budget's reach is told when it has stopped them.
+#:
+#: Names no level, no period, no subject, no figure and no end instant, so two refusals a
+#: fortnight apart are the same sentence and subtract into nothing. It does say that questions
+#: are paused and that this is not about their access, which is `brain.ops.halt`'s argument
+#: about a halt applied to a stop: refusing somebody in silence sends them to a support channel
+#: to report a bug that is not one, and the fact of a pause discloses nothing about what exists
+#: or who may see it.
+NOTHING_TO_NAME: Final = (
+    "Questions are paused because a budget is used up. Nothing about your access has changed."
+)
+
+
+@dataclass(frozen=True)
+class StopRow:
+    """One budget stop, at the place it is reported.
+
+    Assembled by the caller from a `brain.ops.budget_stop.Stop` and the department the stop is
+    reported at, exactly as `Setback` is assembled from a `Preflight` and a department, and for
+    the same reason: a stop carries a budget's own subject, which is a department only at one
+    of four levels, and a report has to be filtered by a place at all four.
+    """
+
+    stop: Stop
+    department: str
+
+    def __post_init__(self) -> None:
+        if not self.department.strip():
+            msg = "a stop with no department cannot be shown to anybody at a reach"
+            raise SpendViewError(msg)
+
+
+@dataclass(frozen=True)
+class Told:
+    """What one asker is told about the stop refusing them. Two shapes, and one names nothing.
+
+    `until` is present only on the shape that names the budget, so the withheld form has
+    nothing for a renderer to show: a date is itself a disclosure, because a boundary tomorrow
+    and a boundary on the first say whether the exhausted ceiling was daily or monthly.
+
+    The constructor holds the two together, so a withheld notice cannot be built carrying a
+    specific sentence and a specific one cannot be built without its instant.
+    """
+
+    message: str
+    until: datetime | None
+
+    def __post_init__(self) -> None:
+        if (self.until is None) != (self.message == NOTHING_TO_NAME):
+            msg = (
+                "this refusal names a budget and no instant, or an instant and no budget. "
+                f"{A_BUDGET_REFUSAL_NAMING_A_BUDGET_THE_READER_CANNOT_READ_IS_A_DISCLOSURE}"
+            )
+            raise SpendViewError(msg)
+
+    @property
+    def names_the_budget(self) -> bool:
+        """Whether this reader was told which budget stopped them."""
+        return self.until is not None
+
+
+def told_about(row: StopRow, entitlement: EntitlementSet, *, now: datetime | None = None) -> Told:
+    """What this asker may be told about the budget stop refusing them (M21.3.6).
+
+    Two readers and one rule. Somebody whose usage grant already admits that department's rows
+    is told which budget bound and when it ends, in `brain.ops.spend.Refusal`'s own words
+    rather than a second wording. Everybody else is told that questions are paused and nothing
+    else at all. See `A_BUDGET_REFUSAL_NAMING_A_BUDGET_THE_READER_CANNOT_READ_IS_A_DISCLOSURE`.
+
+    **A person's own allowance is always theirs to be told about**, whatever they may read of
+    a department's spend, and that is what keeps M21.2.6 working for the case it was written
+    for. Their own ceiling is a fact about them; the department's is a fact about everybody
+    else's spending as well.
+    """
+    if _their_own(row.stop, entitlement) or may_read_spend(row.department, entitlement, now=now):
+        return Told(
+            message=Refusal(level=row.stop.level, period=row.stop.period).message,
+            until=row.stop.until,
+        )
+    return Told(message=NOTHING_TO_NAME, until=None)
+
+
+def _their_own(stop: Stop, entitlement: EntitlementSet) -> bool:
+    """Whether this stop is on the reader's own personal allowance and nobody else's."""
+    return stop.level is BudgetLevel.USER and stop.subject == entitlement.principal_id
+
+
+def budget_stops(
+    rows: Sequence[StopRow],
+    entitlement: EntitlementSet,
+    *,
+    at: datetime,
+    now: datetime | None = None,
+) -> tuple[StopRow, ...]:
+    """Every budget currently refusing that this reader may see, in the order given (M21.3.6).
+
+    The operator's half of the owner's decision, and the reason it is built at all. A hard stop
+    is an outage the system causes itself, so somebody has to be able to look at one screen and
+    see that questions are being refused for money rather than for permission. See
+    `A_STOPPED_DEPARTMENT_MUST_NOT_READ_AS_A_PERMISSION_PROBLEM`.
+
+    Filtered by the same grant and the same place field as the spend report, so a reader cannot
+    learn from the stop board that a department exists which the usage screen declined to
+    mention. A stop whose period has rolled is absent, because `Stop.in_force_at` is what
+    decides that and nothing here keeps a second opinion about when a window closes.
+
+    No count of what was dropped and no residual bucket, for the reason `Report` carries no
+    total over rows it did not show.
+    """
+    return tuple(
+        one
+        for one in rows
+        if one.stop.in_force_at(at) and may_read_spend(one.department, entitlement, now=now)
+    )
 
 
 # ------------------------------------------------- the cost review after launch (M37.5.3)

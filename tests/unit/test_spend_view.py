@@ -22,6 +22,7 @@ import pytest
 
 from brain.console.screens import screen
 from brain.console.spend_view import (
+    NOTHING_TO_NAME,
     QUANTILES,
     CostReview,
     Distribution,
@@ -30,14 +31,19 @@ from brain.console.spend_view import (
     Report,
     Setback,
     SpendViewError,
+    StopRow,
+    Told,
+    budget_stops,
     cost_per_answer,
     cost_review,
     dearest,
     distribution,
     friction,
+    may_read_spend,
     minimum_rows,
     pace,
     spend_report,
+    told_about,
     visible,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -45,6 +51,7 @@ from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.context import TrafficClass
+from brain.ops.budget_stop import Stop
 from brain.ops.budgets import (
     Allowance,
     BudgetError,
@@ -55,7 +62,9 @@ from brain.ops.budgets import (
 from brain.ops.retune import MEASUREMENT_WINDOW_DAYS
 from brain.ops.retune import Distribution as SpendWindow
 from brain.ops.spend import (
+    BUDGET_PHRASE,
     NO_CORRECTION,
+    PERIOD_PHRASE,
     Actual,
     Dimension,
     Observation,
@@ -599,6 +608,222 @@ def test_a_cause_names_the_budget_or_the_sacrifice_and_never_a_figure() -> None:
     assert degraded.cause == "cheaper_tier"
     for one in (refused, degraded):
         assert not any(character.isdigit() for character in one.cause)
+
+
+# --- a budget that is refusing until the period rolls (M21.3.6) ----------------------------
+
+
+def a_stop(
+    *,
+    level: BudgetLevel = BudgetLevel.DEPARTMENT,
+    subject: str = MAINTENANCE,
+    period: BudgetPeriod = BudgetPeriod.MONTH,
+) -> Stop:
+    """One budget stop in force at `NOW`, through `Stop`'s own validators."""
+    return Stop(
+        level=level,
+        subject=subject,
+        period=period,
+        since=NOW,
+        until=NOW + timedelta(days=20),
+    )
+
+
+def test_a_reader_who_may_read_the_spend_is_told_which_budget_stopped_them() -> None:
+    """**M21.2.6 kept for the reader it was written for.** A refusal that says only no sends
+    somebody to a help desk that cannot help them, so a reader whose usage grant already admits
+    that department's rows is told which budget bound and when it ends.
+
+    The wording is `spend.Refusal`'s own rather than a second sentence written here, asserted by
+    building the refusal and comparing, so a second phrasing table fails rather than drifting.
+
+    Delete this and the specific branch can be removed with the withheld test still green, and
+    every refusal becomes the anonymous one."""
+    row = StopRow(stop=a_stop(), department=MAINTENANCE)
+
+    told = told_about(row, a_reader(MAINTENANCE), now=NOW)
+
+    assert told.message == Refusal(level=BudgetLevel.DEPARTMENT, period=BudgetPeriod.MONTH).message
+    assert told.until == row.stop.until
+    assert told.names_the_budget is True
+
+
+def test_a_reader_who_may_not_read_the_spend_is_told_nothing_about_the_budget() -> None:
+    """**The disclosure this rule exists for.** "Your department's monthly budget is used up"
+    tells somebody who cannot read that department's spend that it has a budget, that the budget
+    is monthly and that it is gone, and a second refusal a fortnight later says whether anything
+    was raised in between.
+
+    Asserted against the whole phrasing table and the whole period table rather than against the
+    one sentence this stop would have produced, so a withheld message that names some other
+    level or period fails as well. The end instant is asserted absent, because a boundary
+    tomorrow and a boundary on the first say which ceiling ran out.
+
+    Delete this and the refusal names the department's budget to everybody it refuses, which is
+    every member of the department and anybody an agent of theirs ran for."""
+    row = StopRow(stop=a_stop(), department=MAINTENANCE)
+
+    told = told_about(row, a_reader(FINANCE), now=NOW)
+
+    assert told.message == NOTHING_TO_NAME
+    assert told.until is None
+    assert told.names_the_budget is False
+    for phrase in BUDGET_PHRASE.values():
+        assert phrase.format(period="") not in told.message
+    for period in PERIOD_PHRASE.values():
+        assert period not in told.message
+    assert MAINTENANCE not in told.message
+
+
+def test_every_budget_and_period_produces_the_same_withheld_sentence() -> None:
+    """The property that makes two refusals unsubtractable: whatever stopped them, a reader
+    outside the budget's reach reads the same words. A withheld sentence that varied by level or
+    by period would let somebody compare two refusals a fortnight apart and learn which ceiling
+    moved.
+
+    Every level and every rolling period is walked, so a fifth level added to `BudgetLevel` is
+    caught here rather than by somebody reading a message.
+
+    Delete this and the withheld sentence can be softened per level, which is the change that
+    looks like better copy and is the leak."""
+    outsider = a_reader(FINANCE)
+    said = set()
+    for level in BudgetLevel:
+        for period in (BudgetPeriod.DAY, BudgetPeriod.MONTH):
+            row = StopRow(
+                stop=a_stop(level=level, subject="s_whatever", period=period),
+                department=MAINTENANCE,
+            )
+            told = told_about(row, outsider, now=NOW)
+            said.add((told.message, told.until))
+
+    assert said == {(NOTHING_TO_NAME, None)}
+
+
+def test_a_person_is_always_told_about_their_own_allowance() -> None:
+    """Their own ceiling is a fact about them, and M21.2.6's argument holds for it whatever they
+    may read of a department's spend: a person refused by their own allowance and told nothing
+    raises a ticket about their access.
+
+    The discriminating pair is the same reader against the same department at two levels: their
+    own user allowance names itself, and the department's ceiling does not.
+
+    Delete this and somebody who holds no usage grant is refused anonymously by their own
+    allowance, and M21.2.6 stops working for the case it was written for."""
+    nobody = EntitlementSet(principal_id="u_asker", grants=())
+    mine = StopRow(
+        stop=a_stop(level=BudgetLevel.USER, subject="u_asker", period=BudgetPeriod.DAY),
+        department=MAINTENANCE,
+    )
+    theirs = StopRow(stop=a_stop(), department=MAINTENANCE)
+
+    assert told_about(mine, nobody, now=NOW).names_the_budget is True
+    assert told_about(theirs, nobody, now=NOW).names_the_budget is False
+    assert (
+        told_about(
+            StopRow(
+                stop=a_stop(
+                    level=BudgetLevel.USER, subject="u_somebody_else", period=BudgetPeriod.DAY
+                ),
+                department=MAINTENANCE,
+            ),
+            nobody,
+            now=NOW,
+        ).names_the_budget
+        is False
+    )
+
+
+def test_a_refusal_cannot_be_built_naming_a_budget_with_no_instant_or_the_reverse() -> None:
+    """The shape that keeps the two forms apart. A withheld sentence carrying an end instant
+    would disclose the period through the date; a specific sentence with no instant would be a
+    stop nobody can wait out.
+
+    Both halves are refused and both valid shapes are built, so this is not passing because the
+    constructor refuses everything.
+
+    Delete this and a renderer handed a withheld refusal shows a date beside it."""
+    with pytest.raises(SpendViewError, match="names a budget and no instant"):
+        Told(message=NOTHING_TO_NAME, until=NOW)
+
+    with pytest.raises(SpendViewError, match="names a budget and no instant"):
+        Told(message="Your department's monthly budget is used up.", until=None)
+
+    assert Told(message=NOTHING_TO_NAME, until=None).names_the_budget is False
+    assert Told(message="something specific", until=NOW).names_the_budget is True
+
+
+def test_the_stop_board_shows_only_the_departments_the_reader_may_read_spend_for() -> None:
+    """The operator's half, filtered by the same grant and the same place field as the spend
+    report, so a reader cannot learn from the stop board that a department exists which the
+    usage screen declined to mention.
+
+    Two stops in two departments and two readers, so a board showing everything and one showing
+    nothing both fail.
+
+    Delete this and the screen built to make a budget outage visible becomes the place the
+    department list leaks."""
+    rows = [
+        StopRow(stop=a_stop(), department=MAINTENANCE),
+        StopRow(stop=a_stop(subject=FINANCE), department=FINANCE),
+    ]
+
+    mine = budget_stops(rows, a_reader(MAINTENANCE), at=NOW, now=NOW)
+
+    assert [one.department for one in mine] == [MAINTENANCE]
+    assert len(budget_stops(rows, everybody(), at=NOW, now=NOW)) == 2
+    assert budget_stops(rows, a_reader(), at=NOW, now=NOW) == ()
+
+
+def test_the_stop_board_drops_a_stop_whose_period_has_already_rolled() -> None:
+    """A board that kept a stop past its window would show an operator a department refused when
+    it is being served, which is the same false assurance the install screens argue about in the
+    other direction. `Stop.in_force_at` decides it, and nothing here keeps a second opinion about
+    when a window closes.
+
+    The in-force instant is asserted beside it, so this is not passing because the board is
+    always empty.
+
+    Delete this and the stop board is a list of every budget that has ever been used up."""
+    rows = [StopRow(stop=a_stop(), department=MAINTENANCE)]
+    after = NOW + timedelta(days=21)
+
+    assert budget_stops(rows, everybody(), at=NOW, now=NOW) == tuple(rows)
+    assert budget_stops(rows, everybody(), at=after, now=NOW) == ()
+
+
+def test_a_stop_with_no_department_cannot_be_shown_at_a_reach() -> None:
+    """The same refusal `Setback` makes, for the same reason: a row with no place satisfies no
+    scoped grant, so it would either be dropped from every reader's board or shown to all of
+    them depending on which way the filter was written.
+
+    Delete this and a stop assembled from a company budget with no department attached is
+    invisible to the one screen built to make it visible."""
+    for nowhere in ("", "  "):
+        with pytest.raises(SpendViewError, match="no department"):
+            StopRow(stop=a_stop(), department=nowhere)
+
+
+def test_may_read_spend_is_the_one_question_the_rows_and_the_refusal_both_ask() -> None:
+    """The single statement of the rule, asserted against both of its callers. A second copy
+    would drift on the afternoon somebody widens the report, and the copy that drifted would be
+    the one deciding what an error message is allowed to say.
+
+    Delete this and `told_about` can grow its own scope check, which would then be the only
+    place in the module where a widened report does not widen a refusal, or the reverse."""
+    reader = a_reader(MAINTENANCE)
+
+    assert may_read_spend(MAINTENANCE, reader, now=NOW) is True
+    assert may_read_spend(FINANCE, reader, now=NOW) is False
+    assert may_read_spend(MAINTENANCE, a_reader(), now=NOW) is False
+
+    rows = [a_run(department=MAINTENANCE, cost=10), a_run(department=FINANCE, cost=10)]
+
+    assert [one.department for one in visible(rows, reader, now=NOW)] == [MAINTENANCE]
+    assert (
+        told_about(StopRow(stop=a_stop(), department=FINANCE), reader, now=NOW).names_the_budget
+        is False
+    )
 
 
 # --- the dearest lines (M21.3.4, agents only) --------------------------------------------
