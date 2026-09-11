@@ -15,10 +15,12 @@ Task ids: M0.1.6
 from __future__ import annotations
 
 import inspect
+import os
 import re
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -267,8 +269,21 @@ def test_an_empty_run_says_so_rather_than_printing_an_empty_table() -> None:
 #: directory on `sys.path`, so the test imports the source beside it as a top-level module
 #: rather than through `brain.ops`. `verify` copies carried files by relative path and creates
 #: parent directories, so both arrive in the worktree where the test expects them.
-PROBE_SOURCE = Path(".scratch/_probe_for_test_mutation.py")
-PROBE_TEST = Path(".scratch/test__probe_for_test_mutation.py")
+#: The process id in both names, which is the half of this the first fix missed.
+#:
+#: Moving the pair under `.scratch` stopped every *other* check seeing it. It did nothing about
+#: two sessions running **this file** at once, because the path was still fixed: the second run
+#: writes the probe the first is using, and the first deletes the probe the second is using.
+#: That surfaced within the hour as
+#: `test_a_mutation_runs_in_a_worktree_and_never_touches_the_file_it_names` failing in a full
+#: suite and passing in isolation, which is the signature of the whole family.
+#:
+#: The lesson is worth more than the fix. A shared path is a shared path wherever it is put,
+#: and relocating one only changes who collides with it. `os.getpid()` is what makes two runs
+#: independent, and `verify` carries whatever name it is handed, so the worktree follows.
+_PROBE_RUN: Final = os.getpid()
+PROBE_SOURCE = Path(f".scratch/_probe_{_PROBE_RUN}_for_test_mutation.py")
+PROBE_TEST = Path(f".scratch/test__probe_{_PROBE_RUN}_for_test_mutation.py")
 
 
 @pytest.fixture
@@ -291,7 +306,7 @@ def probe() -> Iterator[None]:
     (REPO / PROBE_TEST).write_text(
         '"""Watches the probe. Written and removed by test_mutation. Task ids: none"""\n\n'
         "import pytest\n\n"
-        "from _probe_for_test_mutation import loud\n\n\n"
+        f"from {PROBE_SOURCE.stem} import loud\n\n\n"
         "def test_a_negative_value_is_refused() -> None:\n"
         '    """Delete this and the probe has no guard, which is the point of the probe."""\n'
         '    with pytest.raises(ValueError, match="negative"):\n'

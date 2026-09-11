@@ -51,8 +51,13 @@ obvious one is whether the run fanned out and how many tools it called. Neither 
 today. See `A_COST_LEDGER_HAS_NO_QUESTION_IN_IT`.
 
 What was rejected. A `department` parameter, so a reader could narrow the report themselves:
-`brain.console.scoped_authority.THE_AREAS_ARE_DERIVED_AND_NEVER_ASKED_FOR` is the same refusal
-about the same shape, and the argument carries here unchanged. A row count beside each line,
+`brain.console.screens.A_FILTER_LIST_IS_A_LISTING_OF_EVERYTHING_IT_OFFERS` is the same refusal
+about the same shape, and the argument carries here unchanged. That citation named
+`scoped_authority.THE_AREAS_ARE_DERIVED_AND_NEVER_ASKED_FOR` until 2026-09-11 and no such
+constant has ever existed anywhere in this repository. It was found by an agent writing
+`usage_view.py`, which copied the name before checking it; a citation nobody can follow is a
+rejected design whose argument has quietly gone missing, and the reader who goes looking
+concludes the refusal was never really made. A row count beside each line,
 which is a count of runs and therefore of activity the reader may not have. And a residual
 bucket for rows out of reach, which is the hidden count with a label on it.
 

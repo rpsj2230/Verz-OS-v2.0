@@ -156,10 +156,32 @@ def conditions(path: Path) -> tuple[Decision, ...]:
 def decisions_not_mutated(path: Path) -> tuple[Decision, ...]:
     """Every other condition in the module, in line order, each saying why it is not mutated.
 
-    Four shapes, and each is a real gap rather than a curiosity. A wrapped `if` cannot be
+    Five shapes, and each is a real gap rather than a curiosity. A wrapped `if` cannot be
     matched byte for byte. A comprehension filter and a conditional expression are not `ast.If`
     at all. A `BoolOp` in a `return` is the `or ("tsv",)` fallback shape, which decides what a
     caller gets when everything above produced nothing.
+
+    **The fifth is `match`, and it was missing until 2026-09-11 in the worst way this function
+    has: silently, and in both directions.** A `case` arm is not an `ast.If`, a comprehension,
+    an `IfExp` or a `Return` holding a `BoolOp`, so it was neither mutated nor listed, and a
+    module whose decisions are arms came back with a clean table and no note under it. That is
+    exactly `A_CLEAN_TABLE_OVER_HALF_A_MODULE_IS_WORSE_THAN_NO_TABLE`, arriving through a node
+    shape this function did not know about rather than through one it declined to handle.
+
+    The measurement is why it matters more than the count suggests: **53 match statements, 213
+    case arms, in 31 modules under `src/brain`**, and the modules CLAUDE.md holds up as audited
+    with no survivors remaining are among the heaviest users. `gate/leash.py` reports 21 `if`
+    statements mutated and 4 decisions named while 18 arms were invisible; `ops/partitioning.py`
+    has 22 arms, `core/scope_sql.py` 19, `ops/storage.py` and `identity/lifecycle.py` 13 each,
+    `ops/spend.py` and `ops/admission.py` 11 each. Those audits were run honestly and reported
+    a number that was true about `if` statements and read as a number about decisions.
+
+    Each arm is listed separately rather than one entry for the statement, because an arm is
+    the decision: a reader mutating these by hand has to reach each one, and a single line
+    saying "a match statement" tells them how many statements there are rather than how much
+    work is in front of them. A wildcard `case _` is listed too. It is where an unmatched value
+    lands, which is the branch that decides what happens to input nobody anticipated, and it is
+    the arm most likely to be reachable only by something no test builds.
 
     See `A_CLEAN_TABLE_OVER_HALF_A_MODULE_IS_WORSE_THAN_NO_TABLE`.
     """
@@ -194,6 +216,20 @@ def decisions_not_mutated(path: Path) -> tuple[Decision, ...]:
                     source=lines[node.lineno - 1].strip(),
                     unmutatable="a conditional expression",
                 )
+            )
+            continue
+        if isinstance(node, ast.Match):
+            found.extend(
+                Decision(
+                    line=arm.pattern.lineno,
+                    source=lines[arm.pattern.lineno - 1].strip(),
+                    unmutatable=(
+                        "a guarded arm of a match statement"
+                        if arm.guard is not None
+                        else "an arm of a match statement"
+                    ),
+                )
+                for arm in node.cases
             )
             continue
         if isinstance(node, ast.Return) and isinstance(node.value, ast.BoolOp):

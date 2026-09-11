@@ -28,6 +28,8 @@ from brain.ops.guards import (
     reaching,
 )
 
+REPO = Path(__file__).resolve().parents[2]
+
 
 def write(path: Path, body: str) -> Path:
     """A source file with a trailing newline, written the way the auditor reads it."""
@@ -85,7 +87,7 @@ def test_a_single_line_condition_is_addressable_and_a_wrapped_one_is_not(tmp_pat
 def test_every_decision_a_mutation_cannot_address_is_reported_with_its_reason(
     tmp_path: Path, body: str, expected: str
 ) -> None:
-    """**The three shapes that decide something and are not `ast.If`.**
+    """**The shapes that decide something and are not `ast.If`.**
 
     A tool that walks `ast.If` and says nothing about these gives a clean table for a module
     whose decisions are mostly unwatched, and the table is what gets quoted into a commit
@@ -297,3 +299,75 @@ def test_a_decision_records_whether_it_can_be_mutated_at_all() -> None:
     Delete this and the empty string stops meaning "this one can be mutated"."""
     assert Decision(line=1, source="if x:").unmutatable == ""
     assert Decision(line=1, source="if x:", unmutatable="wrapped").unmutatable == "wrapped"
+
+
+def test_every_arm_of_a_match_statement_is_reported_as_a_decision(tmp_path: Path) -> None:
+    """**The gap that was silent in both directions, and the one that made the audits over
+    other modules read as more than they were.**
+
+    A `case` arm is not an `ast.If`, a comprehension, an `IfExp` or a `Return` holding a
+    `BoolOp`, so until 2026-09-11 it was neither mutated nor listed. A module whose decisions
+    are arms came back with a clean table and nothing under it, which is the failure
+    `A_CLEAN_TABLE_OVER_HALF_A_MODULE_IS_WORSE_THAN_NO_TABLE` names, reached through a node
+    shape this function did not know about rather than one it declined to handle.
+
+    It was not a rare shape. Measured over `src/brain` the day it was found: 53 match
+    statements, 213 case arms, 31 modules, and the heaviest users are the modules held up as
+    audited with no survivors. `gate/leash.py` reported four decisions and had twenty-two.
+
+    One entry per arm rather than per statement, because an arm is the decision and somebody
+    mutating these by hand has to reach each one. The wildcard is listed too: it is where a
+    value nobody anticipated lands, which makes it the arm least likely to be reached by a test
+    and the one most worth knowing is unwatched.
+
+    A guarded arm is named apart from a bare one because it holds two decisions, the pattern
+    and the `if` after it, and a hand-written mutation has to break them separately.
+
+    Delete this and `match` goes back to being invisible, and every audit over a module that
+    uses one reports a number about `if` statements while reading as a number about
+    decisions."""
+    module = write(
+        tmp_path / "m.py",
+        "def f(a: object) -> int:\n"
+        "    match a:\n"
+        "        case int() if a > 0:\n"
+        "            return 1\n"
+        "        case str():\n"
+        "            return 2\n"
+        "        case _:\n"
+        "            return 3\n",
+    )
+
+    found = decisions_not_mutated(module)
+
+    assert [one.unmutatable for one in found] == [
+        "a guarded arm of a match statement",
+        "an arm of a match statement",
+        "an arm of a match statement",
+    ]
+    assert [one.source for one in found] == ["case int() if a > 0:", "case str():", "case _:"]
+
+
+def test_the_modules_this_repository_calls_audited_are_full_of_arms_nobody_mutated() -> None:
+    """**A test that exists to keep a correction from being quietly undone.**
+
+    CLAUDE.md lists modules audited "with no survivors remaining", and several of them are
+    among the heaviest users of `match` in this repository. Those audits were run honestly and
+    reported a true number about `if` statements which read as a number about decisions.
+
+    Asserted against the real tree rather than a fixture, because the claim is about this
+    repository: these arms exist, they are not mutated by the audit, and every one of them is
+    now at least reported. If somebody hand-mutates them and the arms go away, this test goes
+    red and should be deleted along with the sentence in CLAUDE.md that it guards. That is the
+    intended way for it to end.
+
+    Delete this and the correction survives only as prose, which is the arrangement that let
+    the gap exist in the first place."""
+    from brain.ops.guards import decisions_not_mutated as reported
+
+    for name in ("gate/leash.py", "ops/admission.py", "core/scope_sql.py"):
+        path = REPO / "src" / "brain" / name
+        arms = [
+            one for one in reported(path) if one.unmutatable.endswith("arm of a match statement")
+        ]
+        assert arms, f"{name} has no match arms, so the sentence in CLAUDE.md is out of date"

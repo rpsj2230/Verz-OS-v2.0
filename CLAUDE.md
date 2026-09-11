@@ -277,6 +277,26 @@ So the useful record is not where the audit has been. It is that **a module nobo
 looks exactly like a module nobody needed to audit**, and the only way to tell is to run it.
 What follows is what running it costs, which is the thing worth knowing before you start.
 
+**Every audit above understated its own coverage, and the correction is newer than the list.**
+Until 2026-09-11 `decisions_not_mutated` was blind to `match` statements in both directions: a
+`case` arm is not an `ast.If`, a comprehension, an `IfExp` or a `Return` holding a `BoolOp`, so
+it was neither mutated nor listed as unmutatable. A module whose decisions are arms came back
+with a clean table and nothing under it, which is the one failure that function exists to
+prevent, arriving through a node shape it did not know about.
+
+It is not a rare shape here. Measured the day it was found: **53 match statements, 213 case
+arms, in 31 modules under `src/brain`**, and the heaviest users are modules on the list above.
+`gate/leash.py` reported four decisions it could not reach and has twenty-two;
+`ops/partitioning.py` has 22 arms, `core/scope_sql.py` 19, `ops/storage.py` and
+`identity/lifecycle.py` 13 each, `ops/spend.py` and `ops/admission.py` 11 each. Those audits
+were run honestly and reported a number that was true about `if` statements and read as a
+number about decisions.
+
+The arms are now **listed**, so the gap is visible. They are still not mutated, so a module on
+that list is audited over its `if` statements and its arms are yours to break by hand. Treat
+"audited with no survivors" above as a claim about branches rather than about decisions until
+somebody re-runs it and says otherwise.
+
 **A condition inside a comprehension is invisible to the audit, and there are usually more of
 them than there are `if` statements.** The audit walks `ast.If`. A filter in a list
 comprehension, an `or` fallback on a return and a conditional expression are none of them an
