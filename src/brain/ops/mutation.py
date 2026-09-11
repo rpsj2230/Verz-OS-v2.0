@@ -59,11 +59,13 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
+from typing import Final
 
 #: A pytest failure line, which is the only evidence that counts as a catch.
 #:
@@ -228,6 +230,21 @@ def _digest(path: Path) -> str:
     return hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
 
 
+#: The interpreter a mutation run builds its worktree environment from.
+#:
+#: This process's base installation rather than its virtual environment. The venv would make
+#: the subprocess import `brain` from the editable install in the main tree, so the mutated
+#: file in the worktree would never be read; the base is what uv needs in order to build an
+#: environment for the worktree itself.
+#:
+#: Named rather than left to uv's own resolution, because an unnamed interpreter is whichever
+#: one uv decides to fetch, and a mutation run is evidence about the environment the caller
+#: verified in rather than about one nobody has looked at.
+_BASE_INTERPRETER: Final = str(
+    Path(sys.base_prefix) / ("python.exe" if os.name == "nt" else "bin/python3")
+)
+
+
 def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603  arguments come from a Mutation, which validates them
         # `python -m pytest` rather than `pytest`, and the difference is not stylistic.
@@ -242,7 +259,33 @@ def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProces
         # `python -m pytest` runs the interpreter uv already trusts and imports pytest as a
         # module, so no new executable is spawned and there is nothing for the policy to
         # refuse. Same interpreter, same environment, same result, one fewer moving part.
-        ["uv", "run", "python", "-m", "pytest", *tests, "--no-header", "--disable-warnings"],  # noqa: S607
+        #
+        # **And the interpreter is named rather than resolved, measured on 2026-09-11.** The
+        # worktree is a fresh checkout with no environment in it, so `uv run` chose one of its
+        # own: a managed CPython in the uv cache, which is unsigned, which Application Control
+        # refused with `os error 4551`. The harness reported "the unmutated tests did not run
+        # cleanly", which is the right message for the wrong reason and reads as the tests
+        # being broken rather than the interpreter being unavailable.
+        #
+        # `--python` names this process's *base* interpreter, so uv builds the worktree's
+        # environment from the one already running rather than fetching another. Not
+        # `sys.executable`, which is this venv: pointing uv at it makes the subprocess import
+        # `brain` from the editable install in the main tree, so the mutated file in the
+        # worktree is never read and every mutation comes back SURVIVED. That was tried first
+        # and `test_a_mutation_runs_in_a_worktree_and_never_touches_the_file_it_names` caught
+        # it immediately, which is the one test in this file that would.
+        [  # noqa: S607  uv is resolved from PATH, as every other tool in this repository is
+            "uv",
+            "run",
+            "--python",
+            _BASE_INTERPRETER,
+            "python",
+            "-m",
+            "pytest",
+            *tests,
+            "--no-header",
+            "--disable-warnings",
+        ],
         cwd=cwd,
         capture_output=True,
         # **Read as UTF-8 rather than at the platform encoding, and never allowed to raise.**
