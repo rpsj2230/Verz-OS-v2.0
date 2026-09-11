@@ -2,33 +2,36 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**6 items are open, and that is down from twenty on 2026-09-09.** You answered every
-one of the others in two messages that afternoon, and those answers are recorded in the
-answered section below with what each one authorises. What is left is genuinely left: two of
-them are one command each, one is a question I owe you a recommendation on and now have, one
-is a fault under investigation, and one is a decision about how versions are pinned.
+**5 items are open, and every one is an action of yours rather than work of mine.** That is
+new. You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
+verified by mutation and pushed, so nothing on this page is waiting on a decision any more.
+What is left is five things only you can do, and none of them is urgent.
 
-**Two are one action each and neither is urgent.** Item 49: the service identifier on your
-server holds the wrong value, because this page told you to copy it out of an address bar that
-carries three of them. Nothing is broken today and the command that fixes it is at the top of
-the item. Item 52: two workflow files carry your server's address, and one repository variable
-lets me remove them.
+**Four are one action each and all four are settings pages or a terminal.**
 
-**One needs a sentence from you and this page finally has a recommendation in it.** Item 34:
-the embedding model produces vectors of one width and the column that stores them is another
-width, so nothing can be embedded until one of the two moves. The recommendation is in the
-item, along with why the answer is not simply a number.
+Item 42: the three deploy secrets exist on the repository and arrive empty, so they were saved
+with empty values. Click **Update** on each of the three and re-paste. Two of the values are in
+the item; only the token needs finding.
 
-**One is two pieces of housekeeping on a system that is otherwise working.** Item 32: Keycloak
-is up, healthy and signed into. A temporary account should be deleted and one password should
-be rotated, both in your identity provider, and I hold no credentials for it.
+Item 49: the service identifier on your server holds the wrong value, because this page told
+you to copy it from an address bar that carries three of them. One command, and the corrected
+one reads the value off the server rather than having it typed in.
 
-**One is being investigated rather than waiting on you.** Item 42: the three deploy secrets
-exist and the pipeline still reports them missing. The next run says where.
+Item 52: two workflow files carry your server's address. One repository variable and I remove
+them.
 
-**One is a decision about pinning.** Item 51: every container defaults to the `latest` image,
-so an install that pins nothing is not pinned. Three numbered steps and the first changes
-nothing.
+Item 51: every container defaults to the `latest` image, so an install that pins nothing is not
+pinned. Three numbered steps and the first changes nothing about what runs.
+
+**One is two pieces of housekeeping inside your identity provider.** Item 32: Keycloak is up,
+healthy and signed into. A temporary account should be deleted and one password rotated. I hold
+no credentials for it and should not.
+
+**What the page looks like underneath.** Nineteen items have been answered and closed, and the
+answered section keeps each decision as it was made rather than as the code turned out, with a
+note appended where the facts have since moved. Two of them, 53 and 54, are the record of this
+machine's Application Control policy blocking four different things over three days, and of
+what fixes it, because the same policy will refuse the next unsigned binary anything installs.
 
 # Open
 
@@ -229,9 +232,64 @@ Coolify. It never fired, because all three have always been empty. It would have
 first run after you fixed the secrets: a check that breaks at the moment it starts to matter,
 invisible for as long as the fault it sits behind is there.
 
-## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - which moves?
+## 32. Two pieces of Keycloak housekeeping, and nothing is blocked by either
 
-**This blocks local embedding, and it is a schema decision rather than a setting.**
+**Keycloak is up.** Measured on 2026-09-09: its own container and its own database
+container have both been healthy for two days. The three passwords
+are set, the realm imported, and you have signed in. Everything this item originally asked for
+is done and the rest of it has moved to the answered section.
+
+**Two steps remain and both are yours.**
+
+1. **Delete the temporary `admin` account** now that your own administrator exists. It was
+   created to make the first one and it is a second way in that nobody needs.
+2. **Change `KEYCLOAK_ADMIN_PASSWORD` in Coolify to a fresh value.** It was used once to create
+   your account, so it is a credential that has been through a setup process and is written in
+   at least one place it should not stay.
+
+**Do not delete that variable.** The stack refuses to start without it, and it is the way back
+in if every administrator is ever lost. Change the value, keep the name.
+
+I cannot check either of these for you without administrator credentials for your identity
+provider, which I do not hold and should not.
+
+# Answered
+
+## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - DECIDED: narrowed, and the width is a setting now
+
+**Built 2026-09-11, on the recommendation below.** You asked what I recommended rather than
+picking from the three options, and "proceed with the remaining" was the authorisation. Both
+halves are in: the column is `VECTOR(1024)`, which is what the model item 31 chose produces,
+and the width is a declared install setting rather than a number.
+
+**The second half is the one that matters, and it un-blocks this item rather than answering
+it.** A hardcoded 1024 is the same defect as a hardcoded 1536 one number later: this
+repository is the product every client installs, and a client running a different inference
+model needs a different width. Compiled in, that client is a fork. As a setting, any smaller
+model that also produces 1024 needs no schema change at all, and one that produces a different
+width is one value at install time. That is why the item could stay open for so long without
+anybody being wrong: choosing a width before choosing a model spends the same migration twice,
+and now it does not.
+
+**Reversible today and not tomorrow, which is why it was worth doing now.** Changing a column
+width normally means re-embedding every chunk. No chunk has ever been embedded, so it cost
+one migration and nothing else, and that stops being true on the day the first real document is
+ingested.
+
+Two refusals came with it. A width above the ceiling pgvector will index is refused when it is
+read, because the alternative is a column that stores and an index that does not. And the
+migration refuses to change the width once the column holds anything, as a `DO` block rather
+than a Python guard, because `alembic upgrade --sql` renders a migration to a script somebody
+runs by hand against production and a Python guard renders to nothing at all. The script would
+carry the `ALTER` and not the refusal, which is the one combination that loses a corpus.
+
+**If you want a different width, say so and it is one value rather than a migration.** The
+three options below are what the decision looked like before, and the first of them is what was
+built.
+
+---
+
+**This blocked local embedding, and it was a schema decision rather than a setting.**
 
 The knowledge corpus stores a vector per chunk in a column declared `VECTOR(1536)`. That width
 was chosen for a hosted model, `text-embedding-3-small`, before item 31 decided that embedding
@@ -304,28 +362,6 @@ unless the corpus is empty and says why.
 
 ---
 
-## 32. Two pieces of Keycloak housekeeping, and nothing is blocked by either
-
-**Keycloak is up.** Measured on 2026-09-09: its own container and its own database
-container have both been healthy for two days. The three passwords
-are set, the realm imported, and you have signed in. Everything this item originally asked for
-is done and the rest of it has moved to the answered section.
-
-**Two steps remain and both are yours.**
-
-1. **Delete the temporary `admin` account** now that your own administrator exists. It was
-   created to make the first one and it is a second way in that nobody needs.
-2. **Change `KEYCLOAK_ADMIN_PASSWORD` in Coolify to a fresh value.** It was used once to create
-   your account, so it is a credential that has been through a setup process and is written in
-   at least one place it should not stay.
-
-**Do not delete that variable.** The stack refuses to start without it, and it is the way back
-in if every administrator is ever lost. Change the value, keep the name.
-
-I cannot check either of these for you without administrator credentials for your identity
-provider, which I do not hold and should not.
-
-# Answered
 
 ## 54. Windows blocked Python itself for about an hour - DONE: you installed the signed one
 
