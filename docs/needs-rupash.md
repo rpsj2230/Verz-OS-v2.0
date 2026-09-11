@@ -418,7 +418,34 @@ so nothing that reaches `main` is unchecked whatever happens here. The live syst
 untouched.
 
 
-## 53. Windows blocked the database driver for four hours and then stopped - DONE: nothing was done
+## 53. Windows blocked the database driver - DONE: a zip, no installer, and the whole suite runs
+
+**Closed for good on 2026-09-11, and the fix is not the one this item recommended.** The
+recommendation was to install PostgreSQL's client libraries with `winget`. You ran that and it
+exited 1, because Smart App Control refused `initdb.exe` from inside the installer: the policy
+blocks the executables the installer runs, so the install never completes and there is no
+point retrying it.
+
+What works is the same libraries without an installer. The binaries-only archive from the same
+publisher unzips to a directory and runs nothing, and `C:\pgsql\bin` is now on your user PATH.
+`libpq.dll` is unsigned and loads anyway, which is the distinction that had not been drawn
+until it was tested: the policy refuses **executables it is asked to start**, and this is a
+library a process loads. That is why the driver's own `pq.cp313-win_amd64.pyd` stayed blocked
+while this one does not, and it is worth remembering the next time something here is refused.
+
+**Measured immediately afterwards: 10,940 passed, 4 skipped, nothing failing and nothing
+uncollectable.** That is the whole suite for the first time in three days. Before it: 10,239
+passing with 8 failures and 16 files that could not be collected, all on one import.
+
+Nothing was switched off and nothing about Smart App Control changed.
+
+**The earlier half of this item is still worth reading**, because the first episode resolved
+itself and that is what made the second one predictable. On 2026-09-09 the same policy blocked
+the same driver for about four hours and then stopped, with nothing installed and nothing
+changed. The likeliest reading was that the file had gained reputation, which is how the policy
+is designed to work, and this item closed saying it could happen again to the next unsigned
+binary anything installs. It happened the following morning to the Python interpreter itself,
+which is item 54.
 
 **Closed 2026-09-10, and nobody did anything.** The driver imports again, the whole suite runs, and Smart App Control is still on and still enforcing: measured after the fact,
 `VerifiedAndReputablePolicyState` is unchanged. Reinstalling the package had not helped while it was blocked, and nothing was installed to fix it.
