@@ -67,15 +67,25 @@
 # What it decides is what a piece of text looks like. It is never an authorisation boundary,
 # in either direction, which is the same sentence `brain.ops.pii` opens with about a detector.
 #
+# **The address the Brain dials is this service's name, and it is a declared setting rather
+# than a literal anywhere.** `INSTALL_MODEL_ENDPOINT` defaults to this service on the port
+# exposed below, `brain.knowledge.embed_policy.embedding_endpoint` is the one thing that reads
+# it, and `brain.ops.inference_client.make_client` has no parameter that could name another.
+# `tests/unit/test_embed.py` holds the default to this file, because a default address that
+# does not resolve to the service the product ships is an install that works everywhere
+# somebody tested it and nowhere else.
+#
 # **Nothing joins this network from the Brain's side yet, and that is the part of the wiring
 # that is not built.** The worker is what would send a batch, and `docker-compose.worker.yml`
 # deliberately does not name `inference` today: a service referring to a network that is only
 # defined in this file fails to start whenever this file is not composed alongside it, so the
-# entry belongs on the commit that also gives the worker something to send. That commit is the
-# one that implements `EmbeddingService`, which
-# `brain.knowledge.embed_queue.NOTHING_IMPLEMENTS_THE_EMBEDDING_SERVICE` says nothing does.
-# The same shape as `docker-compose.parse-worker.yml`, which says plainly that nothing routes
-# a parse to it: an unfinished route stated is worth more than a route that looks complete.
+# entry belongs on the commit that also gives the worker something to send. What that commit
+# needs is no longer an implementation of `EmbeddingService`: `brain.ops.inference_client` is
+# one, and `brain.knowledge.embed.embed_chunks` is the sequence that drives it. It is a caller,
+# and `brain.knowledge.embed.wiring_gaps` names the two that are missing by symbol, an
+# ingestion path that enqueues a job and a writer for `know.chunk`. The same shape as
+# `docker-compose.parse-worker.yml`, which says plainly that nothing routes a parse to it: an
+# unfinished route stated is worth more than a route that looks complete.
 #
 # ---------------------------------------------------------------------------------------
 # **There is no image, and this file says so rather than defaulting to one.**

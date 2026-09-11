@@ -36,10 +36,13 @@ from dataclasses import dataclass, replace
 import pytest
 
 from brain.core.errors import Outcome
+from brain.install import BY_NAME
 from brain.knowledge.chunking import Block, BlockKind, ChunkBounds, chunk_document
 from brain.knowledge.embed_policy import (
+    APP_ENDPOINT_SETTING,
     COLUMN_DIMENSIONS,
     EMBED_TIMEOUT_SECONDS,
+    ENDPOINT_SETTING,
     FP16_ACCUMULATED_ERROR,
     QUESTION_UNIT_ID,
     QWEN3_EMBEDDING_DIMENSIONS,
@@ -50,6 +53,9 @@ from brain.knowledge.embed_policy import (
     accept_vectors,
     dimension_gaps,
     embed_all,
+    embedding_endpoint,
+    endpoint_conflicts,
+    endpoint_refusals,
     outage_response,
     policy_gaps,
     question_batch,
@@ -67,11 +73,21 @@ from brain.knowledge.embedding import EMBEDDING_FIELD, EmbeddedVector, Embedding
 from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.search import CHUNK, EMBEDDING_DIMENSIONS, Vector
 from brain.knowledge.visibility import KnowledgeVisibility
-from brain.ops.inference import SERVED_MODELS, InferenceRefused, InferenceTask
+from brain.ops.inference import (
+    INFERENCE_DESTINATION_SETTINGS,
+    SERVED_MODELS,
+    InferenceRefused,
+    InferenceTask,
+)
 from brain.ops.queue import stale_after
 
 A_REVISION = "v1.0.0"
 MODEL = served_embedding_model(revision=A_REVISION)
+
+#: An address in the documentation range, so the independence sweep reads it as reserved
+#: rather than as one client's host. A literal here rather than the declared default, because
+#: a test that asserts the default against itself is green at every value.
+AN_ENDPOINT = "http://192.0.2.9:8080"
 
 
 def _unit_values(dimensions: int = COLUMN_DIMENSIONS) -> tuple[float, ...]:
@@ -452,6 +468,148 @@ def test_a_response_carrying_more_than_one_vector_for_one_question_is_refused() 
     ]
     with pytest.raises(InferenceRefused, match="2 vector"):
         question_vector(two)
+
+
+# ------------------------------------------ where the text goes, and where it may not
+
+
+def test_the_endpoint_is_the_same_address_whether_this_install_allows_a_hosted_model() -> None:
+    """The whole of `EMBEDDING_IS_LOCAL_ON_EVERY_MODEL_PROFILE`, as a property rather than as a
+    paragraph. `INSTALL_MODEL_PROFILE` says whether this install may reach an external
+    provider, and reading it on this path would mean an install that switched it for the
+    reasoner also started posting every passage of every document it holds to somebody else's
+    API.
+
+    Asserted over both values of the setting rather than by inspecting the signature, because a
+    function can take no profile parameter and still read one out of the environment it was
+    handed.
+
+    Delete this and a profile branch can be added on this path, and the change that turns the
+    embedder into an external call is one value in an environment file."""
+    local = embedding_endpoint({ENDPOINT_SETTING: AN_ENDPOINT, "INSTALL_MODEL_PROFILE": "local"})
+    hosted = embedding_endpoint({ENDPOINT_SETTING: AN_ENDPOINT, "INSTALL_MODEL_PROFILE": "hosted"})
+
+    assert local == hosted == AN_ENDPOINT
+
+
+def test_the_address_is_read_from_the_setting_this_install_declared() -> None:
+    """The positive case, and the one that says the setting is consulted at all. Every refusal
+    below is satisfied by a resolver that raises unconditionally.
+
+    The default is asserted against `brain.install`'s own declaration rather than against a
+    literal here, so the two cannot be edited into agreement with each other.
+
+    Delete this and `embedding_endpoint` can be made to return a constant, at which point every
+    install posts its documents to whatever name this repository happened to ship."""
+    assert embedding_endpoint({ENDPOINT_SETTING: AN_ENDPOINT}) == AN_ENDPOINT
+    assert embedding_endpoint({}) == BY_NAME[ENDPOINT_SETTING].default
+
+
+def test_an_endpoint_somebody_blanked_falls_back_to_the_declared_name_rather_than_nothing() -> None:
+    """The behaviour that makes one branch of `endpoint_refusals` unreachable from here, pinned
+    so that the docstring saying so cannot become false without a test noticing. `value_of`
+    substitutes the declared default for a blank optional setting, so an emptied endpoint is
+    the product's own service name and never an empty string.
+
+    It matters in the safe direction: an install that deleted the value dials a name that
+    resolves only inside its own compose project, rather than being handed `/embed`.
+
+    Delete this and the empty branch can be read as the one that protects a blanked setting,
+    and the refusal that actually protects it, the one about an origin, can be removed as a
+    duplicate."""
+    assert embedding_endpoint({ENDPOINT_SETTING: "   "}) == BY_NAME[ENDPOINT_SETTING].default
+
+
+@pytest.mark.parametrize(
+    ("address", "expected"),
+    [
+        ("   ", "nowhere to send"),
+        ("inference-server:8080", "scheme"),
+        ("ftp://inference-server", "scheme"),
+        ("http:///embed", "names no host"),
+        ("http://someone:secret@192.0.2.9:8080", "credentials"),
+        ("https://192.0.2.9/v1", "bare origin"),
+        ("http://192.0.2.9:8080?key=abc", "bare origin"),
+        ("http://192.0.2.9:8080#frag", "bare origin"),
+    ],
+)
+def test_an_address_that_is_not_this_installs_own_server_is_refused(
+    address: str, expected: str
+) -> None:
+    """Six shapes and each one is a different way the address stops being an origin on the
+    client's own network. The base path is the one worth the parametrisation: `/v1` is how a
+    hosted provider's API is addressed, and `embed_url` would join it happily, so an install
+    could be moved off its own hardware by one value in an environment file.
+
+    Parametrised over the shapes rather than written as six tests, so a refusal that is
+    dropped is a named failure rather than a test nobody replaced.
+
+    Delete this and the endpoint becomes any string, and the one that is pasted in is the one
+    somebody copied out of a provider's quickstart."""
+    findings = endpoint_refusals(address)
+
+    assert findings
+    assert any(expected in one for one in findings)
+
+
+def test_an_ordinary_internal_address_is_accepted_with_and_without_a_trailing_slash() -> None:
+    """The positive case for the refusals above, and the trailing slash is in it because that
+    is what an address copied out of a browser carries. A check that refused one would present
+    as an embedding leg that cannot be configured at all.
+
+    Delete this and the origin check can be tightened to something no real address satisfies,
+    and the fix somebody reaches for is deleting the check."""
+    assert endpoint_refusals(AN_ENDPOINT) == ()
+    assert endpoint_refusals(f"{AN_ENDPOINT}/") == ()
+    assert endpoint_refusals(BY_NAME[ENDPOINT_SETTING].default) == ()
+
+
+def test_a_refused_address_names_every_reason_rather_than_the_first() -> None:
+    """Matching `brain.ops.worker.preflight`: an address wrong in two ways is one where fixing
+    either leaves it still wrong, and a resolver that reported one at a time would be a
+    sequence of restarts.
+
+    Delete this and the refusals can be turned into an early return each, so an operator fixes
+    the scheme and discovers the credential on the next deploy."""
+    findings = endpoint_refusals("ftp://someone:secret@192.0.2.9/v1")
+
+    assert len(findings) == 3
+
+
+def test_an_install_that_has_said_nothing_about_the_second_setting_has_no_conflict() -> None:
+    """The ordinary state of a `standard` install: `BRAIN_INFERENCE_URL` is unset, the startup
+    check has nothing to refuse, and the endpoint is the declared one. A conflict reported here
+    would fire on every install and be scrolled past.
+
+    Delete this and `endpoint_conflicts` can be made to fire whenever the two are not both
+    set, which is a finding on a configuration that is correct."""
+    assert endpoint_conflicts(endpoint=AN_ENDPOINT, configured="") == ()
+    assert endpoint_conflicts(endpoint=AN_ENDPOINT, configured=f"{AN_ENDPOINT}/") == ()
+
+
+def test_two_settings_naming_two_hosts_is_reported_because_only_one_is_dialled() -> None:
+    """The case worth a sentence. `brain.config.check` judges `BRAIN_INFERENCE_URL` against the
+    profile at startup and nothing dials it; `INSTALL_MODEL_ENDPOINT` is what a client is built
+    from. Set differently, the install has had one destination approved and sends its documents
+    to another.
+
+    Delete this and the two settings drift apart silently, and the startup check goes on
+    reporting that a host nothing contacts is allowed."""
+    findings = endpoint_conflicts(endpoint=AN_ENDPOINT, configured="http://192.0.2.55:8080")
+
+    assert len(findings) == 1
+    assert ENDPOINT_SETTING in findings[0]
+    assert APP_ENDPOINT_SETTING in findings[0]
+
+
+def test_the_second_setting_is_spelled_the_way_the_startup_check_spells_it() -> None:
+    """Derived from `brain.ops.inference.INFERENCE_DESTINATION_SETTINGS` rather than typed, so
+    a rename there cannot leave this asking about a variable nobody sets. Asserted against that
+    tuple rather than against the literal, which would be one name checked against itself.
+
+    Delete this and the conflict message can go on naming a setting that no longer exists,
+    which reads as an operator's mistake rather than as ours."""
+    assert f"BRAIN_{INFERENCE_DESTINATION_SETTINGS[0].upper()}" == APP_ENDPOINT_SETTING
 
 
 # ------------------------------------------------------ many batches, one run (M7.3.3)

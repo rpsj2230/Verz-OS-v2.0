@@ -745,6 +745,11 @@ def test_the_worker_preflight_asks_what_the_inference_server_will_take(
         "BRAIN_WORKER_SLOTS_HUMAN_ASYNC": "4",
         "BRAIN_WORKER_SLOTS_AUTOMATION": "2",
         "BRAIN_WORKER_SLOTS_SYSTEM": "1",
+        # The connection bound joined the set a worker will start on when the queue driver
+        # became a dependency on 2026-09-11: `pool_declaration_gaps` refuses a container that
+        # has a driver and has not said how many connections it may hold. Without it the
+        # assertion below would be about a preflight that refuses for an unrelated reason.
+        "BRAIN_WORKER_POOL_MAX": "15",
     }
     assert preflight(environment) == ()
 

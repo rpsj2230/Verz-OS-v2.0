@@ -22,6 +22,7 @@ Task ids: none
 
 from __future__ import annotations
 
+import inspect
 import json
 import math
 from dataclasses import dataclass, field
@@ -30,9 +31,11 @@ from typing import Any
 
 import pytest
 
+from brain.install import BY_NAME
 from brain.knowledge.embed_policy import (
     COLUMN_DIMENSIONS,
     EMBED_TIMEOUT_SECONDS,
+    ENDPOINT_SETTING,
     EmbeddingUnavailable,
     served_embedding_model,
 )
@@ -53,6 +56,7 @@ from brain.ops.inference_client import (
     TransportError,
     embed_url,
     jsonable,
+    make_client,
 )
 from brain.ops.queue import stale_after
 
@@ -129,10 +133,49 @@ def test_an_address_nobody_configured_is_refused_rather_than_defaulted() -> None
     whatever answers on this host, and is found out by the answers getting quietly worse. It is
     the same refusal `docker-compose.inference.yml` makes about having no default image.
 
-    Delete this and an empty `INFERENCE_URL` becomes localhost, which is somebody else's
-    process on a shared host."""
-    with pytest.raises(EmbeddingUnavailable, match="INFERENCE_URL"):
+    The setting named in the message is asserted against `brain.install`'s declaration rather
+    than typed here, which is what makes this test say "the message names the value somebody
+    has to set" instead of "the message contains a string I also wrote".
+
+    Delete this and an empty endpoint becomes `/embed`, a relative URL posted at whatever the
+    process resolves it against."""
+    with pytest.raises(EmbeddingUnavailable, match=ENDPOINT_SETTING):
         embed_url("   ")
+    assert ENDPOINT_SETTING in BY_NAME
+
+
+def test_the_joiner_refuses_by_the_same_rule_the_resolver_uses() -> None:
+    """One rule, one place. `embed_url` held its own empty check until 2026-09-11 and knew
+    nothing about a scheme, a credential or a base path, so an address built by hand and passed
+    straight in was joined without any of them being asked.
+
+    Asserted through a shape the old check could not have caught, so this cannot pass by the
+    empty case above moving.
+
+    Delete this and the two spellings of the rule come back, and the half that goes stale is
+    the half a client's document text travels through."""
+    with pytest.raises(EmbeddingUnavailable, match="bare origin"):
+        embed_url("https://192.0.2.9/v1")
+
+
+def test_the_client_takes_its_address_from_the_install_and_has_no_parameter_for_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The structural half of "there is one answer to where this company's text goes".
+    `make_client` took a `base_url` until 2026-09-11 and nothing supplied one, so the address
+    was whatever a future caller happened to hold. A signature is the only thing that can say
+    a second answer is impossible.
+
+    The built client is asserted to have dialled the declared value, not merely to exist,
+    because a signature check alone passes for a function that ignores the setting.
+
+    Delete this and an address parameter comes back for the convenience of one caller, and the
+    declared endpoint stops being the one that is used."""
+    monkeypatch.setenv(ENDPOINT_SETTING, "http://192.0.2.7:9100")
+    parameters = inspect.signature(make_client).parameters
+
+    assert set(parameters) == {"env", "timeout_seconds"}
+    assert make_client().url == f"http://192.0.2.7:9100{EMBED_PATH}"
 
 
 def test_the_address_is_joined_to_the_path_without_producing_a_double_slash() -> None:

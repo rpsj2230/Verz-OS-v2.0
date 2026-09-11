@@ -38,13 +38,17 @@ again at full cost; that is a contract failure and reads as `InferenceRefused`, 
 `outage_response` is written about. The two are separate so an operator is not sent to look at
 a server that is fine.
 
-**Nothing calls anything in this module.** `make_client` needs `Settings.inference_url`, which
-is empty on every install today because `docker-compose.inference.yml` names an image that does
-not exist and could not run on this host if it did; `embed` needs a batch, and nothing enqueues
-one because `brain.ops.queue.NO_DRIVER_IS_INSTALLED`. It has never been run against a server,
-only against a fake, and the fake exercises the refusals rather than standing in for a service.
-That is the same refusal `docker-compose.inference.yml` makes about M7.3.3 and this module does
-not change it.
+**Nothing calls anything in this module, and the reason changed on 2026-09-11.** It used to be
+the address: `make_client` took one as a parameter and read `Settings.inference_url` nowhere,
+so there was no answer to where a client's text goes. That half is closed, and closed in the
+one place an installation value may be read: the address is `INSTALL_MODEL_ENDPOINT`, resolved
+by `brain.knowledge.embed_policy.embedding_endpoint`, and this module has no parameter that
+could name another. What is still absent is a caller: `embed` needs a batch, and nothing
+enqueues one because `brain.knowledge.embed_queue.embed_job` has no caller either.
+`brain.knowledge.embed.wiring_gaps` names both by symbol. It has never been run against a
+server, only against a fake, and the fake exercises the refusals rather than standing in for a
+service. That is the same refusal `docker-compose.inference.yml` makes about M7.3.3 and this
+module does not change it.
 
 Scope: the client half. This module opens a connection and reads a clock, and it is the only
 one on this leg that may.
@@ -67,6 +71,8 @@ from brain.knowledge.embed_policy import (
     EMBED_TIMEOUT_SECONDS,
     EmbeddingUnavailable,
     accept_vectors,
+    embedding_endpoint,
+    endpoint_refusals,
 )
 from brain.knowledge.embed_queue import Embedded, EmbeddingBatch
 from brain.models.routing import CircuitBreaker
@@ -86,21 +92,22 @@ BREAKER_NAME: Final = "inference-server"
 
 
 def embed_url(base_url: str) -> str:
-    """Where a batch is posted, or a refusal naming the setting that is empty.
+    """Where a batch is posted, or a refusal naming every reason the address is not one.
 
-    Refuses an empty address rather than defaulting to localhost. A default here would be a
-    client that starts, posts the text of a client's documents at whatever answers on this
-    host, and is discovered by the answers getting quietly worse, which is the argument
-    `docker-compose.inference.yml` makes about `INFERENCE_IMAGE` having no default either.
+    **The refusals are `endpoint_refusals`, not a second copy of them**, and until 2026-09-11
+    this function held its own: an empty check, and nothing about a scheme, a credential or a
+    base path. Two spellings of one rule is one rule that gets changed, and the half that would
+    have gone stale is the half a client's document text travels through.
+
+    Checked here as well as in `embedding_endpoint` rather than trusted, because this is
+    exported and a joiner that trusts its input builds `/embed` out of an empty string and
+    posts a relative URL. The resolver's job is to read a setting; holding a precondition for
+    callers it does not have is not part of it.
     """
     address = base_url.strip()
-    if not address:
-        msg = (
-            "no inference address is configured, so there is nowhere to send text to be "
-            "embedded; set INFERENCE_URL on a profile that deploys an inference server, "
-            "which brain.ops.inference.inference_config_conflicts checks at startup"
-        )
-        raise EmbeddingUnavailable(msg)
+    findings = endpoint_refusals(address)
+    if findings:
+        raise EmbeddingUnavailable("; ".join(findings))
     return f"{address.rstrip('/')}{EMBED_PATH}"
 
 
@@ -284,9 +291,22 @@ class _HttpxTransport:
 
 
 def make_client(
-    *, base_url: str, timeout_seconds: float = EMBED_TIMEOUT_SECONDS
+    *, env: Mapping[str, str] | None = None, timeout_seconds: float = EMBED_TIMEOUT_SECONDS
 ) -> InferenceEmbeddingClient:
-    """An embedding client pointed at a deployed inference server. Nothing calls this.
+    """An embedding client pointed at this install's inference server. Nothing calls this.
+
+    **There is no `base_url` parameter, and its absence is the point.** It took one until
+    2026-09-11 and nothing supplied it, so the address a client's document text is posted to
+    was whatever a future caller happened to have in hand. A parameter here would be a second
+    answer to "where does this company's text go", beside the declared one, and
+    `brain.install.ONE_READER_OR_TWO_DEFAULTS` is about exactly that: the two agree on every
+    machine where both are set, which is every machine except the new client's. So the address
+    comes from `embed_policy.embedding_endpoint`, which reads `INSTALL_MODEL_ENDPOINT` through
+    the one reader of an installation value and refuses the shapes that are not an origin.
+
+    `env` is a parameter for the reason `brain.install.value_of` takes one, and it is the only
+    input: an install that has said nothing gets the declared default rather than a client
+    pointed at localhost.
 
     The timeout is passed to `httpx` per request rather than set on the client, so the figure
     that governs it is `embed_policy.EMBED_TIMEOUT_SECONDS` and there is no second one on a
@@ -294,6 +314,6 @@ def make_client(
     """
     return InferenceEmbeddingClient(
         transport=_HttpxTransport(client=httpx.Client()),
-        url=embed_url(base_url),
+        url=embed_url(embedding_endpoint(env)),
         timeout_seconds=timeout_seconds,
     )

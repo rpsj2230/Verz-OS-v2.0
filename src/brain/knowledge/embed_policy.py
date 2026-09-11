@@ -72,18 +72,27 @@ answer once. So `EMBED_TIMEOUT_SECONDS` is derived from those figures rather tha
 beside them, and if the first measurement says a full batch needs longer, the fix is a smaller
 batch rather than a longer timeout.
 
-**What has no caller yet, stated plainly rather than implied.** Nothing in this repository
-calls anything in this module. `embed_all` needs an `EmbeddingService`, and the only one is
-`brain.ops.inference_client`, which needs an address to an inference server that has no image;
-`question_batch` and `question_vector` need a retrieval path that embeds a question, and
-`brain.knowledge.search.vector_query` is still called with a vector nobody produces;
-`policy_gaps` is called by `brain.ops.worker.preflight` beside `embed_batch_gaps`, which it
-was not until 2026-09-07: the paragraph here said the file was being edited by somebody else
-that day and wiring it was one line, and that line then went unwritten for as long as anybody
-read the note as a record rather than a task. So this was a
-policy nothing consults, and saying so is worth more than a wire that looks live.
+**Where the inference server is, is read here and in no other place.** `embedding_endpoint`
+resolves `INSTALL_MODEL_ENDPOINT` through `brain.install.value_of`, which is the one reader of
+an installation value, and `brain.ops.inference_client.make_client` takes no address of its
+own: a client that accepted one would be a second answer to "where does this company's
+document text go", and the wrong copy is the one that renders. **There is deliberately no
+branch on `INSTALL_MODEL_PROFILE` anywhere on this path**; see
+`EMBEDDING_IS_LOCAL_ON_EVERY_MODEL_PROFILE` for why `hosted` moves the reasoner and never the
+embedder.
 
-Scope: domain logic. Nothing here opens a connection, loads a model or reads a clock.
+**What has no caller yet, stated by name rather than in a paragraph.** This section was prose
+until 2026-09-11 and prose is what goes stale: it opened "nothing in this repository calls
+anything in this module" three sentences before naming the caller of `policy_gaps`.
+`brain.knowledge.embed.wiring_gaps` is that list as a value now, one entry per step between a
+chunk needing an embedding and a vector being stored, each saying what it still needs, and
+`tests/unit/test_embed.py` holds every entry to what `brain.ops.controls.call_sites` reads out
+of the source. A step that gains a caller and is still listed as an orphan is a red test
+rather than a sentence nobody re-reads.
+
+Scope: domain logic. Nothing here opens a connection, loads a model or reads a clock. It does
+read this installation's declared endpoint, through `brain.install` and with `env` a parameter,
+which is the same shape `brain.knowledge.search.declared_dimensions` uses for the width.
 
 Task ids: none
 """
@@ -96,8 +105,10 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Final
+from urllib.parse import urlsplit
 
 from brain.core.errors import Outcome
+from brain.install import value_of
 from brain.knowledge.embed_queue import (
     Embedded,
     EmbeddingBatch,
@@ -113,7 +124,12 @@ from brain.knowledge.embedding import (
     EmbeddingModel,
 )
 from brain.knowledge.search import CHUNK, Vector
-from brain.ops.inference import InferenceRefused, InferenceTask, served_model
+from brain.ops.inference import (
+    INFERENCE_DESTINATION_SETTINGS,
+    InferenceRefused,
+    InferenceTask,
+    served_model,
+)
 from brain.ops.queue import HEARTBEAT_SECONDS, stale_after
 
 # ------------------------------------------------------------------ written-down reasons
@@ -193,6 +209,42 @@ A_QUESTIONS_VECTOR_IS_NEVER_A_WRITE: Final = (
     "an invented chunk id for the same reason from the other side: it cannot be produced by "
     "chunk_document, which builds every id as an item id and a four-digit ordinal, so a "
     "question can never be confused for a passage even by a response that is wrong."
+)
+
+
+#: Why `INSTALL_MODEL_PROFILE` does not reach this path at all.
+EMBEDDING_IS_LOCAL_ON_EVERY_MODEL_PROFILE: Final = (
+    "INSTALL_MODEL_PROFILE says whether this install may reach an external provider, and it "
+    "is about the reasoner. Reading it here and sending embeddings to a hosted model on "
+    "'hosted' would be a different decision wearing the same word, because the two legs send "
+    "different things to different extents. A reasoner is handed one person's question and the "
+    "passages that person was already entitled to, at the moment they ask. An embedder is "
+    "handed every passage of every document this company has ever uploaded, including the ones "
+    "nobody has asked about and the ones nobody may read, and it is handed them again on every "
+    "model change. Item 31 decided the models live in a service of this company's own for a "
+    "memory reason and that boundary is worth more than the reason that bought it. There is a "
+    "second cost that is not about privacy: the model identity is recorded beside every vector, "
+    "so a profile that moved the embedder would leave the corpus holding two spaces and "
+    "A_MIXED_CORPUS_HAS_NO_VECTOR_LEG turns the vector leg off until somebody re-embeds all of "
+    "it. So there is no branch on the profile on this path, and a test asserts the endpoint is "
+    "the same value under both."
+)
+
+#: Why the address has to be a bare origin and is refused when it is anything else.
+AN_ENDPOINT_IS_AN_ORIGIN_BECAUSE_THE_PATH_IS_JOINED_BY_CONCATENATION: Final = (
+    "brain.ops.inference_client.embed_url builds the address it posts to by concatenation, "
+    "trimming a trailing slash and appending its own path. Only an origin survives that. An "
+    "endpoint carrying a query or a fragment produces a URL with the appended path after the "
+    "question mark, which is a request to the wrong place that no test on either side would "
+    "see; an endpoint carrying credentials puts them in every string this address appears in, "
+    "and this server authenticates nobody because it is reached over a network with "
+    "internal: true and no route off the host. An endpoint carrying a base path is the third "
+    "and it is the one worth refusing rather than joining properly: /v1 is how a hosted "
+    "provider's API is addressed, so permitting a base path is permitting the single edit that "
+    "turns this leg into an external call, and it would be made by whoever is copying an "
+    "environment file rather than by anybody deciding it. An install that genuinely serves its "
+    "own model under a path needs embed_url to join two paths, which is a change with somebody "
+    "looking at it."
 )
 
 
@@ -608,6 +660,152 @@ def embed_all(batches: Sequence[EmbeddingBatch], service: EmbeddingService) -> E
                 failure=str(exc),
             )
     return EmbedRun(planned=len(batches), completed=len(batches), writes=tuple(writes))
+
+
+# ------------------------------------------------- where the text is sent, once (M7.3.3)
+
+#: The setting that says where this install's inference server answers. One name, read through
+#: `brain.install.value_of` and nowhere else, because two readers is two defaults and the wrong
+#: one is the one nobody looked at.
+ENDPOINT_SETTING: Final = "INSTALL_MODEL_ENDPOINT"
+
+#: The other setting that names the same destination, spelled as an operator sets it. Derived
+#: from `brain.ops.inference.INFERENCE_DESTINATION_SETTINGS` rather than typed, so a rename
+#: there cannot leave this asking about a variable nobody sets.
+#:
+#: It exists for a different job and `endpoint_conflicts` is what keeps the two jobs apart:
+#: `brain.config.check` refuses this one being set on a profile that deploys no inference
+#: server, which is a refusal about a *destination being configured at all*. Nothing dials it.
+APP_ENDPOINT_SETTING: Final = f"BRAIN_{INFERENCE_DESTINATION_SETTINGS[0].upper()}"
+
+#: The schemes an inference endpoint may use. Two, and `https` is here for an install that
+#: terminates TLS in front of its own server rather than because anything about this path
+#: needs it: the compose network is internal, so plain HTTP on it leaves no host.
+ENDPOINT_SCHEMES: Final[frozenset[str]] = frozenset({"http", "https"})
+
+
+def endpoint_refusals(address: str) -> tuple[str, ...]:
+    """Every reason this address is not somewhere this system may post a document's text to.
+
+    A pure function over a string rather than a check inside the resolver, for the reason
+    `dimension_gaps` is one: a refusal that can only be reached by setting an environment
+    variable is a refusal nobody can show firing, and this one is the last thing between a
+    client's corpus and an address somebody pasted.
+
+    Four refusals and they are argued in
+    `AN_ENDPOINT_IS_AN_ORIGIN_BECAUSE_THE_PATH_IS_JOINED_BY_CONCATENATION`. What is
+    deliberately **not** checked is whether the host is inside the client's network. Nothing
+    here can tell: `inference-server` is a name Docker resolves and a public name resolves
+    identically, and the alternative is a list of provider hostnames, which is the shape
+    `brain.ops.independence.A_BLOCKLIST_OF_ONE_CLIENTS_NAMES_PASSES_FOR_EVERY_OTHER_CLIENT`
+    refuses. What does stop the text leaving is structural and lives in the deployment: the
+    `inference` network is `internal: true`, so a container on it has no route off the host.
+
+    Returns all of them rather than the first, matching `brain.ops.worker.preflight`.
+    """
+    findings: list[str] = []
+    trimmed = address.strip()
+    if not trimmed:
+        return (
+            f"{ENDPOINT_SETTING} is empty, so there is nowhere to send text to be embedded. It "
+            "has no safe default that could be filled in here: a client whose inference server "
+            "is somewhere else would then have this company's documents posted at whatever "
+            "answers on the name this product happened to ship",
+        )
+    parts = urlsplit(trimmed)
+    if parts.scheme not in ENDPOINT_SCHEMES:
+        findings.append(
+            f"{ENDPOINT_SETTING}={trimmed!r} has scheme {parts.scheme!r} and an inference "
+            f"endpoint is one of {sorted(ENDPOINT_SCHEMES)}; an address with no scheme at all "
+            "is read as one whose scheme is its own hostname, so the request goes nowhere and "
+            "the failure names a protocol nobody chose"
+        )
+    if not parts.hostname:
+        findings.append(
+            f"{ENDPOINT_SETTING}={trimmed!r} names no host, so nothing can be dialled; an "
+            "address that is all path is the shape a relative URL takes after somebody has "
+            "removed the scheme"
+        )
+    if parts.username or parts.password:
+        findings.append(
+            f"{ENDPOINT_SETTING} carries credentials in the address, which puts them in every "
+            "string this endpoint appears in; the inference server authenticates nobody, "
+            "because it is reached over a network declared internal, so a credential here "
+            "means the address is something else's API"
+        )
+    if parts.path.strip("/") or parts.query or parts.fragment:
+        findings.append(
+            f"{ENDPOINT_SETTING}={trimmed!r} is not a bare origin. "
+            f"{AN_ENDPOINT_IS_AN_ORIGIN_BECAUSE_THE_PATH_IS_JOINED_BY_CONCATENATION}"
+        )
+    return tuple(findings)
+
+
+def embedding_endpoint(env: Mapping[str, str] | None = None) -> str:
+    """Where this install's inference server answers, or a refusal naming every reason.
+
+    **The one place this is read, and it takes no model profile.** See
+    `EMBEDDING_IS_LOCAL_ON_EVERY_MODEL_PROFILE`: there is no parameter here that could name a
+    provider and no branch that could choose one, so an install switching
+    `INSTALL_MODEL_PROFILE` to `hosted` changes what the reasoner may reach and changes nothing
+    about where a document's text goes.
+
+    `env` is a parameter for the reason `brain.install.value_of` takes one, and it is load
+    bearing rather than a convenience: every refusal below is unreachable from a test that
+    cannot set the value.
+
+    **The empty refusal cannot fire from here and that is worth stating rather than leaving a
+    reader to assume it can.** `value_of` substitutes the declared default for a setting that
+    is blank, so an install that empties `INSTALL_MODEL_ENDPOINT` gets the product's own
+    service name back rather than nothing. `endpoint_refusals` still carries the empty case
+    because `embed_url` is exported and asks it about an address somebody built by hand, and a
+    joiner handed an empty string produces `/embed`, which is a relative URL posted at whatever
+    the process resolves it against. What an environment file can actually produce here is the
+    other four shapes.
+
+    `EmbeddingUnavailable` rather than a class of its own, matching `embed_url`. A misconfigured
+    address and an absent server are the same event to the leg that is waiting: nothing is
+    written, and the ingest job is re-driven. What separates them for the operator is that this
+    one is a finding on `python -m brain.knowledge.embed --check` rather than only a job that
+    keeps failing.
+    """
+    address = value_of(ENDPOINT_SETTING, env).strip()
+    findings = endpoint_refusals(address)
+    if findings:
+        raise EmbeddingUnavailable("; ".join(findings))
+    return address
+
+
+def endpoint_conflicts(*, endpoint: str, configured: str) -> tuple[str, ...]:
+    """Whether the address that is checked at startup is the address text is actually sent to.
+
+    Two settings name one destination and they answer to different halves of the system.
+    `brain.config.check` calls `brain.ops.inference.inference_config_conflicts` on
+    `BRAIN_INFERENCE_URL`, which is what refuses a destination being configured on a profile
+    that deploys no inference server; `INSTALL_MODEL_ENDPOINT` is what
+    `brain.ops.inference_client.make_client` dials. An install that sets both, differently, is
+    the case worth a sentence: the check at startup passed judgement on a host nothing will
+    contact, and the text goes to the other one with nothing having looked at it.
+
+    Compared as origins rather than as strings, so a trailing slash is not a finding. An unset
+    `BRAIN_INFERENCE_URL` is not a conflict either: it is the ordinary state of a `standard`
+    install, where the startup check has nothing to refuse and the endpoint is the declared
+    one.
+
+    Both are parameters with no defaults, so this can be shown to fire; nothing here reads an
+    environment.
+    """
+    other = configured.strip()
+    if not other:
+        return ()
+    if urlsplit(other).netloc == urlsplit(endpoint.strip()).netloc:
+        return ()
+    return (
+        f"{APP_ENDPOINT_SETTING} and {ENDPOINT_SETTING} name two different hosts, and only "
+        f"{ENDPOINT_SETTING} is dialled. brain.config.check judges the first at startup, so "
+        "this install has had a destination approved that nothing contacts while the text of "
+        "its documents goes to the second, which nothing checked against the profile",
+    )
 
 
 # ------------------------------------------------------------------ the deployment check

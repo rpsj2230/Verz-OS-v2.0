@@ -73,7 +73,10 @@ deliberately, and the reason is worth knowing because the failure it prevents is
 directions: a refused span is retried and dropped inside the client library, and an accepted one
 means your traces are sitting on a host chosen by whoever last copied an environment file. The
 same rule and a heavier version of it apply to `BRAIN_INFERENCE_URL`: a trace host receives
-metadata about a request, and that address receives the text of the document itself.
+metadata about a request, and a model-reading destination receives the text of the document
+itself. `BRAIN_INFERENCE_URL` is the declaration that startup judges; the address actually
+dialled is `INSTALL_MODEL_ENDPOINT`, and `python -m brain.knowledge.embed --check` prints it,
+says it is the only one, and reports the two naming different hosts.
 
 ## Backups, and the honest position
 
@@ -129,7 +132,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Eleven of the thirteen mechanisms are started by nothing
+## Ten of the thirteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -138,7 +141,9 @@ fails a test, and so does a row whose last column disagrees with the code.
 
 That check exists because this section was wrong. It read "the twelve mechanisms nothing runs"
 on the morning of 2026-09-09 and eleven was already true, because one had acquired a caller and
-the heading, the table and the count were three hand-kept copies of a fact the code holds.
+the heading, the table and the count were three hand-kept copies of a fact the code holds. Ten
+became true on 2026-09-11, when the console page that lets somebody choose a staff source and
+test it before it runs became the first caller of the roster dry run.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -149,7 +154,7 @@ the heading, the table and the count were three hand-kept copies of a fact the c
 | `restore_drill` | that the copies being taken can actually be restored | `nothing` |
 | `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `nothing` |
-| `directory_sync` | that the roster follows employment: joiners, movers and leavers | `nothing` |
+| `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
 | `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `nothing` |
 | `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
 | `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `nothing` |
@@ -161,7 +166,8 @@ the heading, the table and the count were three hand-kept copies of a fact the c
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it and says nothing
 about whether *that* module is ever reached, which for `spend_correction` today means a console
-screen nobody opens on a schedule. `on_a_route` is the only one that runs: an external timer
+screen nobody opens on a schedule, and for `directory_sync` a console page somebody presses.
+`on_a_route` is the only one that runs: an external timer
 calls an HTTP route, and it is what makes it detectable if entries are ever removed from the
 end of the audit ledger.
 
