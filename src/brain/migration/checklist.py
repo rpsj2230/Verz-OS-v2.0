@@ -184,6 +184,15 @@ CUTOVER_GATED_ACTS: Final[Mapping[str, str]] = MappingProxyType(
             "a backup has been read back in front of the client, so what is retained is a "
             "copy somebody has opened rather than a file"
         ),
+        "M37.6.1.1": (
+            "the deployment control panel requires a second factor, because its sign-in page "
+            "answers from the internet and it holds every container, database and secret on "
+            "the host"
+        ),
+        "M37.6.1.2": (
+            "the temporary administrator the identity provider created at bootstrap has been "
+            "deleted, so an internet-facing admin sign-in is one account to guess and not two"
+        ),
     }
 )
 

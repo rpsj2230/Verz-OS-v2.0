@@ -42,6 +42,9 @@ module.exports = [
    {n:"Scheduled job registry",k:["Every scheduled control listed with what it guards","CI assertion that each control appears in the scheduler","Alert when a scheduled job has not run within its window","Explicit test that no safety mechanism lacks a caller"]},
    {n:"On-call",k:["Alert routing and severity definitions","Runbook per alert","Escalation path to us where the client cannot resolve it"]},
    {n:"Cost validation",k:["Measured spend against the projection after thirty days","Estimator correction from actuals","Budget thresholds retuned with real distribution rather than assumptions"]}
+ ]},
+ {n:"Go-live hardening",s:[
+   {n:"Administrative consoles",k:["Two-factor on the deployment control panel account, because its sign-in page answers from the internet and it holds every container, database and secret on the host","Delete the temporary identity provider administrator created at bootstrap, so an internet-facing admin sign-in is one account to guess rather than two","Decide whether the administrative consoles stay on public subdomains or move behind an SSH tunnel, and write down which and why","Rotate the identity provider's bootstrap administrator password once the account it created has been deleted"]}
  ]}
 ]}
 ];

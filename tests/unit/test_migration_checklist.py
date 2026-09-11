@@ -327,6 +327,21 @@ def test_the_gated_ids_are_exactly_the_ones_the_plan_flags_as_gating() -> None:
     compared against the flags in the plan, which is a comparison against something outside
     itself rather than the constant compared against a restatement of itself.
 
+    **The literal below is a third copy and it is deliberate.** Two records compared against
+    each other both move when one edit touches both, and an agent adding a gated act edits the
+    plan and the constant in the same breath. The list written out here is the one a reviewer
+    reads, so widening what gates a client's cutover costs three deliberate edits rather than
+    two mechanical ones. That is the whole of what it buys and it is worth the friction: this
+    set is the difference between a cutover reported complete and a cutover that was.
+
+    Two were added on 2026-09-11 and neither came from the plan. Both administrative consoles
+    on the first deployment were measured answering from the open internet, so a second factor
+    on the control panel and the deletion of a bootstrap administrator joined the set. The
+    owner asked for them at go-live rather than now, which is right: nothing holds client data
+    yet, and a hardening step taken before the thing it protects exists is one nobody
+    re-checks on the day it matters. Gating the cutover is exactly how a step deferred to that
+    day is not forgotten on it.
+
     Delete this and the two drift, and the one that drifts is whichever nobody is looking at,
     which is the gate."""
     assert set(CUTOVER_GATED_ACTS) == set(gated_acts(load_acts(WBS)))
@@ -336,6 +351,8 @@ def test_the_gated_ids_are_exactly_the_ones_the_plan_flags_as_gating() -> None:
         "M37.2.6.2",
         "M37.2.6.5",
         "M37.4.1.3",
+        "M37.6.1.1",
+        "M37.6.1.2",
     }
 
 

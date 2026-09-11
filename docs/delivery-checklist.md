@@ -4,7 +4,7 @@
 
 Work in the plan that no commit can close. Every item here is done by a person, on the week of a migration, with a client. They are counted separately from the build for that reason: the percentage on the build page measures work that closes by being written, and these do not.
 
-33 items, 5 of which gate the cutover.
+36 items, 7 of which gate the cutover.
 
 **The items marked GATES CUTOVER are refused rather than listed.** `brain.migration.decommission` will not report a completed cutover while any of them is unrecorded, because their absence has a security consequence and a list nothing gates is a list nobody reads.
 
@@ -86,3 +86,14 @@ Work in the plan that no commit can close. Every item here is done by a person, 
 
 - [ ] `M37.4.2.1` Data processing agreement
 - [ ] `M37.4.2.3` Support and escalation procedure
+
+### M37.6 Go-live hardening
+
+#### M37.6.1 Administrative consoles
+
+- [ ] `M37.6.1.1` Two-factor on the deployment control panel account, because its sign-in page answers from the internet and it holds every container, database and secret on the host **GATES CUTOVER**
+  - a public sign-in page is fine when a guessed or stolen password is not sufficient on its own, and this one is not a console among others: it is the control plane for every container on the host, including the identity provider's own database and every environment variable in it. One credential between the internet and all of that is the single largest exposure on the box, and the fix is an authenticator scan
+- [ ] `M37.6.1.2` Delete the temporary identity provider administrator created at bootstrap, so an internet-facing admin sign-in is one account to guess rather than two **GATES CUTOVER**
+  - the same shape as the OAuth grants two groups up: a credential left behind after it has served its purpose, on a service reachable from outside. It is worse than an unused password because nothing about an unused admin account looks different on the day it is used
+- [ ] `M37.6.1.4` Rotate the identity provider's bootstrap administrator password once the account it created has been deleted
+  - conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off

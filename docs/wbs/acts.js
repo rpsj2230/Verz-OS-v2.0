@@ -243,6 +243,37 @@ const ACTS = {
     gate: false,
     text: "Support and escalation procedure",
   },
+
+  // Added 2026-09-11, from a measurement rather than from the plan. Both administrative
+  // consoles on the first deployment answer from the open internet: the deployment control
+  // panel returns 302 to an unauthenticated request on its own subdomain, and the identity
+  // provider's admin console returns 200 at `/admin/master/console/`. A note claiming the
+  // first was reachable only by tunnel was five days stale and produced a wrong
+  // recommendation before anybody curled it.
+  //
+  // Three of the four are acts and the fourth is not: deciding where the consoles live is a
+  // decision plus about an hour of proxy work, which is a commit. The owner asked for all
+  // four on the list to be done when the system is about to go live rather than now, which
+  // is the right call: nothing here holds client data yet, and a hardening step taken before
+  // the thing it protects exists is one nobody re-checks on the day it matters.
+  "M37.6.1.1": {
+    kind: "ACT",
+    gate: true,
+    text: "Two-factor on the deployment control panel account, because its sign-in page answers from the internet and it holds every container, database and secret on the host",
+    why: "a public sign-in page is fine when a guessed or stolen password is not sufficient on its own, and this one is not a console among others: it is the control plane for every container on the host, including the identity provider's own database and every environment variable in it. One credential between the internet and all of that is the single largest exposure on the box, and the fix is an authenticator scan",
+  },
+  "M37.6.1.2": {
+    kind: "ACT",
+    gate: true,
+    text: "Delete the temporary identity provider administrator created at bootstrap, so an internet-facing admin sign-in is one account to guess rather than two",
+    why: "the same shape as the OAuth grants two groups up: a credential left behind after it has served its purpose, on a service reachable from outside. It is worse than an unused password because nothing about an unused admin account looks different on the day it is used",
+  },
+  "M37.6.1.4": {
+    kind: "ACT",
+    gate: false,
+    text: "Rotate the identity provider's bootstrap administrator password once the account it created has been deleted",
+    why: "conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off",
+  },
 };
 
 //: Why the two conditional acceptance leaves do not gate the cutover, kept here because the
