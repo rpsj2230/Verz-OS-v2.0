@@ -78,13 +78,32 @@ ran. What is here is the rule a runtime will have to obey and the checks that sa
 it does, which is the same standing `checkpoint_refusals` has and is worth saying plainly
 rather than leaving to be discovered.
 
-Rejected: computing the child grant in SQL, which is what M18.3.1 asks for in as many
-words. It is a second implementation of the platform's central rule, in a language no test
-in this repository runs, on a row nothing in `src/brain/tables/` defines. CLAUDE.md's
-first invariant and that leaf cannot both be honoured, and the invariant wins: the leaf is
-left open and the reason is written here rather than worked around. What SQL can honestly
-do is refuse, not compute, and the refusal is `narrowing_refusals` until there is a table
-to hang a trigger on.
+**This module refused M18.3.1 and M18.3.2 until 2026-09-11, and the refusal is now spent.**
+It read the single-implementation rule as forbidding any second computation of the central
+rule, and on those terms it was right to refuse: a second implementation of a reach a run
+is *executed at* is a second place for the rule to be subtly wrong, and the wrong copy is
+the one in production.
+
+What `brain.core.scope_sql.delegated_reach` builds is not that, and the distinction is
+worth stating precisely because it is the only thing keeping it legitimate. **Its sole
+consumer is a refusal.** No run is executed at the reach it computes, no caller receives
+it, and `EntitlementSet.intersect` remains the one implementation anything acts on. The
+failure modes are asymmetric in the safe direction: narrower than Python refuses a row that
+should have been recorded, which is loud; wider admits a row the Python path had already
+checked, which is where the system stood before the trigger existed.
+
+Silent drift between the two is the thing that would matter, so they are measured against
+each other rather than argued about: ten differential cases fold the same three sets
+through `intersect` twice and through the SQL once and compare by meaning, against a live
+server, in `tests/unit/test_delegation_sql.py`.
+
+The other half of the old refusal was real and has been answered rather than waived. There
+was no row to hang a trigger on; migration `0028` creates `gate.delegation`, and the trigger
+catches what this module cannot: a row below the root has no column in which to state its
+own parent reach, so it is measured against what its parent row recorded, and every UPDATE
+is refused because otherwise widening is two statements. What the database still cannot
+confirm is the root row's own `parent_grants`, which is the asker's reach and is as true as
+its writer; `scope_sql` says so in its own docstring rather than implying more.
 
 Rejected: a `depth` field on the chain. It is derivable from the hops and a stored copy is
 a second fact that can disagree with the first, which is

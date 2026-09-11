@@ -27,7 +27,85 @@ person seeing the whole company, so both are named here rather than left to the 
 Nothing here performs I/O or imports a database driver. It emits a fragment and its bound
 parameters as data; binding them is the caller's job.
 
-Task ids: M2.1.2, M2.1.3
+---
+
+**The second half of this module is a refusal rather than a renderer, and the distinction is
+the whole argument for it existing.** `E_run(caller, agent) = E(caller) intersect
+agent_ceiling` is implemented once, in `EntitlementSet.intersect`, and CLAUDE.md forbids a
+second implementation because the wrong copy is the one in production.
+`brain.orchestration.delegation` declined M18.3.1 on exactly that reading and the reading was
+right about what it refused: **a second computation whose answer a run is executed at is a
+second answer to the platform's central question.**
+
+What is here is not that. `gate.delegated_reach` computes `parent intersect agent intersect
+subtask` in SQL and no caller may run at what it returns: its only consumer is
+`gate.delegation_narrows`, which compares it against the reach a row *claims* and raises. A
+second implementation used to compute hands out a reach; a second implementation used only to
+disagree is a check. The failure modes are not symmetrical either, and that is what makes the
+copy affordable: an SQL copy narrower than the Python one refuses a legitimate row, which is
+loud and is an availability bug, and an SQL copy wider than the Python one admits a row that
+the Python path had already checked, which is the state before this existed.
+
+What must not happen is the two drifting silently, so they are measured against each other
+rather than trusted: `tests/unit/test_delegation_sql.py` runs the same sets through
+`EntitlementSet.intersect` twice over and through `gate.delegated_reach` once, on a real
+PostgreSQL, and compares the reaches by meaning. `not_after` is compared as an instant and not
+as text, because pydantic renders UTC as `Z` and PostgreSQL renders it as `+00:00`; those are
+the same instant and a byte comparison would have failed on a difference that means nothing.
+
+**A trigger that repeats what the application already checked is worth very little, so this
+one is built to catch the row the application never saw.** Two things make it that rather than
+a restatement of `narrowing_refusals`:
+
+- **A row may not supply its own parent reach unless it is the root of a chain.** `parent_id`
+  and `parent_grants` are mutually exclusive by check constraint, so every row below the root
+  is measured against the reach its parent row *recorded*, which the trigger already refused
+  to widen. An inserter that controls every column of its own row therefore still cannot
+  widen: the left-hand side of its intersection is not a column it writes. That is the half a
+  Python check standing beside the same insert could not do, because Python would be reading
+  the same attacker-supplied value.
+- **A delegation row is written once.** The trigger refuses every UPDATE, so the reach a
+  parent recorded cannot be edited after its children were measured against it. Without that,
+  widening is a two-statement job: insert a narrow parent, insert the children, widen the
+  parent.
+
+**What it cannot do is check the root.** The root row's `parent_grants` is the asker's reach
+and nothing in the database can confirm that it was: entitlements are resolved from several
+tables plus the directory sync, by `brain.gate.entitle`, and a trigger re-resolving them would
+be the second implementation this module has just argued against. So the guarantee is stated
+narrowly and honestly: **below the root, no row widens; at the root, the row is as true as
+whoever wrote it.** A root row is one insert to audit, and a chain of them is none.
+
+Those four arguments are written down as `THE_SQL_REACH_IS_ONLY_EVER_A_SECOND_OPINION`,
+`A_ROW_MAY_NOT_SUPPLY_ITS_OWN_PARENT_REACH`, `A_DELEGATION_ROW_RECORDS_ONE_DECISION` and
+`THE_ROOT_OF_A_CHAIN_IS_AS_TRUE_AS_ITS_WRITER`, because a paragraph is deleted by the next
+person who tidies a docstring and a named constant has to be argued with.
+
+**Rejected, and it is the reason the intersection has to be computed rather than merely
+asked about: checking containment against each of the three sides separately.** Containment in
+an intersection is containment in each side, so `child subset (P and A and S)` looks like
+three independent subset tests that need nothing materialised, and that is the cheaper design.
+It does not work, because the containment this check uses is grant for grant on the
+capability's own value, for the reason `narrowing_refusals` records: `scope_for` conjoins the
+scopes of every grant that *covers* a capability, so comparing through it reports a correct
+narrowing as a widening. A ceiling holding `read:client.*` covers a child holding
+`read:client.name` and has no grant equal to it, so the direct test refuses a row that is
+plainly narrower. Only the intersection has the wildcard resolved down to the concrete
+capability the parent held, which is what the child can be compared against at all.
+`test_the_intersection_cannot_be_replaced_by_three_containment_tests` is that measured on a
+live server, so the argument is a demonstration rather than a paragraph.
+
+Rejected: a second table holding one grant per row, joined for the check. It reads better as
+SQL and it loses the property that matters: a delegation and its grants would then arrive in
+separate statements, and a row-level trigger would pass on each half. A constraint trigger
+deferred to commit closes that and adds a failure mode where the refusal arrives detached from
+the statement that caused it. One row cannot be half written.
+
+Rejected: enforcing the depth cap and the fan-out cap here too. Both are already decided in
+`brain.orchestration.delegation` against `brain.ops.admission`'s configured budget, and a
+constant compiled into a trigger is a budget that changes in two places or in neither.
+
+Task ids: M2.1.2, M2.1.3, M18.3.1, M18.3.2
 """
 
 from __future__ import annotations
@@ -35,7 +113,7 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Final
 
 from pydantic import ValidationError
 
@@ -558,3 +636,437 @@ def compile_where(
                 fragments.append(f"{column} LIKE :{name} ESCAPE '{LIKE_ESCAPE}'")
                 params[name] = f"{_escape_like(str(clause.value))}%"
     return CompiledPredicate(where="(" + " AND ".join(fragments) + ")", params=params)
+
+
+# ------------------------------------------- the delegation refusal (M18.3.1, M18.3.2)
+#: Why a second implementation of the central rule is affordable here and nowhere else.
+THE_SQL_REACH_IS_ONLY_EVER_A_SECOND_OPINION: Final = (
+    "gate.delegated_reach computes parent intersect agent intersect subtask in SQL, and the "
+    "one thing it may never do is hand that reach to something that runs at it. Its only "
+    "consumer is the trigger, which compares it against the reach a row claims and raises. A "
+    "second implementation used to compute is a second answer to who may see what; a second "
+    "implementation used only to disagree is a check. The two are measured against each "
+    "other on a real server rather than trusted to agree, because silent drift is the one "
+    "failure this arrangement does not survive."
+)
+
+#: Why the trigger is not a restatement of the Python check standing beside the same insert.
+A_ROW_MAY_NOT_SUPPLY_ITS_OWN_PARENT_REACH: Final = (
+    "Below the root of a chain, the left-hand side of the intersection is not a column the "
+    "inserter writes: parent_id and parent_grants are mutually exclusive, so a child row is "
+    "measured against the reach its parent row recorded and that row was already refused if "
+    "it widened. An inserter in control of every column of its own row therefore still "
+    "cannot widen. A check written in the application beside the same insert cannot say "
+    "that, because it would be reading the same supplied value."
+)
+
+#: Why a delegation row is written once and never edited.
+A_DELEGATION_ROW_RECORDS_ONE_DECISION: Final = (
+    "Every UPDATE is refused. A parent's recorded reach is the bound its children were "
+    "measured against, so a reach that can be edited afterwards makes widening a "
+    "two-statement job: insert a narrow parent, insert the children under it, then widen the "
+    "parent. Nothing needs to edit one of these rows, and the ability to would remove the "
+    "only thing the chain check rests on."
+)
+
+#: What the trigger cannot establish, said plainly so nobody reads it as more than it is.
+THE_ROOT_OF_A_CHAIN_IS_AS_TRUE_AS_ITS_WRITER: Final = (
+    "The root row supplies parent_grants and nothing in the database can confirm that it was "
+    "the asker's reach. Entitlements are resolved across several tables and the directory "
+    "sync by brain.gate.entitle, and a trigger re-resolving them would be the second "
+    "implementation this module argues against. So the guarantee is narrow: below the root "
+    "no row widens, and at the root the row is as true as whoever wrote it. That leaves one "
+    "insert per chain to audit rather than one per hop."
+)
+
+#: The schema the delegation table and its functions live in. `gate` rather than `agent`,
+#: because `brain.db.SCHEMAS` classifies `gate` as capabilities, grants and scopes, and every
+#: column this check reads is one of those. The row is a permissions document; where it is
+#: kept is a classification decision and not a filing one.
+DELEGATION_SCHEMA: Final = "gate"
+
+#: The table the trigger hangs on, unqualified and then qualified. Both are here so the
+#: migration and the SQL below cannot disagree about where the table is, which is the failure
+#: `0024` records about rendering an index expression from the module that owns it.
+DELEGATION_TABLE: Final = "delegation"
+DELEGATION_RELATION: Final = f"{DELEGATION_SCHEMA}.{DELEGATION_TABLE}"
+
+#: Every column the trigger reads off `NEW`. The migration builds the table and this SQL reads
+#: it, and a column renamed in one and not the other is a table whose every insert raises at
+#: run time rather than at build time. `trigger_columns` reads these back out of the source so
+#: a test can hold the two against each other.
+DELEGATION_COLUMNS: Final[tuple[str, ...]] = (
+    "agent_ceiling",
+    "child_grants",
+    "child_id",
+    "decided_at",
+    "parent_grants",
+    "parent_id",
+    "subtask_ceiling",
+)
+
+#: What a delegation refusal is reported as. `check_violation`, because that is what it is: a
+#: check the database makes about one row. Which refusal it was belongs in the message and not
+#: in a second code, since a caller that has to learn two codes to tell a widened reach from a
+#: malformed one will handle neither.
+DELEGATION_REFUSED_SQLSTATE: Final = "23514"
+
+#: `Capability.covers`, in SQL. Only a trailing `.*` expands, and it expands to a prefix
+#: ending in the dot, so `read:client.*` covers `read:client.name` and never `read:clients`.
+#: Written with `left` and `right` rather than with LIKE, because a capability arriving with a
+#: `%` in it would otherwise be a pattern rather than a string, which is the same defect
+#: `_escape_like` exists for one layer down.
+CAPABILITY_COVERS_SQL: Final = """
+CREATE OR REPLACE FUNCTION gate.capability_covers(wide text, narrow text)
+RETURNS boolean
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+AS $covers$
+    SELECT wide = narrow
+        OR (right(wide, 2) = '.*'
+            AND left(narrow, length(wide) - 1) = left(wide, length(wide) - 1))
+$covers$
+"""
+
+#: `EntitlementSet.scope_for`, in SQL: the clauses of every grant in the ceiling that covers
+#: this capability, conjoined, or NULL when the ceiling covers it with nothing.
+#:
+#: NULL and `[]` are the two answers that must not be confused, which is why this is a CASE
+#: over an existence test rather than an aggregate. `[]` is a ceiling that admits the
+#: capability unrestricted; NULL is a ceiling that does not admit it at all, and an aggregate
+#: over no rows returns the same empty array for both.
+#:
+#: The expiry test is inside the match, mirroring `scope_for` refusing an expired principal
+#: before it looks at a grant. An expired ceiling therefore admits nothing rather than
+#: everything, which is the direction a mistake here has to fail in.
+#:
+#: `SET timezone = 'UTC'` is what makes `IMMUTABLE` true rather than merely declared. Casting
+#: a text timestamp that carries no offset reads the session's `TimeZone`, so without this the
+#: function returns different answers on two connections to one server, and IMMUTABLE is a
+#: promise the planner is entitled to act on. Pydantic always writes an offset; a row written
+#: by hand may not, and this is what decides that such a row means UTC.
+ENTITLEMENT_SCOPE_FOR_SQL: Final = """
+CREATE OR REPLACE FUNCTION gate.entitlement_scope_for(
+    ceiling jsonb, capability text, at timestamptz)
+RETURNS jsonb
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET timezone = 'UTC'
+AS $scope_for$
+    WITH matched AS (
+        SELECT coalesce(g.value -> 'scope' -> 'clauses', '[]'::jsonb) AS clauses
+        FROM jsonb_array_elements(coalesce(ceiling -> 'grants', '[]'::jsonb)) AS g(value)
+        WHERE (ceiling ->> 'not_after' IS NULL
+               OR at < (ceiling ->> 'not_after')::timestamptz)
+          AND gate.capability_covers(g.value -> 'capability' ->> 'value', capability)
+    )
+    SELECT CASE
+        WHEN NOT EXISTS (SELECT 1 FROM matched) THEN NULL
+        ELSE (
+            SELECT coalesce(jsonb_agg(DISTINCT c.value), '[]'::jsonb)
+            FROM matched AS m, LATERAL jsonb_array_elements(m.clauses) AS c(value)
+        )
+    END
+$scope_for$
+"""
+
+#: M18.3.1: the child grant, computed as parent intersect agent intersect subtask.
+#:
+#: A left fold like the Python one, and flattened into a single pass because intersection is
+#: associative: a grant survives when both ceilings cover it, and its scope is the parent's
+#: clauses conjoined with what each ceiling narrowed it to. Ordered by the parent's own grant
+#: order so a reader diffing this against `chain_reach` is comparing like with like.
+#:
+#: `LEAST` ignores NULLs in PostgreSQL, which is exactly `min` over the bounds that are set,
+#: and matches `intersect` taking the tighter of the two. A ceiling with no expiry therefore
+#: does not extend one that has it.
+#:
+#: `SET timezone = 'UTC'` for the reason `ENTITLEMENT_SCOPE_FOR_SQL` gives, and here it also
+#: decides what the returned document says: rendering a timestamptz into jsonb uses the
+#: session zone, so without this one server prints `+08:00` and another prints `Z` for the
+#: same instant. Both are correct and neither is stable, which is enough to make a function
+#: declared IMMUTABLE not be.
+DELEGATED_REACH_SQL: Final = """
+CREATE OR REPLACE FUNCTION gate.delegated_reach(
+    parent jsonb, agent_ceiling jsonb, subtask_ceiling jsonb, at timestamptz)
+RETURNS jsonb
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET timezone = 'UTC'
+AS $reach$
+    SELECT jsonb_build_object(
+        'principal_id', parent ->> 'principal_id',
+        'grants', coalesce((
+            SELECT jsonb_agg(jsonb_build_object(
+                'capability', g.value -> 'capability',
+                'scope', jsonb_build_object('clauses', (
+                    SELECT coalesce(jsonb_agg(DISTINCT c.value), '[]'::jsonb)
+                    FROM jsonb_array_elements(
+                        coalesce(g.value -> 'scope' -> 'clauses', '[]'::jsonb)
+                        || narrowed.by_the_agent
+                        || narrowed.by_the_subtask) AS c(value)
+                ))
+            ) ORDER BY g.ordinality)
+            FROM jsonb_array_elements(coalesce(parent -> 'grants', '[]'::jsonb))
+                 WITH ORDINALITY AS g(value, ordinality),
+                 LATERAL (
+                     SELECT gate.entitlement_scope_for(
+                                agent_ceiling, g.value -> 'capability' ->> 'value', at)
+                            AS by_the_agent,
+                            gate.entitlement_scope_for(
+                                subtask_ceiling, g.value -> 'capability' ->> 'value', at)
+                            AS by_the_subtask
+                 ) AS narrowed
+            WHERE narrowed.by_the_agent IS NOT NULL
+              AND narrowed.by_the_subtask IS NOT NULL
+        ), '[]'::jsonb),
+        'not_after', LEAST(
+            (parent ->> 'not_after')::timestamptz,
+            (agent_ceiling ->> 'not_after')::timestamptz,
+            (subtask_ceiling ->> 'not_after')::timestamptz)
+    )
+$reach$
+"""
+
+#: Whether a jsonb column is a reach at all, reported as every fault at once.
+#:
+#: **This is the fail-closed half and it is here because the alternative fails open.** The SQL
+#: above reads `grants`, `capability.value`, `scope.clauses` and `not_after` by name out of
+#: what pydantic serialises. Rename one of those fields in `brain.core.entitlement` and every
+#: lookup returns NULL, the computed reach comes back holding nothing, and a child claiming
+#: nothing passes: the trigger would go on admitting rows while checking nothing at all.
+#: Refusing a document it cannot read turns that into a refusal on the first insert.
+#:
+#: Not STRICT, because a NULL document is one of the faults it exists to name.
+ENTITLEMENT_DOCUMENT_FAULTS_SQL: Final = """
+CREATE OR REPLACE FUNCTION gate.entitlement_document_faults(label text, doc jsonb)
+RETURNS text[]
+LANGUAGE sql IMMUTABLE PARALLEL SAFE
+AS $faults$
+    SELECT coalesce(array_agg(fault ORDER BY fault), ARRAY[]::text[])
+    FROM (
+        SELECT label || ' is not a json object, so no reach can be read out of it' AS fault
+        WHERE doc IS NULL OR jsonb_typeof(doc) IS DISTINCT FROM 'object'
+        UNION ALL
+        SELECT label || ' names no principal_id, and a reach belongs to somebody'
+        WHERE jsonb_typeof(doc) = 'object'
+          AND jsonb_typeof(doc -> 'principal_id') IS DISTINCT FROM 'string'
+        UNION ALL
+        SELECT label || ' carries no grants array'
+        WHERE jsonb_typeof(doc) = 'object'
+          AND jsonb_typeof(doc -> 'grants') IS DISTINCT FROM 'array'
+        UNION ALL
+        SELECT label || ' carries a grant with no capability value or no scope clauses'
+        WHERE jsonb_typeof(doc -> 'grants') = 'array'
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(doc -> 'grants') AS g(value)
+            WHERE jsonb_typeof(g.value -> 'capability' -> 'value') IS DISTINCT FROM 'string'
+               OR jsonb_typeof(g.value -> 'scope' -> 'clauses') IS DISTINCT FROM 'array')
+        UNION ALL
+        SELECT label || ' carries a not_after that is neither absent nor a timestamp'
+        WHERE jsonb_typeof(doc) = 'object'
+          AND doc -> 'not_after' IS NOT NULL
+          AND jsonb_typeof(doc -> 'not_after') NOT IN ('null', 'string')
+    ) AS faults
+$faults$
+"""
+
+#: `brain.orchestration.delegation.narrowing_refusals`, in SQL. The same four checks, in the
+#: same order, and each one is a way a row could widen.
+#:
+#: The scope check is a containment test on clause sets and deliberately not a comparison of
+#: normalised scopes. Clause order and duplication carry no meaning, so a set test needs no
+#: agreement about how Python sorts a clause, and there is nothing left to drift: two jsonb
+#: clauses are equal when they say the same thing.
+#:
+#: A capability the parent does not hold at all produces the first finding and not the second,
+#: matching the `continue` in the Python original: one missing capability is one refusal, not
+#: two ways of saying it.
+NARROWING_REFUSALS_SQL: Final = """
+CREATE OR REPLACE FUNCTION gate.narrowing_refusals(child jsonb, parent jsonb)
+RETURNS text[]
+LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+SET timezone = 'UTC'
+AS $refusals$
+    SELECT coalesce(array_agg(finding ORDER BY finding), ARRAY[]::text[])
+    FROM (
+        SELECT 'the child names principal ' || coalesce(child ->> 'principal_id', '?')
+               || ' and the parent names ' || coalesce(parent ->> 'principal_id', '?')
+               || '; narrowing keeps the caller''s id, so this row was not produced by '
+               || 'narrowing that caller''s reach' AS finding
+        WHERE child ->> 'principal_id' IS DISTINCT FROM parent ->> 'principal_id'
+        UNION ALL
+        SELECT (g.value -> 'capability' ->> 'value')
+               || ' is held by the child and by no grant of the parent''s'
+        FROM jsonb_array_elements(child -> 'grants') AS g(value)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements(parent -> 'grants') AS p(value)
+            WHERE p.value -> 'capability' ->> 'value'
+                  = g.value -> 'capability' ->> 'value')
+        UNION ALL
+        SELECT (g.value -> 'capability' ->> 'value')
+               || ' is scoped in the child without every clause the parent''s grant '
+               || 'carried, and scopes compose by conjunction only, so a dropped clause '
+               || 'is rows the parent could not see'
+        FROM jsonb_array_elements(child -> 'grants') AS g(value)
+        WHERE EXISTS (
+            SELECT 1 FROM jsonb_array_elements(parent -> 'grants') AS p(value)
+            WHERE p.value -> 'capability' ->> 'value'
+                  = g.value -> 'capability' ->> 'value')
+          AND NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements(parent -> 'grants') AS p(value)
+            WHERE p.value -> 'capability' ->> 'value'
+                  = g.value -> 'capability' ->> 'value'
+              AND NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(
+                    coalesce(p.value -> 'scope' -> 'clauses', '[]'::jsonb)) AS wanted(value)
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM jsonb_array_elements(
+                        coalesce(g.value -> 'scope' -> 'clauses', '[]'::jsonb)) AS held(value)
+                    WHERE held.value = wanted.value)))
+        UNION ALL
+        SELECT 'the child expires at ' || coalesce(child ->> 'not_after', 'never')
+               || ' and the parent at ' || (parent ->> 'not_after')
+               || '; a delegated run outliving the reach it came from is a grant with a '
+               || 'later expiry than the one it was cut from'
+        WHERE parent ->> 'not_after' IS NOT NULL
+          AND (child ->> 'not_after' IS NULL
+               OR (child ->> 'not_after')::timestamptz
+                  > (parent ->> 'not_after')::timestamptz)
+    ) AS refusals
+$refusals$
+"""
+
+#: M18.3.2: the trigger that refuses a delegation row which is not a subset.
+#:
+#: `SECURITY DEFINER` for one read and one reason. The table has no SELECT policy, because
+#: nothing in the application reads a delegation row back and a policy of `USING (true)`
+#: written in advance of a screen that needs it would grant back what the flag denied. The
+#: chain check still has to read one column of one row by primary key, and it is the only
+#: reader there is, so it runs as the owner with a fixed `search_path` and everything it calls
+#: is schema-qualified.
+#:
+#: The UPDATE refusal comes first because it is the cheapest and because it is the check the
+#: rest depends on: see `A_DELEGATION_ROW_RECORDS_ONE_DECISION`.
+#:
+#: There is deliberately no `IF refusals IS NULL` guard. Both of the functions it calls are
+#: STRICT and would return NULL for a NULL argument, and `array_length(NULL, 1) IS NULL` reads
+#: the same as "nothing to refuse", so that would be a fail-open path if it could be reached.
+#: It cannot: the fault check above returns before it for any document that is not an object,
+#: which is the only way either argument could be NULL. The guard would be unreachable, and an
+#: unreachable guard is this repository's commonest defect rather than its remedy, so the
+#: reason it is safe is written here instead of being implemented twice.
+DELEGATION_TRIGGER_FUNCTION_SQL: Final = """
+CREATE OR REPLACE FUNCTION gate.delegation_narrows()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, gate
+AS $narrows$
+DECLARE
+    parent_reach jsonb;
+    parent_decided_at timestamptz;
+    faults text[];
+    refusals text[];
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'a delegation row records one decision and is not edited afterwards',
+            DETAIL = 'a parent reach that can be changed after its children were measured '
+                     'against it makes widening a two-statement job';
+    END IF;
+    IF NEW.parent_id IS NULL THEN
+        parent_reach := NEW.parent_grants;
+    ELSE
+        SELECT d.child_grants, d.decided_at INTO parent_reach, parent_decided_at
+        FROM gate.delegation AS d
+        WHERE d.id = NEW.parent_id;
+        IF NOT FOUND THEN
+            RAISE EXCEPTION USING
+                ERRCODE = '23514',
+                MESSAGE = 'delegation ' || NEW.child_id || ' names a parent row that is '
+                          'not there to bound it';
+        END IF;
+        IF NEW.decided_at < parent_decided_at THEN
+            RAISE EXCEPTION USING
+                ERRCODE = '23514',
+                MESSAGE = 'delegation ' || NEW.child_id || ' was decided before the '
+                          'delegation it descends from',
+                DETAIL = 'the timestamps are what an auditor reconstructs the order of a '
+                         'chain from, and a chain that runs backwards did not happen';
+        END IF;
+    END IF;
+    faults := gate.entitlement_document_faults('the parent reach', parent_reach)
+           || gate.entitlement_document_faults('the agent ceiling', NEW.agent_ceiling)
+           || gate.entitlement_document_faults('the subtask ceiling', NEW.subtask_ceiling)
+           || gate.entitlement_document_faults('the child reach', NEW.child_grants);
+    IF array_length(faults, 1) IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'delegation ' || NEW.child_id || ' carries a reach this check cannot '
+                      'read: ' || array_to_string(faults, '; ');
+    END IF;
+    refusals := gate.narrowing_refusals(
+        NEW.child_grants,
+        gate.delegated_reach(
+            parent_reach, NEW.agent_ceiling, NEW.subtask_ceiling, NEW.decided_at));
+    IF array_length(refusals, 1) IS NOT NULL THEN
+        RAISE EXCEPTION USING
+            ERRCODE = '23514',
+            MESSAGE = 'delegation ' || NEW.child_id || ' widens rather than narrows: '
+                      || array_to_string(refusals, '; ');
+    END IF;
+    RETURN NEW;
+END
+$narrows$
+"""
+
+#: Both statements, because the trigger fires on UPDATE in order to refuse it. A trigger
+#: declared `BEFORE INSERT` alone would leave the edit path open with the refusal written and
+#: unreachable, which is this repository's most common defect wearing a different hat.
+DELEGATION_TRIGGER_SQL: Final = """
+CREATE TRIGGER delegation_narrows
+BEFORE INSERT OR UPDATE ON gate.delegation
+FOR EACH ROW EXECUTE FUNCTION gate.delegation_narrows()
+"""
+
+#: Every statement the migration runs, in dependency order: a function is created before the
+#: one that calls it, and the trigger last. Exported as one tuple so the migration executes
+#: exactly what the tests install and neither can be given a statement the other does not run.
+DELEGATION_INSTALL: Final[tuple[str, ...]] = (
+    CAPABILITY_COVERS_SQL,
+    ENTITLEMENT_SCOPE_FOR_SQL,
+    DELEGATED_REACH_SQL,
+    ENTITLEMENT_DOCUMENT_FAULTS_SQL,
+    NARROWING_REFUSALS_SQL,
+    DELEGATION_TRIGGER_FUNCTION_SQL,
+)
+
+#: The reverse, for a downgrade, innermost caller first. Named with their argument types
+#: because a function is identified by its signature, and `DROP FUNCTION` on a bare name
+#: fails once anything is ever overloaded.
+DELEGATION_UNINSTALL: Final[tuple[str, ...]] = (
+    "DROP FUNCTION IF EXISTS gate.delegation_narrows()",
+    "DROP FUNCTION IF EXISTS gate.narrowing_refusals(jsonb, jsonb)",
+    "DROP FUNCTION IF EXISTS gate.entitlement_document_faults(text, jsonb)",
+    "DROP FUNCTION IF EXISTS gate.delegated_reach(jsonb, jsonb, jsonb, timestamptz)",
+    "DROP FUNCTION IF EXISTS gate.entitlement_scope_for(jsonb, text, timestamptz)",
+    "DROP FUNCTION IF EXISTS gate.capability_covers(text, text)",
+)
+
+#: How a column of the row under test is spelled in the trigger body.
+_NEW_COLUMN = re.compile(r"NEW\.([a-z][a-z0-9_]*)")
+
+
+def trigger_columns(body: str = DELEGATION_TRIGGER_FUNCTION_SQL) -> tuple[str, ...]:
+    """Every column of the row under test that the trigger reads, sorted and deduplicated.
+
+    The table is built by a migration and read by a string in this module, and nothing in
+    between type checks the join between them. A column renamed on one side and not the other
+    produces a table whose every insert raises at run time, which is fail-closed and is still
+    a defect discovered by an operator rather than by a gate.
+
+    Takes the body as an argument rather than reading the constant directly, so that the
+    interesting case, a trigger naming a column the table does not have, is one a test can
+    hand it. That is the argument `brain.orchestration.delegation.grant_verbs_in` records
+    about its own signature.
+    """
+    return tuple(sorted(set(_NEW_COLUMN.findall(body))))
