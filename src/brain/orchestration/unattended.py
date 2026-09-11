@@ -89,8 +89,9 @@ one it would mean in practice is whichever the first caller assumed.
 
 Scope: domain logic. Nothing here schedules anything, opens a connection or reads a clock;
 `now` and `at` are parameters for the reason `brain.ops.limits` gives about policy that owns
-a client. No automation described here has ever run: there is no scheduler in this
-repository, and `brain.ops.queue.NO_DRIVER_IS_INSTALLED` says there is nothing to run it on.
+a client. No automation described here has ever run, and since 2026-09-11 there is one
+reason rather than two: M32.4.1.1 installed a queue driver, so there is something to run an
+automation on, and there is still no scheduler in this repository to start one.
 
 Task ids: M17.4.1, M17.4.2, M17.4.3, M17.4.4, M17.4.5, M17.4.6
 """

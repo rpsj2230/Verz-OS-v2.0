@@ -64,7 +64,7 @@ Scope: domain logic. Nothing here renders, opens a connection or reads a clock; 
 parameter, as in `brain.console.reads`.
 
 **Most of what M33 asks for is a screen and there are no screens.** `unregistered_tools([])`
-returns all thirty-four, so a leaf reading "their own memory with a delete control" needs a
+returns all thirty-five, so a leaf reading "their own memory with a delete control" needs a
 tool that does not exist and is not claimed below however well the menu behaves. M33.5.1.3,
 "set permission-sync capability per connector", is a connector's credential custody rather
 than a console surface and is not claimed here either; `brain.identity.staff_source` argues

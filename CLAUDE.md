@@ -376,6 +376,31 @@ git commit --amend --no-edit
 Amending rather than fixing forward, because every push to main deploys, so a broken commit in
 the history is a failed deployment rather than an untidy log.
 
+**mypy type checks the platform it is running on, so a green local run says nothing about the
+container.** It narrows `sys.platform` to a literal and then declines to warn about a block a
+platform check excludes. That courtesy covers the guarded block and **not the statements
+downstream of it**, so a function branching on the platform is checked in halves: Windows
+checks one, the ubuntu runner checks the other, and each is silent about the half it skipped.
+
+On 2026-09-11 `brain.ops.worker._loop_factory` was written `if sys.platform != "win32": return
+None` with the Windows branch after it. Local mypy said `Success: no issues found in 681 source
+files`; CI said `Statement is unreachable` and exited 1. CI gates Deploy, so production sat on
+the previous commit and the only symptom was a task list that had stopped updating. Inverting
+the condition fixes Linux and breaks Windows, measured both ways: the asymmetry is in mypy's
+narrowing rather than in which branch comes first.
+
+So **branch on `os.name`, which mypy does not narrow at all**, and both branches are then
+checked on both platforms, which is more checking than either `sys.platform` form bought. And
+the gates now judge the platform this ships on: `ops/hooks/pre-push` passes `--platform
+"$SHIPS_ON"` on both its mypy runs, `make types` passes `--platform linux`, `make types-here`
+is the native run for debugging a development machine, and
+`test_the_local_type_gates_judge_the_platform_the_runner_does` holds all of that against the
+`runs-on` of whichever job in `ci.yml` actually runs mypy. To reproduce the runner by hand:
+
+```
+uv run python -m mypy --platform linux
+```
+
 **pytest addopts already contains `-q`.** Passing another one makes it `-qq` and suppresses the
 summary line, so a green run prints no count at all.
 

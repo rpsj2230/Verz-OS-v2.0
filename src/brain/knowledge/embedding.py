@@ -54,8 +54,11 @@ loses the one number that can be compared against the corpus afterwards. See
 reports where one has got to, and refuses the claim that one finished when the arithmetic says
 otherwise. It does not execute one, because executing means embedding text and rewriting rows:
 the embedding service is a seam nothing implements (M7.3.3, and see
-`brain.knowledge.embed_queue`), there is no queue driver to fetch a batch with, and no chunk
-repository to read from or write to. The column the identity is stored in does now exist;
+`brain.knowledge.embed_queue`), and there is no chunk repository to read from or write to. The
+queue is no longer one of the reasons: M32.4.1.1 installed a driver on 2026-09-11 and a worker
+really does drain a queue now, so what is missing here is narrower than it was and naming the
+queue among the gaps would send a reader looking for something that exists. The column the
+identity is stored in does now exist;
 migration 0010 added `know.chunk.embedding_model` and `vector_query` conjoins it, so a query
 cannot span a model change even when a caller never consults `corpus_identity`. What remains
 missing is everything that would move a row.

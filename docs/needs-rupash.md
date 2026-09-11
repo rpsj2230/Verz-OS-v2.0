@@ -769,7 +769,7 @@ quote one without doing so.
 
 **Nothing is blocked. This is a design record to disagree with now rather than after it is
 built.** You said the nine screens I described could not be the whole console, and you were
-right. The plan named eighteen and the code had four. It is now thirty-four, declared in
+right. The plan named eighteen and the code had four. It is now thirty-five, declared in
 `brain/console/screens.py` with tests holding every one of them to the rules below, and the
 roadmap under M27 lists them all.
 

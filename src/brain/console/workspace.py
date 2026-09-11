@@ -66,7 +66,7 @@ Scope: domain logic. Nothing here opens a connection, renders anything or reads 
 `now` is a parameter for the reason `brain.ops.limits` gives about policy that owns a client.
 
 **This declares the surface and builds none of it.** There is no console screen behind any of
-the thirty-four `brain.console.screens` declares, and there is none behind this either. The
+the thirty-five `brain.console.screens` declares, and there is none behind this either. The
 four ranges M39.1.3.2 asks a selector for are declared as `Range`; the selector is a control
 and is not claimed. Nor are the header, the right pane and the keyboard map: each is a
 rendered thing, and a leaf claimed for a type nobody renders would have the traceability

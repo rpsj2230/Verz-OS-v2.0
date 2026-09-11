@@ -227,16 +227,19 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(
         name="queue_redrive",
         needs=(
-            "a queue. `verdict_for` decides what to do with a stuck job and `redrive` acts on "
-            "the verdict; no queue driver is installed, which is why both workers exit at "
-            "startup today"
+            "a caller. `verdict_for` decides what to do with a stuck job and `redrive` acts "
+            "on the verdict. The queue they need arrived with M32.4.1.1 on 2026-09-11, which "
+            "is why this sentence no longer says both workers exit at startup: they run. What "
+            "is missing is the tick that asks either function anything"
         ),
     ),
     Runner(
         name="side_effect_resume",
         needs=(
-            "the same queue, plus the idempotency records `resume` reads. A side effect "
-            "cannot be resumed before there is a queue that could have interrupted one"
+            "the idempotency records `resume` reads. The queue half of this sentence was "
+            "answered by M32.4.1.1, and it mattered because a side effect cannot be resumed "
+            "before there is a queue that could have interrupted one. The records are what is "
+            "left, and nothing writes them"
         ),
     ),
     Runner(

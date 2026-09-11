@@ -171,9 +171,14 @@ WORKER_CHECKPOINTER_CONNECTIONS: Final = 10
 #: The same number in both because it is the same decision: a queue connection is a LISTEN
 #: and the fetches that follow it, and it does not scale with slots the way the checkpointer
 #: does. It is the half of `brain-worker`'s bound that is a judgement rather than a
-#: measurement, because no queue driver is installed and nothing can be read off one. See
-#: `brain.ops.worker.AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` for what happens
-#: on the day a driver arrives and this number turns out to be smaller than the truth.
+#: measurement, and it was a judgement because no driver was installed to read anything off.
+#: M32.4.1.1 installed one on 2026-09-11 and the figure has not moved, which is deliberate
+#: rather than an oversight: the driver takes this number as its pool's `max_size`, so it is
+#: now a bound the driver obeys rather than a guess about what the driver would want, and
+#: `queue_pool_gaps` holds it against the shard count that has to fit inside it. Measuring a
+#: replacement means watching a real queue under real traffic, which no install has yet. See
+#: `brain.ops.worker.AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` for the day this
+#: number turns out to be smaller than the truth.
 WORKER_QUEUE_CONNECTIONS: Final = 5
 
 

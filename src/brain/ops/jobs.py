@@ -80,11 +80,15 @@ task inside a class occupying every slot in it while the class as a whole looks 
 sized. It cannot break the memory arithmetic, because a per-task cap only ever reduces what
 is in flight, so `concurrency_gaps` keeps that sum and it is not repeated here.
 
-**The driver integration is unbuilt, and this file has never persisted anything.** M17.1.2 is
-an integration with the queue driver `brain.ops.queue.DRIVER_IMPORT_NAME` names, and that
-package is not a dependency of this project: `brain.ops.queue.NO_DRIVER_IS_INSTALLED` says so
-and `brain.ops.worker` exits 69 rather than looping on a queue it cannot read. So no job row
-here has ever been written, fetched, or run. What is written instead is the shape such a row
+**This file has never persisted anything, and on 2026-09-11 the reason changed.** It used to
+be that the queue driver `brain.ops.queue.DRIVER_IMPORT_NAME` names was not a dependency at
+all, so `brain.ops.worker` exited 69 rather than looping on a queue it could not read.
+M32.4.1.1 made it one, and a worker now drains a real queue against a real PostgreSQL. What is
+still true, and is the only thing that was ever true of *this* module, is that nothing here has
+been written, fetched or run: these are the rows a table of our own would hold, and there is no
+such table. M17.1.2 names the same integration as M32.4.1.1 from the other end of the plan and
+is not claimed here, because the part it would close is the part that is built. What is written
+instead is the shape such a row
 would take, with every part named against the driver's own concept in `DRIVER_MAPPING`, and
 the parts that have no counterpart at all marked as ours: those are exactly the columns a
 table of our own would need, which is the specification for a migration this file is not
@@ -226,14 +230,23 @@ A_COUNT_OF_HIDDEN_JOBS_IS_A_COUNT_OF_HIDDEN_PEOPLE: Final = (
 )
 
 #: What is not claimed about the driver, in the words the report has to use.
+#:
+#: Rewritten on 2026-09-11 when M32.4.1.1 made the driver a dependency. The sentence it
+#: replaced opened "the queue driver is not a dependency of this project", which stopped being
+#: true that day, and the only reader of this constant is a branch that runs when
+#: `driver_is_installed()` is False. That is now a different situation from the one the old
+#: words described: not a project that has not added the driver, but an environment that does
+#: not have the one the project declares. A report that names the wrong cause sends whoever
+#: reads it to the wrong place, and this one is printed exactly when somebody is looking.
 THE_DRIVER_INTEGRATION_IS_UNBUILT: Final = (
-    "The queue driver is not a dependency of this project, so nothing in this module has "
-    "ever been written to a table, fetched from one, or run. What is written is the shape a "
-    "driver-backed row would take, named against the driver's own documented concepts, and "
-    "the parts it has no counterpart for are marked as ours rather than glossed over: those "
-    "are the columns a table of our own would need, and there is no such table and no "
-    "migration for one. Nothing here has been verified against a running driver, and no "
-    "verification is possible on a machine with no PostgreSQL on it."
+    "No driver can be imported here, so nothing in this module has been written to a table, "
+    "fetched from one, or run in this environment. The driver is a dependency of this "
+    "project, so an environment without it is an image built wrongly rather than a feature "
+    "nobody has added. Separately, and whatever the environment: what is written here is the "
+    "shape a driver-backed row would take, named against the driver's own documented "
+    "concepts, and the parts it has no counterpart for are marked as ours rather than glossed "
+    "over. Those are the columns a table of our own would need, and there is no such table "
+    "and no migration for one."
 )
 
 

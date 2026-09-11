@@ -65,11 +65,13 @@ checked there rather than on the parse worker's condition because a slot is a sl
 container draining the queue may be handed an embedding batch. Everything else here has no
 caller and cannot have one today, and there are three separate reasons rather than one.
 `units_for`, `plan_batches`, `embed_batch` and `writes_for` need an `EmbeddingService`, and
-nothing implements one. `embed_job` and `rebuild_job` need a queue driver, and
-`brain.ops.queue.NO_DRIVER_IS_INSTALLED` is the sentence saying there is not one, so nothing
-has ever been enqueued. And `EmbeddingWrite` is an update nobody applies, because there is no
-chunk repository in this repository: `know.chunk` is a table and a set of queries, with no
-writer. Naming the three is worth more than a mechanism that looks wired.
+nothing implements one. `embed_job` and `rebuild_job` build a job nobody enqueues, and that
+reason changed on 2026-09-11: it used to be that there was no driver, and M32.4.1.1 installed
+one, so the queue these jobs would go on now exists and is drained. What is missing is one step
+further in, a caller that constructs either job and hands it over. And `EmbeddingWrite` is an
+update nobody applies, because there is no chunk repository in this repository: `know.chunk` is
+a table and a set of queries, with no writer. Naming the three is worth more than a mechanism
+that looks wired.
 
 The driver's own name is deliberately not written here, and that is not squeamishness:
 `tests/unit/test_queue.py` fails the build when any module outside `brain.ops.queue` names an
@@ -641,7 +643,8 @@ def rebuild_job(*, plan: RebuildPlan, cursor: RebuildCursor) -> Job | None:
     resumption is made in one place: a cursor rebuilding towards one model under a plan naming
     another leaves the corpus holding both, plus whatever it started on.
 
-    Nothing calls this yet. There is no queue driver, so no job has ever been enqueued.
+    Nothing calls this yet, and since M32.4.1.1 that is no longer because there is nowhere to
+    send it: there is a driver and a worker draining a queue. Nothing constructs this job.
     """
     batch = next_batch(plan=plan, cursor=cursor)
     if batch.is_finished:

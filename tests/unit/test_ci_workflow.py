@@ -442,3 +442,71 @@ def test_the_install_job_compares_against_the_demo_rather_than_a_value_typed_int
     client = next(one for one in demo.build_records() if one.entity == "client")
     assert client.fields["status"] not in body
     assert client.fields["name"] not in body
+
+
+# ------------------------------------------------------------------ the platform the gates judge
+
+
+#: How GitHub's `runs-on` labels map onto the value mypy's `--platform` takes.
+#:
+#: A mapping rather than a string comparison, because the two vocabularies are genuinely
+#: different: `ubuntu-latest` and `linux` are the same platform under two naming schemes, and a
+#: test that compared them directly would have to restate one of them to make them match.
+RUNNER_PLATFORMS = {"ubuntu": "linux", "windows": "win32", "macos": "darwin"}
+
+
+def _runner_platform() -> str:
+    """The mypy platform name for the runner `ci.yml` type checks on.
+
+    The job is found by what it runs rather than by its key, which is `static` and reads in
+    GitHub's UI as "Lint, types, invariants": three names for one thing, and the test would
+    break on a rename that changed nothing. Whichever job runs mypy is the one whose platform
+    decides what the type gate means.
+    """
+    running = [
+        job
+        for job in _workflow()["jobs"].values()
+        if any("mypy" in str(step.get("run", "")) for step in job.get("steps", []))
+    ]
+    assert len(running) == 1, f"expected exactly one job to run mypy, found {len(running)}"
+    label = str(running[0]["runs-on"]).split("-")[0]
+    assert label in RUNNER_PLATFORMS, f"unknown runner {running[0]['runs-on']!r}"
+    return RUNNER_PLATFORMS[label]
+
+
+def test_the_local_type_gates_judge_the_platform_the_runner_does() -> None:
+    """**A gate that is green on a developer machine and red in CI is worse than no gate,
+    because the push has already happened by the time anybody learns the difference.**
+
+    mypy narrows `sys.platform` to the platform mypy itself is running on, and it declines to
+    warn about a block a platform check excludes. That courtesy covers the guarded block and
+    not the statements downstream of it, so a function branching on the platform is type
+    checked in halves: a Windows machine checks one, an ubuntu runner checks the other, and
+    each is silent about the half it skipped. On 2026-09-11 that put `Statement is unreachable`
+    into CI for `brain.ops.worker._loop_factory` with local mypy reporting Success the whole
+    time, and because CI gates Deploy, production sat on the previous commit with nothing in
+    the deployment saying why.
+
+    So the pre-push hook and `make types` both pass `--platform`, and this holds the value they
+    pass against the runner `ci.yml` declares rather than against the word "linux" typed here.
+    Moving CI to another runner without moving the local gates turns this red, which is the
+    only arrangement under which "it passed locally" means anything.
+
+    The native run is deliberately still reachable as `make types-here`, because somebody
+    debugging a development machine needs it, and it is not a gate.
+
+    Delete this and the flag drifts off the hook on the first tidy-up, and the next function
+    that branches on the platform is checked in halves again with nobody able to see it."""
+    platform = _runner_platform()
+    expected = f"--platform {platform}"
+
+    hook = (REPO / "ops" / "hooks" / "pre-push").read_text(encoding="utf-8")
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+
+    assert f"SHIPS_ON={platform}" in hook, "the hook types against a platform CI does not use"
+    assert hook.count('python -m mypy --platform "$SHIPS_ON"') == 2, (
+        "both mypy runs in the hook, the HEAD worktree one and the working-tree one, have to "
+        "judge the platform the runner judges"
+    )
+    assert expected in makefile, "make types no longer names the platform the runner uses"
+    assert "types-here:" in makefile, "the native run has to stay reachable for debugging"

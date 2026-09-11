@@ -69,9 +69,11 @@ rather than counting anything here. A second counter would be the failure that m
 exists to prevent.
 
 **Nothing here is a runtime.** `brain.gate.leash` says the same of itself and it is truer
-here: there is no agent loop in this repository, `brain.ops.queue.NO_DRIVER_IS_INSTALLED`
-says there is no queue to run children on, and `brain.ops.checkpoints` says there is no
-graph and no saver. So no chain computed here has ever been the reach of anything that
+here: there is no agent loop in this repository, and `brain.ops.checkpoints` says there is
+no graph and no saver. The queue used to be third on that list and was struck off on
+2026-09-11, when M32.4.1.1 installed a driver: there is now somewhere to run a child, and
+still nothing that would be running. So no chain computed here has ever been the reach of
+anything that
 ran. What is here is the rule a runtime will have to obey and the checks that say whether
 it does, which is the same standing `checkpoint_refusals` has and is worth saying plainly
 rather than leaving to be discovered.

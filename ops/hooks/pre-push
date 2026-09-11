@@ -63,10 +63,13 @@ fi
 #
 # Skipped rather than failed if the worktree cannot be made, because a hook that blocks a
 # push for want of disk space is a hook people pass --no-verify to.
+# The platform every gate here type checks against. See the note above the types step.
+SHIPS_ON=linux
+
 echo "pre-push: the commit, not the working tree"
 HEADCHECK="$(mktemp -d 2>/dev/null || echo "")"
 if [ -n "$HEADCHECK" ] && git worktree add --detach --quiet "$HEADCHECK" HEAD 2>/dev/null; then
-  ( cd "$HEADCHECK" && "$UV" run $NAMED_PYTHON python -m mypy && "$UV" run $NAMED_PYTHON python -m brain.ops.sweeps traceability )     || { git worktree remove --force "$HEADCHECK" 2>/dev/null; exit 1; }
+  ( cd "$HEADCHECK" && "$UV" run $NAMED_PYTHON python -m mypy --platform "$SHIPS_ON" && "$UV" run $NAMED_PYTHON python -m brain.ops.sweeps traceability )     || { git worktree remove --force "$HEADCHECK" 2>/dev/null; exit 1; }
   git worktree remove --force "$HEADCHECK" 2>/dev/null
 else
   echo "  skipped: could not create a worktree at HEAD"
@@ -78,8 +81,20 @@ echo "pre-push: format"
 echo "pre-push: lint"
 "$UV" run python -m ruff check src tests
 
-echo "pre-push: types (strict)"
-"$UV" run python -m mypy
+# `--platform "$SHIPS_ON"` rather than this machine's, and it is not a refinement.
+#
+# On 2026-09-11 a push left CI red on `Statement is unreachable` in a function branching on
+# `sys.platform`, and mypy had said Success here moments earlier. mypy narrows that value to
+# the platform it is itself running on, so a Windows developer and an ubuntu runner type
+# check different halves of such a function and each is silent about the other. CI gates
+# Deploy, so the cost was production sitting on the previous commit with nothing saying why.
+#
+# Linux is the only platform this ships on, so it is the one the gate should be about. The
+# native run is still available as `uv run python -m mypy` for anybody debugging a developer
+# machine, and `tests/unit/test_ci_workflow.py` holds this flag against the runner ci.yml
+# declares, so the two cannot drift apart.
+echo "pre-push: types (strict, as the runner sees them)"
+"$UV" run python -m mypy --platform "$SHIPS_ON"
 
 echo "pre-push: invariants"
 # These encode rules that must never break. If one fails, the push stops here.

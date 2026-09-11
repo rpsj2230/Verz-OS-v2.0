@@ -27,7 +27,15 @@ invariants:  ## Only the rules that must never break
 lint:  ## Ruff
 	uv run python -m ruff check src tests migrations
 
-types:  ## Mypy, strict
+# `--platform linux` rather than this machine's. mypy narrows `sys.platform` to the platform it
+# runs on, so on 2026-09-11 a Windows machine reported Success on a function whose other half
+# was unreachable on the runner, CI went red on it, and because CI gates Deploy production sat
+# on the previous commit. Linux is the only platform this ships on. `make types-here` is the
+# native run for anybody debugging a development machine.
+types:  ## Mypy, strict, against the platform this ships on
+	uv run python -m mypy --platform linux
+
+types-here:  ## Mypy, strict, against this machine's own platform
 	uv run python -m mypy
 
 fmt:  ## Format in place

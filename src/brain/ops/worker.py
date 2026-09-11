@@ -142,6 +142,7 @@ Task ids: none
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
@@ -979,12 +980,32 @@ def _loop_factory() -> Callable[[], asyncio.AbstractEventLoop] | None:
 
     The deployed path is untouched: everything but Windows gets None and the platform's own
     loop, so this cannot change what the container does.
-    """
-    if sys.platform != "win32":
-        return None
-    import selectors
 
-    return lambda: asyncio.SelectorEventLoop(selectors.SelectSelector())
+    **The condition is `os.name` rather than `sys.platform`, and that is the whole point of
+    this docstring.** It was `if sys.platform != "win32": return None` with the Windows branch
+    after it. mypy narrows `sys.platform` to the platform it is running on, and it declines to
+    warn about a block a platform check excludes, but that courtesy covers the guarded block
+    and not the statements downstream of it. So on a Windows machine the excluded `return None`
+    was skipped in silence, and on the Linux runner the guard was always taken and everything
+    after it was genuinely unreachable. `warn_unreachable` fired, the lint job exited 1, and
+    because CI gates Deploy, production stayed on the previous commit with nothing in the
+    deployment saying why. Local mypy said "Success" the whole time.
+
+    Inverting it to `if sys.platform == "win32"` fixes Linux and breaks Windows, measured both
+    ways, because the asymmetry is in mypy's narrowing rather than in which branch is written
+    first. mypy does not narrow `os.name` at all, so in this form **both branches are checked
+    on both platforms**, which is more checking than either `sys.platform` arrangement bought:
+    a type error in the Windows branch is now caught by the Linux runner too.
+
+    `uv run python -m mypy --platform linux` reproduces the runner on a development machine,
+    and it is worth running before pushing anything that branches on the platform, because the
+    local gate otherwise says nothing about the only platform this ships on.
+    """
+    if os.name == "nt":
+        import selectors
+
+        return lambda: asyncio.SelectorEventLoop(selectors.SelectSelector())
+    return None
 
 
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:

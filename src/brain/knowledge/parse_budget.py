@@ -84,8 +84,9 @@ rather than each alone. The priority rule survives intact: a task may declare a 
 may not declare a class, because saying a job is expensive only ever routes it to the scarcer
 container that runs one at a time.
 
-Nothing runs today either way: there is no queue driver and no parser, so no job has ever been
-fetched by either container. The routing exists and the traffic does not.
+Nothing runs today either way, and since M32.4.1.1 there is exactly one reason rather than two:
+there is a driver and both containers drain a queue, and there is no parser, so no parse job
+has ever been enqueued for either to fetch. The routing exists and the traffic does not.
 
 Task ids: M7.2.6
 """

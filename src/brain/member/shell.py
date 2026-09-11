@@ -327,7 +327,7 @@ def _member_screen(key: str, title: str, plane: Plane, purpose: str) -> MemberSc
 
 #: Every screen the member application has. The order is the order of the menu.
 #:
-#: Five, against the console's thirty-four, which is M40.1.2.1's "much shorter" as a fact
+#: Five, against the console's thirty-five, which is M40.1.2.1's "much shorter" as a fact
 #: rather than as an aspiration. A tuple rather than a mapping, following `SCREENS`: the
 #: order is information and a mapping would leave it to whatever the renderer sorted by.
 #:
