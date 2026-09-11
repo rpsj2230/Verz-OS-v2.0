@@ -31,6 +31,7 @@ import io
 import re
 from pathlib import Path
 from types import ModuleType
+from typing import Any, cast
 
 import pytest
 import sqlalchemy as sa
@@ -45,6 +46,8 @@ from brain.core.department import SLUG_RE
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.db import metadata
+from brain.install import BY_NAME
+from brain.knowledge.embed_policy import QWEN3_EMBEDDING_DIMENSIONS
 from brain.knowledge.item import KnowledgeState
 from brain.knowledge.search import (  # the two private helpers below are guards, see their tests
     CANDIDATE_DEPTH,
@@ -67,12 +70,14 @@ from brain.knowledge.search import (  # the two private helpers below are guards
     SEARCH_CONFIG,
     SLUG_SQL_PATTERN,
     TEXT_FIELDS_THE_DATABASE_CANNOT_FILL,
+    WIDTH_SETTING,
     Reach,
     SearchError,
     Vector,
     _posix_pattern,
     chunk_text_fields,
     cjk_lexical_query,
+    declared_dimensions,
     hybrid,
     iterative_scan_statements,
     lexical_legs,
@@ -82,6 +87,7 @@ from brain.knowledge.search import (  # the two private helpers below are guards
     session_settings,
     top_within_reach,
     vector_query,
+    width_change_refusal,
 )
 from brain.knowledge.visibility import Visibility
 from brain.ops.migration_policy import check_file
@@ -777,10 +783,88 @@ def test_the_stored_vector_is_narrow_enough_that_an_index_can_be_built_on_it() -
     the trap: the column is created, the rows are inserted, and `CREATE INDEX` is what fails,
     by which point there is a corpus to re-embed.
 
+    The second assertion held the declaration to `0009`'s copy of it until 2026-09-10, when
+    the width became `INSTALL_EMBEDDING_DIMENSIONS` and `0027` became what sets the column.
+    `0009` still describes the column it built, which is why the comparison moved rather than
+    being deleted: the migration that decides the width today is the one that has to agree.
+
     Delete this and raising the dimension to a larger model's native width looks like a
     quality improvement right up to the migration."""
     assert EMBEDDING_DIMENSIONS <= INDEXABLE_DIMENSION_CEILING
-    assert migration().EMBEDDING_DIMENSIONS == EMBEDDING_DIMENSIONS
+    assert width_migration().EMBEDDING_DIMENSIONS == EMBEDDING_DIMENSIONS
+
+
+def test_the_width_is_whatever_the_install_declared_rather_than_a_number_in_this_module() -> None:
+    """**The half of item 34 that is not about 1024.** A column width compiled into the
+    product makes a client whose embedding model is a different size a fork of this
+    repository, and the fork is the failure that reports nothing: both copies pass their own
+    tests and only one of them gets the next fix.
+
+    Asserted at a width that is nobody's real model, so a reading that returned the default
+    whatever it was handed would fail here rather than agreeing with itself.
+
+    Delete this and `declared_dimensions` can go back to returning a constant, with every
+    other test in this file green because they all resolve through it."""
+    assert declared_dimensions({WIDTH_SETTING: "768"}) == 768
+    assert declared_dimensions({WIDTH_SETTING: str(INDEXABLE_DIMENSION_CEILING)}) == (
+        INDEXABLE_DIMENSION_CEILING
+    )
+
+
+def test_the_default_width_is_the_one_the_model_this_product_serves_produces() -> None:
+    """Where 1024 comes from, asserted against the three things outside the declaration that
+    decide it rather than against itself.
+
+    A test reading `BY_NAME[WIDTH_SETTING].default` and comparing it to 1024 written here
+    would compare a constant with a copy of itself and stay green at every value the setting
+    could hold, which is the failure `CLAUDE.md` records three separate authors making in one
+    afternoon. So the default is held to `brain.knowledge.embed_policy`'s record of the model
+    card figure, to the pgvector ceiling it has to sit under, and to the width the column
+    object actually ends up declaring when nothing is set.
+
+    Delete this and the shipped default can drift from the model this product serves, whose
+    only symptom is that every embedding job fails at the insert on a fresh install."""
+    default = BY_NAME[WIDTH_SETTING].default
+
+    assert int(default) == QWEN3_EMBEDDING_DIMENSIONS
+    assert int(default) <= INDEXABLE_DIMENSION_CEILING
+    assert declared_dimensions({}) == int(default)
+    # `get_col_spec` is pgvector's, and mypy sees the column's type as the generic
+    # `TypeEngine`. Cast at the library boundary: proving the structural match would be
+    # work for no property, and the assertion itself is what pins the rendered width.
+    assert cast("Any", CHUNK.c.embedding.type).get_col_spec() == f"VECTOR({default})"
+
+
+def test_a_width_pgvector_will_store_and_refuse_to_index_is_refused_when_it_is_read() -> None:
+    """The value is refused rather than the index, and the order is the whole point.
+
+    pgvector stores a vector of up to 16,000 dimensions and indexes one of at most 2,000, so a
+    width between the two produces a column that accepts every row and an index that cannot be
+    built. Nothing says so until `CREATE INDEX`, which is after the corpus exists, and the
+    repair at that point is a migration plus a re-embed rather than an edit to one line of an
+    environment file.
+
+    Delete this and a client can be told to set a width their model produces and this system
+    cannot index, and the failure arrives at the worst possible moment."""
+    with pytest.raises(SearchError, match="cannot carry an HNSW or IVFFlat index"):
+        declared_dimensions({WIDTH_SETTING: str(INDEXABLE_DIMENSION_CEILING + 1)})
+
+
+@pytest.mark.parametrize("supplied", ["0", "-1", "1024 dimensions", "1e3", "1024.0", ""])
+def test_a_width_that_is_not_a_usable_number_of_dimensions_is_refused(supplied: str) -> None:
+    """Every way this setting is filled in wrongly by hand, refused where it is read.
+
+    The empty string is in the list and is the one that is not a refusal: an unset variable
+    and a variable set to nothing are the same thing to `brain.install.value_of`, and both
+    mean the default. The rest reach SQLAlchemy as a column type otherwise, and the message
+    then names a Python type rather than the variable somebody just edited.
+
+    Delete this and a mistyped width is discovered from a DDL error during an install."""
+    if not supplied:
+        assert declared_dimensions({WIDTH_SETTING: supplied}) == EMBEDDING_DIMENSIONS
+        return
+    with pytest.raises(SearchError, match=WIDTH_SETTING):
+        declared_dimensions({WIDTH_SETTING: supplied})
 
 
 def test_values_are_bound_into_the_query_and_never_rendered_into_it() -> None:
@@ -960,9 +1044,27 @@ def _columns_added_later() -> tuple[str, ...]:
     file to edit. A migration that adds one declares `ADDS_COLUMNS`; one that does not touch
     columns declares nothing and is skipped.
     """
-    import importlib.util
+    return _declared_by_later_migrations("ADDS_COLUMNS")
 
-    added: list[str] = []
+
+def _columns_altered_later() -> tuple[str, ...]:
+    """Columns `0009` created and a later migration changed the type of.
+
+    The sibling of the tuple above and read the same way. A column here is one that `0009`
+    genuinely built, so it is not missing from that migration's DDL; what has moved on is its
+    declaration, which now describes what the later migration left rather than what `0009`
+    made. `0027` is the only one, and it is the vector width becoming an install setting.
+    """
+    return _declared_by_later_migrations("ALTERS_COLUMNS")
+
+
+def _declared_by_later_migrations(attribute: str) -> tuple[str, ...]:
+    """Every column named by `attribute` across the migrations, in revision order.
+
+    Read from the migrations themselves rather than listed here, so adding or altering a
+    column is one file to edit. A migration that touches none declares nothing and is skipped.
+    """
+    found: list[str] = []
     versions = Path(__file__).resolve().parents[2] / "migrations" / "versions"
     for path in sorted(versions.glob("*.py")):
         spec = importlib.util.spec_from_file_location(path.stem, path)
@@ -970,8 +1072,8 @@ def _columns_added_later() -> tuple[str, ...]:
             continue
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        added.extend(getattr(module, "ADDS_COLUMNS", ()))
-    return tuple(added)
+        found.extend(getattr(module, attribute, ()))
+    return tuple(found)
 
 
 def test_the_migration_builds_the_table_the_declaration_declares() -> None:
@@ -984,12 +1086,20 @@ def test_the_migration_builds_the_table_the_declaration_declares() -> None:
     accurate. The columns a later migration added are read from that migration's own
     `ADDS_COLUMNS`, so adding another is one file to edit and not two.
 
+    A column a later migration *altered* is the second case and is exempted the same way, by
+    that migration's `ALTERS_COLUMNS`. `embedding` is the one: 0009 built it as `VECTOR(1536)`
+    and 0027 sets it to whatever this install declared, so its declaration is 0027's business
+    and the test that holds the two together is the one below. Skipping it here rather than
+    asserting it is absent, because 0009 does build the column and the difference is only its
+    type.
+
     Delete this and the migration and the declaration drift apart at the first edit, silently,
     because nothing else compares them."""
     assert migration().TABLES == ("know.chunk",)
 
     built = squash(rendered("upgrade"))
     added = set(_columns_added_later())
+    altered = set(_columns_altered_later())
 
     for column in CHUNK.columns:
         if column.name in added:
@@ -997,11 +1107,14 @@ def test_the_migration_builds_the_table_the_declaration_declares() -> None:
                 f"{column.name} is declared by a later migration and 0009 should not build it"
             )
             continue
+        if column.name in altered:
+            continue
         # One column's rendered definition, which carries its type, width and nullability.
         rendered_column = squash(str(CreateColumn(column).compile(dialect=POSTGRES)))
         assert rendered_column in built, f"0009 does not build {column.name} as declared"
 
     assert added, "no later migration adds a column; this test is comparing nothing extra"
+    assert altered, "no later migration alters a column; the exemption above covers nothing"
 
 
 def test_the_migration_builds_every_index_the_declaration_declares() -> None:
@@ -1197,3 +1310,152 @@ def migration_module_0010() -> ModuleType:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+# ================================ the width belongs to the install (0027, item 34)
+
+WIDTH_MIGRATION = REPO / "migrations" / "versions" / "0027_embedding_width.py"
+
+
+def width_migration() -> ModuleType:
+    """The migration that sets the vector column to the width this install declared."""
+    spec = importlib.util.spec_from_file_location("m0027", WIDTH_MIGRATION)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def width_rendered(direction: str) -> str:
+    """What 0027 emits, rendered without a database, the way `rendered` does it for 0009.
+
+    Read from the rendered SQL rather than from the file for the reason that function gives:
+    a statement sitting in a constant that `upgrade` never executes passes a source-text
+    search and does nothing at all, which is exactly the shape this migration's refusal would
+    fail in.
+    """
+    buffer = io.StringIO()
+    context = MigrationContext.configure(
+        dialect_name="postgresql",
+        opts={"as_sql": True, "output_buffer": buffer, "target_metadata": metadata},
+    )
+    with Operations.context(context):
+        getattr(width_migration(), direction)()
+    return buffer.getvalue()
+
+
+def test_the_width_migration_follows_the_one_before_it() -> None:
+    """A revision that does not chain is a migration Alembic never runs, and here the symptom
+    is a corpus column at the width a hosted model wanted while the served model produces
+    another, which is the state item 34 was opened about."""
+    module = width_migration()
+
+    assert module.revision == "0027"
+    assert module.down_revision == "0026"
+
+
+def test_the_width_migration_sets_the_column_to_the_width_this_install_declared() -> None:
+    """The end of item 34: the column is what `INSTALL_EMBEDDING_DIMENSIONS` says, and this is
+    the migration that makes that sentence true of a database rather than of a Python object.
+
+    Compared against the column's own rendered specification rather than against the number,
+    so the declaration and the database are held together by the same string PostgreSQL is
+    given.
+
+    Delete this and the migration can be edited to a literal that agrees with the declaration
+    on this machine and with nothing on a client's, which is the copy that goes stale."""
+    emitted = squash(width_rendered("upgrade"))
+    declared = cast("Any", CHUNK.c.embedding.type).get_col_spec()
+
+    assert f"ALTER TABLE know.chunk ALTER COLUMN embedding TYPE {declared}" in emitted
+
+
+def test_the_width_migration_refuses_to_move_a_column_that_already_holds_vectors() -> None:
+    """**The guard that makes a configurable width safe rather than merely convenient.** A
+    stored vector belongs to the model that produced it, so altering the column does not
+    convert the corpus, it invalidates it. A setting that can be changed quietly is one
+    somebody will change quietly, and what is lost is every embedding the company has paid
+    for.
+
+    Asserted in both directions, because a rollback is the direction nobody rehearses, and
+    before the alteration in each, because a refusal after the rewrite is a message about
+    something that has already happened.
+
+    Delete this and the width becomes an environment variable somebody edits on a Friday."""
+    for direction in ("upgrade", "downgrade"):
+        emitted = width_rendered(direction)
+        refusal = emitted.index("RAISE EXCEPTION")
+        alteration = emitted.index("ALTER COLUMN embedding TYPE")
+
+        assert "IF EXISTS (SELECT 1 FROM know.chunk WHERE embedding IS NOT NULL)" in emitted
+        assert refusal < alteration, f"the {direction} alters the column before it refuses"
+
+
+def test_the_refusal_asks_about_the_column_the_vectors_are_actually_in() -> None:
+    """The statement is rendered from the table object rather than spelled, so a renamed table
+    or column cannot leave a guard that asks a question about something that is not there.
+
+    A `DO` block naming a table that does not exist raises rather than passing quietly, so
+    this is not the failure that direction usually takes. What it would cost is worse in a
+    subtler way: the refusal would fire on every install, including the empty ones, and the
+    migration would become one nobody can apply.
+
+    Delete this and the guard can be written against a column name that was right once."""
+    statement = width_change_refusal(EMBEDDING_DIMENSIONS)
+
+    assert f"{CHUNK.schema}.{CHUNK.name}" in statement
+    assert f"{CHUNK.c.embedding.name} IS NOT NULL" in statement
+    # Two, and they are the ones around the message. A third is an apostrophe somebody wrote
+    # into the prose, which ends the quoted string early and leaves PostgreSQL parsing the
+    # rest of the sentence as SQL.
+    assert statement.count("'") == 2
+    assert "%" not in statement, "RAISE reads a percent sign as a placeholder"
+
+
+def test_the_downgrade_puts_back_the_width_the_creating_migration_built() -> None:
+    """A downgrade is for the release before this one, and that release read a hardcoded 1536.
+    Putting back this install's declared width instead would leave the previous release
+    refusing every insert against a column it thinks it knows the size of.
+
+    The figure is held to 0009's own constant rather than to the literal in 0027, because a
+    number written in one file about another file is the copy this repository keeps finding
+    rotted.
+
+    Delete this and a rollback lands on a column width that matches neither release."""
+    built_by_0009 = migration().EMBEDDING_DIMENSIONS
+
+    assert built_by_0009 == width_migration().WIDTH_BEFORE_THIS
+    assert f"ALTER TABLE know.chunk ALTER COLUMN embedding TYPE VECTOR({built_by_0009})" in squash(
+        width_rendered("downgrade")
+    )
+
+
+def test_the_width_migration_satisfies_the_migration_policy() -> None:
+    """The mechanical rules: a downgrade that exists and does something, no unreviewed
+    autogeneration markers, no schema and data change in one file. This migration is the one
+    most likely to look like the third, because its guard reads a table."""
+    assert check_file(WIDTH_MIGRATION) == []
+
+
+def test_the_width_migration_changes_no_data() -> None:
+    """The guard reads the corpus and must never write to it. A migration that cleared the
+    column to make its own alteration possible would be a data loss written as a convenience,
+    and it would pass every other test in this file."""
+    emitted = squash(width_rendered("upgrade") + width_rendered("downgrade")).upper()
+
+    for statement in ("INSERT INTO", "DELETE FROM", "UPDATE KNOW.CHUNK", "TRUNCATE"):
+        assert statement not in emitted
+
+
+def test_the_width_migration_creates_no_table_and_declares_none() -> None:
+    """`tests/unit/test_tables.py` compares the migrations that create tables against the
+    package tuple end to end. A migration that altered a column and declared a `TABLES` slice
+    anyway would be counted as creating one, and the end-to-end equality would fail with a
+    table named twice.
+
+    Delete this and the next migration to alter something copies a `TABLES` line from the one
+    above it, which is how that comparison acquires a duplicate."""
+    module = width_migration()
+
+    assert not hasattr(module, "TABLES")
+    assert module.ALTERS_COLUMNS == ("embedding",)

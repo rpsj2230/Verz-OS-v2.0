@@ -259,21 +259,29 @@ def test_two_widths_that_agree_are_reported_as_nothing() -> None:
     assert dimension_gaps(model_dimensions=16, column_dimensions=16) == ()
 
 
-def test_this_deployment_cannot_embed_with_the_model_it_names() -> None:
-    """The honest state of M7.3.3 as it stands, asserted rather than written in a comment. The
-    column is the width of a hosted model chosen in `brain.knowledge.search` and Qwen3 produces
-    fewer dimensions than that; Matryoshka truncation shortens a vector and cannot lengthen
-    one, so no setting on the far side closes the gap.
+def test_this_deployment_can_embed_with_the_model_it_names() -> None:
+    """The honest state of M7.3.3 as it stands, asserted rather than written in a comment.
 
-    The column figure in the message is checked against `search.EMBEDDING_DIMENSIONS`, which is
-    outside the module under test, so this cannot pass by both ends moving together.
+    **This test asserted the opposite until 2026-09-10 and the inversion is the record of item
+    34 being answered.** The column was the width of a hosted model chosen in
+    `brain.knowledge.search` and Qwen3 produces fewer dimensions than that, so the product
+    shipped unable to embed with the model it names; `0027` narrowed the column to the width
+    the served model produces and made that width `INSTALL_EMBEDDING_DIMENSIONS`, defaulting
+    here. The old test's own docstring is the reason it was written this way round: it said the
+    disagreement had to be asserted so that deciding item 34 would show up as a failure rather
+    than as nothing.
 
-    Delete this and the disagreement becomes something a reader has to notice for themselves,
-    which is exactly how a leaf gets claimed for a model that cannot store a vector."""
-    assert QWEN3_EMBEDDING_DIMENSIONS < EMBEDDING_DIMENSIONS
-    findings = dimension_gaps()
-    assert len(findings) == 1
-    assert str(EMBEDDING_DIMENSIONS) in findings[0]
+    Three names for one number and no two of them from the same place, which is what stops
+    this passing by both ends moving together: the model card figure is in the module under
+    test, `EMBEDDING_DIMENSIONS` is the install setting resolved in `brain.knowledge.search`,
+    and `COLUMN_DIMENSIONS` is read off the column's own type object.
+
+    Delete this and the width the product ships can drift away from the width its own model
+    produces again, with the only symptom being that every embedding job fails at the insert.
+    """
+    assert QWEN3_EMBEDDING_DIMENSIONS == EMBEDDING_DIMENSIONS
+    assert COLUMN_DIMENSIONS == QWEN3_EMBEDDING_DIMENSIONS
+    assert dimension_gaps() == ()
 
 
 # ------------------------------------------------------ normalisation, checked not applied

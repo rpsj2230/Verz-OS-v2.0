@@ -266,6 +266,25 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         meaning="Where the inference server answers. Inside the client's own network by default.",
         default="http://inference-server:8080",
     ),
+    Setting(
+        name="INSTALL_EMBEDDING_DIMENSIONS",
+        belongs=Belongs.MODELS,
+        meaning=(
+            "How many numbers the embedding model returns per passage, which is the width "
+            "of the column the corpus is stored in. It has to be what the model this "
+            "install serves actually produces: the width is part of the column's type, so "
+            "PostgreSQL refuses a vector of any other size rather than storing something "
+            "meaningless. The default is what the model this product serves by default "
+            "produces. Set it before the first document is ingested and then leave it "
+            "alone: changing it afterwards is a re-embed of everything, and the migration "
+            "refuses to change it while a single chunk is embedded."
+        ),
+        # 1024, and it is Qwen3-Embedding-0.6B's hidden size rather than a number chosen
+        # here. `brain.knowledge.embed_policy.QWEN3_EMBEDDING_DIMENSIONS` is where that
+        # figure is recorded with its provenance, and the test holding this default to it
+        # is what stops the two drifting into two answers about one model.
+        default="1024",
+    ),
     # --- storage, M41.1.7
     Setting(
         name="INSTALL_OBJECT_STORE_URL",

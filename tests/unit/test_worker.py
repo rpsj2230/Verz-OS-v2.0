@@ -87,6 +87,21 @@ def _worker_environment() -> dict[str, str]:
     return {key: str(value).replace("${POSTGRES_PASSWORD}", "pw") for key, value in raw.items()}
 
 
+#: A finding of the kind `advisories` carries and `preflight` must not, put into the advisory
+#: source by the tests that check where each list ends up.
+#:
+#: Arranged rather than live, and that is a change of shape rather than a weakening. Until
+#: 2026-09-10 the advisory list was never empty, because the product shipped a corpus column
+#: of one width and served a model of another, and three tests here read that live finding.
+#: `0027` closed it, and a test whose subject is one install's misconfiguration is a test that
+#: goes green or red on somebody else's decision. What each of them is really about is the
+#: wiring: that `advisories` reports what `policy_gaps` finds, that `preflight` does not, and
+#: that `main` prints it. All three survive the finding being supplied.
+A_FINDING_THAT_STARTING_WILL_NOT_FIX = (
+    "the served embedding model produces 8 dimensions and know.chunk.embedding holds 16"
+)
+
+
 def _sound_environment(**overrides: str) -> dict[str, str]:
     """An environment a worker would start on, before the override under test."""
     env = {
@@ -153,7 +168,9 @@ def test_the_preflight_surfaces_a_queue_schema_gap_rather_than_swallowing_it(
     assert "the schema moved" in preflight(_sound_environment())
 
 
-def test_a_deployment_that_cannot_embed_is_reported_and_still_starts() -> None:
+def test_a_deployment_that_cannot_embed_is_reported_and_still_starts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """**The distinction wiring one uncalled check forced into the open.** `policy_gaps` was
     written, argued and never called; its own docstring named `preflight` as where it belonged
     and said wiring it was one line. Wired there, it stopped the worker, because everything in
@@ -164,32 +181,61 @@ def test_a_deployment_that_cannot_embed_is_reported_and_still_starts() -> None:
     over it takes the whole queue down to protect one leg, and it replaces the operator's real
     diagnosis, "no queue driver is installed", with one they cannot act on.
 
-    This is a real finding today: `docs/needs-rupash.md` item 34 records the decision, which
-    interacts with two other open items and is nobody's to take here. So it is asserted as a
-    live value rather than patched in, and when item 34 is decided this test says so by
-    failing rather than by passing quietly on nothing.
+    **This was asserted against a live disagreement until 2026-09-10 and now has to be
+    arranged.** Item 34 was the finding: the product shipped a column of one width for a model
+    of another, so `advisories()` was non-empty on every deployment and the assertion was
+    `"1024 dimensions" in one`. `0027` closed that, and a test that reads the state of one
+    install is a test that reports somebody else's decision. What is worth pinning is the
+    wiring, so `policy_gaps` is replaced by one that finds something and the two lists are
+    asked what they did with it. The test below is the other half of the same property, and
+    the one after it is the case where nothing is wrong.
 
     Delete this and the check goes back to being uncalled, or worse, goes back into the
     refusals where it stops a worker that could run."""
-    reported = advisories()
+    monkeypatch.setattr(
+        "brain.ops.worker.policy_gaps", lambda: (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
+    )
 
-    assert any("1024 dimensions" in one for one in reported), reported
+    assert advisories() == (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
     assert preflight(_sound_environment()) == ()
 
 
-def test_an_advisory_is_never_a_reason_the_worker_will_not_start() -> None:
+def test_an_advisory_is_never_a_reason_the_worker_will_not_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The property that makes the split worth having rather than a second list of the same
     thing. `preflight` answers "must this refuse to start"; `advisories` answers "what is
     wrong that starting will not fix". A finding in both would make the second meaningless and
     the first wrong.
 
-    Asserted as disjointness rather than as two separate emptiness checks, because the failure
-    is overlap and a membership check cannot see it.
+    Asserted by putting a finding into the advisory source and asking whether the refusals
+    picked it up, rather than by intersecting two lists. The intersection was the shape while
+    item 34 was open and the advisory list was never empty; with nothing wrong on a correctly
+    configured install both lists are empty, and two empty sets are disjoint for no reason at
+    all. What this asks instead is the real regression: somebody adding `policy_gaps()` to
+    `preflight` because a check that matters ought to stop a container.
 
     Delete this and the next check added to `advisories` can be copied into `preflight` as
     well, which turns an advisory into an outage."""
-    assert not set(advisories()) & set(preflight(_sound_environment()))
-    assert advisories(), "an advisory list that is empty proves nothing about the disjointness"
+    monkeypatch.setattr(
+        "brain.ops.worker.policy_gaps", lambda: (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
+    )
+
+    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX in advisories()
+    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX not in preflight(_sound_environment())
+
+
+def test_an_install_whose_declared_width_is_its_models_has_nothing_to_report() -> None:
+    """The positive sibling, and the one that pins what item 34 decided.
+
+    Every other test on this surface arranges a finding, and a surface tested only that way is
+    satisfied by one that reports on every install for ever, which is what an operator learns
+    to scroll past. The width the product ships is now the width the model it serves produces,
+    so a default install has nothing here at all.
+
+    Delete this and the disagreement between the column and the served model can come back
+    with no test noticing, because every other advisory test supplies its own finding."""
+    assert advisories() == ()
 
 
 def test_a_correctly_configured_worker_reports_nothing_to_fix() -> None:
@@ -583,6 +629,7 @@ def test_the_check_mode_reports_a_sound_configuration_as_sound() -> None:
 
 def test_the_check_mode_prints_an_advisory_rather_than_swallowing_it(
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """An advisory that is computed and not shown is the state this whole surface was created
     out of: `policy_gaps` was correct, argued and silent for as long as nothing called it, and
@@ -591,11 +638,19 @@ def test_the_check_mode_prints_an_advisory_rather_than_swallowing_it(
     stderr rather than stdout, and after the refusals, so it sits in the container log beside
     the plan without changing what a script reading stdout gets.
 
+    The finding is supplied for the reason `A_FINDING_THAT_STARTING_WILL_NOT_FIX` gives: this
+    test is about the printing and not about which install is misconfigured, and it read a
+    live disagreement only because there was one to read.
+
     Delete this and `advisories()` can be called and its result dropped, which passes every
     other test here because the exit code does not move."""
+    monkeypatch.setattr(
+        "brain.ops.worker.policy_gaps", lambda: (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
+    )
+
     main(["--check"], env=_sound_environment())
 
-    assert "1024 dimensions" in capsys.readouterr().err
+    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX in capsys.readouterr().err
 
 
 def test_the_three_exit_codes_are_three_different_numbers() -> None:

@@ -42,6 +42,14 @@ from brain.knowledge.search import (
 MODEL = EmbeddingModel(name="qwen3-embedding", revision="a1b2c3d", dimensions=EMBEDDING_DIMENSIONS)
 NEWER = EmbeddingModel(name="qwen3-embedding", revision="e4f5g6h", dimensions=EMBEDDING_DIMENSIONS)
 
+#: A width the column does not hold, derived from the column rather than spelled.
+#:
+#: Three tests below wrote 1024, which was a width the column could not hold on the day they
+#: were written and is the width it holds since `0027`. They passed for a fact about one
+#: install and went red when that install's setting changed, which is the same defect the
+#: setting exists to remove. One less than the column is a width no column can also be.
+NARROWER_THAN_THE_COLUMN = EMBEDDING_DIMENSIONS - 1
+
 
 def _row(identity: str | None = MODEL.identity, *, embedded: bool = True) -> dict[str, object]:
     return {
@@ -72,7 +80,9 @@ def test_the_same_model_at_two_widths_are_two_identities() -> None:
     """A truncated Matryoshka embedding is a different space from the full one, and the same
     weights at two widths would otherwise share an identity and be compared against each
     other."""
-    narrow = EmbeddingModel(name="qwen3-embedding", revision="a1b2c3d", dimensions=1024)
+    narrow = EmbeddingModel(
+        name="qwen3-embedding", revision="a1b2c3d", dimensions=NARROWER_THAN_THE_COLUMN
+    )
     assert narrow.identity != MODEL.identity
     assert not narrow.fits_the_column
 
@@ -194,7 +204,9 @@ def test_the_vector_leg_returns_when_the_rebuild_finishes() -> None:
 def test_a_rebuild_onto_a_width_the_column_cannot_hold_is_refused_before_the_first_batch() -> None:
     """The width is part of the column type, so this is a migration before it is a rebuild.
     Found at the first write instead, an afternoon of embedding has already been spent."""
-    narrow = EmbeddingModel(name="qwen3-embedding", revision="a1b2c3d", dimensions=1024)
+    narrow = EmbeddingModel(
+        name="qwen3-embedding", revision="a1b2c3d", dimensions=NARROWER_THAN_THE_COLUMN
+    )
     with pytest.raises(EmbeddingError, match="migration before it is a rebuild"):
         RebuildPlan(to_model=narrow)
 
@@ -459,7 +471,16 @@ def test_the_command_refuses_a_model_the_column_cannot_hold(
 ) -> None:
     """Refusing loudly at the top of the afternoon is worth more than failing at the first
     write four hours in, which is where an unchecked width is otherwise discovered."""
-    code = main(["--to-model", "qwen3-embedding", "--revision", "v9", "--dimensions", "1024"])
+    code = main(
+        [
+            "--to-model",
+            "qwen3-embedding",
+            "--revision",
+            "v9",
+            "--dimensions",
+            str(NARROWER_THAN_THE_COLUMN),
+        ]
+    )
     assert code == 2
     assert "migration before it is a rebuild" in capsys.readouterr().err
 
@@ -467,7 +488,16 @@ def test_the_command_refuses_a_model_the_column_cannot_hold(
 def test_the_command_refuses_a_model_with_no_revision(capsys: pytest.CaptureFixture[str]) -> None:
     """The command line is where a revision is easiest to leave out, and a corpus stamped
     with a name alone cannot tell two sets of weights apart afterwards."""
-    code = main(["--to-model", "qwen3-embedding", "--revision", "", "--dimensions", "1536"])
+    code = main(
+        [
+            "--to-model",
+            "qwen3-embedding",
+            "--revision",
+            "",
+            "--dimensions",
+            str(EMBEDDING_DIMENSIONS),
+        ]
+    )
     assert code == 2
     assert "names no revision" in capsys.readouterr().err
 

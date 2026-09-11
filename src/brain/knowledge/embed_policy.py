@@ -19,14 +19,25 @@ answer in front of a person right now is composed from text search alone, and no
 fixes the answer they already read. So the query leg's outage is `Outcome.DEGRADED` and never
 `OK`. See `AN_INGEST_OUTAGE_IS_INVISIBLE_AND_A_QUERY_OUTAGE_IS_DECLARED`.
 
-**The vector width is read off the column rather than configured, so a model of another width
+**The vector width is read off the column rather than asked for, so a model of another width
 is a migration and cannot be anything else.** `served_embedding_model` has no `dimensions`
-parameter and there is no setting that could supply one: the figure comes from
-`know.chunk.embedding`'s own declared type. A server running different weights states its own
-width in the response, `EmbeddingModel` is built from that, and `writes_for` refuses the
-identity mismatch, so a width change surfaces as a refusal rather than as rows nobody can
-compare. See `THE_WIDTH_IS_THE_COLUMNS_SO_A_MODEL_CHANGE_IS_A_MIGRATION`, and `dimension_gaps`
-for the disagreement that exists today between Qwen3 and this column.
+parameter and nothing here supplies one: the figure comes from `know.chunk.embedding`'s own
+declared type. A server running different weights states its own width in the response,
+`EmbeddingModel` is built from that, and `writes_for` refuses the identity mismatch, so a
+width change surfaces as a refusal rather than as rows nobody can compare. See
+`THE_WIDTH_IS_THE_COLUMNS_SO_A_MODEL_CHANGE_IS_A_MIGRATION`.
+
+**That sentence said "rather than configured" until 2026-09-10 and the correction is worth
+reading rather than skipping.** The width is configured now: item 34 made it
+`INSTALL_EMBEDDING_DIMENSIONS`, declared in `brain.install` and defaulting to the 1024 below,
+because a width compiled into the product makes every client whose model is a different size
+a fork. What did not change is anything this module relies on. The setting is read once, on
+an install day, by the migration that alters the column; it cannot be read here, it cannot be
+passed to `served_embedding_model`, and changing it afterwards is refused unless the corpus
+is empty. So the column is still the fact, and `dimension_gaps` still compares the served
+model against it. What that check reports has changed direction: it fired for every
+deployment while the product shipped one width for a model of another, and it now fires only
+for an install whose declared width is not what its own model produces.
 
 **A run that stopped in the middle is not a run that finished, and `EmbedRun` cannot be built
 saying otherwise.** `writes_for` already refuses a response that covers part of one batch. The
@@ -125,18 +136,20 @@ AN_INGEST_OUTAGE_IS_INVISIBLE_AND_A_QUERY_OUTAGE_IS_DECLARED: Final = (
     "running."
 )
 
-#: Why the width is not a setting, and what a change to it actually is.
+#: Why nothing here takes a width, and what a change to it actually is.
 THE_WIDTH_IS_THE_COLUMNS_SO_A_MODEL_CHANGE_IS_A_MIGRATION: Final = (
     "The width is part of the type of know.chunk.embedding, so it is a fact about the "
-    "database and not about a deployment. Making it configurable would let an operator point "
-    "an install at a model of another width, at which point every insert is refused by "
-    "PostgreSQL, or worse, the width happens to match and the vectors are from a space "
-    "nothing recorded. So served_embedding_model has no dimensions parameter, and the figure "
-    "it uses is read off the column object rather than from a constant that sits beside it: a "
-    "column altered without the constant being edited would otherwise leave the two "
-    "disagreeing with nothing to notice. What is left is a model whose native width is not "
-    "the column's, and that is a migration and a full re-embed, which is what dimension_gaps "
-    "says in words rather than leaving somebody to discover at the first insert."
+    "database. An install chooses it once through INSTALL_EMBEDDING_DIMENSIONS, which the "
+    "migration reads and the migration alone; nothing at run time may supply one. A dimensions "
+    "parameter on this path would let a caller point one request at a model of another width, "
+    "at which point every insert is refused by PostgreSQL, or worse, the width happens to "
+    "match and the vectors are from a space nothing recorded. So served_embedding_model has no "
+    "dimensions parameter, and the figure it uses is read off the column object rather than "
+    "from a constant that sits beside it: a column altered without the constant being edited "
+    "would otherwise leave the two disagreeing with nothing to notice. What is left is a model "
+    "whose native width is not the column's, and that is a migration and a full re-embed, "
+    "which is what dimension_gaps says in words rather than leaving somebody to discover at "
+    "the first insert."
 )
 
 #: Why a partial run reports itself as one, and why it stops rather than carrying on.
@@ -308,9 +321,14 @@ COLUMN_DIMENSIONS: Final[int] = _column_dimensions()
 #: `brain.ops.inference.ServedModel.sizing_basis` requires: it is the hidden size on the
 #: published model card, and that card also offers Matryoshka truncation, which shortens a
 #: vector and cannot lengthen one. So this figure is a ceiling as well as a default, and no
-#: setting on the far side turns 1024 into the 1536 this column holds. There is no such server
-#: on this host, so there is nothing to measure it against; `dimension_gaps` is what compares
-#: the two ends rather than a sentence here claiming they agree.
+#: setting on the far side lengthens what this model returns. There is no such server on this
+#: host, so there is nothing to measure it against; `dimension_gaps` is what compares the two
+#: ends rather than a sentence here claiming they agree.
+#:
+#: **This is where `INSTALL_EMBEDDING_DIMENSIONS`'s default comes from**, and the arrow points
+#: this way rather than the other: the install setting defaults to the width the model this
+#: product serves produces, and `tests/unit/test_search.py` holds the two together so that
+#: neither can be edited into agreement with itself.
 QWEN3_EMBEDDING_DIMENSIONS: Final = 1024
 
 
@@ -342,17 +360,21 @@ def dimension_gaps(
 ) -> tuple[str, ...]:
     """Whether the served model can produce what this column holds, in words naming the fix.
 
-    **This is a schema finding and not a configuration one**, which is why it is a sentence
-    about a migration rather than about a setting. Both figures are parameters with defaults
-    for the reason `brain.ops.inference.weights_mib` takes one: a check that can only ever be
-    run against the constants beside it cannot be shown to fail.
+    **This is a schema finding even though a setting decides it**, which is why it is a
+    sentence about a migration rather than about a restart. `INSTALL_EMBEDDING_DIMENSIONS` is
+    read once, by the migration that alters the column, and a column already holding vectors
+    refuses the change: an operator who edits the setting and restarts has changed nothing
+    the database knows about. Both figures are parameters with defaults for the reason
+    `brain.ops.inference.weights_mib` takes one: a check that can only ever be run against the
+    constants beside it cannot be shown to fail.
 
-    It fires today. The column is the width of a hosted model chosen in
-    `brain.knowledge.search` and Qwen3-Embedding-0.6B is narrower, so this deployment cannot
-    embed with the model it names until somebody decides which of the two moves. That decision
-    is the owner's for the same reason item 31's three ways out are: it trades answer quality
-    against a container this host cannot fit, and picking one here would spend a migration on
-    a width the next decision changes again.
+    **It fired for every deployment until 2026-09-10 and now fires for a misconfigured one**,
+    which is the whole difference this check was waiting on. The column was the width of a
+    hosted model chosen in `brain.knowledge.search` and Qwen3-Embedding-0.6B is narrower, so
+    the product shipped unable to embed with the model it names; item 34 narrowed the column
+    to the served model's width and made that width the install's. What is left is the case
+    this check is worth having for: an install that declares a width its own inference server
+    does not produce, where every embedding job fails at the insert and nothing else does.
     """
     if model_dimensions == column_dimensions:
         return ()
@@ -360,8 +382,10 @@ def dimension_gaps(
         f"the served embedding model produces {model_dimensions} dimensions and "
         f"know.chunk.embedding holds {column_dimensions}; the width is part of the column "
         "type, so this is a migration that alters the column and rebuilds the vector index, "
-        "plus a re-embed of every chunk, and not a setting anybody can change. Nothing is "
-        "written in the meantime: an insert of the wrong width is refused by PostgreSQL",
+        "plus a re-embed of every chunk, and not an edit to INSTALL_EMBEDDING_DIMENSIONS and "
+        "a restart: that setting is read by the migration and the migration refuses to move "
+        "a column that already holds vectors. Nothing is written in the meantime: an insert "
+        "of the wrong width is refused by PostgreSQL",
     )
 
 

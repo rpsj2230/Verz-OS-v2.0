@@ -81,6 +81,27 @@ combined afterwards, so paying for a guarantee that is then discarded buys nothi
 
 ---
 
+**The vector's width is this install's, not this file's, and that changed on 2026-09-10.**
+It was the literal 1536, chosen for a hosted model before item 31 decided that embedding
+would run locally against a model producing 1024, and the column and the model then
+disagreed for a fortnight while `brain.ops.worker --check` said so and nothing else did.
+Editing the literal to 1024 would have fixed this deployment and kept the defect one number
+further on: this repository is what every client installs, and a client serving a model of a
+third width would need this file changed, which makes them a fork. So the width is a
+declared setting, `declared_dimensions` is the only thing that reads it, and 1024 is its
+default rather than its value. `migrations/versions/0027_embedding_width.py` is what sets
+the column to it.
+
+Two properties come with that and both are refusals rather than notes. A width above
+pgvector's index ceiling is refused when the setting is read, because a column that stores
+and an index that will not build is a failure that arrives at `CREATE INDEX` with a corpus
+already in the table. And a width changed after installation is a re-embed of everything, so
+`width_change_refusal` is emitted by that migration in both directions and stops it while any
+chunk is embedded. A setting that could be changed quietly is one somebody will change
+quietly, and the corpus is what would be lost.
+
+---
+
 **Row-level security is the second wall (M15.2.7), and both walls are needed for different
 reasons.** The predicate in the query is right today and is written by whoever wrote the
 query. The policy in the database is what holds when a future query is not: a maintenance
@@ -148,6 +169,7 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.scope import Op, Scope
 from brain.core.scope_sql import ColumnLayout, compile_where
 from brain.db import Base
+from brain.install import value_of
 from brain.knowledge.chunking import BlockKind
 from brain.knowledge.fusion import RRF_K, Fused, Ranking, fuse
 from brain.knowledge.item import ITEM_ID_PATTERN, RETRIEVABLE_STATES, KnowledgeState
@@ -264,23 +286,90 @@ WEIGHTED_TSVECTOR: Final = _weighted_tsvector(REGCONFIG_SQL)
 #: `CREATE INDEX` is what fails, by which time there is a corpus to re-embed.
 INDEXABLE_DIMENSION_CEILING: Final = 2000
 
-#: What is embedded and stored. 1536 is `text-embedding-3-small`, and it is also
-#: `text-embedding-3-large` asked for 1536 dimensions, which is a supported truncation of a
-#: Matryoshka-trained model rather than a trick. The larger model's native 3072 was rejected
-#: for one reason: it is above the ceiling above, so it cannot be indexed at all.
-#:
-#: The dimension is part of the column type, so changing the embedding model is a migration
-#: and a full re-embed rather than a configuration change. That is the honest cost and it is
-#: better paid loudly: PostgreSQL refuses a vector of the wrong width on insert, so a model
-#: swapped underneath this fails at the first write instead of returning nonsense distances.
-EMBEDDING_DIMENSIONS: Final = 1536
+#: The setting that declares the width, read through `brain.install.value_of` and nowhere
+#: else. See `THE_WIDTH_BELONGS_TO_THE_INSTALL_RATHER_THAN_TO_THIS_FILE`.
+WIDTH_SETTING: Final = "INSTALL_EMBEDDING_DIMENSIONS"
 
-if EMBEDDING_DIMENSIONS > INDEXABLE_DIMENSION_CEILING:  # pragma: no cover - a constant
-    _msg = (
-        f"{EMBEDDING_DIMENSIONS} dimensions cannot carry an HNSW or IVFFlat index; "
-        f"pgvector indexes at most {INDEXABLE_DIMENSION_CEILING}"
-    )
-    raise SearchError(_msg)
+#: Why the width is a declared setting and not the literal that stood here until 2026-09-10.
+#:
+#: This file said 1536 for a hosted model, item 31 then chose a local one that produces 1024,
+#: and the column and the model disagreed for a fortnight. Replacing 1536 with 1024 would
+#: have fixed this deployment and left the defect: the next client to serve a model of a
+#: third width would need this file edited, and a client who needs a file edited is a fork.
+THE_WIDTH_BELONGS_TO_THE_INSTALL_RATHER_THAN_TO_THIS_FILE: Final = (
+    "the vector width is what one install's embedding model produces, so it is configuration "
+    "and not a constant; a width compiled in here makes every client whose model is a "
+    "different size a fork of this repository, which is the one thing an installable product "
+    "may not require"
+)
+
+#: Why a value above pgvector's ceiling is refused here rather than left to `CREATE INDEX`.
+A_WIDTH_ABOVE_THE_CEILING_STORES_AND_THEN_REFUSES_TO_INDEX: Final = (
+    "pgvector stores a vector of up to 16,000 dimensions and indexes one of at most 2,000, so "
+    "a width between the two produces a column that accepts every row and an index that "
+    "cannot be built; the failure arrives at the CREATE INDEX, by which time there is a "
+    "corpus to re-embed, so the value is refused instead of the index"
+)
+
+#: Why the width cannot be changed on an install that has embedded anything.
+A_WIDTH_CHANGED_AFTER_INSTALLATION_IS_A_RE_EMBED_OF_EVERYTHING: Final = (
+    "a stored vector belongs to the model that produced it, so narrowing or widening the "
+    "column does not convert the corpus, it invalidates it; the width is therefore chosen "
+    "once, before the first document is ingested, and the migration that sets it refuses "
+    "while a single chunk is embedded rather than leaving a corpus nobody can compare"
+)
+
+
+def declared_dimensions(env: Mapping[str, str] | None = None) -> int:
+    """The width this install's embedding model produces, from the one place it is declared.
+
+    **Read once, at import, and frozen into `EMBEDDING_DIMENSIONS` below.** The width is part
+    of `know.chunk.embedding`'s type and the table is declared at module scope, so a value
+    that could differ between two calls in one process would mean two different columns in
+    one process. One resolution is the only shape that keeps the declaration, the query's
+    width check and the migration talking about one column.
+
+    `env` is a parameter for the reason `brain.install.value_of` takes one: a setting read
+    through a module-level import cannot be tested at more than one value, and every refusal
+    below would then be unreachable.
+
+    Three refusals and each has a distinct failure behind it. A value that is not a whole
+    number is somebody's `1024 dimensions` or `1e3`, and `int()` raising here names the
+    setting rather than producing a `TypeError` from inside SQLAlchemy's DDL. A width below
+    one is a column that can hold nothing. A width above the ceiling is the expensive one:
+    see `A_WIDTH_ABOVE_THE_CEILING_STORES_AND_THEN_REFUSES_TO_INDEX`.
+    """
+    supplied = value_of(WIDTH_SETTING, env)
+    try:
+        dimensions = int(supplied)
+    except ValueError:
+        msg = (
+            f"{WIDTH_SETTING}={supplied!r} is not a whole number of dimensions; it is how "
+            "many numbers this install's embedding model returns per passage"
+        )
+        raise SearchError(msg) from None
+    if dimensions < 1:
+        msg = f"{WIDTH_SETTING}={dimensions} is not a vector width"
+        raise SearchError(msg)
+    if dimensions > INDEXABLE_DIMENSION_CEILING:
+        msg = (
+            f"{WIDTH_SETTING}={dimensions} cannot carry an HNSW or IVFFlat index; pgvector "
+            f"indexes at most {INDEXABLE_DIMENSION_CEILING}. "
+            f"{A_WIDTH_ABOVE_THE_CEILING_STORES_AND_THEN_REFUSES_TO_INDEX}"
+        )
+        raise SearchError(msg)
+    return dimensions
+
+
+#: What is embedded and stored, for this install. The default is 1024, which is what
+#: Qwen3-Embedding-0.6B produces and what `brain.knowledge.embed_policy` records the
+#: provenance of; the number is declared in `brain.install` rather than here, so that a
+#: client serving a model of another width sets a value instead of editing this file.
+#:
+#: The dimension is still part of the column type, and that has not become cheaper for being
+#: configurable: changing it after installation is a migration and a full re-embed. What has
+#: changed is that it is decided on install day instead of by whoever wrote this line.
+EMBEDDING_DIMENSIONS: Final[int] = declared_dimensions()
 
 
 class Vector(UserDefinedType[Any]):
@@ -626,6 +715,54 @@ INDEXES: Final[tuple[sa.Index, ...]] = (
     REACH_INDEX,
     DOCUMENT_INDEX,
 )
+
+
+def width_change_refusal(dimensions: int) -> str:
+    """The statement that stops a width change on a corpus somebody has already embedded.
+
+    **Written as SQL rather than as a Python check, and that is the decision in this
+    function.** The obvious shape is `op.get_bind().execute(...)` inside the migration and a
+    Python `raise`. It is shorter, it can count the rows, and it is absent from the artefact
+    that most needs it: `alembic upgrade --sql` renders a migration to a script for a person
+    to run against a production database by hand, and a guard written in Python renders to
+    nothing at all. The script would then contain the `ALTER` and not the refusal, which is
+    the one combination that loses a corpus. A `DO` block is in the script, in the same
+    transaction as the `ALTER`, and refuses at the moment of application either way.
+
+    Rendered from the table and column objects rather than spelled, so a rename cannot leave
+    this asking about a column that no longer exists. The message names the width that was
+    about to be set, because an operator meeting this has usually just changed
+    `INSTALL_EMBEDDING_DIMENSIONS` and the useful sentence is which value they changed it to.
+
+    No count of the embedded chunks, and no apostrophe or percent sign anywhere in the
+    message: `RAISE` reads `%` as a placeholder, and a quote would have to be doubled to
+    survive the dollar-quoted body. See
+    `A_WIDTH_CHANGED_AFTER_INSTALLATION_IS_A_RE_EMBED_OF_EVERYTHING`.
+    """
+    table = f"{CHUNK.schema}.{CHUNK.name}"
+    column = CHUNK.c.embedding.name
+    message = (
+        f"{table}.{column} already holds vectors, so this install cannot change its width to "
+        f"{dimensions}: a stored vector belongs to the model that produced it and a narrower "
+        "or wider column does not convert the corpus, it invalidates it. Clear the column and "
+        f"re-embed every chunk, or put {WIDTH_SETTING} back to the width the corpus was "
+        "embedded at"
+    )
+    # Everything interpolated below is this module's own metadata: `CHUNK.schema`,
+    # `CHUNK.name`, `CHUNK.c.embedding.name` and a sentence assembled four lines up from an
+    # integer the installation declaration validated. There is no path by which a caller's
+    # value reaches any of them. The suppression sits on the one line that builds the
+    # predicate rather than on the file, so a statement that did take a caller's value would
+    # still be reported.
+    return (
+        "DO $$\n"  # noqa: S608
+        "BEGIN\n"
+        f"    IF EXISTS (SELECT 1 FROM {table} WHERE {column} IS NOT NULL) THEN\n"
+        f"        RAISE EXCEPTION '{message}';\n"
+        "    END IF;\n"
+        "END\n"
+        "$$"
+    )
 
 
 # ---------------------------------------------------------------- the reach
