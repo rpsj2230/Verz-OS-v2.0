@@ -27,6 +27,31 @@ its contents one thing, so a client who deletes an agent they do not want finds 
 the next upgrade, and there is no honest way to tell that apart from a repair. The starter set
 is applied once, at install, and after that it is the client's to change.
 
+**Rejected: applying it from `brain.seed`, and the reason is measurable rather than
+stylistic.** It is the obvious host - it is the one command that writes rows, it already runs
+at install time, and `make seed` is already in the Makefile. It is the wrong one twice over.
+The first reason is the one M41.2.8 is about: a client who wanted the roles would have to load
+Northwind Facilities to get them, which is the conflation this whole module exists to refuse.
+The second is structural and was measured on 2026-09-11 against a real PostgreSQL. `brain.seed`
+refuses any database holding rows it does not own, and a real install holds rows before the
+starter set is wanted: the first administrator is created by a person at first run, and that
+row alone is enough for the seed to refuse. **The two deliveries have opposite preconditions.**
+The demonstration wants a database with nothing in it; the furnished system wants the database
+a client is actually about to use. One command cannot be right for both, and the one that tried
+would be wrong for whichever it was not written for. See
+`A_FURNISHED_SYSTEM_AND_A_DEMONSTRATION_HAVE_OPPOSITE_PRECONDITIONS`.
+
+**So it belongs on the install plan, and the plan already has the concept it needs.**
+`brain.deployment.installer.PLAN` is the sequence that runs once on a client's server, and
+`brain.deployment.installer.Step` requires `already_done` of any step that writes: a shell
+test that is true when the step has nothing left to do. That is
+`A_MIGRATION_THAT_INSERTS_ROWS_TAKES_THEM_BACK_ON_THE_NEXT_UPGRADE`'s "once, at install"
+expressed as a first-class property rather than as a convention, and it is the difference
+between a starter set a client can delete from and one that grows back. Nothing applies the
+starter set today, which this module should say plainly rather than imply: what exists here is
+the declaration and the refusal, and `tests/unit/test_starter.py` holds the two properties that
+must stay true whoever writes the applying half.
+
 Task ids: M41.2.7, M41.2.8
 """
 
@@ -66,6 +91,23 @@ A_STARTER_SET_THAT_SHIPS_AN_ACCOUNT_SHIPS_ONE_NOBODY_CREATED: Final = (
     "that no credential exists in this repository. Anything else furnished with an account "
     "is an account with no owner and no audit trail explaining where it came from."
 )
+
+#: Why the seed command is not where the starter set is applied.
+A_FURNISHED_SYSTEM_AND_A_DEMONSTRATION_HAVE_OPPOSITE_PRECONDITIONS: Final = (
+    "`brain.seed` refuses a database holding rows it does not own, because a demonstration "
+    "belongs in an empty one. The starter set belongs in the database a client is about to "
+    "use, which holds the first administrator before anything else is furnished, so a seed "
+    "that also applied it would refuse exactly when it was needed. That is the second reason "
+    "and the first is M41.2.8: a client who wanted the six roles would have to load Northwind "
+    "Facilities to get them. The applying half belongs on the install plan, where "
+    "`brain.deployment.installer.Step` already requires a step that writes to say when it has "
+    "nothing left to do."
+)
+
+#: The module whose install plan the starter set belongs on, and the field that makes it
+#: applicable once. Named rather than described, so a test can fail when either goes away
+#: instead of a paragraph quietly naming somewhere that no longer exists.
+APPLIED_BY = ("brain.deployment.installer", "already_done")
 
 #: Why the starter set is applied once rather than by a migration.
 A_MIGRATION_THAT_INSERTS_ROWS_TAKES_THEM_BACK_ON_THE_NEXT_UPGRADE: Final = (

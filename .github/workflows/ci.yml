@@ -325,11 +325,13 @@ jobs:
           [ "$absent" = "$unknown" ] || { echo "::error::an absent record and an unmatched question answer differently"; exit 1; }
           echo "both answered: $absent"
 
-      - name: Loading the demo a second time changes nothing
+      - name: Loading the demo a second time changes nothing and is not refused
         # `ON CONFLICT DO NOTHING`, against a real database rather than against a string.
+        # No `--force`: the second load has to be permitted by `not_yet_loaded`, so this step
+        # proves the guard lets the demo past itself rather than bypassing the guard.
         run: |
           before=$(psql "$DATABASE_URL" -tAc "select count(*) from auth.principal" | tr -d '[:space:]')
-          uv run python -m brain.seed --force
+          uv run python -m brain.seed
           after=$(psql "$DATABASE_URL" -tAc "select count(*) from auth.principal" | tr -d '[:space:]')
           [ "$before" = "$after" ] || { echo "::error::a repeated load changed the row count from $before to $after"; exit 1; }
           echo "repeat load is a no-op at $after principal(s)"

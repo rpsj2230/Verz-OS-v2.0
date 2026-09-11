@@ -1,8 +1,17 @@
 """Load the demo company into a database.
 
-Refuses to run against a database that holds real rows. Seeding is destructive by nature -
-it truncates what it owns - and "I ran the seed against production" is a mistake that
-should be impossible rather than merely discouraged.
+Refuses to run against a database that holds real rows. "I ran the seed against production"
+is a mistake that should be impossible rather than merely discouraged.
+
+**The refusal is no longer about damage, and saying so is the point.** This module used to
+truncate what it owned, and the header used to open by saying seeding is destructive by
+nature. Nothing here truncates anything now: every insert carries ON CONFLICT DO NOTHING and
+every delete is bounded by an identifier `brain.demo` declares. What survives is the harm
+that was never about damage - a fictitious company's clients and contract values sitting in
+a real company's database looking exactly like their own - and that is what the guard is
+for. The distinction matters because a guard whose stated reason has gone stale is a guard
+somebody eventually argues away, and the argument would be correct about truncation and
+wrong about the thing that would actually happen.
 
 **This used to import `tests.fixtures.company` and that was an install step reading a Verz
 artefact.** The comment beside the import said tests are not on the path in a deployed
@@ -25,6 +34,28 @@ inserted with `ON CONFLICT DO NOTHING` and are removable by identifier, so loadi
 cannot overwrite a row somebody else wrote and removing it cannot reach one. See
 `WRITING_IS_NOT_OWNING`.
 
+**Running it twice is a no-op, and until 2026-09-11 it was a production refusal.** Measured
+against a real PostgreSQL: the first run writes nine principals, thirty-one grants, seven
+records and three rules, and the second run came back `database holds rows this command does
+not own: gate.fast_path_rule, gate.grants_version, gate.policy_epoch, obs.audit_entry,
+proj.record`. Every table in that list is one the seed's own first run had just filled,
+directly or through a trigger. The guard was answering a question nobody had asked it, and
+the line under the refusal offered one way out, which was `--force`. `insert_statement` has
+argued since it was written that a repeated load is a no-op; the argument was unreachable,
+because the guard refused before an insert ever ran. So the refusal is now narrowed by
+`not_yet_loaded`, which asks whether the rows the guard objects to are the demo's own, and
+the narrowing is a short-circuit rather than a change to the guard: see
+`THE_DEMOS_OWN_ROWS_ARE_NOT_SOMEBODY_ELSES` for why it is placed after it and not inside it.
+
+**The ledger keeps its entries after `--remove`, and that is the one case still refused.**
+Writing a grant fires `gate.record_entitlement_change`, which appends to `obs.audit_entry`,
+and removing the demo deletes no audit entry: a hash chain with a hole in it is a hash chain
+nobody can verify. So a database the demo has been loaded into and removed from still holds
+thirty-one entries and one `gate.policy_epoch` counter, and seeding it again is refused.
+That refusal is correct - the ledger is evidence that grants were written here - and the
+remedy is to rebuild the database, which is `make reset`, rather than to turn the guard off.
+See `A_REFUSAL_WHOSE_ONLY_REMEDY_IS_FORCE_TEACHES_FORCE`.
+
 Task ids: M0.4.4, M0.4.5, M41.2.3
 """
 
@@ -38,13 +69,17 @@ from typing import Any, Protocol
 
 import structlog
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from brain import demo
 from brain.db import SCHEMAS, normalise_database_url
 
 log = structlog.get_logger()
 
-#: Tables this command owns and will replace. Anything else is left alone.
+#: The tables whose contents `looks_like_production` is not surprised by. It said "owns and
+#: will replace" until 2026-09-11, and nothing here has replaced anything since the load
+#: became additive; what the list still decides is which rows are no evidence that this
+#: database is somebody's.
 OWNED = ("auth.principal", "gate.capability_grant")
 
 #: Tables the demo writes into. A superset of `OWNED`, and the difference is the point.
@@ -60,6 +95,29 @@ WRITING_IS_NOT_OWNING = (
     "removing it cannot reach one either."
 )
 
+#: Why the demo's own footprint is answered after the guard rather than inside it.
+THE_DEMOS_OWN_ROWS_ARE_NOT_SOMEBODY_ELSES = (
+    "The guard asks one question of every table in every schema and either signal refuses. "
+    "Teaching it to discount the demo's rows would mean discounting them on the statistics "
+    "arm too, because the exact probe alone is blind to rows row-level security hides from "
+    "the connected role, and `proj.record` - the table `WRITING_IS_NOT_OWNING` is written "
+    "about - is exactly where that blindness would cost something. So the guard is unchanged "
+    "and the narrowing sits after it: the guard decides whether this database holds rows the "
+    "seed does not own, and `not_yet_loaded` decides whether those rows are the demo's own, "
+    "which is a question about identifiers this module declares rather than about the shape "
+    "of the database."
+)
+
+#: Why a refusal has to name a remedy that is not `--force`.
+A_REFUSAL_WHOSE_ONLY_REMEDY_IS_FORCE_TEACHES_FORCE = (
+    "A guard that refuses the ordinary case and offers one way past it does not get read "
+    "twice: the second time, the flag goes on the command line before the message is read, "
+    "and the flag disables the refusal that matters along with the one that did not. "
+    "`tests/unit/test_seed.py` already says this about seeding every database. So a refusal "
+    "here names what the demo can do about itself first - it is removable by identifier, and "
+    "a development loop rebuilds the database - and names `--force` last, as what it is."
+)
+
 #: What an ordinary Postgres identifier looks like. A name that does not match is reported
 #: rather than interpolated into a query.
 _IDENTIFIER_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
@@ -69,9 +127,12 @@ _IDENTIFIER_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 #: what the statement does when somebody adds a constraint.
 CONFLICT_KEYS: dict[str, tuple[str, ...]] = {
     "auth.principal": ("id",),
-    # No natural key. A grant row is identified by its generated uuid, so a repeated load
-    # would insert a second identical grant; the removal below is what makes that reversible,
-    # and `install` refuses to run twice over a database that already holds the demo.
+    # No natural key of this module's choosing, so the conflict clause names no column and
+    # the table's own `uq_capability_grant_principal_id_capability_live` decides. Measured on
+    # 2026-09-11 against a real PostgreSQL: a forced second load leaves thirty-one grants at
+    # thirty-one. The comment here used to say `install` refuses to run twice, which it does
+    # not and never did - `seed` decides that, above `install`, and `install` called directly
+    # writes whatever it is given.
     "gate.capability_grant": (),
     "proj.record": ("source", "entity", "source_id"),
     "gate.fast_path_rule": ("rule_id",),
@@ -292,12 +353,74 @@ def remove(executor: Executor) -> dict[str, int]:
             if not _IDENTIFIER_RE.match(part):
                 msg = f"{part!r} is not an ordinary identifier"
                 raise ValueError(msg)
-        rows = demo.demo_rows()[table]
-        targets = sorted({str(one[column]) for one in rows} & identifiers)
+        targets = declared_in(table)
         statement = f'DELETE FROM "{schema}"."{name}" WHERE {column} = ANY(:targets)'  # noqa: S608
         executor.execute(text(statement), {"targets": targets})
         removed[table] = len(targets)
     return removed
+
+
+def declared_in(table: str) -> list[str]:
+    """The identifiers `brain.demo` declares for one table, as the removal bound reads them.
+
+    One function rather than the same two lines in `remove` and in `not_yet_loaded`, because
+    the two have to agree about what the demo's rows are: what a removal deletes and what
+    presence is decided from are then the same set by construction, rather than by somebody
+    keeping two comprehensions in step. The intersection with `demo_identifiers` is what
+    makes it a declared list rather than whatever happens to be in the column.
+    """
+    column = REMOVAL_KEYS[table]
+    rows = demo.demo_rows()[table]
+    return sorted({str(one[column]) for one in rows} & set(demo.demo_identifiers()))
+
+
+def not_yet_loaded(executor: Executor) -> tuple[str, ...]:
+    """Which of the demo's own identifiers this database does not hold, as `table:identifier`.
+
+    An empty result means every row the demo declares is already there, which is the reading
+    that lets `seed` answer "nothing to do" instead of handing a production refusal to
+    somebody whose database holds nothing but the demo. See
+    `THE_DEMOS_OWN_ROWS_ARE_NOT_SOMEBODY_ELSES` for why this is a separate question asked
+    after the guard rather than a condition inside it.
+
+    **A soft-deleted row counts as present, deliberately.** `proj.record` and
+    `gate.fast_path_rule` both carry `deleted_at`, and a demo row somebody has retired still
+    occupies its identifier: re-inserting it would conflict and do nothing, so reporting it
+    absent would promise a load that cannot happen. The read here is therefore unfiltered,
+    unlike `_READ_RECORDS`, which answers a question about what a reader may be told.
+    """
+    absent: list[str] = []
+    for table in demo.TABLES:
+        schema, _, name = table.partition(".")
+        column = REMOVAL_KEYS[table]
+        for part in (schema, name, column):
+            if not _IDENTIFIER_RE.match(part):
+                msg = f"{part!r} is not an ordinary identifier"
+                raise ValueError(msg)
+        targets = declared_in(table)
+        if not targets:
+            # **Refused rather than skipped, and a mutation is why.** Skipping it survived
+            # every test, because an empty bound matches nothing and extends nothing, so the
+            # branch could not change an outcome. What it could change is the answer above
+            # it: a table that contributes no identifier is silently agreed to be present,
+            # and `already_loaded` then reports a demo that is whole while a table of it is
+            # missing. That happens the moment `demo_identifiers` and `REMOVAL_KEYS` stop
+            # naming the same column, which is two constants in two modules.
+            msg = (
+                f"{table} is declared in brain.demo.TABLES and contributes no identifier, so "
+                "whether the demo is loaded cannot be decided from a smaller demo than the "
+                "one a load would write"
+            )
+            raise ValueError(msg)
+        statement = (
+            f'SELECT DISTINCT {column} FROM "{schema}"."{name}" '  # noqa: S608
+            f"WHERE {column} = ANY(:targets)"
+        )
+        found = {
+            str(one[0]) for one in executor.execute(text(statement), {"targets": targets}).all()
+        }
+        absent.extend(f"{table}:{one}" for one in targets if one not in found)
+    return tuple(absent)
 
 
 #: What is read back to answer one question. Written out rather than `SELECT *`, so a column
@@ -355,12 +478,57 @@ def smoke(executor: Executor) -> tuple[str, str | None, str]:
     return question, ask(executor, question), client.fields[rule.answer_field]
 
 
+#: What the refusal says after naming what it found. Three lines, in the order somebody
+#: should try them, and `--force` last because it is the only one that stops the guard
+#: deciding. See `A_REFUSAL_WHOSE_ONLY_REMEDY_IS_FORCE_TEACHES_FORCE`.
+REMEDIES: tuple[str, ...] = (
+    "The demo removes itself: python -m brain.seed --remove deletes every row it declares.",
+    "A database that has ever held a grant keeps the ledger entries that grant wrote, and "
+    "removing the demo does not reach them, so a development loop rebuilds: make reset.",
+    "--force does not remove anything. It stops this check running, on this database.",
+)
+
+
+def already_loaded(url: str) -> bool:
+    """Whether this database already holds every row the demo declares.
+
+    Its own engine, and the reason is the same one `looks_like_production` has: a connection
+    the caller has already used is a connection whose transaction state the caller decides,
+    and the one thing this function must not do is report presence from inside a transaction
+    that is about to write the rows it is looking for.
+
+    **A question that cannot be asked is answered no, and the direction is the whole point.**
+    This runs only after the guard has already refused, so it can turn a refusal into a
+    success and nothing else. A database that has some of the schema and not the demo's part
+    of it - migrated halfway, or migrated by a different product - makes the presence read
+    raise, and letting that out would replace a refusal somebody can act on with a traceback.
+    Answering no leaves exactly the behaviour there was before this function existed.
+    """
+    engine = create_engine(normalise_database_url(url), poolclass=None)
+    try:
+        with engine.connect() as conn:
+            return not not_yet_loaded(conn)
+    except SQLAlchemyError:
+        log.info("cannot tell whether the demo is loaded", reason="the read did not complete")
+        return False
+    finally:
+        engine.dispose()
+
+
 def seed(url: str, *, force: bool = False) -> int:
     risky, why = looks_like_production(url)
     if risky and not force:
+        # The demo's own rows are what the guard is most likely to have found, because the
+        # first run wrote four tables the guard reads and fired triggers into three more.
+        # Asked here rather than inside the guard: see `THE_DEMOS_OWN_ROWS_ARE_NOT_SOMEBODY_ELSES`.
+        if already_loaded(url):
+            log.info("already loaded", reason="every row the demo declares is present")
+            print(f"{demo.summary()} - already loaded, nothing written")
+            return 0
         log.error("refusing to seed", reason=why)
         print(f"REFUSED: {why}", file=sys.stderr)
-        print("Pass --force only if you are certain this database is disposable.", file=sys.stderr)
+        for remedy in REMEDIES:
+            print(remedy, file=sys.stderr)
         return 1
 
     gaps = demo.demo_gaps()

@@ -11,12 +11,14 @@ database would, rather than through `seed` with the guard replaced.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Collection
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any
 
 import pytest
+from sqlalchemy.exc import ProgrammingError
 
 from brain import demo
 from brain import seed as seed_mod
@@ -82,8 +84,15 @@ def test_the_seeded_grants_carry_a_scope_a_granter_and_a_reason() -> None:
 
 
 def test_the_owned_table_list_is_explicit() -> None:
-    """Seeding truncates what it owns. What it owns is written down rather than inferred,
-    so widening it is a visible edit."""
+    """What this command may disturb is written down rather than inferred, so widening it is
+    a visible edit. It said "seeding truncates what it owns" until 2026-09-11, which had
+    stopped being true: nothing here truncates anything, every insert carries ON CONFLICT DO
+    NOTHING and every delete is bounded by a declared identifier. `OWNED` is now only the
+    list `looks_like_production` treats as unsurprising, which is a smaller claim and the one
+    the guard actually makes.
+
+    Deleting this lets `proj.record` join the list, and `WRITING_IS_NOT_OWNING` says what
+    that costs."""
     # Corrected 5 September: the table M1.4.1 actually creates is `capability_grant`.
     # `gate.grant` named nothing, and `looks_like_production` counts rows in tables it
     # does not own, so the first real grant row would have made the seeder refuse to run.
@@ -93,10 +102,17 @@ def test_the_owned_table_list_is_explicit() -> None:
 def test_seed_refuses_when_the_database_holds_rows_it_does_not_own(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """'I ran the seed against production' should be impossible, not discouraged."""
+    """'I ran the seed against production' should be impossible, not discouraged.
+
+    `already_loaded` is answered no here, which is what a client's database says: their rows
+    are theirs and none of the demo's identifiers is among them. The case where it answers
+    yes has its own test below, and the two together are what stop the short-circuit becoming
+    a way past the guard.
+    """
     monkeypatch.setattr(
         seed_mod, "looks_like_production", lambda _url: (True, "know.item (4,102 rows)")
     )
+    monkeypatch.setattr(seed_mod, "already_loaded", lambda _url: False)
     assert seed_mod.seed("postgresql://x", force=False) == 1
 
 
@@ -161,6 +177,49 @@ def test_a_repeated_load_cannot_overwrite_a_row_somebody_edited() -> None:
     assert "ON CONFLICT" in statement
     assert "DO NOTHING" in statement
     assert "DO UPDATE" not in statement
+
+
+def test_the_conflict_clause_names_a_key_only_where_the_table_has_one() -> None:
+    """Two forms, and which one is used is a decision `brain.ops.guards` cannot mutate because
+    it is a conditional expression rather than an `if`. `auth.principal` has a natural key and
+    names it; `gate.capability_grant` has none of this module's choosing, so the clause names
+    no column and the table's own partial unique index decides. Measured on 2026-09-11 against
+    a real PostgreSQL: a forced second load leaves thirty-one grants at thirty-one.
+
+    Swapping the two produces `ON CONFLICT () DO NOTHING`, which is a syntax error PostgreSQL
+    reports and no test here builds a database to hear.
+
+    Deleting this leaves the choice untested in both directions, and the direction that fails
+    fails on the client's server rather than here.
+    """
+    keyed = seed_mod.insert_statement("auth.principal", ("id", "display_name"))
+    assert "ON CONFLICT (id) DO NOTHING" in keyed
+
+    unkeyed = seed_mod.insert_statement("gate.capability_grant", ("principal_id", "capability"))
+    assert "ON CONFLICT DO NOTHING" in unkeyed
+    assert "ON CONFLICT (" not in unkeyed, unkeyed
+    assert seed_mod.CONFLICT_KEYS["gate.capability_grant"] == ()
+
+
+def test_a_mapping_column_is_serialised_before_it_reaches_the_driver() -> None:
+    """`proj.record.fields` is a mapping and psycopg will not adapt a dict to `jsonb` on its
+    own, so the demo's records fail to insert at all unless something serialises them. This is
+    the second decision in this module the guard audit cannot reach, and it is the one that
+    only breaks against a real database.
+
+    Asserted both ways: the mapping becomes a string that parses back to the same mapping, and
+    a value that was already a string is left alone rather than quoted twice.
+
+    Deleting this lets the serialisation go, and the symptom is the demo load failing on the
+    third table on somebody's install while every test here passes.
+    """
+    row = next(iter(demo.record_rows()))
+    assert isinstance(row["fields"], dict), "the demo stopped carrying a mapping"
+
+    bound = seed_mod._bindable(row)
+    assert isinstance(bound["fields"], str)
+    assert json.loads(bound["fields"]) == row["fields"]
+    assert bound["source"] == row["source"]
 
 
 def test_a_value_never_reaches_a_statement_as_text() -> None:
@@ -376,6 +435,30 @@ def test_a_snapshot_restored_minutes_ago_is_refused_even_though_its_statistics_a
     risky, why = seed_mod.looks_like_production("postgresql://x")
     assert risky, "a restored snapshot with cold statistics read as an empty database"
     assert "holds rows" in why
+
+
+def test_rows_the_connected_role_cannot_see_are_refused_on_the_statistics_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The blind spot the estimate is kept for, and until 2026-09-11 nothing reached it.**
+    The exact probe runs as whoever is connected, and row-level security can hide every row
+    in a table from that role while `pg_stat_user_tables` still counts them. So a client's
+    database read as empty to the probe, and the estimate is the only signal that says
+    otherwise. The docstring has argued that since the probe was added; the guard audit found
+    on 2026-09-11 that switching the estimate arm off changed nothing any test could see.
+
+    The mirror image of `test_a_snapshot_restored_minutes_ago...`, which is the probe covering
+    the estimate's blind spot. Neither covers the other, which is why both run and either
+    refuses, and why both now have a test that fails when the other one is deleted.
+
+    Deleting this lets the estimate arm go, and what goes with it is the only thing that
+    notices a table full of rows the seeding role is not allowed to see.
+    """
+    _database(monkeypatch, [("know", "item")], populated=set(), stats={"know.item"})
+    risky, why = seed_mod.looks_like_production("postgresql://x")
+    assert risky, "a table whose rows are hidden by policy read as an empty table"
+    assert "know.item" in why
+    assert "by statistics" in why, why
 
 
 def test_a_table_whose_name_is_not_an_identifier_stops_the_seed_rather_than_being_queried(
@@ -644,3 +727,413 @@ def test_what_a_trigger_wrote_is_deleted_before_the_principals_it_points_at() ->
     grants_version = next(i for i, one in enumerate(tables_in_order) if "grants_version" in one)
     principal_delete = next(i for i, one in enumerate(tables_in_order) if '"principal"' in one)
     assert grants_version < principal_delete
+
+
+# ------------------------------------------------- running it a second time (M0.4.4)
+class _Present:
+    """A database holding exactly the demo identifiers it was constructed with.
+
+    Built to answer `not_yet_loaded` and nothing else: it reads the bound list out of the
+    parameters and hands back the subset it holds, which is what a real `SELECT DISTINCT
+    <key> ... WHERE <key> = ANY(:targets)` does.
+    """
+
+    def __init__(self, held: Collection[str]) -> None:
+        self.held = set(held)
+        self.statements: list[str] = []
+        self.bounds: list[list[str]] = []
+
+    def execute(self, statement: object, parameters: Any = None, /) -> _Result:
+        self.statements.append(str(statement))
+        targets = list(parameters["targets"]) if parameters else []
+        self.bounds.append(targets)
+        return _Result([(one,) for one in targets if one in self.held])
+
+
+def _everything() -> set[str]:
+    """Every identifier the demo would have written, across all four of its tables."""
+    return {one for table in demo.TABLES for one in seed_mod.declared_in(table)}
+
+
+def test_a_second_seed_over_a_database_holding_the_demo_writes_nothing_and_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The leaf's second-run question, and until 2026-09-11 the answer was a production
+    refusal.** Measured against a real PostgreSQL: the first run wrote four tables and fired
+    triggers into three more, and the second came back `database holds rows this command does
+    not own: gate.fast_path_rule, gate.grants_version, gate.policy_epoch, obs.audit_entry,
+    proj.record` - every one of them a table the seed itself had just filled. The only remedy
+    the message offered was `--force`, which is the flag that turns the guard off.
+
+    So a second run is a no-op that succeeds: nothing is written, the exit code is zero, and
+    the state after two runs is the state after one. `insert_statement` has argued for that
+    since it was written; what was missing was reaching the inserts at all.
+
+    Delete this and the short-circuit can go, and what comes back is a command that refuses
+    its own second run in the words of the production guard.
+    """
+    monkeypatch.setattr(seed_mod, "looks_like_production", lambda _url: (True, "proj.record"))
+    monkeypatch.setattr(seed_mod, "already_loaded", lambda _url: True)
+    recorder = _engine(monkeypatch)
+
+    assert seed_mod.seed("postgresql://x") == 0
+    assert not recorder.calls, "a second seed wrote rows into a database that already had them"
+
+
+def test_a_demo_that_is_only_half_there_is_not_treated_as_already_loaded() -> None:
+    """The negative half, and the one that stops the short-circuit becoming a hole. "Loaded"
+    means every identifier the demo declares, not one of them: a database holding three demo
+    people and none of the records has not been seeded, and answering yes would leave it that
+    way for ever while reporting success.
+
+    Delete this and `not_yet_loaded` can be weakened to "any row present", which reads the
+    same in review and turns a half-loaded install into a permanent one.
+    """
+    everything = _everything()
+    assert not seed_mod.not_yet_loaded(_Present(everything))
+
+    half = sorted(everything)[: len(everything) // 2]
+    absent = seed_mod.not_yet_loaded(_Present(half))
+    assert absent
+    assert all(":" in one for one in absent), absent
+    assert not seed_mod.not_yet_loaded(_Present(everything))
+
+
+def test_presence_is_decided_from_the_identifiers_the_removal_deletes() -> None:
+    """One declared list, read by both. What a removal deletes and what presence is decided
+    from have to be the same set, or the command can report a demo loaded that its own
+    removal would not take out, and the leftover is a fictitious row nobody can name.
+
+    Asserted through `declared_in`, which both call, rather than by comparing two
+    comprehensions that happen to agree today.
+
+    Delete this and the two can drift, and the drift is invisible until somebody removes the
+    demo and the next seed says it is still there.
+    """
+    reader = _Present(_everything())
+    seed_mod.not_yet_loaded(reader)
+
+    recorder = _Recorder()
+    seed_mod.remove(recorder)
+    deleted = {
+        table: set(parameters["targets"])
+        for (statement, parameters), table in zip(
+            recorder.calls[len(seed_mod.TRIGGER_WRITTEN) :],
+            tuple(reversed(demo.TABLES)),
+            strict=True,
+        )
+        if statement
+    }
+
+    for table, bound in zip(demo.TABLES, reader.bounds, strict=True):
+        assert set(bound) == deleted[table], table
+        assert bound, f"{table} is checked against an empty bound, so presence means nothing"
+
+
+def test_presence_counts_a_demo_row_somebody_retired_as_still_there() -> None:
+    """`proj.record` and `gate.fast_path_rule` carry `deleted_at`, and a retired demo row
+    still occupies its identifier: re-inserting it would conflict and do nothing. Reporting
+    it absent would promise a load that cannot happen, and the seed would then refuse for
+    ever on a database it had already filled.
+
+    Asserted on the statement rather than on a row, because the failure is a `WHERE
+    deleted_at IS NULL` copied in from `_READ_RECORDS`, which answers a different question.
+
+    Delete this and that clause comes back, and the symptom is a demo that can never be
+    reported loaded once anybody retires one of its rows.
+    """
+    reader = _Present(_everything())
+    seed_mod.not_yet_loaded(reader)
+
+    assert reader.statements
+    for statement in reader.statements:
+        assert "deleted_at" not in statement, statement
+        assert statement.startswith("SELECT DISTINCT ")
+
+
+def test_a_refusal_names_something_to_do_before_it_names_force(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """**A guard that refuses the ordinary case and offers one way past it teaches that way
+    past it.** `test_a_database_holding_only_what_the_seed_owns_is_seedable` already says so
+    about the guard; this says it about the message, which is the half somebody actually
+    reads. The refusal used to end `Pass --force only if you are certain this database is
+    disposable`, which names the flag that stops the check running and nothing else.
+
+    Asserted on the order of the lines as well as on their presence, because a remedy printed
+    after `--force` has been printed after the reader has stopped reading.
+
+    Delete this and the message can go back to one line naming one flag.
+    """
+    monkeypatch.setattr(seed_mod, "looks_like_production", lambda _url: (True, "know.item"))
+    monkeypatch.setattr(seed_mod, "already_loaded", lambda _url: False)
+
+    assert seed_mod.seed("postgresql://x") == 1
+    printed = capsys.readouterr().err
+
+    assert "--remove" in printed
+    assert "make reset" in printed
+    assert printed.index("--remove") < printed.index("--force")
+    assert seed_mod.REMEDIES[-1].startswith("--force"), seed_mod.REMEDIES
+
+
+def test_a_presence_check_never_interpolates_a_name_that_is_not_an_identifier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The presence read interpolates a schema, a table and a column exactly as the removal
+    does, so it carries the same validation. A validator that is written and never run is
+    this repository's most common defect, and this one guards the only interpolation in a
+    statement that is built per table.
+
+    Delete this and the check becomes removable, and what it guards is a column name reaching
+    a query as though it were a literal.
+    """
+    monkeypatch.setattr(
+        seed_mod,
+        "REMOVAL_KEYS",
+        dict(seed_mod.REMOVAL_KEYS) | {"proj.record": 'source_id"; drop table x --'},
+    )
+    with pytest.raises(ValueError, match="ordinary identifier"):
+        seed_mod.not_yet_loaded(_Present(()))
+
+
+# ------------------------------------------- guards that were written and never reached
+def test_the_statistics_arm_ignores_the_tables_the_seed_owns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The estimate half has its own `OWNED` filter and nothing reached it. Without it, a
+    database holding the seed's own principals is refused by the statistics even though the
+    exact probe passed it, so re-seeding a stack this command already owns becomes
+    impossible - which is the normal case, and the one somebody answers with `--force`.
+
+    Found by `brain.ops.guards` on 2026-09-11: `seed.py:175` survived at depth one and at
+    depth two, against every test file that imports this module.
+
+    Delete this and the filter can go, and the failure presents as a seeder that refuses a
+    database it filled itself.
+    """
+    _database(
+        monkeypatch,
+        [("auth", "principal"), ("gate", "capability_grant")],
+        populated=set(),
+        stats={"auth.principal", "gate.capability_grant"},
+    )
+    assert seed_mod.looks_like_production("postgresql://x") == (False, "")
+
+
+def test_a_table_the_demo_declares_no_rows_for_is_skipped_rather_than_indexed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`install` reads the column names off `rows[0]`, so a declared table with no rows yet is
+    an `IndexError` in the middle of a load rather than a table that writes nothing. The
+    branch that skips it was written and reached by nothing, because every table the demo
+    declares has rows today.
+
+    A table declared before its rows exist is an ordinary state: `brain.demo.TABLES` is the
+    insertion order, and somebody adding the next one writes the name first.
+
+    Delete this and the skip can go, and the symptom is a half-written demo in a rolled-back
+    transaction with a traceback about list indices.
+    """
+    thinned = {
+        table: (() if table == "proj.record" else rows) for table, rows in demo.demo_rows().items()
+    }
+    monkeypatch.setattr(demo, "demo_rows", lambda: thinned)
+
+    recorder = _Recorder()
+    written = seed_mod.install(recorder)
+
+    assert written["proj.record"] == 0
+    assert not any("proj" in statement for statement, _ in recorder.calls)
+    assert written["auth.principal"] == len(demo.principal_rows())
+
+
+def test_a_trigger_written_table_named_oddly_stops_the_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`TRIGGER_WRITTEN` is interpolated into a DELETE the same way `REMOVAL_KEYS` is, and its
+    validation was reached by nothing: both constants are written here and always valid, so
+    every object any test builds is valid. That is the exact shape this repository's guard
+    audit keeps finding.
+
+    Delete this and the validation on the first statement `remove` runs becomes removable,
+    and it is a DELETE.
+    """
+    monkeypatch.setattr(
+        seed_mod, "TRIGGER_WRITTEN", {"gate.grants_version": 'principal_id" OR 1=1 --'}
+    )
+    with pytest.raises(ValueError, match="ordinary identifier"):
+        seed_mod.remove(_Recorder())
+
+
+def test_a_removal_column_that_is_not_an_identifier_stops_the_removal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same validation on the demo's own tables, and the same reason it was unreachable.
+    A DELETE is the one statement in this module where an unchecked interpolation cannot be
+    undone by re-running anything.
+
+    Delete this and `remove` will build a DELETE round whatever `REMOVAL_KEYS` holds.
+    """
+    monkeypatch.setattr(
+        seed_mod, "REMOVAL_KEYS", dict(seed_mod.REMOVAL_KEYS) | {"auth.principal": "id; drop"}
+    )
+    with pytest.raises(ValueError, match="ordinary identifier"):
+        seed_mod.remove(_Recorder())
+
+
+# ------------------------------------------------- the command line CI actually runs
+class _Both:
+    """An engine that hands one executor to `begin` and to `connect` alike."""
+
+    def __init__(self, executor: object) -> None:
+        self._executor = executor
+
+    def begin(self) -> Any:
+        return nullcontext(self._executor)
+
+    def connect(self) -> Any:
+        return nullcontext(self._executor)
+
+    def dispose(self) -> None:
+        return None
+
+
+def _command(monkeypatch: pytest.MonkeyPatch, executor: object) -> None:
+    """Point `main` at one executor, with a URL in the environment."""
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
+    monkeypatch.setattr(seed_mod, "create_engine", lambda *_a, **_k: _Both(executor))
+
+
+def test_the_removal_subcommand_is_reachable_from_the_command_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Every subcommand below is run by the CI install job and by no test until now.**
+    `brain.ops.guards` reported `--remove`, `--smoke`, `--ask` and the answer comparison as
+    survivors at depth one and depth two on 2026-09-11: the functions underneath were tested
+    and the dispatch that reaches them was not, so a flag could be renamed or dropped and
+    every test here would still pass while the job that proves an install works broke.
+
+    Delete this and `--remove` can stop being wired up, and M41.2.6's smallest testable half
+    goes with it.
+    """
+    recorder = _Recorder()
+    _command(monkeypatch, recorder)
+
+    assert seed_mod.main(["--remove"]) == 0
+    assert recorder.calls
+    assert all(statement.startswith("DELETE FROM ") for statement, _ in recorder.calls)
+
+
+def test_the_smoke_subcommand_answers_zero_and_a_wrong_answer_is_a_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--smoke` is the whole of the CI install job's assertion, so the comparison has to be
+    able to fail. It compares what came out of the database against what `brain.demo`
+    declared, and a comparison nothing has ever seen fail is a comparison that might be
+    between a constant and itself.
+
+    Both directions here: a seeded database exits zero, and a migrated one that was never
+    seeded exits one.
+
+    Delete this and the exit code can be pinned at zero, and the CI step that exists to catch
+    an install that never seeded passes on one.
+    """
+    _command(monkeypatch, _Reader(list(demo.rule_rows()), list(demo.record_rows())))
+    assert seed_mod.main(["--smoke"]) == 0
+
+    _command(monkeypatch, _Reader([], []))
+    assert seed_mod.main(["--smoke"]) == 1
+
+
+def test_the_ask_subcommand_answers_and_refuses_an_empty_question(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`--ask` with nothing after it used to be a flag with no test at all, and the branch
+    that refuses it is the difference between a usage message and asking the database the
+    empty string, which matches no rule and prints the same `no answer` a real absence does.
+
+    The CI job asks two questions through this flag and compares the answers, so a usage
+    error printed as an answer would make that comparison pass for the wrong reason.
+
+    Delete this and the dispatch and its refusal both go untested.
+    """
+    _command(monkeypatch, _Reader(list(demo.rule_rows()), list(demo.record_rows())))
+    assert seed_mod.main(["--ask", "what is the status of Ashgrove Retail Group"]) == 0
+    assert capsys.readouterr().out.strip() == "active"
+
+    assert seed_mod.main(["--ask"]) == 2
+    assert "needs a question" in capsys.readouterr().err
+
+
+def test_already_loaded_asks_the_database_rather_than_assuming_either_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The thin half of the second-run answer, and the half a stub hides. Every test above
+    that exercises the short-circuit replaces `already_loaded`, so the function itself - the
+    engine it opens and the `not` in front of `not_yet_loaded` - is reached by nothing unless
+    something drives it.
+
+    Inverted, it would report every database as already holding the demo, and the command
+    would report success on a fresh install having written nothing at all. That is the worst
+    failure this module has available and it is one character.
+
+    Delete this and the wrapper goes untested in both directions.
+    """
+    monkeypatch.setattr(seed_mod, "create_engine", lambda *_a, **_k: _Both(_Present(_everything())))
+    assert seed_mod.already_loaded("postgresql://x") is True
+
+    monkeypatch.setattr(seed_mod, "create_engine", lambda *_a, **_k: _Both(_Present(())))
+    assert seed_mod.already_loaded("postgresql://x") is False
+
+
+def test_a_presence_question_that_cannot_be_asked_is_answered_no(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The short-circuit runs only after the guard has refused, so it can turn a refusal into
+    a success and nothing else. A database migrated halfway, or migrated by something else,
+    makes the presence read raise, and letting that out would replace a refusal somebody can
+    act on with a traceback on the first command of an install.
+
+    Answering no leaves exactly the behaviour there was before the short-circuit existed,
+    which is the only safe direction for a fallback on this path.
+
+    Deleting this lets the fallback be widened to True, which would turn every database the
+    read cannot be run against into one the seed reports as already holding the demo.
+    """
+
+    class _Broken:
+        def execute(self, statement: object, parameters: Any = None, /) -> Any:
+            raise ProgrammingError("select", {}, Exception("relation does not exist"))
+
+    monkeypatch.setattr(seed_mod, "create_engine", lambda *_a, **_k: _Both(_Broken()))
+    assert seed_mod.already_loaded("postgresql://x") is False
+
+    monkeypatch.setattr(
+        seed_mod, "looks_like_production", lambda _url: (True, "know.item (4,102 rows)")
+    )
+    assert seed_mod.seed("postgresql://x") == 1
+
+
+def test_a_declared_table_that_contributes_no_identifier_stops_the_presence_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**Found by a mutation that survived.** The code skipped such a table, and skipping it
+    changed nothing a test could see: an empty bound matches nothing and extends nothing. What
+    it changed was the answer above it. A table contributing no identifier is silently agreed
+    to be present, so `already_loaded` reports the demo whole while a whole table of it is
+    missing, and the seed then declines to write the rows that are not there.
+
+    It takes two constants in two modules disagreeing: `brain.demo.demo_identifiers` and
+    `brain.seed.REMOVAL_KEYS` have to name the same column for a table's presence to mean
+    anything, and nothing else compares them.
+
+    Deleting this leaves the refusal unreachable again, and the failure it prevents is an
+    install that reports success having written a quarter of the demo.
+    """
+    monkeypatch.setattr(
+        demo, "demo_identifiers", lambda: tuple(one["id"] for one in demo.principal_rows())
+    )
+
+    with pytest.raises(ValueError, match="contributes no identifier"):
+        seed_mod.not_yet_loaded(_Present(()))

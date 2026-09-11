@@ -10,12 +10,18 @@ Task ids: M41.2.7 M41.2.8
 
 from __future__ import annotations
 
+import ast
+import dataclasses
+import importlib
+from pathlib import Path
+
 import pytest
 
 from brain.agents.catalogue import CATALOGUE
 from brain.demo import DEMO_PREFIX, principal_rows, record_rows
 from brain.identity.roles import Role
 from brain.ops.starter import (
+    APPLIED_BY,
     DEFAULTS,
     PACKS,
     Default,
@@ -204,6 +210,99 @@ def test_the_diagnostic_refuses_a_demo_row_and_a_setting_defaulted_twice() -> No
     assert any("opens blank" in one for one in empty), empty
 
     assert starter_gaps() == ()
+
+
+# --- where the starter set is applied, and where it is not -------------------------------------
+
+
+def test_the_seed_command_does_not_apply_the_starter_set() -> None:
+    """**The refusal M41.2.8 asks for, stated against the one command that would break it.**
+    `brain.seed` is the obvious host: it is the only thing in this repository that writes rows
+    at install time, and `make seed` is already in the Makefile. Wiring the starter set into it
+    would mean a client who wanted the six roles had to load Northwind Facilities to get them,
+    which is the conflation this module exists to refuse.
+
+    There is a second reason, measured on 2026-09-11 against a real PostgreSQL and recorded in
+    `A_FURNISHED_SYSTEM_AND_A_DEMONSTRATION_HAVE_OPPOSITE_PRECONDITIONS`: the seed refuses a
+    database holding rows it does not own, and the database the starter set is wanted in holds
+    the first administrator already. A seed that applied it would refuse exactly when it was
+    needed.
+
+    Asserted on the import graph rather than on a substring, because a module that reaches this
+    one through another module has the same effect and reads as unrelated.
+
+    Delete this and the two deliveries can become one command, and the symptom is invented
+    contract values in a real company's database looking exactly like their own.
+    """
+    source = (Path(__file__).resolve().parents[2] / "src" / "brain" / "seed.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            # **`from brain.ops import starter` is the form that got past the first version
+            # of this test, and a mutation is how that was found.** Reading `node.module`
+            # alone sees `brain.ops`, which is not the starter set by any spelling, so the
+            # assertion below passed with that import sitting in the file. The name has to be
+            # rejoined to the module for the dotted path to be what is checked.
+            where = node.module or ""
+            imported.add(where)
+            imported.update(f"{where}.{alias.name}".strip(".") for alias in node.names)
+
+    assert imported, "nothing parsed, so this test proves nothing"
+    assert not any(one.startswith("brain.ops.starter") for one in imported), sorted(imported)
+    assert "starter" not in {one.rsplit(".", 1)[-1] for one in imported}
+
+    # And the other direction, which catches a wiring that does not go through an import: the
+    # seed writes none of the tables the furniture lives in. Somebody applying the starter set
+    # from here would have to add one of these to `brain.demo.TABLES` to do it.
+    import brain.seed as seed_mod
+
+    furniture = {
+        "gate.capability_pack",
+        "gate.capability_pack_assignment",
+        "agent.template_instance",
+        "agent.template_version",
+        "ops.setting",
+    }
+    assert seed_mod.WRITES, "the seed writes nothing, so this test proves nothing"
+    assert not furniture & set(seed_mod.WRITES), sorted(furniture & set(seed_mod.WRITES))
+    assert not furniture & set(seed_mod.REMOVAL_KEYS)
+
+
+def test_the_module_the_starter_set_is_applied_by_exists_and_can_say_it_is_done() -> None:
+    """**A paragraph naming somewhere is a paragraph that outlives it.** `APPLIED_BY` names
+    `brain.deployment.installer` and the field on its `Step` that makes a write safe to run
+    twice, and this fails if either goes away, which is the shape `brain.seed.THE_ONLY_TAKER`
+    and `brain.ops.controls.NOT_A_SCHEDULE` both take for the same reason.
+
+    The `already_done` field is the load-bearing half.
+    `A_MIGRATION_THAT_INSERTS_ROWS_TAKES_THEM_BACK_ON_THE_NEXT_UPGRADE` argues the starter set
+    is applied once, at install, and `Step` is the only place in this repository where "applied
+    once" is a property a step must declare rather than a convention somebody keeps. Naming a
+    host that could not express that would be naming the wrong host.
+
+    Delete this and the decision becomes prose pointing at a module that may not exist, which
+    is how a leaf comes to be claimed with nothing behind it.
+    """
+    module_name, field = APPLIED_BY
+    module = importlib.import_module(module_name)
+
+    step = module.Step
+    assert dataclasses.is_dataclass(step)
+    fields = {one.name for one in dataclasses.fields(step)}
+    assert field in fields, f"{module_name}.Step has no {field!r}: {sorted(fields)}"
+    assert "changes" in fields, "nothing marks a step as writing, so `already_done` guards what?"
+
+    # And it is a plan rather than a single function, so there is somewhere for a step to go.
+    assert module.PLAN, "the install plan is empty"
+    assert all(one.already_done for one in module.PLAN if one.changes), (
+        "a step that writes cannot say it is done, so 'applied once at install' is not a "
+        "property this plan can express"
+    )
 
 
 def test_a_new_install_starts_by_asking_a_person_rather_than_trusting_itself() -> None:
