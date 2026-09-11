@@ -327,6 +327,97 @@ provider, which I do not hold and should not.
 
 # Answered
 
+## 54. Windows blocked Python itself for about an hour - DONE: you installed the signed one
+
+**Closed 2026-09-11, in about ten minutes from you reading it.** You ran the `winget` line, I
+rebuilt the project's environment against that copy, and every gate works again: the suite,
+mypy, both formatting checks, all three sweeps, the mutation harness and the git hooks. The
+three pieces of work that were waiting are verified, mutated and committed.
+
+**The PostgreSQL half of the same fix failed, and that is item 53 rather than this one.** You
+ran `winget install --id PostgreSQL.PostgreSQL.17` and the installer exited 1, with Windows
+reporting that it had blocked `initdb.exe`. So the same policy that blocked the Python
+interpreter also blocks the binaries inside PostgreSQL's own installer, and the database
+driver is still unavailable here: eight tests fail and sixteen files cannot be collected, all
+on one import, all of them run by CI against a real database on every commit. Do not retry
+that install; it will fail the same way. Item 53 carries what is left.
+
+**Two things worth keeping from the hour.** The mutation harness broke, because the throwaway
+worktree it runs in has no environment and `uv` went looking for an interpreter of its own,
+which was the blocked one. Fixing that turned up something better: the harness had been
+letting a subprocess choose the interpreter, so a mutation run was evidence about an
+environment nobody had looked at rather than the one the caller verified in. It names the
+interpreter now.
+
+And the first attempt at that fix was wrong in a way one test caught. Pointing it at this
+project's virtual environment made the subprocess import the code from the main tree rather
+than from the worktree, so every mutation would have come back as a survivor and the harness
+would have reported a perfect score at the moment it stopped testing anything. Nineteen of the
+twenty tests in that file passed; the one that failed was the one written to notice exactly
+that.
+
+**What it cost.** About an hour, no work lost, and nothing committed unverified. I did not
+force the commit through with `--no-verify` while the hooks were down: every push here
+deploys, and bypassing the gate that checks task claims is not a habit worth starting in order
+to land a document.
+
+**What you do, and it is one command.** Kept below because the same policy can block the next
+unsigned binary anything installs, and this is the fix for the class rather than the instance.
+
+```
+winget install --id Python.Python.3.13 --source winget --accept-package-agreements
+```
+
+**Why that one.** The installer from python.org is signed by the Python Software Foundation,
+and a signed binary is what Smart App Control admits without argument. The copy being blocked
+is the one `uv` downloads and manages itself, which is unsigned, and that is the whole of the
+difference.
+
+**What is broken right now.** Every check on this machine. Not the code: the tools.
+
+```
+uv run python -c "print('ok')"
+  Unable to create process using '...\.venv\Scripts\python.exe':
+  An Application Control policy has blocked this file.
+```
+
+The same for the interpreter that virtual environment was built from, so there is no Python on
+this machine at all. The test suite, mypy, both formatting gates, all three sweeps and the
+mutation harness are unavailable, and so are `git commit` and `git push`, because the commit
+hook and the pre-push hook both run Python. The repository is fine and `main` is green; I
+simply cannot run anything against it.
+
+**This is item 53 again and it has got worse, which that item said it would.** Yesterday the
+same policy blocked one library the database driver loads, for about four hours, and then
+stopped on its own. It closed with the sentence "it can happen again, to this file or to the
+next unsigned one a package installs, and it will present the same way: a gate failing with no
+gate having an opinion." It happened again inside a day, and this time it is the interpreter
+rather than a library, so nothing runs at all rather than four fifths of it.
+
+**What is waiting on this.** Three pieces of work are finished and sitting uncommitted,
+roughly four thousand three hundred lines with their tests: the embedding column width as an
+install setting (item 34), the budget ceiling and the department admin screens (item 38), and
+the console's running-version indicator (M42.3.9). I will not commit any of them until I can
+run their tests and mutate their guards, because a change nobody has run is a draft, and this
+repository's whole practice is that a suite passing is not evidence and a mutation table is.
+
+**Options.**
+
+- **Install the signed Python, which is the recommendation.** One command, it switches nothing
+  off, and it fixes the class rather than this instance: every unsigned tool `uv` fetches later
+  is subject to the same block, and a signed interpreter is not.
+- Wait for it to clear on its own, as item 53 did. It may. Nothing can be built or verified
+  meanwhile, and there is no way to tell how long, because what changes is a reputation signal
+  held by Microsoft rather than anything on your machine.
+- Turn Smart App Control off. It is one setting and I would argue against it hard: on this
+  version of Windows it cannot be turned back on without reinstalling the operating system, so
+  it trades a five-minute fix for a permanent reduction in what the machine refuses to run.
+
+**What this does not affect.** CI runs the full suite against a real database on every commit,
+so nothing that reaches `main` is unchecked whatever happens here. The live system is
+untouched.
+
+
 ## 53. Windows blocked the database driver for four hours and then stopped - DONE: nothing was done
 
 **Closed 2026-09-10, and nobody did anything.** The driver imports again, the whole suite runs, and Smart App Control is still on and still enforcing: measured after the fact,
