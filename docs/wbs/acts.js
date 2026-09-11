@@ -274,6 +274,57 @@ const ACTS = {
     text: "Rotate the identity provider's bootstrap administrator password once the account it created has been deleted",
     why: "conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off",
   },
+
+  // Added 2026-09-11. THIS FILE HELD NOTHING BUT M37 UNTIL NOW, and that was an omission
+  // rather than a decision: every sentence at the top of this file about mixing two kinds of
+  // work into one denominator applies to M38.2.1 exactly as it applied to M37, and nobody
+  // had looked outside the module the file was written for.
+  //
+  // M38.2.1 is the release ritual performed at the end of each wave, and three of its four
+  // open leaves are things a person does to a running system on a particular day. They were
+  // being counted as code somebody had not got round to writing, which makes the buildable
+  // figure lower than the truth and puts three items on the list of work that no commit can
+  // ever remove from it.
+  //
+  // M38.2.2 is deliberately NOT flagged and the distinction is the useful one. Those leaves
+  // are the evidence that a wave is done, and evidence is a test: M38.2.2.1 and M38.2.2.3
+  // were both closed by commits that drove the whole composition end to end, and the wave-2
+  // one is the model for the rest. A milestone is buildable; the ritual around it is not.
+  //
+  // M38.2.1.2 is also not flagged and is not buildable as written either. It reads "run the
+  // full invariant suite against staging", and measured on 2026-09-11 that suite is 1305
+  // tests which pass identically with and without a database, because it reads source files
+  // from disk rather than asking a running system anything. The image ships no tests, by
+  // design. So running it against staging either re-tests the checkout, which is worth
+  // nothing, or ships a test suite into a production image, which is worse than nothing.
+  //
+  // Left open and unflagged on purpose. It is not an act, because nothing a person does on
+  // the day would satisfy it either, and flagging it would move it onto a checklist an
+  // operator is meant to be able to work through. Adding the suite to the `stack` job was
+  // considered and rejected as theatre: that job and the `static` job run the same checkout,
+  // so the second run would prove exactly what the first already proved while looking like
+  // coverage. What the leaf is reaching for is real and is a different check, that the image
+  // about to be deployed carries the source the commit says it does, which `schema_check`
+  // already does for the schema and nothing does for the code. That is a leaf somebody should
+  // write, and it is not this one.
+  "M38.2.1.3": {
+    kind: "ACT",
+    gate: false,
+    text: "Deploy to production",
+    why: "the pipeline that does it is built, closed by the wave-zero milestone, and has deployed this repository all day. What is left is somebody deciding a particular release goes out on a particular day, which is the act, and no commit closes it",
+  },
+  "M38.2.1.4": {
+    kind: "ACT",
+    gate: false,
+    text: "Smoke test: one real question answered end to end by a real person",
+    why: "the leaf says a real person in as many words, and that is the whole content of it. A fixture asking the same question is the wave-one milestone, which is a different leaf and is buildable",
+  },
+  "M38.2.1.5": {
+    kind: "ACT",
+    gate: false,
+    text: "Restore drill from wave three onward",
+    why: "a drill is somebody restoring a real backup onto real hardware and timing it. The machinery it exercises is code and is the recovery screen leaf under M27; the drill is the act, and `brain.launch.service_level` already refuses to report a recovery figure that rests on a schedule rather than on a copy somebody made",
+  },
 };
 
 //: Why the two conditional acceptance leaves do not gate the cutover, kept here because the

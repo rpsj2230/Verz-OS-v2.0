@@ -4,7 +4,7 @@
 
 Work in the plan that no commit can close. Every item here is done by a person, on the week of a migration, with a client. They are counted separately from the build for that reason: the percentage on the build page measures work that closes by being written, and these do not.
 
-36 items, 7 of which gate the cutover.
+39 items, 7 of which gate the cutover.
 
 **The items marked GATES CUTOVER are refused rather than listed.** `brain.migration.decommission` will not report a completed cutover while any of them is unrecorded, because their absence has a security consequence and a list nothing gates is a list nobody reads.
 
@@ -97,3 +97,16 @@ Work in the plan that no commit can close. Every item here is done by a person, 
   - the same shape as the OAuth grants two groups up: a credential left behind after it has served its purpose, on a service reachable from outside. It is worse than an unused password because nothing about an unused admin account looks different on the day it is used
 - [ ] `M37.6.1.4` Rotate the identity provider's bootstrap administrator password once the account it created has been deleted
   - conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off
+
+## M38 Continuous delivery and live status
+
+### M38.2 Deploy at the end of every wave
+
+#### M38.2.1 Wave close ritual
+
+- [ ] `M38.2.1.3` Deploy to production
+  - the pipeline that does it is built, closed by the wave-zero milestone, and has deployed this repository all day. What is left is somebody deciding a particular release goes out on a particular day, which is the act, and no commit closes it
+- [ ] `M38.2.1.4` Smoke test: one real question answered end to end by a real person
+  - the leaf says a real person in as many words, and that is the whole content of it. A fixture asking the same question is the wave-one milestone, which is a different leaf and is buildable
+- [ ] `M38.2.1.5` Restore drill from wave three onward
+  - a drill is somebody restoring a real backup onto real hardware and timing it. The machinery it exercises is code and is the recovery screen leaf under M27; the drill is the act, and `brain.launch.service_level` already refuses to report a recovery figure that rests on a schedule rather than on a copy somebody made
