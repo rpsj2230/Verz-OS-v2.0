@@ -54,6 +54,40 @@ Some of them are worth knowing before you build a dashboard:
 - A worker is ready when its queue driver has fetched at least once and the database is
   reachable.
 
+## Installing the job queue, which is not part of `alembic upgrade`
+
+The queue's tables are the driver's own, versioned by the driver and created by the DDL it
+ships. Transcribing that into a migration would fork it at the driver's next release, with no
+error until a query names a column that is not there, so these four steps are applied by an
+operator rather than by the migration history. That argument is
+`brain.ops.queue.THE_QUEUE_SCHEMA_IS_NOT_ALEMBICS` and it is why this section exists at all.
+
+Until step four has run, `python -m brain.ops.sweeps rls` is red, because the driver's tables
+arrive with row-level security off in a schema that sweep enumerates. A red sweep with no
+remedy written down is a sweep somebody switches off, so the remedy is here.
+
+`python -m brain.ops.worker --deploy-plan` prints this same plan with the full reasoning for
+each step, and `--install-queue` runs steps two to four. Run them on a direct connection and
+never through the pooler: the driver needs `LISTEN`, which the pooler does not carry in
+transaction mode.
+
+<!-- checked: the steps that install the job queue -->
+
+| Step | What it does | Skippable |
+| --- | --- | --- |
+| `dependency` | The driver is in the project's dependencies and the lock file. Without it nothing can be enqueued or fetched, and every step below is a command that cannot be run. | required |
+| `schema` | `CREATE SCHEMA IF NOT EXISTS ops`, because the driver's DDL is unqualified and lands wherever `search_path` points, which on a fresh connection is `public`. | optional |
+| `tables` | `python -m brain.ops.worker --install-queue`, which applies the driver's own schema manager. It is not idempotent: run against a database that already has the tables it raises `DuplicateObject`, so this is applied once and reported as present afterwards. | required |
+| `row_level_security` | `ALTER TABLE ... ENABLE ROW LEVEL SECURITY` for every table the step above created, derived from the catalogue rather than from a transcribed list, so a table a future driver release adds is secured by the run that creates it. | required |
+
+The skippable column is the one to read carefully rather than the one to skim. `schema` is
+optional only because the migration history already creates `ops` on any database the
+application has started against; on a database that has never run a migration it is not
+optional at all. Every other row is required, and `tables` is the row where getting this wrong
+costs the most in both directions: skipping it leaves a worker that starts and drains nothing,
+and repeating it raises on a database that was already correct.
+
+
 ## Logging
 
 **The audit ledger is not optional and is not a log.** It records who read what, it is

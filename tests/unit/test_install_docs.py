@@ -53,7 +53,10 @@ from brain.ops.install_docs import (
     MANIFEST_BUILDER,
     MECHANISMS_MARKER,
     NO_CEILING,
+    OPTIONAL_STEP,
     PORTS_MARKER,
+    QUEUE_STEPS_MARKER,
+    REQUIRED_STEP,
     STEPS_MARKER,
     THE_REGISTER_IS_MORE_THAN_THE_TEMPLATE,
     TOOL_NAMES_ARE_NOT_A_PROPERTY_OF_EVERY_CONNECTOR,
@@ -73,12 +76,14 @@ from brain.ops.install_docs import (
     minted_variables,
     port_gaps,
     profiles_cell,
+    queue_step_gaps,
     script_variables,
     step_gaps,
     table_after,
     variables,
     wizard_settings,
 )
+from brain.ops.queue import DeployStep, StepKind
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.ops.wiring import PROFILES, WiringError
 from brain.setup_wizard import WIZARD
@@ -237,6 +242,7 @@ PORTS_HEADER = "| Service | Port | Who may reach it |"
 MECHANISMS_HEADER = "| Mechanism | What it would guard | Started by |"
 STEPS_HEADER = "| Step | What it does | If it fails |"
 CONNECTORS_HEADER = "| Connector | Transport | Pinned to | Access | Enforces | Ceiling |"
+QUEUE_STEPS_HEADER = "| Step | What it does | Skippable |"
 
 
 def a_variable(name: str, **overrides: Any) -> Variable:
@@ -1020,3 +1026,147 @@ def test_a_mechanism_row_with_too_few_cells_is_a_finding() -> None:
     )
 
     assert any("every row states the mechanism" in one for one in found)
+
+
+# ---------------------------------------------------- the queue install steps (M32.4.1.1)
+
+
+def a_deploy_step(kind: str, *, order: int = 1, optional: bool = False) -> DeployStep:
+    """One step of the queue's deploy plan, for exercising a refusal against a built plan."""
+    return DeployStep(
+        order=order,
+        kind=StepKind(kind),
+        what=f"the {kind} step",
+        why=f"because the {kind} step is needed",
+        optional=optional,
+    )
+
+
+def test_the_operations_chapter_names_every_step_that_installs_the_queue() -> None:
+    """**The chapter said nothing about the queue at all, and `--deploy-plan` printed a plan
+    nobody was told to run.**
+
+    The queue's tables are the driver's and are created by DDL it ships, so they are outside
+    `alembic upgrade` and an operator has to apply them. Until the last of those steps has run,
+    `brain.ops.sweeps rls` is red on tables that arrived with row-level security off, and a red
+    sweep with no remedy written down is a sweep somebody switches off.
+
+    Held against `brain.ops.queue.DEPLOY_PLAN` rather than written out, for the reason
+    `step_gaps` gives about the installer's plan: a hand-typed list of steps is a second plan,
+    and the second one goes stale because nothing imports it.
+
+    Delete this and the chapter drifts back to being silent about the queue, which is the state
+    it was in on 2026-09-11 with the driver already shipped."""
+    assert queue_step_gaps(guide("operations.md")) == ()
+
+
+def test_a_queue_step_the_chapter_does_not_list_leaves_the_queue_half_installed() -> None:
+    """The direction that costs an operator an outage rather than a puzzle: they follow the
+    chapter to the end, the worker starts, and it drains nothing.
+
+    Delete this and a step appended to the plan is invisible to every operator following the
+    chapter."""
+    found = queue_step_gaps(
+        a_table(
+            QUEUE_STEPS_MARKER,
+            QUEUE_STEPS_HEADER,
+            "| `dependency` | the driver is in the lock file | required |",
+        ),
+        plan=(a_deploy_step("dependency"), a_deploy_step("tables", order=2)),
+    )
+
+    assert found == (
+        "'tables': the queue install runs this step and the chapter does not list it, so an "
+        "operator following the chapter leaves the queue half installed",
+    )
+
+
+def test_a_row_for_a_queue_step_the_install_does_not_run_is_a_finding() -> None:
+    """The quieter direction. A step removed from the plan and left in the chapter reads as
+    coverage, so nobody looks for it, and the operator runs a command that no longer applies.
+
+    Delete this and the chapter is longer than the install for ever."""
+    found = queue_step_gaps(
+        a_table(
+            QUEUE_STEPS_MARKER,
+            QUEUE_STEPS_HEADER,
+            "| `dependency` | the driver is in the lock file | required |",
+            "| `vacuum` | something nobody runs any more | required |",
+        ),
+        plan=(a_deploy_step("dependency"),),
+    )
+
+    assert found == ("'vacuum': the chapter lists a queue step the install does not run",)
+
+
+def test_a_step_the_chapter_says_may_be_skipped_and_the_plan_requires_is_a_finding() -> None:
+    """**The column an operator acts on, and the one where both mistakes are expensive.** A
+    required step described as optional is a queue that is never finished installing. An
+    optional step described as required is an operator running the driver's schema command a
+    second time, which raises `DuplicateObject` because it is not idempotent, against a
+    database that was already correct.
+
+    Asserted with the plan's own flag rather than the word typed here, so the two cannot agree
+    with each other while both disagreeing with the plan.
+
+    Delete this and the chapter can call anything skippable and the check still passes."""
+    found = queue_step_gaps(
+        a_table(
+            QUEUE_STEPS_MARKER,
+            QUEUE_STEPS_HEADER,
+            f"| `tables` | applies the driver's schema manager | {OPTIONAL_STEP} |",
+        ),
+        plan=(a_deploy_step("tables", optional=False),),
+    )
+
+    assert found == (
+        f"'tables': the chapter calls it {OPTIONAL_STEP!r} and the plan says "
+        f"{REQUIRED_STEP!r}, which is the column that decides whether somebody runs it",
+    )
+
+
+def test_the_queue_steps_are_checked_in_the_order_the_install_runs_them() -> None:
+    """Row-level security is enabled over the tables the previous step created, so a chapter
+    naming that step first is a chapter whose reader secures nothing and sees no error.
+
+    Reported only when nothing is missing or extra, for the reason `step_gaps` gives: a list
+    with a step missing is out of order by arithmetic, and saying so twice buries the finding
+    somebody can act on.
+
+    Delete this and every step can be present and the sequence useless."""
+    found = queue_step_gaps(
+        a_table(
+            QUEUE_STEPS_MARKER,
+            QUEUE_STEPS_HEADER,
+            "| `row_level_security` | enables it on what was created | required |",
+            "| `tables` | creates them | required |",
+        ),
+        plan=(
+            a_deploy_step("tables", order=1),
+            a_deploy_step("row_level_security", order=2),
+        ),
+    )
+
+    assert found == (
+        "the chapter names every queue step and not in the order they run: it reads "
+        "['row_level_security', 'tables'] and the install runs ['tables', "
+        "'row_level_security']",
+    )
+
+
+def test_a_queue_step_row_missing_a_cell_is_reported_rather_than_read() -> None:
+    """A three-column table with a two-column row is a formatting slip, and reading it anyway
+    would take the row's second cell as its skippability: a step would silently be declared
+    optional because somebody dropped a pipe.
+
+    Delete this and a malformed row either crashes on an index or, worse, answers.
+    """
+    found = queue_step_gaps(
+        a_table(QUEUE_STEPS_MARKER, QUEUE_STEPS_HEADER, "| `tables` | creates them |"),
+        plan=(),
+    )
+
+    assert found == (
+        "a row with 2 cell(s) reads ('`tables`', 'creates them'); every row states the step, "
+        "what it does and whether an install may skip it",
+    )

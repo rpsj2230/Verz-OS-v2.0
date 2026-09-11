@@ -76,6 +76,7 @@ from typing import Any, Final
 from brain.connectors.manifest import ConnectorManifest
 from brain.deployment.installer import Step as InstallStep
 from brain.ops.controls import CONTROLS, Control
+from brain.ops.queue import DeployStep
 from brain.ops.wiring import PROFILES, assert_known_profile
 from brain.setup_wizard import Step as WizardStep
 
@@ -345,6 +346,23 @@ STEPS_MARKER: Final = "<!-- checked: the steps the installer runs -->"
 MECHANISMS_MARKER: Final = (
     "<!-- checked: every scheduled mechanism and whether anything starts it -->"
 )
+#: Where the operations chapter lists the steps that install the job queue.
+#:
+#: A second marker rather than a second table under `STEPS_MARKER`, because these are a second
+#: plan rather than more of the first one. `brain.deployment.installer.PLAN` runs on the
+#: client's server once; `brain.ops.queue.DEPLOY_PLAN` is applied against the database by an
+#: operator, some of it optional depending on what the database has already seen. Merging them
+#: would make every row need a column saying which install it belongs to, which is the same
+#: information in a worse place.
+QUEUE_STEPS_MARKER: Final = "<!-- checked: the steps that install the job queue -->"
+
+#: The cell that marks a queue step an install may already have satisfied.
+#:
+#: Spelled in the table rather than left to an empty cell, for the reason `NO_CEILING` is
+#: spelled: an empty cell reads as one somebody did not fill in, and the difference between
+#: "you may skip this" and "nobody said" is exactly what an operator is reading the column for.
+REQUIRED_STEP: Final = "required"
+OPTIONAL_STEP: Final = "optional"
 
 #: One connector's section heading, which is its manifest name in a code span. Matched rather
 #: than searched for by name, so a heading for a connector nobody has is a finding.
@@ -716,6 +734,87 @@ def mechanism_gaps(guide: str, *, controls: Sequence[Control] | None = None) -> 
         for name in sorted(set(stated) & set(declared))
         if stated[name] != declared[name]
     )
+    return tuple(findings)
+
+
+def queue_step_gaps(guide: str, *, plan: Sequence[DeployStep] | None = None) -> tuple[str, ...]:
+    """Every way the operations chapter and the queue's deploy plan disagree.
+
+    **The gap this closes was found by the session that built the plan, not by any check.**
+    `brain.ops.queue.DEPLOY_PLAN` is the four steps that turn a database with a driver
+    installed into one with a queue on it, and `python -m brain.ops.worker --deploy-plan`
+    prints them. Nothing pointed an operator at that command, and the chapter they would
+    actually open said nothing about the queue at all. A plan printed by a command nobody is
+    told to run is the documentation equivalent of this repository's recurring defect.
+
+    `step_gaps` makes the whole argument for holding a guide against a plan rather than
+    letting it list the steps by hand, and this is that argument applied to the second plan.
+    What is different is which cell matters most. There, a missing step leaves an install one
+    step short; here, the step most worth getting right is the one an operator may skip. The
+    driver's schema DDL is not idempotent, so a step described as optional that is not is an
+    install that stops, and a step described as required that is not is an operator running
+    something that raises `DuplicateObject` on a database that was already correct. So the
+    optional column is checked as a value and not merely as a presence.
+
+    **Matched on `kind` rather than on the sentence.** `DeployStep.what` is prose meant to be
+    read, and holding a table against prose means the table has to restate a sentence that can
+    be improved, so improving it breaks the check and the fix is to paste the new wording
+    across. `kind` is the field the plan's own tests treat as the stable identifier for exactly
+    this reason.
+
+    Order is reported only when nothing is missing or extra, for the reason `step_gaps` gives:
+    a list with a step missing is out of order by arithmetic, and saying so twice buries the
+    finding somebody can act on.
+
+    `plan` is a parameter defaulting to the real one, the shape `mechanism_gaps` and
+    `backup_policy_gaps` both take: a check that can only be run against today's plan is a
+    check whose failure mode cannot be tested.
+    """
+    from brain.ops.queue import DEPLOY_PLAN
+
+    steps = DEPLOY_PLAN if plan is None else plan
+    findings: list[str] = []
+    stated: list[str] = []
+    optionality: dict[str, str] = {}
+    for cells in table_after(guide, QUEUE_STEPS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the step, "
+                "what it does and whether an install may skip it"
+            )
+            continue
+        kind = bare(cells[0])
+        stated.append(kind)
+        optionality[kind] = bare(cells[2])
+    # `.value` rather than the member, and it is not cosmetic. `StepKind` is a `StrEnum`, so
+    # a member compares equal to its own string at runtime: every check below passed while
+    # mypy refused the dictionary lookups, because the table yields `str` and the plan yields
+    # members and only the type checker could see the difference. One vocabulary throughout
+    # is what keeps a finding here about the document rather than about a conversion.
+    named = [one.kind.value for one in steps]
+    skippable = {one.kind.value: OPTIONAL_STEP if one.optional else REQUIRED_STEP for one in steps}
+    findings.extend(
+        f"{kind!r}: the queue install runs this step and the chapter does not list it, so an "
+        "operator following the chapter leaves the queue half installed"
+        for kind in named
+        if kind not in stated
+    )
+    findings.extend(
+        f"{kind!r}: the chapter lists a queue step the install does not run"
+        for kind in stated
+        if kind not in named
+    )
+    findings.extend(
+        f"{kind!r}: the chapter calls it {optionality[kind]!r} and the plan says "
+        f"{skippable[kind]!r}, which is the column that decides whether somebody runs it"
+        for kind in sorted(set(stated) & set(named))
+        if optionality[kind] != skippable[kind]
+    )
+    if not findings and stated != named:
+        findings.append(
+            f"the chapter names every queue step and not in the order they run: it reads "
+            f"{stated} and the install runs {named}"
+        )
     return tuple(findings)
 
 
