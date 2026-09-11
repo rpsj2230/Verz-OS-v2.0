@@ -494,5 +494,28 @@ new. `brain.ops.mutation` and `ops/hooks/pre-push` both carry the same fix for t
 reason, and the harness one presented as a flaky test in the module whose whole job is to be
 believed.
 
+**That policy is the same one behind four separate blocks over three days, and the rule that
+predicts them took until 2026-09-11 to see: it refuses what Windows is asked to *start*, and
+not a library a process loads.** Everything it stopped was started or loaded as an image: the
+console shims above, the uv-managed CPython in `%APPDATA%\uv\python`, `initdb.exe` from inside
+PostgreSQL's installer, and `pq.cp313-win_amd64.pyd`, which is psycopg's driver and is an
+extension module. What it does not stop is `libpq.dll` from PostgreSQL's binaries-only zip,
+which is equally unsigned and loads through ctypes without complaint.
+
+So the two fixes that work are a signed interpreter (`winget install --id Python.Python.3.13`,
+then rebuild the venv from it) and that zip unpacked to `C:\pgsql` with its `bin` on PATH.
+`winget install --id PostgreSQL.PostgreSQL.17` does **not** work and will not: the installer
+exits 1 because the policy refuses the binaries it runs.
+
+**And anything that makes a throwaway worktree has to name its interpreter.** A fresh worktree
+has no environment, so uv goes looking for one and finds the managed copy that is blocked. Both
+`brain.ops.mutation` and `ops/hooks/pre-push` now pass `--python` derived from
+`sys.base_prefix`. That is right on its own terms as well as being the fix: a mutation run is
+evidence about the environment the caller verified in, and letting a subprocess choose made it
+evidence about one nobody had looked at. Pointing it at `sys.executable` instead is the trap
+next door, and it is worse: the venv's editable install resolves `brain` to the **main tree**,
+so the mutated file in the worktree is never read and every mutation comes back SURVIVED. One
+test in `test_mutation.py` catches that and nothing else does.
+
 And measure rather than assert. If you claim a thing is fixed, show the command and its output.
 If a test fails, say so and paste it. A report that rounds up is worse than no report.
