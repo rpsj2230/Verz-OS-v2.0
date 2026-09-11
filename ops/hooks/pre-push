@@ -33,6 +33,26 @@ if [ -z "$UV" ]; then
   exit 1
 fi
 
+# The interpreter is named rather than left to uv's resolution, for the worktree below.
+#
+# Measured on 2026-09-11. That worktree is a fresh checkout with no environment in it, so uv
+# went looking for one of its own and chose a managed CPython in its cache, which is unsigned,
+# which Windows Application Control refused: `os error 4551`. The push failed with no gate
+# having an opinion, which is the failure mode the comment further down is already about,
+# arriving one layer further out.
+#
+# This repository's own `.venv` is built from a signed interpreter, so its base is a signed
+# interpreter, and naming it means the worktree's environment is built from the same one this
+# machine already runs. `brain.ops.mutation` carries the same fix for the same reason.
+PYBASE="$("$UV" run python -c "import sys; print(sys.base_prefix)" 2>/dev/null || echo "")"
+if [ -n "$PYBASE" ] && [ -x "$PYBASE/python.exe" ]; then
+  NAMED_PYTHON="--python=$PYBASE/python.exe"
+elif [ -n "$PYBASE" ] && [ -x "$PYBASE/bin/python3" ]; then
+  NAMED_PYTHON="--python=$PYBASE/bin/python3"
+else
+  NAMED_PYTHON=""
+fi
+
 # Every gate below reads the working tree. That is the right thing to check most of the
 # time and it is not what is being pushed, and the difference has now shipped four broken
 # commits: a fixed file left unstaged passes every check here and fails in CI, because CI
@@ -46,7 +66,7 @@ fi
 echo "pre-push: the commit, not the working tree"
 HEADCHECK="$(mktemp -d 2>/dev/null || echo "")"
 if [ -n "$HEADCHECK" ] && git worktree add --detach --quiet "$HEADCHECK" HEAD 2>/dev/null; then
-  ( cd "$HEADCHECK" && "$UV" run python -m mypy && "$UV" run python -m brain.ops.sweeps traceability )     || { git worktree remove --force "$HEADCHECK" 2>/dev/null; exit 1; }
+  ( cd "$HEADCHECK" && "$UV" run $NAMED_PYTHON python -m mypy && "$UV" run $NAMED_PYTHON python -m brain.ops.sweeps traceability )     || { git worktree remove --force "$HEADCHECK" 2>/dev/null; exit 1; }
   git worktree remove --force "$HEADCHECK" 2>/dev/null
 else
   echo "  skipped: could not create a worktree at HEAD"
