@@ -342,7 +342,7 @@ def test_a_tick_of_nothing_would_wake_the_loop_continuously() -> None:
 # --- the registry has not been told anything is wired ------------------------------------
 
 
-def test_the_registry_still_reports_the_same_eleven_orphans() -> None:
+def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> None:
     """**Nothing here calls a control, so the registry must still say nothing calls them.**
 
     `brain.ops.controls` reads `ast.Call` nodes and its own docstring says it cannot resolve a
@@ -351,9 +351,17 @@ def test_the_registry_still_reports_the_same_eleven_orphans() -> None:
     lie one layer down, and this test is what would catch it: the day a runner genuinely calls
     a control, this fails and the registry row has to move with it.
 
+    **The figure came down from eleven to ten on 2026-09-11 and this runner is not why.**
+    `brain.console.staff_source_view` became the first caller of the roster dry run, so
+    `directory_sync` left the orphan list for the state between, which is a caller that nothing
+    runs on a schedule. `runner_gaps` is still twelve, asserted above, because what that
+    control is waiting for has not changed: somebody has to gather its inputs. The two figures
+    moving apart is the point of keeping both.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 11
+    assert len(orphans()) == 10
+    assert "directory_sync" not in {one.name for one in orphans()}
     assert len(CONTROLS) == 13

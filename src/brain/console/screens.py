@@ -62,6 +62,24 @@ already argues is the correct answer rather than a gap.
 any good", Install is "what is this deployment". A person arriving with a problem knows which
 of those four they are in, which is more than they know about which module owns the answer.
 
+**Not every screen is asked for by M27, and the count has to be able to say which.** Version
+and updates is M42.3.9, "the console shows the running version and whether a newer release
+exists, because nothing else reminds a client IT team to update". It is a screen and it is a
+leaf of the deployment module, so counting the registry against M27's four screen groups would
+have been an arithmetic that said the console had one screen too many, and the two repairs
+available were to stop counting or to leave the screen unregistered.
+`SCREENS_ASKED_FOR_ELSEWHERE` is the third: it names the screen and the leaf that asks for it,
+so the count is still anchored to the work breakdown and a screen with no leaf behind it still
+fails. `brain.console.version_view` was written on 2026-09-10 and had no entry here, which made
+M42.3.9 a panel a client could not open.
+
+**That screen shares `read:release` with This install, which is a decision rather than reuse.**
+Both are statements about which release this deployment is on: one is what is running beside
+the migration level and the profile, the other is whether anything newer has been recorded. A
+capability of its own would have to be `read:release.currency` or similar, `Capability.covers`
+expands only a trailing `.*`, so `read:release` would not cover it and every grant an install
+has already written would stop reaching the new screen on the day it appeared.
+
 Scope: domain logic. Nothing here renders, opens a connection or reads a clock. The tool names
 are declarations; `unregistered_tools` checks them against a registry handed in rather than
 importing one, so this module has no dependency on the tool layer and the check still exists.
@@ -80,8 +98,9 @@ from __future__ import annotations
 
 import enum
 import inspect
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.console.reads import ConsoleRead, Plane, permitted
@@ -276,7 +295,7 @@ def _screen(
 
     Department and person are added to whatever a screen declares rather than repeated on
     every entry, because the requirement is that they are on everything and a list repeated
-    thirty-four times is a list with an omission in it.
+    thirty-five times is a list with an omission in it.
 
     There is deliberately no parameter here for withholding a screen from a department's
     menu. See `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT`: that decision is
@@ -658,6 +677,16 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "features it turns on. The first question of every support conversation.",
     ),
     _screen(
+        "updates",
+        "Version and updates",
+        Group.INSTALL,
+        "console.updates",
+        "read:release",
+        Plane.CONFIGURATION,
+        "Which release this install is on, whether anything newer has been recorded, and how "
+        "old that answer is. Nothing here asks anywhere outside this network.",
+    ),
+    _screen(
         "recovery",
         "Backup and recovery",
         Group.INSTALL,
@@ -840,7 +869,7 @@ def offerable(values: Iterable[str], reachable: Iterable[str]) -> tuple[str, ...
 def screen_gaps(registered_tools: Iterable[str] = ()) -> tuple[str, ...]:
     """Everything about this registry that would let a screen show more than it should.
 
-    Six checks. The first two hold this module to its own shape and would otherwise be
+    Seven checks. The first two hold this module to its own shape and would otherwise be
     review comments that survive exactly as long as the reviewer remembers them.
     """
     gaps: list[str] = []
@@ -883,6 +912,14 @@ def screen_gaps(registered_tools: Iterable[str] = ()) -> tuple[str, ...]:
                 "the screen it was meant for is quietly being offered"
             )
 
+    for elsewhere, leaf in SCREENS_ASKED_FOR_ELSEWHERE.items():
+        if elsewhere not in seen:
+            gaps.append(
+                f"{elsewhere} is recorded as the screen {leaf} asks for and is not a screen, "
+                "so the count is excusing a registry entry nobody can open and the screen that "
+                "leaf really asks for is being counted against M27"
+            )
+
     known = set(registered_tools)
     if known:
         for one in SCREENS:
@@ -900,7 +937,7 @@ def unregistered_tools(registered_tools: Iterable[str]) -> tuple[str, ...]:
 
     Separate from `screen_gaps` because this one is expected to be non-empty for a while:
     the screens are declared before the tools behind them exist, deliberately, so the shape
-    of the console can be argued about before thirty-four tools are written. A diagnostic
+    of the console can be argued about before thirty-five tools are written. A diagnostic
     that is red for a month is one somebody switches off, so the honest thing is to keep it
     apart from the ones that must always be green.
     """
@@ -908,12 +945,34 @@ def unregistered_tools(registered_tools: Iterable[str]) -> tuple[str, ...]:
     return tuple(one.read.tool for one in SCREENS if one.read.tool not in known)
 
 
+#: Every screen here that no M27 leaf asks for, and the leaf that does ask for it.
+#:
+#: M27's four screen groups name thirty-four screens and the registry held exactly those until
+#: 2026-09-11, so the test that counts the registry against the work breakdown could compare
+#: group for group. A screen asked for by a leaf of another module breaks that arithmetic in
+#: the direction that reads as a surplus, and the two cheap repairs are both wrong: stop
+#: counting, and the registry drifts from the record again; leave the screen out, and the
+#: module behind it is a panel nobody can open, which is what M42.3.9 was for a day.
+#:
+#: A mapping rather than a set, because the id is the whole value of the entry: it is what
+#: makes the screen traceable to something somebody asked for, and a screen appearing here with
+#: no leaf behind it is the failure this is meant to catch rather than the exemption it would
+#: otherwise be.
+SCREENS_ASKED_FOR_ELSEWHERE: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        # The running release and whether anything newer exists. `brain.console.version_view`
+        # builds the panel; M42.3.9 is a deployment leaf rather than a console one because the
+        # thing it is about is the update, and the console is where it has to be read.
+        "updates": "M42.3.9",
+    }
+)
+
 #: How many screens exist, so a test can pin it and a person can quote it.
 #:
 #: Pinned rather than computed at the call site, because the interesting failure is a screen
 #: disappearing in a refactor, and a test asserting `len(SCREENS) == len(SCREENS)` would not
 #: notice.
-SCREEN_COUNT: Final = 34
+SCREEN_COUNT: Final = 35
 
 #: The screens a department admin is not offered, in registry order.
 #:

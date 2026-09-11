@@ -21,6 +21,15 @@ that shows no rows has disclosed nothing and a missing menu heading has; a leak 
 is left, and the test for it checks the argument against the module whose rows it cites rather
 than taking the argument on trust.
 
+**The registry stopped being exactly M27's screens on 2026-09-11.** Version and updates is
+asked for by M42.3.9 and `brain.console.version_view` had been written for a day with no screen
+in front of it, so the panel existed and nobody could open it. Registering it moved two figures
+that are deliberately hard to move, and both were moved rather than worked around: the pinned
+`SCREEN_COUNT`, which a test below reads out of the source as a literal so a computed pin
+cannot stand in for a decision, and the comparison against the work breakdown, which now takes
+the screens M27 does not ask for out of the group arithmetic by name and holds each of them to
+naming a real leaf outside M27.
+
 Real `EntitlementSet`s throughout, and real `Screen`s wherever the registry is not itself the
 thing under test. A test that stood a fixture in for either would be checking this module
 against an agreement it had made with itself.
@@ -49,6 +58,7 @@ from brain.console.screens import (
     ONLY_THE_SCREENS,
     SCREEN_COUNT,
     SCREENS,
+    SCREENS_ASKED_FOR_ELSEWHERE,
     WITHHELD_AT_DEPARTMENT_SCOPE,
     Axis,
     Disclosure,
@@ -519,9 +529,16 @@ def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_discl
     which is derived from the same list the function reads: taking it from there would pass for
     any list at all. The constant is then pinned against the difference.
 
-    The positive half is the decision. Thirty-three of the thirty-four screens are a department
+    The positive half is the decision. Thirty-four of the thirty-five screens are a department
     admin's, including the four that used to be withheld, so this is not passing because
     `for_department` returns everything either.
+
+    **Version and updates is offered, and it is the screen that tests the rule rather than the
+    flag.** It is an Install screen added on 2026-09-11 and every earlier Install screen was
+    withheld under the reading the owner overruled. What it shows at a department's scope is
+    which release this deployment is on, which is one fact about the install and the same fact
+    for everybody on it, so there is nothing a department-scoped reader would learn that is not
+    theirs and no `Disclosure` could be written for it.
 
     Delete this and the four screens the owner asked for go back behind a flag, or the one that
     cannot be rendered at that scope joins them with no argument written down."""
@@ -532,8 +549,8 @@ def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_discl
 
     assert ours - theirs == {"limits"}
     assert set(WITHHELD_AT_DEPARTMENT_SCOPE) == ours - theirs
-    assert len(theirs) == 33
-    assert {"install", "recovery", "connections", "staff_sources"} <= theirs
+    assert len(theirs) == 34
+    assert {"install", "recovery", "connections", "staff_sources", "updates"} <= theirs
     assert {"people", "usage", "halt", "audit", "agents"} <= theirs
 
 
@@ -620,6 +637,27 @@ def test_screen_gaps_reports_a_screen_withheld_from_a_department_that_does_not_e
     assert [one for one in gaps if one.startswith("rate_limits is withheld")], gaps
 
 
+def test_screen_gaps_reports_a_screen_excused_from_the_count_that_does_not_exist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The check that keeps the mapping of screens M27 does not ask for in step with the
+    registry. An entry naming a key nothing registers takes a screen out of the group
+    comparison and puts nothing back, so the group it was really in reads as one short and the
+    count still adds up. That is the shape a comparison fails silently in.
+
+    Patched rather than provoked on the real mapping, which agrees with the registry, so the
+    branch is watchable at all.
+
+    Delete this and `SCREENS_ASKED_FOR_ELSEWHERE` becomes a list somebody adds a key to while
+    renaming a screen, and the registry drifts from the work breakdown in the one place that
+    was still comparing them."""
+    monkeypatch.setattr(screens_module, "SCREENS_ASKED_FOR_ELSEWHERE", {"version": "M42.3.9"})
+
+    gaps = screens_module.screen_gaps()
+
+    assert [one for one in gaps if one.startswith("version is recorded as the screen")], gaps
+
+
 # --- the registry keeps its own shape --------------------------------------------------------
 
 
@@ -634,13 +672,22 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
     and is why `CLAUDE.md` has a paragraph about it. Counting the whole module fails loudly on
     that edit instead of quietly counting four groups that have moved.
 
+    **The registry stopped being exactly M27's screens on 2026-09-11 and this is where that is
+    visible.** Version and updates is asked for by M42.3.9, a deployment leaf, so a count of the
+    registry against M27's four groups read as one screen too many. The two cheap repairs were
+    both wrong: dropping the comparison lets the registry drift from the record again, and
+    leaving the screen out of the registry leaves `brain.console.version_view` as a panel a
+    client cannot open. So the screens M27 does not ask for are named, with the leaf that does,
+    and taken out of the group comparison rather than out of the count.
+
+    The entry is held to being a real screen and to naming a real leaf outside M27, which is
+    what stops the mapping becoming the exemption list a later screen is added to instead of
+    being argued for.
+
     Delete this and the registry and the work breakdown drift, and the tracker counts screens
     that were never declared while the console declares screens the tracker never named."""
-    module = next(
-        one
-        for one in json.loads((REPO / "docs" / "wbs.json").read_text(encoding="utf-8"))["modules"]
-        if one["id"] == "M27"
-    )
+    every_module = json.loads((REPO / "docs" / "wbs.json").read_text(encoding="utf-8"))["modules"]
+    module = next(one for one in every_module if one["id"] == "M27")
 
     per_group: dict[str, int] = {}
     for leaf in module["leaf_ids"]:
@@ -656,7 +703,22 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         "M27.6": 4,  # install
     }
 
-    counted = {group: sum(1 for one in SCREENS if one.group is group) for group in Group}
+    every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}
+
+    assert set(SCREENS_ASKED_FOR_ELSEWHERE) <= {one.key for one in SCREENS}
+    assert SCREENS_ASKED_FOR_ELSEWHERE == {"updates": "M42.3.9"}
+    for key, leaf in SCREENS_ASKED_FOR_ELSEWHERE.items():
+        assert leaf in every_leaf, key
+        assert not leaf.startswith("M27."), key
+
+    counted = {
+        group: sum(
+            1
+            for one in SCREENS
+            if one.group is group and one.key not in SCREENS_ASKED_FOR_ELSEWHERE
+        )
+        for group in Group
+    }
 
     assert counted == {
         Group.OPERATE: per_group["M27.2"],
@@ -664,7 +726,7 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         Group.REPORT: per_group["M27.4"],
         Group.INSTALL: per_group["M27.6"],
     }
-    assert sum(counted.values()) == SCREEN_COUNT
+    assert sum(counted.values()) + len(SCREENS_ASKED_FOR_ELSEWHERE) == SCREEN_COUNT
 
 
 def test_every_screen_is_registered_once_and_the_count_is_pinned() -> None:
@@ -676,7 +738,7 @@ def test_every_screen_is_registered_once_and_the_count_is_pinned() -> None:
     them audits under the other's name.
 
     **And the constant is asserted to be a literal, which a comparison cannot do.** A mutation
-    replacing `SCREEN_COUNT: Final = 34` with `len(SCREENS)` survived every assertion below,
+    replacing `SCREEN_COUNT: Final = 35` with `len(SCREENS)` survived every assertion below,
     because the derived value equals the pin today and a test comparing two numbers cannot see
     where one of them came from. A pin that is computed from the registry it guards is the
     trap this docstring already warns about, arriving by a route the same docstring did not
@@ -690,8 +752,8 @@ def test_every_screen_is_registered_once_and_the_count_is_pinned() -> None:
     keys = [one.key for one in SCREENS]
 
     assert len(keys) == len(set(keys))
-    assert len(SCREENS) == SCREEN_COUNT == 34
-    assert len({one.read.tool for one in SCREENS}) == 34
+    assert len(SCREENS) == SCREEN_COUNT == 35
+    assert len({one.read.tool for one in SCREENS}) == 35
 
     declared = ast.parse(Path(screens_module.__file__).read_text(encoding="utf-8"))
     pins = [

@@ -507,7 +507,12 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=SYNC_INTERVAL,
         cadence_from="brain.identity.staff_sync:SYNC_INTERVAL",
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        # Moved from NOTHING on 2026-09-11, when `brain.console.staff_source_view` became the
+        # first caller of `dry_run` and the last of the three symbols acquired one. It does not
+        # mean the nightly sync runs: the caller is a console page somebody presses, which is
+        # the separate question `chains_worth_checking` asks and this member deliberately does
+        # not answer.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="knowledge_reverification",

@@ -13,7 +13,8 @@ were written by somebody who found it in their own module and wrote it down. Thi
 first thing in the tree that asks the question of every module at once.
 
 **What this asserts is that the registry and the source agree, not that everything is
-wired.** Twelve of the thirteen controls have no caller of any kind today. A test asserting
+wired.** Ten of the thirteen controls have no caller of any kind today, two have a caller
+nothing runs on a schedule, and one is on a route. A test asserting
 that they do would be red on arrival, and `brain.ops.sweeps.sweep_house_style` records at
 length what happens to a check that is red the day it lands. So the assertion is agreement in
 both directions, which is green now and goes red on three different regressions: a control
@@ -60,7 +61,6 @@ KNOWN_ORPHANS = frozenset(
         "restore_drill",
         "backup_exposure",
         "denial_digest",
-        "directory_sync",
         "knowledge_reverification",
         "resolution_calibration",
         "queue_redrive",
@@ -76,7 +76,29 @@ KNOWN_ORPHANS = frozenset(
 #: screen on a schedule. The set exists so that leaving the orphan list is recorded as the
 #: small move it is rather than as an arrival, and so that a control moving here and then
 #: quietly back is visible.
-WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction"})
+#:
+#: `directory_sync` joined it on 2026-09-11 for the same shape one module along.
+#: `brain.identity.staff_sync.dry_run` had no caller of any kind, which the module it lives in
+#: said in terms, and `brain.console.staff_source_view` is now it: the page M1.6.11 asks for,
+#: which runs the chosen source once and shows what a real sync would change. Nothing opens
+#: that screen on a schedule either, so the nightly sync is exactly as unscheduled as it was.
+WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync"})
+
+#: Controls whose caller is itself imported by nothing, named rather than counted.
+#:
+#: `chains_worth_checking` is the check `measured_invocation` deliberately does not make, and
+#: an empty answer was the right assertion for as long as every wired control's caller was a
+#: module something else in the tree imports. `directory_sync` ended that on 2026-09-11 and the
+#: reason is not about this control: `dry_run` is called from `brain.console.staff_source_view`,
+#: a console page, and **no console page in this repository is imported by anything**, because
+#: nothing here wires a screen to a tool yet. `brain.console.screens.unregistered_tools([])`
+#: still returns all thirty-five, which is the same fact stated about the console instead of
+#: about one control.
+#:
+#: So this is recorded rather than argued away. A set rather than a relaxed assertion, for
+#: `KNOWN_ORPHANS`' reason: a chain that appears quietly is an incident, and one repaired
+#: without being recorded makes every entry above it less believable.
+CALLERS_NOTHING_REACHES = frozenset({"directory_sync"})
 
 
 def test_every_control_names_functions_that_exist() -> None:
@@ -229,10 +251,24 @@ def test_a_control_that_is_reachable_is_reachable_from_something_reachable() -> 
     nothing calls the outer one. Counting the inner function as reached would have put a
     knowledge control in the wired column while nothing ran it. This asserts the one level
     that can be measured exactly.
+
+    **This asserted an empty answer until 2026-09-11 and now asserts a named set**, for the
+    reason `KNOWN_ORPHANS` is a set rather than a count: the finding is real and hiding it
+    would be the overstatement this whole file is written against. `directory_sync`'s caller
+    is a console page, and no console page here is imported by anything, because nothing in
+    this repository wires a screen to a tool yet.
+
+    The control names are compared rather than the sentences, because the sentence names the
+    calling module and a module renamed is not a control becoming unreachable. Equality in
+    both directions, so a second chain fails here and so does this one being repaired without
+    anybody recording it.
     """
     from brain.ops.controls import chains_worth_checking
 
-    assert chains_worth_checking() == ()
+    found = chains_worth_checking()
+
+    assert {one.split(":", 1)[0] for one in found} == CALLERS_NOTHING_REACHES
+    assert CALLERS_NOTHING_REACHES <= WIRED_BUT_NOT_SCHEDULED
 
 
 def test_the_handover_pack_says_which_mechanisms_are_not_running() -> None:
