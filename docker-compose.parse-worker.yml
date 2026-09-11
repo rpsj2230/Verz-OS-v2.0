@@ -58,10 +58,18 @@
 # container that runs one at a time. What is still not built is the enqueue side: nothing
 # constructs a parse job, because there is no driver to enqueue it with.
 #
-# **It has never been started**, for the same reason `docker-compose.worker.yml` has not:
-# `brain.ops.worker` exits 69 saying no queue driver is installed. There is also no parser,
-# because Docling is not a dependency of this project. A compose file that has never run is a
-# design, and this one is a design with a number in it that has been checked against the door.
+# **The queue's own tables are a deploy step and it is shared with the general worker.**
+# `python -m brain.ops.worker --install-queue` creates the schema, applies the driver's own
+# DDL and enables row-level security on the tables that appeared. Both containers reach the
+# same database, so it is run once for the pair rather than once per container;
+# `--deploy-plan` prints the steps with the reason for each.
+#
+# **It has still never been started**, for the same reason `docker-compose.worker.yml` has not:
+# the file has never run on the host it was sized for. The process now starts rather than
+# exiting, because the queue driver is a dependency; what is missing here is narrower and
+# larger. There is no parser, because Docling is not a dependency of this project, and nothing
+# enqueues a parse. A compose file that has never run is a design, and this one is a design
+# with a number in it that has been checked against the door.
 #
 # Task ids: none. M7.2.6 is claimed by `brain.knowledge.parse_budget` for the bound and this
 # file for the sizing; the routing above is what stops it being claimed whole.
@@ -131,8 +139,9 @@ services:
     healthcheck:
       # Readiness, not liveness. `brain.ops.wiring` says what it means for this component:
       # the queue driver has fetched at least once and the object store returns an original
-      # by key. Nothing writes the heartbeat yet, so this reports not-ready, which is the
-      # correct answer for a container that is not draining a queue.
+      # by key. The run mode writes the heartbeat every 15 seconds from inside the loop the
+      # driver's worker runs on, so a process that is alive and not scheduling reports
+      # not-ready rather than healthy. The object-store half is not checked by this.
       test: ["CMD", "python", "-m", "brain.ops.worker", "--ready"]
       interval: 15s
       timeout: 5s

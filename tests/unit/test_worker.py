@@ -9,10 +9,11 @@ are the translation from a per-class allocation into processes, and the thing th
 them is `brain.ops.worker`. Keeping them beside their consumer also means this change touches
 one fewer file that other work is in.
 
-No task ids. `brain.ops.worker` and `docker-compose.worker.yml` claim none: the container has
-never been started, because the process it runs has no queue driver to fetch with. M32.4.1.4
-is served rather than closed, on the same grounds `docker-compose.langfuse.yml` refuses
-M32.1.1.1.
+No task ids. `brain.ops.worker` and `docker-compose.worker.yml` claim none. The process starts
+now, because the queue driver is a dependency as of 2026-09-11, and what has not happened is
+this compose file running on the host it was sized for. M32.4.1.4 is served rather than
+closed, on the same grounds `docker-compose.langfuse.yml` refuses M32.1.1.1: a compose file
+that has never run is a design. The driver's own tests are in `test_queue_driver.py`.
 """
 
 from __future__ import annotations
@@ -26,7 +27,11 @@ import yaml
 from brain.db import SCHEMAS
 from brain.gate.context import TrafficClass
 from brain.ops.checkpoints import connection_refusals
-from brain.ops.connections import client_named
+from brain.ops.connections import (
+    WORKER_CHECKPOINTER_CONNECTIONS,
+    WORKER_QUEUE_CONNECTIONS,
+    client_named,
+)
 from brain.ops.queue import (
     CONCURRENCY,
     DRIVER_SCHEMA,
@@ -35,6 +40,7 @@ from brain.ops.queue import (
     MIB_PER_SLOT,
     QueueError,
     Shard,
+    SlotClass,
     driver_schema_gaps,
     queue_name_for,
     queue_url_refusals,
@@ -49,13 +55,19 @@ from brain.ops.worker import (
     EXIT_NOT_READY,
     POOL_MAX_ENV,
     advisories,
+    beat,
     declared_pool_max,
     declared_slots,
+    default_heartbeat_path,
+    heartbeat_path,
     is_ready,
     main,
     plan_for,
     pool_declaration_gaps,
     preflight,
+    queue_pool_max,
+    queue_split_advisory,
+    run,
     slot_env_name,
 )
 
@@ -103,14 +115,38 @@ A_FINDING_THAT_STARTING_WILL_NOT_FIX = (
 
 
 def _sound_environment(**overrides: str) -> dict[str, str]:
-    """An environment a worker would start on, before the override under test."""
+    """An environment a worker would start on, before the override under test.
+
+    `BRAIN_WORKER_POOL_MAX` joined this on 2026-09-11 and the reason is the mechanism working.
+    `pool_declaration_gaps` refuses a container that has a queue driver and no declared bound,
+    and it is gated on the driver being importable so that it could not be red on arrival. The
+    driver is importable now, so an environment without that variable is genuinely not sound,
+    and every test below that asserts a clean preflight would otherwise be asserting that the
+    refusal does not work.
+    """
+    budgeted = client_named("brain-worker")
+    assert budgeted is not None
     env = {
         "QUEUE_URL": "postgresql+psycopg://brain:pw@db:5432/brain",
         "DATABASE_URL": "postgresql+psycopg://brain:pw@pgbouncer:5432/brain",
+        POOL_MAX_ENV: str(budgeted.pool_max),
         **{slot_env_name(t): str(v) for t, v in CONCURRENCY.items()},
     }
     env.update(overrides)
     return env
+
+
+def _fully_declared_environment(**overrides: str) -> dict[str, str]:
+    """A sound environment whose connection bound also splits the way the budget says.
+
+    The general worker's fifteen is ten for the saver and five for the queue, so a container
+    that declares fifteen and configures no checkpointer has an advisory against it. That is
+    correct and it is noise in a test whose subject is a different advisory, so the tests about
+    where a finding ends up start from a container with nothing at all to say.
+    """
+    return _sound_environment(
+        BRAIN_CHECKPOINTER_URL="postgresql+psycopg://brain:pw@db:5432/brain", **overrides
+    )
 
 
 # --------------------------------------------------- what the worker refuses to start on
@@ -150,8 +186,18 @@ def test_a_worker_with_no_checkpointer_at_all_is_not_a_misconfiguration() -> Non
     """An install with no durable graph has no checkpointer, and refusing that would make
     every worker deployment carry a variable for a component that does not exist. A wrong
     checkpointer is a refusal; an absent one is not. Delete this and the two collapse, which
-    blocks the only deployment shape currently possible."""
+    blocks the only deployment shape currently possible.
+
+    It is not free either, and that is the second half. Without a checkpointer the container's
+    declared bound is spent entirely on the queue, so the split `brain.ops.connections`
+    describes stops being true of this container. That is an advisory rather than a refusal:
+    the database is still bounded at the figure it was sized for, and what is wrong is the
+    sentence saying where those connections go."""
     assert preflight(_sound_environment()) == ()
+    assert any(
+        "The total is right and the split is not" in one
+        for one in advisories(_sound_environment(), worker_component="brain-worker")
+    )
 
 
 def test_the_preflight_surfaces_a_queue_schema_gap_rather_than_swallowing_it(
@@ -196,8 +242,12 @@ def test_a_deployment_that_cannot_embed_is_reported_and_still_starts(
         "brain.ops.worker.policy_gaps", lambda: (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
     )
 
-    assert advisories() == (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
-    assert preflight(_sound_environment()) == ()
+    env = _fully_declared_environment()
+
+    assert advisories(env, worker_component="brain-worker") == (
+        A_FINDING_THAT_STARTING_WILL_NOT_FIX,
+    )
+    assert preflight(env) == ()
 
 
 def test_an_advisory_is_never_a_reason_the_worker_will_not_start(
@@ -221,8 +271,10 @@ def test_an_advisory_is_never_a_reason_the_worker_will_not_start(
         "brain.ops.worker.policy_gaps", lambda: (A_FINDING_THAT_STARTING_WILL_NOT_FIX,)
     )
 
-    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX in advisories()
-    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX not in preflight(_sound_environment())
+    env = _fully_declared_environment()
+
+    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX in advisories(env, worker_component="brain-worker")
+    assert A_FINDING_THAT_STARTING_WILL_NOT_FIX not in preflight(env)
 
 
 def test_an_install_whose_declared_width_is_its_models_has_nothing_to_report() -> None:
@@ -235,7 +287,7 @@ def test_an_install_whose_declared_width_is_its_models_has_nothing_to_report() -
 
     Delete this and the disagreement between the column and the served model can come back
     with no test noticing, because every other advisory test supplies its own finding."""
-    assert advisories() == ()
+    assert advisories(_fully_declared_environment(), worker_component="brain-worker") == ()
 
 
 def test_a_correctly_configured_worker_reports_nothing_to_fix() -> None:
@@ -289,27 +341,27 @@ def test_an_allocation_over_the_containers_memory_limit_refuses_to_start() -> No
 
 
 # --------------------------------------------------- the connection bound
-def test_a_worker_with_a_queue_driver_and_no_declared_pool_refuses_to_start(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _undeclared_pool_environment() -> dict[str, str]:
+    """A sound environment with the connection bound taken back out of it."""
+    return {k: v for k, v in _sound_environment().items() if k != POOL_MAX_ENV}
+
+
+def test_a_worker_with_a_queue_driver_and_no_declared_pool_refuses_to_start() -> None:
     """**The refusal `docs/needs-rupash.md` item 41 asks for, and the reason it is a refusal
     rather than a line in the log.** A worker's connections are spent out of a database's
     ceiling rather than out of its own cgroup limit, so an unbounded pool is not this
     container's problem: it is every client of that database, and the first one refused is
     whoever is trying to find out why. That is the 2026-09-07 outage.
 
-    The finding cannot be produced by this repository as it stands, because no queue driver is
-    importable, so the driver is patched present. That is the same technique
-    `test_the_preflight_surfaces_a_queue_schema_gap_rather_than_swallowing_it` uses and for the
-    same reason: a check whose condition is false today is a check that has never been shown to
-    fire.
+    **It was patched into existence until 2026-09-11 and now fires on its own.** The check was
+    gated on a driver being importable, which nothing was, so the test had to arrange the
+    condition; the driver is a dependency now and this is the check doing the thing it was
+    built to do on the day it was built to start doing it.
 
-    Delete this and the variable can be dropped from a compose file in a tidy-up, and the day
-    a driver is installed the container starts with a pool nobody sized against a budget that
-    goes on reporting spare connections."""
-    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: True)
-    env = _sound_environment()
-    assert POOL_MAX_ENV not in env
+    Delete this and the variable can be dropped from a compose file in a tidy-up, and the
+    container starts with a pool nobody sized against a budget that goes on reporting spare
+    connections."""
+    env = _undeclared_pool_environment()
 
     findings = preflight(env)
 
@@ -320,24 +372,23 @@ def test_a_worker_with_a_queue_driver_and_no_declared_pool_refuses_to_start(
 def test_a_worker_with_no_queue_driver_is_not_asked_for_a_pool_it_cannot_open(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The gate on the refusal above, and it is the half that keeps the check alive. Nothing
-    here opens a queue connection today, so refusing every container that omits the variable
-    would be a check that is red on arrival, which `brain.ops.sweeps` records at length as how
-    a gate comes to be switched off. The day a driver becomes importable is the first day the
-    number could be wrong, and it is the day this starts asking.
+    """The gate on the refusal above, and it is the half that keeps the check alive. An install
+    that builds its own image without the dependency opens no queue connection, so refusing it
+    for not sizing one would be a refusal about a pool that does not exist.
 
-    Asserted with the driver patched absent as well as present, because the real environment
-    has no driver and a test relying on that fact alone would pass for a check that never runs
-    at all.
+    Asserted in both directions from one environment, which is what makes it a statement about
+    the gate rather than about today's state of the world: the same missing variable is refused
+    with a driver and ignored without one.
 
-    Delete this and the refusal can be made unconditional, which stops every worker on every
+    Delete this and the refusal can be made unconditional, which stops every container on every
     install that has not yet been told a number for a pool it does not open."""
+    env = _undeclared_pool_environment()
     monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: False)
 
-    assert pool_declaration_gaps(_sound_environment(), worker_component="brain-worker") == ()
+    assert pool_declaration_gaps(env, worker_component="brain-worker") == ()
 
     monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: True)
-    assert pool_declaration_gaps(_sound_environment(), worker_component="brain-worker")
+    assert pool_declaration_gaps(env, worker_component="brain-worker")
 
 
 def test_a_declared_pool_that_disagrees_with_the_budget_refuses_to_start() -> None:
@@ -601,6 +652,162 @@ def test_readiness_uses_the_same_staleness_as_the_re_drive_sweep(tmp_path: Path)
     assert is_ready(beat, now=now + stale_after() + timedelta(seconds=5)) is False
 
 
+# --------------------------------------------------- the queue's share of the bound
+def test_the_queue_is_handed_what_is_left_after_the_checkpointer_rather_than_the_whole_bound() -> (
+    None
+):
+    """**The subtraction nothing did.** `BRAIN_WORKER_POOL_MAX` is the whole of what this
+    container may hold against a database no pooler bounds, and it has two spenders: the saver's
+    measured ten and the queue's pool. Handing the driver the total double-counts the
+    checkpointer against a ceiling every other client of that database is also spending from,
+    and the failure is the 2026-09-07 outage with a different service in it.
+
+    The two containers are the reason this is arithmetic and not a constant: fifteen minus ten
+    on the general worker and five minus nothing on the parse worker are the same answer from
+    different totals, and a figure written here would be right for both by coincidence.
+
+    Delete this and the driver can be given the container's whole bound, which no other check
+    would see: the total still agrees with the budget and every slot figure is unchanged."""
+    with_saver = _fully_declared_environment()
+    without = _sound_environment()
+
+    share, findings = queue_pool_max(with_saver, worker_component="brain-worker")
+
+    assert findings == ()
+    assert share == WORKER_QUEUE_CONNECTIONS
+    assert share == int(with_saver[POOL_MAX_ENV]) - WORKER_CHECKPOINTER_CONNECTIONS
+
+    unsaved, _ = queue_pool_max(without, worker_component="brain-worker")
+
+    assert unsaved == int(without[POOL_MAX_ENV])
+
+
+def test_a_bound_the_checkpointer_alone_exhausts_leaves_the_queue_nothing_and_is_refused() -> None:
+    """The one way this arithmetic produces something that must stop a container rather than be
+    reported. A declared bound at or below the saver's ten leaves the driver a pool of nothing,
+    which is not a smaller queue: it is a worker that holds a connection, fetches nothing and
+    reports itself up.
+
+    Delete this and a container declared at ten starts and drains nothing, and the only symptom
+    is a queue depth that rises."""
+    share, findings = queue_pool_max(
+        _fully_declared_environment(**{POOL_MAX_ENV: str(WORKER_CHECKPOINTER_CONNECTIONS)}),
+        worker_component="brain-worker",
+    )
+
+    assert share is None
+    assert any("nothing to fetch with" in f for f in findings), findings
+
+
+def test_a_bound_that_is_right_in_total_and_wrong_in_its_split_is_reported_and_starts() -> None:
+    """The case nothing else on this surface can see. `pool_declaration_gaps` holds the total to
+    the budget and says nothing about where it goes, and every slot figure is unchanged, so a
+    container that declares the budgeted fifteen and configures no saver hands the queue three
+    times what the budget describes with every other check green.
+
+    An advisory rather than a refusal, and the boundary is what the finding costs: the database
+    is still bounded at the figure it was sized for, so what is wrong is the sentence in
+    `brain.ops.connections` saying where those connections go.
+
+    Delete this and the split can drift with nothing anywhere reporting it, which is how the
+    budget's own documentation stops describing the deployment."""
+    wrong_split = _sound_environment()
+
+    assert preflight(wrong_split) == ()
+    assert queue_split_advisory(wrong_split, worker_component="brain-worker")
+    assert (
+        queue_split_advisory(_fully_declared_environment(), worker_component="brain-worker") == ()
+    )
+
+
+def test_a_container_this_budget_has_never_heard_of_is_not_told_about_its_split() -> None:
+    """A third worker container is a deployment decision this check has no basis to make, which
+    is the same answer `component_slot_class_gaps` gives about a component nobody paired. What
+    refuses an unknown component is `preflight`, once, against `brain.ops.wiring`.
+
+    Delete this and adding a worker container produces an advisory about a budget row that does
+    not exist."""
+    assert queue_split_advisory(_sound_environment(), worker_component="brain-nothing") == ()
+
+
+def test_the_preflight_asks_whether_the_bound_can_hold_the_shards_it_lays_out() -> None:
+    """`queue_pool_gaps` is a mechanism and this is its call site, which is the pairing this
+    repository gets wrong most often: the check is written beside the module it belongs to and
+    the wiring is left for later, and the test that exercises it directly passes either way.
+
+    The property is one neither figure has on its own. A shard listens on a connection for as
+    long as it lives, so a slot allocation decides how much of the pool is spoken for before
+    any work is fetched, and psycopg's pool turns an exhausted one into a wait rather than an
+    error. The symptom of getting it wrong is latency and never a failure.
+
+    Delete this and the call can be taken out of `preflight` with every arithmetic test in
+    `test_queue_driver.py` still green."""
+    shards = worker_shards(CONCURRENCY)
+    starved = _fully_declared_environment(
+        **{POOL_MAX_ENV: str(WORKER_CHECKPOINTER_CONNECTIONS + len(shards))}
+    )
+
+    findings = preflight(starved)
+
+    assert any("each hold a connection to listen on" in f for f in findings), findings
+
+
+def test_a_worker_allocated_no_slots_anywhere_refuses_instead_of_holding_a_connection() -> None:
+    """The one configuration that reaches the run mode and produces no shards. `concurrency_gaps`
+    reports a class left out of the allocation and has nothing to say about one set to zero, so
+    four zeroes pass every refusal above and lay out no process at all.
+
+    Reached without a database, which is what makes it testable at all: building the driver's
+    app opens no connection, so the refusal happens before anything is dialled.
+
+    Delete this and a compose file with four zeroes in it deploys a container that opens a pool,
+    starts nothing and reports itself up, and the guard against reading a shard out of an empty
+    tuple goes with it: what an operator gets instead is an IndexError."""
+    idle = _sound_environment(**{slot_env_name(t): "0" for t in TrafficClass})
+
+    assert run(idle, worker_component="brain-worker", slot_class=SlotClass.STANDARD) == (
+        EXIT_MISCONFIGURED
+    )
+
+
+# --------------------------------------------------- the heartbeat the healthcheck reads
+def test_a_running_worker_writes_the_file_its_own_readiness_check_reads(tmp_path: Path) -> None:
+    """`--ready` compared a heartbeat's age against the queue's staleness and nothing wrote the
+    file, so the healthcheck answered "not ready" for ever. The run mode writes it from inside
+    the loop the driver's workers run on, which is what makes it evidence rather than a flag: a
+    process that is alive and has stopped scheduling stops touching it.
+
+    The two are asserted together, because the failure that matters is not either half. It is
+    the healthcheck reading one path while the loop touches another, which is a container that
+    is never in rotation and whose log says it is working.
+
+    Delete this and the heartbeat and the readiness check can disagree about where the file
+    goes."""
+    declared = tmp_path / "somewhere" / "heartbeat"
+    env = _sound_environment(BRAIN_WORKER_HEARTBEAT=str(declared))
+
+    assert heartbeat_path(env) == declared
+    assert is_ready(declared, now=datetime.now(tz=UTC)) is False
+
+    beat(declared)
+
+    assert declared.exists()
+    assert is_ready(declared, now=datetime.now(tz=UTC)) is True
+
+
+def test_a_worker_told_nowhere_to_beat_uses_a_path_the_container_forgets() -> None:
+    """A heartbeat must not survive a restart: the file says "a worker is working right now",
+    and a durable copy of that sentence left behind by a process that died is exactly the lie
+    the re-drive sweep exists to catch.
+
+    Delete this and the default can move somewhere a volume is mounted, and a dead container
+    reports ready until the age catches up."""
+    import tempfile
+
+    assert heartbeat_path({}) == default_heartbeat_path()
+    assert str(default_heartbeat_path()).startswith(tempfile.gettempdir())
+
+
 # --------------------------------------------------- the process refuses out loud
 def test_a_misconfigured_worker_exits_with_a_configuration_code_and_not_with_one() -> None:
     """Exit 1 means everything, so it means nothing. The two ways this process refuses need
@@ -610,20 +817,27 @@ def test_a_misconfigured_worker_exits_with_a_configuration_code_and_not_with_one
     assert main([], env=_sound_environment(QUEUE_URL="")) == EXIT_MISCONFIGURED
 
 
-def test_a_correctly_configured_worker_still_refuses_because_it_has_no_driver() -> None:
-    """The honest behaviour, and the reason this leaf is not claimed. A worker that started
-    against no driver would poll a queue that does not exist and report itself healthy, and
-    an empty queue is indistinguishable from an absent one in every metric there is.
+def test_a_worker_whose_image_has_no_driver_refuses_before_anything_else(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal that survives the driver arriving. An install that builds its own image can
+    leave the dependency out, and that container must say so with a code of its own: 69 says
+    the build is missing a package, 78 says an operator wrote something wrong.
 
-    Delete this and starting anyway becomes a small change with no test against it."""
+    Delete this and an image without the driver reports a configuration problem instead, and
+    whoever is paged goes to the compose file rather than to the Dockerfile."""
+    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: False)
+
     assert main([], env=_sound_environment()) == EXIT_NO_DRIVER
 
 
 def test_the_check_mode_reports_a_sound_configuration_as_sound() -> None:
-    """`--check` is an operator asking whether a deployment would start, and it has to be
-    able to answer yes on a machine with no driver installed. Delete this and the only way to
-    validate a worker's environment is to try to run it, which on this host means editing a
-    compose file to find out."""
+    """`--check` is an operator asking whether a deployment would start, and it has to answer
+    without connecting to anything: the run mode opens a pool, and a validation mode that did
+    the same could only be used on a host that already has the database.
+
+    Delete this and the only way to validate a worker's environment is to try to run it, which
+    on this host means editing a compose file to find out."""
     assert main(["--check"], env=_sound_environment()) == 0
 
 

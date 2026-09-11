@@ -355,14 +355,27 @@ def test_every_job_state_is_named_against_the_drivers_own_vocabulary() -> None:
     assert any("no driver concept" in gap for gap in driver_mapping_gaps(partial))
 
 
-def test_nothing_may_claim_to_be_verified_against_a_driver_that_is_not_installed() -> None:
+def test_nothing_may_claim_to_be_verified_against_a_driver_that_is_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A mapping written from documentation and never run is a set of plausible names, and the
     sentence a later reader trusts is the one saying it was checked. Delete this and the
-    honesty of this whole module becomes a habit rather than a check."""
+    honesty of this whole module becomes a habit rather than a check.
+
+    **The gate is now asserted in both directions, because on 2026-09-11 it stopped firing on
+    its own.** `driver_mapping_gaps` asks whether the driver can be imported, and the answer
+    changed when `procrastinate` became a dependency: a row claiming verification is no longer
+    a false claim, it is merely an unchecked one, and this check was built to stop asking on
+    exactly that day. Asserting the absence as well as the presence is what keeps that from
+    reading as the check having been quietly removed."""
     assert all(not concept.verified for concept in DRIVER_MAPPING)
     claimed = (DriverConcept(ours="attempts", theirs="x", note="y", verified=True),)
-    gaps = driver_mapping_gaps(claimed)
-    assert any("claims to be verified" in gap for gap in gaps)
+
+    monkeypatch.setattr("brain.ops.jobs.driver_is_installed", lambda: False)
+    assert any("claims to be verified" in gap for gap in driver_mapping_gaps(claimed))
+
+    monkeypatch.setattr("brain.ops.jobs.driver_is_installed", lambda: True)
+    assert not any("claims to be verified" in gap for gap in driver_mapping_gaps(claimed))
 
 
 def test_the_parts_the_driver_cannot_hold_are_named_rather_than_glossed_over() -> None:

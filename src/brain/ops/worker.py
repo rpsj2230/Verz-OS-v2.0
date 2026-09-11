@@ -83,13 +83,20 @@ asked on the same terms and for the same reason, from the far end of that batch:
 the largest batch the planner will build against the largest request the inference server
 will accept, and a container that may be handed a batch is a container that may find out.
 
-**It exits rather than loops.** There is no queue driver installed, so the run mode prints
-`NO_DRIVER_IS_INSTALLED` and exits. A worker that started anyway would poll an empty queue
-and report itself healthy, and an empty queue and an absent queue look identical from every
-metric there is - which is the same argument `brain.ops.queue` makes about a listener behind
-a transaction pooler. That is now asked rather than stated: it prints the sentence when
-`driver_is_installed` says so, having previously printed it unconditionally, which would have
-gone on being printed on the first day it was false.
+**It runs now, and until 2026-09-11 it exited.** There was no queue driver, so the run mode
+printed `NO_DRIVER_IS_INSTALLED` and stopped: a worker that started anyway would have polled a
+queue that did not exist and reported itself healthy, and an empty queue and an absent queue
+look identical from every metric there is. The driver is a dependency now, so the run mode
+opens the pool, lays out one driver worker per shard and writes the heartbeat the healthcheck
+reads. The refusal is kept for the install that builds its own image without the dependency,
+and it is asked rather than asserted.
+
+**What has not changed is that nothing registers a task, and that is printed rather than
+discovered.** `brain.ops.jobs` holds the job model against a driver integration that does not
+exist, so the queues this drains have nothing enqueued onto them and a job that did arrive
+would fail as an unknown task. `NOTHING_REGISTERS_A_TASK` is that sentence, and it is asked of
+the driver's own registry rather than stated, so it stops being printed on the day it stops
+being true rather than on the day somebody remembers it is there.
 
 **`--deploy-plan` prints the steps that install the queue, because they existed nowhere.**
 `THE_QUEUE_SCHEMA_IS_NOT_ALEMBICS` argues that the driver's DDL is a deploy step rather than
@@ -99,19 +106,31 @@ security on the tables the driver creates without it. `brain.ops.queue.DEPLOY_PL
 runbook and this is the mode that prints it, so the answer to "what does this leaf still
 need" is a command an operator can run rather than a paragraph somebody has to find.
 
-**Readiness is the heartbeat, and the heartbeat is not written yet.** `brain.ops.wiring`
-says the worker is ready when "the queue driver has fetched at least once and the database
-is reachable", so `--ready` reads the heartbeat file a running worker would write and
-compares its age against `brain.ops.queue.stale_after()`, which is the same staleness the
-re-drive sweep uses rather than a second copy of it. Nothing writes that file today, so the
-check answers "not ready", which is the correct answer for a container that is not draining
-a queue.
+**Readiness is the heartbeat, and something writes it now.** `brain.ops.wiring` says the
+worker is ready when "the queue driver has fetched at least once and the database is
+reachable", so `--ready` reads the heartbeat file a running worker writes and compares its age
+against `brain.ops.queue.stale_after()`, which is the same staleness the re-drive sweep uses
+rather than a second copy of it. The run mode writes that file every `HEARTBEAT_SECONDS`
+inside the same loop the driver's workers run on, which is what makes it evidence: a loop that
+has stopped scheduling stops touching the file, and a process that is alive but not running
+its loop reports not-ready rather than healthy.
 
-Not claimed: M32.4.1.4, and the reason has narrowed rather than gone. The placement defect
-above is fixed and the two containers are now checked against each other, which is real work
-against that leaf. The service is still written, sized, and never started, because the process
-it starts has no driver to fetch with. `docker-compose.langfuse.yml` refuses M32.1.1.1 on the
-same grounds and in the same words: a compose file that has never run is a design.
+**The fourth cap is the queue's share of the third, and it is arithmetic nothing did.**
+`BRAIN_WORKER_POOL_MAX` bounds the container against a database no pooler protects, and
+`brain.ops.connections` splits that figure into a measured checkpointer pool and a judged queue
+pool. Nothing derived the second half from the first, so the queue driver would have been handed
+either the whole bound or a constant, and the two containers make the difference visible: the
+general worker declares fifteen and configures a checkpointer, the parse worker declares five
+and configures none, and both should hand the driver five. `queue_pool_max` is that
+subtraction, and what it catches is a container whose total is right and whose split is not -
+drop `BRAIN_CHECKPOINTER_URL` from the general worker and the queue's share silently becomes
+fifteen against a budget that says five.
+
+Not claimed: M32.4.1.4, and the reason has narrowed again. The process starts now, lays out one
+driver worker per shard at the declared concurrency and has been watched fetching and running a
+job against a real database. What has not happened is this compose file running on the host it
+was sized for. `docker-compose.langfuse.yml` refuses M32.1.1.1 on the same grounds and in the
+same words: a compose file that has never run is a design.
 
 What this serves is the leaf named in the paragraph above, and it is deliberately not
 claimed. The id is not repeated on the line below, because that line is parsed for ids and
@@ -122,9 +141,10 @@ Task ids: none
 
 from __future__ import annotations
 
+import asyncio
 import sys
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -139,7 +159,11 @@ from brain.knowledge.parse_budget import (
     parse_worker_gaps,
 )
 from brain.ops.checkpoints import channel_policy_gaps, connection_refusals
-from brain.ops.connections import client_named
+from brain.ops.connections import (
+    WORKER_CHECKPOINTER_CONNECTIONS,
+    WORKER_QUEUE_CONNECTIONS,
+    client_named,
+)
 from brain.ops.inference import inference_gaps
 from brain.ops.queue import (
     DEPLOY_PLAN,
@@ -147,14 +171,21 @@ from brain.ops.queue import (
     FALLBACK_POLL_SECONDS,
     MIB_PER_SLOT,
     NO_DRIVER_IS_INSTALLED,
+    QueueError,
     Shard,
     SlotClass,
     concurrency_gaps,
     deploy_plan_gaps,
+    driver_default_disagreements,
     driver_is_installed,
     driver_schema_gaps,
+    install_queue,
+    queue_app,
+    queue_pool_gaps,
     queue_url_refusals,
+    run_shards,
     stale_after,
+    tasks_of_ours,
     worker_shards,
 )
 from brain.ops.wiring import WiringError, component
@@ -248,6 +279,22 @@ HEARTBEAT_DIRECTORY: Final = "brain-worker"
 #: than one packed string, so a deployment that gets one of them wrong is wrong in one place
 #: and readable in `docker inspect`.
 SLOT_ENV_PREFIX: Final = "BRAIN_WORKER_SLOTS_"
+
+#: What a worker says when it can fetch and there is nothing registered to run.
+#:
+#: Printed on every start until something registers a task, and asked of the driver's own
+#: registry rather than stated, for the reason `NO_DRIVER_IS_INSTALLED` is asked: a sentence
+#: that cannot stop being said is not a report. It is an advisory rather than a refusal because
+#: the container is correct: the queue exists, is bounded and is drained, and what is missing
+#: is upstream of it. A refusal here would stop the deployment of a queue in order to protest
+#: about the absence of work to put in it.
+NOTHING_REGISTERS_A_TASK: Final = (
+    "no task is registered with the queue driver, so these queues have nothing enqueued onto "
+    "them and a job that did arrive would fail as an unknown task. brain.ops.jobs holds the "
+    "job model and its integration with the driver is unbuilt; this container is draining a "
+    "queue that works and is empty, which is a different state from the one it was in before "
+    "a driver existed and is reported so the two are not confused."
+)
 
 #: `EX_CONFIG` from sysexits. A distinct code because the two ways this process refuses need
 #: different actions: 78 says an operator wrote something wrong, 69 says the build is missing
@@ -512,6 +559,108 @@ def pool_declaration_gaps(env: Mapping[str, str], *, worker_component: str) -> t
     return tuple(findings)
 
 
+def queue_pool_max(
+    env: Mapping[str, str], *, worker_component: str
+) -> tuple[int | None, tuple[str, ...]]:
+    """The queue driver's share of this container's declared bound, and why it may be wrong.
+
+    **The subtraction nothing did.** `BRAIN_WORKER_POOL_MAX` is the whole of what this
+    container may hold against a database no pooler bounds, and it has two spenders:
+    `brain.session.make_worker_engine` keeps `WORKER_CHECKPOINTER_CONNECTIONS` for the saver
+    when a checkpointer is configured, and whatever is left is the queue's. Handing the driver
+    the whole bound would double-count the checkpointer's half; handing it
+    `WORKER_QUEUE_CONNECTIONS` directly would make the container's own declaration decorative,
+    which is the state `AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES` is about.
+
+    The checkpointer's half is counted only when a checkpointer URL is set, which is what makes
+    the two containers come out at the same queue share from different totals: fifteen minus
+    ten on the general worker, five minus nothing on the parse worker.
+
+    **What this refuses is a share of nothing, and no more than that.** A split that disagrees
+    with the budget's stated decomposition endangers no database: the total is what every
+    headroom figure is computed from, `pool_declaration_gaps` already holds the total to the
+    budget, and the subtraction here is what keeps the two pools inside it whatever the split
+    is. So the disagreement is an advisory and lives in `queue_split_advisory`, which is the
+    line `advisories` was written for and did not have: wrong, actionable, and not grounds for
+    refusing to boot.
+
+    None with the complaint beside it rather than a raise, matching `declared_pool_max` and
+    `declared_slots`: a preflight that stopped here would report one problem out of the several
+    a badly configured container usually has. The component is taken and not used for the
+    arithmetic, because the arithmetic is about this container's own declaration; it is here so
+    that the caller cannot ask this question without having settled which container it is
+    asking about, which is the mistake `BRAIN_WORKER_COMPONENT` exists to make impossible.
+    """
+    declared, problems = declared_pool_max(env)
+    findings = list(problems)
+    if declared is None:
+        return None, tuple(findings)
+    spent = _checkpointer_share(env)
+    share = declared - spent
+    if share < 1:
+        findings.append(
+            f"{POOL_MAX_ENV}={declared} and the checkpointer keeps {spent} of it, which leaves "
+            f"{share} for the queue. The saver and the queue are two pools out of one bound "
+            f"and {worker_component!r} has declared a bound the saver alone exhausts, so the "
+            "driver would be given nothing to fetch with"
+        )
+        return None, tuple(findings)
+    return share, tuple(findings)
+
+
+def _checkpointer_share(env: Mapping[str, str]) -> int:
+    """What the saver holds out of this container's bound, which is nothing when it has none.
+
+    `brain.session.make_worker_engine` keeps five plus five overflow, and
+    `brain.ops.connections` records that as the measured half of the worker's budget. Counted
+    only when a URL is set, because an install with no durable graph constructs no saver and a
+    bound that reserved ten for it would be ten connections nothing spends against a database
+    somebody else is a client of.
+    """
+    return WORKER_CHECKPOINTER_CONNECTIONS if (env.get(CHECKPOINTER_URL_ENV) or "").strip() else 0
+
+
+def queue_split_advisory(env: Mapping[str, str], *, worker_component: str) -> tuple[str, ...]:
+    """Whether this container's bound splits the way `brain.ops.connections` says it does.
+
+    **Reported only when the total agrees with the budget**, and that is not a softening.
+    `pool_declaration_gaps` already refuses a container whose total is not the budgeted one, and
+    a split computed from a total that is already wrong is a second finding about one mistake:
+    `brain.ops.queue.pooler_url_findings` records what reporting one fault twice does to
+    whoever reads the list. What is left is the case nothing else can see, which is a right
+    total split the wrong way: drop `BRAIN_CHECKPOINTER_URL` from the general worker and the
+    queue driver is handed fifteen connections against a budget that says five, with every
+    other check on this surface green.
+
+    An advisory rather than a refusal, and the boundary is `advisories`' own: the database is
+    still bounded at the figure it was sized for, so nothing here is an outage waiting to
+    happen. What is wrong is that the sentence in `brain.ops.connections` describing where
+    those connections go has stopped being true of this container, and the next person to size
+    something against that sentence is the one who pays for it.
+
+    **The share comes from `queue_pool_max` rather than being computed again here**, which it
+    was for about an hour and which a mutation caught: two copies of one subtraction is two
+    places for it to stop agreeing, and the copy that drifts is the one nobody is looking at.
+    The figure this reports has to be the figure the driver is given, or the advisory describes
+    a container that does not exist.
+    """
+    declared, unreadable = declared_pool_max(env)
+    budgeted = client_named(worker_component)
+    if declared is None or unreadable or budgeted is None or declared != budgeted.pool_max:
+        return ()
+    spent = _checkpointer_share(env)
+    share, problems = queue_pool_max(env, worker_component=worker_component)
+    if share is None or problems or share == WORKER_QUEUE_CONNECTIONS:
+        return ()
+    return (
+        f"{POOL_MAX_ENV}={declared} is the budgeted total for {worker_component!r} and the "
+        f"checkpointer keeps {spent} of it, so the queue driver is handed {share} connections "
+        f"while brain.ops.connections budgets {WORKER_QUEUE_CONNECTIONS} for it. The total is "
+        f"right and the split is not: {CHECKPOINTER_URL_ENV} decides the other half and it is "
+        + ("set" if spent else "not set"),
+    )
+
+
 def declared_component(env: Mapping[str, str]) -> str:
     """Which component this container is, as its environment says.
 
@@ -583,9 +732,18 @@ def preflight(env: Mapping[str, str]) -> tuple[str, ...]:
     # container. Every other figure below is spent inside a cgroup limit; this one is spent out
     # of a database's ceiling, which every other client of that database is also spending from.
     findings.extend(pool_declaration_gaps(env, worker_component=worker_component))
+    share, split = queue_pool_max(env, worker_component=worker_component)
+    findings.extend(split)
     findings.extend(
         concurrency_gaps(allocation, worker_component=worker_component, slot_class=slot_class)
     )
+    # The floor the connection bound has to clear, which is a property of the two figures
+    # together and of neither alone: a shard holds a connection for as long as it listens, so
+    # the slot allocation decides how much of the pool is spoken for before any work is
+    # fetched. Asked only when there is a bound to ask about, because the sentence to print
+    # when there is not is `pool_declaration_gaps`'s and not a second one about shards.
+    if share is not None:
+        findings.extend(queue_pool_gaps(share, worker_shards(allocation, slot_class)))
     # Every container, not only one of them, and that is the difference between this check and
     # the parse worker's below. A parse budget is a property of a container, because only one
     # container is sized for a document somebody else chose. A batch budget is a property of a
@@ -608,7 +766,7 @@ def preflight(env: Mapping[str, str]) -> tuple[str, ...]:
     return tuple(findings)
 
 
-def advisories() -> tuple[str, ...]:
+def advisories(env: Mapping[str, str], *, worker_component: str) -> tuple[str, ...]:
     """Everything wrong with this deployment that does not stop the process from starting.
 
     **This exists because wiring one uncalled check exposed a distinction `preflight` never
@@ -619,8 +777,8 @@ def advisories() -> tuple[str, ...]:
     queue. Both workers drain `system` and embedding is one job type among many.
 
     A worker that refused to start over it would take the whole queue down to protect one leg,
-    and the operator's diagnosis would change from "no queue driver is installed", which is
-    the thing they can fix, to "misconfigured", which is a schema decision they cannot.
+    and the operator's diagnosis would change from a variable they can edit to "misconfigured",
+    which is a schema decision they cannot.
 
     So the split is by what the finding costs and not by how serious it sounds.
     `embed_batch_gaps` stays a refusal, because a batch that does not fit the slot is a
@@ -629,12 +787,14 @@ def advisories() -> tuple[str, ...]:
     Findings are printed on every mode that prints the preflight, never swallowed. A check
     that runs and is not shown is the state this function was created out of.
 
-    No environment parameter, unlike `preflight`. Nothing it asks reads one, and a
-    parameter accepted and ignored is the shape `tests/invariants/test_guards_that_can_fire.py`
-    exists to refuse: it reads as though the answer depends on the deployment when it does
-    not. Add it when the first advisory needs it.
+    **It took an environment on 2026-09-11, which is what its own last paragraph asked for.**
+    This had no parameter because nothing it asked read one, and a parameter accepted and
+    ignored is the shape `tests/invariants/test_guards_that_can_fire.py` exists to refuse. The
+    first advisory that needs one is `queue_split_advisory`: a container whose connection bound
+    no longer splits the way the budget describes is wrong in the budget's documentation rather
+    than in the database, which is this list's exact subject.
     """
-    return tuple(policy_gaps())
+    return (*policy_gaps(), *queue_split_advisory(env, worker_component=worker_component))
 
 
 # ------------------------------------------------------------------------- readiness
@@ -704,15 +864,138 @@ def deploy_plan_text() -> str:
     return "\n".join(lines)
 
 
-def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    """`python -m brain.ops.worker [--check | --ready | --deploy-plan]`.
+def heartbeat_path(env: Mapping[str, str]) -> Path:
+    """Where this container's heartbeat goes, as its environment says or by default.
 
-    Four modes, and each one is used by something. `--check` is an operator asking whether a
+    One function rather than the two lines it replaces, because `--ready` and the run mode have
+    to agree about the path: a healthcheck reading one file while the loop touches another is a
+    container that is never in rotation and whose logs say it is working.
+    """
+    declared = (env.get(HEARTBEAT_PATH_ENV) or "").strip()
+    return Path(declared) if declared else default_heartbeat_path()
+
+
+def beat(path: Path) -> None:
+    """Say that this process's loop is still going round.
+
+    The directory is created on every beat rather than once at start-up. It costs a stat and it
+    survives the case a start-up-only version does not, which is somebody clearing the
+    container's temporary directory underneath a running worker: the heartbeat would stop being
+    written, the healthcheck would take the container out of rotation, and the loop would be
+    perfectly healthy the whole time.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+
+
+def install_queue_text(env: Mapping[str, str], *, worker_component: str) -> tuple[int, str]:
+    """Run the queue's install steps against this container's own connection, and say what
+    happened.
+
+    Uses the same connection string and the same bound the run mode would, rather than taking
+    arguments of its own. An installer pointed at a different database from the worker is a
+    queue installed correctly somewhere nothing will ever listen, which is the failure this
+    whole module is written around in its other form.
+
+    Returns the exit code beside the text because the caller is `main`, and a function that
+    printed and returned nothing would leave the mode unable to fail.
+    """
+    url = (env.get(QUEUE_URL_ENV) or "").strip()
+    share, split = queue_pool_max(env, worker_component=worker_component)
+    if share is None:
+        reason = "; ".join(split) if split else f"{POOL_MAX_ENV} is not set"
+        return EXIT_MISCONFIGURED, f"the queue cannot be installed: {reason}"
+    try:
+        done = install_queue(url, pool_max=share, schema=DRIVER_SCHEMA)
+    except QueueError as exc:
+        return EXIT_MISCONFIGURED, f"the queue was not installed: {exc}"
+    return 0, "\n".join(f"  - {line}" for line in done)
+
+
+def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass) -> int:
+    """Open the pool, lay out one driver worker per shard, and stay there.
+
+    The only function in this module that connects to anything, and it is reached only after
+    `preflight` has returned nothing, so every figure it uses has already been checked against
+    the budget and the container's limit.
+
+    **The pool bound is the queue's share and not the container's total.** See `queue_pool_max`:
+    the checkpointer keeps the other half, and handing the driver the total would put this
+    container over the budget every other client of that database is sized against.
+
+    Returns rather than raising on a refusal from the queue, so the container's exit code says
+    which kind of wrong it was. A traceback out of a container's command is the one form of
+    report an operator cannot act on without the source in front of them.
+    """
+    url = (env.get(QUEUE_URL_ENV) or "").strip()
+    allocation, _ = declared_slots(env)
+    share, _ = queue_pool_max(env, worker_component=worker_component)
+    if share is None:
+        # Not reachable from `main`, which refuses first. Present because this is a public
+        # entry point and the alternative is a `None` reaching `queue_app` as a pool size.
+        print(f"{POOL_MAX_ENV} does not give the queue a bound", file=sys.stderr)
+        return EXIT_MISCONFIGURED
+    try:
+        app = queue_app(url, pool_max=share, schema=DRIVER_SCHEMA)
+    except QueueError as exc:
+        print(f"the queue driver will not be started: {exc}", file=sys.stderr)
+        return EXIT_MISCONFIGURED
+    shards = worker_shards(allocation, slot_class)
+    # Asked of the tasks that are ours rather than of the registry, because the driver puts a
+    # housekeeping task of its own on every app it builds. Asking the registry made this
+    # advisory unprintable, which is a guard that cannot fire, and only starting the process
+    # showed it: see `brain.ops.queue.DRIVER_BUILTIN_TASK_PREFIXES`.
+    if not tasks_of_ours(app.tasks):
+        print(f"  ! {NOTHING_REGISTERS_A_TASK}", file=sys.stderr)
+    # The driver's own defaults, printed rather than refused. They are not a misconfiguration
+    # anybody can fix and they are the two numbers somebody will want during an incident about
+    # a job that was reclaimed too early; see `brain.ops.queue.driver_default_disagreements`.
+    #
+    # Guarded on there being a shard, because an allocation of zero everywhere produces none
+    # and nothing before this point refuses that: `concurrency_gaps` reports a class left out
+    # of the mapping and has nothing to say about one set to zero. `run_shards` is what refuses
+    # it, a few lines below, and reading a shard out of an empty tuple here would replace that
+    # sentence with an IndexError.
+    for gap in driver_default_disagreements(shards[0]) if shards else ():
+        print(f"  ~ {gap}", file=sys.stderr)
+    path = heartbeat_path(env)
+    try:
+        asyncio.run(run_shards(app, shards, beat=lambda: beat(path)), loop_factory=_loop_factory())
+    except QueueError as exc:
+        print(f"the queue driver stopped: {exc}", file=sys.stderr)
+        return EXIT_MISCONFIGURED
+    return 0
+
+
+def _loop_factory() -> Callable[[], asyncio.AbstractEventLoop] | None:
+    """The event loop this process runs its workers on, or None to take the platform's own.
+
+    **A Windows-only branch in a module whose container is Linux, and it earns its place by
+    what it costs not to have.** The driver's connections are psycopg's async ones, and psycopg
+    refuses the proactor loop Windows uses by default with "Psycopg cannot use the
+    'ProactorEventLoop' to run in async mode". Without this, `python -m brain.ops.worker` is a
+    command nobody on a development machine can run, so the only way to find out whether a
+    worker starts is to deploy it, which is the state `--check` exists to end.
+
+    The deployed path is untouched: everything but Windows gets None and the platform's own
+    loop, so this cannot change what the container does.
+    """
+    if sys.platform != "win32":
+        return None
+    import selectors
+
+    return lambda: asyncio.SelectorEventLoop(selectors.SelectSelector())
+
+
+def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
+    """`python -m brain.ops.worker [--check | --ready | --deploy-plan | --install-queue]`.
+
+    Five modes, and each one is used by something. `--check` is an operator asking whether a
     deployment would start; `--ready` is the container healthcheck; `--deploy-plan` is the
-    steps that install the queue, which existed nowhere before and which nothing else prints;
-    no argument is the container's command. The environment is a parameter defaulting to the
-    real one so the modes can be tested without one, which is the same reason
-    `brain.ops.admission` takes `now` rather than reading a clock.
+    steps that install the queue and `--install-queue` is those steps run; no argument is the
+    container's command. The environment is a parameter defaulting to the real one so the modes
+    can be tested without one, which is the same reason `brain.ops.admission` takes `now`
+    rather than reading a clock.
     """
     import os
 
@@ -727,13 +1010,20 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         return 0
 
     if "--ready" in arguments:
-        declared = (environment.get(HEARTBEAT_PATH_ENV) or "").strip()
-        path = Path(declared) if declared else default_heartbeat_path()
+        path = heartbeat_path(environment)
         if is_ready(path, now=datetime.now(tz=UTC)):
             print(f"ready: heartbeat at {path} is fresh")
             return 0
         print(f"not ready: no fresh heartbeat at {path}", file=sys.stderr)
         return EXIT_NOT_READY
+
+    # Before the preflight, and it is the only refusal that is checked twice. Every mode below
+    # describes or starts a driver, and reporting eleven things about a slot allocation to
+    # somebody whose image does not contain the queue is eleven sentences in front of the one
+    # that matters.
+    if not driver_is_installed():
+        print(NO_DRIVER_IS_INSTALLED, file=sys.stderr)
+        return EXIT_NO_DRIVER
 
     findings = preflight(environment)
     if findings:
@@ -742,16 +1032,17 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
             print(f"  - {finding}", file=sys.stderr)
         return EXIT_MISCONFIGURED
 
+    allocation, _ = declared_slots(environment)
+    worker_component = declared_component(environment)
+    slot_class, _ = declared_slot_class(environment)
+
     # After the refusals and before anything starts. Printed rather than returned, and to
     # stderr rather than stdout, because a worker with an advisory against it is a worker that
     # runs: these lines sit in the log beside the plan, and the exit code stays whatever the
     # start itself produces.
-    for advisory in advisories():
+    for advisory in advisories(environment, worker_component=worker_component):
         print(f"  ! {advisory}", file=sys.stderr)
 
-    allocation, _ = declared_slots(environment)
-    worker_component = declared_component(environment)
-    slot_class, _ = declared_slot_class(environment)
     print(plan_for(allocation, worker_component=worker_component, slot_class=slot_class).describe())
     if worker_component == PARSE_WORKER_COMPONENT:
         # The plan's own numbers understate this container by an order of magnitude: it says
@@ -762,23 +1053,16 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     if "--check" in arguments:
         return 0
 
-    # The run mode, which does not run. See the module docstring: a worker that started
-    # against no driver would poll an empty queue and report itself healthy, and an empty
-    # queue is indistinguishable from an absent one in every metric there is.
-    #
-    # Asked rather than asserted. The sentence was printed unconditionally, which was true
-    # and would have stayed printed on the first day it stopped being. There is still nothing
-    # to run when a driver is present, because nothing implements `QueueDriver`, so that path
-    # says what is missing instead of saying what is installed.
-    if not driver_is_installed():
-        print(NO_DRIVER_IS_INSTALLED, file=sys.stderr)
-        return EXIT_NO_DRIVER
-    print(
-        "a queue driver is installed and nothing implements brain.ops.queue.QueueDriver, so "
-        "there is still nothing to fetch with. See --deploy-plan for what remains.",
-        file=sys.stderr,
-    )
-    return EXIT_NO_DRIVER
+    if "--install-queue" in arguments:
+        # After the preflight rather than before it. Installing a queue on a connection
+        # `queue_url_refusals` would refuse is the one outcome worse than not installing it:
+        # the tables are right, the row-level security is on, and nothing will ever be
+        # notified, which is the failure with no error in it.
+        code, text = install_queue_text(environment, worker_component=worker_component)
+        print(text, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+
+    return run(environment, worker_component=worker_component, slot_class=slot_class)
 
 
 if __name__ == "__main__":

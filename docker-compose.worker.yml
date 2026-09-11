@@ -47,15 +47,19 @@
 # | cap | value | where it is set | what it does not cover |
 # | --- | --- | --- | --- |
 # | checkpointer pool | 10 | `brain.session.make_worker_engine`, pool 5 plus 5 overflow | nothing; it is measured |
-# | queue pool | 5 | nowhere yet, because no driver is installed | what the driver actually opens |
-# | declared total | 15 | `BRAIN_WORKER_POOL_MAX` below | it declares rather than enforces; see below |
+# | queue pool | 5 | the total below, minus the checkpointer's ten | a driver that opens outside its pool |
+# | declared total | 15 | `BRAIN_WORKER_POOL_MAX` below | nothing; it is what the driver is given |
 #
-# The third row is the honest one. Nothing in this repository opens a queue connection, so
-# this variable is a declaration checked against the budget rather than a knob that binds a
-# pool, and the day a driver is installed it becomes the number that driver has to be given.
-# `brain.ops.worker` refuses to start a container that has a driver and no such declaration,
-# because "we guessed five and the driver opens twenty" is a silent understatement and a
-# silent understatement is the whole of the 2026-09-07 outage.
+# **The third row stopped being a declaration on 2026-09-11 and became the figure that binds.**
+# It said "it declares rather than enforces", because nothing in this repository opened a queue
+# connection. `brain.ops.worker.queue_pool_max` now subtracts the checkpointer's measured ten
+# from it and hands the remainder to the driver's connection pool as its maximum, so this
+# number is what the container may hold rather than what somebody said it would.
+#
+# That subtraction is also the check nothing else can make. Removing `BRAIN_CHECKPOINTER_URL`
+# below leaves the queue the whole fifteen against a budget that says five, with the total
+# still correct and every other check green; the container prints that as an advisory and
+# starts, because the database is still bounded at the figure it was sized for.
 #
 # **QUEUE_URL goes straight to the database and DATABASE_URL does not.** Both are set, and
 # the worker compares them: `brain.ops.queue.queue_url_refusals` exists for the case where
@@ -64,12 +68,20 @@
 # another backend and stops delivering, so the worker polls on its fallback timer, throughput
 # drops to whatever that allows, and every metric reports an empty queue.
 #
-# **It has never been started.** `brain.ops.worker` exits 69 with a message saying no queue
-# driver is installed, because procrastinate is not a dependency of this project. That is the
-# honest behaviour: a worker that started anyway would poll a queue that does not exist and
-# report itself healthy. So M32.4.1.4 is not claimed here, on the same grounds
-# `docker-compose.langfuse.yml` refuses M32.1.1.1: a compose file that has never run is a
-# design.
+# **There is a step before this file now, and it is not a migration.** The queue driver ships
+# and versions its own tables, so they are a deploy step rather than an Alembic revision, and
+# they arrive with row-level security off. `python -m brain.ops.worker --install-queue` creates
+# the schema, applies the driver's own DDL and enables row-level security on the tables that
+# appeared, in that order; `--deploy-plan` prints the whole of it with the reason for each step.
+# Run it once against `QUEUE_URL` before the first `docker compose up` of this file. Until it
+# has run there are no queue tables, and `brain.ops.sweeps.sweep_rls` is what would say so.
+#
+# **It has still never been started here.** The process it runs works: it opens the pool, lays
+# out one driver worker per shard at the concurrencies below, and writes the heartbeat the
+# healthcheck reads. What has not happened is this file running on the host it was sized for,
+# so M32.4.1.4 is not claimed, on the same grounds `docker-compose.langfuse.yml` refuses
+# M32.1.1.1: a compose file that has never run is a design. Nothing registers a task either, so
+# a container started today drains queues nothing enqueues onto and says so on every start.
 #
 # Task ids: none. M32.4.1.4 is what this serves and is deliberately not claimed; see above.
 
@@ -145,8 +157,9 @@ services:
       # Readiness, not liveness, and `brain.ops.wiring` says what it means: the queue driver
       # has fetched at least once and the database is reachable. `--ready` reads the
       # heartbeat a draining worker writes and compares its age against the same staleness
-      # the re-drive sweep uses. Nothing writes it yet, so this reports not-ready, which is
-      # the correct answer for a container that is not draining a queue.
+      # the re-drive sweep uses. The run mode writes that file every 15 seconds from inside
+      # the loop the driver's workers run on, so a process that is alive and not scheduling
+      # reports not-ready rather than healthy.
       test: ["CMD", "python", "-m", "brain.ops.worker", "--ready"]
       interval: 15s
       timeout: 5s

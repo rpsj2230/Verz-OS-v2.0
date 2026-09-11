@@ -6,11 +6,12 @@ passages a run retrieved are all states in which every process reports itself he
 of them raises, none of them appears in a metric, and each is discovered by the thing it was
 meant to prevent.
 
-No task ids. `brain.ops.queue`, `brain.ops.worker` and `brain.ops.checkpoints` claim none of
-M32.4.1.1, .2 or .4 between them: there is no queue driver in `uv.lock`, no graph is built,
-and neither worker container has ever been started. These tests exist because the decisions
-are real where the components are not, and because two of the three checks below stop a
-container today.
+M32.4.1.1 is claimed by `brain.ops.queue` as of 2026-09-11: the driver is in `uv.lock`, the
+install steps are a command rather than a runbook, and the worker starts. M32.4.1.2 and
+M32.4.1.4 are still claimed by nobody: no graph is built, so no saver is constructed from
+`brain.ops.checkpoints`, and neither compose file has run on the host it was sized for.
+
+Task ids: M32.4.1.1
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ from brain.ops.queue import (
     DEPLOY_PLAN,
     DRIVER_IMPORT_NAME,
     DRIVER_SCHEMA,
+    DRIVER_SCHEMA_COMMAND,
     MAX_ARGUMENT_CHARS,
     MIB_PER_SLOT,
     NO_DRIVER_IS_INSTALLED,
@@ -46,10 +48,13 @@ from brain.ops.queue import (
     QueueError,
     Shard,
     SlotClass,
+    StepKind,
     concurrency_gaps,
     deploy_plan_gaps,
     driver_is_installed,
+    driver_pool_settings,
     driver_rls_statements,
+    queue_app,
     queue_name_for,
     worker_shards,
 )
@@ -357,18 +362,46 @@ def test_the_row_level_security_step_comes_after_the_tables_it_acts_on_exist() -
     and enables nothing, because the ALTER has no table to name."""
     assert deploy_plan_gaps() == ()
 
-    ddl = next(s for s in DEPLOY_PLAN if DRIVER_IMPORT_NAME in s.what and "schema" in s.what)
-    rls = next(s for s in DEPLOY_PLAN if "ROW LEVEL SECURITY" in s.what)
+    ddl = next(s for s in DEPLOY_PLAN if s.kind is StepKind.TABLES)
+    rls = next(s for s in DEPLOY_PLAN if s.kind is StepKind.ROW_LEVEL_SECURITY)
 
     assert rls.order > ddl.order
+
+
+def test_a_step_is_found_by_what_it_is_and_not_by_what_its_sentence_says() -> None:
+    """Written because this check quietly stopped working. `deploy_plan_gaps` used to find the
+    step that creates the tables by looking for the driver's name and the word "schema" inside
+    its prose; the step became a command of ours, the substring went with it, and the ordering
+    rule had nothing left to order against - no failure, no finding, and a plan that could then
+    be reordered freely.
+
+    Asserted by rewording every step into prose that says nothing and asking whether the rules
+    still fire. Delete this and the identification can go back to reading sentences, and the
+    next reword silences it again."""
+    silent = (
+        DeployStep(order=1, kind=StepKind.ROW_LEVEL_SECURITY, what="step one", why="because"),
+        DeployStep(order=2, kind=StepKind.TABLES, what="step two", why="because"),
+    )
+
+    assert any("nothing to enable it on" in g for g in deploy_plan_gaps(silent))
 
 
 def test_a_plan_that_secures_the_tables_before_creating_them_is_reported() -> None:
     """The check has to fail when it should. Delete this and `deploy_plan_gaps` could return
     an empty tuple unconditionally and the test above would still be green."""
     reversed_plan = (
-        DeployStep(order=1, what="ALTER TABLE x ENABLE ROW LEVEL SECURITY", why="because"),
-        DeployStep(order=2, what=f"{DRIVER_IMPORT_NAME} schema --apply", why="because"),
+        DeployStep(
+            order=1,
+            kind=StepKind.ROW_LEVEL_SECURITY,
+            what="ALTER TABLE x ENABLE ROW LEVEL SECURITY",
+            why="because",
+        ),
+        DeployStep(
+            order=2,
+            kind=StepKind.TABLES,
+            what=f"{DRIVER_IMPORT_NAME} schema --apply",
+            why="because",
+        ),
     )
 
     assert any("nothing to enable it on" in g for g in deploy_plan_gaps(reversed_plan))
@@ -382,9 +415,15 @@ def test_the_step_that_enables_row_level_security_may_not_be_marked_optional() -
     Delete this and it can be marked optional in one keyword, in an edit that reads as
     acknowledging that a schema sometimes already has it."""
     optional = (
-        DeployStep(order=1, what=f"{DRIVER_IMPORT_NAME} schema --apply", why="because"),
+        DeployStep(
+            order=1,
+            kind=StepKind.TABLES,
+            what=f"{DRIVER_IMPORT_NAME} schema --apply",
+            why="because",
+        ),
         DeployStep(
             order=2,
+            kind=StepKind.ROW_LEVEL_SECURITY,
             what="ALTER TABLE x ENABLE ROW LEVEL SECURITY",
             why="because",
             optional=True,
@@ -395,7 +434,7 @@ def test_the_step_that_enables_row_level_security_may_not_be_marked_optional() -
 
     assert len(gaps) == 1, gaps
     assert "tables nothing protects" in gaps[0]
-    assert not any(s.optional for s in DEPLOY_PLAN if "ROW LEVEL SECURITY" in s.what)
+    assert not any(s.optional for s in DEPLOY_PLAN if s.kind is StepKind.ROW_LEVEL_SECURITY)
 
 
 def test_only_the_step_that_creates_the_schema_may_be_skipped() -> None:
@@ -408,9 +447,18 @@ def test_only_the_step_that_creates_the_schema_may_be_skipped() -> None:
     reads as an operator being given the benefit of the doubt."""
     skippable_ddl = (
         DeployStep(
-            order=1, what=f"{DRIVER_IMPORT_NAME} schema --apply", why="because", optional=True
+            order=1,
+            kind=StepKind.TABLES,
+            what=f"{DRIVER_IMPORT_NAME} schema --apply",
+            why="because",
+            optional=True,
         ),
-        DeployStep(order=2, what="ALTER TABLE x ENABLE ROW LEVEL SECURITY", why="because"),
+        DeployStep(
+            order=2,
+            kind=StepKind.ROW_LEVEL_SECURITY,
+            what="ALTER TABLE x ENABLE ROW LEVEL SECURITY",
+            why="because",
+        ),
     )
 
     gaps = deploy_plan_gaps(skippable_ddl)
@@ -418,7 +466,7 @@ def test_only_the_step_that_creates_the_schema_may_be_skipped() -> None:
     assert len(gaps) == 1, gaps
     assert "no tables at all" in gaps[0]
     assert [s.order for s in DEPLOY_PLAN if s.optional] == [
-        s.order for s in DEPLOY_PLAN if "CREATE SCHEMA" in s.what
+        s.order for s in DEPLOY_PLAN if s.kind is StepKind.SCHEMA
     ]
 
 
@@ -432,7 +480,14 @@ def test_a_plan_with_no_row_level_security_step_at_all_is_reported() -> None:
     assert any(
         "no step enables row-level security" in g
         for g in deploy_plan_gaps(
-            (DeployStep(order=1, what=f"{DRIVER_IMPORT_NAME} schema --apply", why="because"),)
+            (
+                DeployStep(
+                    order=1,
+                    kind=StepKind.TABLES,
+                    what=f"{DRIVER_IMPORT_NAME} schema --apply",
+                    why="because",
+                ),
+            )
         )
     )
 
@@ -484,12 +539,70 @@ def test_the_deploy_plan_installs_into_a_schema_the_security_sweep_enumerates() 
 
     Delete this and the two can drift, which produces a deploy where every step succeeds."""
     assert DRIVER_SCHEMA in SCHEMAS
-    create = next(s for s in DEPLOY_PLAN if "CREATE SCHEMA" in s.what)
-    apply = next(s for s in DEPLOY_PLAN if DRIVER_IMPORT_NAME in s.what and "schema" in s.what)
+    create = next(s for s in DEPLOY_PLAN if s.kind is StepKind.SCHEMA)
+    apply = next(s for s in DEPLOY_PLAN if s.kind is StepKind.TABLES)
 
     assert DRIVER_SCHEMA in create.what
-    assert f"search_path={DRIVER_SCHEMA}" in apply.what
+    assert DRIVER_SCHEMA_COMMAND in apply.what
     assert driver_rls_statements(["t"])[0].startswith(f"ALTER TABLE {DRIVER_SCHEMA}.")
+
+
+def test_the_driver_is_pointed_at_that_schema_by_the_connection_and_not_by_an_argument() -> None:
+    """The half the plan cannot state, because the driver's DDL is unqualified: what decides
+    where its tables land is `search_path` on the connection, so the app the worker builds has
+    to carry it. `public` is deliberately not on that path; a path of `ops,public` creates new
+    tables in `ops` and finds existing ones in `public`, so an install that has already run
+    once with the default keeps reading the tables no sweep enumerates while the fix appears to
+    have worked.
+
+    Read off the pool the app was actually built with, through the driver's private attribute,
+    rather than off `driver_pool_settings` alone. That is deliberate and it is the rule
+    `CLAUDE.md` states about a producer and a consumer either side of a value: asking the
+    settings function what it returns twice is two tests for the settings function, and the
+    fact worth pinning is that the value reaches the driver.
+
+    Delete this and the schema decision survives only in prose, and the queue installs into
+    `public`, which `sweep_rls` does not enumerate at all."""
+    settings = driver_pool_settings("postgresql+psycopg://brain:pw@db:5432/brain", pool_max=5)
+    app = queue_app("postgresql+psycopg://brain:pw@db:5432/brain", pool_max=5)
+    built = getattr(app.connector, "_pool_args")  # noqa: B009 - the driver exposes no accessor
+
+    assert settings["kwargs"] == {"options": f"-c search_path={DRIVER_SCHEMA}"}
+    assert "public" not in str(settings["kwargs"])
+    assert built["kwargs"] == settings["kwargs"]
+
+
+def test_the_driver_is_given_the_pool_bound_it_is_handed_and_never_a_default() -> None:
+    """The third cap, reaching the only thing in this process that opens sockets. A driver
+    handed no bound opens what it likes against a database no pooler is protecting, which is
+    `AN_UNBOUNDED_CLIENT_ALWAYS_RUNS_AT_THE_SERVERS_CEILING` with a different service in it,
+    and the 2026-09-07 outage is what it looks like.
+
+    The idle floor is asserted beside the ceiling because it is the half that is easy to
+    "tidy" into matching: a pool that keeps its maximum open holds this container's whole
+    allowance against a database whose spare connections are somebody else's diagnosis.
+
+    Delete this and `queue_app` can drop the argument on the floor, which no other test would
+    see because nothing else reads the pool the connector was built with."""
+    app = queue_app("postgresql+psycopg://brain:pw@db:5432/brain", pool_max=4)
+    built = getattr(app.connector, "_pool_args")  # noqa: B009 - the driver exposes no accessor
+
+    assert built["max_size"] == 4
+    assert built["min_size"] == 1
+
+    with pytest.raises(QueueError, match="bounded at 0 connections"):
+        queue_app("postgresql+psycopg://brain:pw@db:5432/brain", pool_max=0)
+
+
+def test_a_queue_app_is_never_built_on_a_connection_the_refusals_would_reject() -> None:
+    """`queue_url_refusals` is a list of findings and a list of findings is something a caller
+    can ignore. This is the door where ignoring it stops being possible: the object that opens
+    sockets cannot be constructed against the pooler at all.
+
+    Delete this and a worker can be handed the application's URL by a path that never asked
+    the refusals, which is the failure with no error in it."""
+    with pytest.raises(QueueError, match="transaction pooler"):
+        queue_app("postgresql+psycopg://brain:pw@pgbouncer:5432/brain", pool_max=5)
 
 
 def test_a_deploy_step_with_no_reason_cannot_be_recorded() -> None:
@@ -499,24 +612,24 @@ def test_a_deploy_step_with_no_reason_cannot_be_recorded() -> None:
 
     Delete this and the next step is added with a command and no argument."""
     with pytest.raises(QueueError, match="has no why"):
-        DeployStep(order=1, what="something", why="  ")
+        DeployStep(order=1, kind=StepKind.TABLES, what="something", why="  ")
 
 
-def test_the_absence_of_a_driver_is_asked_rather_than_asserted() -> None:
+def test_the_presence_of_a_driver_is_asked_rather_than_asserted() -> None:
     """The run mode printed "no queue driver is installed" unconditionally, which was true and
     would have gone on being printed on the first day it was false. A sentence that cannot
-    stop being said is not a report.
+    stop being said is not a report, and 2026-09-11 is the day it stopped being true.
 
     Asserted in both directions: the fact today, and that the plan's first step reports the
     same fact rather than carrying a hand-written status.
 
-    Delete this and the answer goes back to being a constant, and the day the dependency lands
-    the deploy plan says it has not."""
-    assert driver_is_installed() is False
+    Delete this and the answer goes back to being a constant, and an install that builds its
+    own image without the dependency is told the queue is installed."""
+    assert driver_is_installed() is True
     assert DRIVER_IMPORT_NAME in DEPLOY_PLAN[0].what
 
 
-def test_the_deploy_plan_mode_prints_the_step_that_has_not_been_done(
+def test_the_deploy_plan_mode_prints_every_step_and_what_has_been_done(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """The mode exists because the steps existed nowhere: not in a runbook, not in a comment,
@@ -524,12 +637,16 @@ def test_the_deploy_plan_mode_prints_the_step_that_has_not_been_done(
     is not installed, which is the state in which every other mode of this process refuses, so
     this one answers before the preflight and without an environment.
 
+    The first step now reads done, which is the same mechanism reporting a different fact: the
+    status is asked of the environment rather than written into the step.
+
     Delete this and the plan is data nothing prints, which is this repository's most common
     defect wearing a docstring."""
     assert main(["--deploy-plan"], env={}) == 0
     printed = capsys.readouterr().out
 
-    assert "NOT DONE" in printed
+    assert "NOT DONE" not in printed
+    assert "[done]" in printed
     assert all(str(step.order) in printed for step in DEPLOY_PLAN)
     assert "ENABLE ROW LEVEL SECURITY" in printed
 
@@ -550,32 +667,32 @@ def test_the_preflight_surfaces_a_broken_deploy_plan_rather_than_swallowing_it(
     assert "the plan is out of order" in preflight(_environment(GENERAL_WORKER_COMPOSE))
 
 
-def test_the_run_mode_stops_saying_the_driver_is_missing_once_it_is_not(
+def test_an_image_built_without_the_driver_refuses_before_it_checks_anything_else(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The other half of asking rather than asserting, and the half no test could otherwise
-    reach: the branch only differs on a machine where the dependency is installed, which is
-    the thing M32.4.1.1 needs and does not have.
+    """The refusal that is kept now that the dependency is here. An install building its own
+    image can leave the driver out, and that container must say which of the two kinds of
+    wrong it is: 69 says the build is missing a package, 78 says an operator wrote something
+    wrong, and a single exit 1 for both sends the wrong person to look.
 
-    It still exits 69, because installing the dependency does not implement `QueueDriver`.
-    The two states are different sentences to whoever is paged: one says the build is missing
-    a package and the other says the code is missing an implementation.
+    It refuses before the preflight, and the ordering is the point: eleven findings about a
+    slot allocation in front of the one sentence that matters is a log nobody reads to the
+    bottom of.
 
-    Delete this and the run mode goes back to printing one sentence whatever is true, which
-    is what it did before and which nothing could have caught."""
-    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: True)
-
-    assert main([], env=_environment(GENERAL_WORKER_COMPOSE)) == EXIT_NO_DRIVER
-    installed = capsys.readouterr().err
-
+    Delete this and an image without the driver reports a configuration problem, and whoever
+    is paged goes to the compose file rather than to the Dockerfile."""
     monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: False)
+
     assert main([], env=_environment(GENERAL_WORKER_COMPOSE)) == EXIT_NO_DRIVER
     absent = capsys.readouterr().err
 
     assert NO_DRIVER_IS_INSTALLED in absent
-    assert NO_DRIVER_IS_INSTALLED not in installed
-    assert "nothing implements" in installed
+    assert "slot" not in absent
+
+    monkeypatch.setattr("brain.ops.worker.driver_is_installed", lambda: True)
+    assert main(["--check"], env=_environment(GENERAL_WORKER_COMPOSE)) == 0
+    assert NO_DRIVER_IS_INSTALLED not in capsys.readouterr().err
 
 
 # ----------------------------------------------- what a run may save (M32.4.1.2)
