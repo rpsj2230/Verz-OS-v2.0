@@ -240,8 +240,35 @@ def test_an_empty_run_says_so_rather_than_printing_an_empty_table() -> None:
 # uncommitted.
 
 
-PROBE_SOURCE = Path("src/brain/ops/_probe_for_test_mutation.py")
-PROBE_TEST = Path("tests/unit/test__probe_for_test_mutation.py")
+#: Both halves of the probe live under `.scratch`, and that is not tidiness.
+#:
+#: This pair is the only thing in the repository that writes files into the working tree, and
+#: for three days it wrote them where every other run would find them: the source under
+#: `src/brain/ops`, the test under `tests/unit`. Both are deleted by the `finally` below, which
+#: is correct for the run that wrote them and wrong for every other run, because several
+#: sessions work on this repository at once.
+#:
+#: **The failure it produced was the least diagnosable this repository has made, and it takes
+#: two forms.** A bare `pytest` collects `testpaths = ["tests"]`, so a second session picks the
+#: probe test up and then loses it mid-run. And roughly twenty checks walk `src/brain` by
+#: listing files and then opening them, so a source file that disappears between the listing
+#: and the open raises `FileNotFoundError` inside a check that has no opinion about it. Three
+#: sessions on three consecutive days spent time on these, each time on a module that was gone
+#: before anybody could look at it, and each time it read as a defect in their own change.
+#:
+#: Skipping the name in each walker was the first fix and it is the wrong one: there are about
+#: twenty of them, a skip has to be remembered by everybody who writes the next one, and a
+#: check that skips a file is a check with a documented way round it. Moving the files is the
+#: fix, because `.scratch` is outside `testpaths` and inside `.gitignore`, so no bare run
+#: reaches them and no run of this test dirties the tree.
+#:
+#: What makes it work, measured rather than assumed: pytest collects a file it is handed by
+#: name whatever `norecursedirs` says, and `prepend` import mode puts a test file's own
+#: directory on `sys.path`, so the test imports the source beside it as a top-level module
+#: rather than through `brain.ops`. `verify` copies carried files by relative path and creates
+#: parent directories, so both arrive in the worktree where the test expects them.
+PROBE_SOURCE = Path(".scratch/_probe_for_test_mutation.py")
+PROBE_TEST = Path(".scratch/test__probe_for_test_mutation.py")
 
 
 @pytest.fixture
@@ -251,6 +278,7 @@ def probe() -> Iterator[None]:
     Deleted in `finally`, because a probe left behind is collected by every later run and
     `ruff` has an opinion about it.
     """
+    (REPO / PROBE_TEST).parent.mkdir(parents=True, exist_ok=True)
     (REPO / PROBE_SOURCE).write_text(
         '"""A probe written and removed by test_mutation. Task ids: none"""\n\n\n'
         "def loud(value: int) -> int:\n"
@@ -263,7 +291,7 @@ def probe() -> Iterator[None]:
     (REPO / PROBE_TEST).write_text(
         '"""Watches the probe. Written and removed by test_mutation. Task ids: none"""\n\n'
         "import pytest\n\n"
-        "from brain.ops._probe_for_test_mutation import loud\n\n\n"
+        "from _probe_for_test_mutation import loud\n\n\n"
         "def test_a_negative_value_is_refused() -> None:\n"
         '    """Delete this and the probe has no guard, which is the point of the probe."""\n'
         '    with pytest.raises(ValueError, match="negative"):\n'
@@ -531,3 +559,50 @@ def test_a_test_that_prints_outside_the_platform_encoding_does_not_crash_the_rea
     assert passed.get("encoding") == "'utf-8'"
     assert passed.get("errors") == "'replace'"
     assert "text" not in passed, "text=True decodes at the platform encoding"
+
+
+def test_neither_half_of_the_probe_is_written_where_another_run_would_read_it() -> None:
+    """**The probe pair is the only thing in this repository that writes files into the working
+    tree, and for three days it wrote both of them where every other run would find them.**
+
+    Two areas, because the pair had two separate ways of breaking a stranger's run.
+
+    `testpaths` is what a bare `pytest` collects when given no arguments, so a probe test
+    written inside it is collected by any session that starts a run while the fixture holds and
+    then deleted from under that run by the `finally`. And `brain.ops.independence.SEARCHED`
+    names the areas this repository's own checks walk, which they do by listing files and then
+    opening them: a source file that vanishes between the listing and the open raises
+    `FileNotFoundError` inside a check that has no opinion about it. That second one is not
+    hypothetical. It arrived as
+    `test_the_import_graph_is_read_once_and_handed_out_unchangeable` failing with
+    `FileNotFoundError: src/brain/ops/_probe_for_test_mutation.py` in a session doing unrelated
+    work, and it is the third day in a row this pair cost somebody time.
+
+    Both sets are read out of their declarations rather than restated here, because a test that
+    compares a constant against its own copy is green for every value either could hold: this
+    repository has been caught by exactly that three times in one afternoon. So widening
+    `testpaths` to cover `.scratch`, adding `.scratch` to the searched areas, or moving either
+    half back where it was, all turn this red.
+
+    Delete this and the pair drifts back into `src/brain` and `tests/unit` on the first
+    tidy-up, and the next session to lose a day to it has no record that it was understood."""
+    import tomllib
+
+    from brain.ops.independence import SEARCHED
+
+    config = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
+    collected = config["tool"]["pytest"]["ini_options"]["testpaths"]
+
+    assert collected, "with no testpaths a bare run collects the rootdir and this cannot hold"
+    assert SEARCHED, "with no searched areas the second half of this claim is about nothing"
+
+    for half in (PROBE_SOURCE, PROBE_TEST):
+        for area in collected:
+            assert not half.is_relative_to(area), (
+                f"{half} is inside testpaths {area}, so a concurrent bare run collects it"
+            )
+        for area in SEARCHED:
+            assert not half.is_relative_to(area), (
+                f"{half} is inside the searched area {area}, so a check walking it can open a "
+                f"file this fixture is about to delete"
+            )

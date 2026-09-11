@@ -400,7 +400,10 @@ def test_the_sweep_is_registered_and_runs_on_every_commit() -> None:
     assert "brain.ops.sweeps client_independence" in workflow
 
 
-def test_the_sweep_raises_on_a_finding_rather_than_only_printing_it() -> None:
+def test_the_sweep_raises_on_a_finding_rather_than_only_printing_it(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """**A survivor found this.** `test_sweeps.py` checks that every registered sweep exits
     zero on this tree, which a sweep that can never fail satisfies perfectly: it is green
     today, green on a tree full of client values, and green for ever.
@@ -409,25 +412,40 @@ def test_the_sweep_raises_on_a_finding_rather_than_only_printing_it() -> None:
     file and asking the sweep. The alternative, asserting that the function contains a
     `raise`, is the shape this repository has been caught by twice.
 
+    **The file is planted in a throwaway tree rather than in this one, and the tree the sweep
+    reads is redirected to it.** Until 2026-09-11 this wrote the probe into `src/brain` and
+    removed it in a `finally`, which is correct for the run that wrote it and wrong for every
+    other run: this repository is worked on by several sessions at once, and a second one
+    sweeping inside that window reads a planted client host and goes red on a defect nobody
+    introduced. It cost three separate sessions time on three consecutive days, each time
+    presenting as `client_independence` failing on work that had nothing to do with it.
+
+    Redirecting `REPO` costs one thing worth paying for separately, so the assertion above it
+    is new: that the constant points at this checkout. Nothing asserted that before, so a
+    sweep reading the wrong tree would have been green.
+
     Delete this and `client_independence` can be reduced to a print, and every other test
     about it still passes."""
+    from brain.ops import sweeps
     from brain.ops.sweeps import SweepFailure, sweep_client_independence
 
-    scratch = REPO / "src" / "brain" / "_temporary_sweep_probe.py"
-    scratch.write_text(
-        '"""A probe written and removed by test_independence. Task ids: none"""\n\n'
+    assert sweeps.REPO == REPO
+
+    (tmp_path / "src" / "brain").mkdir(parents=True)
+    (tmp_path / "src" / "brain" / "endpoint.py").write_text(
+        '"""A module in a tree built for this test. Task ids: none"""\n\n'
         'ENDPOINT = "https://records.acme-corporation.invalid-tld"\n',
         encoding="utf-8",
         newline="\n",
     )
-    try:
-        with pytest.raises(SweepFailure) as raised:
-            sweep_client_independence()
-    finally:
-        scratch.unlink(missing_ok=True)
+    monkeypatch.setattr(sweeps, "REPO", tmp_path)
+
+    with pytest.raises(SweepFailure) as raised:
+        sweep_client_independence()
 
     assert any("acme-corporation" in one for one in raised.value.findings), raised.value.findings
 
+    monkeypatch.undo()
     sweep_client_independence()
 
 
@@ -493,7 +511,7 @@ def test_a_vendor_host_is_derived_from_the_connectors_rather_than_listed() -> No
     assert not any(" " in one for one in found), "a sentence is not a host"
 
 
-def test_the_pages_the_application_serves_are_swept_as_well_as_the_source() -> None:
+def test_the_pages_the_application_serves_are_swept_as_well_as_the_source(tmp_path: Path) -> None:
     """**A survivor found this, and it was the mutation worth writing.** Removing `docs` from
     the searched areas left every other test green: nothing asserted that the pages served at
     `/build` are read at all.
@@ -506,21 +524,24 @@ def test_the_pages_the_application_serves_are_swept_as_well_as_the_source() -> N
     Asserted by planting a host in a real docs page rather than by checking the constant, so
     the claim is that they are read rather than that they are listed.
 
+    Planted in a tree built for the purpose rather than in this repository's own `docs`: the
+    claim is that the *area* is read, which a throwaway tree proves exactly as well, and a
+    client host written into this checkout is one a concurrently running sweep reads. See
+    `test_the_sweep_raises_on_a_finding_rather_than_only_printing_it` for what that cost.
+
     Delete this and `docs` can be dropped from the sweep and nothing says so."""
     from brain.ops.independence import SEARCHED
 
     assert "docs" in SEARCHED
 
-    page = REPO / "docs" / "_temporary_independence_probe.html"
-    page.write_text(
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "page.html").write_text(
         '<link rel="stylesheet" href="https://cdn.acme-corporation.invalid-tld/a.css">\n',
         encoding="utf-8",
         newline="\n",
     )
-    try:
-        found = value_shaped_literals(REPO)
-    finally:
-        page.unlink(missing_ok=True)
+
+    found = value_shaped_literals(tmp_path)
 
     assert any("cdn.acme-corporation.invalid-tld" in one for one in found), found
 
@@ -542,31 +563,36 @@ def test_a_reserved_domain_is_recognised_by_its_suffix_and_an_ordinary_one_is_no
     assert not is_reserved("acme.co")
 
 
-def test_a_client_host_in_a_literal_is_reported_and_a_docstring_is_not() -> None:
+def test_a_client_host_in_a_literal_is_reported_and_a_docstring_is_not(tmp_path: Path) -> None:
     """The two halves that let this be a hard gate. A URL in a literal is a value the running
     system uses; the same words in a docstring are prose about where a measurement was taken,
     and stripping the place would make the sentence a claim about nothing.
 
-    Written against a temporary file rather than against the tree, so it tests the rule rather
-    than today's contents, which are green.
+    Written against a temporary tree rather than against this one, so it tests the rule rather
+    than today's contents, which are green. It was a temporary file *inside* this tree until
+    2026-09-11, which is the variant that goes red for whoever else is running a sweep at the
+    time; the sibling test named in this file records what that cost.
+
+    A tree holding exactly one file also lets the negative half be exact rather than a search
+    for an absence in several hundred findings: both halves are asserted against the whole
+    result, so a rule that reported the docstring would have nowhere to hide.
 
     Delete this and either the gate stops catching a hardcoded host, or it starts refusing
     every module docstring that mentions a company, at which point somebody switches it off."""
-    scratch = REPO / "src" / "brain" / "_temporary_independence_probe.py"
-    scratch.write_text(
-        '"""A probe written and removed by test_independence.\n\n'
+    (tmp_path / "src" / "brain").mkdir(parents=True)
+    (tmp_path / "src" / "brain" / "endpoint.py").write_text(
+        '"""A module in a tree built for this test.\n\n'
         "Prose mentioning https://acme-corporation.example-not-reserved.com is not a value.\n\n"
         'Task ids: none\n"""\n\n'
         'ENDPOINT = "https://records.acme-corporation.invalid-tld"\n',
         encoding="utf-8",
         newline="\n",
     )
-    try:
-        found = value_shaped_literals(REPO)
-    finally:
-        scratch.unlink(missing_ok=True)
 
-    assert any("records.acme-corporation.invalid-tld" in one for one in found), found
+    found = value_shaped_literals(tmp_path)
+
+    assert len(found) == 1, found
+    assert "records.acme-corporation.invalid-tld" in found[0], found
     assert not any("example-not-reserved.com" in one for one in found), found
 
 
