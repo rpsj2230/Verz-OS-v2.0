@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**10 items are open: five actions of yours, and five decisions, four of which unblock leaves.**
+**11 items are open: five actions of yours, and six decisions, five of which unblock leaves.**
 You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
 verified by mutation and pushed. The two decisions were found on 2026-09-14 while finishing
 waves 0 to 3, and each comes with a recommendation, so one letter each is enough.
@@ -38,6 +38,34 @@ machine's Application Control policy blocking four different things over three d
 what fixes it, because the same policy will refuse the next unsigned binary anything installs.
 
 # Open
+
+## 60. The backup ladder the plan asks for keeps copies for a year, and every erasure certificate promises 35 days
+
+**What you decide: one letter. I recommend Option A.**
+
+M30.3.5 asks for thirty daily, twelve weekly and twelve monthly backups. Kept that way, the oldest
+copy is 372 days old. But `BACKUP_RETENTION_DAYS` is 35, the backups bucket expires copies at 35
+days, and `brain.ops.erasure.backup_horizon` uses that number to tell a person when their deleted
+data is beyond backup reach. A 372-day ladder would make every one of those certificates false.
+`brain.ops.recovery` already refuses the ladder for this reason, and the selection that keeps the
+tiers is built with a guard: it refuses the full ladder unless a caller states a horizon of at
+least 372 days. Nothing prunes backups today except the bucket's own 35-day rule.
+
+**Option A (recommended): keep the 35-day promise, and change the ladder to fit inside it.**
+Thirty daily copies plus weekly copies to day 35. An erasure is honoured within five weeks, which is
+the promise a data protection reviewer will read, and a fault noticed at month end can still be
+restored from before it began, which was the reason for 35 days in the first place.
+
+**Option B: keep the full ladder, and change the promise to 372 days.** A year of recovery points,
+and every certificate then says a deletion reaches backups after a year. That is lawful if said
+plainly, and it is a harder answer to give a client whose staff asked to be forgotten.
+
+**Option C: keep both, by erasing from backups.** Rewrite retained copies when someone is erased.
+It is the most work by far, and it makes the backup a thing that changes after it was taken, which
+undermines what a backup is for.
+
+**Why A.** The 35 days is already a promise the product makes in writing; the ladder is a line in a
+plan. When the two disagree, the promise wins, and the plan's line is the one that should move.
 
 ## 59. "Most expensive question shapes" needs one field that links a cost to the request it paid for
 
