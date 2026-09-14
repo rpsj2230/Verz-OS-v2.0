@@ -1,13 +1,13 @@
 /**
  * One agent beside the template it came from, path by path, both sides at once (M39.1.1.5).
  *
- * **The arrangement is `brain.console.workspace.PART_OF_PATH`'s and the rows have no
- * producer yet.** An earlier version of this comment said the rows were
- * `brain.agents.upgrade`'s. They are not: `upgrade` diffs a pinned version against a newer
- * candidate and returns only the paths that moved, so with no upgrade waiting it returns
- * nothing, and nothing compares an instance with the template it came from. The row shape
- * here is this console's proposal, rendered side by side and grouped by the part each path
- * supplies, and M39.1.1.5 stays open until the Python side produces it.
+ * **The rows are `brain.console.workspace.composition_rows`'s and the arrangement is
+ * `PART_OF_PATH`'s.** An earlier version of this comment said the rows were
+ * `brain.agents.upgrade`'s, and they could not be: `upgrade` diffs a pinned version against a
+ * newer candidate and returns only the paths that moved. `composition_rows` compares an
+ * instance with the template it came from and emits exactly the wire names read here. No
+ * route serves them yet, so the diff is rendered from whatever an answer carries, which
+ * today is nothing.
  *
  * **Divergence is read off the row and never off the two columns**, which is the one place
  * a diff in a browser goes wrong quietly. See

@@ -55,13 +55,14 @@ its template on any of them. A sixth, the leash, is in the manifest and sealed, 
 diverge either. `PARTS_THAT_CAN_DIVERGE` is the four that are left, derived rather than
 listed, so the day `SEALED_PATHS` changes this changes with it.
 
-**Rejected: a second diff between an instance and its template, and the reason was half
-wrong.** `brain.agents.upgrade` walks `MANIFEST_PATHS` and produces the three columns M13.4.3
-asks for, but between a pinned version and a newer candidate, returning only the paths that
-moved: with no upgrade waiting it returns nothing. So the map from a manifest path to the
-part it supplies is here, and M39.1.1.5 is not claimed because nothing yet compares an
-instance with the template it came from. The console renders that diff side by side from a
-row shape of its own proposal, and the rows are the missing half.
+**The composition diff is produced here, and it is not the upgrade's diff.**
+`brain.agents.upgrade` walks `MANIFEST_PATHS` between a pinned version and a newer candidate
+and returns only the paths that moved, so with no upgrade waiting it returns nothing and it
+could never be the diff between an instance and the template it came from.
+`composition_rows` is that diff: one row per composition path, both sides spelled the way
+the content digest spells them, and the source read off the ownership map rather than
+inferred from two values that happen to differ. The console renders it side by side under
+exactly the wire names it emits (M39.1.1.5).
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock;
 `now` is a parameter for the reason `brain.ops.limits` gives about policy that owns a client.
@@ -74,7 +75,8 @@ type it reads. The keyboard map is rendered too and is not yet closable: its way
 a roster page that does not exist. No Python route serves the page's data yet, so every agent
 currently shows the answer a withheld one would.
 
-Task ids: M39.1.1.1, M39.1.1.2, M39.1.1.4, M39.1.2.2, M39.1.2.4, M39.1.3.1, M39.1.3.3, M39.1.3.4
+Task ids: M39.1.1.1, M39.1.1.2, M39.1.1.4, M39.1.1.5, M39.1.2.2
+Task ids: M39.1.2.4, M39.1.3.1, M39.1.3.3, M39.1.3.4
 """
 
 from __future__ import annotations
@@ -91,7 +93,14 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from brain.agents.model import AgentRecord
-from brain.agents.template import MANIFEST_PATHS, SEALED_PATHS, TemplateInstance
+from brain.agents.template import (
+    MANIFEST_PATHS,
+    SEALED_PATHS,
+    EffectiveAgent,
+    SignedManifest,
+    TemplateInstance,
+    canonical_value,
+)
 from brain.chat.turns import Turn, TurnKind
 from brain.console.reads import ConsoleRead, Plane, permitted
 from brain.console.screens import SCREENS, screen
@@ -438,6 +447,85 @@ PARTS_NO_TEMPLATE_SUPPLIES: Final[frozenset[Part]] = frozenset(Part) - frozenset
 PARTS_THAT_CAN_DIVERGE: Final[frozenset[Part]] = frozenset(
     part for path, part in PART_OF_PATH.items() if path not in SEALED_PATHS
 )
+
+
+#: Why a composition row names nobody.
+A_COMPOSITION_ROW_SAYS_WHAT_AND_NEVER_WHO: Final = (
+    "FieldOwner records who last set a path, and the diff could carry it. It does not, "
+    "because nothing decides which readers may be told who configured an agent, and a name "
+    "shown to everybody who may open the composition tab is a disclosure decided by default. "
+    "The console already renders an absent setter as the reader not being told, so leaving "
+    "it out is the one answer that is right for every reader until a rule exists."
+)
+
+
+@dataclass(frozen=True)
+class CompositionRow:
+    """One composition path, the template's value beside this agent's (M39.1.1.5).
+
+    Every field is text. The two sides are spelled by `canonical_value`, the spelling the
+    content digest uses, so the same value is the same string on both sides. See
+    `A_COMPOSITION_ROW_SAYS_WHAT_AND_NEVER_WHO` for the field that is deliberately absent.
+    """
+
+    part: str
+    path: str
+    template: str
+    instance: str
+    source: str
+
+    def wire(self) -> dict[str, str]:
+        """The row under the names `console/src/pages/agentQuery.ts` reads, and no others."""
+        return {
+            "part": self.part,
+            "path": self.path,
+            "template": self.template,
+            "instance": self.instance,
+            "source": self.source,
+        }
+
+
+def composition_rows(
+    signed: SignedManifest, effective: EffectiveAgent
+) -> tuple[CompositionRow, ...]:
+    """The diff between an installed agent and the template it came from (M39.1.1.5).
+
+    One row per path in `PART_OF_PATH`, in `MANIFEST_PATHS` order, so a console renders the
+    same diff twice running whatever order an overlay was written in. The sealed leash is a
+    row too: its source is always the template, and showing it says so rather than leaving a
+    reader to wonder whether it was left out.
+
+    **Divergence is the ownership map's answer, never a comparison of the two sides.** A value
+    set on this agent to exactly what the template says is still this agent's, and an upgrade
+    will ask about it. Two equal strings cannot say that, and `effective.owners` can.
+
+    No reader is taken. Whether somebody may see an agent's composition at all is the tab
+    strip's question, and a row set that is whole or absent is one no count can be read from.
+
+    Refuses an agent materialised from a different template or version, because the rows would
+    be a confident comparison of two unrelated documents.
+    """
+    theirs = signed.manifest.identity
+    ours = effective.manifest.identity
+    if (ours.template_id, ours.version) != (theirs.template_id, theirs.version):
+        msg = (
+            f"an agent materialised from {ours.template_id} version {ours.version} cannot be "
+            f"compared with {theirs.template_id} version {theirs.version}: the rows would "
+            "describe two unrelated documents"
+        )
+        raise WorkspaceError(msg)
+    template = signed.manifest.document()
+    return tuple(
+        CompositionRow(
+            part=PART_OF_PATH[path].value,
+            path=path,
+            template=canonical_value(template[path]),
+            instance=canonical_value(effective.document[path]),
+            source=effective.owners[path].source.value,
+        )
+        for path in MANIFEST_PATHS
+        if path in PART_OF_PATH
+    )
 
 
 def divergent_parts(instance: TemplateInstance) -> frozenset[Part]:

@@ -606,6 +606,16 @@ def _digest(parts: Iterable[str]) -> str:
     return hashlib.sha256(joined.encode("utf-8")).hexdigest()
 
 
+def canonical_value(value: JsonValue) -> str:
+    """One JSON value, rendered the way `canonical` renders a whole document.
+
+    `canonical` is written on top of this rather than beside it, so the two spellings cannot
+    drift: a composition row showing a value and the digest covering that value spell it
+    identically, and a difference between two rendered sides is a difference in the values.
+    """
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def canonical(document: Mapping[str, JsonValue]) -> str:
     """One rendering of a document, so one document has one digest.
 
@@ -613,7 +623,7 @@ def canonical(document: Mapping[str, JsonValue]) -> str:
     rendering independent of insertion order; `separators` removes the two spaces
     `json.dumps` adds by default, which are invisible in a diff and change every digest.
     """
-    return json.dumps(dict(document), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return canonical_value(dict(document))
 
 
 def content_digest(manifest: TemplateManifest) -> str:

@@ -37,8 +37,10 @@ from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
 from brain.agents.template import (
     MANIFEST_PATHS,
     SEALED_PATHS,
+    EffectiveAgent,
     FieldOwner,
     FieldSource,
+    SignedManifest,
     TemplateInstance,
 )
 from brain.chat.turns import Turn, TurnKind
@@ -1124,3 +1126,137 @@ def test_the_workspace_intersects_no_entitlement_sets_of_its_own() -> None:
     gaps = workspace_gaps(source="def reach(a, b):\n    return a.intersect(b)\n")
 
     assert any("intersects two entitlement sets" in one for one in gaps), gaps
+
+
+# ------------------------------------------------------------ the composition diff (M39.1.1.5)
+
+
+def installed(
+    overlay: dict[str, str] | None = None, *, template_id: str = "support_ticket_agent"
+) -> tuple[SignedManifest, EffectiveAgent]:
+    """A real published template, a real install of it, and what that install materialises into.
+
+    Built through `publish` and `materialise` rather than assembled, so the ownership map the
+    rows read is the one a real install produces and not one written to suit the test.
+    """
+    from brain.agents.catalogue import catalogue_by_id
+    from brain.agents.template import content_digest, materialise, publish
+
+    manifest = catalogue_by_id()[template_id]
+    signed = publish(manifest, key="a-key-for-this-test", signed_by="p_publisher", at=MONTH_START)
+    local = dict(overlay or {})
+    owner = FieldOwner(source=FieldSource.INSTANCE, set_by=READER, set_at=MIDMONTH)
+    instance = TemplateInstance(
+        instance_id=AGENT,
+        template_id=template_id,
+        template_version=manifest.identity.version,
+        content_digest=content_digest(manifest),
+        overlay=local,
+        overlay_owners=dict.fromkeys(local, owner),
+        created_by=READER,
+    )
+    effective = materialise(
+        signed, instance, audience=AgentAudience(level=Visibility.COMPANY, owner_id=READER)
+    )
+    return signed, effective
+
+
+def test_an_untouched_install_is_every_composition_path_once_with_both_sides_equal() -> None:
+    """The positive case, and the shape every other test here narrows. One row per path the
+    composition map names, in manifest order, the template's source on every one, and each
+    row's part read off the same map the console groups by.
+
+    Delete this and the diff can drop a path or reorder rows, and a console renders a
+    different diff every time an overlay is edited."""
+    from brain.console.workspace import composition_rows
+
+    signed, effective = installed()
+    rows = composition_rows(signed, effective)
+
+    assert [row.path for row in rows] == [path for path in MANIFEST_PATHS if path in PART_OF_PATH]
+    assert all(row.template == row.instance for row in rows)
+    assert {row.source for row in rows} == {FieldSource.TEMPLATE.value}
+    assert all(row.part == PART_OF_PATH[row.path].value for row in rows)
+
+
+def test_a_value_set_on_this_agent_shows_both_sides_and_is_marked_by_its_source() -> None:
+    """**What the leaf is for.** The persona set on this agent is shown beside the template's,
+    and the row says the value in force is this agent's. The other rows stay the template's.
+
+    Delete this and the diff can show the agent's value on both sides, or the template's, and
+    still look complete."""
+    from brain.agents.template import canonical_value
+    from brain.console.workspace import composition_rows
+
+    local = "Answers in plain English and never promises a date."
+    signed, effective = installed({"persona": local})
+    rows = {row.path: row for row in composition_rows(signed, effective)}
+
+    assert rows["persona"].source == FieldSource.INSTANCE.value
+    assert rows["persona"].instance == canonical_value(local)
+    assert rows["persona"].template == canonical_value(signed.manifest.document()["persona"])
+    assert rows["persona"].template != rows["persona"].instance
+    others = {row.source for path, row in rows.items() if path != "persona"}
+    assert others == {FieldSource.TEMPLATE.value}
+
+
+def test_a_value_set_to_what_the_template_says_is_still_this_agents() -> None:
+    """**Divergence is the ownership map's answer and never two strings compared.** A persona
+    set locally to exactly the template's text is still set here, and an upgrade will ask about
+    it. A diff that compared the two sides would call it untouched.
+
+    Delete this and `source` can quietly become a comparison, which is right on every row
+    except the one the upgrade review depends on."""
+    from brain.agents.catalogue import catalogue_by_id
+    from brain.console.workspace import composition_rows
+
+    same = catalogue_by_id()["support_ticket_agent"].persona
+    signed, effective = installed({"persona": same})
+    persona = next(row for row in composition_rows(signed, effective) if row.path == "persona")
+
+    assert persona.template == persona.instance
+    assert persona.source == FieldSource.INSTANCE.value
+
+
+def test_a_row_names_nobody_and_carries_only_the_names_the_console_reads() -> None:
+    """The owner of a local value is on the ownership map and is not on the row. See
+    `A_COMPOSITION_ROW_SAYS_WHAT_AND_NEVER_WHO`: nothing decides who may be told who configured
+    an agent, and an absent setter is what the console renders for "not told".
+
+    Delete this and the person who set a value is shown to everybody who may open the tab."""
+    from brain.console.workspace import composition_rows
+
+    signed, effective = installed({"persona": "A persona somebody set."})
+    wire = [row.wire() for row in composition_rows(signed, effective)]
+
+    assert all(set(one) == {"part", "path", "template", "instance", "source"} for one in wire)
+    assert not any(READER in value for one in wire for value in one.values())
+
+
+def test_an_agent_from_another_template_cannot_be_diffed_against_this_one() -> None:
+    """Two unrelated documents compared path by path produce a confident diff of nothing.
+
+    Delete this and a caller holding the wrong template renders every path as changed."""
+    from brain.console.workspace import WorkspaceError, composition_rows
+
+    signed, _ = installed()
+    _, other = installed(template_id="accountant_agent")
+
+    with pytest.raises(WorkspaceError, match="two unrelated documents"):
+        composition_rows(signed, other)
+
+
+def test_a_value_is_spelled_exactly_as_the_digest_spells_it() -> None:
+    """`canonical` is built on `canonical_value`, so a row's text and the digest over the same
+    value cannot disagree. Asserted against a real document and against the one-key form, so a
+    change of separators in either spelling fails here.
+
+    Delete this and a rendered difference can be a difference in spelling rather than value."""
+    from brain.agents.template import canonical, canonical_value
+
+    signed, _ = installed()
+    document = signed.manifest.document()
+
+    assert canonical(document) == canonical_value(dict(document))
+    connectors = document["connectors"]
+    assert canonical({"k": connectors}) == '{"k":' + canonical_value(connectors) + "}"
