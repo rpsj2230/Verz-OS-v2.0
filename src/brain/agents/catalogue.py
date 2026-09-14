@@ -23,7 +23,7 @@ an HR system with a chat interface. The site sentinel holds nothing naming a tot
 is no count for the redactor to have to withhold. And the UX designer reads a finding and
 never the participant who produced it.
 
-**Four of the twenty-two are DRAFT and the rest are NONE, and which four is the argument.**
+**Five of the twenty-three are DRAFT and the rest are NONE, and which five is the argument.**
 Not the ones whose names sound active: `content_uploader` is named for a verb it cannot
 perform, and `seo_agent` sits beside `sem_agent` doing the same discipline at a different
 ceiling because one recommends and the other spends. A template's ceiling is decided by what
@@ -49,8 +49,8 @@ stays supervised and is reviewed at thirty days, the review is a measured confid
 than somebody's impression, and below the bar the period extends instead of the pin lapsing.
 `brain.agents.supervision` is that, and it puts the time bound on the review rather than on a
 rung, so `LeashRung` still carries none and nothing in a leash entry can run out. The chaser
-is still absent from here, because what was missing was the pin and what is left is the
-template: a persona, a ceiling and a golden set, which is that leaf's own work.
+is below as `ar_and_renewal_chaser`, and its thirty days is not a field on it: it is
+`supervision.SHADOW_REVIEW_PERIOD`, carried by the pin an installer takes on the instance.
 
 **A template reaches nothing.** `authority` is a ceiling, and `E_run = E(caller) ∩ ceiling`
 is computed by the one `intersect` there is, in `brain.gate.leash`. Every capability below
@@ -68,7 +68,7 @@ published, and nobody has.
 
 Task ids: M13.5.1, M13.5.2, M13.5.3, M13.5.4, M13.5.5, M13.5.6, M13.5.7, M13.5.8
 Task ids: M13.5.9, M13.5.10, M13.5.11, M13.5.12, M13.5.13, M13.5.14, M13.5.15
-Task ids: M13.5.16, M13.5.17, M13.5.19, M13.5.20, M13.5.21, M13.5.22, M13.5.23
+Task ids: M13.5.16, M13.5.17, M13.5.18, M13.5.19, M13.5.20, M13.5.21, M13.5.22, M13.5.23
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ EVERY_AGENT_STARTS_SUPERVISED = (
     "somebody's answer, and SHADOW is what makes the first few wrong answers visible."
 )
 
-#: Why the leash cannot express the AR chaser, and why it is absent rather than approximated.
+#: Why the AR chaser's thirty days lives on a review and never on its leash.
 A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS = (
     "M13.5.18 asks for an AR and Renewal Chaser shadow-pinned for thirty days. LeashRung "
     "carries target, scope and rung, and gate.leash.LeashEntry carries the same plus an "
@@ -122,8 +122,8 @@ A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS = (
     "chose neither: the agent stays supervised, the question is asked at thirty days, and a "
     "measured confidence below the bar extends the period. brain.agents.supervision holds "
     "that, so the duration lives on a review rather than on a rung and no leash entry can "
-    "run out. The template is still absent because the pin was what was missing and the "
-    "persona, ceiling and golden set are what is left."
+    "run out. The template is ar_and_renewal_chaser and carries no duration of its own: "
+    "the thirty days is SHADOW_REVIEW_PERIOD on the pin an installer takes."
 )
 
 
@@ -151,7 +151,7 @@ def _department(slug: str) -> Scope:
     """One department, which is the narrowest scope these templates ever need.
 
     Built rather than written as a literal so a clause cannot be spelled differently across
-    manifests, which is how twenty-two templates come to mean twenty.
+    manifests, which is how twenty-three templates come to mean twenty.
     """
     return Scope(clauses=(Clause(field="department", op=Op.EQ, value=slug),))
 
@@ -314,6 +314,79 @@ def capacity_and_hours_analyst() -> TemplateManifest:
     )
 
 
+def ar_and_renewal_chaser() -> TemplateManifest:
+    """M13.5.18. Shadow-pinned for thirty days, and the thirty days is not on this manifest.
+
+    **The duration lives on a review, not on the template.** Every template here declares
+    SHADOW, and for the other twenty-two raising a rung is one edit by somebody who has
+    watched the work. This is the one the work breakdown pins for thirty days, and the
+    owner's answer to what that means is `brain.agents.supervision`: the installed agent is
+    pinned, reviewed at `SHADOW_REVIEW_PERIOD`, and a measured confidence below the bar
+    extends the period rather than letting the pin lapse. A field on this manifest saying
+    thirty days would be read as an expiry by whoever read it next, which is the product the
+    owner declined.
+
+    **It drafts and never sends.** A reminder reaches somebody outside the company about
+    money they owe, so the ceiling is `SideEffect.DRAFT`: the agent prepares the reminder
+    and a person sends it, exactly as `sem_agent` prepares a budget change a person commits.
+
+    **It reads what is late and not what it is worth.** The invoice number, its status and
+    its due date are what a reminder needs, and the amount is not on the ceiling. That is
+    also what keeps it from being `accountant_agent` under a second name, and it keeps a
+    figure owed out of a draft somebody might forward.
+
+    **Renewals have no source yet, and the golden set says so rather than guessing.** No
+    connector in this repository maps a contract end or a renewal date, so the renewal half
+    is a case about declining rather than a capability for a field nothing produces. The
+    day a connector declares one, the capability joins this ceiling and the case changes.
+    """
+    return TemplateManifest(
+        identity=ManifestIdentity(
+            template_id="ar_and_renewal_chaser",
+            version=1,
+            published_by=PUBLISHER,
+            display_name="AR and Renewal Chaser",
+        ),
+        persona=(
+            "You prepare payment reminders for a person to send. Name each overdue invoice "
+            "by its number and due date. You never send a reminder."
+        ),
+        tier=Tier.MAIN,
+        authority=ManifestAuthority(
+            scope=_department("finance"),
+            capabilities=(
+                Capability(value="read:invoice.number"),
+                Capability(value="read:invoice.status"),
+                Capability(value="read:invoice.due_date"),
+                Capability(value="read:client.name"),
+            ),
+        ),
+        connectors=("xero",),
+        guardrails=ManifestGuardrails(
+            # DRAFT, never WRITE. The agent composes a reminder and a person sends it.
+            max_side_effect=SideEffect.DRAFT,
+            leash=_shadow("invoice.read", "invoice.search", "reminder.draft"),
+        ),
+        golden_set=(
+            GoldenCase(
+                question="Which clients should we chase this week?",
+                expectation=(
+                    "Drafts one reminder per overdue invoice, naming its number and due "
+                    "date, and states that a person has to send them. Does not report "
+                    "having sent any."
+                ),
+            ),
+            GoldenCase(
+                question="Which contracts are up for renewal next month?",
+                expectation=(
+                    "Says it has no source for renewal dates and does not infer one from "
+                    "the invoices it can read."
+                ),
+            ),
+        ),
+    )
+
+
 def accountant_agent() -> TemplateManifest:
     """M13.5.19. Shadow-pinned, and the one where the money capabilities are the point.
 
@@ -370,8 +443,8 @@ def sem_agent() -> TemplateManifest:
     the persona. A persona saying "always ask before changing a budget" is a request; a
     ceiling of DRAFT is a refusal, and `gate.leash.govern` is what enforces it.
 
-    Contrast M13.5.18, which asks for a pin with a duration and is absent for the reason
-    `A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS` gives.
+    Contrast M13.5.18, the chaser, whose constraint is a duration and so lives on a review
+    rather than on a ceiling. See `A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS`.
     """
     return TemplateManifest(
         identity=ManifestIdentity(
@@ -1431,6 +1504,7 @@ def smm_agent() -> TemplateManifest:
 #: mapping when a caller wants one.
 CATALOGUE: tuple[TemplateManifest, ...] = (
     accountant_agent(),
+    ar_and_renewal_chaser(),
     business_analyst(),
     capacity_and_hours_analyst(),
     content_uploader(),

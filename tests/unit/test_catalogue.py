@@ -282,7 +282,7 @@ def test_the_support_agent_and_the_developer_both_wait_for_freshdesk() -> None:
 
 
 def test_no_two_templates_hold_the_same_authority() -> None:
-    """**The failure a catalogue of twenty-two invites, and the one no other test here
+    """**The failure a catalogue of twenty-three invites, and the one no other test here
     catches.**
 
     Writing this many templates in one sitting, the cheap way is to copy the last one, change
@@ -428,7 +428,7 @@ def test_the_presales_agent_reads_a_deals_stage_and_never_what_it_is_worth() -> 
 
 
 def test_every_leaf_this_module_claims_has_a_template_behind_it() -> None:
-    """The catalogue claims twenty-two leaves in its `Task ids:` line, and a claim is only
+    """The catalogue claims twenty-three leaves in its `Task ids:` line, and a claim is only
     worth what stands behind it.
 
     Counted rather than listed, and compared against the module's own docstring rather than
@@ -437,9 +437,10 @@ def test_every_leaf_this_module_claims_has_a_template_behind_it() -> None:
     they are different mistakes: the first under-reports finished work, and the second is the
     one this repository has a `Reopens:` trailer for.
 
-    M13.5.18, the AR chaser, is deliberately absent from both, which is what makes the two
-    counts agree at twenty-two rather than twenty-three. See
-    `A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS`.
+    The claims are also held against the work breakdown's own list of catalogue leaves, so
+    a leaf can be neither forgotten nor invented. Until 2026-09-14 this asserted the chaser
+    was absent, because the leash had no time dimension; `brain.agents.supervision` gave the
+    pin one, and the twenty-third template closed the gap.
 
     Delete this and the docstring's claim and the tuple below it drift apart silently, which
     is the failure the traceability sweep exists to catch one level up."""
@@ -451,9 +452,82 @@ def test_every_leaf_this_module_claims_has_a_template_behind_it() -> None:
         f"the docstring claims {len(claimed)} leaves and the catalogue holds "
         f"{len(CATALOGUE)} templates"
     )
-    assert "M13.5.18" not in claimed, (
-        "the AR chaser is claimed, but the leash still has no time dimension"
+    import json
+    from pathlib import Path
+
+    plan = json.loads(
+        (Path(__file__).resolve().parents[2] / "docs" / "wbs.json").read_text(encoding="utf-8")
     )
+    leaves = {
+        leaf for one in plan["modules"] for leaf in one["leaf_ids"] if leaf.startswith("M13.5.")
+    }
+    assert claimed == leaves, (
+        f"catalogue leaves with no template: {sorted(leaves - claimed)}; "
+        f"claimed and not leaves: {sorted(claimed - leaves)}"
+    )
+
+
+def test_the_chaser_is_reviewed_at_thirty_days_and_no_timer_ever_releases_it() -> None:
+    """**The leaf's own words are "shadow-pinned thirty days", and this is what they mean
+    here.** The number of days is read out of the work breakdown rather than restated,
+    because a test comparing `SHADOW_REVIEW_PERIOD` with a thirty written beside it is green
+    for every value the two could agree on.
+
+    Then the part the owner decided. The chaser declares SHADOW on every target, a review
+    before the period is not yet due, and on the day it falls due an unreviewed chaser is not
+    released: the pin extends. Nothing on the manifest carries a date that could run out.
+
+    Delete this and the chaser's thirty days is a word in a docstring with nothing behind
+    it."""
+    import json
+    from datetime import UTC, datetime, timedelta
+    from pathlib import Path
+
+    from brain.agents.catalogue import catalogue_by_id
+    from brain.agents.supervision import SHADOW_REVIEW_PERIOD, ShadowOutcome, pin, review
+    from brain.gate.injection import AutonomyTier
+
+    plan = json.loads(
+        (Path(__file__).resolve().parents[2] / "docs" / "wbs.json").read_text(encoding="utf-8")
+    )
+    texts = {
+        leaf: sentence
+        for one in plan["modules"]
+        for leaf, sentence in zip(one["leaf_ids"], one["leaf_texts"], strict=True)
+    }
+    stated = re.search(r"(\w+) days", texts["M13.5.18"])
+    assert stated is not None, texts["M13.5.18"]
+    assert timedelta(days={"thirty": 30}[stated.group(1)]) == SHADOW_REVIEW_PERIOD
+
+    chaser = catalogue_by_id()["ar_and_renewal_chaser"]
+    assert {one.rung for one in chaser.guardrails.leash} == {AutonomyTier.SHADOW}
+
+    start = datetime(2019, 1, 1, tzinfo=UTC)
+    held = pin("ag_chaser", now=start)
+    early = review(held, simulated=(), reviews=(), now=start + timedelta(days=29))
+    due = review(held, simulated=(), reviews=(), now=start + SHADOW_REVIEW_PERIOD)
+
+    assert early.outcome is ShadowOutcome.NOT_YET_DUE
+    assert due.outcome is ShadowOutcome.EXTENDED
+    assert due.pin.review_due_at > held.review_due_at
+
+
+def test_the_chaser_reads_what_is_late_and_never_what_it_is_worth() -> None:
+    """A reminder needs the invoice, its status and its due date. The amount is the field
+    that would make the chaser a second accountant and put a figure owed into a draft
+    somebody might forward, so it is asserted by prefix rather than by name: holding
+    `read:invoice.amount_due` fails as surely as `read:invoice.amount`.
+
+    Delete this and the chaser's ceiling can grow to the ledger's without another test here
+    noticing, because it would still differ from the accountant by its due date."""
+    from brain.agents.catalogue import catalogue_by_id
+
+    chaser = catalogue_by_id()["ar_and_renewal_chaser"]
+    held = {one.value for one in chaser.authority.capabilities}
+
+    assert "read:invoice.due_date" in held
+    assert not any(value.startswith("read:invoice.amount") for value in held), held
+    assert chaser.guardrails.max_side_effect.name == "DRAFT"
 
 
 def test_the_ux_designer_reads_a_finding_and_never_who_produced_it() -> None:

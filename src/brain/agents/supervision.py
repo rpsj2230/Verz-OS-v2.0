@@ -106,10 +106,10 @@ throughout, for the reason `brain.agents.lifecycle` gives about a rule on dates 
 clock itself being untestable at its own boundary.
 
 What this implements is `docs/needs-rupash.md` item 33, which is a decision rather than a work
-breakdown leaf, so it claims none. The leaf it unblocks is the chaser template the catalogue
-still does not carry, and that template is deliberately not written here: this makes the pin
-expressible, and writing the twenty-third template is that leaf's own work, with its own
-persona, ceiling and golden set to argue about.
+breakdown leaf, so it claims none. The leaf it unblocked is the chaser, which the catalogue
+now carries as `ar_and_renewal_chaser`. This makes the pin expressible and the template
+stays out of it: the template declares SHADOW like every other, and the thirty days is the
+pin an installer takes here.
 
 Task ids: none
 """
