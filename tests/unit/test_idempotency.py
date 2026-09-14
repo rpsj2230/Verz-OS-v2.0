@@ -11,7 +11,7 @@ record the store would hold at each, and asserts that resuming from it never iss
 second side effect. That is at-most-once under a model rather than exactly-once under a
 kill, and the difference is stated rather than glossed.
 
-Task ids: M17.3.1, M17.3.2, M17.3.3, M17.3.4, M17.3.5
+Task ids: M17.3.2, M17.3.4, M17.3.5
 """
 
 from __future__ import annotations

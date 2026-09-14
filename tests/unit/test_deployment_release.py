@@ -25,7 +25,7 @@ running it against a throwaway directory shaped like an install. What that catch
 never would: a guard that is inverted, a copy that takes the wrong file, and a second run that
 overwrites the one record a rollback has.
 
-Task ids: M42.3.6, M42.3.8
+Task ids: M42.3.6, M42.3.8, M30.2.7
 """
 
 from __future__ import annotations

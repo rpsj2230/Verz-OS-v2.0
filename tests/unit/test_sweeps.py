@@ -235,6 +235,64 @@ def test_a_malformed_task_line_actually_fails_the_sweep() -> None:
     assert "a deliberate finding" in raised.value.findings
 
 
+def test_a_claim_no_test_names_fails_the_sweep_and_a_claim_one_names_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The rule the sweep is named for, and no test handed it a claim to refuse.** Every
+    test above drives the shape of a `Task ids:` line, the wiring of the malformed-line
+    findings, or one of the advisory counters. None gives the sweep a source claim that no
+    test names, so `if tid in proven:` could become `if True:` with this file green: the
+    sweep would print "all traceable" over every claim in the tree, which is the defect it
+    already shipped once, one line lower.
+
+    The unproven id is assembled at run time rather than written out, because the sweep reads
+    this file as evidence: a literal id here would prove the very claim this test needs to be
+    unproven. The sibling claims an id this file does name, so a sweep that refuses every claim
+    fails too.
+
+    The three advisory helpers are stubbed because they read git history, which is the subject
+    of other tests and would only make this one slow.
+
+    Delete this and the check that makes a docstring claim mean anything can be switched off
+    by a one-word edit."""
+    unproven = "M" + "999.9.9"
+
+    class _Claiming:
+        def __init__(self, line: str) -> None:
+            self._line = line
+
+        def read_text(self, **kwargs: Any) -> str:
+            del kwargs
+            return f'"""A stand-in module.\n\nTask ids: {self._line}\n"""\n'
+
+        def relative_to(self, other: Any) -> str:
+            del other
+            return "stand_in.py"
+
+    class _OneFile:
+        def __init__(self, line: str) -> None:
+            self._line = line
+
+        def rglob(self, pattern: str) -> list[Any]:
+            del pattern
+            return [_Claiming(self._line)]
+
+    monkeypatch.setattr(sweeps, "_commit_claims_without_tests", lambda: 0)
+    monkeypatch.setattr(sweeps, "_source_claims_never_closed_by_a_commit", lambda: 0)
+    monkeypatch.setattr(sweeps, "_claims_that_name_no_leaf", lambda: ())
+
+    monkeypatch.setattr(sweeps, "SRC", _OneFile(unproven))
+    with pytest.raises(sweeps.SweepFailure) as raised:
+        sweeps.sweep_traceability()
+    assert any(
+        finding.startswith(f"{unproven} claimed in stand_in.py")
+        for finding in raised.value.findings
+    )
+
+    monkeypatch.setattr(sweeps, "SRC", _OneFile("M0.5.8"))
+    sweeps.sweep_traceability()
+
+
 def test_a_leaf_proved_by_the_consoles_own_suite_counts_as_proved() -> None:
     """**The sweep read `tests/*.py` and nothing else, so 109 TypeScript tests were invisible
     to it.** Three leaves were closed by a commit, covered by those tests, and reported here

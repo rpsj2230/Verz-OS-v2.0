@@ -11,7 +11,7 @@ comparisons against a literal digest. That is deliberate: the claim being tested
 outbound signing and inbound verification are one construction, and a literal would still
 match after the two had drifted apart.
 
-Task ids: M17.5.1, M17.5.2, M17.5.3
+Task ids: M17.5.2
 """
 
 from __future__ import annotations

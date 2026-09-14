@@ -14,7 +14,7 @@ it against `len(PLAN)`, which is the only place it belongs.
 The rendered script is checked structurally and then handed to `sh -n`, because a test that
 asserted the text would be satisfied by a script that is not valid shell.
 
-Task ids: M42.1.3, M42.3.1, M42.3.4, M42.5.15
+Task ids: M42.1.3, M42.3.1, M42.3.4, M42.5.15, M30.2.5
 """
 
 from __future__ import annotations

@@ -14,7 +14,7 @@ which drives the real script against a stubbed docker through six failure scenar
 a rollback is a sequence of decisions and not a line in a file.
 
 Task ids: M0.5.3, M38.1.1.3, M38.1.2.2, M38.1.2.3, M38.1.2.4, M38.1.2.5, M38.1.3.1,
-M38.1.3.2, M38.1.3.3, M38.1.3.4, M38.1.4.1, M38.1.4.3, M38.2.2.1
+M38.1.3.2, M38.1.3.3, M38.1.3.4, M38.1.4.1, M38.1.4.3, M38.2.2.1, M30.2.2, M30.2.3
 """
 
 from __future__ import annotations

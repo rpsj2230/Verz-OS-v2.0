@@ -39,7 +39,7 @@ redactor makes between a payload and a trace.
 Scope: domain logic. Nothing here opens a connection or starts a thread. A plan is a value
 somebody else executes; `now` is always a parameter.
 
-Task ids: M11.5.1, M11.5.2, M11.5.3, M11.5.4, M11.5.5
+Task ids: M11.5.1, M11.5.2, M11.5.3, M11.5.4, M11.5.5, M36.2.1.1, M36.2.1.2
 """
 
 from __future__ import annotations

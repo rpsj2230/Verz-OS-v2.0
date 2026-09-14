@@ -59,7 +59,7 @@ somebody who read the first as precedent. When one is genuinely needed the right
 two-release change, which is the actual answer to a column that has to go: stop reading it in
 release N, drop it in release N plus one.
 
-Task ids: M30.2.6
+Task ids: M30.2.6, M31.2.2.3
 """
 
 from __future__ import annotations

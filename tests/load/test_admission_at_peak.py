@@ -26,7 +26,7 @@ work nobody is waiting on. A run where interactive requests are refused while ba
 still being let in is the failure this asserts against, and it is not hypothetical: it is
 what every priority scheme that shares one pool does the first time the pool is contended.
 
-Task ids: M22.3.3
+Task ids: M22.3.3, M36.2.4.1
 """
 
 from __future__ import annotations

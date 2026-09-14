@@ -46,7 +46,7 @@ who the client is. Adding it to `INSTALLATION` would put it on the console's ins
 screen beside the company name and the logo, and widen the one declaration that exists to draw
 exactly that line.
 
-Task ids: M42.1.1, M42.1.2, M42.3.2, M42.5.2
+Task ids: M42.1.1, M42.1.2, M42.3.2, M42.5.2, M30.1.4, M30.1.5
 """
 
 from __future__ import annotations

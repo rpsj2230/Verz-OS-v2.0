@@ -12,7 +12,7 @@ detectably wrong from inside itself, so the store declarations are checked again
 `brain.db.SCHEMAS` and `brain.ops.storage.BUCKETS`, and the check is shown failing as well
 as passing. A check nobody has watched produce a finding is a check nobody knows works.
 
-Task ids: M25.1.1, M25.1.2, M25.1.3, M25.1.4, M25.1.5
+Task ids: M25.1.1, M25.1.2, M25.1.3, M25.1.4
 """
 
 from __future__ import annotations

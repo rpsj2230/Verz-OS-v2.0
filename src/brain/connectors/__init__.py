@@ -7,4 +7,6 @@ permission logic instead of auditing one redactor.
 
 **What does not belong here.** Credentials. A connector borrows a lease from
 `brain.ops.secrets` for the duration of a call and cannot read one by path.
+
+Task ids: M38.4.1.1
 """

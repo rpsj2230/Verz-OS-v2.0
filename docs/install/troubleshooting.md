@@ -311,6 +311,15 @@ moment they reached a real database, and there is no PostgreSQL on the developme
 system.** It presented as a build step failing with no step having an opinion, which is worse
 than a consistent failure.
 
+## What is checked and what is not
+
+| Claim | Held by |
+| --- | --- |
+| Every entry says what to do, and says what is happening first | `test_install_docs.py` |
+| No entry sits below the closing sections | the same test |
+| The search ceiling of three hundred, and the Compose version | the same test, against the connector's recorded ceiling and the runtime requirements |
+| **That each heading reads as a symptom, and that each cause is the cause** | **nobody. Every entry happened here, and it is kept true by hand.** |
+
 ## Task ids
 
 M42.2.9

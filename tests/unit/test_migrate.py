@@ -35,6 +35,32 @@ def test_percent_in_a_password_is_escaped_for_configparser() -> None:
     assert "%%" in (cfg.get_main_option("sqlalchemy.url") or "")
 
 
+def test_the_migration_template_asks_for_task_ids_and_both_directions() -> None:
+    """`make revision` writes every new migration from `migrations/script.py.mako`, so the
+    template is where a migration's house rules either start or do not. It carries a
+    `Task ids:` line so a migration claims its leaves the way a module does, it renders both an
+    upgrade and a downgrade, and it tells the author that a downgrade which cannot be written
+    raises rather than passes, because a `pass` downgrade reports success on the way back and
+    leaves the schema where it was.
+
+    Read line by line and matched on whole lines, so a phrase inside the template's own prose
+    cannot stand in for the function it describes.
+
+    Delete this and the template can lose any of those, and the next migration written from it
+    has no line on which to say which leaf it serves."""
+    template = (Path(__file__).resolve().parents[2] / "migrations" / "script.py.mako").read_text(
+        encoding="utf-8"
+    )
+    lines = [line.rstrip() for line in template.splitlines()]
+
+    assert any(line.startswith("Task ids:") for line in lines)
+    assert "def upgrade() -> None:" in lines
+    assert "def downgrade() -> None:" in lines
+    assert "revision = ${repr(up_revision)}" in lines
+    assert "down_revision = ${repr(down_revision)}" in lines
+    assert "NotImplementedError" in template
+
+
 # ------------------------------------------------------------------ startup
 def test_startup_skips_migrations_when_no_database_is_configured() -> None:
     """The documents and the status page serve without a database, so a missing

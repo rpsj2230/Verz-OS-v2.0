@@ -55,7 +55,7 @@ Nothing here reaches anything, in the same split as `brain.ops.handover` and for
 reason: the interesting case is the register that has a gap, and a module holding a session
 could not be made to fail that way in a test.
 
-Task ids: M30.5.4, M37.4.2.2, M37.4.2.4, M37.4.3.1, M37.4.3.2, M37.4.3.3, M37.4.3.5
+Task ids: M30.5.4, M37.4.2.2, M37.4.2.4, M37.4.3.1, M37.4.3.2, M37.4.3.3, M37.4.3.5, M34.3.2.3
 """
 
 from __future__ import annotations

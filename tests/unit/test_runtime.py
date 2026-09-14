@@ -5,7 +5,12 @@ Task ids: M31.1.1.3, M31.1.2.1, M31.1.2.2, M31.1.2.3
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
+
+import pytest
+import yaml
 
 from brain.runtime import (
     DOCKER_STOP_TIMEOUT,
@@ -124,3 +129,80 @@ def test_detect_falls_back_when_there_is_no_cgroup() -> None:
     p = detect_profile()
     assert isinstance(p, ProcessProfile)
     assert p.workers >= 1
+
+
+# ----------------------------------------------------------------- launcher
+REPO = Path(__file__).resolve().parents[2]
+
+
+def test_the_launcher_hands_uvicorn_the_profile_it_derived(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every test above proves `profile_for` chooses well, and none proves anybody uses it.
+
+    `brain.serve.main` is the only place a profile becomes a running server. A literal typed
+    there, `workers=4` or `timeout_graceful_shutdown=5`, leaves this whole file green while the
+    container ignores its own cgroup limits and cuts in-flight requests on every deploy. The
+    profile is built with figures no default produces, so a typed literal cannot match it by
+    coincidence.
+
+    The positive sibling of `test_the_launcher_refuses_to_bind_a_port_on_a_bad_config`, which
+    proves the launcher stops on a bad configuration and says nothing about what it starts
+    on a good one. Delete this and the wiring can be replaced by constants unnoticed.
+
+    Task ids: M31.1.2.1, M31.1.2.2"""
+    import brain.serve as serve
+
+    chosen = ProcessProfile(
+        workers=3, graceful_timeout=7, timeout_keep_alive=4, limit_concurrency=117, reason="test"
+    )
+    monkeypatch.setenv("BRAIN_ENV", "development")
+    monkeypatch.setattr(serve, "detect_profile", lambda: chosen)
+    started: dict[str, Any] = {}
+
+    def spy(*_a: object, **kwargs: Any) -> None:
+        started.update(kwargs)
+
+    monkeypatch.setattr("uvicorn.run", spy)
+    serve.main()
+
+    assert started, "the launcher never started uvicorn on a valid configuration"
+    assert started["workers"] == chosen.workers
+    assert started["timeout_graceful_shutdown"] == chosen.graceful_timeout
+    assert started["timeout_keep_alive"] == chosen.timeout_keep_alive
+    assert started["limit_concurrency"] == chosen.limit_concurrency
+
+
+def test_the_container_stop_signal_reaches_the_server_that_drains() -> None:
+    """Uvicorn handles SIGTERM by draining, and only if SIGTERM reaches it.
+
+    A shell-form `CMD python -m brain.serve` makes `/bin/sh` process 1, and the shell does not
+    forward SIGTERM: Docker waits out its stop timeout and sends SIGKILL, so the graceful
+    timeout the profile computes is never used and every deploy cuts whoever was mid-question.
+    A compose `command`, `entrypoint` or `stop_signal` on the app service would undo the
+    image's arrangement the same way, and a `stop_grace_period` there is a second stop timeout
+    that the profile's drain was never fitted inside, since it is sized to `DOCKER_STOP_TIMEOUT`.
+
+    Parsed rather than matched as text, so a comment quoting the right form cannot satisfy
+    it. Delete this and the launcher can be wrapped in a shell script with nothing going red.
+
+    Task ids: M31.1.2.3"""
+    dockerfile = (REPO / "Dockerfile").read_text(encoding="utf-8").splitlines()
+    commands = [line.removeprefix("CMD").strip() for line in dockerfile if line.startswith("CMD")]
+    assert commands, "the image declares no CMD"
+    assert json.loads(commands[-1]) == ["python", "-m", "brain.serve"], (
+        f"the image starts the server in shell form or through something else: {commands[-1]}"
+    )
+    signals = [line for line in dockerfile if line.startswith("STOPSIGNAL")]
+    assert all(line.split()[1] == "SIGTERM" for line in signals), signals
+
+    apps = 0
+    for path in sorted(REPO.glob("docker-compose*.yml")):
+        parsed: dict[str, Any] = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        app = (parsed.get("services") or {}).get("app")
+        if app is None:
+            continue
+        apps += 1
+        overrides = {"command", "entrypoint", "stop_signal", "stop_grace_period"} & set(app)
+        assert not overrides, f"{path.name} overrides {sorted(overrides)} on the app service"
+    assert apps, "no compose file defines an app service, so this compared nothing"

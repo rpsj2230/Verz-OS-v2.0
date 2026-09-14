@@ -60,7 +60,17 @@ reads. So the guide is written, and this refuses it when it drifts.
 about a document in this repository rather than about a running system, so the unit suite is
 the thing that has the document in front of it.
 
-Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8
+**Three pages were prose and nothing else until 2026-09-14, and each is held now by the part of
+it that can be held.** The troubleshooting guide by its shape: every entry states what is seen
+and what it is before it says what to do, because the reader arrives knowing the symptom and not
+the name. The deployment checklist by its ten sections, the four links a copied install carries,
+and the scheduled jobs this repository installs, read off the timer units in both directions.
+The update page by its script table, read off the scripts the release carries. What each line
+of those pages advises stays prose, and each page says so at its foot. See
+`AN_ENTRY_THAT_OPENS_WITH_THE_REMEDY_IS_ONE_NOBODY_CAN_FIND`.
+
+Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2
+Task ids: M34.3.3.3, M30.2.8
 """
 
 from __future__ import annotations
@@ -74,6 +84,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from brain.connectors.manifest import ConnectorManifest
+from brain.deployment.installer import INSTALL_HOME
 from brain.deployment.installer import Step as InstallStep
 from brain.ops.controls import CONTROLS, Control
 from brain.ops.queue import DeployStep
@@ -868,5 +879,258 @@ def connector_gaps(
     findings.extend(
         f"{name}: a manifest for a connector this package has no module for"
         for name in sorted(named - set(modules))
+    )
+    return tuple(findings)
+
+
+# ------------------------------------------------------------- pages read as sections
+#: One level-two heading. `###` does not match, because the third character is not a space.
+HEADING: Final = re.compile(r"^##\s+(.+?)\s*$", re.M)
+
+
+def sections(text: str) -> tuple[tuple[str, str], ...]:
+    """Every level-two heading in a page and the text under it, in the order they appear."""
+    found = list(HEADING.finditer(text))
+    return tuple(
+        (
+            one.group(1),
+            text[one.end() : found[index + 1].start() if index + 1 < len(found) else len(text)],
+        )
+        for index, one in enumerate(found)
+    )
+
+
+# --------------------------------------------------------- the troubleshooting guide (M42.2.9)
+#: Why an entry has to state the symptom and the cause before the remedy.
+AN_ENTRY_THAT_OPENS_WITH_THE_REMEDY_IS_ONE_NOBODY_CAN_FIND: Final = (
+    "Somebody troubleshooting knows what they are seeing and not what it is called, so an entry "
+    "is found by its symptom and believed by its cause. An entry that opens with what to do "
+    "asks the reader to already know which failure they have, and an entry with no remedy at "
+    "all is a story. So every entry says what to do, and says something before it."
+)
+
+#: The line every troubleshooting entry carries once it has said what is happening.
+WHAT_TO_DO: Final = "**What to do.**"
+
+#: The sections of the troubleshooting guide that are not entries, and that come last.
+TROUBLESHOOTING_CLOSING: Final = (
+    "Failures from this build that you will not meet",
+    "What is checked and what is not",
+    "Task ids",
+)
+
+
+def troubleshooting_gaps(guide: str) -> tuple[str, ...]:
+    """Every entry in the troubleshooting guide that cannot be used the way it is meant to be.
+
+    Structure only, and deliberately. Whether a heading reads as a symptom is a judgement, and
+    a check pretending to make it would be a word list somebody satisfies. What is checked is
+    what makes a symptom-first entry usable at all: it says what to do, it says something
+    before that, and it sits above the closing sections rather than after them, where a reader
+    who has stopped at "failures you will not meet" would never reach it.
+    """
+    found = sections(guide)
+    entries = [(heading, body) for heading, body in found if heading not in TROUBLESHOOTING_CLOSING]
+    if not entries:
+        return (
+            "the guide carries no entries, so there is nothing a reader can look a symptom up in",
+        )
+    findings: list[str] = []
+    for heading, body in entries:
+        at = body.find(WHAT_TO_DO)
+        if at < 0:
+            findings.append(f"{heading!r}: says what is happening and never what to do about it")
+        elif not body[:at].strip(" \n-"):
+            findings.append(
+                f"{heading!r}: opens with what to do, so a reader who knows only the symptom "
+                "has nothing to recognise it by"
+            )
+    headings = [heading for heading, _ in found]
+    closing_at = [
+        index for index, heading in enumerate(headings) if heading in TROUBLESHOOTING_CLOSING
+    ]
+    if closing_at:
+        findings.extend(
+            f"{heading!r}: an entry after the closing sections, where nobody reading for a "
+            "symptom still is"
+            for heading in headings[closing_at[0] :]
+            if heading not in TROUBLESHOOTING_CLOSING
+        )
+    return tuple(findings)
+
+
+# ----------------------------------------------------------- the deployment checklist (M42.3.7)
+#: The ten sections the checklist is written in, in the order the work happens.
+CHECKLIST_SECTIONS: Final = (
+    "Pre-deployment",
+    "Server",
+    "Application",
+    "Database",
+    "Environment",
+    "Integrations",
+    "Security",
+    "Testing",
+    "Go-live",
+    "Post-deployment",
+)
+
+#: The sections of the checklist that are about the page rather than about the install.
+CHECKLIST_CLOSING: Final = ("What is checked and what is not", "Task ids")
+
+#: One item somebody ticks.
+CHECKLIST_ITEM: Final = re.compile(r"^\s*- \[ \] \S", re.M)
+
+#: The four links a copy of an install carries to the install it was copied from (M34.3.3.1,
+#: M30.2.8). Named by where they hide rather than by one platform's file names, because the
+#: platform differs between two installs and the hiding place does not.
+HIDDEN_LINKS: Final = (
+    "platform project files",
+    "temporary CLI state",
+    "git remotes",
+    "scheduled jobs",
+)
+
+#: Why a copied install is checked for links and not only for credentials.
+A_COPY_ACTS_ON_WHAT_THE_ORIGINAL_POINTED_AT: Final = (
+    "A server image, a home directory or a deployment project copied from one install to "
+    "another carries more than its credentials. It carries where a deploy tool stored its own "
+    "copy of the project, a registry login and an ssh destination, a remote naming somebody "
+    "else's repository, and timers that keep running against whatever they were pointed at. "
+    "Three of the four are invisible from the directory a person is looking at, and every one "
+    "of them acts on the original install the moment the copy starts."
+)
+
+#: Where the checklist names the four links.
+LINKS_MARKER: Final = "<!-- checked: the four links a copied install carries -->"
+
+#: Where the checklist names every scheduled job this repository installs.
+TIMERS_MARKER: Final = "<!-- checked: every scheduled job this repository installs -->"
+
+
+def checklist_gaps(guide: str) -> tuple[str, ...]:
+    """Every way the deployment checklist has stopped being the checklist the leaf asks for.
+
+    The ten sections by name and in order, none of them empty, and the four links a copied
+    install carries by name in both directions. A section with no item is a heading somebody
+    reads as done, and a link table that has lost a row is the one hiding place nobody checks.
+    """
+    findings: list[str] = []
+    found = [
+        (heading, body) for heading, body in sections(guide) if heading not in CHECKLIST_CLOSING
+    ]
+    stated = [heading for heading, _ in found]
+    findings.extend(
+        f"{name!r}: the checklist has no section for it"
+        for name in CHECKLIST_SECTIONS
+        if name not in stated
+    )
+    findings.extend(
+        f"{name!r}: a section the checklist does not declare, which reads as coverage"
+        for name in stated
+        if name not in CHECKLIST_SECTIONS
+    )
+    if not findings and stated != list(CHECKLIST_SECTIONS):
+        findings.append(
+            f"the sections are not in the order the work happens: the page reads {stated}"
+        )
+    findings.extend(
+        f"{heading!r}: a section with nothing to tick, which reads as done"
+        for heading, body in found
+        if heading in CHECKLIST_SECTIONS and not CHECKLIST_ITEM.search(body)
+    )
+    named: list[str] = []
+    for cells in table_after(guide, LINKS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the link, "
+                "where it hides and what to do"
+            )
+            continue
+        named.append(bare(cells[0]))
+    findings.extend(
+        f"{link!r}: a copied install carries this link and the checklist does not name it"
+        for link in HIDDEN_LINKS
+        if link not in named
+    )
+    findings.extend(
+        f"{link!r}: a link the checklist names that is not one of the four"
+        for link in named
+        if link not in HIDDEN_LINKS
+    )
+    return tuple(findings)
+
+
+def scheduled_job_gaps(guide: str, *, timers: Collection[str]) -> tuple[str, ...]:
+    """Timer units this repository installs that the checklist does not name, and the reverse.
+
+    `timers` is the file names of the units, read out of `ops/` by the caller. A timer the page
+    does not name is a job that survives a copied disk with nobody told to look for it; a row
+    for a timer that is gone sends somebody looking for a unit that is not there, and reads as
+    coverage while they do.
+    """
+    findings: list[str] = []
+    named: list[str] = []
+    for cells in table_after(guide, TIMERS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the timer, "
+                "what installs it and what it does"
+            )
+            continue
+        named.append(bare(cells[0]))
+    findings.extend(
+        f"{timer}: this repository installs the timer and the checklist does not name it"
+        for timer in sorted(timers)
+        if timer not in named
+    )
+    findings.extend(
+        f"{timer}: the checklist names a timer this repository does not install"
+        for timer in named
+        if timer not in timers
+    )
+    return tuple(findings)
+
+
+# ------------------------------------------------------- the update page (M34.3.3.3)
+#: Where the update page lists the scripts a person runs.
+UPDATE_SCRIPTS_MARKER: Final = "<!-- checked: the update and rollback scripts -->"
+
+#: Where the release unpacks the scripts, which is the directory the page tells somebody to run.
+UPDATE_SCRIPTS_HOME: Final = f"{INSTALL_HOME}/ops/update"
+
+
+def update_script_gaps(guide: str, *, scripts: Collection[str]) -> tuple[str, ...]:
+    """Every way the update page's script table disagrees with the scripts the release carries.
+
+    Both directions, and the command column as a value. A script renamed in `ops/update` with
+    the page left alone is a command that fails with a missing file at the worst moment of
+    somebody's week, which is the moment the rollback exists for.
+    """
+    findings: list[str] = []
+    named: list[str] = []
+    for cells in table_after(guide, UPDATE_SCRIPTS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the script, "
+                "the command and what it needs"
+            )
+            continue
+        name = bare(cells[0])
+        named.append(name)
+        command = f"sh {UPDATE_SCRIPTS_HOME}/{name}"
+        if bare(cells[1]) != command and not bare(cells[1]).startswith(f"{command} "):
+            findings.append(
+                f"{name}: the page says to run {bare(cells[1])!r}, and the release unpacks the "
+                f"script at {UPDATE_SCRIPTS_HOME}/{name}"
+            )
+    findings.extend(
+        f"{name}: the release carries this script and the page does not say how to run it"
+        for name in sorted(scripts)
+        if name not in named
+    )
+    findings.extend(
+        f"{name}: the page names a script the release does not carry"
+        for name in named
+        if name not in scripts
     )
     return tuple(findings)

@@ -506,7 +506,7 @@ def test_a_freshdesk_search_at_or_above_the_cap_is_never_reported_complete(
 
 
 def test_the_first_bottleneck_at_ten_and_a_hundred_times_is_xeros_daily_ceiling() -> None:
-    """M22.3.4, computed rather than asserted in prose.
+    """M22.3.4 and M36.2.4.2, computed rather than asserted in prose.
 
     The estate runs at about 0.1 requests a second, which is 8,640 a day; roughly six per
     cent of questions touching any one source puts about 500 calls a day on each. At that

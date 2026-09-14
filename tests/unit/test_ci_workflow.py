@@ -10,11 +10,12 @@ names come from `brain.ops.sweeps.SWEEPS`, not from a list typed out twice. Addi
 and forgetting to wire it up now fails a test rather than passing silently, which is what
 happened to `one_tool_grammar` on the day it was written.
 
-Task ids: M12.1.6, M38.1.2.1
+Task ids: M12.1.6, M38.1.2.1, M30.2.1
 """
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 from typing import Any
@@ -49,6 +50,32 @@ def _all_run_commands() -> str:
             if "run" in step:
                 parts.append(str(step["run"]))
     return "\n".join(parts)
+
+
+# ------------------------------------------------------------------ the canaries
+def test_the_permission_canaries_run_on_every_push_and_not_only_on_a_laptop() -> None:
+    """M30.2.1 names canaries beside lint, types, tests and migrations, and they are the one of
+    the five with no step of their own: the company canaries live under `tests/invariants` and
+    run because the invariants step runs that directory.
+
+    So both halves are asserted. Delete this and the canary file can move under `tests/unit`,
+    or the invariants step can narrow to one file, and CI goes on reporting the invariants green
+    while no canary is ever asked on a push."""
+    canaries = REPO / "tests" / "invariants" / "test_company_canaries.py"
+    tree = ast.parse(canaries.read_text(encoding="utf-8"))
+    workflow = _workflow()
+    commands = [
+        str(step["run"]).split()
+        for job in workflow["jobs"].values()
+        for step in job.get("steps", [])
+        if "run" in step
+    ]
+
+    assert any(
+        isinstance(node, ast.FunctionDef) and node.name.startswith("test_") for node in tree.body
+    )
+    assert ["uv", "run", "pytest", "tests/invariants"] in [one[:4] for one in commands]
+    assert "push" in workflow[True]
 
 
 # ------------------------------------------------------------------ the gates

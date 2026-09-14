@@ -133,6 +133,39 @@ def test_liveness_stays_ok_while_readiness_fails(app: FastAPI) -> None:
         assert c.get("/health/ready").status_code == 503
 
 
+def test_the_pool_is_released_at_shutdown_and_not_while_requests_are_still_served(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The lifespan's shutdown half, which nothing else in the suite reaches.
+
+    Uvicorn stops accepting and drains in-flight requests before the lifespan's shutdown
+    runs, so disposing the engine after `yield` is what lets those requests finish against a
+    live pool. Two ways to get it wrong and this catches both: the dispose removed, so every
+    replaced container leaves its connections for the pooler to time out, and the dispose
+    moved ahead of `yield`, so the application serves against a pool that is already closed.
+
+    Delete this and either edit passes every other test, because no other test ever leaves
+    the `TestClient` context and then looks at the engine.
+
+    Task ids: M31.1.1.3"""
+    disposed: list[object] = []
+
+    async def spy(engine: object) -> None:
+        disposed.append(engine)
+
+    monkeypatch.setattr("brain.app.run_migrations", lambda _url: [])
+    monkeypatch.setattr("brain.app.dispose", spy)
+    app = create_app(Settings(env="development", database_url="postgresql://u:p@127.0.0.1:1/d"))
+
+    with TestClient(app) as c:
+        engine = app.state.db_engine
+        assert engine is not None, "the lifespan attached no engine, so this checks nothing"
+        assert c.get("/health/live").status_code == 200
+        assert disposed == [], "the pool was released while the application was still serving"
+
+    assert disposed == [engine], "shutdown left the pool open"
+
+
 # ------------------------------------------------------------------ traces
 def test_a_trace_id_is_minted_when_the_caller_sends_none(client: TestClient) -> None:
     r = client.get("/health/live")

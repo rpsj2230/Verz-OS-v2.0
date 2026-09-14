@@ -3,12 +3,14 @@
 Two modules, together because they are the two halves of the same rule: the target registry
 is the description a planner may read, and the snapshot is the description it may not.
 
-Task ids: M19.2.4, M19.4.5
+Task ids: M19.1.4, M19.2.4, M19.4.5
 """
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
+from typing import get_type_hints
 
 import pytest
 
@@ -256,6 +258,29 @@ def test_nothing_in_an_observation_could_carry_a_picture() -> None:
     and a run that has just typed a password has the password on the screen.
     """
     assert vision_gaps() == ()
+
+
+def test_a_snapshot_is_an_accessibility_tree_and_nothing_else() -> None:
+    """M19.1.4. What a run observes is references, roles and names, never a rendering.
+
+    The sibling of the check above and not a copy of it. `vision_gaps` refuses a field by its
+    name, so a field called something innocent, `rendered` or `capture`, passes it while
+    carrying the page as drawn. Pinning the fields outright makes any addition a decision
+    somebody takes in this file. Written out rather than read from the module, so the
+    assertion sits outside the thing being asserted.
+
+    Delete this and a snapshot can gain a field holding a picture under a name the image list
+    does not contain, or its nodes can become something other than tree nodes, and the tree
+    stops being the only thing a run is shown.
+    """
+    assert tuple(one.name for one in dataclasses.fields(Node)) == ("ref", "role", "name")
+    assert tuple(one.name for one in dataclasses.fields(Snapshot)) == (
+        "run_id",
+        "sequence",
+        "origin",
+        "nodes",
+    )
+    assert get_type_hints(Snapshot)["nodes"] == tuple[Node, ...]
 
 
 def test_a_type_carrying_an_image_field_is_reported() -> None:

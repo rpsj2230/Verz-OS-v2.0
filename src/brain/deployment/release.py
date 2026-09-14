@@ -91,7 +91,7 @@ wrong in the direction that costs a client a week of exposure. Urgency is a pers
 so it is stated, and what is enforced is that it is stated at all and that a release breaking
 the schema cannot be called routine.
 
-Task ids: M42.3.6, M42.3.8
+Task ids: M42.3.6, M42.3.8, M30.2.7
 """
 
 from __future__ import annotations
@@ -345,7 +345,7 @@ INCLUDED: Final[tuple[Rule, ...]] = (
     ),
     Rule(
         "docs/install",
-        "the nine pages somebody reads standing in front of the server. Everything else under "
+        "the ten pages somebody reads standing in front of the server. Everything else under "
         "docs/ is this project's own record: the work breakdown, the build pages the console "
         "serves, and the owner's decision list",
     ),

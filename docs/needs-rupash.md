@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**7 items are open: five actions of yours, and two new decisions that each unblock a leaf.**
+**8 items are open: five actions of yours, and three decisions, two of which each unblock a leaf.**
 You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
 verified by mutation and pushed. The two decisions were found on 2026-09-14 while finishing
 waves 0 to 3, and each comes with a recommendation, so one letter each is enough.
@@ -38,6 +38,38 @@ machine's Application Control policy blocking four different things over three d
 what fixes it, because the same policy will refuse the next unsigned binary anything installs.
 
 # Open
+
+## 57. The GitHub repository is public, and the work breakdown says it should be private
+
+**What you decide: one letter. I recommend Option A.**
+
+Measured on 2026-09-14 with the GitHub API: `rpsj2230/Verz-OS-v2.0` reports `visibility: public`.
+Anybody on the internet can read the whole product, every commit message, and the history item 52
+describes, which carries your server's hostname in three older commits. M0.1.1, the first leaf
+of the work breakdown, says "private GitHub repo, branch protection, CODEOWNERS". CODEOWNERS is
+done. The other two are settings only the repository owner can change, and my token can read the
+repository but cannot administer it, so I cannot tell whether `main` has branch protection: that
+setting answers "not found" to anybody without admin rights. No rulesets are visible.
+
+**Option A (recommended): make it private and protect `main`.**
+1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings`.
+2. At the bottom, under **Danger Zone**, click **Change visibility**, choose **Make private**, and
+   confirm by typing the repository name.
+3. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/branches`, click **Add classic
+   branch protection rule**, type `main` as the branch name pattern, tick **Require status checks
+   to pass before merging** and choose the `CI` checks, then click **Create**.
+4. Tell me, and I check both from here and close M0.1.1 honestly.
+
+Private repositories on a free personal plan still run GitHub Actions, within a monthly minutes
+allowance, so CI and the deploy keep working. Step 3's status check does not block pushes made
+directly to `main` unless you also tick the setting that includes administrators; leave that
+unticked until you want it, because every change so far has been pushed straight to `main`.
+
+**Option B: keep it public on purpose.** Reasonable if the product is meant to be open. Then say
+so, and I reword M0.1.1 rather than leave a first leaf that is false.
+
+**Why A.** Nothing here was written to be published. Item 52 already argues that a client should
+never receive a copy of this repository, and a public repository is a copy anybody can take.
 
 ## 56. When an automation runs with nobody present, it has to run as somebody, and nothing says who
 

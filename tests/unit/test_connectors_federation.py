@@ -85,7 +85,7 @@ def test_the_live_fetch_timeout_is_shorter_than_the_task_lane_default() -> None:
 
 # ---------------------------------------------------------------- the fan-out (M11.5.2)
 def test_independent_calls_cost_the_slowest_and_not_the_sum() -> None:
-    """This is the whole point of fanning out. Reporting the sum makes every multi-source
+    """M36.2.1.2. The whole point of fanning out. Reporting the sum makes every multi-source
     question look impossible and pushes somebody to cut a source that costs nothing in
     parallel."""
     plan = FanOutPlan(
@@ -101,7 +101,7 @@ def test_independent_calls_cost_the_slowest_and_not_the_sum() -> None:
 
 
 def test_a_dependent_call_extends_the_critical_path() -> None:
-    """A call that needs another call's answer cannot start until it has it. Treating the
+    """M36.2.1.1. A call needing another call's answer cannot start until it has it. Treating the
     two as independent produces a plan whose latency is right on paper and whose second
     call has no argument to make."""
     plan = FanOutPlan(
@@ -131,7 +131,7 @@ def test_a_plan_deeper_than_the_budget_is_refused_with_the_chain_named() -> None
 
 
 def test_a_plan_with_a_cycle_is_refused_at_construction() -> None:
-    """A cycle deadlocks the executor, and a deadlock at request time reports as a slow
+    """M36.2.1.1. A cycle deadlocks the executor, and a deadlock at request time reports as a slow
     source rather than as the bug it is."""
     with pytest.raises(FederationError, match="cycle"):
         FanOutPlan(

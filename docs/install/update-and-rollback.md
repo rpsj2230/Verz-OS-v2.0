@@ -64,6 +64,8 @@ They arrive with the release, at `/opt/brain/ops/update/`, so the release you ar
 the script that takes you off it. That is deliberate: the moment you need the rollback is the
 moment you are least able to fetch anything.
 
+<!-- checked: the update and rollback scripts -->
+
 | Script | You run | It needs |
 | --- | --- | --- |
 | `update.sh` | `sh /opt/brain/ops/update/update.sh <profile> <release tag>` | `BRAIN_RELEASE_URL` set to that release's archive |
@@ -170,12 +172,16 @@ run on a server**, which is why the list above still has a drill in it.
 | That the scripts in the archive are the ones generated from the plan | the same test, which compares the files against the rendering |
 | That a migration mixing schema and data changes cannot merge | `test_migration_policy.py` |
 | That every migration carries a reverse | the migration files themselves |
+| That the script table names every script in `ops/update`, no other, and the command that runs it | `test_install_docs.py`, against the scripts the release carries |
 | **The procedure on this page** | **nobody. It has never been run on a server.** |
 
 ## Task ids
 
 M42.3.6 is claimed: the update script pins a release tag and the rollback script re-pins the
 previous one, and both are generated from a plan with tests against every refusal.
+
+M34.3.3.3 is claimed: that leaf asks for an upgrade and rollback procedure, which this page is,
+and its script table is held to the scripts the release carries.
 
 M42.2.10 is not claimed. That leaf asks for an update procedure and a rollback procedure
 "rehearsed rather than written", and this is written. There is no server here to rehearse it

@@ -10,6 +10,7 @@ CI still goes green, and the only visible change is that the number stops being 
 Nothing about that reads as a regression in a diff.
 
 Task ids: M0.1.4, M0.1.5, M0.3.1, M0.3.3, M0.3.6, M0.4.3, M0.5.1, M0.5.2
+Task ids: M0.1.2, M0.4.5
 """
 
 from __future__ import annotations
@@ -126,6 +127,91 @@ def test_the_linter_and_the_formatter_agree_about_line_length() -> None:
     assert isinstance(tool, dict)
     ruff = tool["ruff"]
     assert isinstance(ruff.get("line-length"), int)
+
+
+# ------------------------------------------- the interpreter and the lock (M0.1.2)
+def test_the_python_version_is_pinned_to_one_minor_and_every_tool_names_the_same_one() -> None:
+    """`requires-python` without an upper bound lets uv resolve onto the next minor version
+    the day it ships, and mypy and ruff are each told a version separately, so the three can
+    name three different interpreters. The symptom is a type check or a lint rule judging
+    syntax the interpreter in the image does not have, which is a failure nobody reproduces.
+
+    Asserted against each other rather than against a literal, so moving to a new minor is
+    one edit in three places and never a fourth in this test.
+
+    Delete this and the upper bound can go, which reads in a diff as loosening a constraint
+    nobody remembers the reason for."""
+    pyproject = _pyproject()
+    project, tool = pyproject["project"], pyproject["tool"]
+    assert isinstance(project, dict) and isinstance(tool, dict)
+
+    spec = str(project["requires-python"])
+    lower = re.search(r">=\s*3\.(\d+)", spec)
+    upper = re.search(r"<\s*3\.(\d+)", spec)
+    assert lower and upper, f"requires-python is not bounded on both sides: {spec!r}"
+    minor = int(lower.group(1))
+    assert int(upper.group(1)) == minor + 1, f"{spec!r} admits more than one minor version"
+
+    assert tool["mypy"]["python_version"] == f"3.{minor}"
+    assert tool["ruff"]["target-version"] == f"py3{minor}"
+
+
+def test_every_declared_dependency_is_in_the_lock() -> None:
+    """The lock is what makes an install reproducible and what `sweep_dependencies` audits
+    for licences. A dependency added to `pyproject.toml` by hand and never locked is installed
+    at whatever version resolves that day, on the client's server, and is invisible to the
+    audit that exists to refuse the wrong licence.
+
+    Read as TOML on both sides rather than grepped, so a package named inside a comment or a
+    version string is not mistaken for one that is locked.
+
+    Delete this and `pyproject.toml` and `uv.lock` can disagree with every other test green,
+    because nothing else here reads the lock at all."""
+    lock = tomllib.loads((REPO / "uv.lock").read_text(encoding="utf-8"))
+    locked = {str(package["name"]).lower() for package in lock["package"]}
+
+    pyproject = _pyproject()
+    project = pyproject["project"]
+    assert isinstance(project, dict)
+    declared: list[str] = list(project["dependencies"])
+    for extra in dict(project.get("optional-dependencies", {})).values():
+        declared.extend(extra)
+    groups = pyproject.get("dependency-groups", {})
+    assert isinstance(groups, dict)
+    for group in groups.values():
+        declared.extend(group)
+
+    assert declared, "no dependency was read, so this would pass by checking nothing"
+    names = {
+        re.split(r"[\s\[<>=!~;]", one, maxsplit=1)[0].lower().replace("_", "-") for one in declared
+    }
+    missing = sorted(names - locked)
+    assert not missing, f"declared in pyproject.toml and absent from uv.lock: {missing}"
+
+
+# -------------------------------------------------- the reset command (M0.4.5)
+def test_reset_drops_everything_then_rebuilds_then_reseeds_in_that_order() -> None:
+    """`make reset` is the remedy `brain.seed` names when it refuses a database the demo has
+    been loaded into and removed from, so a reset that stops short is a refusal with no way
+    out. The order is the property: seeding before the downgrade writes rows that are then
+    dropped, and upgrading before it is a no-op that leaves the old schema standing.
+
+    Joined by `&&` and asserted that way, because a downgrade that fails half way and is
+    followed by an upgrade anyway rebuilds on top of whatever it left, which is the one state a
+    reset exists to get out of.
+
+    Delete this and the recipe can be reordered, or lose a step, and still be a target that
+    `test_the_task_runner_offers_every_named_command` would accept if it listed it."""
+    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
+    recipe = re.search(r"^reset:.*\n\t(.+)$", makefile, re.M)
+    assert recipe, "make reset does not exist"
+
+    steps = [step.strip() for step in recipe.group(1).split("&&")]
+    assert steps == [
+        "uv run python -m alembic downgrade base",
+        "uv run python -m alembic upgrade head",
+        "$(MAKE) seed",
+    ]
 
 
 # ------------------------------------------------ the database (M0.3.1, M0.3.3, M0.3.6)

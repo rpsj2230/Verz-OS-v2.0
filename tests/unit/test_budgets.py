@@ -10,7 +10,7 @@ figure, a second constant it must relate to, or the property that makes the numb
 test comparing a constant with the constant it imported is green for every value that constant
 could hold, which is the defect this repository keeps finding.
 
-Task ids: M21.1.1, M21.1.2, M21.1.3, M21.1.4, M21.1.5
+Task ids: M21.1.1, M21.1.2, M21.1.3, M21.1.4
 """
 
 from __future__ import annotations

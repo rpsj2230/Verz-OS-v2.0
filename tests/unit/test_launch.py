@@ -11,7 +11,7 @@ three; `REVIEW_AFTER_DAYS` is thirty and the leaf says thirty. A test that impor
 compared it against itself would be green for every value it could hold, which is the trap
 `CLAUDE.md` records three authors falling into in one afternoon.
 
-Task ids: M30.5.4, M37.4.2.2, M37.4.2.4, M37.4.3.1, M37.4.3.2, M37.4.3.3, M37.4.3.5
+Task ids: M30.5.4, M37.4.2.2, M37.4.2.4, M37.4.3.1, M37.4.3.2, M37.4.3.3, M37.4.3.5, M34.3.2.3
 """
 
 from __future__ import annotations

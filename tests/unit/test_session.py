@@ -1,9 +1,11 @@
 """Engines, sessions, and the PgBouncer constraints that shape them.
 
-Task ids: M0.3.4, M0.3.5, M31.2.1.2, M31.2.1.3, M31.2.1.4, M31.2.1.5
+Task ids: M0.3.4, M31.2.1.2, M31.2.1.3, M31.2.1.4, M31.2.1.5
 """
 
 from __future__ import annotations
+
+from typing import Any
 
 import pytest
 from sqlalchemy.pool import NullPool
@@ -24,6 +26,33 @@ def test_the_app_engine_disables_server_side_prepared_statements() -> None:
     assert engine.dialect.name == "postgresql"
     # psycopg's own kwarg, passed through connect_args
     assert engine.pool.__class__ is NullPool
+
+
+def test_the_app_engine_is_built_with_prepared_statements_switched_off(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The test above is named for this property and never asserts it: its body checks the
+    pool class, and a comment says the argument is passed. Setting `prepare_threshold` to 0 in
+    `make_app_engine` left this file green.
+
+    Asserted on the arguments the engine is built with, because an async engine offers no
+    public view of the connect arguments it will hand psycopg, and `None` specifically: 0 means
+    prepare on first use, which is the most aggressive setting rather than the off switch.
+
+    Delete this and the application works on a laptop, where there is no pooler, and fails in
+    production under load the first time two transactions land on different backends."""
+    seen: dict[str, Any] = {}
+
+    def capture(url: str, **kwargs: Any) -> object:
+        del url
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(sess, "create_async_engine", capture)
+    sess.make_app_engine(URL)
+
+    assert "prepare_threshold" in seen["connect_args"]
+    assert seen["connect_args"]["prepare_threshold"] is None
 
 
 def test_the_app_engine_does_not_stack_a_pool_on_the_pooler() -> None:

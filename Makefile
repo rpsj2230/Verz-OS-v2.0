@@ -8,7 +8,7 @@
 # the interpreter uv already trusts and importing the tool as a module spawns nothing new.
 # `brain.ops.mutation` and `ops/hooks/pre-push` carry the same fix for the same reason.
 #
-# Task ids: M0.1.5
+# Task ids: M0.1.5, M0.4.5
 .DEFAULT_GOAL := help
 .PHONY: help dev test invariants lint types fmt check migrate revision seed reset deploy status
 

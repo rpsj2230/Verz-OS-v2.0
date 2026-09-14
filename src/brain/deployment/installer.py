@@ -75,7 +75,7 @@ Rejected: `git clone` for the release. It is one line shorter and it is the shap
 `brain.ops.independence.duplication_gaps` refuses in a build input, for the reason that ends
 with a client running a copy nobody fixed. The installer fetches one archive of one tag.
 
-Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15
+Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15, M30.2.5
 """
 
 from __future__ import annotations

@@ -22,6 +22,7 @@ Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -43,13 +44,23 @@ from brain.connectors.xero import XeroConnection, xero_manifest
 from brain.core.scope import Clause, Op, Scope
 from brain.deployment.installer import PLAN, render
 from brain.deployment.installer import Step as InstallStep
-from brain.deployment.requirements import COMPOSE_FILES_FOR, exposed_ports, files_for, spec_for
+from brain.deployment.release import included_by, refused_by
+from brain.deployment.requirements import (
+    COMPOSE_FILES_FOR,
+    RUNTIME_REQUIREMENTS,
+    exposed_ports,
+    files_for,
+    spec_for,
+)
 from brain.deployment.variables import parse_env
 from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.controls import control
 from brain.ops.install_docs import (
     A_BLANK_DEFAULT_AND_AN_EMPTY_ONE_ARE_THE_SAME_LINE_ON_A_SERVER,
+    CHECKLIST_SECTIONS,
     CONNECTORS_MARKER,
+    HIDDEN_LINKS,
+    LINKS_MARKER,
     MANIFEST_BUILDER,
     MECHANISMS_MARKER,
     NO_CEILING,
@@ -59,13 +70,19 @@ from brain.ops.install_docs import (
     REQUIRED_STEP,
     STEPS_MARKER,
     THE_REGISTER_IS_MORE_THAN_THE_TEMPLATE,
+    TIMERS_MARKER,
     TOOL_NAMES_ARE_NOT_A_PROPERTY_OF_EVERY_CONNECTOR,
+    TROUBLESHOOTING_CLOSING,
+    UPDATE_SCRIPTS_HOME,
+    UPDATE_SCRIPTS_MARKER,
     VALUES_MARKER,
+    WHAT_TO_DO,
     InstallDocsError,
     Provenance,
     Variable,
     bare,
     ceiling_cell,
+    checklist_gaps,
     configuration_gaps,
     connector_gaps,
     connector_modules,
@@ -77,12 +94,17 @@ from brain.ops.install_docs import (
     port_gaps,
     profiles_cell,
     queue_step_gaps,
+    scheduled_job_gaps,
     script_variables,
+    sections,
     step_gaps,
     table_after,
+    troubleshooting_gaps,
+    update_script_gaps,
     variables,
     wizard_settings,
 )
+from brain.ops.limits import FRESHDESK_SEARCH_MAX_RECORDS
 from brain.ops.queue import DeployStep, StepKind
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.ops.wiring import PROFILES, WiringError
@@ -920,7 +942,7 @@ def test_one_connectors_tool_names_change_with_how_it_is_configured() -> None:
 
 def test_the_documents_the_checks_read_are_all_present() -> None:
     """Delete this and a guide deleted or renamed makes its own check fail with a missing file
-    rather than with a finding, and the eight-page set can lose a page silently."""
+    rather than with a finding, and the nine-page set can lose a page silently."""
     expected = {
         "README.md",
         "install.md",
@@ -931,6 +953,7 @@ def test_the_documents_the_checks_read_are_all_present() -> None:
         "operations.md",
         "troubleshooting.md",
         "update-and-rollback.md",
+        "checklist.md",
     }
     assert {one.name for one in GUIDES.glob("*.md")} == expected
 
@@ -1170,3 +1193,265 @@ def test_a_queue_step_row_missing_a_cell_is_reported_rather_than_read() -> None:
         "a row with 2 cell(s) reads ('`tables`', 'creates them'); every row states the step, "
         "what it does and whether an install may skip it",
     )
+
+
+# ==================================================================== troubleshooting_gaps
+def an_entry(heading: str, body: str) -> str:
+    return f"## {heading}\n\n{body}\n\n"
+
+
+def test_every_troubleshooting_entry_says_what_is_happening_and_then_what_to_do() -> None:
+    """**M42.2.9.** The guide is built from failures actually hit, symptom first, and until
+    2026-09-14 nothing held any of it: the README listed the whole page as kept by hand.
+
+    Delete this and an entry that lost its remedy, or grew one with nothing above it, reads
+    exactly like every other entry on the page."""
+    page = guide("troubleshooting.md")
+
+    assert troubleshooting_gaps(page) == ()
+    assert [h for h, _ in sections(page) if h not in TROUBLESHOOTING_CLOSING]
+
+
+def test_an_entry_that_never_says_what_to_do_is_a_finding() -> None:
+    """Delete this and the check can pass a page of stories."""
+    page = an_entry("A thing happens", "It is this.")
+
+    assert troubleshooting_gaps(page) == (
+        "'A thing happens': says what is happening and never what to do about it",
+    )
+
+
+def test_an_entry_that_opens_with_what_to_do_is_a_finding() -> None:
+    """The reader knows the symptom and not the name, so an entry with nothing above its remedy
+    cannot be recognised. Delete this and the order the leaf asks for is unchecked."""
+    page = an_entry("A thing happens", f"{WHAT_TO_DO} Restart it.")
+
+    assert troubleshooting_gaps(page) == (
+        "'A thing happens': opens with what to do, so a reader who knows only the symptom has "
+        "nothing to recognise it by",
+    )
+
+
+def test_an_entry_below_the_closing_sections_is_a_finding() -> None:
+    """Delete this and an entry appended to the end of the file lands under the section a reader
+    stops at, where nobody looking for a symptom arrives."""
+    page = (
+        an_entry("A thing happens", f"It is this.\n\n{WHAT_TO_DO} Restart it.")
+        + an_entry(TROUBLESHOOTING_CLOSING[0], "Stories.")
+        + an_entry("Another thing happens", f"It is that.\n\n{WHAT_TO_DO} Wait.")
+    )
+
+    assert troubleshooting_gaps(page) == (
+        "'Another thing happens': an entry after the closing sections, where nobody reading for "
+        "a symptom still is",
+    )
+
+
+def test_a_guide_with_no_entries_is_refused_rather_than_read_as_having_no_findings() -> None:
+    """Delete this and a guide emptied of every entry passes a check that finds nothing wrong
+    with any of them."""
+    assert troubleshooting_gaps(an_entry("Task ids", "M0.0.0")) == (
+        "the guide carries no entries, so there is nothing a reader can look a symptom up in",
+    )
+
+
+def test_a_level_three_heading_is_part_of_its_section_and_not_a_section() -> None:
+    """Delete this and a `###` inside an entry splits it, so its remedy is found in a section
+    that is not the entry."""
+    page = "## One\n\ntext\n\n### Inner\n\nmore\n\n## Two\n\nend\n"
+
+    assert [heading for heading, _ in sections(page)] == ["One", "Two"]
+    assert "### Inner" in dict(sections(page))["One"]
+
+
+def test_the_figures_the_troubleshooting_guide_quotes_are_the_ones_the_code_holds() -> None:
+    """Two entries quote a number a reader acts on: the helpdesk search ceiling and the Compose
+    version below which every memory limit is ignored. Both are held to the code.
+
+    Delete this and a ceiling or a minimum that moves in the code leaves the guide telling a
+    reader to trust a count, or a tool, that is no longer the one that matters."""
+    entries = dict(sections(guide("troubleshooting.md")))
+    ceiling = next(body for heading, body in entries.items() if "round number" in heading)
+    unlimited = next(body for heading, body in entries.items() if "no memory limit" in heading)
+    compose = next(one for one in RUNTIME_REQUIREMENTS if one.what.startswith("Docker Compose v2"))
+
+    assert FRESHDESK_SEARCH_MAX_RECORDS == 300
+    assert "three hundred" in ceiling
+    assert f"print {compose.minimum} or newer" in unlimited
+
+
+# ==================================================================== checklist_gaps
+def a_checklist(
+    names: tuple[str, ...] = CHECKLIST_SECTIONS,
+    links: tuple[str, ...] = HIDDEN_LINKS,
+    empty: tuple[str, ...] = (),
+) -> str:
+    body = "".join(
+        f"## {name}\n\n" + ("" if name in empty else "- [ ] do the thing\n\n") for name in names
+    )
+    rows = "".join(f"| `{link}` | somewhere | cut it |\n" for link in links)
+    header = "| Link | Where it hides | What to do |\n| --- | --- | --- |\n"
+    return f"{LINKS_MARKER}\n\n{header}{rows}\n{body}"
+
+
+def timer_units() -> frozenset[str]:
+    return frozenset(one.name for one in (REPO / "ops").rglob("*.timer"))
+
+
+def test_the_deployment_checklist_has_its_ten_sections_and_names_the_four_links() -> None:
+    """**M42.3.7, M34.3.3.1 and M30.2.8.** The first asks for ten named sections, the second
+    for the four hidden production links, and the third names the four.
+
+    Delete this and a section can go, or a link row, and the page still reads as a complete
+    checklist."""
+    assert checklist_gaps(guide("checklist.md")) == ()
+
+
+def test_the_four_links_are_the_four_the_work_breakdown_names() -> None:
+    """The constant is held against the leaf sentences rather than against itself.
+
+    Delete this and a fifth link, or a renamed one, changes what the checklist is checked for
+    while the page and the constant agree with each other and not with what was asked."""
+    texts = {
+        leaf: text
+        for module in json.loads((REPO / "docs" / "wbs.json").read_text(encoding="utf-8"))[
+            "modules"
+        ]
+        for leaf, text in zip(module["leaf_ids"], module["leaf_texts"], strict=True)
+    }
+
+    assert "four hidden production links" in texts["M34.3.3.1"]
+    assert len(HIDDEN_LINKS) == 4
+    assert all(link.lower() in texts["M30.2.8"].lower() for link in HIDDEN_LINKS)
+
+
+def test_a_complete_checklist_raises_nothing() -> None:
+    """The positive sibling. Delete this and a check refusing every checklist passes the
+    refusal tests below."""
+    assert checklist_gaps(a_checklist()) == ()
+
+
+def test_a_missing_section_and_an_undeclared_one_are_both_findings() -> None:
+    """Both directions. Delete this and a renamed section is invisible, because a section under
+    the new name reads as coverage."""
+    renamed = tuple("Launch" if name == "Go-live" else name for name in CHECKLIST_SECTIONS)
+
+    assert checklist_gaps(a_checklist(names=renamed)) == (
+        "'Go-live': the checklist has no section for it",
+        "'Launch': a section the checklist does not declare, which reads as coverage",
+    )
+
+
+def test_sections_out_of_order_are_a_finding() -> None:
+    """Delete this and testing can come after go-live on the page a person follows in order."""
+    swapped = (
+        *CHECKLIST_SECTIONS[:7],
+        CHECKLIST_SECTIONS[8],
+        CHECKLIST_SECTIONS[7],
+        CHECKLIST_SECTIONS[9],
+    )
+
+    found = checklist_gaps(a_checklist(names=swapped))
+
+    assert len(found) == 1
+    assert found[0].startswith("the sections are not in the order the work happens")
+
+
+def test_a_section_with_nothing_to_tick_is_a_finding() -> None:
+    """Delete this and a heading with no items under it is read as a section that is done."""
+    assert checklist_gaps(a_checklist(empty=("Security",))) == (
+        "'Security': a section with nothing to tick, which reads as done",
+    )
+
+
+def test_a_missing_link_and_a_fifth_one_are_both_findings() -> None:
+    """Delete this and the one hiding place a checklist stops naming is the one nobody checks."""
+    links = (*HIDDEN_LINKS[:3], "browser cookies")
+
+    assert checklist_gaps(a_checklist(links=links)) == (
+        "'scheduled jobs': a copied install carries this link and the checklist does not name it",
+        "'browser cookies': a link the checklist names that is not one of the four",
+    )
+
+
+def test_every_timer_this_repository_installs_is_on_the_checklist() -> None:
+    """Delete this and a timer added under `ops/` survives a copied disk with nobody told to
+    look for it. The set is asserted non-empty, because a glob that stops matching makes the
+    check pass over nothing."""
+    timers = timer_units()
+
+    assert timers
+    assert scheduled_job_gaps(guide("checklist.md"), timers=timers) == ()
+
+
+def test_a_timer_the_checklist_misses_and_one_that_is_gone_are_both_findings() -> None:
+    """Both directions. Delete this and a row for a deleted timer reads as coverage."""
+    page = (
+        f"{TIMERS_MARKER}\n\n| Timer | Installed by | What it does |\n| --- | --- | --- |\n"
+        "| `old.timer` | a script | a job |\n| `short.timer` | a script |\n"
+    )
+
+    assert scheduled_job_gaps(page, timers={"new.timer"}) == (
+        "a row with 2 cell(s) reads ('`short.timer`', 'a script'); every row states the timer, "
+        "what installs it and what it does",
+        "new.timer: this repository installs the timer and the checklist does not name it",
+        "old.timer: the checklist names a timer this repository does not install",
+    )
+
+
+def test_what_the_checklist_says_about_the_archive_is_what_the_archive_does() -> None:
+    """The git remotes row says the archive carries no `.git`, the temporary state row that no
+    install's `.env` travels, and the page is only useful on a server if it ships. Delete this
+    and any of the three can stop being true while the page goes on saying it."""
+    assert refused_by(".git/config")
+    assert refused_by(".env")
+    assert included_by("docs/install/checklist.md")
+
+
+# ==================================================================== update_script_gaps
+def script_units() -> frozenset[str]:
+    return frozenset(one.name for one in (REPO / "ops" / "update").glob("*.sh"))
+
+
+def test_the_update_page_names_every_script_the_release_carries_and_how_to_run_it() -> None:
+    """**M34.3.3.3.** The procedure is prose and says so; the table of what to run is the part
+    somebody copies at the worst moment of their week, and it is held to the scripts.
+
+    Delete this and a renamed script leaves the page pointing at a file that is not there."""
+    scripts = script_units()
+
+    assert scripts
+    assert all(included_by(f"ops/update/{name}") for name in scripts)
+    assert update_script_gaps(guide("update-and-rollback.md"), scripts=scripts) == ()
+
+
+def test_a_wrong_command_a_missing_script_and_an_extra_one_are_all_findings() -> None:
+    """Delete this and the check can compare names and never the command a person types."""
+    page = (
+        f"{UPDATE_SCRIPTS_MARKER}\n\n| Script | You run | It needs |\n| --- | --- | --- |\n"
+        f"| `update.sh` | `sh /tmp/update.sh <profile>` | nothing |\n"
+        f"| `gone.sh` | `sh {UPDATE_SCRIPTS_HOME}/gone.sh` | nothing |\n"
+        "| `short.sh` | nothing |\n"
+    )
+
+    assert update_script_gaps(page, scripts={"update.sh", "rollback.sh"}) == (
+        f"update.sh: the page says to run 'sh /tmp/update.sh <profile>', and the release "
+        f"unpacks the script at {UPDATE_SCRIPTS_HOME}/update.sh",
+        "a row with 2 cell(s) reads ('`short.sh`', 'nothing'); every row states the script, the "
+        "command and what it needs",
+        "rollback.sh: the release carries this script and the page does not say how to run it",
+        "gone.sh: the page names a script the release does not carry",
+    )
+
+
+def test_a_command_that_is_the_script_path_with_arguments_is_accepted() -> None:
+    """The positive sibling, and the prefix is matched on a word boundary: `update.sh.bak` is
+    not `update.sh`. Delete this and a check refusing every command passes the test above."""
+    good = (
+        f"{UPDATE_SCRIPTS_MARKER}\n\n| Script | You run | It needs |\n| --- | --- | --- |\n"
+        f"| `update.sh` | `sh {UPDATE_SCRIPTS_HOME}/update.sh <profile> <tag>` | a URL |\n"
+    )
+    near = good.replace("update.sh <profile>", "update.sh.bak <profile>")
+
+    assert update_script_gaps(good, scripts={"update.sh"}) == ()
+    assert update_script_gaps(near, scripts={"update.sh"}) != ()

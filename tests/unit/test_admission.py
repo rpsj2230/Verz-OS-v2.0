@@ -578,6 +578,29 @@ def test_the_first_bottleneck_is_the_one_reached_earliest() -> None:
     assert bottleneck.binds_at == pytest.approx(10.0)
 
 
+def test_when_several_ceilings_bind_the_one_reached_at_the_lowest_multiple_is_first() -> None:
+    """M22.3.4 and M36.2.4.2. The ordering, asked where it actually has two candidates.
+
+    The test above has one: at 10x the roomy source is nowhere near its ceiling, so the filter
+    leaves a single demand and `min` and `max` over it agree. Mutating the choice to `max` was
+    caught by nothing in any file that imports the ladder. At 100x both of these are over
+    their ceilings, the tight one since 10x and the roomy one since 50x, and only a ladder
+    that orders on headroom names the tight one.
+
+    Delete this and the first bottleneck can become the last ceiling reached, and the
+    documented answer at a hundred times names whichever source fails most recently rather
+    than the one that failed first.
+    """
+    demands = (
+        Demand(ceiling=Ceiling(name="roomy", per_day=1_000_000), calls_per_day=20_000),
+        Demand(ceiling=Ceiling(name="tight", per_day=5_000), calls_per_day=500),
+    )
+    bottleneck = first_bottleneck(demands, multiplier=100.0)
+    assert bottleneck is not None
+    assert bottleneck.ceiling.name == "tight"
+    assert bottleneck.binds_at == pytest.approx(10.0)
+
+
 def test_a_source_nobody_calls_is_not_a_bottleneck_at_any_scale() -> None:
     """Zero demand against any ceiling is infinite headroom. Treating it as a division by
     zero would put an unused connector at the top of the ladder for ever."""

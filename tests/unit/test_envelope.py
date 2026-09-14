@@ -82,6 +82,53 @@ def test_result_records_its_source_and_fetch_time() -> None:
     assert r.fetched_at.endswith("Z")
 
 
+class Ticket(Entity):
+    status: str
+
+
+class ClientWithTickets(Entity):
+    name: str
+    tickets: tuple[Ticket, ...] = ()
+
+
+def test_a_record_carries_a_nested_array_of_records_that_keep_their_own_tags() -> None:
+    """The redactor asks its policy question per entity, and a ticket nested in a client is
+    asked about as a ticket (`test_redaction.py`). That is only possible if the envelope keeps
+    each child's own tag and id through validation and serialisation, rather than flattening
+    the array into dictionaries with no entity to ask about.
+
+    The refusal half matters as much. A child whose tag is not an identifier must fail the
+    whole record, or a connector could nest an untaggable record under a valid parent and the
+    redactor would meet a field with no policy.
+
+    Delete this and every test above still passes on records that are one level deep, which
+    is the only shape any of them builds."""
+    tickets = (
+        Ticket(entity="ticket", id="t_1", status="open"),
+        Ticket(entity="ticket", id="t_2", status="closed"),
+    )
+    r = TypedResult[ClientWithTickets](
+        records=(ClientWithTickets(entity="client", id="c_0447", name="SNM", tickets=tickets),)
+    )
+
+    dumped = r.model_dump()["records"][0]
+    assert dumped["entity"] == "client"
+    assert [(t["entity"], t["id"]) for t in dumped["tickets"]] == [
+        ("ticket", "t_1"),
+        ("ticket", "t_2"),
+    ]
+
+    with pytest.raises(ValidationError):
+        ClientWithTickets.model_validate(
+            {
+                "entity": "client",
+                "id": "c_1",
+                "name": "x",
+                "tickets": [{"entity": "Ticket Row", "id": "t_1", "status": "open"}],
+            }
+        )
+
+
 # --------------------------------------------------------- ToolDefinition
 def a_tool(**kw: object) -> ToolDefinition:
     base: dict[str, object] = {

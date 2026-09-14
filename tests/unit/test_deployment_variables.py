@@ -9,7 +9,7 @@ here are read by whoever runs the check, which on a client's estate is a CI job 
 a test that only proved the check fires would be satisfied by one that fires and quotes the
 password.
 
-Task ids: M42.1.1, M42.1.2, M42.3.2, M42.5.2
+Task ids: M42.1.1, M42.1.2, M42.3.2, M42.5.2, M30.1.4, M30.1.5
 """
 
 from __future__ import annotations

@@ -57,6 +57,50 @@ def test_every_schema_is_named_and_described() -> None:
     assert all(len(desc) > 10 for desc in SCHEMAS.values()), "a schema has a token description"
 
 
+#: The nine namespaces the foundation names, written out here rather than imported, because
+#: the point is to compare `SCHEMAS` and the first migration against something outside both.
+NAMESPACES_THE_FOUNDATION_NAMES = (
+    "auth",
+    "gate",
+    "agent",
+    "know",
+    "mem",
+    "obs",
+    "proj",
+    "er",
+    "ops",
+)
+
+
+def test_every_namespace_the_foundation_names_is_declared_and_created() -> None:
+    """The test above deliberately asserts no count, and so on its own it stays green with
+    `er` or `gate` deleted from `SCHEMAS`. That list is also what `migrations/env.py` keeps
+    autogenerate inside and what the row-level security sweep enumerates, so a namespace
+    dropped from it is a schema both of those silently stop looking at.
+
+    A subset rather than an equality, for the reason the test above gives: `chat` was a correct
+    tenth, and an eleventh must not fail this. And the first migration is read too, because a
+    namespace declared in Python and never created in the database is a boundary that exists
+    only in a dictionary.
+
+    Delete this and any of the nine can disappear from either place with nothing going red."""
+    import ast
+    from pathlib import Path
+
+    missing = [name for name in NAMESPACES_THE_FOUNDATION_NAMES if name not in SCHEMAS]
+    assert not missing, f"brain.db.SCHEMAS no longer declares {missing}"
+
+    first = Path(__file__).resolve().parents[2] / "migrations" / "versions" / "0001_foundation.py"
+    created = next(
+        ast.literal_eval(node.value)
+        for node in ast.parse(first.read_text(encoding="utf-8")).body
+        if isinstance(node, ast.Assign)
+        and any(isinstance(target, ast.Name) and target.id == "SCHEMAS" for target in node.targets)
+    )
+    uncreated = [name for name in NAMESPACES_THE_FOUNDATION_NAMES if name not in created]
+    assert not uncreated, f"0001_foundation.py does not create {uncreated}"
+
+
 def test_the_extensions_entity_resolution_depends_on_are_declared() -> None:
     assert set(EXTENSIONS) == {"vector", "pg_trgm", "fuzzystrmatch", "unaccent"}
 
