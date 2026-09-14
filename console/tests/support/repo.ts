@@ -29,14 +29,28 @@ export const CONSOLE_ROOT = resolve(HERE, "..", "..");
 /** The repository root, one level above the console. */
 export const REPO_ROOT = resolve(CONSOLE_ROOT, "..");
 
+/**
+ * Every file is read with its line endings as `\n`, whatever the checkout wrote.
+ *
+ * The patterns that read the Python source anchor on line ends (`^\)$` with the `m` flag), and a
+ * Windows checkout with `core.autocrlf` writes `\r\n`, so the same commit was green on the Linux
+ * runner and red in every fresh worktree on the machine it was written on. The failure named a
+ * moved source rather than a line ending, which cost an agent an afternoon. Normalising here, in
+ * the one place files are read, rather than in each pattern, means a pattern written tomorrow
+ * cannot reintroduce it.
+ */
+function readNormalised(path: string): string {
+  return readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+}
+
 /** Read a file inside `console/`. Path separated with forward slashes. */
 export function readConsoleFile(relativePath: string): string {
-  return readFileSync(join(CONSOLE_ROOT, ...relativePath.split("/")), "utf8");
+  return readNormalised(join(CONSOLE_ROOT, ...relativePath.split("/")));
 }
 
 /** Read a file elsewhere in the repository, such as a Python module or the realm export. */
 export function readRepoFile(relativePath: string): string {
-  return readFileSync(join(REPO_ROOT, ...relativePath.split("/")), "utf8");
+  return readNormalised(join(REPO_ROOT, ...relativePath.split("/")));
 }
 
 /**
