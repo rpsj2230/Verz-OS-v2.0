@@ -1210,6 +1210,12 @@ deciding not to worry. There is a test in the repository that walks every module
 nothing is named for restoring anything; it passes today, and it is written so that it fails on
 the day somebody adds a restore, which is the day that screen should be written.
 
+**Since, on 2026-09-14.** The screen is built, as `brain.console.recovery_view`, and the test's
+pin moved with it rather than being dropped: only `brain.ops.backup_manifest` may construct a
+drill record or decide what one proved. Nothing restores a copy yet, so on a real install the
+panel can say only "never verified" or "nothing copied", which is the alarm this paragraph
+asked for rather than the reassurance it warned about.
+
 ---
 
 

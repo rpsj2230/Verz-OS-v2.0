@@ -524,39 +524,50 @@ def test_a_throttle_row_carries_no_count_of_refused_requests():
 
 
 # ------------------------------------------ the screen that is not built (the finding)
-def test_nothing_in_this_repository_performs_a_restore():
-    """**This test is the finding, and it has already fired once.**
+def test_the_restore_vocabulary_has_one_home_and_one_producer():
+    """**This test is the finding, and it has now fired twice. Both times it was right and
+    both times the repair was to build the thing it was waiting for, never to loosen it.**
 
     Until 2026-09-08 it asserted that no function or class in `src/brain` was named for
     restoring anything, and it passed: there was a bucket declaration, a lifecycle rule, a
     retention number derived from it, and a guard refusing an install step that named
     somebody else's dump. `brain.ops.recovery` then landed and it failed, which is exactly
-    what it was written to do.
+    what it was written to do. It was narrowed to three clauses.
 
-    What it asserts now is the narrower thing that is still true and is why M27.6.2 remains
-    unclaimed. Three parts, and the third is the load-bearing one.
+    On 2026-09-11 the third clause fired. It asserted that **nothing calls `verification_of`**
+    and its own failure message read "the recovery panel can now be built", because a
+    definition with no producer is a heading with nothing under it and a screen built over it
+    would be showing a field nobody could ever fill. `brain.ops.backup_manifest.read_drills`
+    is that producer and `brain.console.recovery_view` is that screen, so the condition the
+    clause was waiting for was met and the clause has been replaced rather than deleted.
 
-    The restore vocabulary lives in one module, pinned by name rather than by count, for the
-    reason `tests/invariants/test_single_implementation.py` pins its call sites exactly: a
-    second module naming something for restoring is a second place the rule about what
-    counts as recovered would be applied, and whether that is right is a question for a
-    person rather than a comparison to loosen.
+    **What it was protecting, and what now protects it.** Not the absence of a producer: a
+    tripwire whose message tells you what to build when it fires is not defending the state it
+    finds. It was protecting against a *panel* over an unfillable field, and against the rule
+    for what counts as recovered being applied in a second place. The first is now held where
+    it belongs, by `tests/unit/test_recovery_view.py`, whose panel refuses the reassuring
+    answer without a verification and refuses it again when the newest attempt failed. The
+    second is held here and is stronger than the clause it replaces, because it pins the input
+    as well as the call: `verification_of` turns a `Drill` into a verdict, so a second place
+    constructing a `Drill` is a second place a verdict can be produced about a restore nobody
+    ran, and a form post or a promoted test helper is exactly the shape that would arrive.
+    Both are pinned by name rather than by count, for the reason
+    `tests/invariants/test_single_implementation.py` pins its call sites exactly: whether a
+    second one is right is a question for a person rather than a comparison to loosen.
 
-    That module cannot perform one. It imports nothing that opens a process, a socket, a
-    connection or a file, so it is a declaration in the sense
-    `brain.ops.recovery`'s own docstring claims, and the claim is checked rather than
-    trusted.
-
-    And **nothing calls `verification_of`**, which is the only function that turns an
-    attempted restore into a verified one. A definition with no producer is a heading with
-    nothing under it, so the screen would still be showing a field nobody has filled. This
-    is what fails on the day a runner arrives, and that is the day the panel gets built.
+    The other two clauses are unchanged and both still hold. The restore vocabulary lives in
+    one module, and that module cannot perform one: it imports nothing that opens a process, a
+    socket, a connection or a file, so it is a declaration in the sense
+    `brain.ops.recovery`'s own docstring claims, and the claim is checked rather than trusted.
+    Nothing under `src/brain` performs a restore even now. The runner is a shell script on the
+    client's own server and what this repository holds is the format it has to write.
 
     Deleting this loses the record that the leaf was examined rather than missed, and loses
     the distinction the whole of M30.3 rests on: that a backup nobody has restored is a
     file."""
     restorers: dict[str, list[str]] = {}
     callers: list[str] = []
+    drills: list[str] = []
     acts: list[str] = []
     #: Modules whose presence would mean this is a runner rather than a declaration.
     performing = {
@@ -582,6 +593,8 @@ def test_nothing_in_this_repository_performs_a_restore():
             called = node.func if isinstance(node, ast.Call) else None
             if isinstance(called, ast.Name) and called.id == "verification_of":
                 callers.append(where)
+            if isinstance(called, ast.Name) and called.id == "Drill":
+                drills.append(where)
             if where.endswith("ops/recovery.py") and isinstance(node, ast.Import | ast.ImportFrom):
                 named = (
                     [node.module or ""]
@@ -592,20 +605,27 @@ def test_nothing_in_this_repository_performs_a_restore():
 
     assert restorers == {"src/brain/ops/recovery.py": ["last_verified_restore"]}
     assert acts == [], f"brain.ops.recovery imports {acts}, so it is a runner rather than a shelf"
-    assert callers == [], (
-        f"{callers} produce a verified restore, so the recovery panel can now be built"
+    assert callers == ["src/brain/ops/backup_manifest.py"], (
+        f"{callers} decide what counts as a verified restore, and there may be one such place"
+    )
+    assert drills == ["src/brain/ops/backup_manifest.py"], (
+        f"{drills} construct a drill, and a drill built anywhere but from a runner's own "
+        "record is a verdict about a restore nobody ran"
     )
 
 
-def test_the_recovery_screen_says_what_would_have_to_exist_before_it_is_built():
+def test_the_recovery_screen_says_what_would_have_to_exist_before_it_shows_more_than_an_alarm():
     """Deleting this leaves the decision as a sentence in a commit message nobody re-reads,
-    and the next person concludes the screen was forgotten. Four findings rather than one
-    summary, so the day two of them exist the list gets shorter and says which two."""
+    and the next person concludes the drill was forgotten. Three findings rather than one
+    summary, so the day one of them exists the list gets shorter and says which one. It was
+    four, and said the screen itself was missing, until 2026-09-14: the screen was built then
+    and the backup the first finding asked for was already being taken."""
     found = recovery_gaps()
 
-    assert len(found) == len(RECOVERY_NEEDS) == 4
+    assert len(found) == len(RECOVERY_NEEDS) == 3
     assert any("restores the newest backup" in one for one in found)
-    assert all("nothing in this repository does it" in one for one in found)
+    assert all("can only show an alarm until there is" in one for one in found)
+    assert not any("takes a backup" in one for one in RECOVERY_NEEDS)
 
 
 # ------------------------------------------------------------------ module properties

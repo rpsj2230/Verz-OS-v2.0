@@ -33,6 +33,24 @@ run that went wrong. `read_manifests` returns both halves from one call and
 complaint. See
 `AN_UNREADABLE_MANIFEST_IS_THE_ONE_MOST_LIKELY_TO_MATTER`.
 
+**A drill writes a manifest too, and it records what was asked rather than what it concluded.**
+This is the half that was missing on 2026-09-10 and it is why `brain.ops.recovery.Verification`
+had no producer. The obvious format carries a `verified` boolean, and then the thing deciding
+what counts as a verified restore is a shell script on somebody's server: a runner that never
+asked the permission canary writes `"verified": true` and every screen downstream believes it.
+So a drill manifest carries the backup it read, when it started, when the last check finished,
+that it restored into a scratch target, and one entry per check saying what was asked and what
+came back. The verdict is `verification_of`'s and nothing else's, which is the same rule
+`Verification` already keeps by being obtainable from one function. A runner that omits the
+canary produces a verification whose shortfall says the canary did not run, and it cannot
+produce one that says otherwise. See `A_RUNNER_THAT_COULD_WRITE_THE_VERDICT_WOULD_BE_THE_RULE`.
+
+Rejected: a table for drill results. It is the obvious place for a record a console reads, and
+`A_RECORD_OF_A_BACKUP_KEPT_ONLY_IN_THE_DATABASE_IS_LOST_WITH_IT` applies to a drill with more
+force than to a backup: the drill exists for the morning the database is gone, so a row proving
+the copies were readable is unreadable in exactly the hour somebody needs it. The manifest sits
+beside the artefact it read, under the same retention, in the bucket a restore reaches anyway.
+
 Rejected: putting the manifest inside the dump file as a header. It makes the size and the
 consistency point unreadable without decompressing a multi-gigabyte artefact, so a console
 panel showing "last backup" would have to fetch every copy to render a row.
@@ -48,7 +66,8 @@ into a manifest format is a hostname in the source the day somebody writes a def
 What a reader actually needs is which install, and an install is the bucket the manifest is in.
 
 Scope: reading and refusing. Nothing here opens a socket, reads a clock or takes a dump. The
-taker is `ops/backup/brain-backup`, which runs on the client's own server.
+taker is `ops/backup/brain-backup`, which runs on the client's own server, and the drill runner
+is its sibling and is not written yet: this is the format it has to write.
 
 Task ids: M30.3.1, M30.3.2
 """
@@ -61,7 +80,17 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
 
-from brain.ops.recovery import Backup, Coverage, Method, RecoveryError
+from brain.ops.recovery import (
+    Backup,
+    Check,
+    CheckRun,
+    Coverage,
+    Drill,
+    Method,
+    RecoveryError,
+    Verification,
+    verification_of,
+)
 
 #: Why the manifest sits in the bucket rather than in a table.
 A_RECORD_OF_A_BACKUP_KEPT_ONLY_IN_THE_DATABASE_IS_LOST_WITH_IT: Final = (
@@ -87,8 +116,28 @@ AN_UNREADABLE_MANIFEST_IS_THE_ONE_MOST_LIKELY_TO_MATTER: Final = (
     "the same call so a caller cannot take one without the other."
 )
 
+#: Why a drill manifest states what was asked and never what it proved.
+A_RUNNER_THAT_COULD_WRITE_THE_VERDICT_WOULD_BE_THE_RULE: Final = (
+    "A drill manifest carrying a verified flag puts the definition of a verified restore in "
+    "a shell script on a client's server, where it is whatever that script's author believed "
+    "on the afternoon they wrote it. The failure is not that somebody lies; it is that a "
+    "runner which never asked the permission canary has nothing to report and writes true, "
+    "and a restored copy missing its policies answers everything to everybody and passes. So "
+    "the file carries the questions and the answers, the verdict is verification_of's, and a "
+    "check that did not run arrives as a shortfall saying so rather than as an absence."
+)
+
 #: The file extension a manifest takes, so a listing can find them without reading every object.
 MANIFEST_SUFFIX: Final = ".manifest.json"
+
+#: The file extension a drill's record takes, in the same bucket beside the copy it read.
+#:
+#: Distinct from `MANIFEST_SUFFIX` and neither is a suffix of the other, which is the property
+#: rather than the spelling: a reader selects objects by the end of the name, so one suffix
+#: ending in the other would have `read_manifests` hand every drill record to `backup_from` and
+#: report a healthy bucket as one unreadable file per drill that ran. A test asserts the
+#: relation between the two constants rather than their values.
+DRILL_SUFFIX: Final = ".drill.json"
 
 #: Every field a manifest must carry, in the order the taker writes them.
 #:
@@ -106,6 +155,22 @@ REQUIRED_FIELDS: Final[tuple[str, ...]] = (
     "recoverable_to",
     "size_bytes",
 )
+
+
+#: Every field a drill's manifest must carry. Listed, for the reason `REQUIRED_FIELDS` is.
+#:
+#: There is no `verified` and no `rto_seconds` here, and their absence is the design. See
+#: `A_RUNNER_THAT_COULD_WRITE_THE_VERDICT_WOULD_BE_THE_RULE`.
+DRILL_REQUIRED_FIELDS: Final[tuple[str, ...]] = (
+    "backup_id",
+    "started_at",
+    "finished_at",
+    "into_scratch",
+    "checks",
+)
+
+#: Every field one check entry inside a drill manifest must carry.
+CHECK_REQUIRED_FIELDS: Final[tuple[str, ...]] = ("check", "passed", "detail")
 
 
 class ManifestError(Exception):
@@ -256,6 +321,156 @@ def read_manifests(
         except ManifestError as exc:
             failed.append(Unreadable(where=name, why=str(exc)))
     return tuple(sorted(read, key=lambda one: one.recoverable_to)), tuple(failed)
+
+
+# ------------------------------------------------------------------------ what a drill wrote
+def _flag(value: Any, *, field: str, where: str) -> bool:
+    """One boolean from a manifest, refusing everything that is merely truthy.
+
+    **This is the refusal that matters most in this module and it fails in the flattering
+    direction.** A shell script writing `"passed": "false"` produces a string, and a string of
+    five characters is true to Python, so a check that failed reads as a check that passed and
+    the restore verifies. The same value in `into_scratch` turns a drill that ran against the
+    live database into one `Drill` accepts, which is the misconfiguration that value class
+    exists to refuse.
+
+    `bool` before `int` because `bool` is an `int` in Python, which is the trap
+    `backup_from` already carries for `size_bytes`: here `1` would read as a pass and `0` as a
+    failure, and a format that quietly accepts either is one a runner can be written against by
+    accident.
+    """
+    if not isinstance(value, bool):
+        msg = (
+            f"{where}: {field} is {value!r}, and a drill's answers are written as true or "
+            "false. Anything else is read for its truthiness, which makes the string false a "
+            "pass"
+        )
+        raise ManifestError(msg)
+    return value
+
+
+def _check_run(entry: Any, *, position: int, where: str) -> CheckRun:
+    """One check entry as what was asked and what came back. Never a verdict about the whole."""
+    if not isinstance(entry, Mapping):
+        msg = f"{where}: check {position} is a {type(entry).__name__} and a check is an object"
+        raise ManifestError(msg)
+    missing = [name for name in CHECK_REQUIRED_FIELDS if name not in entry]
+    if missing:
+        msg = f"{where}: check {position} has no {', '.join(missing)}"
+        raise ManifestError(msg)
+    try:
+        asked = Check(entry["check"])
+    except ValueError as exc:
+        msg = f"{where}: check {position}: {exc}"
+        raise ManifestError(msg) from exc
+    detail = entry["detail"]
+    if not isinstance(detail, str):
+        msg = (
+            f"{where}: check {position} says what happened as a "
+            f"{type(detail).__name__}, and a drill report is read by a person"
+        )
+        raise ManifestError(msg)
+    try:
+        return CheckRun(
+            check=asked,
+            passed=_flag(entry["passed"], field=f"check {position} passed", where=where),
+            detail=detail,
+        )
+    except RecoveryError as exc:
+        msg = f"{where}: {exc}"
+        raise ManifestError(msg) from exc
+
+
+def drill_from(document: Mapping[str, Any], *, where: str) -> Drill:
+    """One drill manifest as the attempt it records, refusing anything it cannot describe.
+
+    A `Drill` and not a `Verification`, which is the whole point: what the runner may state is
+    what it did, and `verification_of` decides what that proved. See
+    `A_RUNNER_THAT_COULD_WRITE_THE_VERDICT_WOULD_BE_THE_RULE`.
+
+    `Drill`'s own refusals are kept rather than duplicated, in the same split `backup_from`
+    uses: a negative duration, a naive instant, one check run twice and a target that is not
+    scratch are all its rules, and the exception is re-raised with the file named because a
+    reader looking at a bucket has no other way to find which object complained.
+    """
+    missing = [name for name in DRILL_REQUIRED_FIELDS if name not in document]
+    if missing:
+        msg = f"{where}: no {', '.join(missing)}, so the drill cannot be described"
+        raise ManifestError(msg)
+
+    backup_id = document["backup_id"]
+    if not isinstance(backup_id, str):
+        msg = f"{where}: backup_id is {type(backup_id).__name__} and an identifier is a string"
+        raise ManifestError(msg)
+
+    entries = document["checks"]
+    # A string is a Sequence, and a runner writing one check name rather than a list would
+    # otherwise be read one character at a time into as many refusals as the name is long.
+    if not isinstance(entries, Sequence) or isinstance(entries, str):
+        msg = (
+            f"{where}: checks is {type(entries).__name__} and a drill's checks are a list, "
+            "even when it asked one question or none"
+        )
+        raise ManifestError(msg)
+
+    try:
+        return Drill(
+            backup_id=backup_id,
+            started_at=_instant(document["started_at"], field="started_at", where=where),
+            finished_at=_instant(document["finished_at"], field="finished_at", where=where),
+            into_scratch=_flag(document["into_scratch"], field="into_scratch", where=where),
+            checks=tuple(
+                _check_run(entry, position=at, where=where) for at, entry in enumerate(entries)
+            ),
+        )
+    except RecoveryError as exc:
+        msg = f"{where}: {exc}"
+        raise ManifestError(msg) from exc
+
+
+def read_drills(
+    objects: Iterable[tuple[str, str]],
+) -> tuple[tuple[Verification, ...], tuple[Unreadable, ...]]:
+    """Every drill record in a bucket as what it proved, and every one that could not be read.
+
+    Returns verifications rather than drills, because a caller handed drills would have to run
+    `verification_of` itself and a caller that forgot would have the attempt and the proof
+    collapsed back into one thing. The conversion is here, once.
+
+    Both halves from one call, the shape
+    `AN_UNREADABLE_MANIFEST_IS_THE_ONE_MOST_LIKELY_TO_MATTER` argues for, and it argues harder
+    here: the drill whose record is truncated is the drill that fell over, and dropping it
+    silently leaves an older success standing as the newest evidence.
+
+    Sorted by the moment each drill began, newest last, matching `read_manifests` so a caller
+    reading a bucket does not have to remember which of two functions sorts which way.
+    """
+    read: list[Verification] = []
+    failed: list[Unreadable] = []
+    for name, content in objects:
+        if not name.endswith(DRILL_SUFFIX):
+            continue
+        try:
+            document = json.loads(content)
+        except json.JSONDecodeError as exc:
+            failed.append(Unreadable(where=name, why=f"not JSON: {exc}"))
+            continue
+        if not isinstance(document, dict):
+            failed.append(
+                Unreadable(
+                    where=name,
+                    why=(
+                        f"the top level is a {type(document).__name__} and a drill record is "
+                        "an object"
+                    ),
+                )
+            )
+            continue
+        try:
+            read.append(verification_of(drill_from(document, where=name)))
+        except ManifestError as exc:
+            failed.append(Unreadable(where=name, why=str(exc)))
+    return tuple(sorted(read, key=lambda one: (one.attempted_at, one.backup_id))), tuple(failed)
 
 
 def manifest_gaps(

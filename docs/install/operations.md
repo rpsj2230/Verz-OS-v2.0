@@ -1,11 +1,12 @@
 # Backup, monitoring, logging and health checks
 
 **Read this section first, before the rest of the page.** Thirteen mechanisms in this system
-are meant to run on a schedule. Eleven of them have no caller of any kind: the code is written,
-it is tested, and nothing anywhere invokes it. That includes the one that takes a backup, the
-one that measures how long you have gone without a copy, and the one that proves a copy can be
-restored. A twelfth has a caller and no schedule, which is one link of a chain rather than the
-chain, and the table below says so per mechanism rather than in a count.
+are meant to run on a schedule. Nine of them have no caller of any kind: the code is written,
+it is tested, and nothing anywhere invokes it. That includes the one that takes a backup and the
+one that measures how long you have gone without a copy. Three more have a caller and no
+schedule, which is one link of a chain rather than the chain, and one of the three is the one
+that proves a copy can be restored: the recovery screen asks whether a drill is due, and nothing
+performs one. The table below says so per mechanism rather than in a count.
 
 So this page is in two halves. What answers today, which is the health checks and the audit
 ledger. And what is written down and switched off, which is nearly everything else.
@@ -166,7 +167,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Ten of the thirteen mechanisms are started by nothing
+## Nine of the thirteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -185,7 +186,7 @@ test it before it runs became the first caller of the roster dry run.
 | --- | --- | --- |
 | `retention_sweep` | that nothing is kept past the window its data class was given | `nothing` |
 | `canary_run` | that the gate still refuses today what it refused yesterday | `nothing` |
-| `restore_drill` | that the copies being taken can actually be restored | `nothing` |
+| `restore_drill` | that the copies being taken can actually be restored | `in_process` |
 | `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `nothing` |
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
@@ -200,7 +201,8 @@ test it before it runs became the first caller of the roster dry run.
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it and says nothing
 about whether *that* module is ever reached, which for `spend_correction` today means a console
-screen nobody opens on a schedule, and for `directory_sync` a console page somebody presses.
+screen nobody opens on a schedule, for `directory_sync` a console page somebody presses, and for
+`restore_drill` a recovery panel that can only show an alarm, because nothing performs a drill.
 `on_a_route` is the only one that runs: an external timer
 calls an HTTP route, and it is what makes it detectable if entries are ever removed from the
 end of the audit ledger.

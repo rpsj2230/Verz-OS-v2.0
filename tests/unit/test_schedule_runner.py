@@ -358,10 +358,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     control is waiting for has not changed: somebody has to gather its inputs. The two figures
     moving apart is the point of keeping both.
 
+    **And to nine on 2026-09-14, for the same reason one screen along.**
+    `brain.console.recovery_view` asks `drill_due`, so `restore_drill` has a caller that nothing
+    runs on a schedule, and nothing performs a drill, which is what its runner still waits for.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 10
+    assert len(orphans()) == 9
     assert "directory_sync" not in {one.name for one in orphans()}
+    assert "restore_drill" not in {one.name for one in orphans()}
     assert len(CONTROLS) == 13

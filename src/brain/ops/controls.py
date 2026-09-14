@@ -450,7 +450,11 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=timedelta(days=DRILL_INTERVAL_DAYS),
         cadence_from="brain.ops.recovery:DRILL_INTERVAL_DAYS",
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        # Moved from NOTHING on 2026-09-14, when `brain.console.recovery_view` became a caller
+        # of `drill_due` and `brain.ops.backup_manifest.read_drills` of `verification_of`. It
+        # does not mean a drill runs: nothing in this repository restores a copy or writes a
+        # drill record, so the panel those callers serve can only show an alarm.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="backup_exposure",

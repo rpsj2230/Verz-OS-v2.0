@@ -66,13 +66,20 @@ regulator. `RETENTION_LADDER` is declared so the arithmetic is checkable and
 `backup_policy_gaps` reports the conflict; nothing prunes to it. See
 `THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES`.
 
+**A console needs a third question and it is not the sibling of the other two.**
+`last_verified_restore` refuses to move when a drill fails, which is correct for the field and
+is not the verdict: after Tuesday's failure the Monday date still stands and nothing this
+install holds is known to be readable. `last_attempt` answers the newest evidence, and
+`brain.console.recovery_view` is built on the pair rather than on either. See
+`A_LATER_FAILURE_LEAVES_THE_EARLIER_SUCCESS_WHERE_IT_IS`.
+
 Rejected: a `RecoveryPanel` record with a field per thing the console screen wants.
 `brain.ops.admission` removed exactly that shape for exactly this reason and recorded why:
 nothing constructs one, so its fields would be chosen by whoever wrote this file rather than
-by the screen that has to render them. What a panel needs is two questions, `latest` and
-`last_verified_restore`, and both are answerable without a record wrapping them. M27.6.2 stays
-unclaimed for a different reason than it did yesterday: not that nothing here can say what a
-verified restore is, but that nothing produces one to show.
+by the screen that has to render them. What a panel needs is three questions, `latest`,
+`last_verified_restore` and `last_attempt`, and all three are answerable without a record
+wrapping them. The panel is `brain.console.recovery_view.Panel`, declared beside the screen
+that renders it and shaped by what that screen must refuse to draw.
 
 Rejected: recording the age of the newest object in the `backups` bucket as a backup
 timestamp. It is the number that is available and it answers a different question, which is
@@ -117,6 +124,17 @@ AN_ATTEMPTED_RESTORE_IS_NOT_A_VERIFIED_ONE: Final = (
     "refuses what it should refuse. The first is evidence for the second and is not the "
     "second, and the whole reason the distinction needs a type rather than a convention is "
     "that the interesting failure is a restore that completes and produces something wrong."
+)
+
+#: Why "when did a restore last verify" and "is this install recoverable" are two questions.
+A_LATER_FAILURE_LEAVES_THE_EARLIER_SUCCESS_WHERE_IT_IS: Final = (
+    "last_verified_restore is written so that a failed attempt cannot move it, because the "
+    "field a console labels last verified restore must not advance because somebody tried "
+    "and failed. The consequence is that the field goes on saying Monday after Tuesday's "
+    "drill failed, which is true and is not the verdict: on Tuesday evening no copy this "
+    "install holds is known to be readable. A reader shown only the field sees a date and a "
+    "recent one. So the newest attempt is its own question, answered by last_attempt, and "
+    "anything deciding whether to reassure somebody has to ask that one."
 )
 
 #: Why an unverified drill carries no recovery time.
@@ -606,6 +624,28 @@ def last_verified_restore(verifications: Sequence[Verification]) -> Verification
     if not passed:
         return None
     return max(passed, key=lambda one: (one.attempted_at, one.backup_id))
+
+
+def last_attempt(verifications: Sequence[Verification]) -> Verification | None:
+    """The most recent drill outcome whatever it proved, or `None` for no drill at all.
+
+    **The sibling above is deliberately blind to failure and this one is deliberately not, and
+    a console needs both or it reads the wrong one as the other.** `last_verified_restore`
+    must not move when a drill fails, which is the whole reason it exists. That is right for
+    the field and wrong for the verdict: a restore that verified on Monday and a drill that
+    failed on Tuesday leaves the Monday date standing and leaves nothing on this install known
+    to be readable, and a screen with only the first function renders a date and a tick.
+
+    So the two questions are two functions. When was a restore last proved, and what does the
+    newest evidence say. See `A_LATER_FAILURE_LEAVES_THE_EARLIER_SUCCESS_WHERE_IT_IS`.
+
+    Ordered by `attempted_at` with the identifier breaking ties, exactly as the sibling is, so
+    two drills recorded at one instant cannot swap places between two readings of the same
+    bucket and make a panel change its answer with nothing having happened.
+    """
+    if not verifications:
+        return None
+    return max(verifications, key=lambda one: (one.attempted_at, one.backup_id))
 
 
 #: How often a restore is rehearsed, in days (M30.3.6).

@@ -119,14 +119,15 @@ A_FIELD_CHECKED_BEFORE_DECIDING_NOT_TO_WORRY_IS_MEASURED: Final = (
     "blank one."
 )
 
-#: Why the recovery screen is not built.
+#: Why the recovery screen never shows a backup's age as a verified restore.
 A_BACKUP_TIMESTAMP_IS_NOT_A_VERIFIED_RESTORE: Final = (
     "A backup that has never been restored is a file whose readability nobody has tested, "
     "and the field on a console reading last verified restore is the one somebody checks "
-    "before deciding not to worry. Nothing in this repository takes a backup, restores one "
-    "or records that a restore succeeded. Showing the age of the newest object in a bucket "
-    "under that heading would be a screen that answers the question it was not asked, in "
-    "the reassuring direction, to the one reader who will act on it."
+    "before deciding not to worry. This repository takes a backup and can read what a "
+    "rehearsal recorded, and nothing in it restores a copy or writes that record. Showing "
+    "the age of the newest object in a bucket under that heading would answer the question "
+    "it was not asked, in the reassuring direction, to the one reader who will act on it, so "
+    "brain.console.recovery_view shows the absence of a verified restore as an alarm."
 )
 
 #: Why the migration level is not read out of the source tree.
@@ -625,33 +626,33 @@ def connection_capacity() -> tuple[ConnectionCapacity, ...]:
 
 
 # ------------------------------------------------------------------------- the diagnostic
-#: What would have to exist before a recovery screen could be built.
+#: What would have to exist before the recovery screen could show anything but an alarm.
 #:
-#: Four things, in the order they have to happen. Written as a list rather than a paragraph
+#: Three things, in the order they have to happen. Written as a list rather than a paragraph
 #: so a later reader can tell how much of it has appeared since, which a paragraph makes
-#: surprisingly hard.
+#: surprisingly hard. It was four until 2026-09-14: the first was something that takes a
+#: backup and records when it did, and `ops/backup/brain-backup` with
+#: `brain.ops.backup_manifest` is that, so the list is shorter and says which one went.
 RECOVERY_NEEDS: Final[tuple[str, ...]] = (
-    "something that takes a backup and records when it did",
     "something that restores the newest backup into a scratch database",
     "a smoke query and a permission canary run against the restored copy",
-    "a record of when that last succeeded, and how long it took",
+    "a record of when that last succeeded, and how long it took, written by that run",
 )
 
 
 def recovery_gaps() -> tuple[str, ...]:
-    """Why the backup and recovery screen is not built. See
+    """What the recovery screen still cannot show, and why it shows an alarm instead. See
     `A_BACKUP_TIMESTAMP_IS_NOT_A_VERIFIED_RESTORE`.
 
     Kept apart from every check that must be green, exactly as
     `brain.console.screens.unregistered_tools` is: this one is expected to stay non-empty
     until M30 lands, and a diagnostic that is red for a month is one somebody switches off.
 
-    Returns one finding per missing piece rather than one summary, so the day two of the four
-    exist the list gets shorter and says which two.
+    Returns one finding per missing piece rather than one summary, so the day one of the three
+    exists the list gets shorter and says which one.
     """
     return tuple(
-        f"the recovery screen needs {one}, and nothing in this repository does it"
-        for one in RECOVERY_NEEDS
+        f"the recovery screen can only show an alarm until there is {one}" for one in RECOVERY_NEEDS
     )
 
 

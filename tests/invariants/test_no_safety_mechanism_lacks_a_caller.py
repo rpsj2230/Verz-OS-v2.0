@@ -58,7 +58,6 @@ KNOWN_ORPHANS = frozenset(
     {
         "retention_sweep",
         "canary_run",
-        "restore_drill",
         "backup_exposure",
         "denial_digest",
         "knowledge_reverification",
@@ -82,7 +81,11 @@ KNOWN_ORPHANS = frozenset(
 #: said in terms, and `brain.console.staff_source_view` is now it: the page M1.6.11 asks for,
 #: which runs the chosen source once and shows what a real sync would change. Nothing opens
 #: that screen on a schedule either, so the nightly sync is exactly as unscheduled as it was.
-WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync"})
+#:
+#: `restore_drill` joined it on 2026-09-14. `brain.console.recovery_view` asks `drill_due`
+#: and `brain.ops.backup_manifest.read_drills` asks `verification_of`, and nothing performs a
+#: drill, so the rehearsal is exactly as unscheduled as it was and now says so on a screen.
+WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "restore_drill"})
 
 #: Controls whose caller is itself imported by nothing, named rather than counted.
 #:
@@ -98,7 +101,10 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync"})
 #: So this is recorded rather than argued away. A set rather than a relaxed assertion, for
 #: `KNOWN_ORPHANS`' reason: a chain that appears quietly is an incident, and one repaired
 #: without being recorded makes every entry above it less believable.
-CALLERS_NOTHING_REACHES = frozenset({"directory_sync"})
+#:
+#: `restore_drill` joined it on 2026-09-14 for the reason `directory_sync` did: its caller is
+#: `brain.console.recovery_view`, a console page nothing imports.
+CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "restore_drill"})
 
 
 def test_every_control_names_functions_that_exist() -> None:
