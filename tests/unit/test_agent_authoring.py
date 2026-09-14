@@ -102,11 +102,12 @@ from brain.agents.template import (
 )
 from brain.connectors.registry import ConnectorRegistry
 from brain.core.entitlement import Capability
-from brain.core.envelope import SideEffect
+from brain.core.envelope import Entity, SideEffect, ToolDefinition, TypedResult
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import Tier
+from brain.tools.registry import ToolRegistry
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 LATER = datetime(2026, 9, 7, 9, 0, tzinfo=UTC)
@@ -132,6 +133,35 @@ CONTACT = "bob@acme.example"
 TICKET = "TG-4471"
 RATE = "$180"
 DEPARTMENT = "web"
+
+
+class ClientSummary(Entity):
+    name: str = ""
+
+
+def a_summary() -> TypedResult[ClientSummary]:
+    return TypedResult[ClientSummary]()
+
+
+def _tool_registry() -> ToolRegistry:
+    """The registry the fixture agent's one tool is registered in, so an install of it binds.
+
+    `brain.agents.install.complete` binds every declared tool against the install's registry
+    and badges an install incomplete for a tool nothing binds, so an install with no registry
+    would be incomplete for a reason these tests are not about.
+    """
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name=TOOL,
+            description="a client's summary",
+            entity="client",
+            required_capability="read:client.name",
+        ),
+        a_summary,
+    )
+    return registry
+
 
 #: Two words apart by one suffix. The redaction test asserts on both.
 PERSONA = (
@@ -309,6 +339,7 @@ def _install(authored: AuthoredTemplate, answers: Mapping[str, str] | None = Non
         key=KEY,
         audience=_audience(),
         registry=ConnectorRegistry(),
+        tools=_tool_registry(),
         at=NOW,
     )
 
@@ -758,6 +789,7 @@ def test_a_placeholder_answer_never_reaches_a_published_template() -> None:
         key=KEY,
         audience=_audience(),
         registry=ConnectorRegistry(),
+        tools=_tool_registry(),
         at=NOW,
     )
     assert installed.placeholder_answers["price_list"] == secret
@@ -898,7 +930,12 @@ def test_an_authored_template_installs_through_the_real_wizard_with_its_redactio
     draft = provide(draft, "price_list", "the 2026 rate card")
     draft = provide(draft, "escalation_contact", "whoever is on call")
     installed = complete(
-        draft, key=KEY, audience=_audience(OUTSIDER), registry=ConnectorRegistry(), at=LATER
+        draft,
+        key=KEY,
+        audience=_audience(OUTSIDER),
+        registry=ConnectorRegistry(),
+        tools=_tool_registry(),
+        at=LATER,
     )
 
     assert installed.completeness.badge is InstallBadge.READY

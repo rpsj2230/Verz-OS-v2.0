@@ -19,13 +19,16 @@ composes exactly these three for exactly this shape of question, and this module
 the same way on purpose. A fourth implementation of the central rule is a fourth place for it
 to be subtly wrong, and the permissive copy is the one that wins the day two disagree.
 
-**The intersection runs requirement-first and that is load-bearing rather than stylistic.**
-`intersect` keeps a grant of the receiver's only where the ceiling covers it, and
-`Capability.covers` expands only a trailing `.*`. Narrowing the *reader* by the memory's
-specific capability would drop the wildcard grant of somebody who plainly holds it, so a
-person with `read:client.*` would lose a memory formed under `read:client.name`. Narrowing the
-requirement by the reader asks the question that was meant: does what this person holds cover
-what this memory was formed from.
+**The intersection runs requirement-first, and since 2026-09-14 that is a reading rather than a
+guard.** It was written this way round because `intersect` used to keep a grant of the
+receiver's only where the ceiling covered it, so narrowing the *reader* by the memory's specific
+capability dropped the wildcard grant of somebody who plainly holds it, and a person with
+`read:client.*` lost every memory formed under `read:client.name`. `intersect` now reaches each
+capability exactly where both of its sides do, so the two orders give the same recollection at
+the same scope. A mutation reversing them was caught by three tests before that repair and
+survives every test reaching this module after it, which is recorded as an equivalent mutant
+rather than covered by a test written to fit it. The order is kept because it reads as the
+question that was meant: does what this person holds cover what this memory was formed from.
 
 **The entitlement hash is recorded and is deliberately not the check.** Comparing hashes would
 be a stricter rule and a worse one: it invalidates a memory when the reader's grants change at

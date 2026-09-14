@@ -44,6 +44,20 @@ when anything is missing, and `runnable_agent_ids` therefore leaves it out until
 finishes it. The badge is what a person reads; the disabled timestamp is what selection
 reads. See `AN_INCOMPLETE_INSTALL_IS_DISABLED_RATHER_THAN_SELECTABLE`.
 
+**A template names its tools by what they do, and the install binds them to this install's
+tools.** A manifest cannot know which system a company reads, so the catalogue declares
+`invoice.read`; a registered tool carries its source in its name, `demo.read_invoice`, because
+`brain.knowledge.rows.RowTool` argues a source is part of a tool's identity. `project` and
+`Leash.rung_for` both compare names exactly, so until 2026-09-14 every catalogue template
+reached `invoke` holding names no registry could contain and was refused for every caller,
+while this module badged it READY. `complete` now takes the tool registry, `bind_tool` binds
+each declared tool by entity and verb, and the bound names are what `Installation.record` and
+`Installation.leash` carry, which is the shape `agent.agent.allowed_tools` already stores. A
+declared tool nothing binds is `MissingKind.TOOL`: the badge is INCOMPLETE and the agent starts
+disabled, exactly as for an unbound connector. See
+`A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL` and
+`A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`.
+
 **A template nobody may install and a template that does not exist give one answer.**
 `TemplateCatalogue.open_for` has one raise site, so the two causes cannot drift into two
 sentences, and `installable_ids` returns a frozenset, which has nowhere to put a count of
@@ -72,7 +86,25 @@ judged by a person against `GoldenCase.expectation`, which is prose for the reas
 gives. `rehearse_golden_set` refuses to be handed the same principal twice, because a golden
 set run twice as one person is one run wearing two labels.
 
-Three designs were rejected.
+Six designs were rejected.
+
+*Binding when a run starts rather than when the install completes.* The registry is in hand at
+run time and the binding would follow a change of source for free. But the badge is computed
+here, and it is read by a person deciding whether the install is finished: bound only at run
+time, it would go on saying READY about an agent the run then refuses, which is the defect
+this binding exists to remove. Binding is recomputed every time `complete` assembles an
+`Installation`, which is the same recomputation the connector pin gets.
+
+*A tool registry argument that defaults to none.* There is no honest default. Without a
+registry nothing binds, so a default would either report every declared tool missing, which
+reads as a broken template, or report nothing missing, which is the defect. A required
+argument makes every caller say which tools it installs against.
+
+*Binding `search` to a row tool's `read` because a row tool also filters.* The catalogue's
+authors wrote the two verbs as two leash targets, and the product's vocabulary keeps them apart:
+the Freshdesk connector declares `freshdesk.search_tickets`. Binding both to one tool would put
+two supervision decisions on one name and badge a template complete for a tool it did not ask
+for, so a verb binds only the same verb.
 
 *A wizard with two paths, one for a template and one for "create from scratch".* It is the
 obvious shape and it is the one M13.2.7 exists to prevent. Two paths means two places the
@@ -127,6 +159,7 @@ from pydantic import JsonValue
 from brain.agents.lifecycle import disable
 from brain.agents.model import (
     AgentAudience,
+    AgentAuthority,
     AgentRecord,
     AgentViewer,
     entitlement_ceiling,
@@ -152,7 +185,7 @@ from brain.gate.injection import AutonomyTier, RiskAssessment
 from brain.gate.invoke import InvocationRefusedError, invoke
 from brain.gate.leash import Leash, LeashEntry
 from brain.knowledge.visibility import Visibility
-from brain.tools.registry import ToolRegistry
+from brain.tools.registry import TOOL_NAME_RE, ToolRegistry
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -205,6 +238,28 @@ AN_INCOMPLETE_INSTALL_IS_DISABLED_RATHER_THAN_SELECTABLE: Final = (
     "prevent, so the missing item has to stop the agent being chosen rather than only "
     "colour a row. disable is reversible and archive is not, which is why this uses the "
     "first: finishing the install and enabling it is the ordinary next step."
+)
+
+#: Why a template names its tools by what they do and the install names them by system.
+A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL: Final = (
+    "A template travels between installations and cannot know which system a company reads, "
+    "so it names a tool by what it does to what: invoice.read. A registered tool carries the "
+    "system in its name as well, demo.read_invoice, because two systems' record ids collide by "
+    "coincidence of integers and a source is part of a tool's identity. The gate compares names "
+    "exactly, in the projection and on the leash, so a declared name reaching either matches "
+    "nothing and every run is refused. The install is where the two meet: each declared tool "
+    "is bound by entity and verb to the tools this install registered, and the bound names are "
+    "what the record and the leash carry."
+)
+
+#: Why a declared tool nothing here binds holds the install open.
+A_TOOL_NOTHING_HERE_BINDS_IS_MISSING: Final = (
+    "The badge is read as a promise that the agent will run. Until 2026-09-14 it said READY for "
+    "every catalogue template while brain.gate.invoke.invoke refused every one of them, because "
+    "no declared tool matched a registered name. A declared tool no registered tool binds is "
+    "therefore missing, as an unbound connector is: the badge is INCOMPLETE and the agent starts "
+    "disabled. Nothing is invented to fill the gap, so a drafting tool the product does not "
+    "have stays missing on every install until somebody builds one."
 )
 
 #: Why the catalogue answers absence and refusal identically.
@@ -756,9 +811,124 @@ def pinned_leash(leash: Leash, readiness: tuple[ConnectorReadiness, ...]) -> Lea
     )
 
 
+# ------------------------------------------------------ tools, bound to this install
+@dataclass(frozen=True)
+class ToolBinding:
+    """One tool a manifest declares, and the registered tools that answer to it here.
+
+    `bound` is empty when nothing registered here answers to the declaration, which is what
+    `completeness` reports. It holds more than one name when two systems read here both carry
+    the entity: a template asking to read invoices is asking for both, and neither widens the
+    run, because each still requires the capability the ceiling has to admit.
+    """
+
+    #: As the manifest declares it: `invoice.read`, or a registered name for a hand-built agent.
+    target: str
+    #: The registered names it binds, in registry order.
+    bound: tuple[str, ...]
+
+    @property
+    def ready(self) -> bool:
+        return bool(self.bound)
+
+
+def _verb_of(name: str) -> str:
+    """The verb of a registered tool's name, read off the grammar's own named group.
+
+    `brain.core.envelope` asks that a name be split through its pattern rather than on a dot
+    written here. Registration refuses a name outside the grammar, so a name read from a
+    registry always matches; the empty string exists because `match` is typed as optional,
+    and it is a verb no declaration can bind, since the grammar's verb is never empty.
+    """
+    parsed = TOOL_NAME_RE.match(name)
+    return parsed["verb"] if parsed is not None else ""
+
+
+def bind_tool(target: str, tools: ToolRegistry) -> ToolBinding:
+    """The registered tools one declared tool stands for on this install.
+
+    **A registered name binds itself.** That is a hand-built agent, whose tools are typed into
+    the overlay by somebody who can see the registry, and it is disjoint from the other case:
+    a registered name always has an underscore after its dot and a declaration never does.
+
+    **Otherwise `entity.verb` binds every registered tool of that entity and that verb.** The
+    entity is `ToolDefinition.entity` rather than the noun in the name, because the entity is
+    what a field policy, a capability and a leash target are written about. A declaration with
+    no dot has an empty verb and binds nothing, without a branch saying so.
+
+    See `A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL`.
+    """
+    if tools.has(target):
+        return ToolBinding(target=target, bound=(target,))
+    entity, _, verb = target.partition(".")
+    return ToolBinding(
+        target=target,
+        bound=tuple(
+            definition.name
+            for definition in tools.definitions()
+            if definition.entity == entity and _verb_of(definition.name) == verb
+        ),
+    )
+
+
+def bind_tools(targets: tuple[str, ...], tools: ToolRegistry) -> tuple[ToolBinding, ...]:
+    """A binding per declared tool, in the order the manifest lists them."""
+    return tuple(bind_tool(target, tools) for target in targets)
+
+
+def bound_record(record: AgentRecord, bindings: tuple[ToolBinding, ...]) -> AgentRecord:
+    """The record with every declared tool replaced by the registered tools it binds.
+
+    A declaration nothing binds is dropped rather than kept. The stored column is the gate's
+    vocabulary, and a name no registry can hold is a name `project` can never match; what is
+    missing is recorded where a person reads it, on `Completeness.missing`.
+
+    Rebuilt through `AgentRecord`'s constructor rather than `model_copy`, which skips
+    validation, so the rule that required tools sit inside allowed ones runs on the bound
+    names too.
+    """
+    by_target = {binding.target: binding.bound for binding in bindings}
+    authority = record.authority
+
+    def bound(declared: frozenset[str]) -> frozenset[str]:
+        return frozenset(name for target in declared for name in by_target.get(target, ()))
+
+    fields = {name: getattr(record, name) for name in type(record).model_fields}
+    return AgentRecord.model_validate(
+        {
+            **fields,
+            "authority": AgentAuthority(
+                scope=authority.scope,
+                capabilities=authority.capabilities,
+                allowed_tools=bound(authority.allowed_tools),
+                required_tools=bound(authority.required_tools),
+                max_side_effect=authority.max_side_effect,
+            ),
+        }
+    )
+
+
+def bound_leash(leash: Leash, bindings: tuple[ToolBinding, ...]) -> Leash:
+    """The leash with each bound target's entry repeated for every registered name it binds.
+
+    Scope and rung are carried unchanged, so binding can move a rung neither way; the one
+    place a rung moves is `pinned_leash`. An entry whose target binds nothing is kept as it was
+    written, for the reason `pinned_leash` keeps entries: a console can show what the template
+    configured, and `Leash.rung_for` answers SHADOW for a name that matches no entry anyway.
+    """
+    by_target = {binding.target: binding.bound for binding in bindings if binding.ready}
+    return Leash(
+        entries=tuple(
+            LeashEntry(agent_id=entry.agent_id, target=name, scope=entry.scope, rung=entry.rung)
+            for entry in leash.entries
+            for name in by_target.get(entry.target, (entry.target,))
+        )
+    )
+
+
 # ------------------------------------------------------ what is still missing (M13.3.6)
 class MissingKind(enum.StrEnum):
-    """The three ways an install can be unfinished. Closed; there is no fourth."""
+    """The four ways an install can be unfinished. Closed; there is no fifth."""
 
     #: A manifest path that may not be blank and is.
     FIELD = "field"
@@ -766,6 +936,9 @@ class MissingKind(enum.StrEnum):
     PLACEHOLDER = "placeholder"
     #: A declared connector that is not serving.
     CONNECTOR = "connector"
+    #: A declared tool no tool registered on this install binds. See
+    #: `A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`.
+    TOOL = "tool"
 
 
 @dataclass(frozen=True)
@@ -806,12 +979,18 @@ class Completeness:
         return self.badge is InstallBadge.READY
 
 
-def completeness(draft: InstallDraft, readiness: tuple[ConnectorReadiness, ...]) -> Completeness:
+def completeness(
+    draft: InstallDraft,
+    readiness: tuple[ConnectorReadiness, ...],
+    bindings: tuple[ToolBinding, ...],
+) -> Completeness:
     """What this draft still needs, in the order somebody would work through it (M13.3.6).
 
     Fields first, because a blank persona means there is no agent to badge at all and
     `materialise` will refuse rather than warn. Then the placeholders, which are the
-    installer's own typing. Then the connectors, which are usually somebody else's job.
+    installer's own typing. Then the connectors, which are usually somebody else's job. Then
+    the tools, last, because binding one is a change to what the whole install reads rather
+    than to this agent. See `A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`.
     """
     missing: list[Missing] = []
     missing.extend(
@@ -829,6 +1008,11 @@ def completeness(draft: InstallDraft, readiness: tuple[ConnectorReadiness, ...])
         for indicator in readiness
         if not indicator.ready
     )
+    missing.extend(
+        Missing(kind=MissingKind.TOOL, name=binding.target)
+        for binding in bindings
+        if not binding.ready
+    )
     badge = InstallBadge.READY if not missing else InstallBadge.INCOMPLETE
     return Completeness(badge=badge, missing=tuple(missing))
 
@@ -839,15 +1023,15 @@ class Installation:
     """One finished install: the row, the effective agent, and the state it starts in.
 
     `record` rather than `effective.record` is the one to store and the one to select on.
-    They differ by a single field: `EffectiveAgent.record` is what the manifest and the
-    overlay say, and this is that record with the install's own state applied, which today
-    means disabled when anything is missing. The decision is taken in `complete` and nowhere
-    else, so there is one place the two can be compared rather than two places they can
-    drift.
+    They differ in two ways: `EffectiveAgent.record` is what the manifest and the overlay say,
+    and this is that record with its declared tools bound to this install's registered ones and
+    the install's own state applied, which today means disabled when anything is missing. Both
+    decisions are taken in `complete` and nowhere else, so there is one place the two can be
+    compared rather than two places they can drift.
 
-    `leash` is likewise the pinned one rather than `effective.leash`, which is what the
-    template declared. The pin is recomputed here from the readiness handed in, so it follows
-    the connector rather than remembering an outage.
+    `leash` is likewise bound and then pinned, rather than `effective.leash`, which is what the
+    template declared. Both are recomputed here from the registries handed in, so they follow
+    the connector and the tool rather than remembering either.
     """
 
     instance: TemplateInstance
@@ -857,6 +1041,9 @@ class Installation:
     readiness: tuple[ConnectorReadiness, ...]
     completeness: Completeness
     placeholder_answers: Mapping[str, str]
+    #: What each declared tool bound to. See
+    #: `A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL`.
+    tools: tuple[ToolBinding, ...]
 
     @property
     def is_pinned_to_shadow(self) -> bool:
@@ -870,6 +1057,7 @@ def complete(
     key: str,
     audience: AgentAudience,
     registry: ConnectorRegistry,
+    tools: ToolRegistry,
     at: datetime,
 ) -> Installation:
     """Finish an install and produce the agent it becomes (M13.3.6, M13.3.7).
@@ -897,6 +1085,12 @@ def complete(
     `brain.agents.lifecycle.disable` rather than by writing the column here, so the one rule
     about archived records refusing a state change applies to an install too.
 
+    **Every declared tool is bound to `tools` before the badge is decided**, per
+    `A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL`, and a declared tool that
+    binds nothing is missing, per `A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`. The allowed tools are
+    what is bound, and required tools are always inside them, which `AgentCeiling` refuses
+    otherwise when the record is built.
+
     A blank persona is refused rather than badged. There is no `AgentRecord` to attach a
     badge to, and `AgentRecord`'s own validator is the refusal, which keeps that rule in one
     place rather than restated as a wizard step.
@@ -911,16 +1105,19 @@ def complete(
     )
     effective = materialise(draft.offer.signed, instance, audience=audience)
     readiness = connector_readiness(effective.manifest.connectors, registry)
-    report = completeness(draft, readiness)
-    record = effective.record if report.is_ready else disable(effective.record, now=at)
+    bindings = bind_tools(effective.manifest.authority.allowed_tools, tools)
+    report = completeness(draft, readiness, bindings)
+    bound = bound_record(effective.record, bindings)
+    record = bound if report.is_ready else disable(bound, now=at)
     return Installation(
         instance=instance,
         effective=effective,
         record=record,
-        leash=pinned_leash(effective.leash, readiness),
+        leash=pinned_leash(bound_leash(effective.leash, bindings), readiness),
         readiness=readiness,
         completeness=report,
         placeholder_answers=dict(draft.placeholder_answers),
+        tools=bindings,
     )
 
 

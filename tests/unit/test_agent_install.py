@@ -45,10 +45,13 @@ from brain.agents.install import (
     Offer,
     Step,
     TemplateCatalogue,
+    ToolBinding,
     answer,
     begin,
     begin_hand_built,
+    bind_tool,
     blank_offer,
+    bound_record,
     complete,
     completeness,
     connector_readiness,
@@ -290,6 +293,7 @@ def _install(
         key=KEY,
         audience=audience or _audience(),
         registry=_connectors(serving=serving),
+        tools=_tools(),
         at=NOW,
     )
 
@@ -467,7 +471,7 @@ def test_a_placeholder_answer_to_a_question_the_template_never_asked_is_refused(
 def test_an_install_missing_a_required_placeholder_is_incomplete_and_names_it() -> None:
     """Deleting this lets an agent go live answering from a blank where a price list should
     be, confidently, which is the failure `Placeholder` exists to prevent."""
-    report = completeness(_draft(), connector_readiness((), ConnectorRegistry()))
+    report = completeness(_draft(), connector_readiness((), ConnectorRegistry()), ())
     assert report.badge is InstallBadge.INCOMPLETE
     assert Missing(kind=MissingKind.PLACEHOLDER, name="price_list") in report.missing
 
@@ -475,7 +479,7 @@ def test_an_install_missing_a_required_placeholder_is_incomplete_and_names_it() 
 def test_an_optional_placeholder_left_blank_does_not_hold_an_install_open() -> None:
     """Deleting this lets `required` stop being read, so every placeholder becomes
     mandatory and an install can never finish while an optional question is unanswered."""
-    report = completeness(_filled(_draft()), connector_readiness((), ConnectorRegistry()))
+    report = completeness(_filled(_draft()), connector_readiness((), ConnectorRegistry()), ())
     assert report.badge is InstallBadge.READY
     assert report.missing == ()
 
@@ -556,7 +560,14 @@ def test_a_hand_built_agent_is_shadow_everywhere_and_has_no_side_effect() -> Non
         "persona",
         "Summarise my own notes and nothing else.",
     )
-    installed = complete(draft, key=KEY, audience=_audience(), registry=ConnectorRegistry(), at=NOW)
+    installed = complete(
+        draft,
+        key=KEY,
+        audience=_audience(),
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
+        at=NOW,
+    )
     assert installed.instance.template_id == BLANK_TEMPLATE_ID
     assert installed.record.authority.max_side_effect is SideEffect.NONE
     assert installed.leash.entries == ()
@@ -574,7 +585,14 @@ def test_a_hand_built_agent_and_an_installed_template_finish_through_one_functio
     )
     from_template = _filled(_draft())
     both = (
-        complete(hand_built, key=KEY, audience=_audience(), registry=ConnectorRegistry(), at=NOW),
+        complete(
+            hand_built,
+            key=KEY,
+            audience=_audience(),
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
+            at=NOW,
+        ),
         _install(from_template),
     )
     assert all(isinstance(one, Installation) for one in both)
@@ -635,7 +653,7 @@ def test_a_draft_with_no_persona_is_reported_incomplete_before_it_is_refused() -
     the wrong place for the warning: the person hits save and gets a validation error where
     an amber badge should have told them three screens earlier."""
     fresh = begin_hand_built(key=KEY, at=NOW, instance_id="notes_helper", installer=INSTALLER)
-    report = completeness(fresh, connector_readiness((), ConnectorRegistry()))
+    report = completeness(fresh, connector_readiness((), ConnectorRegistry()), ())
     assert report.badge is InstallBadge.INCOMPLETE
     assert Missing(kind=MissingKind.FIELD, name="persona") in report.missing
 
@@ -855,3 +873,247 @@ def test_the_blank_offer_is_offered_to_the_person_building_the_agent() -> None:
     assert offered.template_id == BLANK_TEMPLATE_ID
     assert offered.audience.level is Visibility.PERSONAL
     assert offered.audience.owner_id == INSTALLER
+
+
+# ------------------------------------------------------------- tools, bound to this install
+#: Registered tools as an install's registry holds them: name, entity, required capability.
+XERO_INVOICES = ("xero.read_invoice", "invoice", "read:invoice")
+DEMO_INVOICES = ("demo.read_invoice", "invoice", "read:invoice")
+XERO_CLIENTS = ("xero.read_client", "client", "read:client")
+FRESHDESK_SEARCH = ("freshdesk.search_tickets", "ticket", "read:ticket")
+
+
+class InvoiceRow(Entity):
+    number: str = ""
+
+
+def an_invoice_handler() -> TypedResult[InvoiceRow]:
+    return TypedResult[InvoiceRow]()
+
+
+def _registered(*tools: tuple[str, str, str]) -> ToolRegistry:
+    """A registry holding these tools, each with its entity set apart from its name."""
+    registry = ToolRegistry()
+    for name, entity, capability in tools:
+        registry.register(
+            ToolDefinition(
+                name=name,
+                description=f"reads through {name}",
+                entity=entity,
+                required_capability=capability,
+                side_effect=SideEffect.NONE,
+                identity_mode=IdentityMode.DELEGATED,
+            ),
+            an_invoice_handler,
+        )
+    return registry
+
+
+def _declaring(*targets: str, required: tuple[str, ...] = ()) -> TemplateManifest:
+    """A template declaring these tools, each leashed at a rung and a scope binding must keep."""
+    return _manifest(
+        authority=ManifestAuthority(
+            capabilities=(Capability(value="read:invoice.number"),),
+            allowed_tools=targets,
+            required_tools=required,
+        ),
+        guardrails=ManifestGuardrails(
+            max_side_effect=SideEffect.NONE,
+            leash=tuple(
+                LeashRung(
+                    target=target,
+                    scope=Scope.department("finance"),
+                    rung=AutonomyTier.AUTONOMOUS,
+                )
+                for target in targets
+            ),
+        ),
+    )
+
+
+def _installed_with(manifest: TemplateManifest, tools: ToolRegistry) -> Installation:
+    return complete(
+        _filled(_draft(manifest)),
+        key=KEY,
+        audience=_audience(),
+        registry=_connectors(serving=True),
+        tools=tools,
+        at=NOW,
+    )
+
+
+def test_a_declared_tool_binds_the_registered_tool_of_its_entity_and_verb() -> None:
+    """**The binding every catalogue template waits on.** `invoice.read` is all a template can
+    know and `xero.read_invoice` is what an install registered, and the gate compares names
+    exactly, so nothing a template declares reaches `project` until one becomes the other.
+
+    Delete this and a binding that returned nothing, or returned every tool, passes every
+    refusal below."""
+    bound = bind_tool("invoice.read", _registered(XERO_INVOICES, XERO_CLIENTS))
+
+    assert bound == ToolBinding(target="invoice.read", bound=("xero.read_invoice",))
+    assert bound.ready
+
+
+def test_a_declared_verb_binds_no_tool_of_another_verb() -> None:
+    """A row tool's verb is `read`, and a template that wrote `search` as a leash target of its
+    own asked for a different tool; the Freshdesk connector's `search_tickets` is the product's
+    evidence that the two are separate names. The positive half is a search tool binding the
+    search declaration.
+
+    Delete this and `invoice.search` binds `xero.read_invoice`, which puts two supervision
+    targets on one tool and badges a template complete for a tool it never asked for."""
+    registry = _registered(XERO_INVOICES, FRESHDESK_SEARCH)
+
+    assert bind_tool("invoice.search", registry).bound == ()
+    assert bind_tool("ticket.search", registry).bound == ("freshdesk.search_tickets",)
+
+
+def test_a_declared_entity_binds_no_tool_of_another_entity() -> None:
+    """Delete this and a template reading clients binds whatever this install reads with the
+    same verb, which on most installs is the price list."""
+    assert bind_tool("client.read", _registered(XERO_INVOICES)).bound == ()
+
+
+def test_a_declaration_with_no_verb_binds_nothing() -> None:
+    """The leash grammar admits a bare word, and a bare word says what is touched and not what
+    is done to it. Nothing in `bind_tool` refuses it by a branch; the empty verb is simply one no
+    registered name has, and this is what holds that true.
+
+    Delete this and a verb check loosened to "any verb" binds `invoice` to every invoice tool,
+    including ones that write."""
+    assert bind_tool("invoice", _registered(XERO_INVOICES)).bound == ()
+
+
+def test_a_registered_name_binds_itself_and_an_unregistered_one_does_not() -> None:
+    """A hand-built agent's tools are typed by somebody looking at the registry, so they arrive
+    as registered names. Read as a declaration, a registered name has a verb no tool has, so
+    without this rule every hand-built agent would bind nothing.
+
+    Delete this and either every hand-built agent is INCOMPLETE, or a name nobody registered
+    binds itself and the badge says READY for a tool that is not there."""
+    registry = _registered(XERO_INVOICES)
+
+    assert bind_tool("xero.read_invoice", registry).bound == ("xero.read_invoice",)
+    assert bind_tool("xero.read_client", registry).bound == ()
+
+
+def test_a_declaration_two_systems_carry_binds_both() -> None:
+    """A template asking to read invoices is asking for both systems' invoices, and neither
+    widens a run: each still requires the capability the ceiling has to admit.
+
+    Delete this and a binding that took the first match picks a system by the order of names."""
+    registry = _registered(XERO_INVOICES, DEMO_INVOICES)
+
+    assert bind_tool("invoice.read", registry).bound == ("demo.read_invoice", "xero.read_invoice")
+
+
+def test_an_installed_template_carries_the_bound_names_on_its_record_and_its_leash() -> None:
+    """**What `project` and `Leash.rung_for` read.** Both compare names exactly, so the record
+    and the leash have to carry the registered name and not the declaration. The rung and the
+    scope the template wrote come through unchanged, because binding is not a place a rung may
+    move.
+
+    Delete this and the badge can be right while the record still carries `invoice.read`, which
+    is an install saying READY and a gate refusing it."""
+    installed = _installed_with(_declaring("invoice.read"), _registered(XERO_INVOICES))
+
+    assert installed.completeness.badge is InstallBadge.READY
+    assert installed.record.authority.allowed_tools == frozenset({"xero.read_invoice"})
+    assert [(e.target, e.rung, e.scope) for e in installed.leash.entries] == [
+        ("xero.read_invoice", AutonomyTier.AUTONOMOUS, Scope.department("finance"))
+    ]
+    assert installed.tools == (ToolBinding(target="invoice.read", bound=("xero.read_invoice",)),)
+
+
+def test_a_declared_tool_nothing_here_binds_holds_the_install_incomplete_and_disabled() -> None:
+    """**The badge stops saying READY for an agent the gate would refuse.** A drafting tool the
+    install has nothing to bind is missing by name, the agent starts disabled, and the record
+    holds only what did bind rather than a name no registry can contain.
+
+    Delete this and a template needing a tool nobody built installs READY and selectable, which
+    is where the whole catalogue was until 2026-09-14."""
+    installed = _installed_with(
+        _declaring("invoice.read", "reminder.draft"), _registered(XERO_INVOICES)
+    )
+
+    assert installed.completeness.badge is InstallBadge.INCOMPLETE
+    assert installed.completeness.missing == (
+        Missing(kind=MissingKind.TOOL, name="reminder.draft"),
+    )
+    assert installed.record.state is AgentState.DISABLED
+    assert installed.record.authority.allowed_tools == frozenset({"xero.read_invoice"})
+
+
+def test_a_leash_entry_whose_target_binds_nothing_is_kept_as_it_was_written() -> None:
+    """A console shows what the template configured, as `pinned_leash` keeps entries for, and
+    `rung_for` answers SHADOW for any name matching no entry anyway.
+
+    Delete this and an unbound target's supervision silently disappears from the record."""
+    installed = _installed_with(
+        _declaring("invoice.read", "reminder.draft"), _registered(XERO_INVOICES)
+    )
+
+    assert sorted(entry.target for entry in installed.leash.entries) == [
+        "reminder.draft",
+        "xero.read_invoice",
+    ]
+
+
+def test_a_required_tool_is_bound_as_an_allowed_one_is() -> None:
+    """`AgentCeiling` refuses a required tool outside the allowed set, so a required declaration
+    left unbound beside a bound allowed one is a record that cannot be built.
+
+    Delete this and the first template declaring a required tool fails to install at all."""
+    installed = _installed_with(
+        _declaring("invoice.read", required=("invoice.read",)), _registered(XERO_INVOICES)
+    )
+
+    assert installed.record.authority.required_tools == frozenset({"xero.read_invoice"})
+
+
+def test_an_installed_template_starts_a_run_through_the_real_gate_once_its_tools_bind() -> None:
+    """**The defect, end to end in one install.** A template declaring `invoice.read`, installed
+    against a registry holding an invoice tool, starts a run through the real `invoke` for
+    somebody holding its ceiling. The sibling is the same template installed against a registry
+    with nothing to bind, which starts none.
+
+    Delete this and binding can be correct in every unit above while the names the gate is
+    handed still match nothing."""
+    registry = _registered(XERO_INVOICES)
+    reach = _reach("read:invoice", "read:invoice.number", principal_id=INSTALLER)
+
+    bound = rehearse(
+        _installed_with(_declaring("invoice.read"), registry),
+        registry=registry,
+        entitlement=reach,
+        assessment=CLEAN,
+        now=NOW,
+    )
+    unbound = rehearse(
+        _installed_with(_declaring("invoice.read"), ToolRegistry()),
+        registry=registry,
+        entitlement=reach,
+        assessment=CLEAN,
+        now=NOW,
+    )
+
+    assert bound.started
+    assert bound.reachable == ("xero.read_invoice",)
+    assert not unbound.started
+
+
+def test_a_declared_tool_no_binding_speaks_for_is_dropped_from_the_record() -> None:
+    """**Written because a mutation survived.** `complete` binds every allowed tool, so through
+    it a declaration always has a binding, possibly empty, and keeping or dropping one with no
+    binding at all changed nothing any test could see. `bound_record` is public and says a
+    declaration nothing binds is dropped, because a name no registry can hold is a name `project`
+    can never match; this holds it to that when it is handed bindings that do not cover the
+    record.
+
+    Delete this and `bound_record` can pass an unbound declaration through, and the first caller
+    binding only part of a record stores `invoice.read` in a column the gate reads as a name."""
+    record = _installed_with(_declaring("invoice.read"), ToolRegistry()).effective.record
+
+    assert record.authority.allowed_tools == frozenset({"invoice.read"})
+    assert bound_record(record, ()).authority.allowed_tools == frozenset()

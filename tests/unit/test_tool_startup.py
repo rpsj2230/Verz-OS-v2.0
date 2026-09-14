@@ -32,11 +32,21 @@ from typing import Any
 import pytest
 
 from brain import demo
-from brain.api_routes import MAX_FILTERS
+from brain.api_routes import MAX_FILTERS, row_readers
 from brain.app import Settings, create_app
+from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.envelope import IdentityMode
+from brain.core.scope import Scope
+from brain.identity.lifecycle import STARTER_PACK
 from brain.knowledge.columns import PRICE_LIST
+from brain.knowledge.document_tools import (
+    KNOWLEDGE_ENTITY,
+    READ_DOCUMENT,
+    SEARCH_DOCUMENTS,
+    knowledge_tools,
+)
 from brain.knowledge.rows import RowQuery
+from brain.knowledge.search import reach_for
 from brain.tools.registry import ToolRegistrationError, ToolRegistry
 from brain.tools.startup import (
     BUILT_IN_ROW_ENTITIES,
@@ -56,6 +66,12 @@ class _Rows:
     async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
         del query
         return ()
+
+
+def _row_tool_names(registry: ToolRegistry) -> tuple[str, ...]:
+    """The row tools alone: the definitions naming a source, which is what the answer lane reads
+    as a reader of rows. The document tools name none, which a test below holds."""
+    return tuple(d.name for d in registry.definitions() if d.source)
 
 
 # --------------------------------------------------------------- there is a builder
@@ -82,9 +98,10 @@ def test_a_row_tool_is_registered_for_every_entity_that_has_a_classification() -
     Named against `BUILT_IN_ROW_ENTITIES` rather than against the number one, so adding a
     second classification does not require editing this test to keep it honest."""
     registry = build_registry(source="xero", records=_Rows())
+    rows = _row_tool_names(registry)
 
-    assert len(registry) == len(BUILT_IN_ROW_ENTITIES)
-    assert registry.names() == ("xero.read_price_list",)
+    assert len(rows) == len(BUILT_IN_ROW_ENTITIES)
+    assert rows == ("xero.read_price_list",)
     assert PRICE_LIST in BUILT_IN_ROW_ENTITIES
 
 
@@ -93,8 +110,8 @@ def test_the_source_is_part_of_every_tools_name() -> None:
     keyed that way and two systems' record ids collide by coincidence of integers. The name
     carries it, so a catalogue holding two sources' price lists describes two tools rather
     than one ambiguous one."""
-    xero = build_registry(source="xero", records=_Rows()).names()
-    freshdesk = build_registry(source="freshdesk", records=_Rows()).names()
+    xero = _row_tool_names(build_registry(source="xero", records=_Rows()))
+    freshdesk = _row_tool_names(build_registry(source="freshdesk", records=_Rows()))
 
     assert xero == ("xero.read_price_list",)
     assert freshdesk == ("freshdesk.read_price_list",)
@@ -198,10 +215,11 @@ def test_the_demos_source_registers_its_own_entities_beside_the_built_ins() -> N
     registry = build_registry(source=demo.DEMO_SOURCE, records=_Rows())
     stored = {str(row["entity"]) for row in demo.record_rows()}
     built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES}
+    rows = [d for d in registry.definitions() if d.entity != KNOWLEDGE_ENTITY]
 
-    assert {d.entity for d in registry.definitions()} == stored | built_in
-    assert {d.source for d in registry.definitions()} == {demo.DEMO_SOURCE}
-    assert len(registry) == len(row_entities_for(demo.DEMO_SOURCE))
+    assert {d.entity for d in registry.definitions()} == stored | built_in | {KNOWLEDGE_ENTITY}
+    assert {d.source for d in rows} == {demo.DEMO_SOURCE}
+    assert len(registry) == len(row_entities_for(demo.DEMO_SOURCE)) + len(knowledge_tools(_Rows()))
 
 
 def test_no_install_reading_another_source_registers_anything_the_demo_brings() -> None:
@@ -216,12 +234,59 @@ def test_no_install_reading_another_source_registers_anything_the_demo_brings() 
 
     Delete this and `row_entities_for` can hand the demo's entities to every source, which is
     `BUILT_IN_ROW_ENTITIES` widened by another route."""
-    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES}
+    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES} | {KNOWLEDGE_ENTITY}
     for source in (Settings().tool_source, "xero", "laravel"):
         registry = build_registry(source=source, records=_Rows())
         assert {d.entity for d in registry.definitions()} == built_in, source
 
     assert Settings().tool_source != demo.DEMO_SOURCE
+
+
+# --------------------------------------------------------------- the document plane
+def test_the_document_plane_is_registered_on_every_install_with_rows_whatever_it_reads() -> None:
+    """**The half that lets a knowledge template start.** Ten catalogue templates name
+    `knowledge.read` or `knowledge.search`, and until 2026-09-14 no install registered anything
+    they could bind to, so every one of them was refused by the gate. The plane is the
+    product's own, so it is asserted for the source an install reads by default, another
+    system, and the demo: a document tool registered for one source is the demo's mistake made
+    in the other direction.
+
+    Delete this and the document tools can stop being registered, and every knowledge template
+    badges itself incomplete on every install."""
+    for source in (Settings().tool_source, "xero", demo.DEMO_SOURCE):
+        names = build_registry(source=source, records=_Rows()).names()
+        assert {SEARCH_DOCUMENTS, READ_DOCUMENT} <= set(names), source
+
+
+def test_a_document_tool_asks_for_exactly_the_grant_that_opens_the_plane() -> None:
+    """Asserted by what the requirement does rather than by how it is spelled: a caller holding
+    only a document tool's required capability has a reach on the plane, and it is one a
+    joiner's starter pack gives them. A tool asking for `read:knowledge.document` would be shown
+    to people whose reach is None, and would retrieve nothing for all of them.
+
+    Delete this and the requirement can drift to a field capability, and the tool appears in
+    catalogues and answers nobody."""
+    registry = build_registry(source="local", records=_Rows())
+
+    for name in (SEARCH_DOCUMENTS, READ_DOCUMENT):
+        needed = registry.get(name).capability
+        holder = EntitlementSet(
+            principal_id="u_reader", grants=(Grant(capability=needed, scope=Scope.unrestricted()),)
+        )
+        assert reach_for(holder, departments=()) is not None, name
+        assert needed in STARTER_PACK.capabilities, name
+
+
+def test_the_answer_lane_reads_no_document_tool_as_a_reader_of_rows() -> None:
+    """`row_readers` hands the answer lane a reader per source and entity, and it reads a
+    definition naming a source as a row tool. A document tool read that way would be handed a
+    `RowRequest` and put `knowledge` into the sources an answer says it covered.
+
+    Delete this and a document tool can be given a source, and the answer lane starts calling it
+    as a table of rows."""
+    registry = build_registry(source="local", records=_Rows())
+
+    assert set(row_readers(registry)) == {("local", "price_list")}
 
 
 def test_every_entity_is_classified_by_one_owner() -> None:

@@ -12,6 +12,9 @@ Task ids: M13.5.16, M13.5.17, M13.5.19, M13.5.20, M13.5.21, M13.5.22, M13.5.23
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -33,9 +36,38 @@ from brain.agents.catalogue import (
     ux_designer,
     wordpress_developer,
 )
+from brain.agents.install import (
+    Installation,
+    MissingKind,
+    Offer,
+    begin,
+    complete,
+    provide,
+    rehearse,
+)
+from brain.agents.model import AgentAudience, entitlement_ceiling
 from brain.agents.template import TemplateManifest, publish
+from brain.app import Settings
+from brain.connectors.contract import ConnectorScope, CredentialBinding, TransportKind
+from brain.connectors.manifest import (
+    ChangeSignal,
+    ConnectorManifest,
+    FieldShape,
+    HotUse,
+    ProjectedEntity,
+    ProjectedField,
+    ToolDeclaration,
+)
+from brain.connectors.registry import INSTALL_AUTHORITY, ConnectorRegistry
+from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.envelope import SideEffect
-from brain.gate.injection import AutonomyTier
+from brain.core.scope import Scope
+from brain.gate.injection import AutonomyTier, RiskAssessment
+from brain.knowledge.rows import RowQuery
+from brain.knowledge.visibility import Visibility
+from brain.ops.secrets import SecretRef, VaultRole
+from brain.tools.registry import ToolRegistry
+from brain.tools.startup import build_registry
 
 IDS = [m.identity.template_id for m in CATALOGUE]
 
@@ -584,3 +616,185 @@ def test_no_built_in_template_is_published_by_a_company() -> None:
 
     assert published == {SYSTEM_PUBLISHER}
     assert len(CATALOGUE) > 5, "almost no templates were read, so an empty difference is nothing"
+
+
+# ------------------------------------------------------------- the tools a template uses
+@pytest.mark.parametrize("manifest", CATALOGUE, ids=IDS)
+def test_every_template_declares_its_tools_once(manifest: TemplateManifest) -> None:
+    """**The leash targets are the tools, and there is one declaration of them.** Until
+    2026-09-14 every template named its tools on its leash and allowed none, so the gate, which
+    keeps a tool only when the ceiling allows it, kept nothing for any of them.
+
+    Held as equality rather than containment in either direction, because each direction is its
+    own mistake: a tool allowed and not leashed runs at `MISSING_ENTRY_RUNG`, which is SHADOW by
+    a fallback rather than by the template's word, and a tool leashed and not allowed is
+    supervision written for a tool the agent can never call.
+
+    Delete this and the two lists drift, and the first symptom is an agent that starts no run."""
+    assert manifest.authority.allowed_tools, f"{manifest.identity.template_id} allows no tool"
+    assert set(manifest.authority.allowed_tools) == {
+        rung.target for rung in manifest.guardrails.leash
+    }
+
+
+@pytest.mark.parametrize("manifest", CATALOGUE, ids=IDS)
+def test_every_tool_a_template_reads_is_on_an_entity_its_ceiling_reads(
+    manifest: TemplateManifest,
+) -> None:
+    """**Written because the analyst read `record` and its ceiling read `client`.** A tool that
+    reads or searches an entity requires the read of that entity, and a ceiling derives the
+    read only of an entity it names a column of, so a tool on any other entity binds, if it
+    binds at all, to something no run through the agent can reach.
+
+    Delete this and a template can declare a read nobody can ever make through it, and it shows
+    up only as an agent that starts and never finds anything."""
+    read_entities = {
+        capability.value.partition(":")[2].partition(".")[0]
+        for capability in manifest.authority.capabilities
+        if capability.verb == "read"
+    }
+
+    for target in manifest.authority.allowed_tools:
+        entity, _, verb = target.partition(".")
+        if verb in ("read", "search"):
+            assert entity in read_entities, (manifest.identity.template_id, target)
+
+
+KEY = "a-key-for-installing-the-catalogue"
+INSTALLER = "u_installer"
+NOW = datetime(2019, 1, 1, 9, 0, tzinfo=UTC)
+CLEAN = RiskAssessment(score=0, matched=())
+
+
+class _NoRows:
+    """A row source with nothing in it: these tests ask which tools exist, not what they read."""
+
+    async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
+        del query
+        return ()
+
+
+def _serving(names: tuple[str, ...]) -> ConnectorRegistry:
+    """Every connector a template declares, installed and switched on, so a connector is never
+    the reason an install below is incomplete."""
+    admin = EntitlementSet(
+        principal_id="svc_connector_install",
+        grants=(Grant(capability=INSTALL_AUTHORITY, scope=Scope.unrestricted()),),
+    )
+    registry = ConnectorRegistry()
+    for name in names:
+        registry.register(
+            ConnectorManifest(
+                name=name,
+                version="1.0.0",
+                transport=TransportKind.REST,
+                scope=ConnectorScope(resource_kind="view", selectors=("records",)),
+                credential=CredentialBinding(
+                    ref=SecretRef(path=f"kv/{name}", role=VaultRole.APPLICATION)
+                ),
+                tools=(
+                    ToolDeclaration(
+                        name=f"{name}.read_record", description="One record.", entity="record"
+                    ),
+                ),
+                projections=(
+                    ProjectedEntity(
+                        entity="record",
+                        fields=(
+                            ProjectedField(
+                                name="id", shape=FieldShape.IDENTIFIER, uses=(HotUse.IDENTIFY,)
+                            ),
+                            ProjectedField(
+                                name="status", shape=FieldShape.STATUS, uses=(HotUse.FILTER,)
+                            ),
+                        ),
+                        change_signal=ChangeSignal.WEBHOOK,
+                        visibility=Scope.department("maintenance"),
+                    ),
+                ),
+            ),
+            installer=admin,
+            now=NOW,
+        )
+        registry.enable(name, installer=admin, now=NOW)
+    return registry
+
+
+def _installed(manifest: TemplateManifest, tools: ToolRegistry) -> Installation:
+    """Installed through every step of the wizard, with every placeholder answered and every
+    connector serving, so a tool is the only thing that can be missing."""
+    signed = publish(manifest, key=KEY, signed_by=PUBLISHER, at=NOW)
+    audience = AgentAudience(level=Visibility.PERSONAL, owner_id=INSTALLER)
+    draft = begin(
+        Offer(signed=signed, audience=audience),
+        instance_id=manifest.identity.template_id,
+        installer=INSTALLER,
+    )
+    for placeholder in manifest.placeholders:
+        if placeholder.required:
+            draft = provide(draft, placeholder.key, f"this install's {placeholder.key}")
+    return complete(
+        draft,
+        key=KEY,
+        audience=audience,
+        registry=_serving(manifest.connectors),
+        tools=tools,
+        at=NOW,
+    )
+
+
+#: The sources the application reads: its default, and the demo's.
+SOURCES = [Settings().tool_source, "demo"]
+
+
+@pytest.mark.parametrize("source", SOURCES)
+@pytest.mark.parametrize("manifest", CATALOGUE, ids=IDS)
+def test_an_installed_template_is_ready_only_when_the_gate_starts_it_for_its_ceilings_holder(
+    manifest: TemplateManifest, source: str
+) -> None:
+    """**The defect, as a property of the whole catalogue.** Until 2026-09-14 the badge said
+    READY for all twenty-three while `brain.gate.invoke.invoke` refused every one. So, against
+    the registry the application builds for the source it reads by default and for the demo's,
+    an install missing nothing must start a run through the real gate for somebody holding its
+    whole ceiling, and an install missing something must name exactly the declared tools
+    nothing bound.
+
+    Delete this and the badge and the gate can disagree again, which nobody asking a question
+    can see from where they are."""
+    tools = build_registry(source=source, records=_NoRows())
+    installed = _installed(manifest, tools)
+    holder = EntitlementSet(
+        principal_id="u_holder", grants=entitlement_ceiling(installed.record).grants
+    )
+    unbound = {binding.target for binding in installed.tools if not binding.ready}
+
+    assert {(one.kind, one.name) for one in installed.completeness.missing} == {
+        (MissingKind.TOOL, target) for target in unbound
+    }
+    if installed.completeness.is_ready:
+        rehearsal = rehearse(
+            installed, registry=tools, entitlement=holder, assessment=CLEAN, now=NOW
+        )
+        assert rehearsal.started, manifest.identity.template_id
+
+
+@pytest.mark.parametrize("source", SOURCES)
+def test_the_templates_that_read_only_documents_are_the_ones_every_install_can_start(
+    source: str,
+) -> None:
+    """**The positive half, written out.** The property above holds vacuously for a catalogue
+    in which nothing is ever READY, so the set that is READY is named: the three templates whose
+    every tool is on the document plane, which every install with rows registers. Every other
+    template declares a row tool, a search or a draft that no source registers today, and stays
+    incomplete on both sources until one does.
+
+    Delete this and a change that made every install incomplete passes the whole catalogue."""
+    tools = build_registry(source=source, records=_NoRows())
+
+    ready = {
+        manifest.identity.template_id
+        for manifest in CATALOGUE
+        if _installed(manifest, tools).completeness.is_ready
+    }
+
+    assert ready == {"html_developer", "internal_helpdesk", "knowledge_gap_curator"}

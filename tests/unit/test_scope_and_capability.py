@@ -451,3 +451,224 @@ def test_an_intersection_carries_the_tighter_of_the_two_time_bounds() -> None:
     assert until_2030.intersect(until_2025, LONG_AGO).not_after == datetime(2025, 1, 1, tzinfo=UTC)
     assert until_2025.intersect(until_2030, LONG_AGO).not_after == datetime(2025, 1, 1, tzinfo=UTC)
     assert _holder(None).intersect(_holder(None), LONG_AGO).not_after is None
+
+
+# ------------------------------------------ a wildcard, on whichever side of the lens holds it
+#: Every column on a client, and two columns under it. The fixture's Department Admin holds the
+#: first and the capacity analyst's ceiling names the second, which is the pair
+#: `tests/e2e/test_wave_three_installed_agent.py` found reaching nothing.
+EVERY_CLIENT_COLUMN = Capability(value="read:client.*")
+HOURS = Capability(value="read:client.hours_remaining")
+MONEY = Capability(value="read:client.contract_value")
+THE_CLIENT_RECORD = Capability(value="read:client")
+
+MAINTENANCE = Scope.department("maintenance")
+GOLD = Scope(clauses=(Clause(field="tier", op=Op.EQ, value="gold"),))
+
+
+def _holding(
+    principal_id: str, *grants: tuple[Capability, Scope], not_after: datetime | None = None
+) -> EntitlementSet:
+    """An entitlement set written as the grants it holds, so a test reads as its own claim."""
+    return EntitlementSet(
+        principal_id=principal_id,
+        grants=tuple(Grant(capability=capability, scope=scope) for capability, scope in grants),
+        not_after=not_after,
+    )
+
+
+def test_a_caller_holding_a_wildcard_is_narrowed_to_the_column_the_ceiling_names() -> None:
+    """**The defect the wave-three milestone test found, measured on 2026-09-14.**
+
+    A caller holding `read:client.*` in Maintenance, through a ceiling naming
+    `read:client.hours_remaining`, held nothing at all. `intersect` walked the caller's grants
+    and asked whether the ceiling covered `read:client.*`, and a column does not cover a
+    wildcard. The other way round it answered correctly, so the lens narrowed whoever held the
+    narrower grant and refused whoever held the wider one, and every Department Admin and the
+    Super Admin hold wildcards.
+
+    Asserted as the whole grant tuple rather than through `holds`, because the right answer is
+    one grant of the column in the caller's scope, and a run that also carried the wildcard would
+    hold every column the ceiling was written to keep out.
+
+    Delete this and the people who install agents can go back to reaching nothing through any of
+    them, which no refusal test can notice."""
+    caller = _holding("p_admin", (EVERY_CLIENT_COLUMN, MAINTENANCE))
+    ceiling = _holding("ceiling:agent:analyst", (HOURS, Scope.unrestricted()))
+
+    run = caller.intersect(ceiling, LONG_AGO)
+
+    assert run.grants == (Grant(capability=HOURS, scope=MAINTENANCE),)
+
+
+def test_the_lens_narrows_the_same_way_whichever_side_holds_the_wildcard() -> None:
+    """The symmetry the defect broke, asserted as the property rather than as the one case.
+
+    One set holds every client column in Maintenance, the other the hours column in the gold
+    tier. Intersected either way round they reach the hours in both scopes conjoined and no other
+    column, because what survives an intersection is the narrower capability under both scopes.
+
+    This is what makes the order of the two sides stop mattering. Four surfaces ask whether a
+    reader may be told something as `requirement(thing).intersect(reader)`, and
+    `brain.memory.formation` recorded that order as load-bearing because only one direction
+    answered.
+
+    Delete this and a repair to one direction that breaks the other passes the test above."""
+    wildcard = _holding("p_one", (EVERY_CLIENT_COLUMN, MAINTENANCE))
+    column = _holding("p_two", (HOURS, GOLD))
+
+    for run in (wildcard.intersect(column, LONG_AGO), column.intersect(wildcard, LONG_AGO)):
+        assert run.scope_for(HOURS, LONG_AGO) == MAINTENANCE.intersect(GOLD)
+        assert run.scope_for(MONEY, LONG_AGO) is None
+
+
+def test_two_wildcards_narrow_to_the_deeper_of_them() -> None:
+    """A wildcard under a wildcard is still the narrower capability, and it is what survives.
+
+    `read:client.billing.*` is covered by `read:client.*` and does not cover it, so whichever
+    side holds which, the run holds the billing wildcard alone: it reaches every billing column
+    and no other client column.
+
+    Delete this and the narrowing is only ever tested against a column, which a repair comparing
+    wildcards with exact names alone passes while dropping every nested wildcard."""
+    billing = Capability(value="read:client.billing.*")
+    total = Capability(value="read:client.billing.total")
+    wide = _holding("p_wide", (EVERY_CLIENT_COLUMN, Scope.unrestricted()))
+    deep = _holding("p_deep", (billing, MAINTENANCE))
+
+    for run in (wide.intersect(deep, LONG_AGO), deep.intersect(wide, LONG_AGO)):
+        assert run.grants == (Grant(capability=billing, scope=MAINTENANCE),)
+        assert run.scope_for(total, LONG_AGO) == MAINTENANCE
+        assert run.scope_for(HOURS, LONG_AGO) is None
+
+
+def test_a_run_holds_no_capability_its_caller_does_not_cover_whatever_the_ceiling_names() -> None:
+    """**Fail-closed, on the side the repair opened.** Reading capabilities off the ceiling as
+    well as the caller is what narrows a wildcard, and it is also the one way the repair could
+    hand a narrow caller whatever a wide ceiling lists. So this ceiling names the wildcard, a
+    column the caller does not hold and the client record besides, and the run reaches the one
+    column the caller holds and nothing else.
+
+    The first assertion is the positive half. Without it a run holding nothing passes the rest.
+
+    Delete this and a ceiling becomes a way to widen a caller, which is the one thing an agent is
+    never allowed to be."""
+    caller = _holding("p_narrow", (HOURS, MAINTENANCE))
+    ceiling = _holding(
+        "ceiling:agent:wide",
+        (EVERY_CLIENT_COLUMN, Scope.unrestricted()),
+        (MONEY, Scope.unrestricted()),
+        (THE_CLIENT_RECORD, Scope.unrestricted()),
+    )
+
+    run = caller.intersect(ceiling, LONG_AGO)
+
+    assert run.scope_for(HOURS, LONG_AGO) == MAINTENANCE
+    assert run.scope_for(MONEY, LONG_AGO) is None
+    assert run.scope_for(THE_CLIENT_RECORD, LONG_AGO) is None
+    assert run.scope_for(Capability(value="read:client.name"), LONG_AGO) is None
+
+
+def test_a_wildcard_confers_no_record_grant_through_a_lens_in_either_direction() -> None:
+    """`read:client.*` covers every field on a client and never `read:client` itself, which is
+    what keeps reaching a row and reading a column two separate grants. The lens must not blur
+    that from either side. The last assertion is the sibling: a record grant both sides hold
+    does survive.
+
+    Delete this and a repair treating a wildcard as covering its own entity hands every
+    Department Admin the row grant of whatever entity a ceiling names."""
+    wildcard = _holding("p_wide", (EVERY_CLIENT_COLUMN, Scope.unrestricted()))
+    record = _holding("p_record", (THE_CLIENT_RECORD, MAINTENANCE))
+
+    assert wildcard.intersect(record, LONG_AGO).grants == ()
+    assert record.intersect(wildcard, LONG_AGO).grants == ()
+    assert record.intersect(record, LONG_AGO).scope_for(THE_CLIENT_RECORD, LONG_AGO) == MAINTENANCE
+
+
+def test_a_run_never_reaches_a_column_more_widely_than_its_caller_does() -> None:
+    """**A permissive defect in the same method, found while repairing the restrictive one.**
+
+    `scope_for` conjoins every grant covering a capability, because holding one twice is never
+    wider than holding it once. This caller holds every client column in Maintenance and the
+    hours column in the gold tier, so alone they reach the hours of gold Maintenance clients and
+    no others. Through a ceiling naming the hours column the run used to reach them for gold
+    clients in every department: the wildcard grant was dropped whole, because the ceiling does
+    not cover a wildcard, and its department clause went with it. Measured on 2026-09-14,
+    before the repair.
+
+    The first two assertions are the sibling: the run does reach the row the caller reaches.
+
+    Delete this and an agent can show a person the gold clients of a department they have never
+    been able to read."""
+    caller = _holding("p_admin", (EVERY_CLIENT_COLUMN, MAINTENANCE), (HOURS, GOLD))
+    ceiling = _holding("ceiling:agent:analyst", (HOURS, Scope.unrestricted()))
+
+    reached = caller.intersect(ceiling, LONG_AGO).scope_for(HOURS, LONG_AGO)
+
+    assert reached is not None
+    assert reached.matches({"department": "maintenance", "tier": "gold"})
+    assert not reached.matches({"department": "web", "tier": "gold"})
+
+
+def test_a_run_never_reaches_a_column_more_widely_than_its_ceiling_does() -> None:
+    """The same defect from the ceiling's side, and just as permissive.
+
+    This ceiling admits every client column in Maintenance and the hours column only in the gold
+    tier, so it reaches the hours of gold Maintenance clients. A caller holding every column
+    everywhere used to come out reaching the hours of every Maintenance client: its wildcard was
+    compared with the ceiling's wildcard grant alone, and the ceiling's narrower grant on the
+    column never met it. Measured on 2026-09-14, before the repair.
+
+    Delete this and a ceiling that narrows one column narrows nothing for whoever holds a
+    wildcard, which is everybody that ceiling was written to restrain."""
+    caller = _holding("p_super", (EVERY_CLIENT_COLUMN, Scope.unrestricted()))
+    ceiling = _holding("ceiling:agent:narrowing", (EVERY_CLIENT_COLUMN, MAINTENANCE), (HOURS, GOLD))
+
+    reached = caller.intersect(ceiling, LONG_AGO).scope_for(HOURS, LONG_AGO)
+
+    assert reached is not None
+    assert reached.matches({"department": "maintenance", "tier": "gold"})
+    assert not reached.matches({"department": "maintenance", "tier": "silver"})
+
+
+def test_a_ceiling_that_narrowed_a_wildcard_still_bounds_the_run_in_time() -> None:
+    """**Never a later expiry, on the side the repair opened.** A column read off the ceiling
+    carries the tighter bound like every grant an intersection keeps: inside the window the run
+    reaches it, after the window it reaches nothing, and an intersection asked about an instant
+    after the ceiling lapsed keeps no grant at all.
+
+    Delete this and a time-boxed agent's column can outlive the box for exactly the callers the
+    repair was for."""
+    caller = _holding("p_admin", (EVERY_CLIENT_COLUMN, MAINTENANCE))
+    until_2030 = datetime(2030, 1, 1, tzinfo=UTC)
+    ceiling = _holding("ceiling:agent:boxed", (HOURS, Scope.unrestricted()), not_after=until_2030)
+
+    run = caller.intersect(ceiling, LONG_AGO)
+
+    assert run.not_after == until_2030
+    assert run.scope_for(HOURS, LONG_AGO) == MAINTENANCE
+    assert run.scope_for(HOURS, LONG_AFTER) is None
+    assert caller.intersect(ceiling, LONG_AFTER).grants == ()
+
+
+def test_the_callers_expiry_is_carried_on_a_column_read_off_the_ceiling_and_not_judged() -> None:
+    """**Only the right-hand side's expiry is decided inside `intersect`; the left-hand side's is
+    carried out on `not_after`.** The repair reads the caller's reach through `scope_for`, and
+    `scope_for` refuses an expired principal, so it has to be asked with the caller's bound set
+    aside or it would begin judging the left-hand side at whatever instant it is handed.
+
+    Here the caller lapsed in 2020 and the intersection is asked about 2999. The column survives
+    into the run, and the run still refuses it after 2020 through the bound it carries, which is
+    the answer the caller's own grants have always had.
+
+    Delete this and every call site passing an instant changes which side's expiry is judged
+    when, without anybody having decided it."""
+    lapsed_in_2020 = datetime(2020, 1, 1, tzinfo=UTC)
+    caller = _holding("p_leaver", (EVERY_CLIENT_COLUMN, MAINTENANCE), not_after=lapsed_in_2020)
+    ceiling = _holding("ceiling:agent:analyst", (HOURS, Scope.unrestricted()))
+
+    run = caller.intersect(ceiling, LONG_AFTER)
+
+    assert run.not_after == lapsed_in_2020
+    assert run.scope_for(HOURS, LONG_AGO) == MAINTENANCE
+    assert run.scope_for(HOURS, LONG_AFTER) is None

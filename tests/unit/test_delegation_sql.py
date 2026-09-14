@@ -199,17 +199,67 @@ def _pointed_at(url: str, database: str) -> str:
     return urlunsplit(parts._replace(path=f"/{database}"))
 
 
+#: A second database of this file's own, for the one test that migrates down and back up. Kept
+#: apart from `SCRATCH_DATABASE`, so a failure half way through that test cannot leave every
+#: other test here reading a downgraded function.
+ROUND_TRIP_DATABASE = "brain_delegation_round_trip"
+
+
+def _fresh(admin: str, database: str) -> str:
+    """Drop and create a scratch database holding what the migrations before `0028` would
+    have left for it to need, the `gate` schema and the `brain_app` role, and return its url."""
+    import psycopg
+
+    with psycopg.connect(admin, autocommit=True) as conn:
+        conn.execute(f'DROP DATABASE IF EXISTS "{database}" WITH (FORCE)')
+        conn.execute(f'CREATE DATABASE "{database}"')
+
+    scratch = _pointed_at(admin, database)
+    with psycopg.connect(scratch, autocommit=True) as conn:
+        conn.execute(f"CREATE SCHEMA {DELEGATION_SCHEMA}")
+        conn.execute(
+            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'brain_app') "
+            "THEN CREATE ROLE brain_app NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$"
+        )
+        conn.execute(f"GRANT USAGE ON SCHEMA {DELEGATION_SCHEMA} TO brain_app")
+    return scratch
+
+
+def _migrate(url: str, database: str, verb: str, revision: str) -> None:
+    """One alembic command against one scratch database, through the migrations that ship.
+
+    `DATABASE_URL` is what the migration environment reads, so it points at the scratch
+    database for the length of the command and is put back afterwards.
+    """
+    from alembic import command
+    from alembic.config import Config
+
+    root = Path(__file__).resolve().parents[2]
+    config = Config(str(root / "alembic.ini"))
+    config.set_main_option("script_location", str(root / "migrations"))
+    commands = {"stamp": command.stamp, "upgrade": command.upgrade, "downgrade": command.downgrade}
+    before = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = _pointed_at(url, database)
+    try:
+        commands[verb](config, revision)
+    finally:
+        if before is None:  # pragma: no cover - DATABASE_URL is set whenever this runs
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = before
+
+
 @pytest.fixture(scope="module")
 def server() -> Iterator[Any]:
-    """A connection to a database holding exactly what `0028` installs.
+    """A connection to a database holding exactly what `0028` and `0029` install.
 
     Stamped at `0027` so the migrations before it, and the extensions they need, are not a
     condition of running these tests, and then upgraded for real: what is under test is the
-    migration that ships rather than a copy of its DDL written out here.
+    migrations that ship rather than a copy of their DDL written out here. Upgraded to `0029`
+    and no further, because `0029` is the last migration that touches `gate.delegation`, and a
+    later one needing an extension this database lacks would make these tests depend on it.
     """
     import psycopg
-    from alembic import command
-    from alembic.config import Config
 
     from brain.db import libpq_url
 
@@ -218,32 +268,9 @@ def server() -> Iterator[Any]:
         pytest.skip("DATABASE_URL is unset, so there is no server to ask; CI always sets it")
 
     admin = libpq_url(url)
-    with psycopg.connect(admin, autocommit=True) as conn:
-        conn.execute(f'DROP DATABASE IF EXISTS "{SCRATCH_DATABASE}" WITH (FORCE)')
-        conn.execute(f'CREATE DATABASE "{SCRATCH_DATABASE}"')
-
-    scratch = _pointed_at(admin, SCRATCH_DATABASE)
-    with psycopg.connect(scratch, autocommit=True) as conn:
-        conn.execute(f"CREATE SCHEMA {DELEGATION_SCHEMA}")
-        conn.execute(
-            "DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'brain_app') "
-            "THEN CREATE ROLE brain_app NOLOGIN NOSUPERUSER NOBYPASSRLS; END IF; END $$"
-        )
-        conn.execute(f"GRANT USAGE ON SCHEMA {DELEGATION_SCHEMA} TO brain_app")
-
-    root = Path(__file__).resolve().parents[2]
-    config = Config(str(root / "alembic.ini"))
-    config.set_main_option("script_location", str(root / "migrations"))
-    before = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = _pointed_at(url, SCRATCH_DATABASE)
-    try:
-        command.stamp(config, "0027")
-        command.upgrade(config, "0028")
-    finally:
-        if before is None:  # pragma: no cover - DATABASE_URL is set whenever this runs
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = before
+    scratch = _fresh(admin, SCRATCH_DATABASE)
+    _migrate(url, SCRATCH_DATABASE, "stamp", "0027")
+    _migrate(url, SCRATCH_DATABASE, "upgrade", "0029")
 
     with psycopg.connect(scratch, autocommit=True) as conn:
         yield conn
@@ -372,6 +399,56 @@ CHAINS: tuple[tuple[str, EntitlementSet, EntitlementSet, EntitlementSet], ...] =
         reach("ceiling:agent:a", ("read:client.*", Scope())),
         reach("subtask-ceiling:s", ("read:client.*", Scope())),
     ),
+    (
+        "a parent's wildcard is narrowed to the column an agent ceiling names",
+        reach("p:one", ("read:client.*", where(department="web"))),
+        reach("ceiling:agent:a", ("read:client.name", Scope())),
+        reach("subtask-ceiling:s", ("read:client.*", Scope())),
+    ),
+    (
+        "a parent's wildcard is narrowed to the column a subtask ceiling names",
+        reach("p:one", ("read:client.*", where(department="web"))),
+        reach("ceiling:agent:a", ("read:client.*", Scope())),
+        reach("subtask-ceiling:s", ("read:client.hours_remaining", where(tier="gold"))),
+    ),
+    (
+        "a parent holding a wildcard and a column under it keeps both scopes on the column",
+        reach(
+            "p:one",
+            ("read:client.*", where(department="web")),
+            ("read:client.name", where(tier="gold")),
+        ),
+        reach("ceiling:agent:a", ("read:client.name", Scope())),
+        reach("subtask-ceiling:s", ("read:client.*", Scope())),
+    ),
+    (
+        "a ceiling narrowing one column under its wildcard narrows a wildcard parent there too",
+        reach("p:one", ("read:client.*", Scope())),
+        reach(
+            "ceiling:agent:a",
+            ("read:client.*", where(department="web")),
+            ("read:client.name", where(tier="gold")),
+        ),
+        reach("subtask-ceiling:s", ("read:client.*", Scope())),
+    ),
+    (
+        "wildcards at two depths narrow to the deeper one",
+        reach("p:one", ("read:client.*", where(department="web"))),
+        reach("ceiling:agent:a", ("read:client.billing.*", Scope())),
+        reach("subtask-ceiling:s", ("read:client.*", Scope())),
+    ),
+    (
+        "a capability a ceiling names and the parent does not cover is not handed down",
+        reach("p:one", ("read:client.name", Scope())),
+        reach("ceiling:agent:a", ("read:client.name", Scope()), ("read:invoice.total", Scope())),
+        reach("subtask-ceiling:s", ("read:client.*", Scope()), ("read:invoice.*", Scope())),
+    ),
+    (
+        "an expired parent's wildcard is narrowed and carries its bound rather than being judged",
+        reach("p:one", ("read:client.*", Scope()), not_after=ALREADY_OVER),
+        reach("ceiling:agent:a", ("read:client.name", Scope())),
+        reach("subtask-ceiling:s", ("read:client.*", Scope())),
+    ),
 )
 
 
@@ -394,19 +471,108 @@ def test_the_reach_computed_in_sql_is_the_reach_python_computes(
     three sets folded by `EntitlementSet.intersect` twice over and by `gate.delegated_reach`
     once, compared by meaning.
 
-    Ten cases, and each is a way the two could disagree without either looking wrong: a
+    Seventeen cases, and each is a way the two could disagree without either looking wrong: a
     wildcard ceiling, a capability dropped at each hop, expiry on each side, the tighter of
     three bounds, one capability held twice by a ceiling, an empty parent, and an entity grant
-    that must not confer the fields beneath it.
+    that must not confer the fields beneath it. The last seven were added on 2026-09-14 with
+    the repair to `intersect`, and they are the wildcard held on the parent's side: narrowed to
+    a column by either ceiling, kept with both scopes, narrowed by a ceiling's column grant under
+    its wildcard, narrowed to a deeper wildcard, not handed a capability only a ceiling names,
+    and carried rather than judged when the parent has lapsed.
 
     Delete this and the SQL is a second answer to who may see what, with nothing watching
     whether it is the same answer.
     """
     expected = parent.intersect(agent, AT).intersect(subtask, AT)
+    computed = sql_reach(server, parent, agent, subtask)
+
+    assert shape(computed) == shape(expected.model_dump(mode="json")), label
+    # The order is not part of the meaning, and `shape` sorts it away. It is asserted anyway,
+    # because `DELEGATED_REACH_SQL` claims to order grants as the Python fold does so a reader
+    # diffing the two compares like with like, and a mutation reversing that order survived.
+    assert [one["capability"]["value"] for one in computed["grants"]] == [
+        one.capability.value for one in expected.grants
+    ], label
+
+
+@pytest.mark.needs_db
+def test_a_parents_wildcard_reaches_the_column_a_ceiling_names_as_the_rule_says(
+    server: Any,
+) -> None:
+    """**The comparison above could not have found the defect it shared, and did not.**
+
+    Until 2026-09-14 `EntitlementSet.intersect` dropped a caller's wildcard whenever a ceiling
+    named a column under it, and `gate.delegated_reach` was written as its mirror, so both
+    computed nothing for this chain and the differential test compared two identical wrong
+    answers. They also shared the permissive half: holding `read:client.*` in Web and
+    `read:client.name` in gold, both handed the child the name column in gold clients of every
+    department.
+
+    So this one is compared against a reach written out here from the rule rather than computed
+    by either implementation. The child holds the column, not the wildcard, under the parent's
+    two scopes conjoined, which is what the parent reaches the column in by itself.
+
+    Delete this and the SQL and the Python can drift together, which is the one kind of drift a
+    differential test is blind to."""
+    parent = reach(
+        "p:one",
+        ("read:client.*", where(department="web")),
+        ("read:client.name", where(tier="gold")),
+    )
+    agent = reach("ceiling:agent:a", ("read:client.name", Scope()))
+    subtask = reach("subtask-ceiling:s", ("read:client.*", Scope()))
+    written_out = reach("p:one", ("read:client.name", where(department="web", tier="gold")))
 
     assert shape(sql_reach(server, parent, agent, subtask)) == shape(
-        expected.model_dump(mode="json")
-    ), label
+        written_out.model_dump(mode="json")
+    )
+
+
+@pytest.mark.needs_db
+def test_the_downgrade_writes_back_the_reach_0028_computed_and_the_upgrade_replaces_it() -> None:
+    """**A downgrade nobody has run is a string**, and this one is a frozen copy of a function
+    rather than a statement rendered from its owner, which is the shape that goes wrong quietly.
+
+    One chain, asked after each step on a live database of its own: a parent holding
+    `read:client.*` in Web, through an agent ceiling naming `read:client.name`. At `0029` the
+    child reaches the column in Web. Downgraded to `0028` it reaches nothing, which is exactly
+    what the function `0028` shipped computed and is what the code of `0028` expects the
+    database to agree with. Upgraded again, the column is back. So the downgrade reverses the
+    upgrade, the upgrade is not a no-op on a database that already ran `0028`, and neither
+    direction is taken on trust.
+
+    Delete this and `0029`'s downgrade can hold any function at all, including the corrected
+    one, with every other test in this file green."""
+    import psycopg
+
+    from brain.db import libpq_url
+
+    url = _database_url()
+    if url is None:
+        pytest.skip("DATABASE_URL is unset, so there is no server to ask; CI always sets it")
+
+    admin = libpq_url(url)
+    scratch = _fresh(admin, ROUND_TRIP_DATABASE)
+    parent = reach("p:one", ("read:client.*", where(department="web")))
+    agent = reach("ceiling:agent:a", ("read:client.name", Scope()))
+    subtask = reach("subtask-ceiling:s", ("read:client.*", Scope()))
+    written_out = reach("p:one", ("read:client.name", where(department="web")))
+    narrowed = shape(written_out.model_dump(mode="json"))
+    as_0028_computed = shape(reach("p:one").model_dump(mode="json"))
+
+    seen: list[tuple[str, tuple[Any, ...]]] = []
+    try:
+        _migrate(url, ROUND_TRIP_DATABASE, "stamp", "0027")
+        for verb, revision in (("upgrade", "0029"), ("downgrade", "0028"), ("upgrade", "0029")):
+            _migrate(url, ROUND_TRIP_DATABASE, verb, revision)
+            with psycopg.connect(scratch, autocommit=True) as conn:
+                seen.append((revision, shape(sql_reach(conn, parent, agent, subtask))))
+    finally:
+        with psycopg.connect(admin, autocommit=True) as conn:
+            conn.execute(f'DROP DATABASE IF EXISTS "{ROUND_TRIP_DATABASE}" WITH (FORCE)')
+
+    assert narrowed != as_0028_computed, "the two states are the same, so this proves nothing"
+    assert seen == [("0029", narrowed), ("0028", as_0028_computed), ("0029", narrowed)]
 
 
 @pytest.mark.needs_db

@@ -770,10 +770,29 @@ $scope_for$
 
 #: M18.3.1: the child grant, computed as parent intersect agent intersect subtask.
 #:
-#: A left fold like the Python one, and flattened into a single pass because intersection is
-#: associative: a grant survives when both ceilings cover it, and its scope is the parent's
-#: clauses conjoined with what each ceiling narrowed it to. Ordered by the parent's own grant
-#: order so a reader diffing this against `chain_reach` is comparing like with like.
+#: `EntitlementSet.intersect` folded twice, and flattened into one pass because that fold has
+#: a closed form. `intersect` reaches every capability exactly where both of its sides do, so
+#: folding it over three sets reaches every capability exactly where all three do: the child
+#: holds each capability any of the three names, wherever all three reach it, in the three
+#: scopes conjoined. Each reach is `gate.entitlement_scope_for`, which is `scope_for`.
+#:
+#: **Until 2026-09-14 this read the capabilities off the parent's grants alone and took each
+#: one's scope from that grant alone, which was the Python's defect copied faithfully.** A
+#: parent holding `read:client.*` through a ceiling naming `read:client.name` computed nothing,
+#: and a parent holding the wildcard in Web and the column in gold computed the column in gold
+#: clients everywhere. The differential test could not see either, because both copies were
+#: wrong identically; `test_a_parents_wildcard_reaches_the_column_a_ceiling_names_as_the_rule_says`
+#: compares against a reach written out from the rule instead. Migration `0029` replaces the
+#: function on a database that already ran `0028`.
+#:
+#: **The parent is read with its `not_after` removed, and both ceilings are judged at `at`.**
+#: `intersect` carries the left-hand side's expiry rather than judging it, and the parent is
+#: the left-hand side of both hops, so judging it here would refuse a child the Python fold
+#: hands a lapsing reach to. The bound still arrives on the result through `LEAST`.
+#:
+#: Ordered by where each capability is first named, parent first, then the agent ceiling and
+#: then the subtask ceiling, which is the order the Python fold produces them in, so a reader
+#: diffing this against `chain_reach` is comparing like with like.
 #:
 #: `LEAST` ignores NULLs in PostgreSQL, which is exactly `min` over the bounds that are set,
 #: and matches `intersect` taking the tighter of the two. A ceiling with no expiry therefore
@@ -795,26 +814,34 @@ AS $reach$
         'principal_id', parent ->> 'principal_id',
         'grants', coalesce((
             SELECT jsonb_agg(jsonb_build_object(
-                'capability', g.value -> 'capability',
+                'capability', jsonb_build_object('value', named.capability),
                 'scope', jsonb_build_object('clauses', (
                     SELECT coalesce(jsonb_agg(DISTINCT c.value), '[]'::jsonb)
                     FROM jsonb_array_elements(
-                        coalesce(g.value -> 'scope' -> 'clauses', '[]'::jsonb)
+                        narrowed.by_the_parent
                         || narrowed.by_the_agent
                         || narrowed.by_the_subtask) AS c(value)
                 ))
-            ) ORDER BY g.ordinality)
-            FROM jsonb_array_elements(coalesce(parent -> 'grants', '[]'::jsonb))
-                 WITH ORDINALITY AS g(value, ordinality),
-                 LATERAL (
-                     SELECT gate.entitlement_scope_for(
-                                agent_ceiling, g.value -> 'capability' ->> 'value', at)
-                            AS by_the_agent,
-                            gate.entitlement_scope_for(
-                                subtask_ceiling, g.value -> 'capability' ->> 'value', at)
-                            AS by_the_subtask
-                 ) AS narrowed
-            WHERE narrowed.by_the_agent IS NOT NULL
+            ) ORDER BY named.first_named)
+            FROM (
+                SELECT g.value -> 'capability' ->> 'value' AS capability,
+                       min(ARRAY[side.place, g.ordinality]) AS first_named
+                FROM (VALUES (1, parent), (2, agent_ceiling), (3, subtask_ceiling))
+                         AS side(place, reach),
+                     LATERAL jsonb_array_elements(coalesce(side.reach -> 'grants', '[]'::jsonb))
+                         WITH ORDINALITY AS g(value, ordinality)
+                GROUP BY g.value -> 'capability' ->> 'value'
+            ) AS named,
+            LATERAL (
+                SELECT gate.entitlement_scope_for(
+                           parent - 'not_after', named.capability, at) AS by_the_parent,
+                       gate.entitlement_scope_for(
+                           agent_ceiling, named.capability, at) AS by_the_agent,
+                       gate.entitlement_scope_for(
+                           subtask_ceiling, named.capability, at) AS by_the_subtask
+            ) AS narrowed
+            WHERE narrowed.by_the_parent IS NOT NULL
+              AND narrowed.by_the_agent IS NOT NULL
               AND narrowed.by_the_subtask IS NOT NULL
         ), '[]'::jsonb),
         'not_after', LEAST(

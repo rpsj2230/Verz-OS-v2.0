@@ -69,13 +69,21 @@ exactly that reason.
    caller whose grants are wildcards, which is every Department Admin and the Super Admin, it
    withholds instead. `brain.memory.formation` intersects requirement-first to step around exactly
    this; the run reach has no such step. See
-   `A_WILDCARD_IS_DELETED_BY_THE_LENS_RATHER_THAN_NARROWED`.
+   `A_WILDCARD_IS_DELETED_BY_THE_LENS_RATHER_THAN_NARROWED`. **Fixed on 2026-09-14**: for every
+   capability either side names, a run holds it where the caller's `scope_for` and the
+   ceiling's `scope_for` both reach, so a wildcard is narrowed to the column and never wider
+   than either side. The SQL twin in `gate.delegated_reach` is corrected by migration 0029.
 3. **No agent installed from the catalogue can start a run.** `brain.gate.catalogue.project` keeps
    a tool only when its name is in `AgentCeiling.allowed_tools`, and not one of the twenty-three
    templates declares any, so `brain.gate.invoke.invoke` refuses every installed catalogue agent
    for every caller while `brain.agents.install.completeness` reports the install READY. The
    application also registers no tool either agent here reads. See
-   `A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN`.
+   `A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN`. **Fixed on 2026-09-14**, as a class: each
+   template declares its tools once, `brain.agents.install` binds every declared tool to the
+   registered tool of its entity and verb, a tool nothing binds holds the install incomplete
+   and disabled, and `brain.knowledge.document_tools` puts the document plane's two tools on
+   every install. The helpdesk starts a run; the analyst reports the two tools nothing on a
+   `local` install serves, rather than reporting ready.
 
 **Why the failing half is a strict xfail rather than absent.** 258c089 found the first of this
 family and left its half-written harness out of the tree, which was right for a session that could
@@ -114,6 +122,7 @@ import pytest
 from brain.agents import catalogue
 from brain.agents.install import (
     Installation,
+    MissingKind,
     TemplateCatalogue,
     begin,
     complete,
@@ -172,8 +181,9 @@ A_WILDCARD_IS_DELETED_BY_THE_LENS_RATHER_THAN_NARROWED: Final = (
     "capability, so a caller holding read:client.* through a ceiling naming "
     "read:client.hours_remaining keeps nothing, although the caller holds the column and the "
     "ceiling admits it. Every Department Admin and the Super Admin hold wildcards, so every one "
-    "of them reaches nothing through a template that names columns. When this passes, the "
-    "marker comes off."
+    "of them reaches nothing through a template that names columns. It passed on 2026-09-14, "
+    "when intersect began asking both sides scope_for about every capability either names, "
+    "and the marker came off."
 )
 
 #: The third defect. See the module docstring, item 3.
@@ -181,8 +191,9 @@ A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN: Final = (
     "brain.gate.catalogue.project keeps a tool only when its name is in the ceiling's "
     "allowed_tools, and no template in brain.agents.catalogue declares any, so "
     "brain.gate.invoke.invoke refuses every agent installed from it while the install reports "
-    "READY; and the application registers no tool the helpdesk reads. When this passes, the "
-    "marker comes off."
+    "READY; and the application registers no tool the helpdesk reads. It passed on 2026-09-14, "
+    "when templates declared their tools once and the install bound them to registered ones, "
+    "and the marker came off."
 )
 
 # ------------------------------------------------------------------ the install
@@ -286,6 +297,7 @@ def install_from_catalogue(manifest: TemplateManifest) -> Installation:
         key=SIGNING_KEY,
         audience=AUDIENCE,
         registry=serving(manifest.connectors),
+        tools=build_registry(source=Settings(env="development").tool_source, records=NoRows()),
         at=NOW,
     )
 
@@ -566,8 +578,8 @@ def memory_text(memory_ids: set[str]) -> str:
 # ================================================================== installed from templates
 @pytest.mark.parametrize(
     "template",
-    [catalogue.internal_helpdesk, catalogue.capacity_and_hours_analyst],
-    ids=["internal_helpdesk", "capacity_and_hours_analyst"],
+    [catalogue.internal_helpdesk],
+    ids=["internal_helpdesk"],
 )
 def test_the_agent_is_installed_from_the_catalogue_whole_and_starts_supervised(
     template: Callable[[], TemplateManifest],
@@ -596,6 +608,34 @@ def test_the_agent_is_installed_from_the_catalogue_whole_and_starts_supervised(
     }
     assert installed.record.authority.scope == manifest.authority.scope
     assert installed.leash.entries, "the template names targets, so the leash is not empty"
+    assert all(entry.rung is AutonomyTier.SHADOW for entry in installed.leash.entries)
+
+
+def test_an_agent_whose_tools_nothing_here_serves_installs_incomplete_and_disabled() -> None:
+    """**The install says what an agent cannot use, rather than calling it ready.** The analyst
+    reads client columns and declares `client.read` and `client.search`. On an install reading
+    `local` no registered tool serves either, so `complete` reports both as missing tools, the
+    badge is incomplete and the agent starts disabled. Everything else the install decides still
+    holds: the audience it was published to, the template's ceiling and the bottom rung.
+
+    Until 2026-09-14 this agent installed ready and `invoke` refused it for every caller, which
+    is `A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN`. It was a parameter of the test above,
+    and it left that test when installing whole stopped being true of it.
+
+    Delete this and an install can report ready again for an agent no run can start."""
+    manifest = catalogue.capacity_and_hours_analyst()
+    installed = install_from_catalogue(manifest)
+
+    assert not installed.completeness.is_ready
+    assert {(one.kind, one.name) for one in installed.completeness.missing} == {
+        (MissingKind.TOOL, "client.read"),
+        (MissingKind.TOOL, "client.search"),
+    }
+    assert not installed.record.is_selectable
+    assert installed.record.audience == AUDIENCE
+    assert {one.value for one in installed.record.authority.capabilities} == {
+        one.value for one in manifest.authority.capabilities
+    }
     assert all(entry.rung is AutonomyTier.SHADOW for entry in installed.leash.entries)
 
 
@@ -707,11 +747,6 @@ def test_the_analyst_recalls_to_the_person_it_was_written_around_what_it_learnt_
     assert listed("u_weiling", analyst, learnings) == {"mem_hours"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason=A_WILDCARD_IS_DELETED_BY_THE_LENS_RATHER_THAN_NARROWED,
-)
 def test_the_department_admin_who_installed_the_analyst_recalls_what_it_learnt_through_it(
     analyst: Installation,
 ) -> None:
@@ -720,7 +755,7 @@ def test_the_department_admin_who_installed_the_analyst_recalls_what_it_learnt_t
     about hours, which his reach and its ceiling both admit, and never what it learnt about the
     money, which its ceiling does not.
 
-    Fails today for `A_WILDCARD_IS_DELETED_BY_THE_LENS_RATHER_THAN_NARROWED`.
+    Failed until 2026-09-14 for `A_WILDCARD_IS_DELETED_BY_THE_LENS_RATHER_THAN_NARROWED`.
 
     Delete this and the people who install agents, who are the people with wildcards, can reach
     nothing through any of them, which no refusal test can notice."""
@@ -830,9 +865,6 @@ class NoRows:
         return ()
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason=A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN
-)
 def test_an_agent_installed_from_the_catalogue_starts_a_run_for_somebody_who_holds_what_it_reads(
     helpdesk: Installation,
 ) -> None:
@@ -840,7 +872,7 @@ def test_an_agent_installed_from_the_catalogue_starts_a_run_for_somebody_who_hol
     `brain.gate.invoke.invoke`, against the registry the application builds for itself, as a
     person who holds everything the helpdesk's ceiling names.
 
-    Fails today for `A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN`.
+    Failed until 2026-09-14 for `A_CEILING_THAT_ALLOWS_NO_TOOL_CANNOT_START_A_RUN`.
 
     Delete this and every other test here passes for an agent the gate will never run."""
     registry = build_registry(source=Settings(env="development").tool_source, records=NoRows())

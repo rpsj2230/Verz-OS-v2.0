@@ -96,17 +96,25 @@ def test_a_reader_who_no_longer_reaches_it_is_told_nothing() -> None:
 
 
 def test_a_reader_holding_a_wildcard_reaches_a_memory_formed_under_a_specific_grant() -> None:
-    """**The reason the intersection runs requirement-first, and the bug the other direction
-    produces.**
+    """**Why the intersection was written requirement-first, and the bug the other direction
+    used to produce.**
 
-    `intersect` keeps a grant of the receiver's only where the ceiling covers it, and
-    `Capability.covers` expands only a trailing `.*`. Narrowing the reader by the memory's
-    specific capability would drop the wildcard grant of somebody who plainly holds it, so a
-    person with `read:client.*` would lose every memory formed under `read:client.name`, and
-    the symptom is a senior person seeing less than a junior one.
+    Until 2026-09-14 `intersect` kept a grant of the receiver's only where the ceiling covered
+    it, and `Capability.covers` expands only a trailing `.*`, so narrowing the reader by the
+    memory's specific capability dropped the wildcard grant of somebody who plainly holds it: a
+    person with `read:client.*` lost every memory formed under `read:client.name`, and the
+    symptom was a senior person seeing less than a junior one.
 
-    Delete this and swapping the two arguments looks like a tidy-up and passes everything
-    else here, because every other case uses matching capabilities."""
+    `intersect` now reaches a capability exactly where both of its sides do, whichever side
+    holds the wildcard, so the two orders give the same recollection and a mutation swapping
+    them survives this file. `tests/invariants/test_entitlement_invariants.py` holds that
+    property for every caller of `intersect` at once. What this still guards is the outcome
+    rather than the order: somebody holding a wildcard is told what was learnt under a field of
+    it.
+
+    Delete this and a change anywhere between `intersect` and recall can take memories away from
+    everybody who holds a wildcard, while every case here using matching capabilities stays
+    green."""
     memory = formed("read:client.name")
 
     assert may_recall(memory, reader("read:client.*"), now=NOW) is not None
@@ -125,6 +133,39 @@ def test_a_memory_formed_under_several_capabilities_needs_all_of_them() -> None:
 
     assert may_recall(memory, reader("read:client.hours"), now=NOW) is None
     assert may_recall(memory, reader("read:client.hours", "read:client.rate"), now=NOW) is not None
+
+
+def test_several_capabilities_are_recalled_only_where_the_reader_reaches_every_one() -> None:
+    """**A survivor of the mutation pass run on 2026-09-14, and a permissive one.**
+
+    `may_recall` conjoins the scope the reader reaches each capability in. Keeping only the
+    last capability's scope instead survived every test reaching this module, because every
+    reader here held all of a memory's capabilities in one scope, so the conjunction and the
+    last scope were the same scope.
+
+    This reader reaches the hours across Web and the rate only in Web's gold tier, and the memory
+    was formed in Web under both, rate first. Asked in Web at large they are told nothing, since
+    the rate does not reach there; asked in Web's gold tier they are told it, at a scope carrying
+    the tier. A version keeping the last scope tells them the memory in all of Web.
+
+    Delete this and a reader who reaches one of a memory's capabilities narrowly is told it as
+    widely as the other capability reaches."""
+    gold_in_web = clause_place(department="web", tier="gold")
+    two_depths = EntitlementSet(
+        principal_id="p_reader",
+        grants=(
+            Grant(capability=Capability(value="read:client.hours"), scope=WEB),
+            Grant(capability=Capability(value="read:client.rate"), scope=gold_in_web),
+        ),
+    )
+    memory = formed("read:client.rate", "read:client.hours")
+
+    assert may_recall(memory, two_depths, now=NOW) is None
+    recollection = may_recall(
+        memory, two_depths, now=NOW, where={"department": "web", "tier": "gold"}
+    )
+    assert recollection is not None
+    assert recollection.scope == gold_in_web
 
 
 def test_a_memory_formed_in_one_department_is_not_recalled_in_another() -> None:

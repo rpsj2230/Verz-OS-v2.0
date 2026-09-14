@@ -27,11 +27,20 @@ catalogue is a process answering questions from a tool set nobody validated, and
 alternative to raising is a warning at boot, which is a warning nobody reads after the
 first week.
 
-**Every install registers one built-in tool, and that is honest rather than embarrassing.**
+**Every install registers one built-in row tool, and that is honest rather than embarrassing.**
 `knowledge.columns.PRICE_LIST` is the only classification the product ships for everybody,
 so the price list is the only entity every install has a row tool for. The value here is not
 the count; it is that the count is produced by a builder that runs every rule, so the next
 tool is registered through a door rather than beside one.
+
+**And two document tools, since 2026-09-14, for the same reason the price list is built in.**
+The document plane is the product's own rather than a source's, so
+`brain.knowledge.document_tools` registers `knowledge.search_documents` and
+`knowledge.read_document` on every install, through the same door as the row tools because they
+read through the same row source. Before they existed no template naming `knowledge.read` or
+`knowledge.search` had anything to bind to, and the gate refused every one of them. See
+`THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`, and that module's docstring for the limit
+of reading chunks through a row source, which fails closed.
 
 **A source may bring the classifications of its own entities, and they are registered only
 where that source is read.** The demo is the first. Until 2026-09-14 nothing classified its
@@ -126,8 +135,20 @@ from typing import Final
 
 from brain import demo
 from brain.knowledge.columns import PRICE_LIST, TableClassification
+from brain.knowledge.document_tools import KNOWLEDGE_PIN, knowledge_tools
 from brain.knowledge.rows import RowSource, RowTool
 from brain.tools.registry import ResultContract, ToolRegistry
+
+#: Why the document plane is registered on every install that has rows, whatever it reads.
+THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE: Final = (
+    "The document plane is the product's own and not a system an install is pointed at, so its "
+    "tools are not per source: the argument that makes the price list a built-in makes "
+    "knowledge one too. It reads through the same row source the row tools do, because that is "
+    "the only database handle this builder is given, so it is registered exactly when they are "
+    "and never beside a source that cannot answer. Ten catalogue templates name knowledge.read "
+    "or knowledge.search, and with no tool to bind them every one of them was an agent the gate "
+    "refused to start."
+)
 
 #: Why an entity a source brings is registered for that source and for no other.
 A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ: Final = (
@@ -260,6 +281,15 @@ def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegi
                 # dictionary fails at registration instead of at the first redaction.
                 result_contract=ResultContract.TYPED,
                 scope=tool.scope,
+            )
+        # The document plane, for every source. See
+        # `THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`.
+        for definition, handler in knowledge_tools(records):
+            registry.register(
+                definition,
+                handler,
+                result_contract=ResultContract.TYPED,
+                scope=KNOWLEDGE_PIN,
             )
 
     return registry.freeze()

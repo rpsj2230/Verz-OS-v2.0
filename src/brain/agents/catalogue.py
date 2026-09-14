@@ -57,6 +57,26 @@ is computed by the one `intersect` there is, in `brain.gate.leash`. Every capabi
 narrows; none grants. A template published to the catalogue does not thereby give anybody
 anything, which is the same argument `AUDIENCE_IS_NOT_AUTHORITY` makes one module over.
 
+**Each template names its tools once, and names them by what they do rather than by system.**
+Until 2026-09-14 every template wrote its tools on its leash and allowed none, and
+`brain.gate.catalogue.project` keeps a tool only when the ceiling allows it, so all twenty-three
+were agents the gate refused to start while the install badged them READY. Each now builds one
+tuple of tools and passes it both to `allowed_tools` and to `_shadow`, and
+`tests/unit/test_catalogue.py` holds the two equal for every template. The names are abstract,
+`invoice.read`, because a template cannot know which system an install reads, and
+`brain.agents.install.bind_tool` binds each to the install's registered tools by entity and verb.
+See `A_TEMPLATE_DECLARES_ITS_TOOLS_ONCE`.
+
+Deriving `allowed_tools` from the leash inside the manifest was rejected. The blank template's
+leash is sealed and empty, so a hand-built agent, whose tools arrive only in the overlay, could
+then hold no tool at all; the one declaration lives here instead, and a test keeps it one.
+
+**Writing that test found the analyst reading the wrong noun.** `capacity_and_hours_analyst`
+leashed `record.read` and `record.search` while its ceiling named only client columns, so its
+ceiling derived `read:client` and never `read:record`, and a `record` tool, had one ever bound,
+was one no run through it could reach. The targets are `client.read` and `client.search` now,
+the entity its capabilities are written about.
+
 **The personas are deliberately thin.** Prompt material is stored and never parsed, so
 anything in a persona that looks like a permission is a permission decided by whoever last
 edited a text box. What each agent may reach is in `authority`, where a reviewer can read it.
@@ -126,6 +146,16 @@ A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS = (
     "the thirty days is SHADOW_REVIEW_PERIOD on the pin an installer takes."
 )
 
+#: Why each template builds one tuple of tools and hands it to both the ceiling and the leash.
+A_TEMPLATE_DECLARES_ITS_TOOLS_ONCE: Final = (
+    "The gate keeps a tool only when the ceiling allows it, and supervises a tool only when the "
+    "leash names it. Written twice, the two lists drift: a tool allowed and not leashed runs at "
+    "MISSING_ENTRY_RUNG, SHADOW by a fallback rather than by the template's word, and a tool "
+    "leashed and not allowed is supervision for a tool the agent can never call. Until "
+    "2026-09-14 every template was the second case for every tool, so no catalogue agent could "
+    "start a run. One tuple, passed to both, is one declaration."
+)
+
 
 #: Who these were published by, and it is the system rather than a person or a company.
 #:
@@ -172,6 +202,10 @@ def wordpress_developer() -> TemplateManifest:
     The placeholder is the standard's own location, because every install has one and no two
     have the same one.
     """
+    tools = (
+        "knowledge.read",
+        "ticket.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="wordpress_developer",
@@ -191,11 +225,12 @@ def wordpress_developer() -> TemplateManifest:
                 Capability(value="read:ticket.subject"),
                 Capability(value="read:ticket.description"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("freshdesk",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("knowledge.read", "ticket.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -230,6 +265,10 @@ def support_ticket_agent() -> TemplateManifest:
     exists, so a support agent that cannot see tickets never answers a question about them
     with whatever else it can reach.
     """
+    tools = (
+        "ticket.read",
+        "ticket.search",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="support_ticket_agent",
@@ -250,11 +289,12 @@ def support_ticket_agent() -> TemplateManifest:
                 Capability(value="read:ticket.status"),
                 Capability(value="read:client.name"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("freshdesk",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("ticket.read", "ticket.search"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -277,6 +317,10 @@ def capacity_and_hours_analyst() -> TemplateManifest:
     `read:client.contract_value`, which is the fixture case
     `tests/e2e/test_wave_two_lark_question.py` drives with two real people.
     """
+    tools = (
+        "client.read",
+        "client.search",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="capacity_and_hours_analyst",
@@ -296,11 +340,12 @@ def capacity_and_hours_analyst() -> TemplateManifest:
                 Capability(value="read:client.hours_remaining"),
                 Capability(value="read:client.hosting_expiry"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("lark_base",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("record.read", "record.search"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -340,6 +385,11 @@ def ar_and_renewal_chaser() -> TemplateManifest:
     is a case about declining rather than a capability for a field nothing produces. The
     day a connector declares one, the capability joins this ceiling and the case changes.
     """
+    tools = (
+        "invoice.read",
+        "invoice.search",
+        "reminder.draft",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="ar_and_renewal_chaser",
@@ -360,12 +410,13 @@ def ar_and_renewal_chaser() -> TemplateManifest:
                 Capability(value="read:invoice.due_date"),
                 Capability(value="read:client.name"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("xero",),
         guardrails=ManifestGuardrails(
             # DRAFT, never WRITE. The agent composes a reminder and a person sends it.
             max_side_effect=SideEffect.DRAFT,
-            leash=_shadow("invoice.read", "invoice.search", "reminder.draft"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -395,6 +446,10 @@ def accountant_agent() -> TemplateManifest:
     that could do the second because it needed the first is how a reconciliation agent
     becomes a payment agent.
     """
+    tools = (
+        "invoice.read",
+        "invoice.search",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="accountant_agent",
@@ -416,11 +471,12 @@ def accountant_agent() -> TemplateManifest:
                 Capability(value="read:invoice.status"),
                 Capability(value="read:client.name"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("xero",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("invoice.read", "invoice.search"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -446,6 +502,10 @@ def sem_agent() -> TemplateManifest:
     Contrast M13.5.18, the chaser, whose constraint is a duration and so lives on a review
     rather than on a ceiling. See `A_PIN_WITH_NO_END_IS_NOT_A_PIN_FOR_THIRTY_DAYS`.
     """
+    tools = (
+        "campaign.read",
+        "campaign.draft_change",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="sem_agent",
@@ -465,11 +525,12 @@ def sem_agent() -> TemplateManifest:
                 Capability(value="read:campaign.spend"),
                 Capability(value="read:campaign.budget"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             # DRAFT, never WRITE. The agent composes a change and a person commits it.
             max_side_effect=SideEffect.DRAFT,
-            leash=_shadow("campaign.read", "campaign.draft_change"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -498,6 +559,10 @@ def knowledge_gap_curator() -> TemplateManifest:
     and there is not going to be one, because "who keeps asking about pricing" is a
     performance report assembled inside a curation tool.
     """
+    tools = (
+        "knowledge.read",
+        "knowledge.search",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="knowledge_gap_curator",
@@ -515,10 +580,11 @@ def knowledge_gap_curator() -> TemplateManifest:
                 Capability(value="read:knowledge.document"),
                 Capability(value="read:knowledge.title"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("knowledge.read", "knowledge.search"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -544,6 +610,10 @@ def business_analyst() -> TemplateManifest:
     conversation about whether the client is worth arguing with, which is a different
     conversation and not one an agent should be able to start.
     """
+    tools = (
+        "requirement.read",
+        "change_request.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="business_analyst",
@@ -565,10 +635,11 @@ def business_analyst() -> TemplateManifest:
                 Capability(value="read:change_request.summary"),
                 Capability(value="read:change_request.status"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("requirement.read", "change_request.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -607,6 +678,10 @@ def pre_sales() -> TemplateManifest:
     asked which clients are worth answering quickly, and it will answer, because the numbers
     are right there. The capability list is what stops that, not the persona.
     """
+    tools = (
+        "deal.read",
+        "project.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="pre_sales",
@@ -628,11 +703,12 @@ def pre_sales() -> TemplateManifest:
                 Capability(value="read:project.stack"),
                 Capability(value="read:project.duration_weeks"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("hubspot",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("deal.read", "project.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -663,6 +739,10 @@ def project_manager() -> TemplateManifest:
     Read-only and DRAFT is not enough, so it is NONE. A project agent that could move a task
     is one that closes something on a Friday because a status update read as a request.
     """
+    tools = (
+        "task.read",
+        "project.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="project_manager",
@@ -685,11 +765,12 @@ def project_manager() -> TemplateManifest:
                 Capability(value="read:project.name"),
                 Capability(value="read:project.phase"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("lark_base",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("task.read", "project.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -728,6 +809,11 @@ def ui_designer() -> TemplateManifest:
     produce an agent that answers a question about a component with a finding from a usability
     test, which is how a design system acquires rules nobody agreed.
     """
+    tools = (
+        "design_token.read",
+        "component.read",
+        "knowledge.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="ui_designer",
@@ -749,11 +835,12 @@ def ui_designer() -> TemplateManifest:
                 Capability(value="read:component.states"),
                 Capability(value="read:knowledge.document"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("google_drive",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("design_token.read", "component.read", "knowledge.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -792,6 +879,10 @@ def ux_designer() -> TemplateManifest:
     member of a client's staff struggled with the checkout. The finding is the product; who
     produced it is not.
     """
+    tools = (
+        "research_finding.read",
+        "knowledge.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="ux_designer",
@@ -812,11 +903,12 @@ def ux_designer() -> TemplateManifest:
                 Capability(value="read:research_finding.observed_at"),
                 Capability(value="read:knowledge.document"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("google_drive",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("research_finding.read", "knowledge.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -848,6 +940,7 @@ def html_developer() -> TemplateManifest:
     That makes it the template that presses hardest on `E_run = E(caller) ∩ ceiling` being a
     narrowing: install it for anybody, and it still cannot reach a project.
     """
+    tools = ("knowledge.read",)
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="html_developer",
@@ -871,10 +964,11 @@ def html_developer() -> TemplateManifest:
                 # said so.
                 Capability(value="read:knowledge.section"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("knowledge.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -913,6 +1007,11 @@ def laravel_developer() -> TemplateManifest:
     distinction is easiest to lose: `read:model.name` and `read:model.records` differ by one
     word and by everything.
     """
+    tools = (
+        "route.read",
+        "model.read",
+        "migration.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="laravel_developer",
@@ -935,11 +1034,12 @@ def laravel_developer() -> TemplateManifest:
                 Capability(value="read:migration.name"),
                 Capability(value="read:migration.applied_at"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("laravel",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("route.read", "model.read", "migration.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -969,6 +1069,10 @@ def shopify_developer() -> TemplateManifest:
     never needs. An agent that could see orders would be able to answer "which products are
     not selling", which is a business conversation nobody asked this template to have.
     """
+    tools = (
+        "theme.read",
+        "knowledge.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="shopify_developer",
@@ -989,10 +1093,11 @@ def shopify_developer() -> TemplateManifest:
                 Capability(value="read:theme.setting"),
                 Capability(value="read:knowledge.document"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("theme.read", "knowledge.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1031,6 +1136,11 @@ def content_uploader() -> TemplateManifest:
     DRAFT rather than NONE because a draft is the deliverable. An agent that could only
     answer questions about content would be a different and less useful template.
     """
+    tools = (
+        "knowledge.read",
+        "page.read",
+        "page.draft",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="content_uploader",
@@ -1051,11 +1161,12 @@ def content_uploader() -> TemplateManifest:
                 Capability(value="read:page.template"),
                 Capability(value="read:page.parent"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("google_drive",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.DRAFT,
-            leash=_shadow("knowledge.read", "page.read", "page.draft"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1090,6 +1201,10 @@ def tester() -> TemplateManifest:
     failure is expected here" would be an agent quietly reducing the number of failures
     somebody looks at, and the whole value of a suite is that a person looks at the red.
     """
+    tools = (
+        "test_case.read",
+        "test_run.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="tester",
@@ -1110,10 +1225,11 @@ def tester() -> TemplateManifest:
                 Capability(value="read:test_run.result"),
                 Capability(value="read:test_run.ran_at"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("test_case.read", "test_run.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1147,6 +1263,10 @@ def internal_helpdesk() -> TemplateManifest:
     leave" is answerable from a document. "How much leave has Priya left" is a different
     question and this template cannot ask it.
     """
+    tools = (
+        "knowledge.read",
+        "knowledge.search",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="internal_helpdesk",
@@ -1166,10 +1286,11 @@ def internal_helpdesk() -> TemplateManifest:
                 Capability(value="read:knowledge.title"),
                 Capability(value="read:knowledge.updated_at"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("knowledge.read", "knowledge.search"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1209,6 +1330,10 @@ def site_health_sentinel() -> TemplateManifest:
     written so there is nothing for it to withhold: the agent has no reach to a figure about
     sites in general.
     """
+    tools = (
+        "site.read",
+        "site_check.read",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="site_health_sentinel",
@@ -1229,11 +1354,12 @@ def site_health_sentinel() -> TemplateManifest:
                 Capability(value="read:site_check.result"),
                 Capability(value="read:site_check.ran_at"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("change_signal",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("site.read", "site_check.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1264,6 +1390,11 @@ def project_status_reporter() -> TemplateManifest:
     read-only project set the manager gets, with nothing added for the writing: composing a
     document is not a reason to be able to see more.
     """
+    tools = (
+        "task.read",
+        "project.read",
+        "report.draft",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="project_status_reporter",
@@ -1285,11 +1416,12 @@ def project_status_reporter() -> TemplateManifest:
                 Capability(value="read:project.name"),
                 Capability(value="read:project.phase"),
             ),
+            allowed_tools=tools,
         ),
         connectors=("lark_base",),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.DRAFT,
-            leash=_shadow("task.read", "project.read", "report.draft"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1329,6 +1461,11 @@ def quote_and_proposal_drafter() -> TemplateManifest:
     terms readable through a quote for another. The rate card is the agency's own published
     position and is the right input.
     """
+    tools = (
+        "rate_card.read",
+        "requirement.read",
+        "quote.draft",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="quote_and_proposal_drafter",
@@ -1351,10 +1488,11 @@ def quote_and_proposal_drafter() -> TemplateManifest:
                 Capability(value="read:requirement.body"),
                 Capability(value="read:knowledge.document"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.DRAFT,
-            leash=_shadow("rate_card.read", "requirement.read", "quote.draft"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1389,6 +1527,7 @@ def seo_agent() -> TemplateManifest:
     two sitting beside each other is the clearest statement in this catalogue that the ceiling
     is decided by what an agent can do rather than by what it is called.
     """
+    tools = ("page.read",)
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="seo_agent",
@@ -1410,10 +1549,11 @@ def seo_agent() -> TemplateManifest:
                 Capability(value="read:page.headings"),
                 Capability(value="read:page.canonical"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.NONE,
-            leash=_shadow("page.read"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
@@ -1447,6 +1587,11 @@ def smm_agent() -> TemplateManifest:
     figure: an agent that could see what performed would write for the metric, and the
     agency's guidance is what the client agreed to sound like.
     """
+    tools = (
+        "knowledge.read",
+        "social_post.read",
+        "social_post.draft",
+    )
     return TemplateManifest(
         identity=ManifestIdentity(
             template_id="smm_agent",
@@ -1467,10 +1612,11 @@ def smm_agent() -> TemplateManifest:
                 Capability(value="read:social_post.channel"),
                 Capability(value="read:social_post.published_at"),
             ),
+            allowed_tools=tools,
         ),
         guardrails=ManifestGuardrails(
             max_side_effect=SideEffect.DRAFT,
-            leash=_shadow("knowledge.read", "social_post.read", "social_post.draft"),
+            leash=_shadow(*tools),
         ),
         golden_set=(
             GoldenCase(
