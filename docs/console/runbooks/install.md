@@ -31,7 +31,7 @@ The facts are the same for everybody who opens it. Identity settings are deliber
 
 ## When it is empty or refuses
 
-The release is unknown when the image carries no release manifest, which is normal outside a built image. The migration level is the level the code expects, not the level the database is on, unless the pending migrations were read, and it is unknown when the migration history branches. Each fact says which of measured, declared or unknown it is. On a database where every migration is still pending the facts currently fail to build rather than show a level.
+The release is unknown when the image carries no release manifest, which is normal outside a built image. The migration level is the level the code expects, not the level the database is on, unless the pending migrations were read, and it is unknown when the migration history branches. Each fact says which of measured, declared or unknown it is. On a database where every migration is still pending the level reads as no migration applied, with how many are waiting.
 
 ## When it shows an alarm
 
