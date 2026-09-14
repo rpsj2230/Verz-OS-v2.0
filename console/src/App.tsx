@@ -98,6 +98,14 @@ const Classification = lazy(async () => ({
 const Agent = lazy(async () => ({ default: (await import("./pages/Agent")).Agent }));
 
 /**
+ * The approvals page, fetched when somebody opens it, for the workspace's reason: it imports
+ * `approvals.css`, and a person who never opens approvals should not download it.
+ */
+const Approvals = lazy(async () => ({
+  default: (await import("./pages/Approvals")).Approvals,
+}));
+
+/**
  * Shown when a page throws while rendering.
  *
  * It deliberately does not print the error. A rendering failure is a bug in this console,
@@ -187,6 +195,9 @@ export const routes: RouteObject[] = [
       // answer.
       { path: "agents/:agentId", element: <Agent /> },
       { path: "agents/:agentId/:tab", element: <Agent /> },
+      // The queue, and one approval on its own, which is where a link from a chat lands.
+      { path: "approvals", element: <Approvals /> },
+      { path: "approvals/:suspensionId", element: <Approvals /> },
       { path: "*", element: <NotFound /> },
     ],
   },

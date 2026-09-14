@@ -208,6 +208,13 @@ code {
     flex-wrap: wrap;
   }
 
+  /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
+  .shell__nav-link {
+    display: flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
+
   .shell__main {
     padding: var(--space-4) var(--space-3);
   }

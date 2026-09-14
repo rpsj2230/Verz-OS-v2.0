@@ -1,0 +1,81 @@
+/*
+ * The approvals page, drawn for a phone first. Every value here is a token from
+ * `theme/tokens.css`, under the discipline `styles/app.css` states for itself.
+ *
+ * A separate sheet imported by the page rather than more of `app.css`, for the reason
+ * `agent-workspace.css` gives: a person who never opens approvals should not download the
+ * rules for them, and a sheet that arrives with its page cannot be left behind when the page
+ * is removed.
+ *
+ * **The narrow screen is the base rule and a wider screen is the exception.** Approvals arrive
+ * on phones, so the rules outside any media query are the phone's: one column, no width that a
+ * 360 pixel screen cannot hold, and every long value allowed to break. A wider screen adds a
+ * second column inside a `min-width` query and changes nothing else. Written the other way
+ * round, a desktop layout with a `max-width` query patched over it, the phone is the case a
+ * later edit forgets. `tests/approvals-page.test.tsx` reads this sheet and refuses either.
+ *
+ * **Nothing here colours a state.** An approval about to lapse is first in the list because the
+ * API ordered it, not red because this sheet decided it was urgent; `ui/tone.ts` gives the
+ * reason a colour must not start meaning something about a record.
+ */
+
+.approval-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.approval-card {
+  min-width: 0;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+}
+
+/*
+ * The artefact is shown as it was rendered, line breaks included, so `pre-wrap` rather than
+ * `pre`: `pre` keeps a long line long and makes the card scroll sideways, which on a phone is
+ * the part of the action a person does not read before deciding.
+ */
+.approval-card__artefact {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.approval-card__facts {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  margin: 0 0 var(--space-3);
+}
+
+.approval-card__label {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.approval-card__value {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
+.approval-card__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+}
+
+@media (min-width: 64rem) {
+  .approval-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

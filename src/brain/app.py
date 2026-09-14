@@ -33,6 +33,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from brain.agent_routes import router as agent_router
 from brain.api import ErrorBody, TimeoutMiddleware
 from brain.api_routes import router as api_router
+from brain.approval_routes import router as approval_router
 from brain.audit.ledger import TRACE_ID
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
@@ -514,6 +515,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # again: who may see an agent is its audience rather than a capability, and a hidden agent
     # and a missing one are one answer. The same `asking` dependency, imported.
     app.include_router(agent_router)
+    # The approvals queue and one approval's card. A fifth router because the refusal differs
+    # again: who is offered an approval is `pending_for` over the action's own row, and an
+    # approval out of reach, decided, lapsed or missing is one answer. GET only; see the module.
+    app.include_router(approval_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
