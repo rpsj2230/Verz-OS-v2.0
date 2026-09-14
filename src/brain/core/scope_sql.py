@@ -906,12 +906,37 @@ $faults$
 #: A capability the parent does not hold at all produces the first finding and not the second,
 #: matching the `continue` in the Python original: one missing capability is one refusal, not
 #: two ways of saying it.
+#:
+#: **Since 2026-09-15 containment is asked of both sides, as the Python original is.** Until
+#: then this matched each child grant to parent grants on the exact capability string, and that
+#: failed in the permissive direction once `intersect` began narrowing a wildcard: a parent whose
+#: `read:client.name` was scoped to one tier passed a child holding `read:client.*` without that
+#: clause, which reaches the name column in every tier. Now, for every capability either
+#: document names, `gate.entitlement_scope_for` is asked of the child and of the parent with both
+#: expiries removed, because expiry is the fourth check's to judge. A capability the child reaches
+#: and the parent does not is the first finding, and one whose parent clauses are not all among
+#: the child's is the second. The finding sentences are unchanged. See
+#: `brain.orchestration.delegation.CONTAINMENT_IS_ASKED_OF_BOTH_SIDES` for the measurement that
+#: chose this over matching per grant.
 NARROWING_REFUSALS_SQL: Final = """
 CREATE OR REPLACE FUNCTION gate.narrowing_refusals(child jsonb, parent jsonb)
 RETURNS text[]
 LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
 SET timezone = 'UTC'
 AS $refusals$
+    WITH reach AS (
+        SELECT named.capability,
+               gate.entitlement_scope_for(
+                   child - 'not_after', named.capability, 'infinity'::timestamptz) AS held,
+               gate.entitlement_scope_for(
+                   parent - 'not_after', named.capability, 'infinity'::timestamptz) AS allowed
+        FROM (
+            SELECT DISTINCT g.value -> 'capability' ->> 'value' AS capability
+            FROM jsonb_array_elements(
+                coalesce(child -> 'grants', '[]'::jsonb)
+                || coalesce(parent -> 'grants', '[]'::jsonb)) AS g(value)
+        ) AS named
+    )
     SELECT coalesce(array_agg(finding ORDER BY finding), ARRAY[]::text[])
     FROM (
         SELECT 'the child names principal ' || coalesce(child ->> 'principal_id', '?')
@@ -920,34 +945,23 @@ AS $refusals$
                || 'narrowing that caller''s reach' AS finding
         WHERE child ->> 'principal_id' IS DISTINCT FROM parent ->> 'principal_id'
         UNION ALL
-        SELECT (g.value -> 'capability' ->> 'value')
+        SELECT reach.capability
                || ' is held by the child and by no grant of the parent''s'
-        FROM jsonb_array_elements(child -> 'grants') AS g(value)
-        WHERE NOT EXISTS (
-            SELECT 1 FROM jsonb_array_elements(parent -> 'grants') AS p(value)
-            WHERE p.value -> 'capability' ->> 'value'
-                  = g.value -> 'capability' ->> 'value')
+        FROM reach
+        WHERE reach.held IS NOT NULL AND reach.allowed IS NULL
         UNION ALL
-        SELECT (g.value -> 'capability' ->> 'value')
+        SELECT reach.capability
                || ' is scoped in the child without every clause the parent''s grant '
                || 'carried, and scopes compose by conjunction only, so a dropped clause '
                || 'is rows the parent could not see'
-        FROM jsonb_array_elements(child -> 'grants') AS g(value)
-        WHERE EXISTS (
-            SELECT 1 FROM jsonb_array_elements(parent -> 'grants') AS p(value)
-            WHERE p.value -> 'capability' ->> 'value'
-                  = g.value -> 'capability' ->> 'value')
-          AND NOT EXISTS (
-            SELECT 1 FROM jsonb_array_elements(parent -> 'grants') AS p(value)
-            WHERE p.value -> 'capability' ->> 'value'
-                  = g.value -> 'capability' ->> 'value'
-              AND NOT EXISTS (
-                SELECT 1 FROM jsonb_array_elements(
-                    coalesce(p.value -> 'scope' -> 'clauses', '[]'::jsonb)) AS wanted(value)
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM jsonb_array_elements(
-                        coalesce(g.value -> 'scope' -> 'clauses', '[]'::jsonb)) AS held(value)
-                    WHERE held.value = wanted.value)))
+        FROM reach
+        WHERE reach.held IS NOT NULL
+          AND reach.allowed IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM jsonb_array_elements(reach.allowed) AS wanted(value)
+            WHERE NOT EXISTS (
+                SELECT 1 FROM jsonb_array_elements(reach.held) AS kept(value)
+                WHERE kept.value = wanted.value))
         UNION ALL
         SELECT 'the child expires at ' || coalesce(child ->> 'not_after', 'never')
                || ' and the parent at ' || (parent ->> 'not_after')

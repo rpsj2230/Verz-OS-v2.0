@@ -24,6 +24,7 @@ Task ids: M18.3.1, M18.3.2
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import re
@@ -48,6 +49,7 @@ from brain.core.scope_sql import (
     DELEGATION_UNINSTALL,
     trigger_columns,
 )
+from brain.orchestration.delegation import narrowing_refusals
 
 #: Far outside any plausible wall clock, on purpose. `tests/unit/test_scope_and_capability.py`
 #: records why: a fixture with a date near today is a clock, and it goes off. Nothing here is
@@ -576,20 +578,74 @@ def test_the_downgrade_writes_back_the_reach_0028_computed_and_the_upgrade_repla
 
 
 @pytest.mark.needs_db
-def test_the_intersection_cannot_be_replaced_by_three_containment_tests(server: Any) -> None:
-    """The cheaper design, shown not to work, so the rejection is a demonstration.
+def test_the_narrowing_migration_round_trips_the_refusals_on_a_live_database() -> None:
+    """**`0033`'s downgrade is a frozen copy of a function, and a copy nobody ran is a string.**
 
-    Containment in an intersection is containment in each side, which reads as three
-    independent subset tests needing nothing materialised. It fails here because the
-    containment this check uses is grant for grant on the capability's own value: a ceiling
-    holding `read:client.*` covers a child holding `read:client.name` and holds no grant equal
-    to it, so the direct test refuses a row that is plainly narrower. Only the intersection has
-    the wildcard resolved down to the concrete capability, which is the thing a child can be
-    compared against at all.
+    One question, asked after each step on a live database of its own: the child that kept a
+    wildcard its parent only reached narrowly, against that parent. At `0033` it is refused.
+    Downgraded to `0032` it is not, which is what the function that shipped before computed.
+    Upgraded again it is refused. So the downgrade reverses the upgrade, and the upgrade is not a
+    no-op on a database that ran the old body.
 
-    Delete this and the next reader deletes `delegated_reach` as redundant and gets a check
-    that refuses every legitimate delegation through a wildcard ceiling.
-    """
+    The migrations between `0029` and `0032` are stamped rather than run. They build tables this
+    function does not read, and what they need is not a condition of asking it anything.
+
+    Delete this and the downgrade can hold any function at all, the corrected one included, with
+    every other test in this file green."""
+    import psycopg
+
+    from brain.db import libpq_url
+
+    url = _database_url()
+    if url is None:
+        pytest.skip("DATABASE_URL is unset, so there is no server to ask; CI always sets it")
+
+    admin = libpq_url(url)
+    scratch = _fresh(admin, ROUND_TRIP_DATABASE)
+    parent = reach(
+        "p:one",
+        ("read:client.*", where(department="web")),
+        ("read:client.name", where(tier="gold")),
+    )
+    child = reach("p:one", ("read:client.*", where(department="web")))
+
+    seen: list[tuple[str, int]] = []
+    try:
+        _migrate(url, ROUND_TRIP_DATABASE, "stamp", "0027")
+        _migrate(url, ROUND_TRIP_DATABASE, "upgrade", "0029")
+        _migrate(url, ROUND_TRIP_DATABASE, "stamp", "0032")
+        for verb, revision in (("upgrade", "0033"), ("downgrade", "0032"), ("upgrade", "0033")):
+            _migrate(url, ROUND_TRIP_DATABASE, verb, revision)
+            with psycopg.connect(scratch, autocommit=True) as conn:
+                row = conn.execute(
+                    "SELECT gate.narrowing_refusals(%s::jsonb, %s::jsonb)",
+                    (doc(child), doc(parent)),
+                ).fetchone()
+                assert row is not None
+                seen.append((revision, len(row[0])))
+    finally:
+        with psycopg.connect(admin, autocommit=True) as conn:
+            conn.execute(f'DROP DATABASE IF EXISTS "{ROUND_TRIP_DATABASE}" WITH (FORCE)')
+
+    assert seen == [("0033", 1), ("0032", 0), ("0033", 1)]
+
+
+@pytest.mark.needs_db
+def test_containment_in_the_intersection_is_containment_in_each_side_since_both_sides_are_asked(
+    server: Any,
+) -> None:
+    """**A rejection this file used to demonstrate, and why it no longer holds.**
+
+    Until 2026-09-15 `gate.narrowing_refusals` matched grants on the capability's own value, so a
+    child holding `read:client.name` was refused against a ceiling holding only `read:client.*`,
+    and this test showed that three direct containment tests could not stand in for the
+    intersection. Containment is now asked of both sides through `gate.entitlement_scope_for`,
+    which is exact, so the reading against the intersection and the reading against one side
+    agree, as set containment says they must. `delegated_reach` is still what the trigger compares
+    a row against, and nothing here argues for removing it.
+
+    Delete this and the SQL can go back to matching strings without a test noticing, which
+    refuses every legitimate delegation through a wildcard ceiling."""
     parent = reach("p:one", ("read:client.name", Scope()))
     agent = reach("ceiling:agent:a", ("read:client.*", Scope()))
     subtask = reach("subtask-ceiling:s", ("read:client.*", Scope()))
@@ -605,7 +661,146 @@ def test_the_intersection_cannot_be_replaced_by_three_containment_tests(server: 
     ).fetchone()
 
     assert against_the_intersection[0] == []
-    assert against_the_agent[0] != [], "the two readings agree, so the rejection above is wrong"
+    # The agent's ceiling is written under its own principal, so the principal finding stands;
+    # what this asserts is that no finding about reach does.
+    assert [one.split(" ", 4)[:4] for one in against_the_agent[0]] == [
+        ["the", "child", "names", "principal"]
+    ]
+
+
+@pytest.mark.needs_db
+def test_a_child_keeping_a_wildcard_its_parent_reaches_only_under_a_narrower_grant_is_refused(
+    server: Any,
+) -> None:
+    """**The widening the string comparison let through, measured before it was fixed.**
+
+    The parent holds `read:client.*` in Web and `read:client.name` in gold, so it reaches the name
+    column only in Web's gold clients. A child holding `read:client.*` in Web alone matched a
+    parent grant string for string and clause for clause, and reaches the name column in every
+    tier of Web. Until 2026-09-15 the database returned no refusal for it. The Python original is
+    asked the same question, so the two cannot disagree about this case.
+
+    Delete this and the database check admits a delegation that reads rows its parent could not."""
+    parent = reach(
+        "p:one",
+        ("read:client.*", where(department="web")),
+        ("read:client.name", where(tier="gold")),
+    )
+    child = reach("p:one", ("read:client.*", where(department="web")))
+
+    refused = server.execute(
+        "SELECT gate.narrowing_refusals(%s::jsonb, %s::jsonb)", (doc(child), doc(parent))
+    ).fetchone()
+
+    assert refused[0] != []
+    assert [one.split(" ", 1)[0] for one in refused[0]] == ["read:client.name"]
+    assert narrowing_refusals(child, parent) != ()
+
+
+@pytest.mark.needs_db
+def test_a_child_narrowed_to_one_column_of_its_parents_wildcard_is_not_refused(
+    server: Any,
+) -> None:
+    """The positive sibling. A parent holding `read:client.*` in Web and a child holding only
+    `read:client.hours_remaining` in Web is a narrowing, and matching strings refused it, because
+    no parent grant carries that capability's own value.
+
+    Delete this and a check refusing every column narrowed from a wildcard passes the test
+    above."""
+    parent = reach("p:one", ("read:client.*", where(department="web")))
+    child = reach("p:one", ("read:client.hours_remaining", where(department="web")))
+
+    refused = server.execute(
+        "SELECT gate.narrowing_refusals(%s::jsonb, %s::jsonb)", (doc(child), doc(parent))
+    ).fetchone()
+
+    assert refused[0] == []
+    assert narrowing_refusals(child, parent) == ()
+
+
+#: Grants whose capabilities cover one another and whose scopes overlap, so that every way two
+#: sets of grants can relate occurs among the pairs of sets drawn from it.
+POOL: tuple[tuple[str, Scope], ...] = tuple(
+    (capability, scope)
+    for capability in ("read:client.*", "read:client.name", "read:client.hours_remaining")
+    for scope in (Scope(), where(department="web"), where(tier="gold"))
+)
+
+
+@pytest.mark.needs_db
+def test_the_database_refuses_exactly_what_the_python_check_refuses(server: Any) -> None:
+    """**The database copy and the Python original agree on every pair of sets from the pool.**
+
+    Every set of at most two grants drawn from `POOL` is asked about as a child and as a parent,
+    which is 46 sets and 2,116 pairs, and the number of refusals the database gives must equal the
+    number the Python original gives. Counts rather than sentences, because the two phrase a
+    missing capability differently, and a count is what the trigger's decision rests on. Expiry
+    and principal are the same throughout, so every refusal here is about reach.
+
+    Delete this and the two copies of the containment rule can drift apart, and the copy that
+    drifts is the one the trigger runs."""
+    sets = [
+        reach("p:one", *combination)
+        for size in range(3)
+        for combination in itertools.combinations(POOL, size)
+    ]
+    disagreements: list[tuple[str, str, int, int]] = []
+    for child, parent in itertools.product(sets, repeat=2):
+        row = server.execute(
+            "SELECT gate.narrowing_refusals(%s::jsonb, %s::jsonb)", (doc(child), doc(parent))
+        ).fetchone()
+        in_database = len(row[0])
+        in_python = len(narrowing_refusals(child, parent))
+        if in_database != in_python:
+            disagreements.append((doc(child), doc(parent), in_database, in_python))
+
+    assert len(sets) == 46
+    assert disagreements == [], disagreements[:3]
+
+
+@pytest.mark.needs_db
+def test_a_child_that_dropped_a_clause_is_refused_whatever_its_own_expiry(server: Any) -> None:
+    """**Expiry is set aside when containment is asked, on the child's side.**
+
+    The child here expires before its parent, so the time-bound check has nothing to say, and it
+    dropped the parent's department clause, so it reaches rows the parent could not. Asked with
+    the child's expiry left in, `gate.entitlement_scope_for` finds the child reaching nothing at
+    all, and a child that reaches nothing contains no widening. Expiry belongs to the fourth
+    check, and the reach question has to be asked as though the child were live.
+
+    Delete this and any expiring delegation can drop a clause unrefused, which is every
+    delegation cut from a contractor or a break-glass grant."""
+    parent = reach("p:one", ("read:client.name", where(department="web")), not_after=LATER_STILL)
+    child = reach("p:one", ("read:client.name", Scope()), not_after=STILL_TO_COME)
+
+    refused = server.execute(
+        "SELECT gate.narrowing_refusals(%s::jsonb, %s::jsonb)", (doc(child), doc(parent))
+    ).fetchone()
+
+    assert [one.split(" ", 1)[0] for one in refused[0]] == ["read:client.name"]
+    assert len(narrowing_refusals(child, parent)) == 1
+
+
+@pytest.mark.needs_db
+def test_a_child_narrowed_from_an_expiring_parent_is_not_refused(server: Any) -> None:
+    """**Expiry is set aside when containment is asked, on the parent's side.** The positive
+    sibling of the test above.
+
+    The parent expires, the child expires no later and keeps every clause, and it holds one column
+    of the parent's wildcard: a narrowing on every axis. Asked with the parent's expiry left in,
+    the parent reaches nothing, and every capability the child holds is reported as held by no
+    grant of the parent's.
+
+    Delete this and every legitimate delegation from a grant with an end date is refused."""
+    parent = reach("p:one", ("read:client.*", where(department="web")), not_after=LATER_STILL)
+    child = reach("p:one", ("read:client.name", where(department="web")), not_after=STILL_TO_COME)
+
+    refused = server.execute(
+        "SELECT gate.narrowing_refusals(%s::jsonb, %s::jsonb)", (doc(child), doc(parent))
+    ).fetchone()
+
+    assert refused[0] == []
+    assert narrowing_refusals(child, parent) == ()
 
 
 # ------------------------------------------------------------------- what the trigger does
