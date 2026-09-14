@@ -1,0 +1,170 @@
+"""The one place a request the gate accepted is finished with, and what it owes when it is.
+
+A finished request owes more than its answer. Adoption needs to know that somebody asked
+(M37.3.2.4), the metadata ledger needs to know when the request ended so that a lane latency
+objective has a duration to take a percentile of (M30.5.2), and a spend row will want the trace
+it paid for (`docs/needs-rupash.md` item 59). Each of those is written by a different module
+with a different table, and the obvious way to get them is a hook per concern, each added where
+its author happened to be looking: a line in a route for one, a line in a channel adapter for
+the next. **That is the shape this module exists to refuse.** A record written from a route is
+missing for every question that arrives some other way, and it is missing silently, because a
+table that is short by one channel looks exactly like a channel nobody used.
+
+**So there is one completion point and it is inside the lane, not beside it.**
+`brain.gate.answer.answer_lane` is the single function that turns an admitted question into an
+outcome, and it takes the recorders as a required argument and calls `finish` on every way out
+of it: an answer, an abstention for any reason, a cache hit, and a fault. A channel that wants
+to answer a question has to call the lane, and the lane will not run without being told what
+to record. A channel cannot forget the record because it never writes one.
+
+**What a recorder is handed is what the gate already decided, and nothing the request
+supplied.** `Origin` carries the resolved `Principal`, which the directory produced from a
+verified token, the channel `brain.api_routes.channel_for` read off the token's claims, and the
+trace id the middleware vouched for or minted. There is no field for a department, a principal
+kind or a traffic class, because each of those is derived from the principal or the channel,
+and a field for it would be a place for a caller to put a different one. See
+`A_RECORD_OF_WHO_ASKED_IS_BUILT_FROM_WHO_THE_GATE_SAID_WAS_ASKING`.
+
+**The origin has to belong to the reach the question was answered at.** A lane handed one
+person's entitlements and another person's origin would answer as the first and record the
+second, and every figure built from the record would describe a question that person never
+asked. `answer_lane` refuses the pair before it reads anything. See
+`A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO`.
+
+**A recorder decides what its own failure means, and the order is the order given.** A recorder
+that raises fails the request, and the next recorder does not run. That is right for a record
+the request must not complete without, and wrong for a measurement, so a recorder whose record
+is a measurement catches its own failure and says so in the log:
+`brain.ops.question_store.QuestionRecorder` does. Deciding it here, once, for every recorder,
+would make one of those two kinds wrong.
+
+Rejected: recording at the route. It is where the principal, the channel and the trace id are
+all in scope, and it is one caller of the lane among several: the golden corpus and the lane's
+own tests already call it directly, and each chat adapter will. A route-level record is the
+per-adapter hook with one adapter written.
+
+Rejected: recording only on the paths that produce frames. A fault is still a question somebody
+asked, and a record written on success only would make the count depend on whether a source was
+reachable, which a department head would read as their people asking less on the day the
+connector was down.
+
+Rejected, for now: writing the whole-request duration onto the metadata ledger from here. It
+belongs here, and it is not small: nothing on any request path builds a
+`brain.ops.telemetry.RequestTelemetry`, and no migration creates the ledger's table, so the
+duration would be one field of a row nobody writes into a table that does not exist. The lane
+also reads no clock, so the completion instant has to arrive from the caller, which is the same
+seam `now` already is. When the ledger is built its recorder attaches to `finish` beside the
+question recorder and needs no second hook.
+
+Task ids: M37.3.2.4
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from typing import TYPE_CHECKING, Final, Protocol
+
+from brain.audit.ledger import TRACE_ID
+from brain.core.principal import Principal
+from brain.gate.context import Channel
+
+if TYPE_CHECKING:
+    # Typing only: `brain.gate.answer` imports this module to call `finish`, so importing the
+    # outcome type at run time would be a cycle, and the annotation is all that needs it.
+    from brain.gate.answer import Answered
+
+#: Why a finished request carries a principal rather than the facts about one.
+A_RECORD_OF_WHO_ASKED_IS_BUILT_FROM_WHO_THE_GATE_SAID_WAS_ASKING: Final = (
+    "A department, a principal kind and a traffic class are all things a request could "
+    "claim, in a header, a body field or a token claim, and every one of them is already "
+    "decided by the gate: the directory resolved the principal from a verified token, and "
+    "the channel was read from the token rather than from anything the caller set. So a "
+    "finished request carries that principal and that channel, and whatever a recorder "
+    "needs is derived from them. A field for the department would be a place to put a "
+    "different one."
+)
+
+#: Why the origin and the reach have to name the same person.
+A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO: Final = (
+    "The answer is computed at one person's entitlements and the record says who asked. If "
+    "the two could name different people, a question would be answered as one person and "
+    "counted as another, and no figure built from the records could be traced back to what "
+    "anybody actually did. The pair is refused before anything is read."
+)
+
+_TRACE_ID_RE: Final = re.compile(TRACE_ID)
+
+
+class FinishError(ValueError):
+    """Raised when a finished request is described in a way no record should be built from."""
+
+
+@dataclass(frozen=True)
+class Origin:
+    """Who asked, from where, under which trace, as the gate established each of them.
+
+    The trace id is held to `brain.audit.ledger.TRACE_ID`, imported rather than restated, so a
+    record written under it can be joined to the audit entries and the ledger row for the same
+    request. `fullmatch` for the reason `brain.ops.telemetry.Ingress` gives: the pattern ends
+    in `$`, which `match` would let a trailing newline through.
+    """
+
+    trace_id: str
+    principal: Principal
+    channel: Channel
+
+    def __post_init__(self) -> None:
+        if not _TRACE_ID_RE.fullmatch(self.trace_id):
+            msg = (
+                f"trace id {self.trace_id!r} is not one the audit ledger accepts, so nothing "
+                "recorded under it could be joined to the rest of the request"
+            )
+            raise FinishError(msg)
+
+
+@dataclass(frozen=True)
+class Finished:
+    """One admitted request the lane has finished with, however it finished.
+
+    `outcome` is None when the lane raised, which is how a recorder tells a fault from an
+    answer without being handed the exception. A recorder that has no business knowing how a
+    request ended, such as the question count, simply does not read it.
+    """
+
+    origin: Origin
+    #: The instant the request was judged at, which the lane is given and never reads itself.
+    at: datetime
+    outcome: Answered | None
+
+    def __post_init__(self) -> None:
+        if self.at.tzinfo is None:
+            msg = "a naive instant files a finished request in the wrong window"
+            raise FinishError(msg)
+
+
+class RequestRecorder(Protocol):
+    """Something a finished request owes a record to."""
+
+    async def finished(self, request: Finished) -> None: ...
+
+
+def attributable(origin: Origin, principal_id: str) -> None:
+    """Refuse an origin that names somebody other than the reach it will be answered at.
+
+    See `A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO`.
+    """
+    if origin.principal.id != principal_id:
+        msg = (
+            f"a question answered at {principal_id}'s reach cannot be recorded as asked by "
+            f"{origin.principal.id}. {A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO}"
+        )
+        raise FinishError(msg)
+
+
+async def finish(recorders: Sequence[RequestRecorder], request: Finished) -> None:
+    """Hand one finished request to every recorder, once each, in the order given."""
+    for recorder in recorders:
+        await recorder.finished(request)

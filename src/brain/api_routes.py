@@ -132,6 +132,7 @@ from brain.gate.answer import answer_lane, frames_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.context import Channel
 from brain.gate.fast_lane import RowReader
+from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import VerifiedClaims
@@ -750,10 +751,24 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
 
     rules = getattr(request.app.state, "fast_path_rules", ())
     sink = getattr(request.app.state, "trace_sink", None) or CountingTraceSink()
+    # What a finished request owes, installed by `brain.app.lifespan` through
+    # `request_recorders_for`. Empty on a process with no database, which has nowhere to hold
+    # a record and nowhere a report could read one from.
+    recorders: tuple[RequestRecorder, ...] = getattr(request.app.state, "request_recorders", ())
+    # The id the trace middleware vouched for or minted, bound before identification ran. Read
+    # from the log context rather than from the header, because the header is what the caller
+    # proposed and the bound value is what this system decided.
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    # Built from what `asking` resolved and nothing the request carried: the principal came
+    # from the directory and the channel from the token's claims. `Origin` refuses an id the
+    # audit ledger would not accept, which is a process fault identical for every caller.
+    origin = Origin(trace_id=trace_id, principal=asked.caller.principal, channel=asked.channel)
 
     try:
         answered = await answer_lane(
             ask.question,
+            origin=origin,
+            recorders=recorders,
             rules=rules,
             readers=row_readers(registry),
             entitlement=asked.reach,

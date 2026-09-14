@@ -35,6 +35,7 @@ import pytest
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import Classification
+from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.redaction import ChannelPayload, LockedField, RedactionTrace
 from brain.core.scope import Scope
 from brain.gate import answer as answer_module
@@ -48,7 +49,9 @@ from brain.gate.abstain import (
 from brain.gate.answer import Answered, answer_lane, frames_of, served_from
 from brain.gate.answer_cache import AGE_MARKER
 from brain.gate.cache_key import CachedAnswer
+from brain.gate.context import Channel
 from brain.gate.fast_lane import FastLaneAnswer, FastPathRule, RowReader
+from brain.gate.finish import Origin
 from brain.gate.streaming import Event, Progress, frames, step_label
 from brain.knowledge.columns import ColumnRule, TableClassification
 from brain.knowledge.rows import RowQuery, RowTool
@@ -142,12 +145,26 @@ def run(
     convention: there is no `pytest-asyncio` here.
     """
     source = rows if rows is not None else Rows(ACME)
+    reach = entitlement if entitlement is not None else ents(*SEES_HOURS)
     return asyncio.run(
         answer_lane(
             question,
+            # Whoever the reach belongs to, because the lane refuses anything else. What is
+            # recorded is `tests/unit/test_request_finish.py`'s subject, not this file's.
+            origin=Origin(
+                trace_id="t-answer-lane",
+                principal=Principal(
+                    id=reach.principal_id,
+                    kind=PrincipalKind.HUMAN,
+                    employment=Employment.STAFF,
+                    display_name="Lane asker",
+                ),
+                channel=Channel.CONSOLE,
+            ),
+            recorders=(),
             rules=rules,
             readers=readers_for(source) if readers is None else readers,
-            entitlement=entitlement if entitlement is not None else ents(*SEES_HOURS),
+            entitlement=reach,
             policies=policies if policies is not None else {"client": CLIENTS.policy()},
             reachable_sources=sources,
             sink=sink if sink is not None else Sink(),

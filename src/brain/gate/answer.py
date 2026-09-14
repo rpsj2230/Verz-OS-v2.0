@@ -89,6 +89,7 @@ from brain.gate.answer_cache import serve_cached
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
 from brain.gate.fast_lane import FastLaneAnswer, FastPathRule, RowReader, respond
+from brain.gate.finish import Finished, Origin, RequestRecorder, attributable, finish
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 
 log = structlog.get_logger(__name__)
@@ -172,6 +173,53 @@ def served_from(answer: FastLaneAnswer, payload: ChannelPayload) -> str:
 
 
 async def answer_lane(
+    question: str,
+    *,
+    origin: Origin,
+    recorders: Sequence[RequestRecorder],
+    rules: Sequence[FastPathRule],
+    readers: Mapping[tuple[str, str], RowReader],
+    entitlement: EntitlementSet,
+    policies: Mapping[str, FieldPolicy],
+    reachable_sources: Iterable[str],
+    sink: TraceSink,
+    now: datetime,
+    cached: CachedAnswer | None = None,
+) -> Answered:
+    """Answer one question, and finish the request once whatever the answer was.
+
+    **This is the single place a question ends**, which is why the recorders are a required
+    argument rather than something a caller adds after it returns. See `brain.gate.finish`
+    for why the completion point is here and not in a route or a channel adapter.
+
+    The origin is checked against the reach before anything is read, so a question cannot be
+    answered as one person and recorded as another. See
+    `brain.gate.finish.A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO`.
+
+    `finish` runs in a `finally`, so an answer, every kind of abstention, a cache hit and a
+    fault all reach the recorders exactly once. The recorders are told which of those it was
+    through `Finished.outcome`, and a recorder with no business knowing does not look.
+    """
+    attributable(origin, entitlement.principal_id)
+    outcome: Answered | None = None
+    try:
+        outcome = await _outcome(
+            question,
+            rules=rules,
+            readers=readers,
+            entitlement=entitlement,
+            policies=policies,
+            reachable_sources=reachable_sources,
+            sink=sink,
+            now=now,
+            cached=cached,
+        )
+        return outcome
+    finally:
+        await finish(recorders, Finished(origin=origin, at=now, outcome=outcome))
+
+
+async def _outcome(
     question: str,
     *,
     rules: Sequence[FastPathRule],

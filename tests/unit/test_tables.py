@@ -91,6 +91,7 @@ MIGRATION_BUDGET = VERSIONS / "0031_budget.py"
 MIGRATION_PLUGIN = VERSIONS / "0032_plugin_registry.py"
 MIGRATION_SPEND = VERSIONS / "0034_spend_ledger.py"
 MIGRATION_SPEND_REPORT = VERSIONS / "0035_materialised_spend_report.py"
+MIGRATION_QUESTIONS = VERSIONS / "0038_question_asked.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -212,6 +213,9 @@ SPEND_TABLES: tuple[str, ...] = ("ops.spend_actual",)
 #: And the one 0035 adds beside its materialised view: when that view was last rebuilt.
 SPEND_REPORT_TABLES: tuple[str, ...] = ("ops.report_refresh",)
 
+#: And the one 0038 adds: who asked a question, one row per trace.
+QUESTION_TABLES: tuple[str, ...] = ("ops.question_asked",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -232,6 +236,7 @@ ALL_TABLES = (
     + PLUGIN_TABLES
     + SPEND_TABLES
     + SPEND_REPORT_TABLES
+    + QUESTION_TABLES
 )
 
 
@@ -929,6 +934,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     plugin = migration_module(MIGRATION_PLUGIN)
     spend = migration_module(MIGRATION_SPEND)
     spend_report = migration_module(MIGRATION_SPEND_REPORT)
+    questions = migration_module(MIGRATION_QUESTIONS)
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -948,6 +954,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert plugin.TABLES == PLUGIN_TABLES
     assert spend.TABLES == SPEND_TABLES
     assert spend_report.TABLES == SPEND_REPORT_TABLES
+    assert questions.TABLES == QUESTION_TABLES
     # The package tuple is the migrations end to end. Stated as an equality rather than as a
     # set comparison, because the order is what a downgrade depends on.
     end_to_end = (
@@ -970,6 +977,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(plugin.TABLES)
         + tuple(spend.TABLES)
         + tuple(spend_report.TABLES)
+        + tuple(questions.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -994,6 +1002,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(plugin.TABLES),
         set(spend.TABLES),
         set(spend_report.TABLES),
+        set(questions.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

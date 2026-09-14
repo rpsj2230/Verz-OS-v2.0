@@ -74,13 +74,42 @@ department gets a line, zero included, so whether a line appears is a fact about
 reach and never about what the excluded rows held. See
 `AN_ADOPTION_LINE_IS_BUILT_FROM_PEOPLE_AND_THE_READERS_OWN_REACH_ONLY`.
 
-**Nothing records an `Asked` yet, and M37.3.2.4 is not claimable for that reason.** The gate
-is not assembled end to end (`brain.ops.lane_share` records the same absence), and neither
-ledger that exists carries what a question count needs. `brain.ops.spend.Actual` has the
-principal's kind, the traffic class and the department and no trace id, so a delegated question
-counts once per hop; `brain.ops.telemetry.RequestTelemetry` has the trace id and no department
-and no principal kind. Building the measure over `Actual` was rejected for exactly that: it
-would ship a figure that treats agent hops as people. Evaluation traffic is the other open half.
+**A question is recorded where the answer lane finishes, and nowhere else.**
+`brain.gate.answer.answer_lane` calls `brain.gate.finish.finish` on every way out of it, and
+`brain.ops.question_store.QuestionRecorder` turns that into one `Asked` through
+`question_of`, keyed on the trace so a hop is not a second row. Neither ledger that already
+existed could have been the source. `brain.ops.spend.Actual` has the principal's kind, the
+traffic class and the department and no trace id, so a delegated question would count once per
+hop; `brain.ops.telemetry.RequestTelemetry` has the trace id and no department and no principal
+kind, and nothing writes it. Building the measure over `Actual` was rejected for exactly that:
+it would ship a figure that treats agent hops as people.
+
+**A refused request is not a question, and a refused record is.** A request the gate turns away
+before the lane runs, because nobody could be identified, the channel and the sign-in admit
+nothing, or the body was not a question, never reaches `finish`, and nobody the directory knows
+asked anything this system accepted. Everything that reaches the lane is recorded identically,
+whether it was answered, declined because nothing matched, declined because the record was
+withheld, served from the cache, or failed, and the record has no field saying which. See
+`A_REFUSED_REQUEST_IS_NOT_A_QUESTION_AND_A_REFUSED_RECORD_IS_ONE`.
+
+**The department is the directory's, read off the resolved principal.** Nothing a request
+carries can set it: not a header, not a body field, not a token claim. A principal the directory
+gives no department is counted under none rather than under a guess, and is written to the log
+by trace id. See `A_PERSON_WITH_NO_DEPARTMENT_IS_COUNTED_UNDER_NONE_RATHER_THAN_A_GUESS`.
+
+**Rejected: a record richer than adoption needs.** The trace ledger is the record of what a
+request did, so this one holds six fields and repeats as little of it as it can. It holds the
+trace id, which is the join to everything else; the principal id, which the people figure
+counts and which the ledger's `principal` would give if anything wrote the ledger; and the
+principal's kind, the channel, the department and the instant, none of which the ledger has.
+It does not hold the status, the abstention reason, the lane, whether the cache answered, the
+entitlement hash, the policy epoch, an agent, a model, a cost, a traffic class or a machine
+flag. The first two would be a per-department count of refused questions, which is the hidden
+count with a label; the next five are the ledger's and would drift from it; a cost is spend's;
+and the last two are derived from the kind and the channel, so storing them would freeze a
+lookup that is meant to be live. See `brain.tables.adoption`.
+
+Evaluation traffic is the one open half.
 Nothing in `src` asks a golden question yet (`brain.ops.evaluation` says why), so nothing marks
 one either, and when a harness does it is excluded here only by recording its persona as a
 `PrincipalKind.SERVICE`. See `AN_EVALUATION_RUN_IS_EXCLUDED_ONLY_BY_ASKING_AS_A_SERVICE`.
@@ -99,6 +128,7 @@ from typing import Final, assert_never
 
 from brain.core.principal import PrincipalKind
 from brain.gate.context import Channel, traffic_class_for
+from brain.gate.finish import Finished
 from brain.install import value_of
 from brain.locale import MESSAGES, PLACEHOLDER
 from brain.ops.limits import is_automated
@@ -806,6 +836,52 @@ AN_EVALUATION_RUN_IS_EXCLUDED_ONLY_BY_ASKING_AS_A_SERVICE: Final = (
     "other machine, and one that records them as people is counted, which is a defect in the "
     "harness and not something this module could detect."
 )
+
+
+#: Which requests are questions, and why a refusal the lane made is still one.
+A_REFUSED_REQUEST_IS_NOT_A_QUESTION_AND_A_REFUSED_RECORD_IS_ONE: Final = (
+    "A request the gate turns away before the answer lane runs, unidentified, not admitted "
+    "or not a question at all, is nobody this system knows asking anything it accepted, so "
+    "it is not recorded. Everything that reaches the lane is recorded the same way whatever "
+    "happened there, including a record the asker was refused, a record that does not "
+    "exist and a fault. The two must leave the same trace: a figure that counted one and not "
+    "the other would be a count of what people were refused, per department."
+)
+
+#: Why a principal with no department is not given one.
+A_PERSON_WITH_NO_DEPARTMENT_IS_COUNTED_UNDER_NONE_RATHER_THAN_A_GUESS: Final = (
+    "The department is the directory's answer about the person, read off the resolved "
+    "principal. Where the directory has none, any department written here would be a guess, "
+    "and a guess lands a question in a department whose head then reads it as their own "
+    "people's. Counted nowhere is the smaller error, and the log names the trace so the gap "
+    "in the directory can be found."
+)
+
+
+def question_of(finished: Finished) -> Asked | None:
+    """The question a finished request was, or None when the asker has no department.
+
+    Everything comes from the gate's own decisions: the principal's id, kind and department
+    from the resolved principal, the channel from `Origin`, the instant from the lane. The
+    outcome is not read, which is
+    `A_REFUSED_REQUEST_IS_NOT_A_QUESTION_AND_A_REFUSED_RECORD_IS_ONE` as a signature: there
+    is no branch here that could treat a refusal differently from an absence.
+
+    A blank department is the same absence as a missing one. See
+    `A_PERSON_WITH_NO_DEPARTMENT_IS_COUNTED_UNDER_NONE_RATHER_THAN_A_GUESS`.
+    """
+    principal = finished.origin.principal
+    department = principal.primary_department
+    if department is None or not department.strip():
+        return None
+    return Asked(
+        trace_id=finished.origin.trace_id,
+        principal_id=principal.id,
+        principal_kind=principal.kind,
+        channel=finished.origin.channel,
+        department=department,
+        at=finished.at,
+    )
 
 
 def channel_for_trigger(trigger: TriggerKind) -> Channel:

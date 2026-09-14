@@ -29,6 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import AliasChoices, BaseModel, BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import router as agent_router
 from brain.api import ErrorBody, TimeoutMiddleware
@@ -39,6 +40,7 @@ from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
 from brain.firstrun import Enrolment, derived_enrolment, sealed_setup_secret
+from brain.gate.finish import RequestRecorder
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.identity.bearer import log_refusal, refusal_headers
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
@@ -46,6 +48,7 @@ from brain.install import installed_name
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.leases import SealedSecret
+from brain.ops.question_store import QuestionRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.wiring import DEFAULT_PROFILE
 from brain.routing_routes import router as routing_router
@@ -305,6 +308,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # `trace_sink.THE_LOG_IS_NOT_A_TRACE_STORE`. It is installed unconditionally, unlike the
     # rules, because a lane with no sink cannot compose at all.
     app.state.trace_sink = CountingTraceSink()
+    app.state.request_recorders = request_recorders_for(app.state.db_sessions)
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
@@ -330,6 +334,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # requests finish against a live pool rather than a disposed one.
         log.info("shutting down")
         await dispose(getattr(app.state, "db_engine", None))
+
+
+def request_recorders_for(
+    sessions: async_sessionmaker[AsyncSession] | None,
+) -> tuple[RequestRecorder, ...]:
+    """What a finished request is recorded to on this process. See `brain.gate.finish`.
+
+    The question recorder when there is a database, and nothing when there is not. A process
+    with no database has nowhere to keep a record and nowhere an adoption report could read
+    one back from, so an in-memory recorder there would be a count that vanishes on restart
+    and that no reader can reach. A function rather than two lines in `lifespan`, so which
+    recorders a wired process installs is a claim a test can hold.
+    """
+    if sessions is None:
+        return ()
+    return (QuestionRecorder(sessions),)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

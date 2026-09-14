@@ -46,6 +46,7 @@ from __future__ import annotations
 # how it is searched, so importing the package has to be what registers it. Without this
 # line the table is absent from `Base.metadata` and autogenerate proposes dropping it.
 from brain.knowledge import search as _search  # noqa: F401
+from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.budget import BudgetVersionRow
@@ -180,6 +181,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "ops.spend_actual",
     # 0035_materialised_spend_report. Names a view, which is not a table and has no row here.
     "ops.report_refresh",
+    # 0038_question_asked. Points at nothing: a principal and a department are values, so a
+    # recorded question outlives both. Keyed on the trace, so a hop is not a second row.
+    "ops.question_asked",
 )
 
 __all__ = [
@@ -215,6 +219,7 @@ __all__ = [
     "PrincipalIdentityRow",
     "PrincipalRow",
     "ProjectedRecordRow",
+    "QuestionAskedRow",
     "ReportRefreshRow",
     "RoutingRungRow",
     "RoutingTierRow",

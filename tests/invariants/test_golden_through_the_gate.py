@@ -58,9 +58,12 @@ import pytest
 
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.field_policy import Classification, FieldPolicy
+from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.redaction import ChannelPayload, RedactionTrace
 from brain.gate.answer import Answered, answer_lane
+from brain.gate.context import Channel
 from brain.gate.fast_lane import FastPathRule, RowReader
+from brain.gate.finish import Origin
 from brain.gate.streaming import Event, frames
 from brain.knowledge.columns import ColumnRule, TableClassification
 from brain.knowledge.rows import RowQuery, RowTool
@@ -159,6 +162,24 @@ class Sink:
         return None
 
 
+def origin_of(entitlement: EntitlementSet) -> Origin:
+    """The origin the lane requires, naming whoever the reach belongs to.
+
+    What gets recorded is not scored here; the lane refuses an origin naming anybody else,
+    and this corpus is about what a person is told.
+    """
+    return Origin(
+        trace_id="t-golden",
+        principal=Principal(
+            id=entitlement.principal_id,
+            kind=PrincipalKind.HUMAN,
+            employment=Employment.STAFF,
+            display_name="Golden asker",
+        ),
+        channel=Channel.CONSOLE,
+    )
+
+
 def ask(question: str, entitlement: EntitlementSet) -> Answered:
     """One golden question, through the whole lane, as one person.
 
@@ -169,6 +190,8 @@ def ask(question: str, entitlement: EntitlementSet) -> Answered:
     return asyncio.run(
         answer_lane(
             question,
+            origin=origin_of(entitlement),
+            recorders=(),
             rules=rules,
             readers=readers,
             entitlement=entitlement,
@@ -573,6 +596,8 @@ def test_the_lane_reaches_a_row_source_for_a_caller_who_holds_the_record_grant()
     asyncio.run(
         answer_lane(
             "what is the registered name of SNM",
+            origin=origin_of(holder),
+            recorders=(),
             rules=rules,
             readers={(SOURCE, "client"): tool.reader(consulted)},
             entitlement=holder,
