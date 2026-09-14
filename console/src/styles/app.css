@@ -582,6 +582,103 @@ code {
   font-weight: 600;
 }
 
+/*
+ * The procedure canvas: the drawing, then the controls that change it. Every control is a
+ * native element carrying the form classes above, so nothing here is a new appearance for a
+ * button or a select, and there is no rule that varies a step by its kind, for the reason the
+ * canvas paragraph at the top of this section gives.
+ */
+.procedure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.procedure__caption {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.procedure__palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.procedure__bound {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.procedure__steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.procedure-step__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.procedure-step__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-1);
+  font-weight: 600;
+}
+
+.procedure-step__field,
+.procedure-step__clause,
+.procedure-step__clauses {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.procedure__skill {
+  margin: 0;
+}
+
+.procedure__skill-caption {
+  margin-bottom: var(--space-1);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+.procedure__skill-text {
+  margin: 0;
+  padding: var(--space-3);
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  white-space: pre-wrap;
+}
+
+/* The builder's form: one generated form per section, stacked in the order the API sent. */
+.manifest-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.manifest-form__caption {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
 /* ------------------------------------------------------------------ notices */
 
 .centred-panel {

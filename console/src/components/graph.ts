@@ -47,7 +47,21 @@
  * fixed it was a route declaring the grammar and a test reading the declaration out of the
  * Python source. Until an endpoint returns a graph, the names below are still a guess.
  *
- * Task ids: M32.5.2.3
+ * **A trace graph is drawn for a run that has ended, and for nothing else** (M20.2.1).
+ * `readCompletedRun` is the reader a trace screen calls, and it refuses a body that names no
+ * ending in `RUN_ENDINGS`. The architecture says it in one phrase, a read-only trace graph of
+ * what actually happened on a completed run, and the rule underneath it is this module's own. A
+ * run still going has steps that have not all been judged against the reader, so a live graph
+ * can show a step at one look and withhold it at the next, which is
+ * `AN_EDGE_TO_A_MISSING_NODE_IS_A_MISSING_NODE` with a clock in it. **Rejected: drawing a live
+ * run with its unfinished steps dimmed.** A dimmed step is the placeholder node this module
+ * refuses, and a view that refreshes is a sequence of graphs somebody can subtract.
+ *
+ * **The same layout draws a procedure somebody is authoring**, which is why an edge may carry a
+ * label. `procedure.ts` builds that graph from the author's own drawing, and nothing the API
+ * sends for a trace can set one.
+ *
+ * Task ids: M32.5.2.3, M20.2.1, M20.2.2
  */
 
 /**
@@ -87,10 +101,18 @@ export interface GraphNode {
   readonly kind: string;
 }
 
-/** One edge. Two node ids, and there is nothing else an edge in this console carries. */
+/**
+ * One edge. Two node ids, and on a procedure canvas which way out of a branch it is.
+ *
+ * **`readGraph` never sets `label`.** A trace edge is two ids and nothing else, so a label the
+ * API sent has nowhere to land, and a label is exactly where a reason would arrive on a line
+ * between two steps. `procedure.ts` sets one on each of a branch's two arrows, which are the
+ * author's own and say "holds" or "otherwise".
+ */
 export interface GraphEdge {
   readonly from: string;
   readonly to: string;
+  readonly label?: string;
 }
 
 /** A whole graph as this console holds it. Two lists, deliberately: see the module note. */
@@ -171,6 +193,76 @@ export function readGraph(payload: unknown): Graph {
   }
 
   return { nodes, edges };
+}
+
+/**
+ * How a run ends, in the API's own words: `brain.ops.telemetry.RequestStatus`.
+ *
+ * A copy, and `tests/trace-graph.test.tsx` holds it against the enum. It is the right vocabulary
+ * for two reasons. Every member is a way a request ended and none means "still going", so a body
+ * carrying one of these has ended and a body carrying none has not. And it gives DENIED and
+ * ABSENT a single member, so an ending is something this console may be told about any run it
+ * was sent, without the ending itself separating a refusal from an absence.
+ */
+export const RUN_ENDINGS: readonly string[] = [
+  "answered",
+  "nothing_returned",
+  "unresolved",
+  "degraded",
+  "failed",
+];
+
+/**
+ * Written down because a live view of a run is the feature somebody will ask for next, and it is
+ * the placeholder this module forbids, delivered one refresh at a time.
+ */
+export const A_TRACE_IS_DRAWN_WHEN_THE_RUN_HAS_ENDED =
+  "A trace graph draws a run that has ended and never one still going. While a run is going, " +
+  "its steps have not all been judged against the person reading the trace, so a step can be " +
+  "on the graph at one look and withheld at the next, and a step that vanishes between two " +
+  "looks is a placeholder drawn in time rather than in space. Two looks at a graph that is " +
+  "still growing are also two graphs somebody can subtract.";
+
+/** A body for a run that has not ended. Refused, rather than drawn half-finished. */
+export class UnfinishedRun extends UnreadableGraph {}
+
+/** The brand only `readCompletedRun` applies. It has no value at run time. */
+declare const ENDED: unique symbol;
+
+/**
+ * A run that has ended, and what happened on it.
+ *
+ * Branded, so that a component taking one cannot be handed a graph somebody assembled, or the
+ * graph of a run still going: under `npm run typecheck` the only way to hold one in `src` is to
+ * have called `readCompletedRun`.
+ */
+export interface CompletedRun {
+  readonly [ENDED]: true;
+  readonly graph: Graph;
+}
+
+/**
+ * Read the trace of a run that has ended, or refuse.
+ *
+ * The body is read as a graph first, so a malformed body is `UnreadableGraph` like any other.
+ * Then its `status` must be one of `RUN_ENDINGS`, or it is `UnfinishedRun`, which a screen
+ * catching `UnreadableGraph` reports as the failure it is: a route promising a finished run
+ * that sent a live one. See `A_TRACE_IS_DRAWN_WHEN_THE_RUN_HAS_ENDED`.
+ *
+ * The ending is checked and not carried. A canvas has nowhere to put it, and the one reason to
+ * read it at all is to refuse a run that has none. `status` is the name `brain.ops.telemetry`'s
+ * per-request record gives this vocabulary's field, and like every name here it is this
+ * console's proposal until a route sends a trace.
+ */
+export function readCompletedRun(payload: unknown): CompletedRun {
+  const graph = readGraph(payload);
+  const ending = (payload as { status?: unknown }).status;
+  if (typeof ending !== "string" || !RUN_ENDINGS.includes(ending)) {
+    throw new UnfinishedRun("A trace graph draws a run that has ended, and this body names no ending.");
+  }
+  // A cast rather than a construction, because the brand is a type with nothing behind it at run
+  // time, and this is the one place allowed to say that a graph belongs to a run that ended.
+  return { graph } as CompletedRun;
 }
 
 /** How far apart two nodes sit. Not theme values: a canvas is a coordinate space. */

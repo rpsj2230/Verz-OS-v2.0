@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    { "id": "start", "kind": "start" },
+    { "id": "step_1", "kind": "tool_call", "tool": "crm.read_client" },
+    {
+      "id": "step_2",
+      "kind": "branch",
+      "predicate": { "clauses": [{ "field": "tier", "op": "eq", "value": "gold" }] }
+    },
+    { "id": "step_3", "kind": "ask", "prompt": "Shall I raise the invoice?" },
+    { "id": "step_4", "kind": "finish" }
+  ],
+  "edges": [
+    { "from": "start", "to": "step_1", "way": "next" },
+    { "from": "step_1", "to": "step_2", "way": "next" },
+    { "from": "step_2", "to": "step_3", "way": "holds" },
+    { "from": "step_2", "to": "step_4", "way": "otherwise" },
+    { "from": "step_3", "to": "step_4", "way": "next" }
+  ]
+}

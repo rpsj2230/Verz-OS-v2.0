@@ -46,17 +46,21 @@ and the canvas ships on its own release schedule; a closed vocabulary refuses ev
 was not told about, which includes the thing nobody thought of.
 
 **Rejected: emitting the SKILL.md here.** M20.2.2 asks for a bounded canvas that outputs one,
-and the output is the half that would be easy to write. It is not claimed, because a document
-emitted from a graph nobody can draw is a serialiser for an absent surface, and the leaf asks
-for both. Edges are absent for the same reason: a node set with no edges is a vocabulary, and
-the connecting is the canvas.
+and the output is the half that would be easy to write. It was not written here while nobody
+could draw a graph, because a document emitted from a graph nobody can draw is a serialiser for
+an absent surface, and the leaf asks for both. It is written now, in `brain.builder.procedure`,
+beside the surface that draws one (`console/src/components/ProcedureCanvas.tsx`), and edges live
+there too: a node set with no edges is a vocabulary, and the connecting is the canvas. This
+module keeps the vocabulary, and that module holds a drawing to it through `assert_drawable`
+before it reads anything else.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock.
 
-**This declares the sections and builds no form.** M20.1.2 is the form generated from the
-manifest JSON Schema through a JavaScript library, M20.1.3 is a co-author that needs a model
-lane nothing in this repository assembles, and M20.1.4 is a draft store. None is claimed and
-none is here.
+**This declares the sections and builds no form.** M20.1.2, the form generated from the
+manifest JSON Schema, is `brain.builder.form`, which cuts that schema into these sections, and
+`console/src/components/ManifestForm.tsx`, which renders it. M20.1.3 is a co-author that needs a
+model lane nothing in this repository assembles, and M20.1.4 is a draft store. Neither is
+claimed and neither is here.
 
 Task ids: M20.1.1, M20.1.5, M20.2.3, M20.2.4
 """

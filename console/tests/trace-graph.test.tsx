@@ -1,5 +1,6 @@
 /**
- * The trace graph: what reaches the canvas, and the two shapes an absent step must not leave.
+ * The trace graph: what reaches the canvas, the two shapes an absent step must not leave, and
+ * the two words M20.2.1 asks it to be, read-only and over completed runs.
  *
  * A step in a run is a record, so the record-level rule applies to it and not the field-level
  * one. `brain.core.redaction` argues the two separately: a field inside a record whose
@@ -18,35 +19,60 @@
  * hole is where the withheld step was and it is readable. So the placement is asserted to be a
  * function of what arrived and of nothing else.
  *
+ * **M20.2.1 was mostly already true and one half of it was not.** Read-only held by
+ * construction when this file was first written, and it was tested for the canvas's flags and
+ * nothing else; the tests under "nothing on it edits anything" prove the rest of the word, that
+ * the trace graph renders no control, reaches no editing module and holds no state that could
+ * make it a feed. "Over completed runs" was not a property of anything: the component drew
+ * whatever graph it was handed, and no body carried a notion of a run ending. `readCompletedRun`
+ * and the `CompletedRun` prop are the code that closes it, and "a run that has ended, and only
+ * that" is its proof.
+ *
  * The canvas is exercised under jsdom, which has no layout: a node's position, its size and
  * whether an edge is drawn between two of them cannot be observed here. What can be observed
  * is which nodes and which text reach the DOM, and that is what these tests read. The
  * placement rules are checked on `layout` directly, where they are arithmetic rather than
  * pixels. See `console/README.md` for what that leaves unverified.
  *
- * Task ids: M32.5.2.3
+ * Task ids: M32.5.2.3, M20.2.1
  */
 
 import { render } from "@testing-library/react";
+import ts from "typescript";
 import { describe, expect, test } from "vitest";
 import { DataTable, type GridColumn } from "../src/components/DataTable";
+import { flowEdges } from "../src/components/GraphCanvas";
 import {
   COLUMN_GAP,
   EMPTY_GRAPH,
   NODE_WIDTH,
   ROW_GAP,
+  RUN_ENDINGS,
+  UnfinishedRun,
   UnreadableGraph,
   layout,
+  readCompletedRun,
   readGraph,
+  type CompletedRun,
   type Graph,
 } from "../src/components/graph";
 import { TraceGraph } from "../src/components/TraceGraph";
 import { customProperties, parseCss, type CssRule } from "./support/css";
-import { backendPublicMessages, backendSpanFields } from "./support/python";
+import {
+  backendPublicMessages,
+  backendRequestStatuses,
+  backendSpanFields,
+} from "./support/python";
 import { readConsoleFile } from "./support/repo";
-import { jsxAttributeUses, parseConsoleSource } from "./support/typescript";
+import {
+  jsxAttributeUses,
+  namedImportsFrom,
+  parseConsoleSource,
+  staticImportGraph,
+} from "./support/typescript";
 
 const CANVAS_MODULE = "src/components/GraphCanvas.tsx";
+const TRACE_MODULE = "src/components/TraceGraph.tsx";
 
 /**
  * A run of five steps as the API computed it, and the three of them one caller may see.
@@ -79,6 +105,17 @@ const WHOLE_RUN = {
   ],
 };
 
+/**
+ * A body for a run that ended, in an ending read out of the API's own vocabulary.
+ *
+ * Read from the enum rather than written here, so a test that draws a run is not also a test
+ * that this file and `graph.ts` agree on a word neither of them owns.
+ */
+function ended(body: object): CompletedRun {
+  const [ending] = backendRequestStatuses();
+  return readCompletedRun({ ...body, status: ending });
+}
+
 function nodeIdsOn(container: HTMLElement): string[] {
   return [...container.querySelectorAll(".react-flow__node")].map(
     (node) => node.getAttribute("data-id") ?? "",
@@ -87,6 +124,19 @@ function nodeIdsOn(container: HTMLElement): string[] {
 
 function tokenRules(): CssRule[] {
   return parseCss(readConsoleFile("src/theme/tokens.css"));
+}
+
+/** Every identifier a module's code uses. Comments are not code, so prose naming one is not. */
+function identifiersIn(path: string): string[] {
+  const found: string[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node)) {
+      found.push(node.text);
+    }
+    node.forEachChild(visit);
+  };
+  parseConsoleSource(path).forEachChild(visit);
+  return found;
 }
 
 describe("reading a graph", () => {
@@ -141,6 +191,24 @@ describe("reading a graph", () => {
     expect(drawn).not.toContain("allowed");
   });
 
+  test("a label the API sends on an edge reaches nothing", () => {
+    // What breaks if this is deleted: a reason drawn on a line. An edge can carry a label now,
+    // because a procedure's branch needs to say which of its two arrows is which, and a label
+    // on a trace edge is exactly where "denied" would arrive between two steps. The reader
+    // copies two ids and nothing else, so the label stops here and the library is never given
+    // one to draw.
+    const graph = readGraph({
+      nodes: WHOLE_RUN.nodes,
+      edges: [
+        { from: "ingress", to: "route", label: "denied" },
+        { from: "route", to: "invoke" },
+      ],
+    });
+
+    expect(graph.edges).toEqual(WHOLE_RUN.edges);
+    expect(flowEdges(graph).map((edge) => edge.label)).toEqual([undefined, undefined]);
+  });
+
   test("a count the API sends reaches nothing", () => {
     // What breaks if this is deleted: "showing 3 steps of 5". The disclosing number does not
     // have to be a count of hidden things: a total the API was entitled to compute, beside a
@@ -176,6 +244,100 @@ describe("reading a graph", () => {
 
     expect(graph.nodes).toEqual([{ id: "route", label: "Route", kind: "" }]);
     expect(graph.nodes).toHaveLength(1);
+  });
+});
+
+describe("a run that has ended, and only that", () => {
+  test("a run that names no ending is refused rather than drawn", () => {
+    // What breaks if this is deleted: "over completed runs" stops being true of anything. A run
+    // still going has steps not yet judged against the reader, so a step can be drawn at one
+    // look and withheld at the next, and a step that vanishes is the placeholder `graph.ts`
+    // forbids, drawn in time instead of space. The words refused are a missing ending, a
+    // vocabulary nobody declared, and a value of the wrong type.
+    expect(() => readCompletedRun(WHOLE_RUN)).toThrow(UnfinishedRun);
+    expect(() => readCompletedRun({ ...WHOLE_RUN, status: "running" })).toThrow(UnfinishedRun);
+    expect(() => readCompletedRun({ ...WHOLE_RUN, status: 1 })).toThrow(UnfinishedRun);
+
+    // And a body that is not a graph at all is still that failure, and not a run in progress.
+    let refusal: unknown = null;
+    try {
+      readCompletedRun(null);
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toBeInstanceOf(UnreadableGraph);
+    expect(refusal).not.toBeInstanceOf(UnfinishedRun);
+  });
+
+  test("a run that ended in any way the API can end one is drawn", () => {
+    // What breaks if this is deleted: the positive sibling, without which a reader refusing
+    // every body passes the test above. The endings come from `brain.ops.telemetry`'s enum, so a
+    // way of ending the API adds is a way this console draws, and the console's copy of the list
+    // is compared with the enum rather than with itself.
+    const endings = backendRequestStatuses();
+    expect([...RUN_ENDINGS].sort()).toEqual([...endings].sort());
+
+    for (const status of endings) {
+      expect(readCompletedRun({ ...WHOLE_RUN, status }).graph).toEqual(readGraph(WHOLE_RUN));
+    }
+  });
+
+  test("no run yet is neither a drawing nor a run with no steps", () => {
+    // What breaks if this is deleted: a screen that has not read anything says "nothing to
+    // show", which is a statement about a run made before there was a run to make it about.
+    const container = render(<TraceGraph caption="A run" run={null} />).container;
+
+    expect(container.querySelector(".react-flow")).toBeNull();
+    expect(container.querySelector(".graph__empty")).toBeNull();
+  });
+});
+
+describe("nothing on it edits anything", () => {
+  test("a drawn run carries no control a person could change anything with", () => {
+    // What breaks if this is deleted: the rest of "read-only". The flags test further down
+    // proves the surface's own nodes cannot be dragged, connected or selected; this proves
+    // nothing else on the trace graph is an input, a button, a select or an editable region,
+    // which is where an "edit this step" affordance would arrive. The node count is the
+    // positive half: a trace graph that drew nothing would also carry no controls.
+    const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
+
+    expect(nodeIdsOn(container)).toEqual(["ingress", "route", "invoke"]);
+    expect(
+      container.querySelectorAll("input, select, textarea, button, [contenteditable]"),
+    ).toHaveLength(0);
+  });
+
+  test("the trace graph reaches no module that edits a drawing", () => {
+    // What breaks if this is deleted: the procedure canvas and the trace graph share a mount,
+    // and the obvious reuse is to render the trace through the canvas that edits. Walking the
+    // static imports proves the trace side reaches the read-only mount and not the editing
+    // model or its controls.
+    const files = staticImportGraph(TRACE_MODULE).files;
+
+    expect(files).toContain(CANVAS_MODULE);
+    expect(files).not.toContain("src/components/procedure.ts");
+    expect(files).not.toContain("src/components/ProcedureCanvas.tsx");
+  });
+
+  test("nothing drawing a trace holds state or schedules anything, so a run cannot become a feed", () => {
+    // What breaks if this is deleted: "not live ones" at the component. A trace graph that kept
+    // state or set a timer could refetch and redraw the run it was handed, and a run redrawn as
+    // it grows is the subtraction and the vanishing step the reader refuses. The three modules
+    // import nothing from React and use no scheduler or network call, which is read from their
+    // code and not their prose, since all three say in comments that they fetch nothing.
+    const schedulers = new Set([
+      "setInterval",
+      "setTimeout",
+      "requestAnimationFrame",
+      "fetch",
+      "EventSource",
+      "WebSocket",
+      "useServerPage",
+    ]);
+    for (const module of [TRACE_MODULE, CANVAS_MODULE, "src/components/graph.ts"]) {
+      expect(namedImportsFrom(parseConsoleSource(module), "react"), module).toEqual([]);
+      expect(identifiersIn(module).filter((name) => schedulers.has(name)), module).toEqual([]);
+    }
   });
 });
 
@@ -261,9 +423,7 @@ describe("what the canvas draws", () => {
     // record, and a record the caller may not see is dropped rather than emptied, because the
     // husk announces that it exists. This asserts on what reaches the DOM rather than on what
     // is visible, so a placeholder hidden by a stylesheet would still fail.
-    const container = render(
-      <TraceGraph caption="A run" graph={readGraph(PARTIAL_RUN)} />,
-    ).container;
+    const container = render(<TraceGraph caption="A run" run={ended(PARTIAL_RUN)} />).container;
 
     expect(nodeIdsOn(container)).toEqual(["ingress", "route", "invoke"]);
     expect(container.innerHTML).not.toContain("identify");
@@ -276,9 +436,7 @@ describe("what the canvas draws", () => {
     // text on the screen came from the canvas rather than from the run. Attributes are not
     // read, because a coordinate space is made of numbers and none of them is about how many
     // steps there were.
-    const container = render(
-      <TraceGraph caption="A run" graph={readGraph(PARTIAL_RUN)} />,
-    ).container;
+    const container = render(<TraceGraph caption="A run" run={ended(PARTIAL_RUN)} />).container;
 
     expect(container.textContent ?? "").not.toMatch(/\d/);
   });
@@ -291,7 +449,7 @@ describe("what the canvas draws", () => {
     // has to be a constant.
     const classesFor = (kind: string): (string | null)[] => {
       const graph: Graph = { nodes: [{ id: "one", label: "One", kind }], edges: [] };
-      const container = render(<TraceGraph caption="A run" graph={graph} />).container;
+      const container = render(<TraceGraph caption="A run" run={ended(graph)} />).container;
       return [...container.querySelectorAll(".graph-node")].map((node) =>
         node.getAttribute("class"),
       );
@@ -326,9 +484,7 @@ describe("what the canvas draws", () => {
     expect(jsxAttributeUses(source, "onNodesChange")).toEqual([]);
     expect(jsxAttributeUses(source, "onEdgesChange")).toEqual([]);
 
-    const container = render(
-      <TraceGraph caption="A run" graph={readGraph(WHOLE_RUN)} />,
-    ).container;
+    const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
     const node = container.querySelector(".react-flow__node") as HTMLElement;
     expect(node.getAttribute("class")).not.toContain("draggable");
     expect(node.getAttribute("class")).not.toContain("selectable");
@@ -340,9 +496,7 @@ describe("what the canvas draws", () => {
     // nothing at all. This is the positive sibling, and it also holds the rule that the API's
     // own words reach the screen unchanged: prettifying a step name here would mean a
     // screenshot and a support conversation quote a word the API never used.
-    const container = render(
-      <TraceGraph caption="A run" graph={readGraph(WHOLE_RUN)} />,
-    ).container;
+    const container = render(<TraceGraph caption="A run" run={ended(WHOLE_RUN)} />).container;
 
     expect(nodeIdsOn(container)).toEqual(["ingress", "route", "invoke"]);
     const labels = [...container.querySelectorAll(".graph-node__label")].map(
@@ -361,7 +515,7 @@ describe("what the canvas draws", () => {
     const grid = render(
       <DataTable caption="Records" columns={columns} rows={[]} rowId={(row) => row.id} />,
     ).container;
-    const canvas = render(<TraceGraph caption="A run" graph={EMPTY_GRAPH} />).container;
+    const canvas = render(<TraceGraph caption="A run" run={ended({ nodes: [] })} />).container;
 
     const sentence = grid.querySelector(".grid__empty")?.textContent;
     expect(sentence).toBeTruthy();
@@ -382,7 +536,7 @@ describe("what the canvas draws", () => {
     const container = render(
       <TraceGraph
         caption="A run"
-        graph={EMPTY_GRAPH}
+        run={null}
         failure={{ status: 404, message: sentence as string, traceId: "trace-abc", outcome: "" }}
       />,
     ).container;
@@ -393,13 +547,14 @@ describe("what the canvas draws", () => {
 
   test("a run still loading is not reported as a run with no steps", () => {
     // What breaks if this is deleted: every canvas flashes the empty sentence before its first
-    // answer arrives. That is a statement about somebody's run made before anybody asked, and
-    // on a slow connection it is the sentence they remember.
-    const container = render(
-      <TraceGraph caption="A run" graph={EMPTY_GRAPH} busy />,
-    ).container;
+    // answer arrives, or while it asks again about a run it already showed. That is a statement
+    // about somebody's run made before anybody answered, and on a slow connection it is the
+    // sentence they remember.
+    for (const run of [null, ended({ nodes: [] })]) {
+      const container = render(<TraceGraph caption="A run" run={run} busy />).container;
 
-    expect(container.querySelector(".graph__empty")).toBeNull();
-    expect(container.querySelector(".graph__busy")).not.toBeNull();
+      expect(container.querySelector(".graph__empty")).toBeNull();
+      expect(container.querySelector(".graph__busy")).not.toBeNull();
+    }
   });
 });

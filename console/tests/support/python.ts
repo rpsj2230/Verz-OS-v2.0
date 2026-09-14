@@ -440,3 +440,161 @@ export function backendOutcomeStatuses(): Record<string, number> {
   }
   return statuses;
 }
+
+const COMPOSE = "src/brain/builder/compose.py";
+const PROCEDURE = "src/brain/builder/procedure.py";
+
+/**
+ * How a request ended, from `brain.ops.telemetry.RequestStatus`.
+ *
+ * The trace graph draws a run that has one of these and refuses a run that has none, so the
+ * console's copy of the list is what decides whether a run counts as ended, and it is checked
+ * against the enum rather than against itself.
+ */
+export function backendRequestStatuses(): string[] {
+  return Object.values(backendEnumMembers("src/brain/ops/telemetry.py", "RequestStatus"));
+}
+
+/** The five kinds a procedure step may be, from `brain.builder.compose.NodeKind`. */
+export function backendNodeKinds(): string[] {
+  return Object.values(backendEnumMembers(COMPOSE, "NodeKind"));
+}
+
+/** Which way out of a step an arrow leaves by, from `brain.builder.procedure.Way`. */
+export function backendWays(): string[] {
+  return Object.values(backendEnumMembers(PROCEDURE, "Way"));
+}
+
+/**
+ * The ways out of each kind, from the mapping `brain.builder.procedure.WAYS` declares.
+ *
+ * Read entry by entry and translated through both enums, so the result is in the values the
+ * wire carries and a member renamed on either side fails here rather than comparing as absent.
+ */
+export function backendWaysOut(): Record<string, string[]> {
+  const block = extractOne(
+    readRepoFile(PROCEDURE),
+    /^WAYS: Final\[.*\] = MappingProxyType\(\n([\s\S]*?)^\)$/m,
+    "WAYS in brain.builder.procedure",
+  );
+  const kinds = backendEnumMembers(COMPOSE, "NodeKind");
+  const ways = backendEnumMembers(PROCEDURE, "Way");
+  const valueOf = (table: Record<string, string>, name: string): string => {
+    const value = table[name];
+    if (value === undefined) {
+      throw new Error(`WAYS names ${name}, which is not a member of its enum; parser is stale.`);
+    }
+    return value;
+  };
+  const out: Record<string, string[]> = {};
+  for (const entry of block.matchAll(/NodeKind\.([A-Z_]+): \(([^)]*)\),/g)) {
+    out[valueOf(kinds, entry[1] ?? "")] = [...(entry[2] ?? "").matchAll(/Way\.([A-Z_]+)/g)].map(
+      (way) => valueOf(ways, way[1] ?? ""),
+    );
+  }
+  if (Object.keys(out).length === 0) {
+    throw new Error("Parsed no ways out from brain.builder.procedure; the parser is stale.");
+  }
+  return out;
+}
+
+/** The tests a scope clause may make, member name to value, from `brain.core.scope.Op`. */
+export function backendClauseOps(): Record<string, string> {
+  return backendEnumMembers("src/brain/core/scope.py", "Op");
+}
+
+/**
+ * The most steps a procedure may hold, which is the gate's bound on a plan.
+ *
+ * Two reads, because the claim is two facts: `brain.builder.procedure.MAX_STEPS` is written as
+ * `MAX_PLAN_TOOLS` and not as a number of its own, and `brain.gate.caches.MAX_PLAN_TOOLS` is the
+ * number. A procedure bound that stopped following the gate's fails the first read.
+ */
+export function backendMaxSteps(): number {
+  extractOne(
+    readRepoFile(PROCEDURE),
+    /^MAX_STEPS: Final = (MAX_PLAN_TOOLS)$/m,
+    "MAX_STEPS in brain.builder.procedure, written as the gate's plan bound",
+  );
+  return Number(
+    extractOne(
+      readRepoFile("src/brain/gate/caches.py"),
+      /^MAX_PLAN_TOOLS: Final = (\d+)$/m,
+      "MAX_PLAN_TOOLS in brain.gate.caches",
+    ),
+  );
+}
+
+/** The keys a drawing, a node and an edge may carry, from `brain.builder.procedure`. */
+export function backendDrawingKeys(): { drawing: string[]; nodes: string[]; edges: string[] } {
+  const source = readRepoFile(PROCEDURE);
+  const keys = (name: string): string[] => {
+    const listed = extractOne(
+      source,
+      new RegExp(`^${name}: Final\\[frozenset\\[str\\]\\] = frozenset\\(\\{([^}]*)\\}\\)$`, "m"),
+      `${name} in brain.builder.procedure`,
+    );
+    const found = [...listed.matchAll(/"([^"]+)"/g)].map((entry) => entry[1] ?? "");
+    if (found.length === 0) {
+      throw new Error(`Parsed no keys from ${name}; the parser is stale.`);
+    }
+    return found.sort();
+  };
+  return { drawing: keys("DRAWING_KEYS"), nodes: keys("NODE_KEYS"), edges: keys("EDGE_KEYS") };
+}
+
+/**
+ * The grammar a step id must match, from the pattern `brain.builder.procedure.STEP_ID_RE`
+ * compiles, which is `brain.core.envelope.OBJECT_NAME_PATTERN`.
+ */
+export function backendStepIdPattern(): string {
+  extractOne(
+    readRepoFile(PROCEDURE),
+    /^STEP_ID_RE: Final = re\.compile\((OBJECT_NAME_PATTERN)\)$/m,
+    "STEP_ID_RE in brain.builder.procedure",
+  );
+  return extractOne(
+    readRepoFile("src/brain/core/envelope.py"),
+    /^OBJECT_NAME_PATTERN = r"([^"]*)"$/m,
+    "OBJECT_NAME_PATTERN in brain.core.envelope",
+  );
+}
+
+/** The builder's seven sections, in order, from `brain.builder.compose.Section`. */
+export function backendSections(): string[] {
+  return Object.values(backendEnumMembers(COMPOSE, "Section"));
+}
+
+/** The version of the builder form document, from `brain.builder.form.FORM_SCHEMA`. */
+export function backendFormVersion(): string {
+  return extractOne(
+    readRepoFile("src/brain/builder/form.py"),
+    /^FORM_SCHEMA: Final = "([^"]*)"$/m,
+    "FORM_SCHEMA in brain.builder.form",
+  );
+}
+
+/** Every path a manifest document has, from `brain.agents.template.MANIFEST_PATHS`. */
+export function backendManifestPaths(): string[] {
+  const block = extractOne(
+    readRepoFile("src/brain/agents/template.py"),
+    /^MANIFEST_PATHS: Final\[tuple\[str, \.\.\.\]\] = \(\n([\s\S]*?)^\)$/m,
+    "MANIFEST_PATHS in brain.agents.template",
+  );
+  const paths = [...block.matchAll(/"([^"]+)"/g)].map((entry) => entry[1] ?? "");
+  if (paths.length === 0) {
+    throw new Error("Parsed no manifest paths; the parser is stale.");
+  }
+  return paths;
+}
+
+/** The longest name an agent may carry, from `brain.agents.model.DISPLAY_NAME_CHARS`. */
+export function backendDisplayNameChars(): number {
+  return Number(
+    extractOne(
+      readRepoFile("src/brain/agents/model.py"),
+      /^DISPLAY_NAME_CHARS: Final = (\d+)$/m,
+      "DISPLAY_NAME_CHARS in brain.agents.model",
+    ),
+  );
+}

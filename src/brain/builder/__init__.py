@@ -19,8 +19,11 @@ reason to be trusted with it. Every function here is handed a reach and filters 
 `brain.console.workspace.intersections_in` is run over both modules by their own diagnostics
 so that the absence is checked rather than remembered.
 
-**And no rendering.** There is no form, no canvas and no screen behind anything declared
-here, exactly as there is none behind `brain.console.screens`. What is built is the domain
-layer: the sectioning of the manifest, the grammar a procedure may be drawn in, whose reach a
-rehearsal runs at, and what a publish gate may refuse and how it must word the refusal.
+**And no rendering.** Nothing in this package draws a form, a canvas or a screen, exactly as
+nothing behind `brain.console.screens` does. What is built here is the domain layer: the
+sectioning of the manifest and the form schema cut from it, the grammar a procedure may be
+drawn in and the bounded drawing and SKILL.md that come from it, whose reach a rehearsal runs
+at, and what a publish gate may refuse and how it must word the refusal. The rendering is the
+console's (`ManifestForm.tsx`, `ProcedureCanvas.tsx`, `TraceGraph.tsx`), and no route joins the
+two halves yet.
 """

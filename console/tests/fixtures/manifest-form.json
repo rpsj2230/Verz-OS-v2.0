@@ -1,0 +1,2344 @@
+{
+  "schema": "brain.builder.form.v1",
+  "sections": [
+    {
+      "section": "identity",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "object",
+            "title": "ManifestIdentity",
+            "additionalProperties": false,
+            "properties": {
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              },
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "display_name",
+              "published_by",
+              "template_id",
+              "version"
+            ]
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        },
+        "required": [
+          "identity"
+        ]
+      }
+    },
+    {
+      "section": "persona",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "persona": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Persona",
+            "type": "string"
+          },
+          "placeholders": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/Placeholder"
+            },
+            "title": "Placeholders",
+            "type": "array"
+          },
+          "tier": {
+            "$ref": "#/$defs/Tier",
+            "default": "main"
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "section": "knowledge",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "authority": {
+            "type": "object",
+            "title": "ManifestAuthority",
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              }
+            }
+          },
+          "connectors": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Connectors",
+            "type": "array"
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "section": "skills",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "skills": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/SkillRef"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "section": "tools",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "authority": {
+            "type": "object",
+            "title": "ManifestAuthority",
+            "additionalProperties": false,
+            "properties": {
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "section": "leash",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "guardrails": {
+            "type": "object",
+            "title": "ManifestGuardrails",
+            "additionalProperties": false,
+            "properties": {
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              },
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              }
+            }
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "section": "tests",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "golden_set": {
+            "default": [],
+            "items": {
+              "$ref": "#/$defs/GoldenCase"
+            },
+            "title": "Golden Set",
+            "type": "array"
+          }
+        },
+        "$defs": {
+          "AutonomyTier": {
+            "enum": [
+              0,
+              1,
+              2
+            ],
+            "title": "AutonomyTier",
+            "type": "integer"
+          },
+          "Capability": {
+            "additionalProperties": false,
+            "properties": {
+              "value": {
+                "maxLength": 200,
+                "minLength": 3,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "Capability",
+            "type": "object"
+          },
+          "Clause": {
+            "additionalProperties": false,
+            "properties": {
+              "field": {
+                "maxLength": 120,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_.]*$",
+                "title": "Field",
+                "type": "string"
+              },
+              "op": {
+                "$ref": "#/$defs/Op"
+              },
+              "value": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Value"
+              }
+            },
+            "required": [
+              "field",
+              "op"
+            ],
+            "title": "Clause",
+            "type": "object"
+          },
+          "GoldenCase": {
+            "additionalProperties": false,
+            "properties": {
+              "question": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Question",
+                "type": "string"
+              },
+              "expectation": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Expectation",
+                "type": "string"
+              }
+            },
+            "required": [
+              "question",
+              "expectation"
+            ],
+            "title": "GoldenCase",
+            "type": "object"
+          },
+          "LeashRung": {
+            "additionalProperties": false,
+            "properties": {
+              "target": {
+                "maxLength": 120,
+                "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)?$",
+                "title": "Target",
+                "type": "string"
+              },
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "rung": {
+                "$ref": "#/$defs/AutonomyTier"
+              }
+            },
+            "required": [
+              "target",
+              "rung"
+            ],
+            "title": "LeashRung",
+            "type": "object"
+          },
+          "ManifestAuthority": {
+            "additionalProperties": false,
+            "properties": {
+              "scope": {
+                "$ref": "#/$defs/Scope"
+              },
+              "capabilities": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Capability"
+                },
+                "title": "Capabilities",
+                "type": "array"
+              },
+              "allowed_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Allowed Tools",
+                "type": "array"
+              },
+              "required_tools": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "title": "Required Tools",
+                "type": "array"
+              }
+            },
+            "title": "ManifestAuthority",
+            "type": "object"
+          },
+          "ManifestGuardrails": {
+            "additionalProperties": false,
+            "properties": {
+              "max_side_effect": {
+                "$ref": "#/$defs/SideEffect",
+                "default": "none"
+              },
+              "leash": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/LeashRung"
+                },
+                "title": "Leash",
+                "type": "array"
+              }
+            },
+            "title": "ManifestGuardrails",
+            "type": "object"
+          },
+          "ManifestIdentity": {
+            "additionalProperties": false,
+            "properties": {
+              "template_id": {
+                "maxLength": 60,
+                "minLength": 2,
+                "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$",
+                "title": "Template Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              },
+              "published_by": {
+                "maxLength": 128,
+                "minLength": 1,
+                "title": "Published By",
+                "type": "string"
+              },
+              "display_name": {
+                "maxLength": 120,
+                "minLength": 1,
+                "title": "Display Name",
+                "type": "string"
+              },
+              "summary": {
+                "default": "",
+                "maxLength": 240,
+                "title": "Summary",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id",
+              "version",
+              "published_by",
+              "display_name"
+            ],
+            "title": "ManifestIdentity",
+            "type": "object"
+          },
+          "Op": {
+            "enum": [
+              "eq",
+              "in",
+              "prefix",
+              "any"
+            ],
+            "title": "Op",
+            "type": "string"
+          },
+          "Placeholder": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "maxLength": 60,
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$",
+                "title": "Key",
+                "type": "string"
+              },
+              "prompt": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Prompt",
+                "type": "string"
+              },
+              "required": {
+                "default": true,
+                "title": "Required",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "key",
+              "prompt"
+            ],
+            "title": "Placeholder",
+            "type": "object"
+          },
+          "Scope": {
+            "additionalProperties": false,
+            "properties": {
+              "clauses": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/Clause"
+                },
+                "title": "Clauses",
+                "type": "array"
+              }
+            },
+            "title": "Scope",
+            "type": "object"
+          },
+          "SideEffect": {
+            "enum": [
+              "none",
+              "draft",
+              "write",
+              "send",
+              "money"
+            ],
+            "title": "SideEffect",
+            "type": "string"
+          },
+          "SkillRef": {
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Digest",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "digest"
+            ],
+            "title": "SkillRef",
+            "type": "object"
+          },
+          "Tier": {
+            "enum": [
+              "none",
+              "small",
+              "main",
+              "heavy"
+            ],
+            "title": "Tier",
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

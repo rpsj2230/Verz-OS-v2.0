@@ -1,11 +1,19 @@
 /**
- * The only place this console mounts React Flow. Read-only by construction.
+ * The only place this console mounts React Flow. Read-only by construction, for both surfaces.
  *
  * **One mount, for the same reason there is one `fetch`.** A trace graph over a completed run
  * and a canvas somebody is drawing a procedure on are different screens with different
  * grammars, and they are the same drawing surface. Two mounts would be two sets of
  * interaction flags, and the second one is where somebody leaves `nodesConnectable` on
  * because it was the default.
+ *
+ * **That held when the procedure canvas arrived, and it is why it arrived the way it did.** An
+ * authoring surface is where a second mount looks necessary, because dragging steps about and
+ * wiring them handle to handle is what the library is for. `ProcedureCanvas.tsx` draws through
+ * this component instead and changes its drawing with native controls beside it, so the flags
+ * below are the same for both surfaces and there is still nowhere on either for a change to go.
+ * `tests/procedure-canvas.test.tsx` fails if React Flow is imported anywhere else or if any
+ * file hands it a change handler, and `procedure.ts` records the three reasons.
  *
  * **Read-only is a shape here, not a setting.** The nodes and the edges are passed as props
  * with no `onNodesChange` and no `onEdgesChange`, which is React Flow's controlled mode: there
@@ -20,6 +28,12 @@
  * leaves no gap. The argument for that, and for dropping an edge whose other end did not
  * arrive, is in `graph.ts`; it is the whole reason a graph needs its own reader.
  *
+ * **An edge carries a label only when the procedure canvas gives it one.** A branch has two
+ * arrows out and which is which is part of what was drawn, so `procedure.ts` labels them. A
+ * trace edge never has one: `readGraph` copies two ids off an edge and nothing else, so a label
+ * the API sent, which is exactly where a reason would arrive on a line between two steps, has
+ * nowhere to land.
+ *
  * **The stylesheet is `base.css`, not `style.css`.** The first is the mechanics: transforms,
  * stacking, the pane and the viewport. The second adds a visual theme with its own colours,
  * which would be a second palette in a project whose entire theme is one file of tokens. The
@@ -29,7 +43,7 @@
  * **Nothing here fetches and nothing here decides.** A graph arrives as a value; see
  * `graph.ts` for the shape and for the fact that no route sends one yet.
  *
- * Task ids: M32.5.2.3
+ * Task ids: M32.5.2.3, M20.2.1, M20.2.2
  */
 
 import {
@@ -83,10 +97,31 @@ function StepNode({ data }: NodeProps<StepNodeShape>) {
  */
 const NODE_TYPES: NodeTypes = { step: StepNode };
 
+/**
+ * The edges as the library takes them, with a label only where the graph has one.
+ *
+ * Exported because jsdom lays nothing out, and React Flow draws no edge between two nodes it
+ * measured at zero size, so what the library is handed is the only part of an edge a test here
+ * can read. The label is in the id as well, because a branch whose two ways lead to one step
+ * has two edges between the same pair, and the library keeps one edge per id.
+ */
+export function flowEdges(graph: Graph): Edge[] {
+  return graph.edges.map((edge) =>
+    edge.label === undefined
+      ? { id: `${edge.from} ${edge.to}`, source: edge.from, target: edge.to }
+      : {
+          id: `${edge.from} ${edge.to} ${edge.label}`,
+          source: edge.from,
+          target: edge.to,
+          label: edge.label,
+        },
+  );
+}
+
 interface GraphCanvasProps {
   /** What this canvas shows, for a screen reader. */
   readonly label: string;
-  /** The graph, already read and pruned by `readGraph`. Never a raw payload. */
+  /** The graph, already read and pruned by `readGraph`, or drawn by `procedure.ts`. */
   readonly graph: Graph;
 }
 
@@ -98,17 +133,12 @@ export function GraphCanvas({ label, graph }: GraphCanvasProps) {
     position: placement.get(node.id) ?? { x: 0, y: 0 },
     data: { label: node.label, kind: node.kind },
   }));
-  const edges: Edge[] = graph.edges.map((edge) => ({
-    id: `${edge.from} ${edge.to}`,
-    source: edge.from,
-    target: edge.to,
-  }));
 
   return (
     <div className="graph__canvas" role="group" aria-label={label}>
       <ReactFlow
         nodes={nodes}
-        edges={edges}
+        edges={flowEdges(graph)}
         nodeTypes={NODE_TYPES}
         // Controlled with no change handlers, so nothing that happens on the surface can
         // reach the graph. Each flag below removes a way the surface would otherwise say it

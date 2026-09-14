@@ -167,6 +167,14 @@ interface SchemaFormProps {
   readonly failure?: ApiFailure | null;
   /** A request is in flight. The form stays on the screen and stops accepting a submission. */
   readonly busy?: boolean;
+  /**
+   * What every control id on this form begins with. The library's own default when unset.
+   *
+   * A form alone on a page never needs it. Two generated forms on one page do, when their
+   * schemas share a property name: the library names each control after the path to it, so
+   * both would build the same id and a label would point at whichever came first.
+   */
+  readonly idPrefix?: string;
 }
 
 const NO_LOCKS: ReadonlySet<string> = new Set();
@@ -180,6 +188,7 @@ export function SchemaForm({
   onSubmit,
   failure = null,
   busy = false,
+  idPrefix = "root",
 }: SchemaFormProps) {
   // Memoised because the schema is recompiled by the validator whenever its identity changes,
   // and because handing the library a new schema object on every keystroke is how a generated
@@ -191,6 +200,7 @@ export function SchemaForm({
       <p className="form__caption">{caption}</p>
 
       <Form
+        idPrefix={idPrefix}
         schema={shape.schema}
         uiSchema={shape.uiSchema}
         formData={formData}
