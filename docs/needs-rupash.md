@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**8 items are open: five actions of yours, and three decisions, two of which each unblock a leaf.**
+**10 items are open: five actions of yours, and five decisions, four of which unblock leaves.**
 You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
 verified by mutation and pushed. The two decisions were found on 2026-09-14 while finishing
 waves 0 to 3, and each comes with a recommendation, so one letter each is enough.
@@ -38,6 +38,68 @@ machine's Application Control policy blocking four different things over three d
 what fixes it, because the same policy will refuse the next unsigned binary anything installs.
 
 # Open
+
+## 59. "Most expensive question shapes" needs one field that links a cost to the request it paid for
+
+**What you decide: one letter. I recommend Option B.**
+
+M21.3.4 asks for the most expensive agents and question shapes. The agents half exists:
+`brain.console.spend_view.dearest` lists them. The question-shapes half cannot be built honestly,
+because nothing records a question's shape next to what it cost. Measured on 2026-09-15: the spend
+record `brain.ops.spend.Actual` has no such field, and the only table of spend rows,
+`ops.spend_actual`, mirrors it. The trace ledger's `tool_count` is never set, and a fan-out plan
+exists only while a request is being estimated. So there is no join from "this cost" to "a question
+that fanned out to five sources", and inventing a shape field without deciding what shape means
+would produce a report nobody could check.
+
+**Option A: record the shape on every spend row.** Add fan-out and tool count to `Actual` and its
+table. It is the simplest join, and it copies facts the trace already owns into a second place,
+where they will drift.
+
+**Option B (recommended): link each spend row to its trace, and read the shape from the trace.**
+Add one field, the trace id, to `Actual` and its table. The trace ledger then records the shape of
+the request that produced it, and the report joins the two. The shape stays in one place, and the
+same link answers other questions later, such as "what did this refused request cost".
+
+**Option C: drop question shapes from the leaf.** The agents half is closed as it stands, and the
+report never ranks questions.
+
+**Why B.** One field, no copied facts, and a join that can be tested end to end. The cost is that the
+trace ledger has to start recording tool count and fan-out, which is small work once you choose it.
+
+## 58. Nine plugin interfaces: define contracts nothing implements yet, or record that these points are not plugins
+
+**What you decide: one letter. I recommend Option B.**
+
+The work breakdown lists an interface for each of nine extension points: the retriever
+(M29.1.6), entity resolver (M29.1.8), verifier (M29.1.9), guard (M29.1.10), storage backend
+(M29.1.11), identity provider (M29.1.13), approver surface (M29.1.14), export format (M29.1.15)
+and scope pack (M29.1.16). The extension-point register in `brain.plugins.points` already answers
+for each point, and it disagrees with building them as they stand:
+
+- **Six have no contract at all**, and the register refuses to add one. Its reason is recorded in
+  `A_PROTOCOL_NOTHING_IMPLEMENTS_MAKES_THE_REGISTER_COMPLETE_AND_WORSE`: a protocol nobody implements
+  makes the register look complete while nothing can plug in. Those six are the retriever, entity
+  resolver, verifier, guard, approver surface and export format.
+- **Three interfaces exist** (`StorageBackend`, `StaffSource` for the identity provider,
+  `CapabilityPack` for scope packs), but the register classes those points as configuration or
+  feature flags, not plugins. Claiming them would tell the tracker a third party can plug in there,
+  which the register says they cannot.
+
+**Option A: define all nine as plugin contracts now.** The percentage moves by nine. You would own
+nine protocols with no implementation, and the register's own argument says that is worse than
+not having them.
+
+**Option B (recommended): record the register's answer as the decision.** Mark the nine leaves as
+decided, not buildable as written, the way the migration-week tasks were marked in item 50, so the
+tracker stops counting them as work. Each point then gets a contract the day a first real plugin
+for it exists, and that plugin is its test.
+
+**Option C: build contracts one at a time as clients ask.** The same as B in practice, except the
+nine leaves stay open on the tracker until each is asked for.
+
+**Why B.** It keeps the one place that decides what may plug in honest, and it stops nine leaves from
+reading as unfinished work when the answer already exists in the code.
 
 ## 57. The GitHub repository is public, and the work breakdown says it should be private
 
