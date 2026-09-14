@@ -76,6 +76,18 @@ BEING_CONTRADICTED_IS_NOT_WEAK_EVIDENCE = (
     "told otherwise. The mark says which."
 )
 
+#: Why a later supersession the other way puts a memory back, and why a tie marks both.
+A_PAIRS_LATEST_WORD_DECIDES_AND_A_TIE_MARKS_BOTH = (
+    "A mark is undoable where a delete is not, and undoing a replacement is a supersession of "
+    "the replacement by the memory it replaced. If every supersession ever written counted, "
+    "that undo would leave both memories marked and the subject with nothing recalled at all, "
+    "while the undo said the original was back. So between any two memories the newest "
+    "supersession is the one that stands, which is the rule this module already gives for "
+    "why a newer statement wins. Two written the opposite ways at one instant are neither "
+    "newer than the other, and picking one would be believing the order a store returned rows "
+    "in, so both memories stay marked until something later says which."
+)
+
 #: What a demoted memory's confidence becomes.
 #:
 #: Zero rather than just below the floor. Below the floor is a memory the system still half
@@ -162,15 +174,35 @@ class Demotion:
 
 
 def superseded_ids(supersessions: Iterable[Supersession]) -> frozenset[str]:
-    """Every memory that has been replaced, as ids.
+    """Every memory that has been replaced and not put back, as ids.
 
     A set rather than a chain walk. Supersession here is one step: A replaced by B, and if B
     is later replaced by C then B is in this set too. Nothing needs to know that A was
     replaced *by* something that has itself been replaced, because both are equally not
     recalled, and following the chain would be the loop `Supersession` refuses to let anybody
     start.
+
+    **A supersession is reversed by a later one between the same two memories the other way**,
+    which is what `digest.undo` writes to put back a memory a learning replaced. Until
+    2026-09-14 this returned every superseded id there had ever been, so an undo wrote its
+    supersession, said the memory was restored, and left both memories marked: the original's
+    own supersession still stood, and the subject had no memory at all. So the latest
+    supersession between any two memories decides which of the two that pair marks. It is
+    still no walk: each pair is looked at once, and no supersession is followed to another.
+
+    Two the opposite ways at the same instant mark both. Neither is later, and choosing would
+    be believing whichever row the store happened to return last; recalling neither fails
+    closed. See `A_PAIRS_LATEST_WORD_DECIDES_AND_A_TIE_MARKS_BOTH`.
     """
-    return frozenset(one.superseded_id for one in supersessions)
+    latest: dict[frozenset[str], list[Supersession]] = {}
+    for one in supersessions:
+        pair = frozenset({one.superseded_id, one.by_id})
+        held = latest.get(pair)
+        if held is None or one.at > held[0].at:
+            latest[pair] = [one]
+        elif one.at == held[0].at:
+            held.append(one)
+    return frozenset(one.superseded_id for held in latest.values() for one in held)
 
 
 def demoted_ids(demotions: Iterable[Demotion]) -> frozenset[str]:

@@ -227,6 +227,57 @@ def test_supersession_is_one_step_rather_than_a_chain_to_walk() -> None:
     assert superseded_ids(chain) == frozenset({"A", "B"})
 
 
+def test_a_later_supersession_the_other_way_puts_the_first_memory_back() -> None:
+    """**Undo restores, rather than saying it restores.** `digest.undo` puts back a memory a
+    learning replaced by writing a supersession of the learning by that memory. Until
+    2026-09-14 `superseded_ids` returned every superseded id there had ever been, so both
+    memories stayed marked, neither was recalled, and the undo's reason said restored.
+
+    Asserted in both input orders, because the newest is decided by time and not by the order
+    the rows arrive in, and with a third supersession the first way, because an undo is itself
+    a mark that can be undone.
+
+    Delete this and a replacement can never be undone: every undo leaves the subject with no
+    memory recalled at all."""
+    replaced = superseded("A", "B", at=NOW)
+    put_back = superseded("B", "A", at=NOW + timedelta(minutes=5))
+    replaced_again = superseded("A", "B", at=NOW + timedelta(minutes=10))
+
+    assert superseded_ids([replaced]) == frozenset({"A"})
+    assert superseded_ids([replaced, put_back]) == frozenset({"B"})
+    assert superseded_ids([put_back, replaced]) == frozenset({"B"})
+    assert superseded_ids([replaced, put_back, replaced_again]) == frozenset({"A"})
+    assert superseded_ids([replaced_again, replaced, put_back]) == frozenset({"A"})
+
+
+def test_two_supersessions_the_opposite_ways_at_one_instant_mark_both() -> None:
+    """Neither is newer, and choosing between them would be believing whichever row the store
+    returned last. Marking both fails closed until something later says which.
+
+    Delete this and a tie resolves on input order, which is the store's order and not a fact
+    about either memory."""
+    one_way = superseded("A", "B", at=NOW)
+    other_way = superseded("B", "A", at=NOW)
+
+    assert superseded_ids([one_way, other_way]) == frozenset({"A", "B"})
+    assert superseded_ids([other_way, one_way]) == frozenset({"A", "B"})
+
+
+def test_a_reversal_between_two_memories_leaves_every_other_pair_alone() -> None:
+    """A pair's latest word decides for that pair and for nothing else. B put A back, and C
+    was replaced by B in a pair of its own, so C stays marked.
+
+    Delete this and the pair is keyed on one side only, and putting one memory back quietly
+    restores another that nobody asked about."""
+    corrections = [
+        superseded("A", "B", at=NOW),
+        superseded("B", "A", at=NOW + timedelta(minutes=5)),
+        superseded("C", "B", at=NOW),
+    ]
+
+    assert superseded_ids(corrections) == frozenset({"B", "C"})
+
+
 def test_nothing_yet_composes_a_correction_with_the_recall_path() -> None:
     """**The honest gap, asserted so it cannot be forgotten quietly.**
 

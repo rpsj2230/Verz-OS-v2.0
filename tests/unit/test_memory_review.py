@@ -27,7 +27,7 @@ from collections.abc import Callable
 from dataclasses import fields as dataclass_fields
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any, Final
+from typing import Any
 
 import pytest
 
@@ -71,15 +71,6 @@ TEAM_A = Scope(clauses=(Clause(field="team", op=Op.EQ, value="a"),))
 WEB_TEAM_A = Scope(clauses=(*WEB.clauses, *TEAM_A.clauses))
 #: A change the tiers gate. Read off the set `review` says is gated rather than named here.
 A_GATED_CHANGE = min(CHANGES_WHAT_ANYBODY_MAY_SEE, key=lambda one: one.value)
-
-#: The defect `test_undoing_an_edit_puts_the_original_back` pins, as it was measured.
-UNDO_DOES_NOT_RESTORE: Final = (
-    "Measured on 2026-09-14: digest.undo on a learning that replaced a memory writes a "
-    "supersession of the learning by that memory and says the memory is restored, but "
-    "correction.superseded_ids is a set with no notion of a reversal, so the memory's own "
-    "supersession still stands and neither memory is recalled afterwards. An edit's "
-    "replacement names what it replaced, so undoing an edit meets the same defect."
-)
 
 
 def holder(
@@ -573,15 +564,14 @@ def test_an_edit_cannot_hold_a_replacement_without_its_mark_or_a_mark_on_another
     assert not Edit(memory_id="m_old", replacement=None, correction=None, reason="").took_effect
 
 
-@pytest.mark.xfail(strict=True, reason=UNDO_DOES_NOT_RESTORE)
 def test_undoing_an_edit_puts_the_original_back() -> None:
     """**An edit is undone by the control every other replacement is undone by.** The
     replacement names what it replaced, so `digest.undo` on it writes the supersession meant
     to put the original back, and the recall path's own `corrected` is asked whether it did.
 
-    Pinned as a strict expected failure rather than left unwritten: see
-    `UNDO_DOES_NOT_RESTORE`. A fix to `corrected` flips this test, strict mode then fails the
-    suite, and the marker comes off in the same change.
+    Written on 2026-09-14 as a strict expected failure, because `correction.superseded_ids`
+    then counted every supersession ever written and the undo left both memories marked. It
+    passes since a pair's latest supersession is the one that stands.
 
     Delete this and the digest's undo goes on saying restored about a memory nothing will
     recall again."""
