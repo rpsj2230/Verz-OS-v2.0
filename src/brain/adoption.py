@@ -43,8 +43,50 @@ wanted to know, in their words, under permissions belonging to whoever reads the
 `brain.ops.feedback`'s closed vocabulary argument arriving one surface earlier. See
 `AN_UNANSWERED_QUESTION_LOG_THAT_KEEPS_THE_QUESTION_IS_A_SEARCH_HISTORY`.
 
+**Adoption is measured in questions people asked, and the machine filter is not written here.**
+Rollout wants a figure per department, and the cheap figure is runs: every row a ledger holds.
+A nightly report, a webhook, an API key and an automation with nobody present all produce rows
+and none of them is somebody in that department deciding the system is worth asking, so a
+department whose champion installed three schedules would read as the keenest in the company.
+Whether a row is a machine's is already one lookup, `brain.ops.limits.is_automated`, reading
+the principal's kind and the traffic class its channel declared through
+`brain.gate.context.traffic_class_for`. `Asked.machine` calls those two and decides nothing.
+A second list of "machine channels" here would be right on the day it was written and wrong on
+the day somebody added a channel, and it would be wrong in the direction of counting a robot.
+See `A_ROW_IS_NOT_A_QUESTION_AND_A_SCHEDULE_IS_NOT_A_PERSON`.
+
+**A question is a trace, not a row, which is how an agent handing work to another agent is
+kept out.** `brain.orchestration.delegation.fan_out_request` admits every child of a run under
+the root run's trace id, so a question that fanned out to four agents is five records and one
+trace. Counting records would make the departments whose questions need delegation look five
+times as engaged. A trace whose records disagree about who asked, from where or for which
+department is refused rather than split, and it is refused before anything is narrowed to the
+reader, so the refusal is the same for everybody and says nothing about what they may see. See
+`A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT`.
+
+**Two figures per department and no third.** Questions, and the number of distinct people who
+asked them, because one enthusiast asking two hundred questions is not a department adopting
+anything and the question count alone cannot tell the two apart. There is no headcount beside
+them, no share and no total: a headcount is the denominator
+`A_PROGRESS_BAR_MEASURES_THE_PRODUCT_AND_NOT_THE_COMPANY` refuses, and a count of machine rows
+or of departments outside the reach is the hidden count with a label on it. Every reachable
+department gets a line, zero included, so whether a line appears is a fact about the reader's
+reach and never about what the excluded rows held. See
+`AN_ADOPTION_LINE_IS_BUILT_FROM_PEOPLE_AND_THE_READERS_OWN_REACH_ONLY`.
+
+**Nothing records an `Asked` yet, and M37.3.2.4 is not claimable for that reason.** The gate
+is not assembled end to end (`brain.ops.lane_share` records the same absence), and neither
+ledger that exists carries what a question count needs. `brain.ops.spend.Actual` has the
+principal's kind, the traffic class and the department and no trace id, so a delegated question
+counts once per hop; `brain.ops.telemetry.RequestTelemetry` has the trace id and no department
+and no principal kind. Building the measure over `Actual` was rejected for exactly that: it
+would ship a figure that treats agent hops as people. Evaluation traffic is the other open half.
+Nothing in `src` asks a golden question yet (`brain.ops.evaluation` says why), so nothing marks
+one either, and when a harness does it is excluded here only by recording its persona as a
+`PrincipalKind.SERVICE`. See `AN_EVALUATION_RUN_IS_EXCLUDED_ONLY_BY_ASKING_AS_A_SERVICE`.
+
 Task ids: M34.1.1.1, M34.1.1.2, M34.1.1.3, M34.1.2.1, M34.1.2.2, M34.1.2.3, M34.2.1.1
-Task ids: M34.2.2.3, M34.3.1.1, M34.3.1.2
+Task ids: M34.2.2.3, M34.3.1.1, M34.3.1.2, M37.3.2.4
 """
 
 from __future__ import annotations
@@ -53,10 +95,14 @@ import enum
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Final
+from typing import Final, assert_never
 
+from brain.core.principal import PrincipalKind
+from brain.gate.context import Channel, traffic_class_for
 from brain.install import value_of
 from brain.locale import MESSAGES, PLACEHOLDER
+from brain.ops.limits import is_automated
+from brain.orchestration.unattended import TriggerKind
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why there is no percentage anywhere in this module.
@@ -718,4 +764,207 @@ def posture_gaps(keys: Sequence[str]) -> tuple[str, ...]:
         f"{one!r} is stated as a posture and is not in the catalogue"
         for one in keys
         if one not in MESSAGES
+    )
+
+
+# ------------------------------------------------------------------ adoption (M37.3.2.4)
+#: Why rows are not counted and the machine test is imported rather than written.
+A_ROW_IS_NOT_A_QUESTION_AND_A_SCHEDULE_IS_NOT_A_PERSON: Final = (
+    "A scheduled report, a webhook, an API key and an automation with nobody present all "
+    "produce the rows a ledger holds, and none of them is somebody in a department deciding "
+    "the system is worth asking. Whether a row is a machine's is already one lookup over the "
+    "principal's kind and the traffic class its channel declared, so this module calls that "
+    "lookup. A second list of machine channels would be right until somebody added a channel, "
+    "and then wrong in the direction of counting a robot as a person."
+)
+
+#: Why a question is a trace and a delegation is not another question.
+A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT: Final = (
+    "An agent handing work to another agent admits the child under the root run's trace id, "
+    "so one question that fanned out is several records and one trace. Counting records makes "
+    "the departments whose questions need delegation look several times as engaged. A trace "
+    "whose records disagree about who asked, from where or for which department is refused "
+    "rather than split, because either answer would be a guess about which record is the "
+    "question."
+)
+
+#: Why every line is a function of people's questions and the reader's reach and nothing else.
+AN_ADOPTION_LINE_IS_BUILT_FROM_PEOPLE_AND_THE_READERS_OWN_REACH_ONLY: Final = (
+    "A line appearing only for departments that had some traffic would appear for one that "
+    "had nothing but a schedule, which tells the reader a schedule exists. So every reachable "
+    "department has a line, zero included, and no line exists for anything outside the reach. "
+    "There is no total, no headcount and no share beside the figures: a headcount is a "
+    "denominator, and a count of what was excluded is the hidden count with a label on it."
+)
+
+#: Why evaluation traffic has no field of its own.
+AN_EVALUATION_RUN_IS_EXCLUDED_ONLY_BY_ASKING_AS_A_SERVICE: Final = (
+    "Nothing asks a golden question yet, so nothing marks one. A flag on the record saying "
+    "'this was a test' would be a boolean a caller sets and a second answer to whether "
+    "anybody was asking. The answer that already exists is the principal's kind: a harness "
+    "that records its personas as service principals is excluded by the same lookup as every "
+    "other machine, and one that records them as people is counted, which is a defect in the "
+    "harness and not something this module could detect."
+)
+
+
+def channel_for_trigger(trigger: TriggerKind) -> Channel:
+    """The channel a run started with nobody present is recorded as arriving on.
+
+    `assert_never` for the reason `brain.gate.context.traffic_class_for` gives: a fourth kind
+    of trigger is a type error here until somebody says where its runs enter, and a mapping
+    with a default would pick one silently.
+
+    The split is who starts the run. A webhook is somebody outside calling an endpoint, which
+    is `Channel.WEBHOOK`. A schedule and a connector event are both this install's own worker
+    starting work, one on a clock and one on a change it noticed, which is
+    `Channel.SCHEDULER`. Both channels are machine traffic whichever principal the automation
+    runs as, and that, rather than the split, is the property the tests hold.
+
+    This names where the run is *recorded* for counting. Which verbs a channel may use is
+    `brain.gate.admission.CHANNEL_VERBS`'s decision and is not taken here.
+    """
+    match trigger:
+        case TriggerKind.WEBHOOK:
+            return Channel.WEBHOOK
+        case TriggerKind.SCHEDULE | TriggerKind.CONNECTOR_EVENT:
+            return Channel.SCHEDULER
+        case _:
+            assert_never(trigger)
+
+
+@dataclass(frozen=True)
+class Asked:
+    """One record of a question reaching the gate, holding only what adoption counts by.
+
+    No question text, on `AN_UNANSWERED_QUESTION_LOG_THAT_KEEPS_THE_QUESTION_IS_A_SEARCH_HISTORY`.
+    A channel rather than a traffic class, because the channel is the origin and the class is
+    `traffic_class_for`'s declaration about it: a record carrying the class could say a
+    scheduler run was interactive. The department is supplied by whoever records the question,
+    where it is known, and never looked up here.
+
+    Whether it was a machine is derived and never stored, exactly as `brain.ops.spend.Actual`
+    derives it. See `A_ROW_IS_NOT_A_QUESTION_AND_A_SCHEDULE_IS_NOT_A_PERSON`.
+    """
+
+    #: The request's trace id. Every record of a delegated question shares the root's.
+    trace_id: str
+    principal_id: str
+    principal_kind: PrincipalKind
+    channel: Channel
+    department: str
+    at: datetime
+
+    def __post_init__(self) -> None:
+        for label, value in (
+            ("trace_id", self.trace_id),
+            ("principal_id", self.principal_id),
+            ("department", self.department),
+        ):
+            if not value.strip():
+                msg = f"a question record with no {label} cannot be counted or attributed"
+                raise AdoptionError(msg)
+        if self.at.tzinfo is None:
+            msg = "a naive instant lands a question in the wrong window at either end of a day"
+            raise AdoptionError(msg)
+
+    @property
+    def machine(self) -> bool:
+        """Whether nobody was asking. `limits.is_automated` over the declared class."""
+        return is_automated(self.principal_kind, traffic_class_for(self.channel))
+
+
+@dataclass(frozen=True)
+class DepartmentAdoption:
+    """How one department used the system over a window: questions, and who asked them.
+
+    Three fields, and there is nowhere to put a fourth figure. See
+    `AN_ADOPTION_LINE_IS_BUILT_FROM_PEOPLE_AND_THE_READERS_OWN_REACH_ONLY`.
+    """
+
+    department: str
+    #: Distinct questions people asked, one per trace.
+    questions: int
+    #: Distinct people who asked them.
+    people: int
+
+    def __post_init__(self) -> None:
+        # No separate check that questions is not negative: people is refused below zero and
+        # above questions, so a negative question count is already refused by one of the two,
+        # and a third check would be a branch no test could reach on its own.
+        if self.people < 0:
+            msg = f"{self.department} reports {self.people} people asking"
+            raise AdoptionError(msg)
+        if self.people > self.questions:
+            msg = f"{self.department} has more people asking than questions asked"
+            raise AdoptionError(msg)
+        if self.questions and not self.people:
+            msg = f"{self.department} has questions that nobody asked"
+            raise AdoptionError(msg)
+
+
+def adoption_by_department(
+    asked: Sequence[Asked],
+    reachable: frozenset[str],
+    *,
+    start: datetime,
+    end: datetime,
+) -> tuple[DepartmentAdoption, ...]:
+    """Questions people asked, per department in the reader's reach, over `[start, end)`.
+
+    In three steps and the order is the argument.
+
+    First every trace is checked and dated, over every record handed in. One trace is one
+    question, dated by its earliest record because a delegated child finishes after the run
+    that started it. A trace whose records disagree about the asker, the principal's kind, the
+    channel or the department is refused. See `A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT`.
+    This happens before the reach is applied so that the refusal is the same for every
+    reader, and a reader cannot learn anything by getting one.
+
+    Then machine traces are removed, once, before either figure is counted, so questions and
+    people are drawn from one population.
+
+    Then each reachable department gets a line, sorted by name, zero included, and nothing
+    outside the reach is counted or mentioned. The reach arrives already narrowed, as it does
+    for `coverage_report`, and should be the same usage grant
+    `brain.console.spend_view.may_read_spend` answers, so this screen and the usage screen
+    cannot disagree about who may know how much a department asked.
+    """
+    if start.tzinfo is None or end.tzinfo is None:
+        msg = "a window with a naive edge moves by the server's offset"
+        raise AdoptionError(msg)
+    if start >= end:
+        msg = f"a window from {start} to {end} holds no instant, so it measures nothing"
+        raise AdoptionError(msg)
+    first: dict[str, Asked] = {}
+    for one in asked:
+        seen = first.get(one.trace_id)
+        if seen is None:
+            first[one.trace_id] = one
+            continue
+        if (seen.principal_id, seen.principal_kind, seen.channel, seen.department) != (
+            one.principal_id,
+            one.principal_kind,
+            one.channel,
+            one.department,
+        ):
+            msg = (
+                f"trace {one.trace_id!r} has records that disagree about who asked, from "
+                f"where or for which department. {A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT}"
+            )
+            raise AdoptionError(msg)
+        if one.at < seen.at:
+            first[one.trace_id] = one
+    questions = dict.fromkeys(reachable, 0)
+    people: dict[str, set[str]] = {department: set() for department in reachable}
+    for question in first.values():
+        if question.machine or question.department not in reachable:
+            continue
+        if not start <= question.at < end:
+            continue
+        questions[question.department] += 1
+        people[question.department].add(question.principal_id)
+    return tuple(
+        DepartmentAdoption(department, questions[department], len(people[department]))
+        for department in sorted(reachable)
     )

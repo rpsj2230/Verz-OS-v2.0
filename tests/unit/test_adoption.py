@@ -7,16 +7,19 @@ department name or a figure that came from one deployment, and the ones that ass
 ordering assert it against a constructed set where the wrong answer is available.
 
 Task ids: M34.1.1.1 M34.1.1.2 M34.1.1.3 M34.1.2.1 M34.1.2.2 M34.1.2.3 M34.2.1.1
-Task ids: M34.2.2.3 M34.3.1.1 M34.3.1.2
+Task ids: M34.2.2.3 M34.3.1.1 M34.3.1.2 M37.3.2.4
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from dataclasses import fields
+from datetime import UTC, datetime, timedelta
+from itertools import product
 
 import pytest
 
 from brain.adoption import (
+    A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT,
     COVERAGE_MESSAGE,
     NEED_FOR,
     NEED_MESSAGE,
@@ -25,16 +28,20 @@ from brain.adoption import (
     WEEK_ONE_TARGET,
     Action,
     AdoptionError,
+    Asked,
     ChannelSurface,
     CitedItem,
     ConnectorOffer,
     Coverage,
+    DepartmentAdoption,
     Need,
     ScopeCoverage,
     Sentence,
     SourceKind,
     StarterQuestion,
     Unanswered,
+    adoption_by_department,
+    channel_for_trigger,
     connector_demand,
     correction_gaps,
     coverage_gaps,
@@ -47,7 +54,10 @@ from brain.adoption import (
     verification_targets,
     visibility_summary,
 )
+from brain.core.principal import PrincipalKind
+from brain.gate.context import Channel
 from brain.locale import MESSAGES
+from brain.orchestration.unattended import TriggerKind
 
 SYNCED = datetime(2026, 9, 8, 9, 0, tzinfo=UTC)
 
@@ -559,3 +569,301 @@ def test_every_posture_statement_is_in_the_catalogue_and_therefore_translated() 
     assert posture_gaps(privacy_posture({})) == ()
     assert posture_gaps(privacy_posture({"INSTALL_MODEL_PROFILE": "hosted"})) == ()
     assert len(posture_gaps(["posture.entitled", "a sentence somebody typed"])) == 1
+
+
+# ---------------------------------------------------------------------- adoption (M37.3.2.4)
+#: The window every adoption test measures. A week in 2019, which nothing about these tests
+#: is about: see `CLAUDE.md` on a fixture with a date in it.
+START = datetime(2019, 3, 4, tzinfo=UTC)
+END = START + timedelta(days=7)
+MIDWEEK = START + timedelta(days=3)
+
+#: The channels a person is waiting or will read the reply on, written as literals.
+#:
+#: Written out rather than derived from `traffic_class_for`, which would compare the lookup
+#: against itself. Together with `MACHINE_CHANNELS` it must cover `Channel` exactly, so a new
+#: channel fails `test_the_origin_table_here_names_every_channel_and_principal_kind` until
+#: somebody decides which side it is on.
+HUMAN_CHANNELS = frozenset(
+    {"console", "lark", "whatsapp", "email", "telegram", "widget", "slack", "teams"}
+)
+#: An API key, a webhook and the scheduler. Nobody is present on any of them.
+MACHINE_CHANNELS = frozenset({"api", "webhook", "scheduler"})
+
+#: Where each unattended trigger's runs are recorded, as literals for the same reason.
+TRIGGER_CHANNELS = {"schedule": "scheduler", "connector_event": "scheduler", "webhook": "webhook"}
+
+
+def asked(
+    trace: str,
+    *,
+    principal: str = "p_one",
+    kind: PrincipalKind = PrincipalKind.HUMAN,
+    channel: Channel = Channel.LARK,
+    department: str = "alpha",
+    at: datetime = MIDWEEK,
+) -> Asked:
+    """One question record, through `Asked`'s own validators."""
+    return Asked(
+        trace_id=trace,
+        principal_id=principal,
+        principal_kind=kind,
+        channel=channel,
+        department=department,
+        at=at,
+    )
+
+
+def measured(
+    records: list[Asked], reachable: frozenset[str] = frozenset({"alpha"})
+) -> tuple[DepartmentAdoption, ...]:
+    return adoption_by_department(records, reachable, start=START, end=END)
+
+
+def test_the_origin_table_here_names_every_channel_and_principal_kind() -> None:
+    """**The exhaustiveness half of the origin test.** The table the next test checks against
+    is written in this file, so it has to be proved complete from outside itself: every
+    channel on exactly one side, and exactly the two principal kinds.
+
+    Delete this and a new channel could be added to `Channel`, declared in
+    `traffic_class_for`, and never be checked against what adoption counts, which is how a
+    new kind of robot arrives in the figure as a new department's enthusiasm."""
+    assert {one.value for one in Channel} == HUMAN_CHANNELS | MACHINE_CHANNELS
+    assert not HUMAN_CHANNELS & MACHINE_CHANNELS
+    assert {one.value for one in PrincipalKind} == {"human", "service"}
+    assert {one.value for one in TriggerKind} == set(TRIGGER_CHANNELS)
+
+
+@pytest.mark.parametrize(
+    ("channel", "kind"), list(product(Channel, PrincipalKind)), ids=lambda one: str(one)
+)
+def test_every_origin_is_counted_exactly_when_a_person_asked_on_a_person_channel(
+    channel: Channel, kind: PrincipalKind
+) -> None:
+    """**Every channel crossed with every principal kind**, each counted or not according to
+    the literal table above and never according to the lookup under test. A service principal
+    is a machine on any channel; a person is a machine on an API key, a webhook or the
+    scheduler.
+
+    Checked through the measure rather than through `Asked.machine` alone, so a filter that
+    stopped consulting the property fails here too. Delete this and a scheduled report run
+    under somebody's name, or a person's API key, counts as that department adopting the
+    system."""
+    counted = channel.value in HUMAN_CHANNELS and kind is PrincipalKind.HUMAN
+    (line,) = measured([asked("t1", kind=kind, channel=channel)])
+
+    assert asked("t1", kind=kind, channel=channel).machine is not counted
+    assert line == DepartmentAdoption("alpha", questions=int(counted), people=int(counted))
+
+
+@pytest.mark.parametrize("trigger", list(TriggerKind), ids=lambda one: str(one))
+def test_every_unattended_trigger_is_recorded_where_nobody_is_counted(trigger: TriggerKind) -> None:
+    """Automations run as a person or as a service principal, so the principal's kind alone
+    does not exclude one. What does is the channel its runs are recorded on, and this holds
+    that every trigger lands on a channel that counts nobody, whichever principal it runs as.
+
+    Delete this and a trigger mapped to a person's channel makes an automation installed by a
+    department head count as that head asking a question every hour."""
+    channel = channel_for_trigger(trigger)
+
+    assert channel.value == TRIGGER_CHANNELS[trigger.value]
+    for kind in PrincipalKind:
+        assert measured([asked("t1", kind=kind, channel=channel)]) == (
+            DepartmentAdoption("alpha", questions=0, people=0),
+        )
+
+
+def test_machine_rows_beside_peoples_questions_change_no_figure() -> None:
+    """**The sibling that proves the filter removes rather than zeroes.** People's questions
+    are counted, and adding every kind of machine traffic beside them moves nothing. A filter
+    that dropped everything would fail the first assertion; one that dropped nothing would
+    fail the second.
+
+    Delete this and the per-origin test above could be satisfied by a measure that counts no
+    question at all."""
+    people = [asked("h1"), asked("h2", principal="p_two", channel=Channel.EMAIL)]
+    machines = [
+        asked("m1", channel=Channel.SCHEDULER),
+        asked("m2", channel=Channel.API, principal="p_three"),
+        asked("m3", kind=PrincipalKind.SERVICE, principal="s_eval"),
+    ]
+
+    assert measured(people) == (DepartmentAdoption("alpha", questions=2, people=2),)
+    assert measured(people + machines) == measured(people)
+
+
+def test_a_question_that_fanned_out_to_other_agents_is_one_question() -> None:
+    """A delegated question is admitted under its root run's trace id, so its hops share it.
+    Four records of one trace are one question; two traces are two.
+
+    Delete this and a department whose questions need three agents reads as four times as
+    engaged as one whose questions need one. See
+    `A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT`."""
+    fanned = [asked("root", at=MIDWEEK + timedelta(seconds=n)) for n in range(4)]
+
+    assert measured(fanned) == (DepartmentAdoption("alpha", questions=1, people=1),)
+    assert measured([*fanned, asked("other")]) == (
+        DepartmentAdoption("alpha", questions=2, people=1),
+    )
+
+
+@pytest.mark.parametrize(
+    "disagreeing",
+    [
+        asked("root", principal="p_two"),
+        asked("root", kind=PrincipalKind.SERVICE),
+        asked("root", channel=Channel.SCHEDULER),
+        asked("root", department="beta"),
+    ],
+    ids=["asker", "principal_kind", "channel", "department"],
+)
+def test_a_trace_whose_records_disagree_about_its_origin_is_refused_for_every_reader(
+    disagreeing: Asked,
+) -> None:
+    """Each of the four things a question is attributed by, changed on one record of a trace.
+    Refused rather than split, and refused identically for a reader who reaches nothing, so
+    the refusal is a fact about the ledger and not about the reader's reach.
+
+    Delete this and a hop recorded under a scheduler run's channel, or another department,
+    is counted once in each, or silently counted as the first record said."""
+    records = [asked("root"), disagreeing]
+
+    for reach in (frozenset({"alpha", "beta"}), frozenset()):
+        with pytest.raises(AdoptionError) as refused:
+            measured(records, reach)
+        assert A_HOP_IS_PART_OF_THE_QUESTION_THAT_STARTED_IT in str(refused.value)
+
+
+def test_a_question_is_dated_by_the_earliest_record_of_its_trace_whatever_the_order() -> None:
+    """A delegated child finishes after the run that started it. The root is inside the
+    window and the child after its end, and the question is counted with the records in
+    either order; a trace that starts after the end is not counted however early its later
+    records are listed.
+
+    Delete this and a question asked on the last evening of a week is counted in the next
+    week, or in neither, depending on which record a store happened to return first."""
+    root = asked("root", at=END - timedelta(minutes=1))
+    child = asked("root", at=END + timedelta(minutes=5))
+    one = (DepartmentAdoption("alpha", questions=1, people=1),)
+
+    assert measured([root, child]) == one
+    assert measured([child, root]) == one
+    assert measured([child]) == (DepartmentAdoption("alpha", questions=0, people=0),)
+
+
+def test_the_window_includes_its_start_and_excludes_its_end() -> None:
+    """Both edges from both sides, so two consecutive weeks count every question once.
+
+    Delete this and a question asked at midnight is in both weeks or in neither."""
+    edges = [
+        asked("before", at=START - timedelta(microseconds=1)),
+        asked("start", at=START),
+        asked("last", at=END - timedelta(microseconds=1)),
+        asked("end", at=END),
+    ]
+
+    assert measured(edges) == (DepartmentAdoption("alpha", questions=2, people=1),)
+    following = adoption_by_department(
+        edges, frozenset({"alpha"}), start=END, end=END + timedelta(days=7)
+    )
+    assert following == (DepartmentAdoption("alpha", questions=1, people=1),)
+
+
+def test_one_person_asking_many_questions_is_one_person() -> None:
+    """The reason there are two figures. Ten questions from one enthusiast and ten from ten
+    people are the same question count and a very different department.
+
+    Delete this and `people` could count questions and nothing would notice."""
+    enthusiast = [asked(f"t{n}") for n in range(10)]
+    ten = [asked(f"t{n}", principal=f"p_{n}") for n in range(10)]
+
+    assert measured(enthusiast) == (DepartmentAdoption("alpha", questions=10, people=1),)
+    assert measured(ten) == (DepartmentAdoption("alpha", questions=10, people=10),)
+
+
+def test_every_reachable_department_has_a_line_and_nothing_else_is_counted_or_named() -> None:
+    """Every department in the reach gets a line, zero included; a department outside it is
+    neither named nor counted, and its records leave the result exactly as it was without
+    them. A department with nothing but machine traffic reads the same as one with no traffic.
+
+    Delete this and a line appearing only where there was traffic tells a reader that a
+    schedule runs in a department nobody asks in, or a remainder appears to subtract from."""
+    reach = frozenset({"alpha", "beta", "gamma"})
+    ours = [asked("a1"), asked("b1", department="beta", channel=Channel.SCHEDULER)]
+    theirs = [asked("o1", department="outside"), asked("o2", department="outside")]
+    expected = (
+        DepartmentAdoption("alpha", questions=1, people=1),
+        DepartmentAdoption("beta", questions=0, people=0),
+        DepartmentAdoption("gamma", questions=0, people=0),
+    )
+
+    assert measured(ours, reach) == expected
+    assert measured(ours + theirs, reach) == expected
+    assert measured(ours + theirs, frozenset()) == ()
+
+
+def test_an_adoption_line_has_nowhere_to_put_a_figure_about_anything_excluded() -> None:
+    """Structural: the line is a department and two counts of people's questions. No total,
+    no share, no headcount and no count of machine or hidden rows, because there is no field
+    for one.
+
+    Delete this and a `machine_runs` or `of_headcount` field could be added for a good reason
+    and become the subtraction `CLAUDE.md` forbids."""
+    assert [one.name for one in fields(DepartmentAdoption)] == ["department", "questions", "people"]
+
+
+@pytest.mark.parametrize(("questions", "people"), [(-1, 0), (0, -1), (1, 2), (3, 0)], ids=str)
+def test_a_line_that_describes_an_impossible_department_is_refused(
+    questions: int, people: int
+) -> None:
+    """Negative counts, more people than questions, and questions nobody asked. Each of these
+    is a figure somebody derived rather than counted. The sibling line below is the positive
+    case, so a constructor refusing everything fails.
+
+    Delete this and a line built by subtraction renders a department in a state no traffic
+    could produce."""
+    assert DepartmentAdoption("alpha", questions=3, people=3).people == 3
+    assert DepartmentAdoption("alpha", questions=0, people=0).questions == 0
+    with pytest.raises(AdoptionError):
+        DepartmentAdoption("alpha", questions=questions, people=people)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [{"trace": " "}, {"principal": ""}, {"department": " "}, {"at": datetime(2019, 3, 5)}],
+    ids=["trace", "principal", "department", "naive"],
+)
+def test_a_question_record_that_cannot_be_attributed_or_dated_is_refused(
+    overrides: dict[str, object],
+) -> None:
+    """A blank trace cannot be collapsed with its hops, a blank principal cannot be counted as
+    a person, a blank department has no line, and a naive instant is in the wrong window at
+    one end of the day. The records every other test here builds are the positive case.
+
+    Delete this and a record with no trace id is a question that every one of its hops would
+    also be counted as."""
+    values: dict[str, object] = {"trace": "t1", **overrides}
+    trace = values.pop("trace")
+    with pytest.raises(AdoptionError):
+        asked(str(trace), **values)  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [
+        (START, START),
+        (END, START),
+        (datetime(2019, 3, 4), END),
+        (START, datetime(2019, 3, 11)),
+    ],
+    ids=["empty", "backwards", "naive_start", "naive_end"],
+)
+def test_a_window_that_holds_no_instant_or_moves_with_the_server_is_refused(
+    start: datetime, end: datetime
+) -> None:
+    """An empty or backwards window measures nothing and would read as nobody asking; a naive
+    edge moves by the server's offset. Every other adoption test uses a valid window.
+
+    Delete this and a caller swapping the two edges gets a page of zeroes."""
+    with pytest.raises(AdoptionError):
+        adoption_by_department([asked("t1")], frozenset({"alpha"}), start=start, end=end)
