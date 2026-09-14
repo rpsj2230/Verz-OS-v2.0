@@ -118,8 +118,15 @@ class ChannelAdapter(Protocol):
         """Whatever arrived, as the one shape the gate reads."""
         ...
 
-    def send(self, payload: ChannelPayload, *, to: str) -> None:
-        """Deliver. Must call `assert_can_send` first, or inherit a base that does."""
+    def send(self, payload: ChannelPayload, *, to: str, body: str = "") -> None:
+        """Deliver. Must call `assert_can_send` first, or inherit a base that does.
+
+        `body` empty means render the payload; a body given is what a person reads, and the
+        adapter checks the payload's label survived into it. Part of the protocol since
+        M34.2.2.1, because `brain.channels.correction` puts the line that lets a person say
+        an answer was wrong into the body, and an adapter whose send could not carry a
+        composed body was an adapter nobody could correct an answer from.
+        """
         ...
 
     def healthy(self, now: datetime) -> bool:

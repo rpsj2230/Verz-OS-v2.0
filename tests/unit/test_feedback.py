@@ -316,6 +316,7 @@ def test_what_was_wrong_comes_from_a_closed_list_that_can_hold_nothing() -> None
     is the one that can hold an answer."""
     assert {r.value for r in FlagReason} == {
         "wrong_fact",
+        "wrong_sources",
         "incomplete",
         "stale",
         "should_have_refused",

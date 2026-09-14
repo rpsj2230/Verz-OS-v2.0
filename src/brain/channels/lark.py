@@ -66,7 +66,7 @@ from brain.channels.adapter import (
     Feature,
     assert_can_send,
 )
-from brain.channels.cards import render_body
+from brain.channels.cards import assert_label_survives, render_body
 from brain.channels.room import Degradation, Member, plan
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
@@ -617,9 +617,21 @@ class LarkAdapter:
         return normalise_message(raw).event
 
     def send(
-        self, payload: ChannelPayload, *, to: str, viewer: str = "", ephemeral: bool = False
+        self,
+        payload: ChannelPayload,
+        *,
+        to: str,
+        body: str = "",
+        viewer: str = "",
+        ephemeral: bool = False,
     ) -> None:
         """Deliver one payload into one chat (M10.2.5).
+
+        `body` empty means render the payload. It was the one adapter here whose send could
+        not carry a composed body, which made it the one surface nobody could correct an
+        answer from once `brain.channels.correction` put that line into the body (M34.2.2.1).
+        Whichever it is, the produced string is checked against the payload's label, the check
+        every other adapter already made.
 
         `viewer` empty means everybody in `to` reads it. A viewer named means only they do,
         and that is refused unless this surface actually supports it: an ephemeral message
@@ -645,7 +657,9 @@ class LarkAdapter:
                 "posted where everybody in the chat reads it"
             )
             raise DeliveryRefusedError(msg)
-        self.sent.append(SentMessage(chat_id=to, body=render_body(payload), viewer=viewer))
+        rendered = body or render_body(payload)
+        assert_label_survives(rendered, payload)
+        self.sent.append(SentMessage(chat_id=to, body=rendered, viewer=viewer))
 
     def healthy(self, now: datetime) -> bool:
         """Whether this adapter can currently deliver. See `adapter.registered`."""

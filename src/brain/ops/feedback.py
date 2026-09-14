@@ -97,18 +97,33 @@ is the decision half of both, which is the half that can be built and mutated be
 table exists. It is the repository's recurring defect, recorded rather than hidden: see
 `brain.gate.answer`, which counted thirteen instances of it on the day it was written.
 
+**Wrong sources is a separate complaint from a wrong answer, because the two are bugs in
+different halves of the system.** An answer built from the right documents that misstates them
+is a reasoning failure, and the fix is in composition. An answer that reads its documents
+faithfully and the documents were the wrong ones is a retrieval failure, and no amount of work
+on composition will fix it. Filed under one reason, the two are averaged into one number and
+whoever looks at it tunes the half they happen to own. So `FlagReason.WRONG_SOURCES` exists,
+`plane_of` is the one place a reason is assigned to a half, and `by_plane` is the report that
+keeps them apart. See `WRONG_SOURCES_IS_A_RETRIEVAL_BUG_AND_WRONG_FACT_IS_A_REASONING_ONE`.
+
+Rejected: a second enum, beside `FlagReason`, saying which half a flag is about. The lead
+would then answer two questions where one is enough, and the pair can disagree: a flag marked
+`WRONG_FACT` in the retrieval half means nothing anybody can act on. The half is derived from
+the reason and never stored.
+
 Scope: this module opens no connection and reads no clock. `now` is a parameter everywhere,
 the same split `brain.ops.limits`, `brain.ops.canaries` and `brain.ops.evaluation` make.
 
-Task ids: M28.3.1, M28.3.2
+Task ids: M28.3.1, M28.3.2, M34.2.2.2
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Final, assert_never
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -177,6 +192,16 @@ A_CASE_CAPTURED_AFTER_THE_TRACE_EXPIRED_IS_BUILT_FROM_MEMORY = (
     "that makes it look reasonable. So the flag expires when the thing it points at does."
 )
 
+#: Why the wrong documents and a wrong reading of the right ones are two reasons.
+WRONG_SOURCES_IS_A_RETRIEVAL_BUG_AND_WRONG_FACT_IS_A_REASONING_ONE = (
+    "An answer that faithfully reports the wrong documents and an answer that misreports the "
+    "right ones look identical to the person reading them and are fixed in different halves "
+    "of the system: one in what retrieval returned, the other in what composition did with it. "
+    "Filed under one reason they become one figure, and whoever reads it tunes the half they "
+    "happen to own while the other half's defect goes on being counted as theirs. So the lead "
+    "says which, and the half is derived from what they said rather than asked a second time."
+)
+
 #: What a lead must hold, in the department the answer was given in, to flag it.
 #:
 #: A write rather than a read. Filing a quality finding creates a row and a piece of work
@@ -218,19 +243,24 @@ REFERENCE_MAX_LENGTH: Final[int] = 4 * (TRACE_REF_BYTES * 4 // 3)
 class FlagReason(enum.StrEnum):
     """What a lead says was wrong. A closed vocabulary, and the closure is the point.
 
-    Five members, each naming a shape of wrongness that can be judged by reading the answer
+    Six members, each naming a shape of wrongness that can be judged by reading the answer
     against the question. None of them can carry a value, which is the whole of
     `A_FREE_TEXT_NOTE_IS_WHERE_THE_ANSWER_GETS_PASTED`.
 
-    Two of them are permission outcomes and three are quality outcomes, and `severity_of`
-    is the only place that mapping is written. Which one a member is does not follow from
-    how bad it sounds: `REFUSED_WRONGLY` reads like a minor annoyance and is a permission
-    failure, because `brain.ops.evaluation.Severity.PERMISSION` covers an answer that
-    refused something the asker may see just as much as one that showed what they may not.
+    Two of them are permission outcomes and four are quality outcomes, and `severity_of`
+    is the only place that mapping is written. Which half of the system each one is a bug
+    in is a second mapping, `plane_of`, and it is written once as well. Which class a member
+    is in does not follow from how bad it sounds: `REFUSED_WRONGLY` reads like a minor
+    annoyance and is a permission failure, because `brain.ops.evaluation.Severity.PERMISSION`
+    covers an answer that refused something the asker may see just as much as one that
+    showed what they may not.
     """
 
-    #: The answer stated something that is not so.
+    #: The answer stated something that is not so, from sources that were the right ones.
     WRONG_FACT = "wrong_fact"
+    #: The answer was faithful to what it cited, and what it cited was not what the question
+    #: needed. See `WRONG_SOURCES_IS_A_RETRIEVAL_BUG_AND_WRONG_FACT_IS_A_REASONING_ONE`.
+    WRONG_SOURCES = "wrong_sources"
     #: The answer left out something the asker was entitled to and had asked for.
     INCOMPLETE = "incomplete"
     #: The answer was right when the data was fetched and is not right now.
@@ -353,7 +383,7 @@ class Flag:
 def severity_of(reason: FlagReason) -> Severity:
     """Which of `brain.ops.evaluation`'s two classes a reason falls in.
 
-    Written once, here, and `assert_never` makes a sixth `FlagReason` a type error rather
+    Written once, here, and `assert_never` makes a seventh `FlagReason` a type error rather
     than something that silently acquires whichever class a dictionary default carried.
     Every default in a mapping like this is the lenient one, because the lenient one is
     what makes the build pass on the afternoon somebody adds a member.
@@ -368,10 +398,81 @@ def severity_of(reason: FlagReason) -> Severity:
     match reason:
         case FlagReason.SHOULD_HAVE_REFUSED | FlagReason.REFUSED_WRONGLY:
             return Severity.PERMISSION
-        case FlagReason.WRONG_FACT | FlagReason.INCOMPLETE | FlagReason.STALE:
+        case (
+            FlagReason.WRONG_FACT
+            | FlagReason.WRONG_SOURCES
+            | FlagReason.INCOMPLETE
+            | FlagReason.STALE
+        ):
             return Severity.QUALITY
         case _:
             assert_never(reason)
+
+
+class FaultPlane(enum.StrEnum):
+    """Which half of the system a flag sends somebody to fix. Derived, and never filed.
+
+    Never a field on `Flag`, for `CapturedCase.expectation`'s reason: a stored half beside a
+    stored reason is two fields that must agree, and they disagree silently in whichever
+    direction the caller wrote. See `plane_of`.
+    """
+
+    #: What was fetched was the wrong material, or old material.
+    RETRIEVAL = "retrieval"
+    #: The right material was fetched and the answer did the wrong thing with it.
+    REASONING = "reasoning"
+    #: The answer crossed a permission line, in either direction.
+    PERMISSION = "permission"
+
+
+def plane_of(reason: FlagReason) -> FaultPlane:
+    """The half of the system this reason is a bug in (M34.2.2.2).
+
+    Written once, with `assert_never`, for `severity_of`'s reason: a seventh reason is a
+    type error here rather than a member that lands in whichever half a default carried.
+
+    **`WRONG_SOURCES` and `STALE` are retrieval.** The first is the leaf: the answer read its
+    documents faithfully and they were the wrong ones. The second is an answer that reported
+    correctly what was fetched, when what was fetched was old, and nothing in composition can
+    make a figure younger; the fix is in what is read and when.
+
+    **`WRONG_FACT` and `INCOMPLETE` are reasoning, and that reading depends on the first
+    member existing.** Before `WRONG_SOURCES`, a lead with an answer built from the wrong
+    document had nowhere to say so but `WRONG_FACT`, and the two halves were one figure. Now
+    a lead who picks `WRONG_FACT` or `INCOMPLETE` over `WRONG_SOURCES` is saying the material
+    was right, which is what puts the defect in composition.
+
+    **The permission outcomes are neither.** A leak or a wrongful refusal is decided by the
+    entitlement model before retrieval ranks anything or composition says anything, and
+    reporting one as a retrieval bug would send somebody to tune ranking over a disclosure.
+    """
+    match reason:
+        case FlagReason.WRONG_SOURCES | FlagReason.STALE:
+            return FaultPlane.RETRIEVAL
+        case FlagReason.WRONG_FACT | FlagReason.INCOMPLETE:
+            return FaultPlane.REASONING
+        case FlagReason.SHOULD_HAVE_REFUSED | FlagReason.REFUSED_WRONGLY:
+            return FaultPlane.PERMISSION
+        case _:
+            assert_never(reason)
+
+
+def by_plane(flags: Iterable[Flag]) -> Mapping[FaultPlane, tuple[Flag, ...]]:
+    """The flags a reader already holds, separated into the half each is a bug in.
+
+    **Every half is a key, always, and an empty half is an empty tuple.** A report whose keys
+    came and went with what had been filed would have a shape that varies with the data, and
+    a missing key is read as "not measured" by whoever consumes it.
+
+    **It narrows nothing.** The flags arrive already read at the reader's reach, which is the
+    same arrangement `brain.adoption` makes about its counts: a report that also decided who
+    may see a flag would be a second permission decision beside `may_flag`, and there is no
+    total here that anything outside the argument could be subtracted from.
+    """
+    grouped: dict[FaultPlane, list[Flag]] = {plane: [] for plane in FaultPlane}
+    for one in flags:
+        grouped[plane_of(one.reason)].append(one)
+    return MappingProxyType({plane: tuple(found) for plane, found in grouped.items()})
 
 
 # ------------------------------------------------------------------------------ the reach

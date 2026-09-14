@@ -213,8 +213,13 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(
         name="knowledge_reverification",
         needs=(
-            "a query for the items whose `review_by` has passed. "
-            "`open_reverification_tasks` turns those items into tasks and nothing finds them"
+            "a table the knowledge items live in, because `KnowledgeItem` is a model with no "
+            "row and nothing under `brain.tables` or `migrations` stores one, so there is no "
+            "query for the items whose `review_by` has passed; somewhere the "
+            "`ReverificationLog` is kept between runs; and a delivery addressed to the owner. "
+            "That last one needs a rule first: `owner_id` never moves and a department does, "
+            "so an owner who has left the item's department is sent its title by a nag they "
+            "can no longer reach the item behind"
         ),
     ),
     Runner(
