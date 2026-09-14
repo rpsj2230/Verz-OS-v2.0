@@ -23,8 +23,10 @@ Task ids: M13.3.1, M13.3.2, M13.3.3, M13.3.4, M13.3.5, M13.3.6, M13.3.7
 
 from __future__ import annotations
 
+import ast
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -32,6 +34,7 @@ from pydantic import JsonValue, ValidationError
 
 import brain.agents.install as install_module
 from brain.agents.install import (
+    AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE,
     REQUIRED_FIELDS,
     STEP_FIELDS,
     STEP_ORDER,
@@ -669,15 +672,79 @@ def test_the_report_reads_the_values_materialise_produces() -> None:
     """Deleting this lets the report and the materialised agent drift. The report is a flat
     read of the document with the answers laid over it, shown before a manifest can be built
     at all; `materialise` is the authority, and this is what holds the two together on the
-    paths the report actually reads."""
+    paths the report actually reads.
+
+    Load-bearing twice since `settle` exists: `completeness` reads the draft's document and
+    `settle` reads the materialised one, so this is also what keeps a draft's badge and a
+    finished agent's badge the same answer."""
     draft = _filled(answer(_draft(), "persona", "Answer only from the ticket record."))
     installed = _install(draft)
     document = installed.effective.document
-    assert install_module._text(draft, "persona") == document["persona"]
-    assert install_module._text(draft, "identity.display_name") == document["identity.display_name"]
+    drafted = install_module._effective(draft)
+    assert install_module._text(drafted, "persona") == document["persona"]
+    assert (
+        install_module._text(drafted, "identity.display_name")
+        == (document["identity.display_name"])
+    )
     assert tuple(p.key for p in install_module._effective_placeholders(draft)) == tuple(
         p.key for p in installed.effective.manifest.placeholders
     )
+
+
+def test_nothing_in_the_agents_package_materialises_an_agent_except_settle() -> None:
+    """**What makes binding impossible to skip rather than easy to remember.** `materialise`
+    returns the record a template declared, with names like `invoice.read` no registry holds.
+    `settle` is the one function that materialises and binds together, and every call to
+    `materialise` anywhere under `brain/agents` is read out of the source and required to sit
+    inside it.
+
+    Read from the syntax tree rather than by searching the text, so a docstring or a comment
+    naming `materialise` cannot satisfy it or trip it, and with a positive half: the one call
+    found is the one in `settle`, so a walk that found nothing would fail too.
+
+    Delete this and the next finishing path can call `materialise` directly, as
+    `brain.agents.upgrade.accept` did until 2026-09-14, and store declared names again."""
+    package = Path(install_module.__file__).parent
+    callers: list[tuple[str, str]] = []
+    for path in sorted(package.glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for function in ast.walk(tree):
+            if not isinstance(function, ast.FunctionDef | ast.AsyncFunctionDef):
+                continue
+            for node in ast.walk(function):
+                if not isinstance(node, ast.Call):
+                    continue
+                name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+                if name == "materialise":
+                    callers.append((path.name, function.name))
+
+    assert callers == [("install.py", "settle")]
+    assert "settle" in AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE
+    assert "invoice.read" in AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE
+
+
+def test_a_required_placeholder_left_unanswered_holds_a_finished_install_incomplete() -> None:
+    """**Written because two mutations survived.** `complete` hands `settle` the draft's
+    unanswered required placeholders, because the answers live on the draft and nowhere
+    `settle` can read them. With that argument emptied, in `complete` or inside `settle`, every
+    test stayed green: the placeholder tests all ask `completeness` of a draft, and nothing asked
+    a finished install. So this finishes one with `price_list` unanswered and requires the badge
+    to name exactly it, and not the optional `team_notes`, and the record to start disabled.
+
+    The sibling finishes the same draft with the answer given, so a `complete` that reported
+    every placeholder missing, or disabled everything, fails too.
+
+    Delete this and an install can start enabled and answer from a blank where its price list
+    should be, which is the failure a required placeholder exists to prevent."""
+    unanswered = _install(_draft())
+    answered = _install(_filled(_draft()))
+
+    assert unanswered.completeness.missing == (
+        Missing(kind=MissingKind.PLACEHOLDER, name="price_list"),
+    )
+    assert unanswered.record.disabled_at == NOW
+    assert answered.completeness.is_ready
+    assert answered.record.disabled_at is None
 
 
 # --------------------------------------------------- who may install, and who may see (M13.3)

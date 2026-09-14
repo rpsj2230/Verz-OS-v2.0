@@ -24,10 +24,12 @@ import pytest
 from sqlalchemy import select
 
 from brain.knowledge.row_store import (
+    SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION,
     SOURCE_RUNS_THE_STATEMENT_AND_DECIDES_NOTHING,
     SessionRowSource,
 )
 from brain.knowledge.rows import RowQuery, RowSource
+from brain.knowledge.search import Reach, session_settings
 
 
 class Recorded:
@@ -188,6 +190,101 @@ def test_the_module_says_why_it_adds_nothing_to_a_statement() -> None:
         SOURCE_RUNS_THE_STATEMENT_AND_DECIDES_NOTHING
     )
     assert "does not know whose reach" in SOURCE_RUNS_THE_STATEMENT_AND_DECIDES_NOTHING
+
+
+class Opened:
+    """One session of many, writing what it ran into a ledger shared by every session."""
+
+    def __init__(self, number: int, ledger: list[tuple[int, str, Any]]) -> None:
+        self.number = number
+        self.ledger = ledger
+
+    async def execute(self, statement: Any) -> Opened:
+        self.ledger.append((self.number, "execute", statement))
+        return self
+
+    def mappings(self) -> Opened:
+        return self
+
+    def all(self) -> Sequence[Mapping[str, Any]]:
+        return []
+
+    async def commit(self) -> None:
+        self.ledger.append((self.number, "commit", None))
+
+    async def __aenter__(self) -> Opened:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
+        self.ledger.append((self.number, "closed", None))
+
+
+class Numbered:
+    """A factory that hands out a new session each time, so which session ran what is visible.
+
+    `Sessions` above hands back one object every time, and against it a source that ran the
+    settings through a second session would look exactly like one that ran them through the
+    first."""
+
+    def __init__(self) -> None:
+        self.ledger: list[tuple[int, str, Any]] = []
+        self.opened = 0
+
+    def __call__(self) -> Opened:
+        self.opened += 1
+        return Opened(self.opened, self.ledger)
+
+
+def test_a_querys_settings_run_before_its_statement_in_the_same_session() -> None:
+    """**The whole of the second wall's plumbing.** `know.chunk`'s row-level security reads two
+    settings that `set_config(..., true)` writes for one transaction. Run after the statement,
+    through a second session, or across a commit, they set nothing the policy can read, and it
+    admits company-visible chunks only, with nothing raised.
+
+    Asserted as one ledger across every session the source opens: one session, the settings in
+    the order they were given, then the statement, then the session closed, and no commit
+    anywhere in between.
+
+    Delete this and the settings can move to a session of their own, which reads as tidy and
+    leaves a department's documents missing for everybody in it."""
+    sessions = Numbered()
+    settings = session_settings(Reach(principal_id="u_reader", departments=("finance", "web")))
+    compiled = RowQuery(
+        entity="knowledge",
+        source="knowledge",
+        columns=("chunk_id",),
+        statement=select(1),
+        certainly_empty=False,
+        settings=settings,
+    )
+
+    asyncio.run(SessionRowSource(sessions).rows(compiled))  # type: ignore[arg-type]
+
+    assert sessions.opened == 1
+    assert sessions.ledger == [
+        (1, "execute", settings[0]),
+        (1, "execute", settings[1]),
+        (1, "execute", compiled.statement),
+        (1, "closed", None),
+    ]
+
+
+def test_a_query_built_without_settings_carries_none() -> None:
+    """The default is what keeps every row tool compiled by `compile_row_query` unchanged: its
+    table's policy reads no session setting, and a default that carried one would run a
+    statement nobody asked for on every read of every row tool.
+
+    Delete this and the default can grow a setting that every row read then pays for."""
+    assert query().settings == ()
+
+
+def test_the_module_says_why_the_settings_share_the_statements_transaction() -> None:
+    """The failure this constant names raises nothing, so the words are all a reviewer has.
+
+    Delete this and the constant becomes a paragraph somebody trims, and the settings move to a
+    session of their own on the next refactor."""
+    assert "last for one transaction" in SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION
+    assert "Nothing raises" in SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION
 
 
 @pytest.mark.parametrize("forbidden", ["limit", "where", "order_by", "filter", "scope"])

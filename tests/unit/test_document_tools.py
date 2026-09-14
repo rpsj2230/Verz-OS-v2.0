@@ -19,6 +19,7 @@ from typing import Any
 
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
+from sqlalchemy.sql.visitors import iterate
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import TypedResult
@@ -29,6 +30,7 @@ from brain.knowledge.document_tools import (
     KNOWLEDGE_PIN,
     LEXICAL_LEG_QUERIES,
     MAX_PASSAGES,
+    NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX,
     PASSAGE_COLUMNS,
     DocumentRead,
     DocumentSearch,
@@ -42,11 +44,15 @@ from brain.knowledge.document_tools import (
 from brain.knowledge.rows import RowQuery
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
+    CHUNK,
+    EMBEDDING_DIMENSIONS,
     KNOWLEDGE_READ,
     RETRIEVABLE_STATE_VALUES,
     Reach,
     lexical_legs,
     reach_predicate,
+    session_settings,
+    vector_query,
 )
 from brain.tables.gate import DepartmentRow
 
@@ -260,6 +266,77 @@ def test_every_chunk_statement_carries_the_callers_reach() -> None:
     assert len(statements) == len(lexical_legs("leave")) + 2
     for query in statements:
         assert predicate in compiled(query), compiled(query)
+
+
+def rendered(settings: Sequence[Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Settings as the text and the bound values they compile to, so two tuples built separately
+    compare by what they would run rather than by object identity."""
+    out = []
+    for one in settings:
+        statement = one.compile(dialect=POSTGRES)
+        out.append((str(statement), dict(statement.params)))
+    return out
+
+
+def test_every_chunk_statement_carries_the_settings_the_second_wall_reads() -> None:
+    """**What makes a department's documents reachable on a real database.** `know.chunk`'s
+    row-level security reads `app.principal_id` and `app.departments`, and a statement run with
+    neither set is admitted company-visible chunks only. So every chunk statement, the ranking
+    legs, the bodies and a document read, carries `session_settings` for the caller's reach.
+
+    Asked of a caller reaching one department, so the settings are held to that reach rather
+    than to any reach: `app.departments` is `web` and nothing wider.
+
+    Delete this and a chunk statement can go out with no settings, which every test with a
+    stand-in source passes and which on PostgreSQL hands a department nothing of its own."""
+    web = holding(KNOWLEDGE_READ.value, scope=Scope.department("web"))
+    expected = rendered(session_settings(Reach(principal_id="u_reader", departments=("web",))))
+    source = Recording(
+        ranked=[("c_leave_1",)], bodies=(body("c_leave_1", "doc_leave", 0, "Leave."),)
+    )
+
+    settle(searcher(source)(DocumentSearch(question="leave"), entitlement=web, now=NOW))
+    settle(reader(source)(DocumentRead(document_id="doc_leave"), entitlement=web, now=NOW))
+
+    statements = source.chunk_statements()
+    assert len(statements) == len(lexical_legs("leave")) + 2
+    for query in statements:
+        assert rendered(query.settings) == expected, compiled(query)
+    assert dict(expected[1][1])["value"] == "web"
+
+
+def test_the_department_registry_is_read_with_no_settings() -> None:
+    """The registry is read before there is a reach to build settings from, and
+    `gate.department`'s policy reads none.
+
+    Delete this and the registry read can be handed settings from a reach computed some other
+    way, which would be a reach decided before `reach_for` was asked."""
+    assert departments_query().settings == ()
+
+
+def test_no_statement_here_walks_the_vector_index() -> None:
+    """**Why the iterative scan settings are not carried.** They tune how the HNSW index is
+    walked, and only a statement ordering by the embedding walks it. Asserted by walking each
+    statement's expression tree for the embedding column itself, with a positive sibling built
+    from `vector_query`, so the walk is known to find the column when it is there.
+
+    Delete this and a vector leg can be added here without its iterative scan settings, which
+    returns fewer passages than asked for under a narrow reach and says nothing."""
+    reach = Reach(principal_id="u_reader", departments=DEPARTMENTS)
+    source = Recording(
+        ranked=[("c_leave_1",)], bodies=(body("c_leave_1", "doc_leave", 0, "Leave."),)
+    )
+    search(source, "leave", READER)
+    settle(reader(source)(DocumentRead(document_id="doc_leave"), entitlement=READER, now=NOW))
+
+    def walks(statement: Any) -> bool:
+        return any(element is CHUNK.c.embedding for element in iterate(statement))
+
+    width = EMBEDDING_DIMENSIONS
+    assert walks(vector_query([0.0] * width, reach=reach, model=f"m@1:{width}"))
+    assert source.chunk_statements()
+    assert not any(walks(query.statement) for query in source.chunk_statements())
+    assert "vector" in NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX
 
 
 def test_the_bodies_are_asked_for_by_exactly_the_references_the_ranking_returned() -> None:

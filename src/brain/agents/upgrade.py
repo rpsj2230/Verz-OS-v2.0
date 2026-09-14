@@ -101,17 +101,27 @@ of them, so a listing written here would either take a viewer it cannot check or
 agents a person may not see. Whoever holds the records builds it, and it must carry no
 count of what it left out.
 
-**One thing an acceptance does not re-check, said plainly rather than implied.** A new
-version can declare a connector the old one did not, or a required placeholder nobody has
-answered, and `accept` does not recompute
-`brain.agents.install.completeness`. It cannot honestly: `completeness` reads an
-`InstallDraft`, and the placeholder answers it needs live only on that draft and on the
-`Installation`, because `brain.agents.install` argued against a `placeholder_answers` column
-on the grounds that nothing writes the table. Reconstructing a draft from an instance would
-mean inventing those answers, and an install reported complete on invented answers is worse
-than one that says nothing. `Upgraded` carries the new instance and its `EffectiveAgent`, and
-whoever holds the connector registry runs `connector_readiness` and `pinned_leash` over the
-result the way `complete` does. This is a gap, not a decision to leave it open for ever.
+**An accepted upgrade is settled exactly as an install is.** A new version can declare a tool
+or a connector the old one did not, and `accept` finishes through
+`brain.agents.install.settle`, the function `complete` finishes through: the declared tools are
+bound to the tool registry, the connectors are read from the connector registry, the leash is
+bound and pinned, and a tool nothing binds holds the upgraded agent incomplete and disabled.
+Both registries are required arguments, so whoever accepts an upgrade holds them, which is the
+application and not this module. Until 2026-09-14 `accept` called `materialise` itself and
+`Upgraded` carried only the `EffectiveAgent`, whose record names tools like `invoice.read` that
+no registry holds; a caller persisting it would have stored the defect
+`brain.agents.install` had just fixed for installs. See
+`brain.agents.install.AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE`. `accept` still writes
+nothing: `Upgraded.record` and `Upgraded.leash` are what a caller persists.
+
+**One thing an acceptance does not re-check, said plainly rather than implied.** A new version
+can declare a required placeholder nobody has answered, and `accept` reports nothing missing
+for it. It cannot honestly do otherwise: the answers live only on the draft and on the
+`Installation`, because `brain.agents.install` argued against a `placeholder_answers` column on
+the grounds that nothing writes the table. Reconstructing them from an instance would mean
+inventing them, and an agent reported complete on invented answers is worse than one that says
+nothing, so `accept` passes `settle` no unanswered keys and says so here. This is a gap, not a
+decision to leave it open for ever.
 
 **What consults this, and what does not.** No HTTP route calls any of it, and there is no
 route behind the gate in this repository at all: `brain.agents.model`, `brain.agents.template`
@@ -120,7 +130,8 @@ invented here would be a second thing for the real one to be reconciled with. Th
 agent page renders a header and tabs and not this badge, so nothing renders it today. What
 is wired is real:
 `publish_version` is a caller of `brain.agents.install.TemplateCatalogue.offer`, `accept`
-is a caller of `brain.agents.template.verify`, `check_overlay` and `materialise`, and
+is a caller of `brain.agents.template.verify`, `check_overlay` and
+`brain.agents.install.settle`, and
 `review` is a caller of `ownership`. Nothing in `src` writes `agent.upgrade_decline`, which
 is the state `agent.template_version` and `agent.template_instance` are both already in.
 
@@ -138,8 +149,15 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
-from brain.agents.install import Offer, TemplateCatalogue
-from brain.agents.model import AGENT_ID_CHARS, OWNER_ID_CHARS, AgentAudience
+from brain.agents.install import (
+    Completeness,
+    ConnectorReadiness,
+    Offer,
+    TemplateCatalogue,
+    ToolBinding,
+    settle,
+)
+from brain.agents.model import AGENT_ID_CHARS, OWNER_ID_CHARS, AgentAudience, AgentRecord
 from brain.agents.template import (
     MANIFEST_PATHS,
     SEALED_PATHS,
@@ -149,12 +167,14 @@ from brain.agents.template import (
     TemplateError,
     TemplateInstance,
     check_overlay,
-    materialise,
     ownership,
     verify,
 )
 from brain.audit.ledger import DIGEST
+from brain.connectors.registry import ConnectorRegistry
 from brain.core.department import SLUG_PATTERN
+from brain.gate.leash import Leash
+from brain.tools.registry import ToolRegistry
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -647,10 +667,20 @@ class Upgraded:
     under the old manifest and is not under the new one fails in `_with_overlay`'s
     revalidation, and the version of this that returned an instance alone would hand back a
     row nobody can turn into an agent and no obvious way back.
+
+    `record` and `leash` are what to store, as on `brain.agents.install.Installation`, and for
+    the same reason: `effective` is what the template declared, and these are that agent with
+    its tools bound to this install's registry, its leash pinned while a connector is down, and
+    the record disabled when anything is missing. All five come from `settle`.
     """
 
     instance: TemplateInstance
     effective: EffectiveAgent
+    record: AgentRecord
+    leash: Leash
+    readiness: tuple[ConnectorReadiness, ...]
+    completeness: Completeness
+    tools: tuple[ToolBinding, ...]
     #: Who accepted, and when. Not an owner of anything: see
     #: `ACCEPTING_AN_UPGRADE_IS_NOT_SETTING_THE_VALUES_IT_KEEPS`.
     accepted_by: str
@@ -663,6 +693,8 @@ def accept(
     resolutions: Mapping[str, Resolution],
     key: str,
     audience: AgentAudience,
+    registry: ConnectorRegistry,
+    tools: ToolRegistry,
     by: str,
     at: datetime,
 ) -> Upgraded:
@@ -693,6 +725,11 @@ def accept(
 
     **A kept value keeps its owner and a released one keeps none.** See
     `ACCEPTING_AN_UPGRADE_IS_NOT_SETTING_THE_VALUES_IT_KEEPS`.
+
+    **The upgraded agent is settled through `brain.agents.install.settle`**, against `registry`
+    and `tools`, so what comes back is bound, pinned and badged exactly as `complete` would
+    leave an install of the same manifest. No unanswered placeholder is passed, for the reason
+    the module docstring gives.
     """
     candidate = reviewed.candidate
     if candidate is None:
@@ -740,9 +777,23 @@ def accept(
         overlay_owners=owners,
         created_by=instance.created_by,
     )
+    settled = settle(
+        candidate,
+        upgraded,
+        audience=audience,
+        unanswered=(),
+        registry=registry,
+        tools=tools,
+        at=at,
+    )
     return Upgraded(
         instance=upgraded,
-        effective=materialise(candidate, upgraded, audience=audience),
+        effective=settled.effective,
+        record=settled.record,
+        leash=settled.leash,
+        readiness=settled.readiness,
+        completeness=settled.completeness,
+        tools=settled.tools,
         accepted_by=by,
         accepted_at=at,
     )

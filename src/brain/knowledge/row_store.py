@@ -26,6 +26,21 @@ other's uncommitted work; taking the factory means the lifetime is this function
 pool's checkout is as short as the statement. It is the same reason `request_session` exists
 rather than a module-level session.
 
+**A query's settings run first, in the same session, and that is not a second opinion.**
+`RowQuery.settings` is how a statement carries the session settings a row-level security policy
+reads, and `know.chunk`'s policy reads two. They are written with `set_config(..., true)`, which
+lasts for one transaction, so the only place they can do anything is the transaction the
+statement runs in: run through a second session they land on another connection, or on this
+one inside a transaction that has already ended, and the policy sees NULL and admits
+company-visible chunks only. That fails closed and silently, which is why
+`SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION` is written down. The source still decides
+nothing: the settings were built beside the statement, under the caller's reach, and are run
+as they arrived.
+
+Rejected: a session-lifetime `SET` issued when a connection is checked out. PgBouncer runs in
+transaction mode here, so a session setting outlives the request and lands on whoever takes the
+connection next, which is the trap `brain.knowledge.search._set_config` records.
+
 **Rows come back as plain mappings.** `read_rows` builds its records from `query.columns`, so
 a driver handing back extra keys cannot widen an answer, and this returns what the driver gave
 rather than filtering it: filtering here would be a second place that decides what a record
@@ -54,6 +69,16 @@ SOURCE_RUNS_THE_STATEMENT_AND_DECIDES_NOTHING = (
     "cannot return a row, and even that is done by the caller rather than here."
 )
 
+#: Why the settings a query carries share its session and its transaction.
+SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION = (
+    "A query's settings are set_config(..., true) statements, which last for one transaction, "
+    "and the row-level security policy that reads them is evaluated inside the statement. Run "
+    "in another session, after the statement, or across a commit, they set nothing the policy "
+    "can see, current_setting returns NULL, and the policy admits company-visible rows only. "
+    "Nothing raises, so the only symptom is a department's documents missing for the people "
+    "in it."
+)
+
 
 class SessionRowSource:
     """Runs compiled row statements on the application's async pool.
@@ -75,7 +100,13 @@ class SessionRowSource:
         No transaction is committed, because nothing is written. The session's context manager
         rolls back on the way out, which for a read is the cheapest correct thing and means a
         statement that somehow modified something could not persist it.
+
+        The query's settings run first, on this session, so they share the transaction the
+        session begins on its first statement. See
+        `SETTINGS_RUN_IN_THE_STATEMENTS_OWN_TRANSACTION`.
         """
         async with self._sessions() as session:
+            for setting in query.settings:
+                await session.execute(setting)
             result = await session.execute(query.statement)
             return [dict(row) for row in result.mappings().all()]

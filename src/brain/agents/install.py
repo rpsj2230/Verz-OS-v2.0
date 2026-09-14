@@ -58,6 +58,17 @@ disabled, exactly as for an unbound connector. See
 `A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL` and
 `A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`.
 
+**An agent is finished from a manifest in one function, and an upgrade finishes through it
+too.** `settle` materialises, binds the declared tools, reads the connectors, badges the
+result and disables it when anything is missing, and it is the only caller of `materialise` in
+`brain.agents`. `complete` calls it for an install and `brain.agents.upgrade.accept` calls it for
+an upgrade. Until 2026-09-14 `accept` called `materialise` itself, so an accepted upgrade came
+back holding the record the template declared, with `invoice.read` in its allowed tools and on
+its leash: the defect this module had just fixed for installs, waiting for the first caller to
+persist an upgrade. Fixing that call site would have left the next finishing path free to make
+the same mistake, so the step moved rather than being repeated, and a test reads the package's
+source for any other caller. See `AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE`.
+
 **A template nobody may install and a template that does not exist give one answer.**
 `TemplateCatalogue.open_for` has one raise site, so the two causes cannot drift into two
 sentences, and `installable_ids` returns a frozenset, which has nowhere to put a count of
@@ -128,8 +139,11 @@ go.
 behind the gate in this repository, `brain.agents.model` and `brain.agents.template` both
 refused to invent one, and a request pipeline invented here would be a second pipeline for
 the real one to be reconciled with. What is wired is real and was not before: this is the
-only caller of `brain.agents.template.install`, `blank_template` and `materialise`; the only
-caller of `brain.agents.lifecycle.disable` in `src`; and `rehearse` drives
+only caller of `brain.agents.template.install` and `blank_template`; `settle` is the only caller
+of `materialise` in `brain.agents`, while `brain.agent_routes` materialises to show an install's
+composition and `brain.member_activity.build_personal_agent` materialises a personal agent,
+neither of them through `settle`; this is the only caller of `brain.agents.lifecycle.disable` in
+`src`; and `rehearse` drives
 `brain.gate.invoke.invoke` with the tool ceiling `brain.agents.model.tool_ceiling` produces,
 a reach narrowed by `entitlement_ceiling` through `EntitlementSet.intersect`, and a leash
 this module computed. Those were three arguments with no producer anywhere.
@@ -260,6 +274,17 @@ A_TOOL_NOTHING_HERE_BINDS_IS_MISSING: Final = (
     "therefore missing, as an unbound connector is: the badge is INCOMPLETE and the agent starts "
     "disabled. Nothing is invented to fill the gap, so a drafting tool the product does not "
     "have stays missing on every install until somebody builds one."
+)
+
+#: Why materialising, binding and badging are one function that every finishing path calls.
+AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE: Final = (
+    "materialise alone returns the record a template declared, whose allowed tools are names "
+    "like invoice.read that no registry holds and whose leash is written against the same "
+    "names. A caller that stored it would store an agent the gate can never project a tool for, "
+    "and nothing would report it. So an install and an upgrade both finish through settle, "
+    "which materialises, binds every declared tool to this install's registry, reads the "
+    "connectors, and disables the record when anything is missing. A second finishing path "
+    "is a second place for the binding to be forgotten, and the upgrade path had forgotten it."
 )
 
 #: Why the catalogue answers absence and refusal identically.
@@ -737,10 +762,19 @@ def _effective_placeholders(draft: InstallDraft) -> tuple[Placeholder, ...]:
     return tuple(Placeholder.model_validate(item) for item in raw)
 
 
-def _text(draft: InstallDraft, path: str) -> str:
-    """One string path off the effective document, or the empty string if it is not one."""
-    value = _effective(draft)[path]
+def _text(document: Mapping[str, JsonValue], path: str) -> str:
+    """One string path off an effective document, or the empty string if it is not one."""
+    value = document[path]
     return value if isinstance(value, str) else ""
+
+
+def _unanswered(draft: InstallDraft) -> tuple[str, ...]:
+    """The keys of the required placeholders this draft has not answered, in manifest order."""
+    return tuple(
+        placeholder.key
+        for placeholder in _effective_placeholders(draft)
+        if placeholder.required and not draft.placeholder_answers.get(placeholder.key, "").strip()
+    )
 
 
 # ------------------------------------------------- connectors and readiness (M13.3.2)
@@ -992,17 +1026,27 @@ def completeness(
     the tools, last, because binding one is a change to what the whole install reads rather
     than to this agent. See `A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`.
     """
+    return _report(_effective(draft), _unanswered(draft), readiness, bindings)
+
+
+def _report(
+    document: Mapping[str, JsonValue],
+    unanswered: tuple[str, ...],
+    readiness: tuple[ConnectorReadiness, ...],
+    bindings: tuple[ToolBinding, ...],
+) -> Completeness:
+    """The badge over one effective document, shared by `completeness` and `settle`.
+
+    One body for both, so a draft's report and a finished agent's report cannot come to
+    disagree about what counts as missing. See `completeness` for the order.
+    """
     missing: list[Missing] = []
     missing.extend(
         Missing(kind=MissingKind.FIELD, name=path)
         for path in REQUIRED_FIELDS
-        if not _text(draft, path).strip()
+        if not _text(document, path).strip()
     )
-    missing.extend(
-        Missing(kind=MissingKind.PLACEHOLDER, name=placeholder.key)
-        for placeholder in _effective_placeholders(draft)
-        if placeholder.required and not draft.placeholder_answers.get(placeholder.key, "").strip()
-    )
+    missing.extend(Missing(kind=MissingKind.PLACEHOLDER, name=key) for key in unanswered)
     missing.extend(
         Missing(kind=MissingKind.CONNECTOR, name=indicator.name)
         for indicator in readiness
@@ -1017,7 +1061,74 @@ def completeness(
     return Completeness(badge=badge, missing=tuple(missing))
 
 
-# --------------------------------------------------------------- finishing the install
+# --------------------------------------------------------------- finishing an agent
+@dataclass(frozen=True)
+class Settled:
+    """An effective agent settled against this install's connectors and tools.
+
+    What `settle` returns, and the only way this package turns a signed manifest and an
+    instance into something fit to store. `record` and `leash` carry bound names; `effective`
+    keeps the declared ones, so a console can show what the template asked for beside what it
+    became. See `AN_AGENT_IS_FINISHED_FROM_A_MANIFEST_IN_ONE_PLACE`.
+    """
+
+    effective: EffectiveAgent
+    record: AgentRecord
+    leash: Leash
+    readiness: tuple[ConnectorReadiness, ...]
+    completeness: Completeness
+    tools: tuple[ToolBinding, ...]
+
+
+def settle(
+    signed: SignedManifest,
+    instance: TemplateInstance,
+    *,
+    audience: AgentAudience,
+    unanswered: tuple[str, ...],
+    registry: ConnectorRegistry,
+    tools: ToolRegistry,
+    at: datetime,
+) -> Settled:
+    """Materialise an agent and settle it against this install's registries (M13.3.6, M13.3.7).
+
+    The order is the argument.
+
+    **Materialised first**, so the pin, the overlay and the record's own validators have all run
+    before anything is bound: a manifest that cannot become an agent is refused rather than
+    badged.
+
+    **Every declared tool is bound to `tools` and every declared connector read from `registry`
+    before the badge is decided**, per
+    `A_TEMPLATE_NAMES_WHAT_IT_USES_AND_THE_INSTALL_NAMES_WHICH_TOOL` and
+    `A_TOOL_NOTHING_HERE_BINDS_IS_MISSING`. Neither registry has a default, for the reason
+    the module docstring gives about the tool registry: with no registry nothing binds, and a
+    default would report every tool missing or none.
+
+    **`unanswered` is the one fact only the caller holds.** Placeholder answers live on a draft
+    and nowhere a manifest or an instance can carry them, so the caller names the required keys
+    still unanswered. It has no default, so a caller that cannot know them has to say so.
+
+    **The record is disabled when anything is missing**, per
+    `AN_INCOMPLETE_INSTALL_IS_DISABLED_RATHER_THAN_SELECTABLE`, through
+    `brain.agents.lifecycle.disable`. The leash is bound, then pinned, per
+    `AN_UNBOUND_CONNECTOR_PINS_THE_RUN_TO_SHADOW`.
+    """
+    effective = materialise(signed, instance, audience=audience)
+    readiness = connector_readiness(effective.manifest.connectors, registry)
+    bindings = bind_tools(effective.manifest.authority.allowed_tools, tools)
+    report = _report(effective.document, unanswered, readiness, bindings)
+    bound = bound_record(effective.record, bindings)
+    return Settled(
+        effective=effective,
+        record=bound if report.is_ready else disable(bound, now=at),
+        leash=pinned_leash(bound_leash(effective.leash, bindings), readiness),
+        readiness=readiness,
+        completeness=report,
+        tools=bindings,
+    )
+
+
 @dataclass(frozen=True)
 class Installation:
     """One finished install: the row, the effective agent, and the state it starts in.
@@ -1026,7 +1137,7 @@ class Installation:
     They differ in two ways: `EffectiveAgent.record` is what the manifest and the overlay say,
     and this is that record with its declared tools bound to this install's registered ones and
     the install's own state applied, which today means disabled when anything is missing. Both
-    decisions are taken in `complete` and nowhere else, so there is one place the two can be
+    decisions are taken in `settle` and nowhere else, so there is one place the two can be
     compared rather than two places they can drift.
 
     `leash` is likewise bound and then pinned, rather than `effective.leash`, which is what the
@@ -1103,21 +1214,24 @@ def complete(
         at=at,
         overlay=draft.answers,
     )
-    effective = materialise(draft.offer.signed, instance, audience=audience)
-    readiness = connector_readiness(effective.manifest.connectors, registry)
-    bindings = bind_tools(effective.manifest.authority.allowed_tools, tools)
-    report = completeness(draft, readiness, bindings)
-    bound = bound_record(effective.record, bindings)
-    record = bound if report.is_ready else disable(bound, now=at)
+    settled = settle(
+        draft.offer.signed,
+        instance,
+        audience=audience,
+        unanswered=_unanswered(draft),
+        registry=registry,
+        tools=tools,
+        at=at,
+    )
     return Installation(
         instance=instance,
-        effective=effective,
-        record=record,
-        leash=pinned_leash(bound_leash(effective.leash, bindings), readiness),
-        readiness=readiness,
-        completeness=report,
+        effective=settled.effective,
+        record=settled.record,
+        leash=settled.leash,
+        readiness=settled.readiness,
+        completeness=settled.completeness,
         placeholder_answers=dict(draft.placeholder_answers),
-        tools=bindings,
+        tools=settled.tools,
     )
 
 

@@ -44,9 +44,15 @@ joiner is given on their first day, and the one whose field capabilities that mo
 "the ones `brain.agents.catalogue` already asks for on knowledge". Entitlements are additive, so
 holding the pack beside the fixture's grants is a second source of grants and an edit to neither.
 
-**What this found, and why M38.2.2.4 is not claimed.** Measured on 2026-09-14, three defects stop
-the leaf being true of the product as it ships. Each is pinned by a test below that fails for
-exactly that reason.
+**What this found, and why M38.2.2.4 is still not claimed.** Measured on 2026-09-14, three defects
+stopped the leaf being true of the product as it ships, and each was pinned by a test below that
+failed for exactly that reason. All three are fixed and nothing here is marked xfail, and the
+document tools now reach a department's and a person's own documents through the real row-level
+security policy, measured in `tests/unit/test_document_second_wall.py`. The leaf says live, and it
+is not yet: nothing in `src` calls `brain.agents.install.complete`, so no running installation can
+install an agent from a template; nothing in `src` forms a memory from a conversation; and on a
+default install only the knowledge-only templates start a run, while the analyst driven here
+installs incomplete.
 
 1. **No agent installed from the catalogue reaches the document plane.**
    `brain.knowledge.search.reach_for` requires `read:knowledge`, and none of the ten templates that
@@ -92,9 +98,10 @@ fix the defect in the same commit. These are in `brain.agents.catalogue` and
 in a commit message, and a test asserting today's broken behaviour would go red on the fix and
 read as a regression. So each defect has a test asserting the property the leaf needs, marked
 `xfail(strict=True)` and restricted to `AssertionError`: the day the product is fixed that test
-passes, strictness turns the pass into a failure, and whoever fixed it takes the marker off. When
-all three are off, the leaf may be claimed. Everything that already holds is unmarked and runs as
-an ordinary test.
+passes, strictness turns the pass into a failure, and whoever fixed it takes the marker off. All
+three are off, which removes these defects from what stands between the product and the leaf and
+does not by itself make it claimable, for the reasons above. Everything that already holds is
+unmarked and runs as an ordinary test.
 
 **What this does not do.** No model is called and nothing composes a sentence: "answering" here is
 what a run may answer from, which is everything a model would be handed. The vector leg of

@@ -88,7 +88,7 @@ from typing import Any, Final, Protocol
 
 import structlog
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Select, select, text
+from sqlalchemy import Select, TextClause, select, text
 
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
@@ -217,6 +217,12 @@ class RowSource(Protocol):
 
     A stand-in in a test is `async def rows` returning a list. Nothing about the empty cases
     got harder to reach, which was the reason for the protocol in the first place.
+
+    **An implementation that runs SQL runs `query.settings` first, in the statement's own
+    transaction.** They are transaction-local by construction, so run anywhere else they set
+    nothing the statement can read, and a policy reading them fails closed without an error.
+    A stand-in that evaluates no SQL has nothing to run them against and may ignore them. See
+    `RowQuery.settings`.
     """
 
     async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]: ...
@@ -255,6 +261,15 @@ class RowQuery:
     compilation, and a caller running it gets an empty result indistinguishable from a table
     with nothing in it. That indistinguishability is right for the asker and useless for the
     caller deciding whether to bother asking, which is what this flag is for.
+
+    `settings` are statements to run before `statement`, in the same transaction. They exist
+    for a table whose row-level security reads session settings, which today is `know.chunk`:
+    its policy reads `app.principal_id` and `app.departments`, and
+    `brain.knowledge.search.session_settings` writes both with `set_config(..., true)`, which
+    lasts for one transaction. **They travel on the query rather than being chosen by the
+    source**, because whose reach a statement runs under is decided where the statement is
+    built, and `brain.knowledge.row_store` holds a connection and no idea whose reach it is.
+    Empty by default, so a row tool compiled by `compile_row_query` runs exactly as before.
     """
 
     entity: str
@@ -264,6 +279,8 @@ class RowQuery:
     columns: tuple[str, ...]
     statement: Select[Any]
     certainly_empty: bool
+    #: Run before `statement`, in its transaction, in this order. See the class docstring.
+    settings: tuple[TextClause, ...] = ()
 
 
 # ------------------------------------------------------ the projection (M15.1.2)

@@ -40,7 +40,17 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import JsonValue, ValidationError
 
-from brain.agents.install import TemplateCatalogue
+from brain.agents.install import (
+    Installation,
+    Missing,
+    MissingKind,
+    Offer,
+    TemplateCatalogue,
+    ToolBinding,
+    begin,
+    complete,
+    provide,
+)
 from brain.agents.model import AgentAudience, AgentViewer
 from brain.agents.template import (
     MANIFEST_PATHS,
@@ -69,6 +79,7 @@ from brain.agents.upgrade import (
     Declines,
     Resolution,
     UpgradeBadge,
+    Upgraded,
     UpgradeReview,
     VersionShelf,
     accept,
@@ -76,13 +87,26 @@ from brain.agents.upgrade import (
     publish_version,
     review,
 )
-from brain.core.entitlement import Capability
-from brain.core.envelope import SideEffect
+from brain.connectors.contract import ConnectorScope, CredentialBinding, TransportKind
+from brain.connectors.manifest import (
+    ChangeSignal,
+    ConnectorManifest,
+    FieldShape,
+    HotUse,
+    ProjectedEntity,
+    ProjectedField,
+    ToolDeclaration,
+)
+from brain.connectors.registry import INSTALL_AUTHORITY, ConnectorRegistry
+from brain.core.entitlement import Capability, EntitlementSet, Grant
+from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.cache_key import key_for
 from brain.gate.injection import AutonomyTier
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import Tier
+from brain.ops.secrets import SecretRef, VaultRole
+from brain.tools.registry import ToolRegistry
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 LATER = datetime(2026, 9, 7, 9, 0, tzinfo=UTC)
@@ -306,6 +330,8 @@ def test_accepting_an_upgrade_does_move_the_cache_key() -> None:
         resolutions={},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     )
@@ -434,6 +460,8 @@ def test_the_badge_belongs_to_the_instance_and_not_to_the_template() -> None:
         resolutions={},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     ).instance
@@ -691,6 +719,8 @@ def test_accepting_refuses_unless_every_conflicting_path_is_resolved() -> None:
             resolutions={"persona": Resolution.KEEP_LOCAL},
             key=KEY,
             audience=AUDIENCE,
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
             by=ACCEPTER,
             at=LATER_STILL,
         )
@@ -718,6 +748,8 @@ def test_accepting_refuses_a_resolution_for_a_path_nobody_was_shown() -> None:
             },
             key=KEY,
             audience=AUDIENCE,
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
             by=ACCEPTER,
             at=LATER_STILL,
         )
@@ -741,6 +773,8 @@ def test_a_resolution_may_not_name_a_sealed_path() -> None:
             resolutions={"guardrails.max_side_effect": Resolution.KEEP_LOCAL},
             key=KEY,
             audience=AUDIENCE,
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
             by=ACCEPTER,
             at=LATER_STILL,
         )
@@ -762,6 +796,8 @@ def test_keeping_a_local_value_leaves_it_in_the_overlay_with_the_owner_it_had() 
         resolutions={"persona": Resolution.KEEP_LOCAL},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     )
@@ -789,6 +825,8 @@ def test_taking_the_template_gives_the_path_back_to_the_publisher() -> None:
         resolutions={"persona": Resolution.TAKE_TEMPLATE},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     )
@@ -816,6 +854,8 @@ def test_a_local_edit_on_a_path_the_new_version_did_not_touch_survives_the_upgra
         resolutions={"persona": Resolution.TAKE_TEMPLATE},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     )
@@ -852,12 +892,231 @@ def test_the_supervision_after_an_upgrade_is_the_new_templates_and_not_the_old_o
         resolutions={},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     )
     assert upgraded.effective.record.authority.max_side_effect is SideEffect.DRAFT
     assert upgraded.effective.leash.rung_for(INSTANCE, "email.send", {}) is (AutonomyTier.ASSISTED)
     assert not set(upgraded.instance.overlay) & set(SEALED_PATHS)
+
+
+# ------------------------------------------ an accepted upgrade is settled as an install is
+class ContractRow(Entity):
+    status: str = ""
+
+
+def a_contract_handler() -> TypedResult[ContractRow]:
+    return TypedResult[ContractRow]()
+
+
+#: How a template declares the tool below: by what it does to what, with no system in the name.
+DECLARED_TOOL = "contract.read"
+#: How an install registers it: with the system in the name, as `brain.knowledge.rows` argues.
+REGISTERED_TOOL = "xero.read_contract"
+
+
+def _contract_tools() -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name=REGISTERED_TOOL,
+            description="reads a contract's status",
+            entity="contract",
+            required_capability="read:contract.status",
+            side_effect=SideEffect.NONE,
+            identity_mode=IdentityMode.DELEGATED,
+        ),
+        a_contract_handler,
+    )
+    return registry
+
+
+def _declaring_a_new_tool(*, connectors: tuple[str, ...] = ()) -> SignedManifest:
+    """Version two, declaring a tool version one did not, leashed at a rung binding must keep."""
+    return publish(
+        _manifest(
+            version=2,
+            allowed=(DECLARED_TOOL,),
+            connectors=connectors,
+            leash=(LeashRung(target=DECLARED_TOOL, rung=AutonomyTier.ASSISTED),),
+        ),
+        key=KEY,
+        signed_by=PUBLISHER,
+        at=LATER,
+    )
+
+
+#: The connector every manifest here declares, as `_manifest` names it.
+CONNECTOR = "xero"
+
+
+def _connectors(*, serving: bool) -> ConnectorRegistry:
+    """A registry holding `xero`, switched on or not.
+
+    `INSTALL_AUTHORITY` governs installing a connector, which is a Connector Admin's act and
+    not what is under test; the fixture holds it so the readiness indicator is exercised
+    rather than the guard in front of it, as `tests/unit/test_agent_install.py` does."""
+    registry = ConnectorRegistry()
+    admin = EntitlementSet(
+        principal_id="u_connector_admin",
+        grants=(Grant(capability=INSTALL_AUTHORITY, scope=Scope.unrestricted()),),
+    )
+    manifest = ConnectorManifest(
+        name=CONNECTOR,
+        version="1.0.0",
+        transport=TransportKind.REST,
+        scope=ConnectorScope(resource_kind="view", selectors=("contracts",)),
+        credential=CredentialBinding(ref=SecretRef(path="kv/xero", role=VaultRole.APPLICATION)),
+        tools=(
+            ToolDeclaration(
+                name=REGISTERED_TOOL, description="One contract's status.", entity="contract"
+            ),
+        ),
+        projections=(
+            ProjectedEntity(
+                entity="contract",
+                fields=(
+                    ProjectedField(name="id", shape=FieldShape.IDENTIFIER, uses=(HotUse.IDENTIFY,)),
+                    ProjectedField(name="status", shape=FieldShape.STATUS, uses=(HotUse.FILTER,)),
+                    ProjectedField(
+                        name="display_name", shape=FieldShape.LABEL, uses=(HotUse.SORT,)
+                    ),
+                ),
+                change_signal=ChangeSignal.WEBHOOK,
+                visibility=Scope.department("web"),
+            ),
+        ),
+    )
+    registry.register(manifest, installer=admin, now=NOW)
+    if serving:
+        registry.enable(CONNECTOR, installer=admin, now=NOW)
+    return registry
+
+
+def _accepted(
+    candidate: SignedManifest, *, tools: ToolRegistry, registry: ConnectorRegistry
+) -> Upgraded:
+    first = _signed()
+    return accept(
+        review(_installed(first), shelf=_shelved(first, candidate), declines=Declines()),
+        resolutions={},
+        key=KEY,
+        audience=AUDIENCE,
+        registry=registry,
+        tools=tools,
+        by=ACCEPTER,
+        at=LATER_STILL,
+    )
+
+
+def test_an_accepted_upgrade_binds_a_tool_its_new_version_declares() -> None:
+    """**The defect this closes.** Version two declares `contract.read`, which is all a template
+    can know, and the install registered `xero.read_contract`. Until 2026-09-14 `accept` returned
+    the materialised record alone, so a caller storing the upgrade stored `contract.read`, which
+    no registry holds, and the gate refused every run of the upgraded agent.
+
+    The effective record still says `contract.read`, and that is asserted too: it is what the
+    template declared, and the difference between it and `record` is the binding.
+
+    Delete this and `accept` can go back to returning declared names, with every other upgrade
+    test green because none of them asks which tool an agent may call."""
+    upgraded = _accepted(
+        _declaring_a_new_tool(), tools=_contract_tools(), registry=ConnectorRegistry()
+    )
+
+    assert upgraded.effective.record.authority.allowed_tools == frozenset({DECLARED_TOOL})
+    assert upgraded.record.authority.allowed_tools == frozenset({REGISTERED_TOOL})
+    assert upgraded.tools == (ToolBinding(target=DECLARED_TOOL, bound=(REGISTERED_TOOL,)),)
+    assert upgraded.leash.rung_for(INSTANCE, REGISTERED_TOOL, {}) is AutonomyTier.ASSISTED
+    assert upgraded.completeness.is_ready
+    assert upgraded.record.disabled_at is None
+
+
+def test_a_new_tool_nothing_registers_holds_an_accepted_upgrade_incomplete_and_disabled() -> None:
+    """The refusal beside the binding above, and the same outcome an install gets: a declared
+    tool nothing binds is `MissingKind.TOOL`, the agent is disabled at the moment of acceptance,
+    and the stored record allows no name no registry holds.
+
+    Delete this and an upgrade to a version declaring a tool nobody built can come back READY,
+    enabled and unable to start a run, which is the badge lying in the way it did for every
+    catalogue template before 2026-09-14."""
+    upgraded = _accepted(
+        _declaring_a_new_tool(), tools=ToolRegistry(), registry=ConnectorRegistry()
+    )
+
+    assert upgraded.completeness.missing == (Missing(kind=MissingKind.TOOL, name=DECLARED_TOOL),)
+    assert not upgraded.completeness.is_ready
+    assert upgraded.record.disabled_at == LATER_STILL
+    assert not upgraded.record.is_selectable
+    assert upgraded.record.authority.allowed_tools == frozenset()
+
+
+def _installed_fresh(
+    candidate: SignedManifest, *, tools: ToolRegistry, registry: ConnectorRegistry
+) -> Installation:
+    """An install of `candidate` through the wizard, with its one placeholder answered."""
+    draft = provide(
+        begin(
+            Offer(signed=candidate, audience=AUDIENCE), instance_id=INSTANCE, installer=INSTALLER
+        ),
+        "finance_contact",
+        "u_finance_lead",
+    )
+    return complete(
+        draft,
+        key=KEY,
+        audience=AUDIENCE,
+        registry=registry,
+        tools=tools,
+        at=LATER_STILL,
+    )
+
+
+@pytest.mark.parametrize(
+    ("connectors", "serving", "registered"),
+    [((), None, True), ((CONNECTOR,), True, True), ((CONNECTOR,), None, False)],
+    ids=[
+        "no connector and the tool binds",
+        "a serving connector and the tool binds",
+        "a tool and a connector are missing",
+    ],
+)
+def test_an_accepted_upgrade_settles_exactly_as_an_install_of_the_same_manifest(
+    connectors: tuple[str, ...], serving: bool | None, registered: bool
+) -> None:
+    """**One finishing step, held from the outside.** The same signed manifest, installed fresh
+    through `complete` and reached by upgrade through `accept`, against registries in the same
+    state, comes back with the same stored record, leash, connector readiness, badge and
+    bindings. Three cases: nothing to connect, a declared connector that is serving, and a tool
+    and a connector both missing, so the equality covers a READY agent with its rung kept, the
+    disabled record and the leash pinned to SHADOW.
+
+    The serving case is what holds `accept` to the registry it is handed: against an empty
+    registry an upgrade that ignored it would agree with the install by accident.
+
+    The install answers its placeholder, because `accept` holds no answers and passes none, for
+    the reason `brain.agents.upgrade` gives; with it unanswered the two differ by exactly that
+    one entry, which is the gap that module names.
+
+    Delete this and the two paths can drift apart one field at a time, which is how the upgrade
+    path lost its binding in the first place."""
+    candidate = _declaring_a_new_tool(connectors=connectors)
+    tools = _contract_tools() if registered else ToolRegistry()
+
+    def registry() -> ConnectorRegistry:
+        return ConnectorRegistry() if serving is None else _connectors(serving=serving)
+
+    upgraded = _accepted(candidate, tools=tools, registry=registry())
+    installed = _installed_fresh(candidate, tools=tools, registry=registry())
+
+    assert upgraded.record == installed.record
+    assert upgraded.leash == installed.leash
+    assert upgraded.readiness == installed.readiness
+    assert upgraded.completeness == installed.completeness
+    assert upgraded.tools == installed.tools
+    assert upgraded.completeness.is_ready is registered
 
 
 def test_an_upgrade_cannot_be_accepted_against_a_manifest_this_installation_did_not_sign() -> None:
@@ -882,6 +1141,8 @@ def test_an_upgrade_cannot_be_accepted_against_a_manifest_this_installation_did_
             resolutions={},
             key=KEY,
             audience=AUDIENCE,
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
             by=ACCEPTER,
             at=LATER_STILL,
         )
@@ -907,6 +1168,8 @@ def test_an_upgrade_that_cannot_be_materialised_is_refused_rather_than_stored() 
             resolutions={},
             key=KEY,
             audience=AUDIENCE,
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
             by=ACCEPTER,
             at=LATER_STILL,
         )
@@ -926,6 +1189,8 @@ def test_there_is_nothing_to_accept_on_an_instance_already_on_the_newest_version
             resolutions={},
             key=KEY,
             audience=AUDIENCE,
+            registry=ConnectorRegistry(),
+            tools=ToolRegistry(),
             by=ACCEPTER,
             at=LATER_STILL,
         )
@@ -1137,6 +1402,8 @@ def test_a_declined_upgrade_can_still_be_read_and_still_be_accepted() -> None:
         resolutions={"persona": Resolution.KEEP_LOCAL},
         key=KEY,
         audience=AUDIENCE,
+        registry=ConnectorRegistry(),
+        tools=ToolRegistry(),
         by=ACCEPTER,
         at=LATER_STILL,
     )

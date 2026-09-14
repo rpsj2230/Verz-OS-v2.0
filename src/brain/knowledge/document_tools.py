@@ -24,16 +24,25 @@ present and cannot answer is worse than an absent one, so these are registered t
 same door as the row tools and exactly when they are. `RowSource` is "whatever runs a
 statement and hands back mappings keyed by the labels", and a chunk statement is a statement.
 
-**That door has a measured limit, and it fails closed.** The second wall on `know.chunk` is the
-row-level security policy in 0009, which reads `app.principal_id` and `app.departments` from
-session settings that `brain.knowledge.search.session_settings` produces.
-`brain.knowledge.row_store.SessionRowSource` runs one statement per session and runs no
-settings, so on a real database the policy sees neither and admits company-visible chunks only:
-a person asking through these tools today reaches the company's documents and not their own
-department's or their own. The first wall is intact either way, and nothing is admitted that
-`reach_predicate` refuses. What closes it is a row query that can carry the settings to run in
-its transaction, which is `brain.knowledge.rows` and `row_store` to change rather than this
-module to work around. See `THE_SECOND_WALL_IS_NOT_RAISED_BY_A_ROW_SOURCE`.
+**Every chunk statement carries the settings the second wall reads.** The second wall on
+`know.chunk` is the row-level security policy in 0009, which reads `app.principal_id` and
+`app.departments`. Until 2026-09-14 `brain.knowledge.row_store.SessionRowSource` ran one
+statement per session and no settings, so on a real database the policy saw neither and
+admitted company-visible chunks only: a person asking through these tools reached the company's
+documents and not their own department's or their own. It failed closed, and it made "answering
+with knowledge" false for everything that was not company-wide. Now each chunk statement is a
+`RowQuery` carrying `brain.knowledge.search.session_settings` for the same `Reach` its
+`reach_predicate` was built from, and the source runs them in the statement's transaction. One
+`Reach` builds both walls, so they cannot be built for two different callers. See
+`THE_SECOND_WALL_IS_RAISED_BY_EVERY_CHUNK_STATEMENT`.
+
+**The iterative scan settings are not carried, because nothing here reads the vector index.**
+`brain.knowledge.search.iterative_scan_statements` tunes how the HNSW index is walked under a
+filter, and only `vector_query` walks it. These tools fuse the lexical legs with an empty vector
+leg, because this process has no embedding of the question to search with, so carrying them
+would set two index parameters on statements that never touch the index. The day a vector leg is
+added here, its statement carries both, and a test fails first to say so. See
+`NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX`.
 
 **The departments are read from `gate.department`, on each call.** `reach_for` needs the
 registry of departments, because a grant with no department clause reaches every department
@@ -53,12 +62,16 @@ Two designs were rejected.
 carries its own visibility, and the reach predicate is what narrows. A tool per department
 would be a second place that decides which department a caller reaches.
 
-*A second protocol beside `RowSource` for chunk statements, handed to `build_registry`.* It is
-the right shape for the second wall and it is not a shape the application can build today
-without changing `brain.app` and the row plane together; and it would register the knowledge
-tools only on processes handed it, so an install with a database and rows would carry row tools
-and no document tools while every knowledge template badged itself incomplete for a reason
-nobody could find.
+*A second protocol beside `RowSource` for chunk statements, handed to `build_registry`.* It
+would have raised the second wall without touching the row plane, and it would register the
+knowledge tools only on processes handed it, so an install with a database and rows would carry
+row tools and no document tools while every knowledge template badged itself incomplete for a
+reason nobody could find. A query that carries its own settings raises the same wall through the
+door that already exists.
+
+*Settings run by the handler, through a session it opens itself.* The handler holds a
+`RowSource` and not a session, and the only way to share a transaction with a statement the
+source runs is to be run by the source.
 
 Task ids: M15.2.6, M15.3.2
 """
@@ -72,6 +85,7 @@ from typing import Any, Final
 
 import sqlalchemy as sa
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import TextClause
 from sqlalchemy.sql import Select
 
 from brain.core.entitlement import EntitlementSet
@@ -92,6 +106,7 @@ from brain.knowledge.search import (
     lexical_query,
     reach_for,
     reach_predicate,
+    session_settings,
 )
 from brain.tables.gate import DepartmentRow
 
@@ -106,14 +121,22 @@ THE_DOCUMENT_PLANE_IS_READ_THROUGH_ITS_OWN_REACH: Final = (
     "and the second one is the one that drifts."
 )
 
-#: The measured limit of reading chunks through a row source. See the module docstring.
-THE_SECOND_WALL_IS_NOT_RAISED_BY_A_ROW_SOURCE: Final = (
-    "know.chunk's row-level security reads app.principal_id and app.departments, and "
-    "SessionRowSource runs no session settings, so on a real database these tools reach "
-    "company-visible chunks only. That fails closed: the first wall still applies, nothing "
-    "reach_predicate refuses is admitted, and a department's documents are missing rather "
-    "than exposed. It is closed by a row query that carries its settings into its own "
-    "transaction, which is a change to brain.knowledge.rows and row_store."
+#: Why every chunk statement carries session settings. See the module docstring.
+THE_SECOND_WALL_IS_RAISED_BY_EVERY_CHUNK_STATEMENT: Final = (
+    "know.chunk's row-level security reads app.principal_id and app.departments, which "
+    "set_config writes for one transaction. A chunk statement with no settings is admitted "
+    "company-visible chunks only, so a person's own department's documents and their own "
+    "never come back, and nothing raises to say so. Every chunk statement therefore carries "
+    "session_settings for the Reach its reach_predicate was built from, and the row source "
+    "runs them in the statement's own transaction."
+)
+
+#: Why the iterative scan settings are not carried. See the module docstring.
+NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX: Final = (
+    "iterative_scan_statements tunes how the HNSW index is walked under a filter, and only a "
+    "vector leg walks it. These tools fuse the lexical legs with an empty vector leg, so the "
+    "settings would tune an index no statement here reads. A vector leg added here carries "
+    "them with its statement."
 )
 
 #: Why the definitions leave `source` empty.
@@ -223,24 +246,38 @@ class KnowledgePassage(Entity):
 
 
 # ------------------------------------------------------------------ the statements
-def _query(entity: str, columns: tuple[str, ...], statement: Select[Any], empty: bool) -> RowQuery:
+def _query(
+    entity: str,
+    columns: tuple[str, ...],
+    statement: Select[Any],
+    empty: bool,
+    *,
+    settings: tuple[TextClause, ...],
+) -> RowQuery:
+    """A row query on the document plane. `settings` has no default, so every statement
+    written here says whether the second wall reads anything, rather than inheriting nothing."""
     return RowQuery(
         entity=entity,
         source=KNOWLEDGE_TOOL_PREFIX,
         columns=columns,
         statement=statement,
         certainly_empty=empty,
+        settings=settings,
     )
 
 
 def departments_query() -> RowQuery:
-    """Every live department's slug, which is the registry `reach_for` intersects a grant with."""
+    """Every live department's slug, which is the registry `reach_for` intersects a grant with.
+
+    No settings: `gate.department`'s policy is `deleted_at IS NULL` alone, and this runs before
+    there is a `Reach` to build any from.
+    """
     statement = (
         sa.select(DepartmentRow.slug.label("slug"))
         .where(DepartmentRow.deleted_at.is_(None))
         .order_by(DepartmentRow.slug)
     )
-    return _query("department", ("slug",), statement, empty=False)
+    return _query("department", ("slug",), statement, empty=False, settings=())
 
 
 def search_queries(question: str, *, reach: Reach) -> tuple[RowQuery, ...]:
@@ -251,6 +288,7 @@ def search_queries(question: str, *, reach: Reach) -> tuple[RowQuery, ...]:
             ("chunk_id", "relevance"),
             LEXICAL_LEG_QUERIES[leg](question, reach=reach, depth=CANDIDATE_DEPTH),
             empty=False,
+            settings=session_settings(reach),
         )
         for leg in lexical_legs(question)
     )
@@ -275,7 +313,13 @@ def passages_query(chunk_ids: Sequence[str], *, reach: Reach) -> RowQuery:
         .where(sa.and_(reach_predicate(reach), CHUNK.c.chunk_id.in_(list(chunk_ids))))
         .order_by(CHUNK.c.chunk_id)
     )
-    return _query(KNOWLEDGE_ENTITY, PASSAGE_COLUMNS, statement, empty=not chunk_ids)
+    return _query(
+        KNOWLEDGE_ENTITY,
+        PASSAGE_COLUMNS,
+        statement,
+        empty=not chunk_ids,
+        settings=session_settings(reach),
+    )
 
 
 def document_query(document_id: str, *, reach: Reach, limit: int) -> RowQuery:
@@ -286,7 +330,9 @@ def document_query(document_id: str, *, reach: Reach, limit: int) -> RowQuery:
         .order_by(CHUNK.c.ordinal, CHUNK.c.chunk_id)
         .limit(limit)
     )
-    return _query(KNOWLEDGE_ENTITY, PASSAGE_COLUMNS, statement, empty=False)
+    return _query(
+        KNOWLEDGE_ENTITY, PASSAGE_COLUMNS, statement, empty=False, settings=session_settings(reach)
+    )
 
 
 # ------------------------------------------------------------------ the handlers
