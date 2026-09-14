@@ -187,7 +187,12 @@ _IN_LIST = re.compile(r"^(?P<column>[\w.]+)\s+IN\s*\((?P<items>[^()]*)\)$", re.I
 #: `schema.table`, as every statement in this repository qualifies it.
 _QUALIFIED = r"[A-Za-z_][\w]*\.[A-Za-z_][\w]*"
 
-_CREATE_TABLE = re.compile(rf"^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?({_QUALIFIED})", re.I)
+#: A table or a materialised view, the two relations a restriction can be placed on. A unique
+#: index on a materialised view the same body creates restricts nothing the previous release
+#: ever wrote, for the reason a policy on a new table does not.
+_CREATE_TABLE = re.compile(
+    rf"^CREATE\s+(?:TABLE|MATERIALIZED\s+VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?({_QUALIFIED})", re.I
+)
 _ALTER_TABLE = re.compile(rf"^ALTER\s+TABLE\s+(?:ONLY\s+)?({_QUALIFIED})\s+(?P<rest>.*)$", re.I)
 _ON_TABLE = re.compile(rf"\bON\s+({_QUALIFIED})\b", re.IGNORECASE)
 
@@ -527,11 +532,19 @@ def _calls(tree: ast.Module, function: str) -> tuple[tuple[_Call, ...], bool]:
 
 
 def _tables_created(calls: tuple[_Call, ...]) -> frozenset[str]:
-    """Every `schema.table` this body creates, from both spellings.
+    """Every `schema.table` this body creates, from both spellings, materialised views included.
 
     Read before anything is classified rather than as the body is walked, because the
     ordering inside a migration says nothing: a policy written above the table it protects
     still protects a table the previous release never saw.
+
+    A materialised view counts because
+    `A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING` is about the relation
+    being new, not about it being a table: the unique index `REFRESH
+    MATERIALIZED VIEW CONCURRENTLY` requires is written in the migration that creates the view,
+    and the previous release never read or refreshed a view that did not exist. A view an
+    earlier migration created is not in this set, so an index added to it later is still a
+    restriction on something that was already there.
     """
     made: set[str] = set()
     for call in calls:

@@ -306,7 +306,24 @@ def spend_report(
     same report do not disagree about the order of two equal figures.
     """
     rows = visible(actuals, entitlement, now=now)
-    totals = spend_by(rows, dimension, include_machine=include_machine)
+    return report_from_totals(
+        dimension,
+        spend_by(rows, dimension, include_machine=include_machine),
+        include_machine=include_machine,
+    )
+
+
+def report_from_totals(
+    dimension: Dimension, totals: Mapping[str, int], *, include_machine: bool
+) -> Report:
+    """A report from totals that were grouped over rows this reader may see, and only those.
+
+    The ordering and the total are here once, so `brain.console.spend_report_view`, which
+    groups in the database rather than in `spend_by`, cannot order two equal figures
+    differently or print a total the lines do not add up to. What this function cannot check
+    is the precondition in its first line: it is handed totals, not rows, so whether they
+    were filtered first is the caller's to prove.
+    """
     lines = tuple(
         Line(key=key, cost_minor=cost)
         for key, cost in sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))

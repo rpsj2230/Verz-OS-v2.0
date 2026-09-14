@@ -341,6 +341,40 @@ def test_row_level_security_switched_on_over_an_existing_table_is_a_finding() ->
     ]
 
 
+def test_a_unique_index_on_a_materialised_view_created_here_is_not_a_restriction() -> None:
+    """The view and the unique index a concurrent refresh needs, written in one migration, as
+    `0035` writes them: nothing breaking, and the index is read as a restriction on a relation
+    created here.
+
+    Delete this and materialised views can fall back out of the created-here set, which flags
+    every migration that builds a refreshable report as breaking the release before it."""
+    fresh = _migration(
+        '    op.execute("CREATE MATERIALIZED VIEW ops.spend_daily AS SELECT 1 AS one")\n'
+        '    op.execute("CREATE UNIQUE INDEX uq_spend_daily_one ON ops.spend_daily (one)")'
+    )
+    changes = changes_in(fresh)
+
+    assert not breaking_changes(fresh)
+    assert "restriction on a table created here" in _rules(changes)
+
+
+def test_a_unique_index_on_a_materialised_view_an_earlier_migration_created_is_still_flagged() -> (
+    None
+):
+    """The same index on a view this migration did not create is a restriction on something the
+    previous release already reads.
+
+    Delete this and the created-here rule could admit every materialised view by its kind rather
+    than by being created in the same body, which is a restriction on a live report let through."""
+    existing = _migration(
+        '    op.execute("CREATE UNIQUE INDEX uq_spend_daily_one ON ops.spend_daily (one)")'
+    )
+    found = breaking_changes(existing)
+
+    assert [one.rule for one in found] == ["restriction on a table that was already there"]
+    assert A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING in found[0].detail
+
+
 @pytest.mark.parametrize(
     ("statement", "verdict"),
     [

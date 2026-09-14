@@ -89,6 +89,8 @@ MIGRATION_CONTROL_RUN = VERSIONS / "0025_control_run.py"
 MIGRATION_OUTBOX = VERSIONS / "0030_outbox.py"
 MIGRATION_BUDGET = VERSIONS / "0031_budget.py"
 MIGRATION_PLUGIN = VERSIONS / "0032_plugin_registry.py"
+MIGRATION_SPEND = VERSIONS / "0034_spend_ledger.py"
+MIGRATION_SPEND_REPORT = VERSIONS / "0035_materialised_spend_report.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -204,6 +206,12 @@ BUDGET_TABLES: tuple[str, ...] = ("ops.budget_version",)
 #: which points at the version it is running.
 PLUGIN_TABLES: tuple[str, ...] = ("ops.plugin_version", "ops.plugin_install")
 
+#: And the one 0034 adds: what each completed run actually cost.
+SPEND_TABLES: tuple[str, ...] = ("ops.spend_actual",)
+
+#: And the one 0035 adds beside its materialised view: when that view was last rebuilt.
+SPEND_REPORT_TABLES: tuple[str, ...] = ("ops.report_refresh",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -222,6 +230,8 @@ ALL_TABLES = (
     + OUTBOX_TABLES
     + BUDGET_TABLES
     + PLUGIN_TABLES
+    + SPEND_TABLES
+    + SPEND_REPORT_TABLES
 )
 
 
@@ -917,6 +927,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     outbox = migration_module(MIGRATION_OUTBOX)
     budget = migration_module(MIGRATION_BUDGET)
     plugin = migration_module(MIGRATION_PLUGIN)
+    spend = migration_module(MIGRATION_SPEND)
+    spend_report = migration_module(MIGRATION_SPEND_REPORT)
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -934,6 +946,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert outbox.TABLES == OUTBOX_TABLES
     assert budget.TABLES == BUDGET_TABLES
     assert plugin.TABLES == PLUGIN_TABLES
+    assert spend.TABLES == SPEND_TABLES
+    assert spend_report.TABLES == SPEND_REPORT_TABLES
     # The package tuple is the migrations end to end. Stated as an equality rather than as a
     # set comparison, because the order is what a downgrade depends on.
     end_to_end = (
@@ -954,6 +968,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(outbox.TABLES)
         + tuple(budget.TABLES)
         + tuple(plugin.TABLES)
+        + tuple(spend.TABLES)
+        + tuple(spend_report.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -976,6 +992,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(outbox.TABLES),
         set(budget.TABLES),
         set(plugin.TABLES),
+        set(spend.TABLES),
+        set(spend_report.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

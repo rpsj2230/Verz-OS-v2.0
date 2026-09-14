@@ -83,6 +83,7 @@ from brain.tables.resolution import (
 )
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
+from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
 
@@ -174,6 +175,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # it is running.
     "ops.plugin_version",
     "ops.plugin_install",
+    # 0034_spend_ledger. Points at nothing: a principal, a department and an agent are values,
+    # so a recorded cost outlives all three.
+    "ops.spend_actual",
+    # 0035_materialised_spend_report. Names a view, which is not a table and has no row here.
+    "ops.report_refresh",
 )
 
 __all__ = [
@@ -209,12 +215,14 @@ __all__ = [
     "PrincipalIdentityRow",
     "PrincipalRow",
     "ProjectedRecordRow",
+    "ReportRefreshRow",
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",
     "SessionRow",
     "SettingRow",
     "SettingType",
+    "SpendActualRow",
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",

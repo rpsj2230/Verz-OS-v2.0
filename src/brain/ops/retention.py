@@ -39,8 +39,10 @@ nothing about it looks wrong.
 takes what an executor observed and returns what is wrong with it, the same split
 `brain.ops.limits` and `brain.ops.limit_store` make, for the same reason: the case that is
 always wrong is the boundary, and a boundary cannot be tested through a module that opens a
-socket. `StoreSweeper` is the shape the executor must have. The executor itself is not
-built, which is stated here rather than implied by the absence of a file.
+socket. `StoreSweeper` is the shape an executor must have, `sweep` is the one run over it,
+and `brain.ops.retention_store.PostgresSweeper` is the executor for the stores in PostgreSQL.
+There is no executor for the object store, the cache or the index, and `sweep` names each of
+those stores as not reached on every run rather than leaving the gap to be inferred.
 
 Rejected: a single `retention_days` column on each table, set by whoever created the table.
 It is cheaper and it is how every estate ends up with fourteen different windows nobody
@@ -49,7 +51,7 @@ anybody weighing it. Rejected too: expressing retention as a bucket lifecycle ru
 which handles the object store and says nothing about the ten Postgres schemas where most
 of a person actually lives.
 
-Task ids: M25.1.1, M25.1.2, M25.1.3, M25.1.4
+Task ids: M25.1.1, M25.1.2, M25.1.3, M25.1.4, M25.1.5
 """
 
 from __future__ import annotations
@@ -57,7 +59,7 @@ from __future__ import annotations
 import enum
 import inspect
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta
 from typing import Final, Protocol, assert_never
 
@@ -801,10 +803,12 @@ def store_gaps(facts: Sequence[StoreFacts] | None = None) -> tuple[str, ...]:
 class StoreSweeper(Protocol):
     """What an executor must offer for a retention run to happen at all.
 
-    A protocol and not an implementation. **The executor half of M25.1.5 is not built**, and
-    saying so here is more useful than leaving it to be inferred from the absence of a file:
-    everything in this module decides and reports, and something with a database connection
-    and an S3 client has to do the removing. That split is the one
+    A protocol and not an implementation. `brain.ops.retention_store.PostgresSweeper` is the
+    one implementation, for the stores in PostgreSQL, and **nothing implements it for the object
+    store**: `brain.ops.storage.StorageBackend` has no implementation to build one on. A store a
+    sweeper cannot count raises `RetentionError` from `census`, and `sweep` reports it as not
+    reached with that reason. Everything in this module decides and reports, and the executor
+    does the removing. That split is the one
     `brain.ops.limits` and `brain.ops.limit_store` make, and the reason is the same: the
     interesting case in a retention run is the store that could not be reached, and a module
     that opened its own connections could not be tested for it.
@@ -1002,6 +1006,60 @@ def enforcement_gaps(census: Sequence[StoreCensus]) -> tuple[str, ...]:
     return tuple(findings)
 
 
+#: Why a sweep removes only from a fixed window, whatever a census says is due.
+ONLY_A_CLOCK_IS_ENFORCED_BY_AGE = (
+    "A fixed window is the one lifetime whose end is a date, so it is the one a scheduled sweep "
+    "may act on unattended. A record-lifetime row ends when its record does, which is an erasure; "
+    "a derived copy ends when its source does, which is a purge; and the audit chain does not "
+    "end. A census claiming any of those has items due is reported and acted on by nothing, "
+    "because a sweep believing it would be removing rows on a reading instead of on a policy."
+)
+
+
+def sweep(sweeper: StoreSweeper, *, now: datetime, report_only: bool) -> RetentionReport:
+    """One retention run over every store: count, report, and remove only what may go (M25.1.5).
+
+    Every member of `Store` is asked, in declaration order. A store the sweeper refuses to count
+    is left out of the census, so `enforcement_report` names it as not reached, and the refusal's
+    own reason is added beside it: "not reached" tells an operator the run was incomplete and the
+    reason tells them what would complete it.
+
+    In report-only mode nothing is removed, and the report says so whenever anything was due,
+    because a report showing items due beside no removal reads as a sweep that failed. Otherwise
+    each reached store with items due is expired, and only if its lifetime is a fixed window.
+    See `ONLY_A_CLOCK_IS_ENFORCED_BY_AGE`.
+    """
+    census: list[StoreCensus] = []
+    refused: list[str] = []
+    for store in Store:
+        try:
+            census.append(sweeper.census(store, now))
+        except RetentionError as why:
+            refused.append(f"{store.value}: not counted, because {why}")
+    report = enforcement_report(now=now, census=census)
+    acted: list[str] = []
+    for entry in census:
+        if entry.due < 1:
+            continue
+        if report_only:
+            acted.append(f"{entry.store.value}: {entry.due} due and none removed, report only")
+            continue
+        if horizon_of(entry.store).lifetime is not Lifetime.FIXED_WINDOW:
+            acted.append(
+                f"{entry.store.value}: {entry.due} reported due and none removed. "
+                f"{ONLY_A_CLOCK_IS_ENFORCED_BY_AGE}"
+            )
+            continue
+        removed = sweeper.expire(entry.store, now)
+        acted.append(f"{entry.store.value}: {removed} removed")
+        if removed > entry.due:
+            acted.append(
+                f"{entry.store.value}: removed {removed} where the census counted {entry.due} "
+                "due, so the count and the removal disagree about what was past its window"
+            )
+    return replace(report, findings=report.findings + tuple(refused) + tuple(acted))
+
+
 # ------------------------------------------------------- the absence of an override
 #: Argument names that would let a caller postpone or extend a window from a call site.
 #: Scanned for rather than trusted, because the way this rule dies is one helpful keyword
@@ -1031,6 +1089,7 @@ POLICY_SURFACE: Final[tuple[Callable[..., object], ...]] = (
     is_expired,
     enforcement_report,
     enforcement_gaps,
+    sweep,
 )
 
 #: The models a per-row window could arrive on instead.
