@@ -38,7 +38,12 @@ for supersession on contradiction, marked rather than deleted, and marking is ei
 grant or an append-only row that supersedes an earlier one. This repository has reached for
 append-only every time the question has come up, and the choice belongs to that leaf rather
 than to this one. Until then a memory cannot be edited, which is the conservative direction:
-nothing can quietly become more confident or wider in scope than it was written.
+nothing can quietly become more confident or wider in scope than it was written. Since
+2026-09-14 an owner can edit one, append-only: `brain.memory.review.edit` inserts a
+replacement and a supersession and refuses a replacement with another scope, other
+capabilities or another kind, so nothing becomes wider than it was written. What an edit
+does renew is the confidence, because the replacement is formed when the person writes it,
+and that is somebody restating a thing rather than the system growing surer of it.
 
 **No `updated_at`.** A row nothing may update carrying a column that says when it was last
 updated is a column that tells a reader something untrue, which is the argument

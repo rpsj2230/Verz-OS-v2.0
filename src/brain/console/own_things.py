@@ -59,6 +59,15 @@ is claimed here is the control the leaf asks for, which exists and runs, and
 `DELETE_MEANS_A_MARK_AND_THIS_SURFACE_MAY_NOT_IMPLY_OTHERWISE` is the sentence that stops the
 next reader promising a purge.
 
+**The edit control is `brain.memory.review.edit` behind the same ownership check.** Added on
+2026-09-14, and shaped like delete for the reason delete is shaped that way: the act, a
+replacement and a supersession with nothing updated in place, stays in the module that argues
+for it, and what this module adds is the one question that module cannot ask. So who may edit a
+memory and who may delete it are one predicate, `is_own` over the writer, rather than two that
+can drift apart. The replacement has to be written by the same person as well, which
+`brain.memory.review.replacement_gaps` holds, so an edit never hands a memory to somebody else
+and what the person wrote is still theirs to edit or delete.
+
 **Usage against allowance needed a join that existed nowhere.** `brain.ops.budgets` builds a
 person's daily and monthly ceilings and says in its own docstring that nothing there counts
 anything; `brain.ops.spend` counts and takes the ceilings as an argument. Between them sits
@@ -80,6 +89,7 @@ Scope: domain logic. Nothing here renders, opens a connection or reads a clock; 
 windows are parameters, as in every sibling in this package.
 
 Task ids: M33.3.1.1, M33.3.1.2, M33.3.1.3, M33.3.1.4, M33.3.1.5
+Task ids: M39.4.1.4
 """
 
 from __future__ import annotations
@@ -96,7 +106,9 @@ from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.visibility import OWNER_FIELD, Visibility, scope_for
 from brain.memory.correction import Demotion, Supersession
 from brain.memory.digest import Learning, Undo
+from brain.memory.review import Edit
 from brain.memory.review import delete as delete_memory
+from brain.memory.review import edit as edit_memory
 from brain.ops.budgets import Allowance, BudgetLevel, BudgetPeriod, BudgetRow
 from brain.ops.export import ConversationExport, conversation_export
 from brain.ops.spend import Actual, Dimension, spend_by
@@ -354,6 +366,39 @@ def delete_own_memory(
     return delete_memory(learning, at=at, supersessions=supersessions, demotions=demotions)
 
 
+def edit_own_memory(
+    learning: Learning,
+    replacement: Learning,
+    *,
+    principal_id: str,
+    at: datetime,
+    supersessions: Iterable[Supersession] = (),
+    demotions: Iterable[Demotion] = (),
+) -> Edit:
+    """The edit control on a person's own memory (M39.4.1.4). It writes a new memory and a mark.
+
+    **The act is `brain.memory.review.edit`, called and never reimplemented**, so what an edit
+    may change and what it writes stay in the module that argues for them. That module refuses
+    a replacement that changes anything but what the memory says, a narrower scope included;
+    `brain.memory.review.AN_EDIT_CHANGES_WHAT_A_MEMORY_SAYS_AND_NEVER_WHO_MAY_RECALL_IT` is why.
+
+    What is added is ownership, by the predicate `delete_own_memory` asks, so the edit and the
+    delete on one row cannot disagree about whose memory it is. It is checked first, so
+    somebody else's memory is refused here whatever replacement arrived with it.
+
+    Refuses rather than returning `None`, for the reason `delete_own_memory` gives.
+    """
+    if not is_own(principal_id, learning.formation.principal_id):
+        msg = (
+            f"{principal_id!r} may not edit {learning.memory_id!r} from a personal memory "
+            f"tab. {WHO_A_MEMORY_FORMED_FROM_IS_AUTHORSHIP_AND_NEVER_A_RECALL_PERMISSION}"
+        )
+        raise OwnThingsError(msg)
+    return edit_memory(
+        learning, replacement, at=at, supersessions=supersessions, demotions=demotions
+    )
+
+
 # -------------------------------------------------------------------- own usage (M33.3.1.5)
 #: The budget level a person's own ceilings are written at. `brain.ops.budgets` owns the
 #: enumeration; this names the member so the selection below reads as a decision rather than
@@ -438,6 +483,7 @@ PERSONAL_SURFACE: Final[tuple[Callable[..., Any], ...]] = (
     export_own_history,
     own_memory,
     delete_own_memory,
+    edit_own_memory,
     own_allowances,
 )
 

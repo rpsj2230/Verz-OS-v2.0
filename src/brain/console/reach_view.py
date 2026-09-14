@@ -112,6 +112,13 @@ only on both memory tables, so an edit is a migration and a tool rather than a f
 console module. Building half of it here would put a write path on a surface whose whole
 argument is that the console holds nothing of its own.
 
+**Since 2026-09-14 that leaf is built, and not here.** The reading above was that an edit needs
+an UPDATE grant, and it does not: `brain.memory.review.edit` returns a replacement and a
+supersession, both of them rows to insert, and refuses a replacement that changes anything but
+what the memory says. The owner's control is `brain.console.own_things.edit_own_memory`, beside
+the delete control and behind the same ownership check. This module still holds no write path,
+which is the half of the argument that stands.
+
 **And nothing here claims a screen exists.** There is no console screen behind any of this, in
 this repository or anywhere else; `brain.console.screens` says the same about its own registry
 and for the same reason. What is built is the domain layer four screens would read.

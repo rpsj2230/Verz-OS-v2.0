@@ -13,6 +13,8 @@ the whole of that function (M33.3.1.3). A memory is theirs by authorship, the de
 writes a mark and refuses somebody else's (M33.3.1.4). And a person's ceilings are paired with
 what they actually spent inside each period's window, with a ceiling nobody supplied a window
 for left out rather than reported at zero (M33.3.1.5).
+The edit control sits beside the delete, behind the same ownership check, and is the memory
+module's own edit rather than a second one (M39.4.1.4).
 
 Real `AgentRecord`s, real `KnowledgeItem`s, a real `Learning` through `brain.memory.tiers.
 propose`, real `Actual`s and real `BudgetRow`s throughout. The export test runs
@@ -20,11 +22,13 @@ propose`, real `Actual`s and real `BudgetRow`s throughout. The export test runs
 because the claim is about what comes back.
 
 Task ids: M33.3.1.1, M33.3.1.2, M33.3.1.3, M33.3.1.4, M33.3.1.5
+Task ids: M39.4.1.4
 """
 
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -38,6 +42,7 @@ from brain.console.own_things import (
     PERSONAL_SURFACE,
     OwnThingsError,
     delete_own_memory,
+    edit_own_memory,
     export_own_history,
     is_own,
     own_agents,
@@ -64,6 +69,7 @@ from brain.knowledge.visibility import (
 from brain.memory.correction import Correction, Demotion
 from brain.memory.digest import Learning
 from brain.memory.formation import Formation
+from brain.memory.review import edit
 from brain.memory.tiers import Change, propose
 from brain.ops.budgets import BudgetLevel, BudgetPeriod, BudgetRow
 from brain.ops.spend import Actual
@@ -395,6 +401,45 @@ def test_a_person_cannot_delete_a_memory_formed_from_somebody_elses_conversation
         delete_own_memory(theirs, principal_id=ME, at=NOW)
 
 
+def test_the_edit_control_is_the_memory_modules_edit_behind_the_same_ownership_check() -> None:
+    """**Who may edit a memory and who may delete it are one predicate.** The act is
+    `brain.memory.review.edit`, asserted as equality so that a second implementation which
+    happens to produce the same shape today is what fails, and ownership is `is_own` over the
+    writer, the check `delete_own_memory` makes.
+
+    Delete this and `edit_own_memory` grows a body of its own, and the first change to it is
+    the one that lets an edit change something the memory module refuses."""
+    mine = a_learning(principal_id=ME)
+    replacement = replace(mine, memory_id="m_two", replaced_id=mine.memory_id)
+
+    made = edit_own_memory(mine, replacement, principal_id=ME, at=NOW)
+
+    assert made == edit(mine, replacement, at=NOW)
+    assert made.took_effect is True
+
+
+def test_a_person_cannot_edit_a_memory_formed_from_somebody_elses_conversation() -> None:
+    """The sibling of the delete refusal and for its reason: a control that took the memory
+    from a form would otherwise rewrite anybody's by id.
+
+    The replacement here is written in the editor's own name, which the memory module would
+    refuse too, and the refusal asserted is ownership: it is checked first, so somebody else's
+    memory is refused by this surface whatever arrived with it.
+
+    Delete this and the personal tab becomes a way to rewrite what the system learnt from other
+    people's conversations."""
+    theirs = a_learning(principal_id=THEM, memory_id="m_theirs")
+    replacement = replace(
+        theirs,
+        memory_id="m_mine_now",
+        replaced_id=theirs.memory_id,
+        formation=replace(theirs.formation, principal_id=ME),
+    )
+
+    with pytest.raises(OwnThingsError, match="may not edit"):
+        edit_own_memory(theirs, replacement, principal_id=ME, at=NOW)
+
+
 # -------------------------------------------------------------------- own usage (M33.3.1.5)
 def test_a_persons_ceilings_are_paired_with_what_they_actually_spent() -> None:
     """**The join neither module could make.** `brain.ops.budgets` builds the ceilings and
@@ -517,7 +562,7 @@ def test_no_personal_function_can_be_asked_to_answer_for_everybody() -> None:
     with one extra argument, and from then on the difference between a personal surface and a
     directory is a parameter nobody reviews."""
     assert own_gaps() == ()
-    assert len(PERSONAL_SURFACE) == 7
+    assert len(PERSONAL_SURFACE) == 8
 
     for one in PERSONAL_SURFACE:
         found = inspect.signature(one).parameters["principal_id"]

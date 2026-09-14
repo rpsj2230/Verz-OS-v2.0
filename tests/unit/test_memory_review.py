@@ -13,22 +13,30 @@ pass with either side of the intersection deleted.
 
 Every hiding test has a sibling proving the permitted rows still come through.
 
-Task ids: M16.5.2, M16.5.3, M16.5.4
+The owner's edit is held to the one thing that would make it dangerous, a replacement that
+changes anything but what the memory says. Every such replacement is built to change exactly
+one field and exactly one reason is asserted, so removing any single check leaves one case
+with nothing to report.
+
+Task ids: M16.5.2, M16.5.3, M16.5.4, M39.4.1.4
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import fields as dataclass_fields
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Any, Final
 
 import pytest
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
-from brain.core.scope import Scope
+from brain.core.scope import Clause, Op, Scope
 from brain.memory import review as review_module
-from brain.memory.correction import Demotion
+from brain.memory.correction import Demotion, Supersession, corrected
 from brain.memory.digest import COUNTING_FIELD_NAMES, Learning, MemoryItem, undo
-from brain.memory.formation import Formation, clause_place
+from brain.memory.formation import Formation, MemoryKind, clause_place, may_recall
 from brain.memory.review import (
     DEPARTMENT_CHANGES,
     QUEUE_ALARM_AT,
@@ -36,13 +44,16 @@ from brain.memory.review import (
     REVIEW_SITTING_MINUTES,
     AgentMemoryView,
     DepartmentMemoryView,
+    Edit,
     QueueAlarm,
     QueueItem,
     ReviewQueue,
     agent_memory,
     delete,
     department_memory,
+    edit,
     queue_alarm,
+    replacement_gaps,
     review_gaps,
     review_queue,
 )
@@ -54,6 +65,21 @@ WEB = clause_place(department="web")
 FINANCE = clause_place(department="finance")
 ANYWHERE = Scope.unrestricted()
 DESK = "a_service_desk"
+#: A reader's place that is not a department: whatever team a works on, in any department.
+TEAM_A = Scope(clauses=(Clause(field="team", op=Op.EQ, value="a"),))
+#: Department web's team a, which is a smaller place than department web.
+WEB_TEAM_A = Scope(clauses=(*WEB.clauses, *TEAM_A.clauses))
+#: A change the tiers gate. Read off the set `review` says is gated rather than named here.
+A_GATED_CHANGE = min(CHANGES_WHAT_ANYBODY_MAY_SEE, key=lambda one: one.value)
+
+#: The defect `test_undoing_an_edit_puts_the_original_back` pins, as it was measured.
+UNDO_DOES_NOT_RESTORE: Final = (
+    "Measured on 2026-09-14: digest.undo on a learning that replaced a memory writes a "
+    "supersession of the learning by that memory and says the memory is restored, but "
+    "correction.superseded_ids is a set with no notion of a reversal, so the memory's own "
+    "supersession still stands and neither memory is recalled afterwards. An edit's "
+    "replacement names what it replaced, so undoing an edit meets the same defect."
+)
 
 
 def holder(
@@ -92,6 +118,25 @@ def learning(
         agent_id=agent_id,
         replaced_id=replaced_id,
     )
+
+
+def rewritten(original: Learning, memory_id: str = "m_new") -> Learning:
+    """The replacement an edit writes: a new memory naming the one it corrects, the same as it
+    in everything recall and the tiers read, and formed an hour later, as a person restating
+    something is."""
+    return replace(
+        original,
+        memory_id=memory_id,
+        replaced_id=original.memory_id,
+        formation=replace(
+            original.formation, formed_at=original.formation.formed_at + timedelta(hours=1)
+        ),
+    )
+
+
+def reformed(one: Learning, **changes: Any) -> Learning:
+    """The same learning with its formation changed in the named fields and nothing else."""
+    return replace(one, formation=replace(one.formation, **changes))
 
 
 def queued(how_many: int) -> tuple[QueueItem, ...]:
@@ -301,6 +346,254 @@ def test_a_memory_row_says_which_mark_its_control_would_write() -> None:
 
     assert writes["m_new"].value == "superseded"
     assert writes["m_alone"].value == "demoted"
+
+
+# -------------------------------------------------------- M39.4.1.4 the owner's direct edit
+def test_an_edit_writes_a_new_memory_and_a_mark_and_rewrites_nothing() -> None:
+    """**An edit is a replacement and a supersession, both of them rows to insert.**
+
+    `brain.tables.memory` grants SELECT and INSERT on both memory tables, and an edit that
+    needed an UPDATE would loosen the one grant that keeps a memory from quietly becoming
+    something else. So the result is asserted as exactly the supersession of the edited memory
+    by its replacement, and the recall path's own `corrected` is asked which of the two stops
+    being recalled.
+
+    Delete this and an edit can come back as the replacement alone, which is two memories
+    recalled side by side, one of them the thing the owner corrected."""
+    original = learning("m_old")
+    replacement = rewritten(original)
+
+    made = edit(original, replacement, at=NOW)
+
+    written = made.correction
+    assert written is not None
+    assert written == Supersession(
+        superseded_id="m_old", by_id="m_new", prompted_by=Signal.REJECTED, at=NOW
+    )
+    assert made.replacement == replacement
+    assert made.took_effect is True
+    assert corrected([written]) == frozenset({"m_old"})
+
+
+def test_an_edit_to_a_memory_already_marked_does_nothing_and_says_so() -> None:
+    """Idempotent by the check `digest.undo` makes and for its reason: an edit pressed on a
+    memory something else has already superseded or demoted writes no second mark, and never
+    reaches the correction that marked it.
+
+    Both marks are tried, because `corrected` is one set built from two sources, and a check
+    that read only supersessions would edit a demoted memory back into recall through its
+    replacement.
+
+    Delete this and a late edit writes a replacement for a memory the source already
+    contradicted, and the replacement is recalled as though nothing had."""
+    original = learning("m_old")
+    replacement = rewritten(original)
+    superseded = Supersession(
+        superseded_id="m_old", by_id="m_other", prompted_by=Signal.REASKED, at=NOW
+    )
+    demoted = Demotion(memory_id="m_old", field="subject:m_old", at=NOW)
+
+    for late in (
+        edit(original, replacement, at=NOW, supersessions=[superseded]),
+        edit(original, replacement, at=NOW, demotions=[demoted]),
+    ):
+        assert late.took_effect is False
+        assert late.replacement is None
+
+    assert edit(original, replacement, at=NOW).took_effect is True
+
+
+@pytest.mark.parametrize(
+    ("change", "build"),
+    [
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: replace(rewritten(old), replaced_id=None),
+            id="names nothing it replaced",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: replace(old, replaced_id="m_other"),
+            id="keeps the original id and so names another memory",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: reformed(rewritten(old), principal_id="p_somebody_else"),
+            id="another writer",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: reformed(
+                rewritten(old), capabilities=(Capability(value="read:client.email"),)
+            ),
+            id="another capability",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: reformed(
+                rewritten(old),
+                capabilities=(
+                    Capability(value="read:client.name"),
+                    Capability(value="read:client.email"),
+                ),
+            ),
+            id="a capability more",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: reformed(rewritten(old), scope=ANYWHERE),
+            id="a larger place",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: reformed(rewritten(old), scope=WEB_TEAM_A),
+            id="a smaller place",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: reformed(rewritten(old), kind=MemoryKind.PERSISTENT),
+            id="another kind of memory",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: replace(rewritten(old), agent_id="a_other_desk"),
+            id="another agent",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: replace(rewritten(old), agent_id=None),
+            id="no agent",
+        ),
+        pytest.param(
+            Change.PREFERENCE,
+            lambda old: replace(
+                rewritten(old), proposal=propose(A_GATED_CHANGE, subject="subject:m_old")
+            ),
+            id="another kind of change",
+        ),
+        pytest.param(A_GATED_CHANGE, rewritten, id="a gated change however faithful"),
+    ],
+)
+def test_an_edit_changes_what_a_memory_says_and_nothing_else(
+    change: Change, build: Callable[[Learning], Learning]
+) -> None:
+    """**A replacement that changes anything but what the memory says is refused, a smaller
+    place included.**
+
+    Every case changes exactly one field and exactly one reason is asserted, so removing any
+    single check leaves one case with nothing to say. One case built to change everything
+    would pass with every check but one removed.
+
+    The smaller place is the case to read twice. Recall asks whether a reader reaches the
+    place a memory is about, so the memory about web narrowed to web's team a is recalled by a
+    reader granted only team a, whom the original refused, and
+    `test_a_smaller_place_is_reached_by_a_reader_the_larger_one_refused` measures exactly that.
+    A gated change is refused however faithful the replacement, because it has not taken
+    effect and editing a proposal is deciding it.
+
+    Delete this and an edit becomes the way round the tiers, the tabs and the formation check
+    at once, pressed by somebody who meant to correct a word."""
+    original = learning("m_old", change)
+    replacement = build(original)
+
+    assert len(replacement_gaps(original, replacement)) == 1
+    with pytest.raises(ValueError, match="this is not an edit"):
+        edit(original, replacement, at=NOW)
+
+
+def test_a_faithful_replacement_is_an_edit() -> None:
+    """The sibling every refusal above needs: a replacement changing only what the memory says
+    reports nothing, at an agent and with no agent. A `replacement_gaps` that reported
+    something for every replacement would satisfy every refusal case and refuse every edit.
+
+    Delete this and the check can refuse all edits and nothing here notices."""
+    for original in (learning("m_old"), learning("m_old", agent_id=None)):
+        assert replacement_gaps(original, rewritten(original)) == ()
+
+
+def test_a_smaller_place_is_reached_by_a_reader_the_larger_one_refused() -> None:
+    """**Why an edit may not narrow a memory's scope, measured rather than argued.**
+
+    `formation.may_recall` asks whether a reader reaches the place a memory is about. A memory
+    about department web is not recalled by a reader granted only team a, who does not reach
+    all of web; the same memory narrowed to web's team a is, because they reach all of that.
+    So a narrower scope on a replacement is a wider set of readers, and holding a replacement
+    to `scope_narrows` would let an edit widen recall while looking like a restriction.
+
+    Delete this and the equality `replacement_gaps` holds a scope to looks like caution, and
+    the first person to relax it to a narrowing relaxes it in the direction that widens."""
+    team_a = holder("read:client.name", scope=TEAM_A)
+    about_web = learning("m_old")
+    about_web_team_a = reformed(rewritten(about_web), scope=WEB_TEAM_A)
+
+    assert may_recall(about_web.formation, team_a, now=NOW) is None
+    assert may_recall(about_web_team_a.formation, team_a, now=NOW) is not None
+    assert may_recall(about_web.formation, holder("read:client.name"), now=NOW) is not None
+
+
+def test_an_edit_cannot_hold_a_replacement_without_its_mark_or_a_mark_on_another_memory() -> None:
+    """`Edit` refuses its two half-states and a mark on the wrong pair. A replacement with no
+    supersession is a second memory recalled beside the first; a supersession with no
+    replacement marks a memory as replaced by something nobody wrote; and a supersession
+    naming another memory on either side marks the wrong one.
+
+    Built directly rather than through `edit`, because `edit` never produces any of them, which
+    is exactly why nothing else reaches these checks.
+
+    Delete this and something building an `Edit` by hand can write the replacement alone."""
+    replacement = rewritten(learning("m_old"))
+
+    def mark(superseded_id: str, by_id: str) -> Supersession:
+        return Supersession(
+            superseded_id=superseded_id, by_id=by_id, prompted_by=Signal.REJECTED, at=NOW
+        )
+
+    with pytest.raises(ValueError, match="together or writes nothing"):
+        Edit(memory_id="m_old", replacement=replacement, correction=None, reason="")
+    with pytest.raises(ValueError, match="together or writes nothing"):
+        Edit(memory_id="m_old", replacement=None, correction=mark("m_old", "m_new"), reason="")
+    with pytest.raises(ValueError, match="must name the edited memory"):
+        Edit(
+            memory_id="m_old",
+            replacement=replacement,
+            correction=mark("m_else", "m_new"),
+            reason="",
+        )
+    with pytest.raises(ValueError, match="must name the edited memory"):
+        Edit(
+            memory_id="m_old",
+            replacement=replacement,
+            correction=mark("m_old", "m_else"),
+            reason="",
+        )
+
+    assert Edit(
+        memory_id="m_old", replacement=replacement, correction=mark("m_old", "m_new"), reason=""
+    ).took_effect
+    assert not Edit(memory_id="m_old", replacement=None, correction=None, reason="").took_effect
+
+
+@pytest.mark.xfail(strict=True, reason=UNDO_DOES_NOT_RESTORE)
+def test_undoing_an_edit_puts_the_original_back() -> None:
+    """**An edit is undone by the control every other replacement is undone by.** The
+    replacement names what it replaced, so `digest.undo` on it writes the supersession meant
+    to put the original back, and the recall path's own `corrected` is asked whether it did.
+
+    Pinned as a strict expected failure rather than left unwritten: see
+    `UNDO_DOES_NOT_RESTORE`. A fix to `corrected` flips this test, strict mode then fails the
+    suite, and the marker comes off in the same change.
+
+    Delete this and the digest's undo goes on saying restored about a memory nothing will
+    recall again."""
+    original = learning("m_old")
+    made = edit(original, rewritten(original), at=NOW)
+    assert made.replacement is not None
+    assert made.correction is not None
+
+    undone = undo(made.replacement, at=NOW + timedelta(minutes=5), supersessions=[made.correction])
+    assert isinstance(undone.correction, Supersession)
+
+    assert corrected([made.correction, undone.correction]) == frozenset({"m_new"})
 
 
 # ------------------------------------------------------ M16.5.3 the department admin view

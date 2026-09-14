@@ -58,10 +58,30 @@ Rejected: putting the queue length on the alarm. It is the obvious field, it is 
 operator asks for, and on a filtered queue it is a count of hidden items whenever the filter
 did anything.
 
-**Nothing here writes, applies or approves.** `delete` returns the correction `digest.undo`
-builds and stores nothing, the views build values, and `now` is a parameter everywhere.
+**An edit is a new memory and a mark, and it changes what a memory says and nothing else.**
+Added on 2026-09-14. `brain.console.reach_view` had declined the leaf on the reading that an
+edit needs an UPDATE grant `brain.tables.memory` does not give, and it does not: `edit` returns
+a replacement and a supersession of the edited memory by it, both of them rows to insert, which
+is the shape a correction already has. See
+`AN_EDIT_IS_A_NEW_MEMORY_AND_A_MARK_AND_NEVER_A_ROW_REWRITTEN`.
 
-Task ids: M16.5.2, M16.5.3, M16.5.4
+What it refuses is the part that would make an edit dangerous. The replacement keeps the scope,
+the capabilities, the writer, the agent, the kind of memory and the kind of change exactly, and
+a narrower scope is refused with a wider one, because recall asks whether a reader reaches the
+place a memory is about, and a smaller place is reached by readers the larger one refused. That
+was measured rather than reasoned: a memory about department web is not recalled by a reader
+granted only team a, and the same memory narrowed to web's team a is. See
+`AN_EDIT_CHANGES_WHAT_A_MEMORY_SAYS_AND_NEVER_WHO_MAY_RECALL_IT`.
+
+Rejected: holding a replacement to `brain.core.scope_sql.scope_narrows`. It is the obvious
+predicate and it is already written, and it answers which rows one scope covers, where recall
+asks which readers reach a place. On a memory's scope the two come apart, in the direction that
+widens.
+
+**Nothing here writes, applies or approves.** `delete` and `edit` return the corrections they
+build and store nothing, the views build values, and `now` is a parameter everywhere.
+
+Task ids: M16.5.2, M16.5.3, M16.5.4, M39.4.1.4
 """
 
 from __future__ import annotations
@@ -72,7 +92,7 @@ from datetime import datetime
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Scope
-from brain.memory.correction import Demotion, Supersession
+from brain.memory.correction import Demotion, Supersession, corrected
 from brain.memory.digest import (
     COUNTING_FIELD_NAMES,
     Learning,
@@ -121,6 +141,30 @@ DELETE_IS_THE_SAME_MARK_THE_DIGEST_UNDO_WRITES = (
     "somebody who read the button rather than the module. `brain.memory.correction` gives "
     "the reason in full: a deleted memory cannot explain itself, and a mark is undoable "
     "where a delete is not."
+)
+
+#: Why an edit writes a new memory beside a mark rather than changing the one it corrects.
+AN_EDIT_IS_A_NEW_MEMORY_AND_A_MARK_AND_NEVER_A_ROW_REWRITTEN = (
+    "An edit writes the replacement as a memory of its own and a supersession of the edited "
+    "memory by it, which is the shape `brain.memory.correction` already gives a newer memory "
+    "replacing an older one. Nothing is updated in place. `brain.tables.memory` grants SELECT "
+    "and INSERT on both memory tables, so an edit that needed an UPDATE would be a migration "
+    "loosening the one grant that keeps a memory from quietly becoming something else, and a "
+    "row rewritten in place can no longer say what it said before somebody changed it."
+)
+
+#: Why an edit may change what a memory says and nothing about who may recall it.
+AN_EDIT_CHANGES_WHAT_A_MEMORY_SAYS_AND_NEVER_WHO_MAY_RECALL_IT = (
+    "The replacement keeps the scope, the capabilities, the writer, the agent, the kind of "
+    "memory and the kind of change of the memory it replaces, exactly. Narrowing looks safe "
+    "and is not: recall asks whether a reader reaches the place a memory is about, so a "
+    "memory about department web is not recalled by a reader granted only team a, and the "
+    "same memory narrowed to web's team a is. Each of the other fields decides where a memory "
+    "applies, whose tab it sits in or which tier it needed, and each has a surface of its own "
+    "for deciding it. An edit that could change any of them would be the way round all of "
+    "them, pressed by somebody who meant to correct a word. A gated change is not edited at "
+    "all, because it has not taken effect, and editing a proposal before anybody decides it "
+    "is deciding it by pressing edit."
 )
 
 #: Why the queue can list a gated change and can do nothing else with it.
@@ -256,6 +300,52 @@ class DepartmentMemoryView:
     reader_id: str
     department: str
     items: tuple[MemoryItem, ...]
+
+
+@dataclass(frozen=True)
+class Edit:
+    """What an edit produced: a replacement and the mark beside it, or nothing, and why.
+
+    `replacement` and `correction` are both present or both absent, and the constructor
+    refuses anything else. A replacement written without its supersession is a second memory
+    recalled beside the one it corrects, and a supersession written without its replacement
+    marks a memory as replaced by something nobody wrote.
+
+    A no-op is a result rather than an error, for the reason `digest.Undo` gives: an edit
+    pressed on a memory somebody has already marked did nothing wrong and has nothing to fix.
+    """
+
+    memory_id: str
+    #: The memory that takes this one's place, to be written together with `correction`.
+    replacement: Learning | None
+    #: The mark that stops the edited memory being recalled. Always a supersession by the
+    #: replacement, never a demotion: a demotion would mark the memory and lose what the
+    #: person wrote in its place.
+    correction: Supersession | None
+    reason: str
+
+    def __post_init__(self) -> None:
+        if (self.replacement is None) != (self.correction is None):
+            msg = (
+                "an edit writes a replacement and its supersession together or writes "
+                "nothing; one without the other is a second memory or a mark naming nothing"
+            )
+            raise ValueError(msg)
+        if (
+            self.replacement is not None
+            and self.correction is not None
+            and (
+                self.correction.superseded_id != self.memory_id
+                or self.correction.by_id != self.replacement.memory_id
+            )
+        ):
+            msg = "an edit's supersession must name the edited memory and its replacement"
+            raise ValueError(msg)
+
+    @property
+    def took_effect(self) -> bool:
+        """Whether this edit wrote anything. False when the memory was already marked."""
+        return self.correction is not None
 
 
 def _queue_item(item: MemoryItem) -> QueueItem:
@@ -463,6 +553,123 @@ def delete(
     after something else has superseded the same memory, does nothing and says so.
     """
     return undo(learning, at=at, supersessions=supersessions, demotions=demotions)
+
+
+def replacement_gaps(original: Learning, replacement: Learning) -> tuple[str, ...]:
+    """Everything a replacement changes beyond what the memory says. Empty means an edit.
+
+    One sentence per difference, like the module's other diagnostics, so a refusal names every
+    reason at once rather than the first. Each field is held equal rather than allowed to
+    narrow; `AN_EDIT_CHANGES_WHAT_A_MEMORY_SAYS_AND_NEVER_WHO_MAY_RECALL_IT` is why, and the
+    scope is the field where that was measured.
+
+    The replacement's own id is not compared. A replacement carrying the original's id cannot
+    also name the original as what it replaced, because `Learning` refuses a memory that
+    replaced itself, so an edit in place always arrives here naming something else and the
+    first check reports it.
+    """
+    gaps: list[str] = []
+    before, after = original.formation, replacement.formation
+    if replacement.replaced_id != original.memory_id:
+        gaps.append(
+            "the replacement does not name the memory it replaces, so nothing records what it "
+            "corrected and the edit cannot be followed back"
+        )
+    if after.principal_id != before.principal_id:
+        gaps.append(
+            "the replacement is written by somebody other than the writer of the memory it "
+            "replaces, so an edit would hand the memory to somebody else"
+        )
+    if {one.value for one in after.capabilities} != {one.value for one in before.capabilities}:
+        gaps.append(
+            "the replacement is formed under other capabilities, so the readers who may recall "
+            "it are not the readers who may recall the memory it replaces"
+        )
+    if after.scope != before.scope:
+        gaps.append(
+            "the replacement is about another place, and even a smaller place is reached by "
+            "readers the memory it replaces refused"
+        )
+    if after.kind is not before.kind:
+        gaps.append(
+            "the replacement is another kind of memory, which is a promotion, and a promotion "
+            "has to be visible as one"
+        )
+    if replacement.agent_id != original.agent_id:
+        gaps.append(
+            "the replacement sits in another tab than the memory it replaces, in front of "
+            "whoever that tab is shown to"
+        )
+    if replacement.proposal.change is not original.proposal.change:
+        gaps.append(
+            "the replacement proposes another kind of change, which can need another tier than "
+            "the one the memory was proposed at"
+        )
+    if original.proposal.tier is Tier.GATED:
+        gaps.append(
+            "the memory is a gated change waiting for a person, and editing a proposal before "
+            "anybody decides it is deciding it by pressing edit"
+        )
+    return tuple(gaps)
+
+
+def edit(
+    learning: Learning,
+    replacement: Learning,
+    *,
+    at: datetime,
+    prompted_by: Signal = Signal.REJECTED,
+    supersessions: Iterable[Supersession] = (),
+    demotions: Iterable[Demotion] = (),
+) -> Edit:
+    """An edit to a memory (M39.4.1.4). It writes a new memory and a mark.
+
+    The replacement is a memory of its own and the correction is a supersession of this one by
+    it, so the edited memory stays on the record and stops being recalled, and nothing is
+    updated in place. See `AN_EDIT_IS_A_NEW_MEMORY_AND_A_MARK_AND_NEVER_A_ROW_REWRITTEN`.
+
+    Refuses a replacement that changes anything but what the memory says, and raises rather
+    than returning a no-op, because an edit that quietly did nothing reads on a screen as an
+    edit that worked. The refusal comes before the check for a mark, so a malformed
+    replacement is reported whatever state the memory is in.
+
+    Idempotent by the check `digest.undo` makes: a memory already marked either way is left
+    alone, the correction that marked it is never read, and the result says nothing was done.
+
+    `prompted_by` defaults to `Signal.REJECTED` for the reason `digest.undo` gives about the
+    same default: a person replacing what the system learnt is refusing it, and recording that
+    as anything else would put a human decision into the evidence as though the system had
+    noticed it by itself.
+
+    Takes no principal, like `delete`. Who may edit a memory is decided by the surface that
+    offers the control, which for a person's own memory is
+    `brain.console.own_things.edit_own_memory`. Writes nothing.
+    """
+    gaps = replacement_gaps(learning, replacement)
+    if gaps:
+        msg = "this is not an edit: " + "; ".join(gaps)
+        raise ValueError(msg)
+    if learning.memory_id in corrected(supersessions, demotions):
+        return Edit(
+            memory_id=learning.memory_id,
+            replacement=None,
+            correction=None,
+            reason=(
+                "this memory has already been marked, so there is nothing to edit; the "
+                "correction that marked it is left exactly as it is"
+            ),
+        )
+    return Edit(
+        memory_id=learning.memory_id,
+        replacement=replacement,
+        correction=Supersession(
+            superseded_id=learning.memory_id,
+            by_id=replacement.memory_id,
+            prompted_by=prompted_by,
+            at=at,
+        ),
+        reason="the replacement is written and this memory is marked as replaced by it",
+    )
 
 
 def review_gaps() -> tuple[str, ...]:
