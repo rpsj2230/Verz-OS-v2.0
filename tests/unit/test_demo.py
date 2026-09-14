@@ -172,10 +172,10 @@ def test_the_demo_can_answer_a_question_about_its_own_records_with_no_model() ->
     and answers nothing.
     """
     rules = rules_from_rows(demo.rule_rows())
-    entities = frozenset(one.entity for one in demo.build_records())
+    served = frozenset((str(one["source"]), str(one["entity"])) for one in demo.record_rows())
     client = next(one for one in demo.build_records() if one.entity == "client")
 
-    match = match_rule(f"what is the status of {client.fields['name']}", rules, entities=entities)
+    match = match_rule(f"what is the status of {client.fields['name']}", rules, served=served)
     assert match is not None, "no demo rule matches a question about a demo record"
     assert match.value == client.fields["name"]
     assert client.fields[match.rule.match_field] == match.value
@@ -498,3 +498,193 @@ def test_two_field_grants_on_one_entity_produce_one_record_grant_at_the_narrower
     )
     assert by_capability["read:job"] == Scope.department("projects")
     assert narrow == wide  # a scope is normalised, so a repeated clause is not a narrowing
+
+
+# --------------------------------------------------- what a stored record carries
+def test_every_stored_record_carries_the_field_its_department_scope_tests() -> None:
+    """**No demo person could reach a single seeded record until 2026-09-14.** Every demo grant
+    is a department scope, and the scope is evaluated against the stored record both in the
+    WHERE clause and in the redactor, so a record without the field satisfies neither.
+    `record_rows` wrote no department at all, and nothing here checked a stored record against a
+    scope: `test_every_person_who_may_read_a_column_can_reach_the_row_it_is_on` checks that a
+    scope resolves, which it did.
+
+    The field is read off the scope grammar and the value off the record's declaration, so
+    neither side of the comparison is the function under test.
+
+    Delete this and `record_rows` can stop writing the department with every other test in this
+    file green, and the demo is data nobody can read again."""
+    from brain.core.scope import Scope
+
+    tested = {clause.field for clause in Scope.department("any").clauses}
+    declared = {one.source_id: one.department for one in demo.build_records()}
+
+    assert tested
+    for row in demo.record_rows():
+        for field in tested:
+            assert row["fields"].get(field) == declared[row["source_id"]], row["source_id"]
+
+
+def test_a_record_whose_own_fields_spell_its_department_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A department written into a record's own fields and declared beside them is two values,
+    and `stored_fields` lays the declared one over the other, so an edit to the spelled one would
+    change nothing and look as if it had. `demo_gaps` names it instead. Driven by planting one,
+    because a check tested only by a clean run passes with its body deleted.
+
+    Delete this and the clash check is asserted by nothing."""
+    planted = demo.DemoRecord(
+        entity="client",
+        source_id=f"{demo.DEMO_PREFIX}client_planted",
+        department="operations",
+        fields={"name": "Planted Holdings", "department": "projects"},
+    )
+    monkeypatch.setattr(demo, "build_records", lambda: (planted,))
+
+    findings = demo.demo_gaps()
+
+    expected = f"{planted.source_id} carries ['department']"
+    assert any(one.startswith(expected) for one in findings), findings
+
+
+def test_a_reader_scoped_on_a_field_no_stored_record_carries_is_reported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The check `brain.seed` runs before loading, and the one that would have refused the demo
+    as it stood before 2026-09-14: a person whose row scope tests a field that a stored record of
+    that entity does not carry reaches none of those records. Planted with a scope on a field
+    nothing stores, since the demo as written now passes.
+
+    Delete this and the seed loads a demo in which somebody can reach nothing, and the first
+    person to notice is whoever is being shown it."""
+    from brain.core.entitlement import Capability, Grant
+    from brain.core.scope import Clause, Op, Scope
+
+    person = demo.build_people()[0]
+    region = Scope(clauses=(Clause(field="region", op=Op.EQ, value="north"),))
+    scoped = demo.DemoPerson(
+        principal=person.principal,
+        grants=(
+            Grant(capability=Capability(value="read:client.name"), scope=region),
+            Grant(capability=Capability(value="read:client"), scope=region),
+        ),
+        role=person.role,
+    )
+    monkeypatch.setattr(demo, "build_people", lambda: (scoped,))
+
+    findings = demo.demo_gaps()
+
+    expected = f"{person.principal.id} reaches client rows"
+    assert any(one.startswith(expected) for one in findings), findings
+
+
+# --------------------------------------------------- how the demo classifies its own columns
+def test_every_column_a_demo_record_stores_is_classified_and_nothing_else_is() -> None:
+    """Both directions, against the rows the seed writes. A stored column nobody classified is
+    withheld from everybody by default-deny, silently, and a classified column no record stores
+    is a rule about nothing that reads as a control.
+
+    Delete this and the classification and the stored rows can drift apart one field at a time,
+    and the first sign is a column nobody sees."""
+    stored: dict[str, set[str]] = {}
+    for row in demo.record_rows():
+        stored.setdefault(str(row["entity"]), set()).update(row["fields"])
+
+    assert {one.entity: set(one.columns()) for one in demo.row_classifications()} == stored
+
+
+def test_a_column_needs_its_own_field_grant_unless_a_scope_tests_it() -> None:
+    """**The measured constraint on how the demo is classified.** A column a department scope
+    tests requires the capability that reaches the row, and every other column requires a field
+    capability of its own. See `demo.THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW`
+    for why the first half is not `read:client.department`: the coordinator's whole row was
+    dropped under it.
+
+    The row capability is `brain.knowledge.rows.entity_capability`, which is what the row plane
+    asks for, and a field capability is one a `read:<entity>.*` grant covers and the row
+    capability is not, which is the grammar in `Capability.covers`.
+
+    Delete this and every column can be put under the row capability, which hands the contract
+    value to everybody who may reach a client, or the scope column under its own, which hands
+    the coordinator nothing."""
+    from brain.core.entitlement import Capability
+    from brain.core.scope import Scope
+    from brain.knowledge.rows import entity_capability
+
+    scoped = {clause.field for clause in Scope.department("any").clauses}
+    for classification in demo.row_classifications():
+        reaches_the_row = entity_capability(classification.entity)
+        every_field = Capability(value=f"read:{classification.entity}.*")
+        for rule in classification.rules:
+            if rule.column in scoped:
+                assert rule.required_capability == reaches_the_row, rule
+            else:
+                assert every_field.covers(rule.required_capability), rule
+                assert rule.required_capability != reaches_the_row, rule
+
+
+def test_everybody_who_reaches_a_demo_row_selects_the_column_their_scope_tests() -> None:
+    """The same constraint through the function that decides it, for every demo person and every
+    entity they reach: the SELECT list `compile_projection` builds for them includes every field
+    their row scope tests, so the record the redactor is handed can satisfy the scope.
+
+    Delete this and a reader can be classified out of the column their own scope needs, and
+    their rows are dropped by the redactor after the query correctly returned them."""
+    from brain.core.entitlement import EntitlementSet
+    from brain.knowledge.rows import compile_projection, row_scope_for
+
+    checked = 0
+    for person in demo.build_people():
+        held = EntitlementSet(
+            principal_id=person.principal.id,
+            grants=person.grants,
+            not_after=person.principal.not_after,
+        )
+        for classification in demo.row_classifications():
+            rows = row_scope_for(classification.entity, held, None)
+            if rows is None:
+                continue
+            selected = compile_projection(classification, entitlement=held, rows=rows)
+            tested = {clause.field for clause in rows.clauses}
+            assert tested <= set(selected), (person.principal.id, classification.entity, selected)
+            checked += 1
+
+    assert checked > 5, f"only {checked} reaches checked; the demo has shrunk"
+
+
+def test_what_a_client_is_worth_is_described_as_more_sensitive_than_its_name() -> None:
+    """The column two people in one department see differently is the demo's first screen, and
+    its classification is what a channel carrying only internal fields refuses to carry.
+    Compared by rank with the column beside it rather than with a level written here.
+
+    Delete this and what a client is worth can be described as ordinary internal data, and every
+    channel that may carry a client's name may carry its value too."""
+    pairs = (("client", "contract_value", "name"), ("invoice", "amount_due", "reference"))
+    by_entity = {one.entity: one for one in demo.row_classifications()}
+    for entity, worth, beside in pairs:
+        money = by_entity[entity].rule_for(worth)
+        ordinary = by_entity[entity].rule_for(beside)
+        assert money is not None and ordinary is not None, entity
+        assert money.classification.rank > ordinary.classification.rank, entity
+
+
+def test_a_record_filed_under_another_source_does_not_answer_a_demo_rule() -> None:
+    """`answer` pairs a rule with records of the source it names, which is how
+    `brain.gate.fast_lane.entities_served` keys what the lane serves since 2026-09-14. The record
+    the question names is refiled under another source while the rest stay, so a rule for the
+    demo's clients still matches, and the refiled record must not be its answer.
+
+    Delete this and `answer` can read a record from whichever source happens to hold one by that
+    name, which is two systems' records treated as one."""
+    named = next(
+        one for one in demo.build_records() if one.fields.get("name") == "Ashgrove Retail Group"
+    )
+    refiled = [
+        {**row, "source": "elsewhere"} if row["source_id"] == named.source_id else row
+        for row in demo.record_rows()
+    ]
+    question = "what is the status of Ashgrove Retail Group"
+
+    assert demo.answer(question, rules=demo.rule_rows(), records=demo.record_rows()) == "active"
+    assert demo.answer(question, rules=demo.rule_rows(), records=refiled) is None

@@ -51,8 +51,8 @@ distinguishable by how long the reply took.
 Rejected: matching the caller's entitlements in the matcher, so that a rule about tickets is
 not considered for somebody who cannot read tickets. It reads like a saving and it is a second
 implementation of the central rule, sitting in front of the real one. The matcher filters on
-which entities the row plane actually serves, which is a fact about wiring and not about a
-person, and the permission is decided once, downstream, where it already was.
+which source and entity pairs the row plane actually serves, which is a fact about wiring and
+not about a person, and the permission is decided once, downstream, where it already was.
 
 Rejected: a rule row carrying the SQL, the column list or a scope. Every one of those is the
 row plane's decision, and a rule that could narrow rows would be a grant written by whoever
@@ -67,11 +67,13 @@ mappings and the rows arrive through a `RowReader`, for the reason `brain.ops.li
 about holding no client: the cases worth testing in a lane like this are the empty ones and
 the ambiguous ones, and neither is reachable through a module that owns a socket.
 
-**Nothing calls this yet.** The gate is not assembled end to end anywhere in this repository:
-`classify_lane` has no caller in `src` either, and there is no implementation of
-`brain.knowledge.rows.RowSource`, so the reader this module needs cannot be built against a
-real database today. What is here is the part that can be written and checked before that
-wiring exists, and the wiring is a request path rather than a lane.
+**It is called now, which it was not when this docstring was written.** `brain.gate.answer`
+calls `respond` for `POST /api/v1/answer`, over the readers `brain.api_routes.row_readers`
+builds from the registry and the rules `brain.gate.rule_store.load_rules` reads, and
+`brain.knowledge.row_store.SessionRowSource` implements the row source against the
+application's pool. The first thing that composition found here was the keying described under
+`entities_served`, which `tests/e2e/test_wave_one_console_question.py` reached with the seeded
+demo.
 
 Task ids: M6.1.1, M6.1.2, M6.1.4
 """
@@ -151,6 +153,15 @@ AN_EMPTY_ANSWER_IS_THE_SAME_ANSWER_FOR_A_DENIAL_AND_AN_ABSENCE = (
     "which happened. Falling through to the answer lane for the denial alone would have "
     "made the two distinguishable by how long the reply took, which is one bit about what "
     "exists, available to anybody willing to ask twice and count."
+)
+
+#: Why what the lane serves is keyed on the source as well as the entity.
+A_RULE_NAMES_A_SOURCE_AS_WELL_AS_AN_ENTITY = (
+    "proj.record is keyed by source and entity, and so are the lane's readers: a rule about the "
+    "demo's clients and a reader for local clients are about different records. A served set "
+    "keyed on the entity alone let such a rule match, found no reader for its pair and raised "
+    "in a request path, which the answer route returned as a 500 for a question that should "
+    "have been told what an absence is told. Keyed on the pair, the rule is never considered."
 )
 
 # ---------------------------------------------------------------------- bounds
@@ -337,18 +348,26 @@ def _same(left: str, right: str) -> bool:
     return left.casefold() == right.casefold()
 
 
-def entities_served(readers: Mapping[tuple[str, str], RowReader]) -> frozenset[str]:
-    """The entity kinds the row plane can actually answer about, from the wiring itself.
+def entities_served(readers: Mapping[tuple[str, str], RowReader]) -> frozenset[tuple[str, str]]:
+    """The source and entity pairs the row plane can actually answer about, from the wiring.
 
     Derived rather than passed, so the set the matcher filters on and the mapping the
-    answer is fetched through cannot disagree. A rule naming an entity nothing serves is
-    then simply never considered, which is the same outcome as no rule matching.
+    answer is fetched through cannot disagree. A rule naming a pair nothing serves is then
+    simply never considered, which is the same outcome as no rule matching.
+
+    **Keyed on the pair since 2026-09-14, and on the entity alone before that, which is how
+    the set and the mapping disagreed while this docstring said they could not.** The
+    mapping has always been keyed on the pair, because `proj.record` is. A set of entities
+    said `client` was served when the only reader was `local.client`, so a rule for
+    `demo.client` matched, `respond` found no reader for it and raised, and the answer route
+    turned that into a 500. The seeded demo did exactly that the moment a client tool
+    existed. See `A_RULE_NAMES_A_SOURCE_AS_WELL_AS_AN_ENTITY`.
     """
-    return frozenset(entity for _, entity in readers)
+    return frozenset(readers)
 
 
 def match_rule(
-    question: str, rules: Sequence[FastPathRule], *, entities: frozenset[str]
+    question: str, rules: Sequence[FastPathRule], *, served: frozenset[tuple[str, str]]
 ) -> RuleMatch | None:
     """The one rule this question is exactly, or nothing (M6.1.2).
 
@@ -368,13 +387,14 @@ def match_rule(
     that changes the answer, and `hours left on Acme after the November work` is not a
     question about a client called `Acme after the November work`.
 
-    Nothing about the caller reaches this function. `entities` is what the row plane serves,
-    which is wiring; the permission is decided downstream, once, by the row plane.
+    Nothing about the caller reaches this function. `served` is the source and entity pairs
+    the row plane has a reader for, which is wiring; the permission is decided downstream,
+    once, by the row plane.
     """
     tidy = _tidy(question)
     found: list[RuleMatch] = []
     for rule in rules:
-        if rule.entity not in entities:
+        if (rule.source, rule.entity) not in served:
             continue
         match = _apply(rule, tidy)
         if match is not None:
@@ -462,6 +482,24 @@ class FastLaneAnswer:
         return bool(self.result.records)
 
 
+def reader_for(match: RuleMatch, readers: Mapping[tuple[str, str], RowReader]) -> RowReader:
+    """The reader a matched rule is answered through, or a wiring error naming the rule's pair.
+
+    A named refusal rather than an index, so the day the set a rule is matched against and the
+    mapping it is answered from part company, the symptom is a sentence naming both halves
+    rather than a `KeyError` in a request path. That day has already happened once: see the
+    comment in `respond`.
+    """
+    found = readers.get((match.rule.source, match.rule.entity))
+    if found is None:
+        msg = (
+            f"rule {match.rule.rule_id} names {match.rule.source}.{match.rule.entity}, "
+            "which this lane has no reader for"
+        )
+        raise FastLaneError(msg)
+    return found
+
+
 async def respond(
     question: str,
     *,
@@ -473,29 +511,28 @@ async def respond(
     """Match, fetch, and hand back rows. No model, no tools, no second permission decision.
 
     One entry point rather than a match step and an answer step a caller pairs up, so that
-    the entity set the matcher filtered on and the mapping the rows come from are the same
-    object. Two arguments would be two things a caller can get out of step, and the way you
-    find out is a rule matching for an entity nothing can fetch.
+    the pairs the matcher filtered on and the mapping the rows come from are the same object.
+    Two arguments would be two things a caller can get out of step, and the way you find out
+    is a rule matching for a pair nothing can fetch.
 
     Returns None for every ordinary reason a fast-lane answer is not the right one: no rule
-    matched, two did, or two records answered to the name. It returns an answer with no
-    records for a caller who may not see the entity, which is the same answer somebody gets
-    for a name that does not exist. See
+    matched, two did, a rule named a source nothing here reads, or two records answered to the
+    name. It returns an answer with no records for a caller who may not see the entity, which
+    is the same answer somebody gets for a name that does not exist. See
     `AN_EMPTY_ANSWER_IS_THE_SAME_ANSWER_FOR_A_DENIAL_AND_AN_ABSENCE`.
     """
-    match = match_rule(question, rules, entities=entities_served(readers))
+    match = match_rule(question, rules, served=entities_served(readers))
     if match is None:
         return None
-    reader = readers.get((match.rule.source, match.rule.entity))
-    if reader is None:
-        # Unreachable through `entities_served`, which is derived from this same mapping, and
-        # checked anyway: the two would part company the day somebody passes the entity set
-        # separately, and the symptom would be a KeyError in a request path.
-        msg = (
-            f"rule {match.rule.rule_id} names {match.rule.source}.{match.rule.entity}, "
-            "which this lane has no reader for"
-        )
-        raise FastLaneError(msg)
+    # **This comment said the refusal inside `reader_for` could not be reached from here, and
+    # until 2026-09-14 it could.** `entities_served` keyed on the entity while `readers` is
+    # keyed on the pair, so a rule for `demo.client` matched on a lane whose only client reader
+    # was `local.client`, the lookup found nothing and raised, and the answer route turned the
+    # error into a 500. The seeded demo did exactly that once a client tool existed, measured by
+    # `tests/e2e/test_wave_one_console_question.py`. Both are keyed on the pair now, so such a
+    # rule never matches and abstains like any other question, and `reader_for` stays a named
+    # refusal for the day somebody passes the set separately.
+    reader = reader_for(match, readers)
 
     request = RowRequest(
         # A `Scope` rather than a filter type of this module's own, so the asker's narrowing

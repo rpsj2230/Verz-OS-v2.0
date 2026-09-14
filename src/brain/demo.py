@@ -40,6 +40,16 @@ departments, its people and its records are invented. This module is read by
 `brain.ops.independence` like every other file under `src`, which is the point: a demo is
 product, so it is held to the product's rule about client values rather than exempted from it.
 
+**A demo nobody in it can read is a demo of an empty screen, and until 2026-09-14 this was
+one.** Every grant here is a department scope and no stored record carried a department, so
+the row plane's WHERE clause and the redactor both tested a key nothing had; and nothing
+classified the demo's clients, jobs or invoices, so no row tool existed for any of them. A
+stored record now carries the fields its readers' scopes test, which `demo_gaps` checks against
+the rows a load writes, so the seed refuses a demo that has drifted back. And the demo
+classifies its own columns, which `brain.tools.startup` registers only for an install reading
+`DEMO_SOURCE`, because they are an invented company's schema rather than the product's.
+`tests/e2e/test_wave_one_console_question.py` is the composition that found both.
+
 Task ids: M41.2.2
 """
 
@@ -51,9 +61,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Final
 
-from brain.core.entitlement import Capability, Grant
+from brain.core.entitlement import Capability, EntitlementSet, Grant
+from brain.core.field_policy import Classification
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.knowledge.columns import ColumnRule, TableClassification
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why this is a second artefact rather than the test fixture under another name.
@@ -91,6 +103,30 @@ AN_UNRESTRICTED_GRANT_IN_A_DEMO_IS_A_DEMO_OF_THE_WRONG_PRODUCT: Final = (
     "here is bounded to a department for that reason, and demo_gaps refuses one that is not."
 )
 
+#: Why a stored record carries the department its readers' grants are scoped on.
+A_RECORD_NO_SCOPE_CAN_MATCH_IS_A_RECORD_NOBODY_REACHES: Final = (
+    "Every grant in this demo is scoped by department, and the scope is evaluated against the "
+    "record twice: the compiled WHERE clause tests the stored field and the redactor tests the "
+    "record it is handed. A record that does not carry the field satisfies neither, so nobody "
+    "reaches it, and the symptom is an empty screen that reads as the permission model "
+    "working. Measured on 2026-09-14, when no demo person could reach a single seeded record. "
+    "So a record's department is written into its stored fields, taken from the scope's own "
+    "clauses rather than spelled a second time."
+)
+
+#: Why the column a department scope tests needs only the grant that reaches the row.
+THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW: Final = (
+    "The redactor evaluates a reader's scope against the record the row plane built, and the "
+    "row plane builds it from the columns that reader may select. Classified under its own "
+    "field capability, the department column is missing from the record of anybody who "
+    "reaches the row without reading that column, the scope matches nothing and the row is "
+    "dropped whole. Measured on 2026-09-14 against the coordinator, who reads client names in "
+    "Projects: under read:client.department she saw no client at all. Under read:client, "
+    "which every reader of the row holds, she sees the client and not what it is worth, and "
+    "the column tells her nothing new, because every row she reaches is in the department "
+    "her grant names."
+)
+
 # ------------------------------------------------------------------ the company
 #: The prefix on every identifier this module writes. One string, so removal is a predicate.
 DEMO_PREFIX: Final = "demo_"
@@ -107,6 +143,13 @@ DEMO_COMPANY: Final = "Northwind Facilities"
 #: The source name projected demo records are filed under. `demo` rather than a connector's
 #: name, because these rows came from nobody: filing them under `freshdesk` would make a
 #: staleness figure a claim about a system this install has never contacted.
+#:
+#: **And an install shows the demo by reading this source, which is `BRAIN_TOOL_SOURCE=demo`.**
+#: Which system an install reads rows from is configuration, and the demo is a system here like
+#: any other. `brain.tools.startup` registers the demo's own entities only for an install reading
+#: this source, so an install reading its own system carries none of them. It is not the
+#: application's default, which `tests/unit/test_tool_startup.py` asserts, because the default is
+#: what every install that never asked for the demo reads.
 DEMO_SOURCE: Final = "demo"
 
 #: Fixed so the demo is byte-identical on every install. Everything dated is relative to it,
@@ -469,6 +512,106 @@ def build_rules() -> tuple[DemoRule, ...]:
     )
 
 
+# ------------------------------------------------------------------ classification
+#: The demo's columns that say what something is worth, classified above the columns around
+#: them. A description of the field rather than a permission, which is what `Classification`
+#: is: who may read a column is its capability, and this is what a channel that carries only
+#: internal fields refuses to carry.
+CONFIDENTIAL_COLUMNS: Final[frozenset[str]] = frozenset({"contract_value", "amount_due"})
+
+#: What each of the demo's row tools says in the catalogue, by entity. Here rather than in
+#: `brain.tools.startup` because the columns they describe are the demo's, and a description
+#: kept away from its classification is the one that goes on naming a column after it has gone.
+ROW_TOOL_DESCRIPTIONS: Final[Mapping[str, str]] = {
+    "client": (
+        "Read the demo company's clients: name, status, client since, account manager, and "
+        "the contract value for callers entitled to it"
+    ),
+    "job": (
+        "Read the demo company's jobs: what the visit is, its status, which client it is for "
+        "and when it is due"
+    ),
+    "invoice": (
+        "Read the demo company's invoices: reference, status, client, due date, and the "
+        "amount due for callers entitled to it"
+    ),
+}
+
+
+def scope_fields(record: DemoRecord) -> dict[str, str]:
+    """The fields a department scope tests, with the values this record satisfies them with.
+
+    Read off `Scope.department` rather than written here as a literal key, so the key a record
+    is stored with and the key every demo grant's scope tests are one fact: rename the field in
+    the scope and the records follow it. See
+    `A_RECORD_NO_SCOPE_CAN_MATCH_IS_A_RECORD_NOBODY_REACHES`.
+    """
+    placed = Scope.department(record.department)
+    return {clause.field: str(clause.value) for clause in placed.clauses}
+
+
+def stored_fields(record: DemoRecord) -> dict[str, str]:
+    """What `proj.record.fields` holds for one record: its own fields and its scope fields.
+
+    The scope fields are laid over the record's own, and a record whose own fields already name
+    one is reported by `demo_gaps` rather than silently overwritten here, because a department
+    spelled in two places is two values the day somebody edits one of them.
+    """
+    return {**record.fields, **scope_fields(record)}
+
+
+def row_classifications() -> tuple[TableClassification, ...]:
+    """One classification per entity the demo stores records of, over exactly the columns stored.
+
+    **The demo's own, and registered only where the demo is read.** These are an invented
+    company's columns, so they are not the product's: `brain.tools.startup` files them under
+    `DEMO_SOURCE` and registers them for an install that reads that source and for no other,
+    and its module docstring gives the shapes that were rejected, widening the built-ins among
+    them.
+
+    **Written from what the records store, so no stored column goes unclassified.** A column
+    nothing classifies is withheld from everybody by default-deny, which is safe and silent,
+    and a record that grew a field nobody classified would show it to nobody with nothing saying
+    why. Reading the columns off `stored_fields` makes the classification and the stored rows
+    one set.
+
+    **Every column requires its own field capability except the ones a scope tests, which
+    require the capability that reaches the row.** See
+    `THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW`, which is the measured reason
+    the department column is `read:client` and not `read:client.department`.
+
+    In the order the entities first appear in `build_records`, so a registry lists them in the
+    order the demo introduces them.
+    """
+    columns: dict[str, set[str]] = {}
+    scoped: dict[str, set[str]] = {}
+    for record in build_records():
+        columns.setdefault(record.entity, set()).update(stored_fields(record))
+        scoped.setdefault(record.entity, set()).update(scope_fields(record))
+    return tuple(
+        TableClassification(
+            entity=entity,
+            rules=tuple(
+                ColumnRule(
+                    column=name,
+                    required_capability=Capability(
+                        value=f"read:{entity}"
+                        if name in scoped[entity]
+                        else f"read:{entity}.{name}"
+                    ),
+                    classification=(
+                        Classification.CONFIDENTIAL
+                        if name in CONFIDENTIAL_COLUMNS
+                        else Classification.INTERNAL
+                    ),
+                )
+                for name in sorted(names)
+            ),
+        )
+        for entity, names in columns.items()
+    )
+
+
 # ------------------------------------------------------------------ rows
 #: The tables the demo writes, in the order it writes them. Principals before grants because
 #: a grant carries a foreign key to one; records and rules after both, because a rule names
@@ -521,14 +664,19 @@ def grant_rows() -> tuple[dict[str, Any], ...]:
 
 
 def record_rows() -> tuple[dict[str, Any], ...]:
-    """Every projected record, keyed the way `proj.record` is keyed."""
+    """Every projected record, keyed the way `proj.record` is keyed.
+
+    `fields` is `stored_fields`, which carries the department every demo grant's scope tests.
+    It was the record's own fields alone until 2026-09-14, and no demo person could reach a
+    single record written that way: see `A_RECORD_NO_SCOPE_CAN_MATCH_IS_A_RECORD_NOBODY_REACHES`.
+    """
     return tuple(
         {
             "source": DEMO_SOURCE,
             "entity": one.entity,
             "source_id": one.source_id,
             "local_id": None,
-            "fields": dict(one.fields),
+            "fields": stored_fields(one),
             "last_seen_at": SEEDED_AT,
         }
         for one in build_records()
@@ -639,6 +787,38 @@ def demo_gaps() -> tuple[str, ...]:
                 f"{A_DEMO_THAT_SHIPS_AN_ADMINISTRATOR_SHIPS_AN_ACCOUNT_NOBODY_CREATED}"
             )
 
+    for record in build_records():
+        clashing = sorted(set(record.fields) & set(scope_fields(record)))
+        if clashing:
+            findings.append(
+                f"{record.source_id} carries {clashing} in its own fields, which its declared "
+                f"department decides. {A_RECORD_NO_SCOPE_CAN_MATCH_IS_A_RECORD_NOBODY_REACHES}"
+            )
+
+    # Read from the rows the seed writes rather than from `stored_fields`, so a load that stops
+    # writing a scope field is caught, and not only a helper that stops returning one.
+    stored: dict[str, list[set[str]]] = {}
+    for row in rows["proj.record"]:
+        stored.setdefault(str(row["entity"]), []).append(set(row["fields"]))
+    for person in build_people():
+        held = EntitlementSet(
+            principal_id=person.principal.id,
+            grants=person.grants,
+            not_after=person.principal.not_after,
+        )
+        for entity, kept in stored.items():
+            scope = held.scope_for(Capability(value=f"read:{entity}"))
+            if scope is None:
+                continue
+            tested = {clause.field for clause in scope.clauses}
+            missing = sorted({name for fields in kept for name in tested - fields})
+            if missing:
+                findings.append(
+                    f"{person.principal.id} reaches {entity} rows scoped on {missing}, which a "
+                    f"stored {entity} record does not carry. "
+                    f"{A_RECORD_NO_SCOPE_CAN_MATCH_IS_A_RECORD_NOBODY_REACHES}"
+                )
+
     return tuple(findings)
 
 
@@ -666,18 +846,24 @@ def answer(
     to the name, and two did. `brain.gate.fast_lane` gives the argument in full under
     `AN_EMPTY_ANSWER_IS_THE_SAME_ANSWER_FOR_A_DENIAL_AND_AN_ABSENCE`, and it is the same
     argument on the first day of an install as on any other.
+
+    Each record carries its `source`, and a rule is answered only from records of the source it
+    names, which is how the lane pairs them. A record by that name filed under another source
+    is another system's record rather than a second answer.
     """
     from brain.gate.fast_lane import match_rule, rules_from_rows
 
     parsed = rules_from_rows(rules)
-    entities = frozenset(str(one["entity"]) for one in records)
-    match = match_rule(question, parsed, entities=entities)
+    # Source and entity together, the way `brain.gate.fast_lane.entities_served` keys what the
+    # lane serves.
+    served = frozenset((str(one["source"]), str(one["entity"])) for one in records)
+    match = match_rule(question, parsed, served=served)
     if match is None:
         return None
     hits = [
         one
         for one in records
-        if str(one["entity"]) == match.rule.entity
+        if (str(one["source"]), str(one["entity"])) == (match.rule.source, match.rule.entity)
         and str(dict(one["fields"]).get(match.rule.match_field, "")).casefold()
         == match.value.casefold()
     ]

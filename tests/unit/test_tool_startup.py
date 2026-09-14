@@ -15,6 +15,12 @@ So the tests below are mostly about wiring: that there is one builder, that the 
 calls it, that what comes back is frozen, and that a tool registered through it went through
 every door on the way in.
 
+**And which entities it registers depends on the source, since 2026-09-14.** The price list is
+built in and registered on every install. The demo's clients, jobs and invoices are classified
+by the demo, for the demo's source, and registered only by an install that reads it. The tests
+at the end hold both halves, because a registration that leaked onto every install and one that
+happened nowhere each pass a test that looks at one install.
+
 Task ids: M12.1.5
 """
 
@@ -25,6 +31,8 @@ from typing import Any
 
 import pytest
 
+from brain import demo
+from brain.api_routes import MAX_FILTERS
 from brain.app import Settings, create_app
 from brain.core.envelope import IdentityMode
 from brain.knowledge.columns import PRICE_LIST
@@ -33,7 +41,11 @@ from brain.tools.registry import ToolRegistrationError, ToolRegistry
 from brain.tools.startup import (
     BUILT_IN_ROW_ENTITIES,
     ROW_TOOL_DESCRIPTIONS,
+    SOURCE_ROW_ENTITIES,
     build_registry,
+    classification_for,
+    every_row_classification,
+    row_entities_for,
 )
 
 
@@ -103,17 +115,26 @@ def test_a_registry_built_with_no_row_source_offers_no_row_tools() -> None:
     assert registry.is_frozen is True
 
 
-def test_every_built_in_entity_has_a_description_written_for_it() -> None:
+def test_every_registered_entity_has_a_description_written_for_it() -> None:
     """`ToolRegistry.validate` refuses two tools sharing a description, folded and stripped of
     punctuation, and that is a property of a pair rather than of one tool. Keeping the
     descriptions in one mapping makes a collision visible while it is being written instead of
     at the freeze that follows.
+
+    A source's own entities are held to the same rule by building the registry for that source,
+    which is where a missing description raises and a colliding one is refused.
 
     Delete this and a new classification is added with no description, and the builder fails
     with a KeyError at startup rather than at the edit."""
     for classification in BUILT_IN_ROW_ENTITIES:
         assert classification.entity in ROW_TOOL_DESCRIPTIONS
         assert ROW_TOOL_DESCRIPTIONS[classification.entity].strip()
+
+    for source, owned in SOURCE_ROW_ENTITIES.items():
+        registry = build_registry(source=source, records=_Rows())
+        for classification in owned:
+            definition = registry.get(f"{source}.read_{classification.entity}").definition
+            assert definition.description.strip()
 
 
 def test_a_registered_row_tool_declares_service_identity_and_carries_its_pin() -> None:
@@ -160,3 +181,85 @@ def test_the_source_the_application_uses_comes_from_configuration() -> None:
     placeholder that would fail the first time somebody deployed without it."""
     assert Settings().tool_source == "local"
     assert Settings(tool_source="xero").tool_source == "xero"
+
+
+# --------------------------------------------------------------- what a source brings
+def test_the_demos_source_registers_its_own_entities_beside_the_built_ins() -> None:
+    """**The positive half of where the demo is registered.** An install configured to read
+    the demo's source gets a row tool for every entity the demo stores records of, pinned to
+    that source, and the price list as well.
+
+    The entities are compared with the rows the demo writes rather than with its
+    classifications, so a classification that forgot an entity is a missing tool here and not
+    the same omission on both sides of an equality.
+
+    Delete this and the demo's entities can stop being registered anywhere, and the console
+    answers nobody's question about the seeded company, which is where it was on 2026-09-14."""
+    registry = build_registry(source=demo.DEMO_SOURCE, records=_Rows())
+    stored = {str(row["entity"]) for row in demo.record_rows()}
+    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES}
+
+    assert {d.entity for d in registry.definitions()} == stored | built_in
+    assert {d.source for d in registry.definitions()} == {demo.DEMO_SOURCE}
+    assert len(registry) == len(row_entities_for(demo.DEMO_SOURCE))
+
+
+def test_no_install_reading_another_source_registers_anything_the_demo_brings() -> None:
+    """**The half that keeps the demo out of the template.** The demo's entities are an invented
+    company's columns, and an install reading its own system must not carry them: not as a
+    classification governing its own `client`, and not as tools that read nothing. Asserted for
+    the source an install reads by default, taken from the application's settings rather than
+    written here, and for two others.
+
+    The demo's source is asserted not to be that default too, because that is the one edit that
+    would register the demo on every install while each comparison above moved with it.
+
+    Delete this and `row_entities_for` can hand the demo's entities to every source, which is
+    `BUILT_IN_ROW_ENTITIES` widened by another route."""
+    built_in = {c.entity for c in BUILT_IN_ROW_ENTITIES}
+    for source in (Settings().tool_source, "xero", "laravel"):
+        registry = build_registry(source=source, records=_Rows())
+        assert {d.entity for d in registry.definitions()} == built_in, source
+
+    assert Settings().tool_source != demo.DEMO_SOURCE
+
+
+def test_every_entity_is_classified_by_one_owner() -> None:
+    """`classification_for` is keyed on the entity alone, and that has one answer only while no
+    two owners classify one entity: the product's built-ins and every source's own. The day a
+    second source classifies `client` this fails, and the lookup has to take the source, which
+    is the change `fast_lane.entities_served` needed on 2026-09-14.
+
+    Delete this and two sources' classifications of one entity make the records route redact one
+    system's rows by the other's policy, chosen by the order two tuples were concatenated in."""
+    entities = [one.entity for one in every_row_classification()]
+    owned = {c.entity for classifications in SOURCE_ROW_ENTITIES.values() for c in classifications}
+
+    assert len(entities) == len(set(entities)), entities
+    assert set(entities) == {c.entity for c in BUILT_IN_ROW_ENTITIES} | owned
+
+
+def test_an_entity_a_source_brings_is_answered_with_that_sources_classification() -> None:
+    """The lookup the records route and the answer lane make. An entity the demo brings is
+    classified by the demo's classification, a built-in by the built-in, and an entity nobody
+    classifies by nothing, which the routes turn into the 404 an ungranted entity gets.
+
+    Delete this and `classification_for` can go back to reading the built-ins alone, and the
+    demo's tools are registered with no policy to redact them by, which the answer lane treats
+    as a misconfigured install for every question."""
+    for classification in demo.row_classifications():
+        assert classification_for(classification.entity) == classification
+    assert classification_for(PRICE_LIST.entity) == PRICE_LIST
+    assert classification_for("no_such_entity") is None
+
+
+def test_every_column_of_every_classified_entity_can_be_filtered_on() -> None:
+    """`tests/unit/test_api_routes.py` holds the filter bound to the widest built-in entity, and
+    a source's own entities are served by the same route, so the same bound has to reach every
+    column of theirs. Measured against the route's own `MAX_FILTERS`.
+
+    Delete this and a source can bring an entity with more columns than a caller may name in one
+    filter, and a column somebody is entitled to read is unfilterable by everybody."""
+    widest = max(len(c.columns()) for c in every_row_classification())
+
+    assert widest <= MAX_FILTERS

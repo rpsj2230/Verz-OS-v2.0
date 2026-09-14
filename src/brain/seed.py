@@ -426,12 +426,17 @@ def not_yet_loaded(executor: Executor) -> tuple[str, ...]:
 #: What is read back to answer one question. Written out rather than `SELECT *`, so a column
 #: added to either table is inert until somebody puts it here, which is the rule
 #: `brain.gate.fast_lane.RULE_FIELDS` states about the same table.
+#:
+#: `source` is selected although the statement already filters on it, because
+#: `brain.demo.answer` answers a rule only from records of the source the rule names, which is
+#: the pairing `brain.gate.fast_lane.entities_served` keys on, and a record read back without
+#: its source is a record no rule can be paired with.
 _READ_RULES = (
     "SELECT rule_id, template, slot, source, entity, match_field, answer_field "
     "FROM gate.fast_path_rule WHERE deleted_at IS NULL"
 )
 _READ_RECORDS = (
-    "SELECT entity, source_id, fields FROM proj.record "
+    "SELECT source, entity, source_id, fields FROM proj.record "
     "WHERE source = :source AND deleted_at IS NULL"
 )
 

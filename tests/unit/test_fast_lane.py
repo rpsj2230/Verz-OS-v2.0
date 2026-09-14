@@ -188,6 +188,11 @@ def readers_for(source: RecordingSource) -> dict[tuple[str, str], fast_lane.RowR
     return {("laravel", "client"): CLIENT_TOOL.reader(source)}
 
 
+#: What the lane above serves, as `match_rule` is handed it: the tool's source and entity
+#: together, because a rule for another system's clients is about different records.
+SERVED = frozenset({(CLIENT_TOOL.source, CLIENT_TOOL.entity)})
+
+
 def parameterised(query: RowQuery) -> str:
     """The statement as it is actually sent: placeholders, not values."""
     return str(query.statement.compile(dialect=DIALECT))
@@ -407,18 +412,15 @@ def test_a_question_that_is_the_template_matches_and_a_longer_one_does_not() -> 
 
     Delete this and the fast lane answers the general question when the narrow one was
     asked, instantly and with a citation."""
-    exact = match_rule("hours left on Acme", [HOURS], entities=frozenset({"client"}))
+    exact = match_rule("hours left on Acme", [HOURS], served=SERVED)
     assert exact is not None and exact.value == "Acme"
 
-    assert match_rule("the hours left on Acme", [HOURS], entities=frozenset({"client"})) is None
+    assert match_rule("the hours left on Acme", [HOURS], served=SERVED) is None
     # A template with literal text after the hole is anchored at that end too, which is the
     # half `HOURS` cannot demonstrate: its hole runs to the end of the question.
-    tail = match_rule("Acme hosting expiry date", [EXPIRY], entities=frozenset({"client"}))
+    tail = match_rule("Acme hosting expiry date", [EXPIRY], served=SERVED)
     assert tail is not None and tail.value == "Acme"
-    assert (
-        match_rule("Acme hosting expiry date please", [EXPIRY], entities=frozenset({"client"}))
-        is None
-    )
+    assert match_rule("Acme hosting expiry date please", [EXPIRY], served=SERVED) is None
 
 
 def test_the_boundary_between_the_literal_and_the_slot_falls_on_a_space() -> None:
@@ -428,8 +430,8 @@ def test_the_boundary_between_the_literal_and_the_slot_falls_on_a_space() -> Non
     about somebody else, or nobody.
 
     Delete this and a typo becomes a lookup of a different name."""
-    assert match_rule("hours left onAcme", [HOURS], entities=frozenset({"client"})) is None
-    assert match_rule("hours left on Acme", [HOURS], entities=frozenset({"client"})) is not None
+    assert match_rule("hours left onAcme", [HOURS], served=SERVED) is None
+    assert match_rule("hours left on Acme", [HOURS], served=SERVED) is not None
 
 
 def test_a_template_ending_in_its_slot_gives_the_slot_the_rest_of_the_question() -> None:
@@ -446,7 +448,7 @@ def test_a_template_ending_in_its_slot_gives_the_slot_the_rest_of_the_question()
 
     Delete this and somebody later reads the anchoring test above and believes the slot is
     bounded on both sides whatever the template says."""
-    trailing = match_rule("hours left on Acme please", [HOURS], entities=frozenset({"client"}))
+    trailing = match_rule("hours left on Acme please", [HOURS], served=SERVED)
 
     assert trailing is not None
     assert trailing.value == "Acme please"
@@ -462,9 +464,7 @@ def test_a_slot_that_swallowed_a_qualifier_does_not_match() -> None:
     that does not."""
     assert vars(fast_lane)["is_a_name_not_a_phrase"] is classify.is_a_name_not_a_phrase
 
-    swallowed = match_rule(
-        "hours left on Acme after the November work", [HOURS], entities=frozenset({"client"})
-    )
+    swallowed = match_rule("hours left on Acme after the November work", [HOURS], served=SERVED)
     assert swallowed is None
 
 
@@ -475,7 +475,7 @@ def test_matching_ignores_case_and_spacing_while_the_slot_value_keeps_both() -> 
 
     Delete this and the lane answers nothing for anybody who capitalises a sentence, or
     matches everything and looks up a name no record holds."""
-    found = match_rule("Hours  Left   On   Acme Pte Ltd?", [HOURS], entities=frozenset({"client"}))
+    found = match_rule("Hours  Left   On   Acme Pte Ltd?", [HOURS], served=SERVED)
 
     assert found is not None
     assert found.value == "Acme Pte Ltd"
@@ -492,11 +492,9 @@ def test_a_slot_value_is_bounded_at_both_ends() -> None:
     mutation that removed the bound entirely and left every other test in this file green.
 
     Delete this and a question with a one-letter tail is looked up as a client."""
-    entities = frozenset({"client"})
-
-    assert match_rule("hours left on A", [HOURS], entities=entities) is None
-    assert match_rule("hours left on " + "A" * 61, [HOURS], entities=entities) is None
-    assert match_rule("hours left on " + "A" * 60, [HOURS], entities=entities) is not None
+    assert match_rule("hours left on A", [HOURS], served=SERVED) is None
+    assert match_rule("hours left on " + "A" * 61, [HOURS], served=SERVED) is None
+    assert match_rule("hours left on " + "A" * 60, [HOURS], served=SERVED) is not None
 
 
 def test_a_rule_set_larger_than_the_cap_is_refused() -> None:
@@ -540,21 +538,21 @@ def test_two_rules_matching_one_question_answer_neither() -> None:
         answer_field="hours_remaining",
     )
 
-    assert match_rule("hours left on Acme", [HOURS, other], entities=frozenset({"client"})) is None
+    assert match_rule("hours left on Acme", [HOURS, other], served=SERVED) is None
     # And each on its own still answers, so this is a refusal of the pair rather than of both.
-    assert match_rule("hours left on Acme", [HOURS], entities=frozenset({"client"})) is not None
-    assert match_rule("hours left on Acme", [other], entities=frozenset({"client"})) is not None
+    assert match_rule("hours left on Acme", [HOURS], served=SERVED) is not None
+    assert match_rule("hours left on Acme", [other], served=SERVED) is not None
 
 
 def test_a_rule_for_an_entity_the_row_plane_does_not_serve_is_never_considered() -> None:
-    """The entity filter is about wiring and not about a person: it is the set of entities a
-    reader exists for, derived from the readers themselves so the two cannot disagree. A rule
-    for a source nobody has wired matches nothing, which is the same outcome as no rule.
+    """The filter is about wiring and not about a person: it is the set of source and entity
+    pairs a reader exists for, derived from the readers themselves so the two cannot disagree.
+    A rule for a pair nobody has wired matches nothing, which is the same outcome as no rule.
 
     Delete this and `respond` raises for a rule naming an entity it cannot fetch, in a
     request path, on a question somebody asked."""
     source = RecordingSource(ACME)
-    assert entities_served(readers_for(source)) == frozenset({"client"})
+    assert entities_served(readers_for(source)) == frozenset({("laravel", "client")})
 
     ticketing = FastPathRule(
         rule_id="ticket_status",
@@ -566,8 +564,13 @@ def test_a_rule_for_an_entity_the_row_plane_does_not_serve_is_never_considered()
         answer_field="status",
     )
 
-    assert match_rule("status of ticket 4471", [ticketing], entities=frozenset({"client"})) is None
-    assert match_rule("status of ticket 4471", [ticketing], entities=frozenset({"ticket"}))
+    tickets = frozenset({("freshdesk", "ticket")})
+    elsewhere = frozenset({("zendesk", "ticket")})
+
+    assert match_rule("status of ticket 4471", [ticketing], served=SERVED) is None
+    assert match_rule("status of ticket 4471", [ticketing], served=tickets)
+    # The entity alone does not decide it: tickets served from another system are not these.
+    assert match_rule("status of ticket 4471", [ticketing], served=elsewhere) is None
 
 
 # ------------------------------------ the gate is not skipped, only the model
@@ -755,26 +758,51 @@ def test_a_question_no_rule_matches_returns_nothing_and_asks_nothing() -> None:
     assert source.queries == []
 
 
-def test_a_rule_naming_a_pair_this_lane_cannot_fetch_is_a_wiring_error_and_says_so() -> None:
-    """Unreachable through `respond`, which derives the entity set from the same mapping, and
-    checked anyway. The two part company the day somebody passes the entity set separately,
-    and the symptom would be a `KeyError` in a request path rather than a sentence naming the
-    rule and the pair.
+def test_a_rule_naming_a_source_nothing_reads_for_its_entity_abstains_and_asks_nothing() -> None:
+    """**This test used to assert the opposite, and the opposite was the defect.** It pinned a
+    wiring error: a rule for `xero.client` on a lane whose only client reader is
+    `laravel.client` raised `FastLaneError`, and the docstring called that path unreachable
+    because the served set was derived from the same mapping. It was derived from the entities
+    alone, so any rule whose source differed from its tool's reached it, and the answer route
+    turned the error into a 500. The seeded demo did exactly that on 2026-09-14.
+
+    Keyed on the pair, such a rule is never considered: `respond` returns nothing, the answer
+    lane abstains as it does when no rule matches, and the database is not asked. The sibling
+    proving the same lane still answers a rule whose source it does read is
+    `test_a_caller_who_holds_the_grant_gets_the_row`.
+
+    Delete this and the lane can go back to matching on the entity, and every install whose
+    rules and tools name different sources answers those questions with a server error."""
+    source = RecordingSource(ACME)
+    elsewhere = HOURS.model_copy(update={"source": "xero"})
+    assert (elsewhere.source, elsewhere.entity) not in entities_served(readers_for(source))
+
+    answer = respond(
+        "hours left on Acme",
+        rules=[elsewhere],
+        readers=readers_for(source),
+        entitlement=ents(*SEES_CLIENT_HOURS),
+    )
+
+    assert answer is None
+    assert source.queries == []
+
+
+def test_a_matched_rule_the_lane_has_no_reader_for_is_a_wiring_error_and_says_so() -> None:
+    """`reader_for` is what `respond` looks a reader up through, and it refuses a pair it has no
+    reader for with a sentence naming the rule and the pair. Unreachable through `respond` now
+    that the served set and the mapping are keyed alike, and exercised directly for the day
+    somebody passes the set separately, when the alternative would be a `KeyError` in a
+    request path.
 
     Delete this and that day produces a stack trace instead of a message."""
-    source = RecordingSource(ACME)
-    readers = readers_for(source)
-    match = RuleMatch(rule=EXPIRY, value="Acme")
-    assert match.rule.entity in entities_served(readers)
+    readers = readers_for(RecordingSource(ACME))
+    wired = RuleMatch(rule=HOURS, value="Acme")
+    unwired = RuleMatch(rule=HOURS.model_copy(update={"source": "xero"}), value="Acme")
 
-    wrong_source = HOURS.model_copy(update={"source": "xero"})
-    with pytest.raises(FastLaneError, match="no reader for"):
-        respond(
-            "hours left on Acme",
-            rules=[wrong_source],
-            readers=readers,
-            entitlement=ents(*SEES_CLIENT_HOURS),
-        )
+    assert fast_lane.reader_for(wired, readers) is readers[("laravel", "client")]
+    with pytest.raises(FastLaneError, match=r"client_hours_remaining names xero\.client"):
+        fast_lane.reader_for(unwired, readers)
 
 
 # ------------------------------------------- the catalogue is empty (M6.1.4)

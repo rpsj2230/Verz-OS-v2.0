@@ -27,11 +27,47 @@ catalogue is a process answering questions from a tool set nobody validated, and
 alternative to raising is a warning at boot, which is a warning nobody reads after the
 first week.
 
-**What is registered today is one tool, and that is honest rather than embarrassing.**
-`knowledge.columns.PRICE_LIST` is the only `TableClassification` in the source tree, so it
-is the only entity there is a row tool for. The value here is not the count; it is that the
-count is now produced by a builder that runs every rule, so the second tool is registered
-through a door rather than beside one.
+**Every install registers one built-in tool, and that is honest rather than embarrassing.**
+`knowledge.columns.PRICE_LIST` is the only classification the product ships for everybody,
+so the price list is the only entity every install has a row tool for. The value here is not
+the count; it is that the count is produced by a builder that runs every rule, so the next
+tool is registered through a door rather than beside one.
+
+**A source may bring the classifications of its own entities, and they are registered only
+where that source is read.** The demo is the first. Until 2026-09-14 nothing classified its
+clients, jobs and invoices, so the console answered nobody's question about the seeded
+company, which `tests/e2e/test_wave_one_console_question.py` measured. The classifications
+now live in `brain.demo`, written from the columns its records store, and
+`SOURCE_ROW_ENTITIES` files them under `brain.demo.DEMO_SOURCE`: an install configured with
+`BRAIN_TOOL_SOURCE=demo` registers them beside the built-ins, and an install reading any other
+system registers none of them. See
+`A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`.
+
+Three other shapes were considered and rejected.
+
+- **Widening `BUILT_IN_ROW_ENTITIES`**, which is one line. The demo's `client` would then be
+  every install's: `contract_value`, `account_manager` and `since` classified by the product,
+  governing whatever a client's own system calls a client. That is one company's schema in the
+  template, and the company being invented does not make it anybody else's.
+- **Registering the demo's entities under its own source on every install with a database.**
+  The seeded rows would answer with nothing configured, and every real install would carry
+  three tools that read nothing, answer `/records/client` for anybody holding a client grant
+  with an empty page where it used to say the entity is not here, and name the demo's source
+  in the scope statement of their answers.
+- **Deciding at startup, from the database, whether the demo is loaded.** It needs no setting,
+  and it makes what the application serves depend on which rows exist, so a stray row
+  registers a tool; `brain.gate.fast_lane` refuses that shape for rules, for the same reason.
+  It would also need a read before the registry is built, which is `brain.app`'s ordering to
+  change rather than this module's.
+
+**`classification_for` is keyed on the entity alone, and that is a limit rather than a
+design.** Its callers do not say which source they mean, so it answers an entity a source
+brings on every install, including one that does not read that source: `/classifications/client`
+shows the demo's rules there to whoever may read classifications, while `/records/client`
+still refuses, because no tool is registered for it. That is sound only while no two owners
+classify one entity, which is tested, and it is the shape `fast_lane.entities_served` had
+until 2026-09-14, when a rule and a reader for one entity under two sources was a 500. The
+day a second source classifies `client`, this takes the source too, and so do its callers.
 
 **The row source is injected and there is no default.** `RowTool.reader` binds to a
 `RowSource`, and a builder that supplied its own would be a second path to data with its
@@ -84,11 +120,24 @@ Task ids: M12.1.5
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Final
 
+from brain import demo
 from brain.knowledge.columns import PRICE_LIST, TableClassification
 from brain.knowledge.rows import RowSource, RowTool
 from brain.tools.registry import ResultContract, ToolRegistry
+
+#: Why an entity a source brings is registered for that source and for no other.
+A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ: Final = (
+    "An entity a source brings is classified by that source's columns, and those columns are "
+    "a fact about one system rather than about the product. Registered on every install, they "
+    "would govern another system's records of the same name and put tools that read nothing "
+    "into installs that never asked for them. Registered where the source is read, they exist "
+    "exactly where their rows can, and which source an install reads is configuration a person "
+    "sets, BRAIN_TOOL_SOURCE, like any other system it is pointed at."
+)
 
 #: The description each built-in row tool carries into the catalogue.
 #:
@@ -103,26 +152,78 @@ ROW_TOOL_DESCRIPTIONS: Final[dict[str, str]] = {
     ),
 }
 
-#: Every entity the application ships a row tool for, with the classification that governs
-#: it. One entry today. A second is one line here and no change anywhere else, which is the
-#: shape a registry is supposed to have.
+#: Every entity the application ships a row tool for on every install, with the
+#: classification that governs it. One entry today. A second is one line here and no change
+#: anywhere else, which is the shape a registry is supposed to have. An entity only one
+#: system carries does not belong here: see `SOURCE_ROW_ENTITIES`.
 BUILT_IN_ROW_ENTITIES: Final = (PRICE_LIST,)
+
+#: The entities a source brings for itself, by the source's name, each with the classification
+#: governing it. Registered only by an install that reads that source. See
+#: `A_SOURCES_OWN_ENTITIES_ARE_REGISTERED_ONLY_WHERE_THAT_SOURCE_IS_READ`.
+#:
+#: Read-only, because a registration added at run time would be visible to every registry
+#: built afterwards in the same process, which is the singleton the module docstring rejects
+#: arriving through a dictionary.
+SOURCE_ROW_ENTITIES: Final[Mapping[str, tuple[TableClassification, ...]]] = MappingProxyType(
+    {demo.DEMO_SOURCE: demo.row_classifications()}
+)
+
+#: The catalogue descriptions for those entities, by source and then entity. Beside the
+#: classifications rather than inside them for the reason `ROW_TOOL_DESCRIPTIONS` gives: a
+#: description is catalogue text whose collisions are a property of the whole registry.
+SOURCE_ROW_DESCRIPTIONS: Final[Mapping[str, Mapping[str, str]]] = MappingProxyType(
+    {demo.DEMO_SOURCE: demo.ROW_TOOL_DESCRIPTIONS}
+)
+
+
+def row_entities_for(source: str) -> tuple[TableClassification, ...]:
+    """Every entity an install reading `source` has a row tool for: the built-ins, then its own.
+
+    The one place the source decides what is registered. `build_registry` reads nothing else,
+    so an entity cannot be registered for a source that does not bring it by any route other
+    than editing `SOURCE_ROW_ENTITIES`, which is a decision somebody can see being made.
+    """
+    return (*BUILT_IN_ROW_ENTITIES, *SOURCE_ROW_ENTITIES.get(source, ()))
+
+
+def every_row_classification() -> tuple[TableClassification, ...]:
+    """Every classification the product knows, whichever install it is registered on.
+
+    What `classification_for` searches. Exposed so a test can hold it to one classification
+    per entity, which is the condition under which an entity-keyed lookup has one answer.
+    """
+    return (
+        *BUILT_IN_ROW_ENTITIES,
+        *(one for owned in SOURCE_ROW_ENTITIES.values() for one in owned),
+    )
 
 
 def classification_for(entity: str) -> TableClassification | None:
     """The column classification governing this entity, or None if nothing classifies it.
 
-    Here rather than in whatever needs it, because the list above is the one place that
-    decides which entities this application ships a row tool for, and a second index built
-    from it elsewhere is a second answer to the same question the first time somebody adds an
-    entity to only one of them.
+    Here rather than in whatever needs it, because the lists above are the one place that
+    decides which entities this application classifies, and a second index built from them
+    elsewhere is a second answer to the same question the first time somebody adds an entity
+    to only one of them.
 
     None rather than a refusal, and the caller decides what an unclassified entity means. For
     `brain.api_routes` it means the same 404 an ungranted entity gets, which is the record
     rule applied one level up: a caller who could tell "there is no such entity here" from
     "you may not reach it" could map the installation by asking.
+
+    Keyed on the entity alone, which is a limit: see the module docstring.
     """
-    return next((c for c in BUILT_IN_ROW_ENTITIES if c.entity == entity), None)
+    return next((c for c in every_row_classification() if c.entity == entity), None)
+
+
+def description_for(source: str, entity: str) -> str:
+    """The catalogue text for one row tool an install reading `source` registers.
+
+    Raises `KeyError` for an entity nobody wrote a description for, at startup, which is where
+    `build_registry` has always failed for that mistake.
+    """
+    return {**ROW_TOOL_DESCRIPTIONS, **SOURCE_ROW_DESCRIPTIONS.get(source, {})}[entity]
 
 
 def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegistry:
@@ -131,7 +232,8 @@ def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegi
     `source` names the system the rows came from and is required. `RowTool` refuses an empty
     one already, with the argument that two sources' record ids collide by coincidence of
     integers; passing it through rather than defaulting keeps that refusal reachable instead
-    of satisfying it with a placeholder nobody chose.
+    of satisfying it with a placeholder nobody chose. It also decides which entities beyond
+    the built-ins are registered: see `row_entities_for`.
 
     `records` may be absent, and then no row tool is registered at all. See the module
     docstring: a tool that is present and cannot answer tells a person the system has no
@@ -144,11 +246,11 @@ def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegi
     registry = ToolRegistry()
 
     if records is not None:
-        for classification in BUILT_IN_ROW_ENTITIES:
+        for classification in row_entities_for(source):
             tool = RowTool(
                 source=source,
                 classification=classification,
-                description=ROW_TOOL_DESCRIPTIONS[classification.entity],
+                description=description_for(source, classification.entity),
             )
             registry.register(
                 tool.definition(),

@@ -34,44 +34,44 @@ record the two people share, and a guard below asserts that string occurs exactl
 everything the seed wrote, which is what makes its appearance anywhere else a leak rather than a
 coincidence.
 
-**What this found, and why M38.2.2.2 is not claimed.** Measured on 2026-09-14, the product as it
-ships cannot answer anybody's question about the seeded company in the console, and each of three
-defects is enough on its own to stop it. Each is pinned by a test below that fails for that reason.
+**What this found, and what closed it.** Measured on 2026-09-14, the product as it shipped could
+not answer anybody's question about the seeded company in the console, and each of three defects
+was enough on its own to stop it. Each is pinned by a test below that fails for that reason.
 
-1. **Nothing classifies a seeded entity.** `brain.tools.startup.BUILT_IN_ROW_ENTITIES` holds the
-   price list alone, so `build_registry` registers no row tool for `client`, `job` or `invoice`:
-   `/records/client` is a 404 for everybody, and the answer lane serves no entity a seeded rule
-   names, so every seeded question abstains. See `NOTHING_CLASSIFIES_A_SEEDED_ENTITY`.
-2. **A seeded record does not carry the field its readers' grants are scoped on.** Every demo
-   grant is a department scope, `brain.demo.DemoRecord.department` is declared, and
-   `brain.demo.record_rows` never writes it into `fields`. The WHERE clause compiled for every
-   demo person therefore tests `fields ->> 'department'` against records with no such key, and
-   the redactor, evaluating the same scope against the record, drops what the query let through.
-   `tests/unit/test_demo.py` checks that `row_scope_for` resolves and never that a stored record
-   satisfies it. See `A_SEEDED_RECORD_CARRIES_NO_DEPARTMENT`.
-3. **The seed and the application name different sources.** The seed files its rules and records
-   under `brain.demo.DEMO_SOURCE`, which is `demo`, and the application registers every row tool
-   under `Settings.tool_source`, which defaults to `local`, so a tool's own pin reads no seeded
-   row. It is worse than unanswered once a client tool exists: `fast_lane.entities_served` keys on
-   the entity alone, so `respond` then raises `FastLaneError` for a seeded rule and the route
-   answers 500 instead of abstaining. See `THE_SEED_AND_THE_APPLICATION_NAME_DIFFERENT_SOURCES`.
+1. **Nothing classified a seeded entity.** `brain.tools.startup.BUILT_IN_ROW_ENTITIES` held the
+   price list alone, so no row tool existed for `client`, `job` or `invoice`. The demo now
+   classifies its own columns (`brain.demo.row_classifications`), and `brain.tools.startup`
+   registers them for an install that reads the demo's source and for no other, rather than
+   widening the built-ins: those columns are an invented company's schema, and built in they
+   would govern every install's `client`. See
+   `test_the_entity_the_worked_examples_ask_about_is_classified_by_the_application`.
+2. **A seeded record did not carry the field its readers' grants are scoped on.** Every demo
+   grant is a department scope, and `brain.demo.record_rows` never wrote the department into
+   `fields`, so the compiled WHERE clause and the redactor both tested a key no seeded record
+   had. It writes it now, derived from the scope rather than spelled twice. See
+   `test_every_seeded_record_carries_the_fields_its_readers_grants_are_scoped_on`.
+3. **The seed and the application named different sources, and the mismatch was a 500.** The
+   seed files everything under `brain.demo.DEMO_SOURCE` and the application reads rows under
+   `Settings.tool_source`. Which system an install reads is configuration, so an install showing
+   the seeded company is configured to read the demo's source, and `showing_the_seeded_company`
+   below is that configuration. The 500 was its own defect: `fast_lane.entities_served` keyed on
+   the entity alone, so a rule for a pair nothing served matched and `respond` raised. It keys on
+   the pair now. See `test_the_seed_writes_under_the_source_the_application_reads_rows_from` and
+   `test_a_rule_filed_under_a_source_the_console_does_not_read_abstains_rather_than_failing`.
 
-A fourth constraint belongs to whoever fixes the first. The redactor evaluates a department scope
-against the record it is handed, and `read_rows` builds that record from the compiled projection,
-so the department column has to be readable by everybody who reaches the row. Classified under
-`read:client.department`, the coordinator's record is fetched without it and dropped whole; under
-`read:client`, which every reader of the row already holds, she sees the client and not its value.
+The constraint the first fix had to meet lives in `brain.demo`: the department column requires
+`read:client` and not `read:client.department`. The redactor evaluates a department scope
+against the record `read_rows` builds from the projection, so a coordinator who may reach the row
+and not select that column had her row dropped whole. See
+`brain.demo.THE_COLUMN_A_SCOPE_TESTS_IS_READ_BY_WHOEVER_REACHES_THE_ROW` and
+`test_she_sees_the_seeded_client_and_never_what_it_is_worth`.
 
-**Why the failing half is a strict xfail rather than absent.** 258c089 found the first of this
-family, while writing this same test, and left its harness out of the tree, which was right for a
-session that could fix the defect in the same commit. These are in `brain.tools.startup`,
-`brain.demo` and `brain.app`, which this file's author does not own. A finding with no test goes
-stale in a commit message, and a test asserting today's broken behaviour would go red on the fix
-and read as a regression. So each defect has a test asserting the property, marked
-`xfail(strict=True)` and restricted to `AssertionError`, and so do the three tests that are the
-leaf itself. The day the product is fixed they pass, strictness turns each pass into a failure,
-and whoever fixed it takes the marker off; when the three leaf tests are unmarked, M38.2.2.2 may
-be claimed. What already holds is unmarked and runs as an ordinary test.
+**Each defect was a strict xfail while it stood, and the markers came off with the fixes.** A
+finding with no test goes stale in a commit message, and a test asserting the broken behaviour
+would have gone red on the fix and read as a regression. So each property was asserted, marked
+`xfail(strict=True)` and restricted to `AssertionError`, and so were the three tests that are the
+leaf itself: a fix could not land without its marker coming off, because strictness turns an
+unexpected pass into a failure. None is left.
 
 **What this does not do.** No model is called: the answer lane is the fast lane, a rule and a row.
 No PostgreSQL: the row source is a double over the rows the seed wrote. It applies the tool's own
@@ -80,9 +80,12 @@ asker's filter, deliberately, so anything missing from a response was removed by
 or the redactor and never by the double being polite. The seed's writes are read back from its
 `Executor` rather than from a database, so no trigger, constraint or conflict clause runs. The
 console's browser half is not here; what is here is the API the console calls, with a token that
-carries a session and is therefore held to the console's channel ceiling.
+carries a session and is therefore held to the console's channel ceiling. And the configuration
+is set here rather than read from an install: nothing in this repository sets
+`BRAIN_TOOL_SOURCE=demo` on an install that loads the demo, which is a setup step and not a
+composition a test can show.
 
-Task ids: none
+Task ids: M38.2.2.2
 """
 
 from __future__ import annotations
@@ -102,7 +105,7 @@ from httpx import Response
 
 from brain import demo, seed
 from brain.api import API_PREFIX
-from brain.api_routes import GateWiring
+from brain.api_routes import GateWiring, row_readers
 from brain.app import Settings, create_app
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
@@ -125,37 +128,31 @@ from tests.unit.test_api_routes import (
 )
 from tests.unit.test_streaming import decode
 
-# ------------------------------------------------------------------ why the xfails fail
-#: The first defect. See the module docstring, item 1.
-NOTHING_CLASSIFIES_A_SEEDED_ENTITY: Final = (
-    "brain.tools.startup.BUILT_IN_ROW_ENTITIES holds the price list alone, so the application "
-    "registers no row tool for any entity the seed writes: /records/client is a 404 for "
-    "everybody and no seeded rule names an entity the answer lane serves. When this passes, "
-    "the marker comes off."
+# ------------------------------------------------------------------ the install
+#: Why the console here reads the demo's source rather than the application's default.
+AN_INSTALL_SHOWS_THE_SEEDED_COMPANY_BY_READING_ITS_SOURCE: Final = (
+    "The seed files everything it writes under brain.demo.DEMO_SOURCE, because those rows came "
+    "from nobody, and Settings.tool_source is which system an install reads rows from. So an "
+    "install showing the seeded company is configured to read the demo's source, the way an "
+    "install is configured to read any system, and an install configured the default way reads "
+    "its own system and registers none of the demo."
 )
 
-#: The second defect. See the module docstring, item 2.
-A_SEEDED_RECORD_CARRIES_NO_DEPARTMENT: Final = (
-    "every demo grant is scoped by department and brain.demo.record_rows writes no department "
-    "into a record's fields, so the compiled WHERE clause and the redactor's scope check both "
-    "test a key no seeded record has, and no demo person reaches a seeded record. When this "
-    "passes, the marker comes off."
-)
 
-#: The third defect. See the module docstring, item 3.
-THE_SEED_AND_THE_APPLICATION_NAME_DIFFERENT_SOURCES: Final = (
-    "the seed files rules and records under brain.demo.DEMO_SOURCE and the application "
-    "registers row tools under Settings.tool_source, which differ, so a tool's own pin reads no "
-    "seeded row; and fast_lane.entities_served keys on the entity alone, so a seeded rule "
-    "raises FastLaneError once a client tool exists. When this passes, the marker comes off."
-)
+def showing_the_seeded_company() -> Settings:
+    """The application's settings on an install that shows the seeded company.
 
-#: Why the leaf's own tests fail today: all three of the above at once.
-THE_CONSOLE_CANNOT_ANSWER_FROM_THE_SEEDED_COMPANY: Final = (
-    "the product as it ships answers nobody's question about the seeded company in the console: "
-    f"{NOTHING_CLASSIFIES_A_SEEDED_ENTITY} Also: {A_SEEDED_RECORD_CARRIES_NO_DEPARTMENT} Also: "
-    f"{THE_SEED_AND_THE_APPLICATION_NAME_DIFFERENT_SOURCES}"
-)
+    See `AN_INSTALL_SHOWS_THE_SEEDED_COMPANY_BY_READING_ITS_SOURCE`. A function rather than a
+    module constant, because `Settings` reads the environment when it is built and a constant
+    would read it once, at collection, for every test after.
+    """
+    return Settings(env="development", tool_source=demo.DEMO_SOURCE)
+
+
+def reading_its_own_system() -> Settings:
+    """The application's settings on an install configured the default way."""
+    return Settings(env="development")
+
 
 # ------------------------------------------------------------------ the worked examples
 #: "Department admin, Projects": every client column, in Projects.
@@ -274,8 +271,10 @@ def seeded() -> Seeded:
 def shared_record(seeded: Seeded) -> Mapping[str, Any]:
     """The client both worked examples may see, in the department they both sit in.
 
-    Found through `brain.demo.build_records`, because the department a record belongs to is the
-    one fact the seed does not write down (defect 2), so the stored rows cannot say which it is.
+    Found through `brain.demo.build_records`, which declares the department, rather than through
+    the department the seed stores. Every fixture here calls this, so reading the stored field
+    would turn a seed that stopped writing it into every test erroring at setup, and the one
+    test written to fail for that reason would be lost in the noise.
     """
     department = seeded.principals[SEES_THE_VALUE].primary_department
     declared = next(
@@ -393,15 +392,24 @@ def console_token(pid: str) -> str:
     )
 
 
-def console(seeded: Seeded, *, only: str | None = None) -> Iterator[TestClient]:
+def console(
+    seeded: Seeded,
+    *,
+    only: str | None = None,
+    rules: Sequence[FastPathRule] | None = None,
+) -> Iterator[TestClient]:
     """The real application, holding the seeded company exactly as it would hold it from a database.
 
-    The registry is built by `brain.tools.startup.build_registry` with the application's own
-    `tool_source`, which is what `brain.app.lifespan` does with a database; the rules are the
-    seeded rows through `rules_from_rows`, which is what `brain.gate.rule_store.load_rules` does.
-    Nothing here registers a tool or classifies an entity the application would not.
+    Configured by `showing_the_seeded_company`. The registry is built by
+    `brain.tools.startup.build_registry` with that configuration's `tool_source`, which is what
+    `brain.app.lifespan` does with a database; the rules are the seeded rows through
+    `rules_from_rows`, which is what `brain.gate.rule_store.load_rules` does. Nothing here
+    registers a tool or classifies an entity the application so configured would not.
+
+    `rules` replaces the seeded rules, for the one test about a rule filed under a source this
+    install does not read.
     """
-    settings = Settings(env="development")
+    settings = showing_the_seeded_company()
     app: FastAPI = create_app(settings)
     with TestClient(app, raise_server_exceptions=False) as client:
         app.state.gate = GateWiring(
@@ -419,7 +427,7 @@ def console(seeded: Seeded, *, only: str | None = None) -> Iterator[TestClient]:
         app.state.tools = build_registry(
             source=settings.tool_source, records=SeededRecords(seeded, only=only)
         )
-        app.state.fast_path_rules = seeded.rules
+        app.state.fast_path_rules = seeded.rules if rules is None else tuple(rules)
         yield client
 
 
@@ -439,6 +447,15 @@ def asking(seeded: Seeded) -> Iterator[TestClient]:
 def nothing_there(seeded: Seeded) -> Iterator[TestClient]:
     """The console over no record at all, which is what a question about an absent client finds."""
     yield from console(seeded, only="no_record_has_this_id")
+
+
+@pytest.fixture
+def asking_under_another_source(seeded: Seeded) -> Iterator[TestClient]:
+    """The console over the one record the question names, holding the seeded rules refiled
+    under the source an install configured the default way reads, which this one does not."""
+    elsewhere = reading_its_own_system().tool_source
+    refiled = tuple(rule.model_copy(update={"source": elsewhere}) for rule in seeded.rules)
+    yield from console(seeded, only=str(shared_record(seeded)["source_id"]), rules=refiled)
 
 
 def ask(client: TestClient, pid: str, question: str) -> Response:
@@ -467,7 +484,7 @@ def said(answered: Response) -> list[str]:
 def test_every_seeded_person_is_known_to_the_console_as_themselves(
     seeded: Seeded, browsing: TestClient
 ) -> None:
-    """**"A person asks in the console", which is the half of the leaf that holds today.** Every
+    """**"A person asks in the console", which is the half of the leaf that held first.** Every
     seeded person presenting a console session is resolved from the seeded principal table as
     themselves, on the console's channel, at the reach their seeded grants give a password-only
     session there.
@@ -538,27 +555,36 @@ def test_the_value_that_would_leak_occurs_once_in_everything_the_seed_wrote(
     assert sum(one.count(value) for one in strings) == 1, value
 
 
-# ================================================================== the defects, one at a time
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=NOTHING_CLASSIFIES_A_SEEDED_ENTITY)
+# ================================================================ the three defects, one at a time
 def test_the_entity_the_worked_examples_ask_about_is_classified_by_the_application(
     seeded: Seeded,
 ) -> None:
-    """Defect 1 on its own: the application must classify the entity the seeded rule and the
-    shared record are about, or it registers no row tool for it.
+    """Defect 1 on its own: the application classifies the entity the seeded rule and the shared
+    record are about, and an install showing the seeded company registers one row tool for it.
+
+    Both halves, because the records route asks both: an entity with a classification and no
+    tool is a 404 there, and a tool with no classification is refused a policy by the answer
+    lane.
 
     Delete this and the reason the leaf tests below fail is one of three nobody can tell apart."""
-    assert classification_for(str(shared_record(seeded)["entity"])) is not None
+    entity = str(shared_record(seeded)["entity"])
+    registry = build_registry(
+        source=showing_the_seeded_company().tool_source, records=SeededRecords(seeded)
+    )
+
+    assert classification_for(entity) is not None
+    assert [one.entity for one in registry.definitions()].count(entity) == 1
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=A_SEEDED_RECORD_CARRIES_NO_DEPARTMENT)
 def test_every_seeded_record_carries_the_fields_its_readers_grants_are_scoped_on(
     seeded: Seeded,
 ) -> None:
     """Defect 2 on its own: for every seeded person and every entity they reach, every field their
     row scope tests is present on every stored record of that entity.
 
-    Read from the stored rows, which is the test `tests/unit/test_demo.py` does not make: it
-    checks that the scope resolves and never that a record could satisfy it.
+    Read from the stored rows, which is the test `tests/unit/test_demo.py` did not make until
+    this one found the gap: it checked that the scope resolves and never that a record could
+    satisfy it.
 
     Delete this and a seed can go on writing records no scoped reader can ever reach."""
     for pid in seeded.principals:
@@ -574,24 +600,64 @@ def test_every_seeded_record_carries_the_fields_its_readers_grants_are_scoped_on
                     assert not missing, (pid, record["source_id"], missing)
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason=THE_SEED_AND_THE_APPLICATION_NAME_DIFFERENT_SOURCES
-)
 def test_the_seed_writes_under_the_source_the_application_reads_rows_from(seeded: Seeded) -> None:
-    """Defect 3 on its own: every seeded rule and record names the source the application
-    registers its row tools under.
+    """Defect 3 on its own: every source and entity a seeded rule or record names is a pair the
+    answer lane has a reader for on an install showing the seeded company, and on an install
+    configured the default way it has a reader for none of them.
 
-    Delete this and the day the first defect is fixed, every seeded question answers 500."""
-    source = Settings(env="development").tool_source
+    Read from `row_readers`, which is the mapping the answer route hands the lane, rather than
+    from the setting, because a source name compared with the setting it was copied into is a
+    constant compared with itself. The last assertion is the demo staying out of an install
+    that did not ask for it: were the demo's source ever the default, every other assertion here
+    would move with it and only that one would notice.
 
-    assert {rule.source for rule in seeded.rules} == {source}
-    assert {str(record["source"]) for record in seeded.records} == {source}
+    Delete this and the seed and the application can drift onto different sources again, and
+    every seeded question abstains with nothing saying why."""
+
+    def served(settings: Settings) -> set[tuple[str, str]]:
+        registry = build_registry(source=settings.tool_source, records=SeededRecords(seeded))
+        return set(row_readers(registry))
+
+    by_rules = {(rule.source, rule.entity) for rule in seeded.rules}
+    by_records = {(str(one["source"]), str(one["entity"])) for one in seeded.records}
+
+    assert by_rules and by_records
+    assert by_rules <= served(showing_the_seeded_company())
+    assert by_records <= served(showing_the_seeded_company())
+    assert not (by_rules | by_records) & served(reading_its_own_system())
+
+
+def test_a_rule_filed_under_a_source_the_console_does_not_read_abstains_rather_than_failing(
+    seeded: Seeded, asking_under_another_source: TestClient, nothing_there: TestClient
+) -> None:
+    """**A rule for a pair nothing serves is told what an absence is told, and until 2026-09-14
+    it was a 500.** The Projects lead, who is answered when the seeded rule names the source the
+    console reads, asks the same question through the seeded rules refiled under a source it does
+    not read, and hears word for word what a question about a client that does not exist hears.
+
+    `fast_lane.entities_served` keyed on the entity alone, so the refiled rule matched because a
+    client tool existed, `respond` found no reader for its pair and raised, and the route answered
+    500. A server error for one question and an abstention for another is also a difference a
+    person can read.
+
+    Delete this and the lane can go back to matching on the entity, and the first install whose
+    rules and tools name different sources answers every such question with a server error."""
+    assert reading_its_own_system().tool_source != showing_the_seeded_company().tool_source
+    record = shared_record(seeded)
+
+    refiled = ask(
+        asking_under_another_source,
+        SEES_THE_VALUE,
+        question_about(seeded, str(record["fields"]["name"])),
+    )
+    absent = ask(nothing_there, SEES_THE_VALUE, question_about(seeded, NOBODY))
+
+    assert refiled.status_code == 200, refiled.text
+    assert said(refiled) == said(absent)
+    assert any(NOT_FOUND_TEXT in text for text in said(refiled)), said(refiled)
 
 
 # ================================================================== the leaf
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason=THE_CONSOLE_CANNOT_ANSWER_FROM_THE_SEEDED_COMPANY
-)
 def test_the_person_who_may_see_it_is_answered_from_the_seeded_record(
     seeded: Seeded, asking: TestClient
 ) -> None:
@@ -620,8 +686,9 @@ def test_somebody_who_may_not_be_told_it_hears_what_an_absence_is_told(
     coordinator may not read the answer field and the Operations lead may not reach the record,
     and each is told, word for word, what they are told about a client that does not exist.
 
-    Today both sides are the abstention the defects above produce; the day they are fixed, this
-    is the test that stops a refusal becoming a sentence of its own.
+    Until 2026-09-14 both sides were the abstention the three defects produced, so this passed
+    for a reason unrelated to its property. The refused side now reaches the row plane and the
+    redactor, which is where a refusal could become a sentence of its own.
 
     Delete this and the console can tell a person which seeded clients exist by answering a
     refusal differently from an absence."""
@@ -634,9 +701,6 @@ def test_somebody_who_may_not_be_told_it_hears_what_an_absence_is_told(
     assert any(NOT_FOUND_TEXT in text for text in refused), refused
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason=THE_CONSOLE_CANNOT_ANSWER_FROM_THE_SEEDED_COMPANY
-)
 def test_the_person_entitled_to_the_value_sees_it_on_the_records_screen(
     seeded: Seeded, browsing: TestClient
 ) -> None:
@@ -653,9 +717,6 @@ def test_the_person_entitled_to_the_value_sees_it_on_the_records_screen(
     assert str(record["fields"][VALUE_FIELD]) in page.text
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason=THE_CONSOLE_CANNOT_ANSWER_FROM_THE_SEEDED_COMPANY
-)
 def test_she_sees_the_seeded_client_and_never_what_it_is_worth(
     seeded: Seeded, browsing: TestClient
 ) -> None:
@@ -684,8 +745,8 @@ def test_the_seeded_value_reaches_nobody_who_may_not_read_it(
     the shared client, and the client records screen. Checked on the whole body rather than on a
     field, because a value can be absent from a record and present in a label.
 
-    Its positive sibling is the xfail above, which is why this is not satisfied by a console that
-    shows nobody anything once that one is unmarked.
+    Its positive siblings are the two tests above that show the value to the lead, which is why
+    this is not satisfied by a console that shows nobody anything.
 
     Delete this and the seeded value can reach the coordinator, another department or somebody
     holding nothing over clients, and no other test here reads a body for it."""
@@ -703,9 +764,9 @@ def test_an_entity_somebody_holds_nothing_over_answers_exactly_as_one_that_does_
     seeded: Seeded, browsing: TestClient
 ) -> None:
     """The records screen, asked by a seeded person who holds nothing over clients, answers the
-    client entity with the status and bytes an entity that does not exist gets. Holds today and
-    must go on holding once the entity is classified, because this person will still hold
-    nothing over it.
+    client entity with the status and bytes an entity that does not exist gets. The entity is
+    classified and has a tool on this install, so this is a refusal answering like an absence
+    rather than two absences agreeing, which is what it was until 2026-09-14.
 
     Compared as whole bodies with one exclusion, the trace id, for the reason
     `tests/unit/test_api_routes.py` gives about the same comparison: it is minted per request

@@ -596,7 +596,14 @@ class _Rows:
 
 
 class _Reader:
-    """A database that answers the two questions `ask` puts to it, and no others."""
+    """A database that answers the two questions `ask` puts to it, and no others.
+
+    **It hands back only the columns a statement selects, the way a database does.** Until
+    2026-09-14 it handed back whole demo rows whatever the statement named, so a column `ask`
+    needed and the read never selected was present here and missing against PostgreSQL, and
+    the one place that would have said so was the CI install job. `brain.demo.answer` began
+    pairing a rule with its records' source that day, which is exactly such a column.
+    """
 
     def __init__(self, rules: list[dict[str, Any]], records: list[dict[str, Any]]) -> None:
         self.rules = rules
@@ -606,9 +613,10 @@ class _Reader:
     def execute(self, statement: object, parameters: Any = None, /) -> _Rows:
         sql = str(statement)
         self.statements.append(sql)
-        if "fast_path_rule" in sql:
-            return _Rows(self.rules)
-        return _Rows(self.records)
+        rows = self.rules if "fast_path_rule" in sql else self.records
+        listed = sql.partition("SELECT")[2].partition("FROM")[0]
+        selected = [one.strip() for one in listed.split(",")]
+        return _Rows([{name: row[name] for name in selected if name in row} for row in rows])
 
 
 def test_a_question_is_answered_from_the_rows_the_database_holds() -> None:
@@ -658,6 +666,11 @@ def test_the_read_names_its_columns_rather_than_selecting_everything() -> None:
         "answer_field",
     ):
         assert column in seed_mod._READ_RULES
+    # The records read names its select list as well, and `source` has to be in that list
+    # rather than only in the WHERE clause, because `brain.demo.answer` pairs a rule with its
+    # records' source. Split into names, since `source_id` would satisfy a substring check.
+    listed = seed_mod._READ_RECORDS.partition("FROM")[0].removeprefix("SELECT")
+    assert {"source", "entity", "source_id", "fields"} <= {one.strip() for one in listed.split(",")}
 
 
 def test_the_smoke_check_compares_the_database_against_what_the_demo_declared() -> None:
