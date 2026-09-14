@@ -46,7 +46,7 @@ from brain.agents.model import (
     entitlement_ceiling,
 )
 from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
-from brain.audit.view import CAPABILITY_BY_KIND, AuditFilter, AuditView
+from brain.audit.view import CAPABILITY_BY_KIND, DEFAULT_PAGE_SIZE, AuditFilter, AuditView
 from brain.console.govern import Placed, may_certify
 from brain.console.reach_view import Operation, PromotionEvidence
 from brain.console.reads import Plane, plane_capability
@@ -1513,6 +1513,44 @@ def test_a_department_this_person_does_not_head_reads_as_one_with_nothing_in_it(
     assert not_headed.model_dump_json() == invented.model_dump_json()
     assert not_headed.model_dump_json() == heads_nothing.model_dump_json()
     assert not_headed.rows == ()
+
+
+@pytest.mark.parametrize(
+    ("limit", "cursor"),
+    [(0, None), (DEFAULT_PAGE_SIZE, "not a cursor")],
+    ids=["limit", "cursor"],
+)
+def test_a_malformed_page_request_is_refused_alike_whether_or_not_the_department_is_headed(
+    limit: int, cursor: str | None
+) -> None:
+    """A page request the view refuses has to be refused before the department is judged. If an
+    unheaded department returned an empty page while a headed one raised, a malformed limit or
+    cursor would be a probe telling a department this person heads from one they do not, which
+    is the disclosure the empty page exists to prevent.
+
+    The positive sibling is the next assertion: a well-formed request still returns the headed
+    department's rows. Delete this and the early return for an unheaded department can move back
+    in front of the view's own validation without anything noticing."""
+    view = a_head_view("u_priya", "u_wei")
+    nobody = AuditFilter(actors=frozenset({"u_nobody"}))
+    asked = (
+        (MAINTENANCE, [MAINTENANCE], None),
+        (FINANCE, [MAINTENANCE], None),
+        (MAINTENANCE, [MAINTENANCE], nobody),
+    )
+    for department, headed, criteria in asked:
+        with pytest.raises(ValueError):
+            department_activity(
+                view,
+                department,
+                headed=headed,
+                members=["u_priya"],
+                criteria=criteria,
+                limit=limit,
+                cursor=cursor,
+            )
+
+    assert department_activity(view, MAINTENANCE, headed=[MAINTENANCE], members=["u_priya"]).rows
 
 
 def test_an_empty_member_list_is_refused_because_a_filter_reads_it_as_everybody() -> None:

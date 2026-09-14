@@ -769,16 +769,16 @@ def department_coverage(
 # -------------------------------------------- what a department did, as its head reads it
 #: Why this view is narrowed by people and never by the department it is named after.
 #:
-#: `brain.console.global_surfaces.activity_filter` refuses a department lens because an audit
-#: entry carries no department. That is the visible half. The half found on 2026-09-08, while
-#: trying to build the department version, is that **a department-scoped audit grant matches
-#: no audit entry at all**: `brain.audit.view._scope_row` offers `action`, `actor_id`,
-#: `subject` and `subject_kind`, and `brain.core.scope.Clause.matches` refuses a row that does
-#: not carry the field, which is the correct fail-closed reading. So a department admin whose
-#: audit grants are scoped to their own department reads an empty ledger, and would do so
-#: whatever this module did with the filter. Run rather than reasoned about: the same reader
-#: with the same capability scoped to a named person sees that person's entries, which is
-#: both the confirmation and the shape of the fix.
+#: `brain.console.global_surfaces.activity_filter` refuses a department lens that arrives without
+#: its members, because an audit entry carries no department. That is the visible half. The half
+#: found on 2026-09-08, while trying to build the department version, is that **a
+#: department-scoped audit grant matches no audit entry at all**: `brain.audit.view._scope_row`
+#: offers `action`, `actor_id`, `subject` and `subject_kind`, and
+#: `brain.core.scope.Clause.matches` refuses a row that does not carry the field, which is the
+#: correct fail-closed reading. So a department admin whose audit grants are scoped to their own
+#: department reads an empty ledger, and would do so whatever this module did with the filter.
+#: Run rather than reasoned about: the same reader with the same capability scoped to a named
+#: person sees that person's entries, which is both the confirmation and the shape of the fix.
 #:
 #: A wrapper that narrowed by member ids would therefore have been a surface that is always
 #: empty for exactly the readers it is for, and its tests would have passed: every fixture
@@ -813,6 +813,14 @@ AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR: Final = (
     "be one they were entitled to see, which is what makes it unnoticeable. It is refused "
     "here rather than defaulted, exactly as brain.core.department.compose refuses an empty "
     "sequence rather than returning the identity."
+)
+
+A_PAGE_REQUEST_IS_JUDGED_BEFORE_THE_DEPARTMENT_IS: Final = (
+    "A department page is empty for a department this person does not head, so that an outsider "
+    "cannot tell a real department from an invented one. That only holds if a malformed limit or "
+    "cursor is refused alike on both sides. Returning the empty page before the view has judged "
+    "the request would raise for a headed department and answer quietly for any other, and a "
+    "deliberately bad page request would then map the org chart one department at a time."
 )
 
 #: Why the screen's member list and the grant's member list are allowed to disagree.
@@ -928,21 +936,21 @@ def department_activity(
             f"{AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR}"
         )
         raise ValueError(msg)
-    if department not in set(headed):
-        return AuditPage()
-
     wanted = frozenset(members)
     if criteria is not None and criteria.actors:
         wanted &= criteria.actors
-    if not wanted:
-        # An intersection of nobody. Returned as an empty page and never as the empty filter,
-        # which `AuditFilter` would read as every actor. See
-        # `AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR`, which is the same trap arriving by
-        # subtraction rather than by an empty argument.
-        return AuditPage()
+    # An intersection of nobody reaches the view as the empty filter, which `AuditFilter` reads
+    # as every actor (`AN_EMPTY_MEMBER_LIST_MEANS_EVERY_ACTOR`, arriving by subtraction). That
+    # page is only ever used for the view's judgement of the request and is discarded below, so
+    # substituting the members for it would be a guard no outcome could reveal, and was removed
+    # when a mutation showed exactly that.
+    nobody = not wanted
 
     base = criteria or AuditFilter()
-    return view.page(
+    # The view is asked before either empty answer is decided, on
+    # `A_PAGE_REQUEST_IS_JUDGED_BEFORE_THE_DEPARTMENT_IS`: a malformed limit or cursor has to be
+    # refused alike for a department this person heads and one they do not.
+    page = view.page(
         AuditFilter(
             actions=base.actions,
             subject_kinds=base.subject_kinds,
@@ -953,6 +961,9 @@ def department_activity(
         limit=limit,
         cursor=cursor,
     )
+    if nobody or department not in set(headed):
+        return AuditPage()
+    return page
 
 
 # ------------------------------------- what a department spent, against pace (M33.2.1.3)
