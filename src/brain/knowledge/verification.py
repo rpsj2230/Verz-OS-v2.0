@@ -327,6 +327,15 @@ def may_name_verifier(item: KnowledgeItem, reader: EntitlementSet, *, now: datet
     only a trailing `.*`. Narrowing the requirement by the reader asks the question that was
     meant.
 
+    **Since 2026-09-14 that reason is gone with the `intersect` it described.** `intersect`
+    now reads the capabilities off both sides and asks each side's `scope_for`, so a reader
+    narrowed by `read:knowledge.verifier` keeps what their `read:knowledge.*` covers, and
+    the two directions are one question. Measured that day over 10,164 requirement-and-reader
+    pairs, with readers bounded a second before, at and a second after `now`: no answer
+    differs, and expiry does not choose a side, because the `scope_for(..., now)` below judges
+    the bound `intersect` carries out. Requirement-first is kept as the reading of the
+    question and guards nothing.
+
     The owner is deliberately not a third way in. An owner is answerable for the item being
     right, which is not the same as being entitled to the identity of everybody who has
     touched it, and the surface that gives an owner what they need is the re-verification

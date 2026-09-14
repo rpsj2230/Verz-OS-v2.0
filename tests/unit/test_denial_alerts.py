@@ -166,7 +166,12 @@ def test_a_wildcard_grant_is_enough_to_be_told_about_a_field_inside_it() -> None
     and the whole alert list would collapse to holders of the exact capability string.
 
     Deleting this test lets the intersection be written the intuitive way round, which
-    silences the alert for every wildcard holder - which is to say for every admin."""
+    silences the alert for every wildcard holder - which is to say for every admin.
+
+    Since 2026-09-14 the order no longer decides this: `intersect` reads both sides through
+    `scope_for`, and with `reach` written the other way round this test still passes. What
+    it guards now is the outcome rather than the order. Delete it and nothing asserts that
+    a holder of a wildcard is told about a column inside it, which is every admin."""
     wildcard = _ents("u_wide", "read:client.*", scope=Scope.department("maintenance"))
     assert reach(_pattern(), wildcard, now=NOW) is not None
 

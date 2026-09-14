@@ -29,6 +29,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from brain.agents import catalogue
 from brain.agents.model import (
     CEILING_PRINCIPAL_PREFIX,
     AgentAudience,
@@ -78,6 +79,7 @@ from brain.orchestration.delegation import (
     narrowing_refusals,
     narrows,
 )
+from tests.fixtures.company import everyone
 
 NOW = datetime(2026, 9, 8, 4, 0, tzinfo=UTC)
 PACKAGE = pathlib.Path(__file__).resolve().parents[2] / "src" / "brain" / "orchestration"
@@ -470,6 +472,240 @@ def test_a_child_with_no_expiry_under_a_parent_with_one_is_refused():
     child = _reach("p-ana", NAME)
 
     assert not narrows(child, parent)
+
+
+# --------------------------------------------------- containment through a wildcard (2026-09-14)
+#: A bound long past on any plausible wall clock, so a test about setting expiry aside cannot
+#: start or stop passing on a date nobody chose.
+LAPSED = datetime(2019, 1, 1, tzinfo=UTC)
+
+WILDCARD = "read:client.*"
+
+#: A noun sharing a prefix with `client`, which no grant on `client` may ever cover.
+NOT_A_CLIENT_COLUMN = "read:clients.name"
+
+#: The capability shapes `Capability.covers` tells apart, written out here rather than imported
+#: from the entitlement invariants, so a change to that universe cannot quietly shrink this one.
+UNIVERSE_PATTERNS = ("read:client", WILDCARD, NAME, "read:client.billing.*")
+
+#: Every pattern, a column under each wildcard that no grant names, and a noun nothing covers.
+UNIVERSE_QUESTIONS = (*UNIVERSE_PATTERNS, "read:client.billing.total", HOURS, NOT_A_CLIENT_COLUMN)
+
+
+def _set(
+    principal_id: str, *grants: tuple[str, Scope], not_after: datetime | None = None
+) -> EntitlementSet:
+    return EntitlementSet(
+        principal_id=principal_id,
+        grants=tuple(Grant(capability=Capability(value=v), scope=s) for v, s in grants),
+        not_after=not_after,
+    )
+
+
+def _every_set_of_at_most_two_grants(principal_id: str) -> list[EntitlementSet]:
+    scopes = (Scope(), _scope(department="maintenance"), _scope(tier="gold"))
+    grants = [
+        Grant(capability=Capability(value=p), scope=s) for p in UNIVERSE_PATTERNS for s in scopes
+    ]
+    held: list[tuple[Grant, ...]] = [(), *((one,) for one in grants)]
+    held.extend(itertools.combinations(grants, 2))
+    return [EntitlementSet(principal_id=principal_id, grants=one) for one in held]
+
+
+def _contained_by_the_rule(child: EntitlementSet, parent: EntitlementSet) -> bool:
+    """Containment written out question by question, over capabilities neither side need name."""
+    for value in UNIVERSE_QUESTIONS:
+        capability = Capability(value=value)
+        held = child.scope_for(capability)
+        if held is None:
+            continue
+        allowed = parent.scope_for(capability)
+        if allowed is None or not set(allowed.clauses) <= set(held.clauses):
+            return False
+    return True
+
+
+def test_narrowing_is_exact_over_every_pair_of_sets_of_at_most_two_grants():
+    """`CONTAINMENT_IS_ASKED_OF_BOTH_SIDES` as the property, over 6,241 children and parents
+    and the 6,241 narrowings `intersect` makes of the same sets.
+
+    Both halves, because each cheaper reading fails one of them. Matching on the capability
+    string refused 1,449 of those narrowings on 2026-09-14. Walking only the child's grants
+    admitted 44 widenings, and `covers` per grant admitted 236. The oracle asks every question
+    in the universe, including columns neither set names, so it also holds the claim that the
+    capabilities the two sides name are enough to ask about.
+
+    The contained count is asserted between the bounds, so the universe cannot be edited into
+    one where everything or nothing is contained and equality holds for free.
+
+    Delete this and containment is held only by the cases written below, which is how the
+    string match stayed wrong for a wildcard caller while every named case passed."""
+    sets = _every_set_of_at_most_two_grants("p-ana")
+    ceilings = _every_set_of_at_most_two_grants(f"{CEILING_PRINCIPAL_PREFIX}lens")
+
+    wrong = [
+        (child.grants, parent.grants)
+        for child in sets
+        for parent in sets
+        if narrows(child, parent) != _contained_by_the_rule(child, parent)
+    ]
+    refused_folds = [
+        (caller.grants, ceiling.grants)
+        for caller in sets
+        for ceiling in ceilings
+        if not narrows(caller.intersect(ceiling, NOW), caller)
+    ]
+    contained = sum(_contained_by_the_rule(child, parent) for child in sets for parent in sets)
+
+    assert wrong == []
+    assert refused_folds == []
+    assert 0 < contained < len(sets) ** 2
+
+
+def _analyst_hop() -> Hop:
+    """The capacity analyst's ceiling, from the catalogue's own authority through the real
+    producer. Audience is not an input to `entitlement_ceiling`, which
+    `test_agent_authoring.py` holds across all three visibilities."""
+    manifest = catalogue.capacity_and_hours_analyst()
+    record = AgentRecord(
+        agent_id=manifest.identity.template_id,
+        display_name="Capacity and hours analyst",
+        persona="Reads client hours.",
+        audience=AgentAudience(level=Visibility.PERSONAL, owner_id="u_aaron"),
+        authority=AgentAuthority(
+            scope=manifest.authority.scope, capabilities=manifest.authority.capabilities
+        ),
+        created_by="u_aaron",
+    )
+    return Hop(lens_id=record.agent_id, kind=LensKind.AGENT, ceiling=entitlement_ceiling(record))
+
+
+def test_a_wildcard_callers_chain_through_the_analysts_column_ceiling_is_not_refused():
+    """**The false refusal the repaired `intersect` exposed, on the fixture company.**
+
+    The analyst's ceiling names three client columns. `u_aaron` and `u_rupash` hold
+    `read:client.*`, so their run holds the columns and they hold no grant equal to any of
+    them. Matching on the capability string refused both, and `u_siti` and the lapsed
+    `u_expired` with them, as "did not narrow". Three hops, the middle one a wildcard subtask
+    ceiling, for `A_CHAIN_OF_TWO_HAS_NO_INTERIOR`.
+
+    The positive half is asserted as well: both admins end the chain holding the hours column,
+    so an empty chain cannot pass this by reaching nothing.
+
+    Delete this and `chain_refusals` can refuse every Department Admin's delegation again with
+    each hand-built case in this file still green."""
+    hops = (
+        _analyst_hop(),
+        _subtask_hop("hours-left", WILDCARD, scope=_scope(department="maintenance")),
+        _agent_hop("hours-reporter", HOURS),
+    )
+    people = everyone()
+
+    refused = {
+        pid: chain_refusals(one.entitlement(), hops)
+        for pid, one in sorted(people.items())
+        if chain_refusals(one.entitlement(), hops)
+    }
+
+    assert refused == {}
+    for pid in ("u_aaron", "u_rupash"):
+        caller = people[pid].entitlement()
+        assert WILDCARD in _held(caller)
+        assert HOURS not in _held(caller)
+        assert HOURS in _held(chain_reach(caller, hops))
+
+
+def test_a_column_under_the_parents_wildcard_is_contained_in_it():
+    """The positive sibling of the two refusals below. Delete this and the containment check
+    could refuse every column a wildcard covers, which is the defect this section repairs."""
+    parent = _set("p-ana", (WILDCARD, _scope(department="web")))
+    child = _set("p-ana", (NAME, _scope(department="web", tier="gold")))
+
+    assert narrowing_refusals(child, parent) == ()
+
+
+def test_a_capability_no_grant_of_the_parents_covers_is_refused_beside_one_that_is():
+    """`read:clients.name` shares a prefix with the wildcard and is not under it. Delete this
+    and a containment reading `covers` loosely, as a prefix, hands a child a second entity."""
+    parent = _set("p-ana", (WILDCARD, Scope()))
+    child = _set("p-ana", (NAME, Scope()), (NOT_A_CLIENT_COLUMN, Scope()))
+
+    refusals = narrowing_refusals(child, parent)
+
+    assert len(refusals) == 1
+    assert refusals[0].startswith(
+        f"{NOT_A_CLIENT_COLUMN} is held by the child and by no grant of the parent's"
+    )
+
+
+def test_a_column_that_lost_the_clause_its_parents_wildcard_carried_is_refused():
+    """The clause half through a wildcard. Delete this and a column could be reached across
+    every department beneath a wildcard held in one."""
+    parent = _set("p-ana", (WILDCARD, _scope(department="web")))
+    child = _set("p-ana", (NAME, Scope()))
+
+    refusals = narrowing_refusals(child, parent)
+
+    assert len(refusals) == 1
+    assert refusals[0].startswith(f"{NAME} is reached by the child without every clause")
+
+
+def test_a_child_that_left_out_the_narrower_column_grant_beneath_a_wildcard_is_refused():
+    """The parent reaches the name column in Web and gold only. A child keeping the wildcard
+    in Web and leaving the column grant out reaches the column in every tier, and it names
+    nothing the parent does not, so only asking the parent's capabilities too finds it. The
+    fold of the same parent is the positive sibling.
+
+    Delete this and containment can walk the child's grants alone, which admitted 44 such
+    widenings over the invariant universe."""
+    parent = _set("p-ana", (WILDCARD, _scope(department="web")), (NAME, _scope(tier="gold")))
+    ceiling = _set(f"{CEILING_PRINCIPAL_PREFIX}wide", (WILDCARD, Scope()))
+    left_out = _set("p-ana", (WILDCARD, _scope(department="web")))
+
+    refusals = narrowing_refusals(left_out, parent)
+
+    assert narrowing_refusals(parent.intersect(ceiling, NOW), parent) == ()
+    assert len(refusals) == 1
+    assert refusals[0].startswith(f"{NAME} is reached by the child without every clause")
+
+
+def test_a_column_reached_under_only_one_of_two_covering_grants_is_refused():
+    """The wildcard in Web and the column in gold both cover the column, so the parent reaches
+    it in Web and gold. A child holding it in Web satisfies the wildcard's clauses and not the
+    conjunction. Holding it in both is the positive sibling.
+
+    Delete this and containment can accept any one covering grant's clauses, which admitted
+    236 widenings over the invariant universe."""
+    parent = _set("p-ana", (WILDCARD, _scope(department="web")), (NAME, _scope(tier="gold")))
+    in_web = _set("p-ana", (NAME, _scope(department="web")))
+    in_both = _set("p-ana", (NAME, _scope(department="web", tier="gold")))
+
+    assert narrowing_refusals(in_both, parent) == ()
+    assert len(narrowing_refusals(in_web, parent)) == 1
+
+
+def test_a_lapsed_callers_fold_is_not_refused_as_a_widening():
+    """Expiry is the fourth check's, and `scope_for` refuses an expired set against the wall
+    clock. Delete this and the parent's bound can be left in the question, so every chain of a
+    caller whose access has lapsed reports each capability as a widening, which is the wrong
+    reason given at a time nobody chose."""
+    parent = _set("p-ana", (WILDCARD, _scope(department="web")), not_after=LAPSED)
+    ceiling = _set(f"{CEILING_PRINCIPAL_PREFIX}narrow", (NAME, Scope()))
+
+    assert narrowing_refusals(parent.intersect(ceiling, NOW), parent) == ()
+
+
+def test_a_lapsed_child_that_dropped_a_clause_is_still_refused():
+    """The other side's bound. Delete this and the child's bound can be left in the question,
+    and a child that has lapsed reaches nothing by `scope_for`, so any widening it carries is
+    admitted as long as its expiry is no later than its parent's."""
+    parent = _set("p-ana", (NAME, _scope(department="web")), not_after=LAPSED)
+    child = _set("p-ana", (NAME, Scope()), not_after=LAPSED)
+
+    refusals = narrowing_refusals(child, parent)
+
+    assert len(refusals) == 1
+    assert "conjunction" in refusals[0]
 
 
 # ------------------------------------------------------------------ the chain's own shape

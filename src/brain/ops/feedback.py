@@ -50,7 +50,9 @@ whether the result still admits that department. That is `brain.ops.denial_alert
 shape, deliberately, and it calls `EntitlementSet.intersect` rather than comparing scopes by
 hand: there are exactly two implementations of the platform's central rule and a third is
 forbidden. Requirement-first, for the reason `denial_alerts` gives about `Capability.covers`
-expanding only a trailing wildcard.
+expanding only a trailing wildcard. Since 2026-09-14 that reason has gone with the
+`intersect` it described, and the order is a convention rather than a guard; `may_flag` says
+what was measured.
 
 **Nothing here writes anything and nothing here moves a bar.** `capture` returns a case and
 a caller commits it, which is `brain.ops.evaluation`'s
@@ -425,6 +427,17 @@ def may_flag(department: str, flagger: EntitlementSet, *, now: datetime) -> Scop
     It stops being equivalent the moment `FLAG_CAPABILITY` becomes field-shaped, which is
     what `denial_alerts` deals with every time it runs, because a denial pattern's capability
     is a column. Written this way round so that change is safe when somebody makes it.
+
+    **Since 2026-09-14 the first and third paragraphs above describe an `intersect` that is
+    gone.** It now reads the capabilities off both sides and asks each side's `scope_for`, so
+    a flagger narrowed by a specific capability keeps what their wildcard covers, and the two
+    directions are one question for every requirement rather than only for this one. Measured
+    that day over 10,164 requirement-and-reader pairs, field-shaped and wildcard capabilities
+    and `write:answer_flag` among them, with readers bounded a second before, at and a second
+    after `now`: no answer differs. So a field-shaped `FLAG_CAPABILITY` is safe in either
+    order, the survivor recorded above is still equivalent for a reason that no longer
+    depends on the capability's shape, and expiry does not choose a side, because the
+    `scope_for(..., now)` below judges the bound `intersect` carries out.
 
     Three existing pieces and no fourth rule. `intersect` decides what narrower means,
     `scope_for` decides what holding it means and refuses an expired principal, which is

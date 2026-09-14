@@ -382,6 +382,16 @@ def reach(pattern: DenialPattern, recipient: EntitlementSet, *, now: datetime) -
     plainly holds it. Narrowing the requirement by the recipient asks the question that was
     meant: does what this person holds cover what was denied.
 
+    **Since 2026-09-14 the paragraph above describes an `intersect` that is gone, and the
+    direction is no longer load-bearing.** `intersect` now reads the capabilities off both
+    sides and asks each side's `scope_for`, so a recipient narrowed by the denied column keeps
+    the column their wildcard covers, and the two directions are one question. Measured that
+    day over 10,164 requirement-and-reader pairs, with readers bounded a second before, at and
+    a second after `now`: no answer differs. Expiry does not choose a side either, because the
+    `scope_for(..., now)` below judges the bound `intersect` carries out, wherever the
+    recipient sat. Requirement-first is kept because it reads as the question being asked, and
+    for no other reason.
+
     Three existing pieces and no fourth rule. `intersect` decides what narrower means,
     `scope_for` decides what holding it means (and refuses an expired recipient, which is
     where a leaver stops being told about their old department), and `Scope.matches` decides

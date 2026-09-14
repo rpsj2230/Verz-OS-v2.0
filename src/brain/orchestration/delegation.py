@@ -93,9 +93,20 @@ should have been recorded, which is loud; wider admits a row the Python path had
 checked, which is where the system stood before the trigger existed.
 
 Silent drift between the two is the thing that would matter, so they are measured against
-each other rather than argued about: ten differential cases fold the same three sets
+each other rather than argued about: seventeen differential cases fold the same three sets
 through `intersect` twice and through the SQL once and compare by meaning, against a live
-server, in `tests/unit/test_delegation_sql.py`.
+server, in `tests/unit/test_delegation_sql.py`. There were ten until 2026-09-14, when seven
+chains holding a wildcard on the parent's side were added with the repair to `intersect`,
+together with one test comparing the SQL against a reach written out by hand, because a
+comparison of two copies cannot see a defect both of them share.
+
+**Since 2026-09-14 the SQL containment check is no longer this module's check in SQL.**
+`narrowing_refusals` below now asks both sides through `scope_for`, and
+`gate.narrowing_refusals` in `brain.core.scope_sql` still matches grants on the capability
+string. Measured on a live server that day, it admits a row holding `read:client.*` in Web
+beneath a reach whose `read:client.name` is Web and gold, and that row reaches the name column
+in every tier. It is recorded here and not repaired here, because that module is not this
+change's.
 
 The other half of the old refusal was real and has been answered rather than waived. There
 was no row to hang a trigger on; migration `0028` creates `gate.delegation`, and the trigger
@@ -167,6 +178,18 @@ EVERY_HOP_ONLY_NARROWS: Final = (
     "remove. Installing an agent would then be a grant, and installing an agent is a "
     "configuration change while granting is a change to somebody's entitlements. The two "
     "have different approvers, and a restoring hop collapses them into one."
+)
+
+#: How containment is asked, and the two cheaper readings that are each wrong one way.
+CONTAINMENT_IS_ASKED_OF_BOTH_SIDES: Final = (
+    "A child is contained in its parent when, for every capability either of them names, the "
+    "child reaches it only where the parent does, each side's reach read through scope_for. "
+    "That is the reading intersect gives a set, so what a fold produces is never refused. "
+    "Matching grants on the capability string refuses a wildcard caller's run the moment a "
+    "ceiling names a column, because the run holds the column and the caller holds no grant "
+    "equal to it. Walking only the child's grants admits a child that kept the parent's "
+    "wildcard and left out the narrower column grant beneath it, and that child reaches the "
+    "column wherever the wildcard does."
 )
 
 #: Why a pair of hops is not enough to test the fold.
@@ -349,20 +372,51 @@ def narrowing_refusals(child: EntitlementSet, parent: EntitlementSet) -> tuple[s
     work, so the hash cannot answer this and it is asked separately; that is the same
     argument `brain.gate.leash.resume` makes about its own identity check.
 
-    **Every capability the child holds, the parent holds**, matched on the capability's own
-    value rather than through `EntitlementSet.scope_for`. `scope_for` intersects the scopes
-    of every grant that *covers* the capability, so a parent holding both `read:client.*`
-    and `read:client.name` would be compared against a conjunction of two scopes that no
-    single child grant was built from, and a correct narrowing would be reported as a
-    widening. Grant for grant is exact for anything `flow_reach` produced, which is what
-    this is asked about.
+    **Every capability the child reaches, the parent reaches.** Asked of both sides through
+    `EntitlementSet.scope_for`, for every capability either set names, with both bounds set
+    aside. That is the question `intersect` asks, so a child is judged by the same reading of
+    a set that produced it. Asking only about the capabilities the child names is not enough:
+    a child can keep a parent's `read:client.*` in Web and leave out the parent's
+    `read:client.name` in gold, and it then reaches the name column in every tier. Asking
+    about every capability either side names is enough, because the grants covering any
+    capability are exactly the grants covering the most specific named capability above it.
+    See `CONTAINMENT_IS_ASKED_OF_BOTH_SIDES`.
 
     **The scope must not have lost a clause.** Scopes compose by conjunction only, so more
-    clauses is narrower and a child whose clauses are a superset of some parent grant's has
-    narrowed. This is a sufficient condition and not a necessary one: a child could be
-    narrower in meaning with different clauses, and this would refuse it. That is the right
-    direction for a refusal, and it is worth saying out loud rather than leaving somebody to
-    discover it by having a legitimate row rejected.
+    clauses is narrower, and a child whose clauses on a capability are a superset of the
+    parent's clauses there has narrowed. This is a sufficient condition and not a necessary
+    one: a child could be narrower in meaning with different clauses, and this would refuse
+    it. That is the right direction for a refusal, and it is worth saying out loud rather
+    than leaving somebody to discover it by having a legitimate row rejected.
+
+    **Until 2026-09-14 this matched each child grant to the parent's grants on the
+    capability's own value**, and argued against `scope_for`: a parent holding both
+    `read:client.*` and `read:client.name` would be compared against a conjunction of scopes
+    no single child grant was built from, and "grant for grant is exact for anything
+    `flow_reach` produced". Both halves were true of the `intersect` of that day, which read a
+    run's grants off the caller alone and took each scope from the one grant being walked.
+    Neither is true of the repaired one. The run holds the column wherever a ceiling names it,
+    so a parent's wildcard has no equal grant to be matched against, and its scope there is
+    the parent's `scope_for` conjoined with the ceiling's, which carries every clause of that
+    conjunction. Left as it was, the check reported a correct narrowing as a widening:
+    `chain_refusals` refused `u_aaron`, `u_rupash`, `u_siti` and `u_expired` in
+    `tests/fixtures/company.py` through the capacity analyst's installed ceiling. What survives
+    of the old argument is the clause test and its direction, which are unchanged.
+
+    Measured that day over every child and parent drawn from the sets of at most two grants
+    `tests/invariants/test_entitlement_invariants.py` uses, 6,241 pairs, against a
+    containment written out capability by capability, and over the narrowings `intersect`
+    produces from the same sets, 6,241 at one hop and 409,968 at a second:
+    - exact matching, as before: 1,449 and 35,991 of those narrowings refused, and against
+      the written-out containment 64 widenings admitted and 670 containments refused;
+    - `Capability.covers` with clause containment, per child grant: no narrowing refused,
+      and 236 widenings admitted, because the clauses of one covering grant are not every
+      clause the parent reaches a column under;
+    - `scope_for`, per child grant: no narrowing refused, and 44 widenings admitted, which
+      are the child leaving out a narrower grant;
+    - `scope_for` asked of both sides, which is what this is: none refused and none admitted.
+    Rejected, then, are the first three, and the fourth is the only one exact in both
+    directions over that universe.
 
     **The time bound must not have moved out.** `intersect` takes the tighter of the two, so
     a child outliving its parent is a child that was not produced by one.
@@ -374,21 +428,26 @@ def narrowing_refusals(child: EntitlementSet, parent: EntitlementSet) -> tuple[s
             f"{parent.principal_id!r}; narrowing keeps the caller's id, so this row was not "
             "produced by narrowing that caller's reach"
         )
-    for grant in child.grants:
-        candidates = [
-            one for one in parent.grants if one.capability.value == grant.capability.value
-        ]
-        if not candidates:
+    # See `CONTAINMENT_IS_ASKED_OF_BOTH_SIDES`. Both bounds are set aside for the question,
+    # because expiry is the fourth check's to judge, and `scope_for` would otherwise judge it
+    # against the wall clock and make a refusal depend on when somebody asked.
+    reaching = child.model_copy(update={"not_after": None})
+    reachable = parent.model_copy(update={"not_after": None})
+    for capability in dict.fromkeys(g.capability for g in (*child.grants, *parent.grants)):
+        held = reaching.scope_for(capability)
+        if held is None:
+            continue
+        allowed = reachable.scope_for(capability)
+        if allowed is None:
             findings.append(
-                f"{grant.capability.value} is held by the child and by no grant of the "
+                f"{capability.value} is held by the child and by no grant of the "
                 f"parent's. {EVERY_HOP_ONLY_NARROWS}"
             )
             continue
-        held = set(grant.scope.clauses)
-        if not any(set(one.scope.clauses) <= held for one in candidates):
+        if not set(allowed.clauses) <= set(held.clauses):
             findings.append(
-                f"{grant.capability.value} is scoped in the child without every clause the "
-                "parent's grant carried, and scopes compose by conjunction only, so a "
+                f"{capability.value} is reached by the child without every clause the "
+                "parent reaches it under, and scopes compose by conjunction only, so a "
                 "dropped clause is rows the parent could not see"
             )
     if parent.not_after is not None and (
