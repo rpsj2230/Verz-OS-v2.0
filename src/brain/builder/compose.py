@@ -59,8 +59,8 @@ Scope: domain logic. Nothing here opens a connection, renders anything or reads 
 **This declares the sections and builds no form.** M20.1.2, the form generated from the
 manifest JSON Schema, is `brain.builder.form`, which cuts that schema into these sections, and
 `console/src/components/ManifestForm.tsx`, which renders it. M20.1.3 is a co-author that needs a
-model lane nothing in this repository assembles, and M20.1.4 is a draft store. Neither is
-claimed and neither is here.
+model lane nothing in this repository assembles, and it is not claimed. M20.1.4, a manifest
+saved as a draft and published as a version, is `brain.builder.drafts`.
 
 Task ids: M20.1.1, M20.1.5, M20.2.3, M20.2.4
 """

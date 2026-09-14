@@ -21,7 +21,8 @@ so that the absence is checked rather than remembered.
 
 **And no rendering.** Nothing in this package draws a form, a canvas or a screen, exactly as
 nothing behind `brain.console.screens` does. What is built here is the domain layer: the
-sectioning of the manifest and the form schema cut from it, the grammar a procedure may be
+sectioning of the manifest and the form schema cut from it, the revisions a manifest is saved
+as before it is whole and the version publishing makes of one, the grammar a procedure may be
 drawn in and the bounded drawing and SKILL.md that come from it, whose reach a rehearsal runs
 at, and what a publish gate may refuse and how it must word the refusal. The rendering is the
 console's (`ManifestForm.tsx`, `ProcedureCanvas.tsx`, `TraceGraph.tsx`), and no route joins the
