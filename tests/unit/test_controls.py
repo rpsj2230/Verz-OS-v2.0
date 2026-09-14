@@ -386,8 +386,153 @@ def test_a_control_whose_only_caller_is_itself_uncalled_is_reported() -> None:
         invoked_by=Invocation.IN_PROCESS,
     )
     findings = chains_worth_checking((inner_only,))
-    assert any("as unreached as the control" in one for one in findings)
+    assert any(
+        "called from brain.knowledge.verification:open_reverification_tasks," in one
+        and "as unreached as the control" in one
+        for one in findings
+    )
     assert chains_worth_checking((control("audit_anchor"),)) == ()
+
+
+def _write_tree(root: Path, files: dict[str, str]) -> Path:
+    """A source tree of the test's own under `root/src/brain`, returned as that directory.
+
+    LF on purpose, for the reason CLAUDE.md gives about `write_text` on this machine, although
+    nothing here reads line endings.
+    """
+    src = root / "src" / "brain"
+    for relative, text in files.items():
+        path = src / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+    return src
+
+
+#: The control every tree below guards, and the import each caller module opens with.
+_GUARDED = {"knowing/guarded.py": "def sweep() -> None:\n    return None\n"}
+_IMPORT_SWEEP = "from brain.knowing.guarded import sweep\n\n\n"
+
+
+def _unreached_callers(findings: tuple[str, ...]) -> set[str]:
+    """The `module:function` each finding names as the unreached caller."""
+    return {one.split(" is called from ", 1)[1].split(",", 1)[0] for one in findings}
+
+
+def test_a_caller_nobody_calls_is_reported_even_when_its_module_is_imported_for_another(
+    tmp_path: Path,
+) -> None:
+    """Delete this and importing a module for one function makes every other one read as run.
+
+    The shape that broke the module-level version of this check on 2026-09-15:
+    `brain.gate.provenance` imported `brain.knowledge.verification` to call `disclose`, and
+    the uncalled `open_reverification_tasks` in the same file became reached. Here `reader`
+    imports `shared` for `disclose`, `uncalled` holds the control's call and nothing calls it,
+    and `tidy` is uncalled too and calls something else, so a check that counted every
+    function holding any call as a caller of the control would name it. The module question is
+    asserted beside the answer, so the test shows the case the old rule got wrong rather than
+    one it happened to get right.
+    """
+    from brain.ops.controls import _callers_of_module, chains_worth_checking
+
+    src = _write_tree(
+        tmp_path,
+        {
+            **_GUARDED,
+            "shared.py": _IMPORT_SWEEP
+            + "def uncalled() -> None:\n    sweep()\n\n\n"
+            + "def tidy() -> str:\n    return str(1)\n\n\n"
+            + "def disclose() -> str:\n    return str(1)\n",
+            "reader.py": "from brain.shared import disclose\n\n\n"
+            "def go() -> str:\n    return disclose()\n",
+        },
+    )
+    wired = _control(symbols=("brain.knowing.guarded:sweep",), invoked_by=Invocation.IN_PROCESS)
+    assert _callers_of_module("brain.shared", src) == ("brain.reader",)
+    findings = chains_worth_checking((wired,), tmp_path)
+    assert _unreached_callers(findings) == {"brain.shared:uncalled"}
+    assert all("as unreached as the control" in one for one in findings)
+
+
+def test_a_caller_on_a_route_or_called_from_another_module_is_not_reported(
+    tmp_path: Path,
+) -> None:
+    """Delete this and the function-level rule can report every wired control there is.
+
+    The refusal test above is satisfied by a check that reports every caller, and the one
+    control that runs today is reached through a route handler, which nothing calls: a rule
+    that forgot decorators would turn `audit_anchor` into a finding. Four reached shapes, each
+    the sole caller in its module: a route handler in a module the application imports, a
+    function another module calls, a private helper reached only through such a function,
+    and a statement in the body of an imported module.
+    """
+    from brain.ops.controls import chains_worth_checking
+
+    _write_tree(
+        tmp_path,
+        {
+            **_GUARDED,
+            "routes.py": _IMPORT_SWEEP
+            + 'router = object()\n\n\n@router.get("/api/sweep")\n'
+            + "def handler() -> None:\n    sweep()\n",
+            "remote.py": _IMPORT_SWEEP
+            + "def entry() -> None:\n    _helper()\n\n\n"
+            + "def _helper() -> None:\n    sweep()\n\n\n"
+            + "def direct() -> None:\n    sweep()\n",
+            "boot.py": _IMPORT_SWEEP + "sweep()\n",
+            "app.py": "import brain.boot\nfrom brain.remote import direct, entry\n"
+            "from brain.routes import router\n\n\n"
+            "def start() -> object:\n    entry()\n    direct()\n    return router\n",
+        },
+    )
+    wired = _control(symbols=("brain.knowing.guarded:sweep",), invoked_by=Invocation.IN_PROCESS)
+    assert chains_worth_checking((wired,), tmp_path) == ()
+
+
+def test_a_caller_no_static_scan_can_see_run_is_reported(tmp_path: Path) -> None:
+    """Delete this and each of the rule's exceptions can widen until nothing is ever reported.
+
+    The siblings of the test above, one per condition in the rule: a route handler in a
+    module nothing imports, a decorator taking a string that is not a path, a statement in
+    the body of a module nothing imports, a method, a function nested in the module body, and
+    a helper whose only caller in its module is itself unreached. Each is in its own module,
+    and every module but two is imported by `app`, so an import alone cannot be what reports
+    them. These are the directions `chains_worth_checking` says it errs in, held to it.
+    """
+    from brain.ops.controls import chains_worth_checking
+
+    _write_tree(
+        tmp_path,
+        {
+            **_GUARDED,
+            "orphan_routes.py": _IMPORT_SWEEP
+            + 'router = object()\n\n\n@router.get("/api/orphan")\n'
+            + "def handler() -> None:\n    sweep()\n",
+            "labelled.py": _IMPORT_SWEEP
+            + 'register = object()\n\n\n@register("not a path")\n'
+            + "def handler() -> None:\n    sweep()\n",
+            "bodyless.py": _IMPORT_SWEEP + "sweep()\n",
+            "methods.py": _IMPORT_SWEEP
+            + "class Worker:\n    def run(self) -> None:\n        sweep()\n",
+            "nested.py": _IMPORT_SWEEP + "if True:\n\n    def hidden() -> None:\n        sweep()\n",
+            "lambdas.py": _IMPORT_SWEEP + "later = lambda: sweep()\n",
+            "chained.py": _IMPORT_SWEEP
+            + "def dead() -> None:\n    _inner()\n\n\n"
+            + "def _inner() -> None:\n    sweep()\n",
+            "app.py": "import brain.chained\nimport brain.labelled\nimport brain.lambdas\n"
+            "import brain.methods\nimport brain.nested\n",
+        },
+    )
+    wired = _control(symbols=("brain.knowing.guarded:sweep",), invoked_by=Invocation.IN_PROCESS)
+    findings = chains_worth_checking((wired,), tmp_path)
+    assert _unreached_callers(findings) == {
+        "brain.orphan_routes:handler",
+        "brain.labelled:handler",
+        "brain.bodyless:<module body>",
+        "brain.methods:Worker.run",
+        "brain.nested:<nested in the module body>",
+        "brain.lambdas:<nested in the module body>",
+        "brain.chained:_inner",
+    }
 
 
 def test_a_call_written_as_import_the_module_then_call_the_attribute_is_found(
@@ -419,7 +564,8 @@ def test_a_call_written_as_import_the_module_then_call_the_attribute_is_found(
 def test_a_module_that_imports_itself_is_not_its_own_caller(tmp_path: Path) -> None:
     """Delete this and a self-import makes an unreached chain look reached.
 
-    `chains_worth_checking` asks whether the module calling a control is itself imported by
+    `chains_worth_checking` asks whether the function calling a control is reached, and for a
+    route handler or a module body that means asking whether the module is imported by
     anything. A module that names itself in an import, which happens under a type-checking
     block or after a rename that half landed, would answer that question with itself and the
     chain would read as connected while nothing outside it ever runs.
@@ -429,9 +575,10 @@ def test_a_module_that_imports_itself_is_not_its_own_caller(tmp_path: Path) -> N
     src = tmp_path / "src" / "brain"
     src.mkdir(parents=True)
     (src / "thing.py").write_text("def guard() -> None:\n    return None\n", "utf-8")
+    # The call sits in the module body, which is reached exactly when something imports the
+    # module, so the self-import is the only thing that could make it read as reached.
     (src / "runner.py").write_text(
-        "from brain.thing import guard\nfrom brain.runner import guard as again\n\n\n"
-        "def go() -> None:\n    guard()\n    again()\n",
+        "from brain.thing import guard\nfrom brain.runner import guard as again\n\nguard()\n",
         "utf-8",
     )
     wired = _control(symbols=("brain.thing:guard",), invoked_by=Invocation.IN_PROCESS)

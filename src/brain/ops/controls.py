@@ -160,6 +160,21 @@ A_CONTROL_IS_RUN_ONLY_WHEN_ALL_OF_IT_IS: Final = (
 )
 
 
+#: What `chains_worth_checking` counts as a caller being reached, and which way it can be wrong.
+A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE: Final = (
+    "A module being imported says that one of its names is wanted, not that the function "
+    "calling a control is. The first version of this check asked the module question, and "
+    "the day another module imported brain.knowledge.verification to use a different "
+    "function, the uncalled open_reverification_tasks read as reached. So the question is "
+    "asked of the function whose body holds the call, and it is reached in three ways only: "
+    "another module calls it, it is registered on an HTTP route in a module something "
+    "imports, or a function in its own module that is itself reached calls it by name. A "
+    "method, a function nested in the module body and a function only ever passed around "
+    "as a value are not reached, because a static scan cannot follow them, and that errs "
+    "toward reporting a chain rather than toward hiding one."
+)
+
+
 class ControlsError(Exception):
     """A control was declared in a shape the registry cannot check or an operator cannot read.
 
@@ -796,6 +811,44 @@ def _dotted_name(node: ast.expr) -> str:
     return ".".join(reversed(parts))
 
 
+def _import_tables(tree: ast.Module) -> tuple[dict[str, str], dict[str, str]]:
+    """What each name bound by an import in this file resolves to.
+
+    The first table is `from x import f [as g]`, binding to `x:f`; the second is `import x
+    [as y]`, binding to `x`. Every import in the file, including one inside a function body,
+    which is how `brain.docs_routes` reaches `take_anchor`. Shared by `_call_index` and
+    `_calling_functions`, because two resolvers are two answers to which function a call
+    names, and the guard asking where a call sits would then disagree with the index saying
+    that it exists.
+    """
+    direct: dict[str, str] = {}
+    dotted: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                direct[alias.asname or alias.name] = f"{node.module}:{alias.name}"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                dotted[alias.asname or alias.name] = alias.name
+    return direct, dotted
+
+
+def _resolved_call(node: ast.Call, direct: Mapping[str, str], dotted: Mapping[str, str]) -> str:
+    """The `module:function` a call names through this file's imports, or empty."""
+    called = node.func
+    if isinstance(called, ast.Name):
+        return direct.get(called.id, "")
+    if isinstance(called, ast.Attribute):
+        # The whole chain rather than the immediate parent. `import brain.ops.x` binds
+        # `brain`, so the call reads `brain.ops.x.f()` and the attribute directly under `f`
+        # is `x` rather than anything the import table knows. Looking at that one name found
+        # nothing, which is why the first version of this branch could be deleted with the
+        # suite green.
+        module = dotted.get(_dotted_name(called.value), "")
+        return f"{module}:{called.attr}" if module else ""
+    return ""
+
+
 @cache
 def _call_index(src: Path | None = None) -> Mapping[str, frozenset[str]]:
     """Every `module:function` called anywhere in the tree, against the modules calling it.
@@ -821,33 +874,11 @@ def _call_index(src: Path | None = None) -> Mapping[str, frozenset[str]]:
     for path in _sources(src):
         here = _module_name(path, src)
         tree = _parsed(path)
-        # binding -> the symbol it resolves to, for `from x import f [as g]`
-        direct: dict[str, str] = {}
-        # binding -> the module it resolves to, for `import x [as y]`
-        dotted: dict[str, str] = {}
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                for alias in node.names:
-                    direct[alias.asname or alias.name] = f"{node.module}:{alias.name}"
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    dotted[alias.asname or alias.name] = alias.name
+        direct, dotted = _import_tables(tree)
         for node in ast.walk(tree):
             if not isinstance(node, ast.Call):
                 continue
-            called = node.func
-            symbol = ""
-            if isinstance(called, ast.Name):
-                symbol = direct.get(called.id, "")
-            elif isinstance(called, ast.Attribute):
-                # The whole chain rather than the immediate parent. `import brain.ops.x`
-                # binds `brain`, so the call reads `brain.ops.x.f()` and the attribute
-                # directly under `f` is `x` rather than anything the import table knows.
-                # Looking at that one name found nothing, which is why the first version of
-                # this branch could be deleted with the suite green.
-                left = _dotted_name(called.value)
-                module = dotted.get(left, "")
-                symbol = f"{module}:{called.attr}" if module else ""
+            symbol = _resolved_call(node, direct, dotted)
             if symbol and not symbol.startswith(f"{here}:"):
                 index.setdefault(symbol, set()).add(here)
     return MappingProxyType({key: frozenset(value) for key, value in index.items()})
@@ -1182,10 +1213,30 @@ def chains_worth_checking(
     link. `brain.knowledge.verification.open_reverification_tasks` is exactly that shape and
     is how this function came to exist.
 
-    One level rather than a closure, and the limit is honest rather than lazy: a full call
-    graph over this tree would have to model methods, callables passed as arguments and route
-    registration, and a reachability answer that is wrong in the optimistic direction is
-    worse than no answer at all. One level is the depth at which the answer is still exact.
+    **The question is asked of the calling function, not of the calling module.** Until
+    2026-09-15 it asked whether anything imported the module the call sat in, and that was
+    wrong in the optimistic direction the paragraph below forbids: `brain.gate.provenance`
+    began importing `brain.knowledge.verification` for `disclose`, and the uncalled
+    `open_reverification_tasks` in the same file read as reached. See
+    `A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE` for the three ways a
+    function counts as reached.
+
+    One level across modules rather than a closure, and the limit is honest rather than lazy:
+    a full call graph over this tree would have to model methods, callables passed as
+    arguments and dispatch tables, and a reachability answer that is wrong in the optimistic
+    direction is worse than no answer at all. Within the calling module the walk does go to
+    a fixed point, because a plain-name call to a module-level function in the same file is
+    resolved exactly, and stopping at a private helper would report every control called
+    from one.
+
+    **Which way it can err, stated rather than implied.** Towards reporting: a caller that is
+    a method, a function nested inside the module body, or a function reached only as a value
+    (a callback, a table of runners) is reported, because nothing here can follow it. That
+    finding is visible and gets argued about. Towards silence, three things, each deliberate:
+    a function called from another module is reached whether or not that module's own
+    caller is, which is the one-level limit; a route handler is reached when its module is
+    imported, which trusts that the import mounts the route, as `measured_invocation` already
+    does; and a call in a module's body runs when the module is imported by anything.
     """
     rows = CONTROLS if controls is None else tuple(controls)
     root = REPO if repo is None else repo
@@ -1196,17 +1247,138 @@ def chains_worth_checking(
             continue
         for symbol in row.symbols:
             for caller in call_sites(symbol, src):
-                onward = _callers_of_module(caller, src)
-                if not onward:
-                    findings.append(
-                        f"{row.name}: {symbol} is called from {caller}, which nothing else "
-                        "in this tree imports, so the caller is as unreached as the control"
-                    )
+                reached = _reached_functions(caller, src)
+                findings.extend(
+                    f"{row.name}: {symbol} is called from {caller}:{function}, which no other "
+                    "module calls, no route registers and nothing reached in its own module "
+                    "calls, so the caller is as unreached as the control"
+                    for function in _calling_functions(symbol, caller, src)
+                    if function not in reached
+                )
     return tuple(sorted(set(findings)))
 
 
+#: Where a call runs when its module is imported: a statement at the top of the file.
+_MODULE_BODY: Final = "<module body>"
+
+#: Where a call runs that no static scan can say is ever run: a function or a lambda nested
+#: in the module body rather than declared at its top level or as a method. Never reached.
+_NESTED_IN_MODULE_BODY: Final = "<nested in the module body>"
+
+
+def _calls_by_owner(tree: ast.Module) -> tuple[tuple[str, ast.Call], ...]:
+    """Every call in a file, against the unit whose running would make it.
+
+    A unit is a top-level function by its name, a method of a top-level class as
+    `Class.method`, the module body, or `_NESTED_IN_MODULE_BODY`. A call inside a function
+    nested in another function belongs to the outer function, because it runs only when that
+    one does. A decorator or a default argument belongs to the function it is written on,
+    which is the reporting direction: both run at import.
+    """
+    found: list[tuple[str, ast.Call]] = []
+
+    def visit(node: ast.AST, owner: str, in_class: str) -> None:
+        for child in ast.iter_child_nodes(node):
+            here = owner
+            if owner == _MODULE_BODY and isinstance(child, ast.Lambda):
+                here = _NESTED_IN_MODULE_BODY
+            elif owner == _MODULE_BODY and isinstance(
+                child, ast.FunctionDef | ast.AsyncFunctionDef
+            ):
+                if node is tree:
+                    here = child.name
+                elif in_class:
+                    here = f"{in_class}.{child.name}"
+                else:
+                    here = _NESTED_IN_MODULE_BODY
+            if isinstance(child, ast.Call):
+                found.append((here, child))
+            top_class = child.name if node is tree and isinstance(child, ast.ClassDef) else ""
+            visit(child, here, top_class)
+
+    visit(tree, _MODULE_BODY, "")
+    return tuple(found)
+
+
+def _calling_functions(symbol: str, module: str, src: Path | None = None) -> tuple[str, ...]:
+    """The units of this module whose bodies call this function, in name order.
+
+    Resolved with the imports `_call_index` resolves with, so a module the index names as a
+    caller always has at least one unit here.
+    """
+    tree = _parsed(_module_path(f"{module}:_", src))
+    direct, dotted = _import_tables(tree)
+    return tuple(
+        sorted(
+            {
+                owner
+                for owner, call in _calls_by_owner(tree)
+                if _resolved_call(call, direct, dotted) == symbol
+            }
+        )
+    )
+
+
+def _registered_on_a_route(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether a decorator registers this function as the handler for an HTTP path.
+
+    Read the way `route_is_declared` reads a route: a decorator call whose first positional
+    argument is a string, and here one that is a path. The path is the condition rather than
+    any decorator call, because `@field_validator("name")` and a registry keyed by a label
+    are calls with a string in them too, and neither is anything outside the process
+    reaching the function.
+    """
+    return any(
+        isinstance(decorator, ast.Call)
+        and bool(decorator.args)
+        and isinstance(decorator.args[0], ast.Constant)
+        and isinstance(decorator.args[0].value, str)
+        and decorator.args[0].value.startswith("/")
+        for decorator in node.decorator_list
+    )
+
+
+def _reached_functions(module: str, src: Path | None = None) -> frozenset[str]:
+    """The units of this module that something is seen to run.
+
+    See `A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE`. The module body
+    and a route handler count only when another module imports this one; a top-level
+    function counts when another module calls it; and from those, a plain-name call inside
+    the file carries the answer on to the function it names, until nothing new is reached.
+    A method and `_NESTED_IN_MODULE_BODY` are never seeds and never carried to.
+    """
+    tree = _parsed(_module_path(f"{module}:_", src))
+    functions = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+    }
+    imported = bool(_callers_of_module(module, src))
+    reached: set[str] = {_MODULE_BODY} if imported else set()
+    for name, node in functions.items():
+        if call_sites(f"{module}:{name}", src) or (imported and _registered_on_a_route(node)):
+            reached.add(name)
+
+    onward: dict[str, set[str]] = {}
+    for owner, call in _calls_by_owner(tree):
+        if isinstance(call.func, ast.Name) and call.func.id in functions:
+            onward.setdefault(owner, set()).add(call.func.id)
+    frontier = list(reached)
+    while frontier:
+        for callee in onward.get(frontier.pop(), set()):
+            if callee not in reached:
+                reached.add(callee)
+                frontier.append(callee)
+    return frozenset(reached)
+
+
 def _callers_of_module(module: str, src: Path | None = None) -> tuple[str, ...]:
-    """Every module importing this one, in name order. Used only by `chains_worth_checking`."""
+    """Every module importing this one, in name order.
+
+    Used only by `_reached_functions`, and only for the two units an import genuinely runs or
+    mounts: the module body and a route handler. It was once the whole of
+    `chains_worth_checking`, which is the defect recorded there.
+    """
     found: set[str] = set()
     for path in _sources(src):
         here = _module_name(path, src)

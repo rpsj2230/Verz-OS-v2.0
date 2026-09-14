@@ -37,12 +37,34 @@ there into browser history, referer headers and every chat client's link preview
 that survived scope filtering may be shown to the asker; it may not be scattered across
 infrastructure nobody governs.
 
+**A cited document carries its verification badge, and the badge is computed at the reach
+the citation was retrieved at (M34.2.1.2).** `brain.knowledge.verification.disclose` already
+decides what one reader may be told about who vouched for an item. What it cannot decide is
+*which* reader, and that is the whole of the risk at this layer: a badge computed for an
+administrator and attached to an asker's citation names a colleague to somebody the name was
+withheld from. So `provenance_for` takes a `Badging` only together with a `RetrievalTrace`
+that states the entitlement hash retrieval ran under, and refuses a reader whose hash is a
+different one. That is `brain.channels.cards.build_approval_card`'s comparison, made for the
+same reason. See `A_BADGE_IS_COMPUTED_AT_THE_REACH_ITS_CITATION_WAS_RETRIEVED_AT`.
+
+**A badge exists only beside a citation.** The item records a caller hands in are looked up
+by the citations the trace holds and never enumerated, so an item that was not cited
+contributes nothing to the answer: not its title, not its state, not its verifier. And a
+cited document with no item record on file is badged as unverified rather than left bare, for
+`AN_UNVERIFIED_ITEM_STILL_CARRIES_A_BADGE`'s reason: a badge that appeared only on checked
+documents would teach a reader that no badge means nothing to report.
+
+**Nothing on the request path cites a document yet, and that is stated rather than implied.**
+`brain.gate.answer.answer_lane` answers from rows and constructs no `RetrievalTrace`, so the
+badge is attached at the one place document evidence meets an answer and is reachable from a
+served answer on the day a document lane builds a trace.
+
 Scope: domain logic. Nothing here reads a clock, opens a connection, or calls a model.
 `now` is always a parameter, for the reason `brain.models.routing.CircuitBreaker` gives:
 a freshness rule that reads the clock itself cannot be tested at its own boundary, and the
 boundary is the part that goes wrong.
 
-Task ids: M8.1.1, M8.1.2, M8.1.3, M8.1.4
+Task ids: M8.1.1, M8.1.2, M8.1.3, M8.1.4, M34.2.1.2
 """
 
 from __future__ import annotations
@@ -55,8 +77,11 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Final, Protocol
 
+from brain.core.entitlement import EntitlementSet
 from brain.core.redaction import ChannelPayload
 from brain.gate.compose import Citation, ComposedAnswer
+from brain.knowledge.item import KnowledgeItem, VerificationState
+from brain.knowledge.verification import DisclosedBadge, disclose
 
 # --------------------------------------------------------------------- grammars
 
@@ -65,6 +90,16 @@ from brain.gate.compose import Citation, ComposedAnswer
 #: `brain.core.redaction` restates its own name pattern: this module's guarantee should not
 #: move when somebody widens an unrelated one.
 _REFERENCE_RE: Final = re.compile(r"^[A-Za-z0-9_.@-]{1,128}$")
+
+#: Why a badge is refused for any reader but the one the citations were retrieved for.
+A_BADGE_IS_COMPUTED_AT_THE_REACH_ITS_CITATION_WAS_RETRIEVED_AT: Final = (
+    "A verification badge can name a colleague, and whether it does is decided for one "
+    "reader. The citation beside it was decided for one reader too, by the scope filter "
+    "inside the retrieval query. If the two readers differ, a badge computed for somebody "
+    "entitled to the verifier's name is attached to an answer for somebody who is not, and "
+    "every check each half made was correct. So the reader is compared with the entitlement "
+    "hash retrieval recorded, and a trace that recorded none cannot be badged at all."
+)
 
 
 # ------------------------------------------------------------- freshness (M8.1.3)
@@ -330,11 +365,24 @@ class RetrievalTrace:
     """
 
     passages: tuple[DocumentCitation, ...] = ()
+    #: The entitlement hash retrieval ran under, as `EntitlementSet.ent_hash` produces it.
+    #: Empty when retrieval did not say, and an empty one admits no badge: see
+    #: `A_BADGE_IS_COMPUTED_AT_THE_REACH_ITS_CITATION_WAS_RETRIEVED_AT`.
+    ent_hash: str = ""
 
 
 #: An empty trace, for a row-only answer. A module constant rather than a default_factory
 #: because the type is frozen, in the shape `brain.models.routing.UNCONSTRAINED` uses.
 NO_DOCUMENTS: Final = RetrievalTrace()
+
+
+class BadgeReachError(Exception):
+    """A badge was asked for at a reach other than the one its citations were retrieved at.
+
+    Outside the user-facing taxonomy for `ModelAuthoredCitationError`'s reason: it means the
+    layer above handed over the wrong reader, which should stop that code being written
+    rather than degrade somebody's answer. The message names neither reader and no item.
+    """
 
 
 class ModelAuthoredCitationError(Exception):
@@ -424,16 +472,26 @@ class Evidence:
 
     citation: Cited
     freshness: StatedFreshness
+    #: The verification badge beside a cited document (M34.2.1.2). None on a row citation,
+    #: which is a field of a record and has nobody who vouched for it, and on a document in
+    #: an answer assembled without `Badging`.
+    badge: DisclosedBadge | None = None
 
     def render(self) -> str:
-        """The citation, with the state and not the read time again.
+        """The citation, with the state and not the read time again, then the badge.
 
         `Citation.render` and `DocumentCitation.render` already append "as of ...", so
         repeating the timestamp here would print it twice in every answer. The state is the
         part this module adds, and where it is UNSTATED it is a correction to the "as of"
         the citation printed from a string nothing could date.
+
+        The badge is `DisclosedBadge.render`, which is already the sentence this reader may be
+        shown, so nothing here decides whether a name appears.
         """
-        return f"{self.citation.render()} ({FRESHNESS_TEXT[self.freshness.state]})"
+        shown = f"{self.citation.render()} ({FRESHNESS_TEXT[self.freshness.state]})"
+        if self.badge is None:
+            return shown
+        return f"{shown} [{self.badge.render()}]"
 
 
 @dataclass(frozen=True)
@@ -487,21 +545,68 @@ class Provenance:
         return tuple(e.render() for e in (*self.rows, *self.documents))
 
 
+@dataclass(frozen=True)
+class Badging:
+    """What an answer's document badges are computed from: the reader, and the item records.
+
+    `reader` is the asker the answer is for, and `provenance_for` refuses one whose hash is
+    not the hash retrieval ran under. `items` is whatever records the caller holds for the
+    documents that might be cited; they are looked up by citation and never listed, so
+    handing over more than was cited adds nothing to the answer.
+    """
+
+    reader: EntitlementSet
+    items: tuple[KnowledgeItem, ...] = ()
+
+    def __post_init__(self) -> None:
+        held = [item.item_id for item in self.items]
+        if len(held) != len(set(held)):
+            # The sweep in `brain.knowledge.verification` refuses the same thing for the same
+            # reason: which record a badge was read from would depend on the order a query
+            # returned two versions of one item.
+            msg = "an item appears twice, so which record a badge is read from would be arbitrary"
+            raise ValueError(msg)
+
+
+def badge_for(passage: DocumentCitation, *, badging: Badging, now: datetime) -> DisclosedBadge:
+    """The badge one cited passage carries, for the badging's reader (M34.2.1.2).
+
+    The record is found by the citation's document id and by nothing else. A cited document
+    with no record on file is not verified by anyone, and says so, rather than carrying no
+    badge: see `brain.knowledge.verification.AN_UNVERIFIED_ITEM_STILL_CARRIES_A_BADGE`.
+    """
+    on_file = next((item for item in badging.items if item.item_id == passage.document_id), None)
+    if on_file is None:
+        return DisclosedBadge(state=VerificationState.UNVERIFIED)
+    return disclose(on_file, reader=badging.reader, now=now)
+
+
 def provenance_for(
     answer: ComposedAnswer,
     *,
     horizon: StalenessHorizon,
     now: datetime,
     trace: RetrievalTrace = NO_DOCUMENTS,
+    badging: Badging | None = None,
 ) -> Provenance:
-    """Assemble the evidence behind a composed answer (M8.1.1, M8.1.3, M8.1.4).
+    """Assemble the evidence behind a composed answer (M8.1.1, M8.1.3, M8.1.4, M34.2.1.2).
 
     It reads `answer.citations`, which the composer derived from the post-redaction
     payload, and `trace.passages`, which retrieval recorded. It never reads `answer.text`.
     That is the whole of M8.1.4 expressed as a data dependency: change what the model said
     and this function returns the same provenance, because the model's words are not an
     input to it. The invariant suite checks exactly that.
+
+    With `badging`, every document citation carries its verification badge, and the reader
+    must be the one retrieval ran for. See
+    `A_BADGE_IS_COMPUTED_AT_THE_REACH_ITS_CITATION_WAS_RETRIEVED_AT`.
     """
+    if badging is not None and trace.ent_hash != badging.reader.ent_hash():
+        msg = (
+            "badges were asked for at a reach other than the one these citations were "
+            "retrieved at, or retrieval did not record its reach"
+        )
+        raise BadgeReachError(msg)
     rows = tuple(
         Evidence(
             citation=citation,
@@ -513,6 +618,7 @@ def provenance_for(
         Evidence(
             citation=passage,
             freshness=state_freshness(passage.fetched_at, horizon=horizon, now=now),
+            badge=None if badging is None else badge_for(passage, badging=badging, now=now),
         )
         for passage in trace.passages
     )
