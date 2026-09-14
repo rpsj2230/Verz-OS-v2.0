@@ -30,9 +30,14 @@
   font-size: var(--text-sm);
 }
 
+/*
+ * One column on a phone, and the pane beside the tabs on a screen with room for it. Written in
+ * that order for the reason `styles/app.css` gives about the shell: the narrow screen is the
+ * base rule, and a `max-width` patch over a desktop layout is the case a later edit forgets.
+ */
 .agent-workspace__body {
   display: flex;
-  align-items: flex-start;
+  flex-direction: column;
   gap: var(--space-5);
 }
 
@@ -42,20 +47,20 @@
 }
 
 .agent-workspace__aside {
-  flex: 0 0 auto;
-  width: var(--shell-nav-width);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
 
-@media (max-width: 60rem) {
+@media (min-width: 60rem) {
   .agent-workspace__body {
-    flex-direction: column;
+    flex-direction: row;
+    align-items: flex-start;
   }
 
   .agent-workspace__aside {
-    width: 100%;
+    flex: 0 0 auto;
+    width: var(--shell-nav-width);
   }
 }
 

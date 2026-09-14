@@ -603,7 +603,10 @@ constant builds to 0.17 kB, so the grid is tree-shaken away.
   and matches selectors but does not evaluate a media query or compute a colour from a
   custom property. So "an explicit light choice wins on a dark machine" is checked as a
   fact about the rule and the selector, not as a painted page, and nothing here measures
-  contrast or catches a layout that collapses.
+  contrast. Phone widths were measured once, by hand, in headless Chrome on 2026-09-15, and
+  the figures are in `styles/app.css`. `tests/phone-width.test.tsx` holds the declarations
+  that measurement depended on, through a reader that applies width queries itself, and no
+  committed test opens a browser.
 - **No CI job, and `.github/` was not touched.** Whether this repository grows a JavaScript
   pipeline is a decision that has not been made, and making it by adding a workflow file
   would be making it quietly.
@@ -791,6 +794,7 @@ by a function that refuses everything.
 | `tests/overview-page.test.tsx` | The caller's own facts against `CallerView` in the Python source, absence contributing nothing, no invented lock, and a failure in the API's own words. |
 | `tests/records-page.test.tsx` | The request against the route's declared parameters, the column a withheld field still gets, the chrome that does not change with the number of rows, and the bounds against `brain.knowledge.rows`. |
 | `tests/bundle-split.test.ts` | The static import graph from `main.tsx`, and the four libraries that must not be in it. |
+| `tests/phone-width.test.tsx` | Every registered route at a phone's width, read through `support/cascade.ts`: no `max-width` query in any sheet, no width wider than the phone, the navigation above the page and a thumb tall, and every value the API sent able to break. |
 
 **Several constants are checked against the thing they are a copy of, not against
 themselves.** That is the point of `tests/support/python.ts` and the realm parsing in

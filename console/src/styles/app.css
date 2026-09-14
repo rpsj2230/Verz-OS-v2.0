@@ -19,8 +19,22 @@ html {
   scroll-padding-top: var(--space-5);
 }
 
+/*
+ * A value from the API may have no space in it: an identifier, a digest, a name typed as one
+ * word. Allowed to break anywhere it wraps inside the screen, and left alone it sets the width
+ * of the page. Set once here and inherited, because the defect is a value that cannot break
+ * and it can arrive in any element; a rule per class would be a list that is complete until
+ * the next screen. The one exception is a grid's table, which scrolls inside its own
+ * container instead: see `.grid__table`. `break-word` was rejected because it does not shrink
+ * a flex item's smallest size, and a flex item beside a label is exactly what overflowed.
+ *
+ * Measured on 2026-09-15 in headless Chrome, with every route rendered holding unbroken values
+ * and opened in a 360 pixel iframe: the overview scrolled to 855 pixels, the agent roster to
+ * 599 and the agent workspace to 911. `tests/phone-width.test.tsx` carries the rest.
+ */
 body {
   margin: 0;
+  overflow-wrap: anywhere;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
@@ -110,17 +124,22 @@ code {
   gap: var(--space-4);
 }
 
+/*
+ * A phone's frame is the base, because approvals arrive on phones: the navigation is a
+ * wrapping row above the page rather than a column beside it, and every link is a thumb tall.
+ * The sidebar is the enhancement, in the `min-width` query further down. Until 2026-09-15 this
+ * was the other way round, with the phone as a `max-width` patch over a desktop layout, which
+ * made a mobile-first approvals page sit inside a frame whose phone case was the afterthought.
+ */
 .shell__body {
   display: flex;
+  flex-direction: column;
   flex: 1;
-  align-items: flex-start;
 }
 
 .shell__nav {
-  width: var(--shell-nav-width);
-  flex: 0 0 auto;
-  padding: var(--space-4) var(--space-3);
-  border-right: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
 }
 
 .shell__nav ul {
@@ -128,12 +147,15 @@ code {
   margin: 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: var(--space-1);
 }
 
+/* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
 .shell__nav-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  min-height: 2.75rem;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius);
   color: var(--text);
@@ -159,7 +181,7 @@ code {
 .shell__main {
   flex: 1;
   min-width: 0;
-  padding: var(--space-5) var(--space-4);
+  padding: var(--space-4) var(--space-3);
 }
 
 .page {
@@ -188,35 +210,34 @@ code {
   margin-bottom: 0;
 }
 
-/* --------------------------------------------------------------- narrow screens */
+/* --------------------------------------------------------------- wider screens */
 
-@media (max-width: 48rem) {
+/*
+ * The sidebar, for a screen with room for one. Everything else about the shell is the phone's
+ * rule above and is not repeated here. The links keep their 44 pixel height on a wide screen
+ * too: a touch laptop has a thumb as well, and one height is one fewer rule to keep in step.
+ */
+@media (min-width: 48rem) {
   .shell__body {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    align-items: flex-start;
   }
 
   .shell__nav {
-    width: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    padding: var(--space-2) var(--space-3);
+    width: var(--shell-nav-width);
+    flex: 0 0 auto;
+    padding: var(--space-4) var(--space-3);
+    border-bottom: none;
+    border-right: 1px solid var(--border);
   }
 
   .shell__nav ul {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
-  .shell__nav-link {
-    display: flex;
-    align-items: center;
-    min-height: 2.75rem;
+    flex-direction: column;
+    flex-wrap: nowrap;
   }
 
   .shell__main {
-    padding: var(--space-4) var(--space-3);
+    padding: var(--space-5) var(--space-4);
   }
 }
 
@@ -269,7 +290,8 @@ code {
   font-size: var(--text-sm);
   font-style: normal;
   letter-spacing: 0.01em;
-  white-space: nowrap;
+  /* May wrap. A department is a name somebody typed, and a chip that cannot wrap is as wide. */
+  max-width: 100%;
 }
 
 .chip {
@@ -315,21 +337,38 @@ code {
   margin: 0;
 }
 
+/*
+ * A label and its value. On a phone the label sits above the value: a 12rem label column
+ * beside it leaves the value about ninety pixels at 360, and a value that could not shrink
+ * below its longest word is what took the overview to 855. A wider screen gets the column back.
+ */
 .fields__row {
   display: flex;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-1);
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--border);
 }
 
 .fields__row dt {
-  width: 12rem;
-  flex: 0 0 auto;
   color: var(--text-muted);
 }
 
 .fields__row dd {
   margin: 0;
+  min-width: 0;
+}
+
+@media (min-width: 48rem) {
+  .fields__row {
+    flex-direction: row;
+    gap: var(--space-4);
+  }
+
+  .fields__row dt {
+    width: 12rem;
+    flex: 0 0 auto;
+  }
 }
 
 /* ------------------------------------------------------------------ grids */
@@ -369,10 +408,17 @@ code {
   overflow-x: auto;
 }
 
+/*
+ * The one place a long value is not broken, because the table scrolls instead. Inheriting
+ * `anywhere` from the body would let every column shrink below its identifiers, so a grid
+ * would never scroll and would split each identifier across lines, which undoes the decision
+ * `.grid__scroll` records.
+ */
 .grid__table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
+  overflow-wrap: normal;
 }
 
 .grid__caption {

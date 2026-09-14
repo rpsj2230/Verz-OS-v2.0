@@ -35,6 +35,7 @@ import {
 import { readApprovalCard, readApprovalQueue } from "../src/pages/approvalsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { asPythonName, backendHiddenCountNames, membersOf } from "./support/agentWorkspace";
+import { consoleRules, declared } from "./support/cascade";
 import { parseCss, type CssRule } from "./support/css";
 import {
   declaredParameterNames,
@@ -210,6 +211,37 @@ const WIDTH_PROPERTIES = [
   "grid-auto-columns",
 ];
 
+/** Declarations that can show an element somewhere other than where the markup puts it. */
+const REORDERING = [
+  "order",
+  "grid-area",
+  "grid-row",
+  "grid-column",
+  "grid-row-start",
+  "grid-column-start",
+  "grid-template-areas",
+  "flex-direction",
+  "position",
+  "float",
+];
+
+/** Whether one of those declarations, with this value, actually moves anything. */
+function reorders(property: string, value: string): boolean {
+  if (property === "flex-direction") {
+    return value.endsWith("-reverse");
+  }
+  if (property === "position") {
+    return value === "absolute" || value === "fixed";
+  }
+  if (property === "float") {
+    return value !== "none";
+  }
+  if (property === "order") {
+    return value !== "0";
+  }
+  return true;
+}
+
 describe("an approval card on a phone", () => {
   const sheet = parseCss(readConsoleFile(SHEET));
 
@@ -281,28 +313,55 @@ describe("an approval card on a phone", () => {
     expect(values.map((value) => value.textContent)).toContain(wireCard("sus_1")["runs_as"]);
   });
 
+  test("a card opens with what will happen, and no rule a phone applies moves it later", async () => {
+    // What breaks if this is deleted: a card whose first lines on a phone are who it runs as
+    // and when it was raised, with the action being approved below the fold, or a stylesheet
+    // `order` that puts it there while the markup still reads correctly to a screen reader.
+    // Reading order is the markup, so the markup is asserted exactly. Visual order is the
+    // markup only while nothing reorders it, so every declaration that could is refused on the
+    // card and on everything inside it, at a phone's width, through the whole cascade.
+    const { container } = await consoleAt(APPROVALS_ADDRESS, {
+      [QUEUE_API]: { body: { items: [wireCard("sus_1")] } },
+    });
+    const drawn = page(container).querySelector("article.approval-card");
+    expect(drawn).not.toBeNull();
+    expect([...(drawn as Element).children].map((child) => child.getAttribute("class"))).toEqual([
+      "approval-card__artefact",
+      "approval-card__facts",
+      "approval-card__link",
+    ]);
+
+    const rules = consoleRules();
+    const moved: string[] = [];
+    for (const element of [drawn as Element, ...(drawn as Element).querySelectorAll("*")]) {
+      for (const property of REORDERING) {
+        const value = declared(element, property, rules, PHONE_WIDTH_PX);
+        if (value !== undefined && reorders(property, value)) {
+          moved.push(`${element.getAttribute("class") ?? element.tagName} { ${property}: ${value} }`);
+        }
+      }
+    }
+    expect(moved).toEqual([]);
+  });
+
   test("a card's link and a section in the navigation are at least a thumb tall on a phone", async () => {
     // What breaks if this is deleted: a link a cursor can hit and a thumb cannot. The card's
-    // link is held in the approvals sheet at every width, and the navigation's links are held
-    // in `app.css` inside the narrow-screen query, which is where a thumb is using them. Each
-    // is paired with the markup, because a height on a class nothing renders is a tap target
-    // on nothing.
+    // link is held in the approvals sheet at every width. The navigation's links are read
+    // through the cascade a 360 pixel screen applies to the link actually rendered, because the
+    // shell's phone layout is its base rule rather than a query, and a height on a class
+    // nothing renders is a tap target on nothing.
     const link = baseRule(sheet, "approval-card__link");
     expect(pixels(link.declarations["min-height"] ?? "")).toBeGreaterThanOrEqual(TAP_TARGET_PX);
     expect(link.declarations["display"]).toMatch(/flex|block/);
-
-    const shell = parseCss(readConsoleFile("src/styles/app.css"));
-    const narrowNav = rulesFor(shell, "shell__nav-link").filter(
-      (rule) => rule.atRule === "@media (max-width: 48rem)",
-    );
-    const heights = narrowNav.map((rule) => pixels(rule.declarations["min-height"] ?? ""));
-    expect(heights.some((height) => (height ?? 0) >= TAP_TARGET_PX)).toBe(true);
 
     const { container } = await consoleAt(APPROVALS_ADDRESS, {
       [QUEUE_API]: { body: { items: [wireCard("sus_1")] } },
     });
     expect(page(container).querySelector("article.approval-card a.approval-card__link")).not.toBeNull();
-    expect(container.querySelector("nav a.shell__nav-link")).not.toBeNull();
+    const navLink = container.querySelector("nav a.shell__nav-link");
+    expect(navLink).not.toBeNull();
+    const height = declared(navLink as Element, "min-height", consoleRules(), PHONE_WIDTH_PX);
+    expect(pixels(height ?? "")).toBeGreaterThanOrEqual(TAP_TARGET_PX);
   });
 
   test("the approvals sheet arrives with the page and is not in the first response", () => {
