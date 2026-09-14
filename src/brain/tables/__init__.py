@@ -48,6 +48,7 @@ from __future__ import annotations
 from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.agent import AgentRow
 from brain.tables.audit import AuditEntryRow
+from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.fast_lane import FastPathRuleRow
@@ -71,6 +72,8 @@ from brain.tables.identity import (
     one_of,
 )
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
+from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow
 from brain.tables.resolution import (
     CanonicalEntityRow,
@@ -161,6 +164,16 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # copy this repository refuses. The name is held to the registry by a check constraint
     # generated from it instead.
     "ops.control_run",
+    # 0030_outbox. The delivery table last, because it points at the other two.
+    "ops.webhook_subscriber",
+    "ops.outbox_event",
+    "ops.outbox_delivery",
+    # 0031_budget. Points at nothing: a subject is a value, so a ceiling outlives its principal.
+    "ops.budget_version",
+    # 0032_plugin_registry. The version table first, because an install points at the version
+    # it is running.
+    "ops.plugin_version",
+    "ops.plugin_install",
 )
 
 __all__ = [
@@ -168,6 +181,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentRow",
     "AuditEntryRow",
+    "BudgetVersionRow",
     "CanonicalEntityRow",
     "CapabilityGrantRow",
     "CapabilityPackAssignmentRow",
@@ -186,7 +200,11 @@ __all__ = [
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
+    "OutboxDeliveryRow",
+    "OutboxEventRow",
     "PersistentMemoryRow",
+    "PluginInstallRow",
+    "PluginVersionRow",
     "PolicyEpochRow",
     "PrincipalIdentityRow",
     "PrincipalRow",
@@ -201,5 +219,6 @@ __all__ = [
     "TemplateInstanceRow",
     "TemplateVersionRow",
     "UpgradeDeclineRow",
+    "WebhookSubscriberRow",
     "one_of",
 ]

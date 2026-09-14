@@ -656,6 +656,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         # of chains worth checking, which is a smaller claim and the true one.
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="outbox_dispatch",
+        # Added on 2026-09-15 with `brain.ops.outbox_store`. `dispatch_due` claims what is due
+        # through `claim_due` and sends it, and nothing calls `dispatch_due`: no worker loop,
+        # no route and no timer. The events are written with the change that caused them and
+        # stay pending until something drains them, which is why this is a control and not a
+        # helper, and why it joins the orphan list the day it is written.
+        symbols=("brain.ops.outbox_store:claim_due", "brain.ops.outbox_store:dispatch_due"),
+        guards=(
+            "that a subscriber is told about an event it asked for, retried with backoff while "
+            "it is down and set aside for a person once the attempts run out"
+        ),
+        lost_silently=(
+            "Events are written and never sent. Every row in the outbox reads as pending, "
+            "which is what a healthy outbox between two ticks also looks like, and the first "
+            "symptom is a client asking why their integration went quiet."
+        ),
+        # A minute, chosen here and declared nowhere else, which the advisories say out loud.
+        # It is the longest a newly written event should wait for its first attempt; the
+        # retries after that wait for `brain.connectors.throttle.retry_delay`, not for this.
+        every=timedelta(minutes=1),
+        severity=Severity.RAISED,
+        invoked_by=Invocation.NOTHING,
+    ),
 )
 
 

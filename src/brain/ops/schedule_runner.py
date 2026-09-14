@@ -259,6 +259,15 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "and nothing assembles on a schedule"
         ),
     ),
+    Runner(
+        name="outbox_dispatch",
+        needs=(
+            "a `Sender` that puts a signed request on the wire, a `Vault` issuing the "
+            "subscribers' secrets and a `Resolver`, none of which this repository implements. "
+            "`brain.ops.outbox_store.dispatch_due` takes all three as parameters and the store "
+            "itself is written and tested against a real database"
+        ),
+    ),
 )
 
 

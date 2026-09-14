@@ -54,10 +54,10 @@ towards the budget whose relief is a precondition for the others. See
 `THE_WIDEST_OF_TWO_EXHAUSTED_BUDGETS_IS_THE_ONE_NAMED`.
 
 Nothing here opens a connection and nothing here persists anything. **The persistence half is
-unbuilt**: there is no table, no migration and no store, so a `BudgetHistory` is a sequence
-somebody else kept, exactly as `limits.LimiterState` is. Said plainly because "versioned,
-audited rows" reads as a table, and what is here is the shape a table would have to hold.
-`brain.ops.spend` is the enforcement half and holds no rows.
+`brain.tables.budget` and `brain.ops.budget_store`**: `0031` builds a table that refuses every
+UPDATE and DELETE, and the store reads a ceiling's versions back as a `BudgetHistory`, so the
+ordering rules below are still the ones that decide. `brain.ops.spend` is the enforcement half
+and holds no rows.
 
 Task ids: M21.1.1, M21.1.2, M21.1.3, M21.1.4
 """

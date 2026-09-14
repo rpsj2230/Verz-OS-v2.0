@@ -226,7 +226,7 @@ def test_nothing_is_wired_yet_and_each_one_says_what_it_is_waiting_for() -> None
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 12
+    assert len(found) == 13
     assert all("cannot be started yet: it needs" in one for one in found)
     assert any("retention_sweep" in one for one in found)
 
@@ -362,11 +362,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     `brain.console.recovery_view` asks `drill_due`, so `restore_drill` has a caller that nothing
     runs on a schedule, and nothing performs a drill, which is what its runner still waits for.
 
+    **And back to ten on 2026-09-15, by an arrival rather than a regression.**
+    `outbox_dispatch` was registered the day `brain.ops.outbox_store` was written, as a
+    control nothing calls, so the control count and the runner gaps each rose by one too.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 9
+    assert len(orphans()) == 10
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 13
+    assert len(CONTROLS) == 14

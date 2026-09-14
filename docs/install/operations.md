@@ -1,7 +1,7 @@
 # Backup, monitoring, logging and health checks
 
-**Read this section first, before the rest of the page.** Thirteen mechanisms in this system
-are meant to run on a schedule. Nine of them have no caller of any kind: the code is written,
+**Read this section first, before the rest of the page.** Fourteen mechanisms in this system
+are meant to run on a schedule. Ten of them have no caller of any kind: the code is written,
 it is tested, and nothing anywhere invokes it. That includes the one that takes a backup and the
 one that measures how long you have gone without a copy. Three more have a caller and no
 schedule, which is one link of a chain rather than the chain, and one of the three is the one
@@ -167,7 +167,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Nine of the thirteen mechanisms are started by nothing
+## Ten of the fourteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -197,6 +197,7 @@ test it before it runs became the first caller of the roster dry run.
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `nothing` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
+| `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `nothing` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it and says nothing

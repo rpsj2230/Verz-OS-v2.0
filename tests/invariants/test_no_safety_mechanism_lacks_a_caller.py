@@ -65,6 +65,10 @@ KNOWN_ORPHANS = frozenset(
         "queue_redrive",
         "side_effect_resume",
         "model_health_probes",
+        # Joined on 2026-09-15, the day it was written. `brain.ops.outbox_store` claims
+        # and sends due deliveries and nothing calls `dispatch_due`: no worker loop, route
+        # or timer, and no sender, vault or resolver this repository implements.
+        "outbox_dispatch",
     }
 )
 

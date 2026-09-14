@@ -86,6 +86,9 @@ MIGRATION_MEMORY = VERSIONS / "0018_memory_stores.py"
 MIGRATION_FAST_PATH = VERSIONS / "0019_fast_path_rule.py"
 MIGRATION_RESOLUTION = VERSIONS / "0020_entity_resolution.py"
 MIGRATION_CONTROL_RUN = VERSIONS / "0025_control_run.py"
+MIGRATION_OUTBOX = VERSIONS / "0030_outbox.py"
+MIGRATION_BUDGET = VERSIONS / "0031_budget.py"
+MIGRATION_PLUGIN = VERSIONS / "0032_plugin_registry.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -186,6 +189,21 @@ RESOLUTION_TABLES: tuple[str, ...] = (
 #: of that constant, and the name is held to it by a check constraint generated from it.
 CONTROL_RUN_TABLES: tuple[str, ...] = ("ops.control_run",)
 
+#: And the three 0030 adds: a webhook subscriber, an event written once, and one event's
+#: delivery to one subscriber. The delivery is last because it points at both of the others.
+OUTBOX_TABLES: tuple[str, ...] = (
+    "ops.webhook_subscriber",
+    "ops.outbox_event",
+    "ops.outbox_delivery",
+)
+
+#: And the one 0031 adds: every version of every budget ceiling, appended and never edited.
+BUDGET_TABLES: tuple[str, ...] = ("ops.budget_version",)
+
+#: And the two 0032 adds: every manifest this install has run, and each plugin's current record,
+#: which points at the version it is running.
+PLUGIN_TABLES: tuple[str, ...] = ("ops.plugin_version", "ops.plugin_install")
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -201,6 +219,9 @@ ALL_TABLES = (
     + FAST_PATH_TABLES
     + RESOLUTION_TABLES
     + CONTROL_RUN_TABLES
+    + OUTBOX_TABLES
+    + BUDGET_TABLES
+    + PLUGIN_TABLES
 )
 
 
@@ -893,6 +914,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     fast_path = migration_module(MIGRATION_FAST_PATH)
     resolution = migration_module(MIGRATION_RESOLUTION)
     control_run = migration_module(MIGRATION_CONTROL_RUN)
+    outbox = migration_module(MIGRATION_OUTBOX)
+    budget = migration_module(MIGRATION_BUDGET)
+    plugin = migration_module(MIGRATION_PLUGIN)
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -907,6 +931,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert fast_path.TABLES == FAST_PATH_TABLES
     assert resolution.TABLES == RESOLUTION_TABLES
     assert control_run.TABLES == CONTROL_RUN_TABLES
+    assert outbox.TABLES == OUTBOX_TABLES
+    assert budget.TABLES == BUDGET_TABLES
+    assert plugin.TABLES == PLUGIN_TABLES
     # The package tuple is the migrations end to end. Stated as an equality rather than as a
     # set comparison, because the order is what a downgrade depends on.
     end_to_end = (
@@ -924,6 +951,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(fast_path.TABLES)
         + tuple(resolution.TABLES)
         + tuple(control_run.TABLES)
+        + tuple(outbox.TABLES)
+        + tuple(budget.TABLES)
+        + tuple(plugin.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -943,6 +973,9 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(fast_path.TABLES),
         set(resolution.TABLES),
         set(control_run.TABLES),
+        set(outbox.TABLES),
+        set(budget.TABLES),
+        set(plugin.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

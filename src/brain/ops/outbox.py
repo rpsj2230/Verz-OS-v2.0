@@ -28,10 +28,9 @@ promises at-least-once and pushes the duplicate on to somebody who can cheaply d
 the same transaction as the business change, so there is no window in which the change is
 committed and the notification is not, and none in which the notification goes out and the
 change rolls back. That is the whole of what "outbox" means, and it is the reason this is a
-row rather than a call. **The table itself is not in this repository yet**: nothing here
-names a column and `src/brain/tables/` holds no outbox model. This module is the shape and
-the policy; the schema and its migration belong to whoever writes them, and they must enable
-row-level security like every other table here.
+row rather than a call. **The table is `brain.tables.outbox`**, built by `0030` with row-level
+security on, and `brain.ops.outbox_store` is the worker that drains it. Nothing here names a
+column: this module is the shape and the policy, and the store re-decides none of it.
 
 **Signing is HMAC over a canonical serialisation with the timestamp inside it, and the
 implementation is imported rather than rewritten.** `brain.channels.webhook.sign` already
@@ -158,11 +157,11 @@ A_SUBSCRIBER_URL_IS_CHECKED_AT_EVERY_DELIVERY = (
 THE_CONSOLE_SCREEN_IS_NOT_BUILT = (
     "M17.5.3 asks for subscriber management in the console. What is here is the policy half: "
     "what a subscriber is, what may be subscribed to, who may manage one, and what the "
-    "address rule is. There is no screen, no route and no table. The console surface would "
-    "list subscribers, show which kinds each takes and when it last delivered, and offer "
-    "create, deactivate and rotate-the-secret; every one of those is a write and every one "
-    "of them needs MANAGE_SUBSCRIBERS, which is why the capability is named here rather than "
-    "invented by whoever builds the screen."
+    "address rule is. The table is brain.tables.outbox and the screen's decisions are "
+    "brain.console.subscribers: list subscribers, show which kinds each takes and when it "
+    "last delivered, register and deactivate. There is still no HTTP route and no drawn "
+    "screen. Every change needs MANAGE_SUBSCRIBERS, which is why the capability is named "
+    "here rather than invented by whoever builds the screen."
 )
 
 
