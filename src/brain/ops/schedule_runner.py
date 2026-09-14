@@ -31,8 +31,10 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Nothing is wired yet and that is stated rather than implied.** Every one of the twelve
-control entry points is a policy function that takes its inputs: `retention.enforcement_report`
+**Two controls are wired, and the rest are stated rather than implied.** `retention_sweep` and
+`spend_report_refresh` have a runner that gathers what they need, and `brain.ops.worker` starts
+them on the schedule through `start_control`. Every other control entry point is a policy
+function that takes its inputs: `retention.enforcement_report`
 takes a census "the executor saw", `denial_alerts.digest` takes patterns and recipients,
 `recovery.alerts` takes backups and verifications. None of them gathers anything. So the
 registry's eleven orphans are not eleven mechanisms waiting for a timer, they are eleven
@@ -46,7 +48,9 @@ reads `ast.Call` nodes to answer "does anything call this", and its own docstrin
 cannot resolve a callable passed as an argument or anything dynamic. So a dispatch table of
 function references would run the controls while the registry went on reporting that nothing
 calls them, which is the same lie one layer down. Each runner is therefore a function in this
-module making a literal call, and `RUNNERS` maps a name to one of those.
+module making a literal call, `RUNNERS` maps a name to one of those, and `start_control`
+reaches each of them by name with a literal call of its own, which is the path the worker takes.
+See `A_RUNNER_IS_STARTED_BY_A_CALL_THE_REGISTRY_CAN_READ`.
 
 Rejected: a thread. The application is async and a thread would need its own engine, its own
 session scope and its own error handling, and the two would drift. The loop is a task on the
@@ -67,8 +71,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
+import psycopg
+
+from brain.db import libpq_url
 from brain.ops.controls import Control
+from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
+from brain.ops.spend_store import refresh_spend_daily_now
 
 #: Why the two questions are two columns.
 TRIED_RECENTLY_AND_WORKING_ARE_DIFFERENT_CLOCKS: Final = (
@@ -95,6 +104,34 @@ A_SCHEDULER_WITH_NOTHING_TO_RUN_IS_HONEST_AND_A_SCHEDULER_THAT_PRETENDS_IS_NOT: 
     "that pass empty sequences would make every control report a successful run having "
     "examined nothing, which is worse than the state it replaced: the console would say the "
     "estate is protected and a run record would agree with it."
+)
+
+#: Why the worker reaches a runner by name rather than through `Runner.run`.
+A_RUNNER_IS_STARTED_BY_A_CALL_THE_REGISTRY_CAN_READ: Final = (
+    "brain.ops.controls decides whether a control is running by finding a call to it in the "
+    "source, and it cannot follow a function stored in a table and called through a variable. "
+    "A loop that started runners through Runner.run would run them while the registry reported "
+    "nothing calling them, and the chain check would report every runner as unreached. So "
+    "start_control names each wired runner in a match arm and calls it, and a test holds the "
+    "arms to the runners that can run, so the table and the dispatch cannot disagree."
+)
+
+#: Why the retention runner passes no legal holds.
+NOTHING_RECORDS_A_LEGAL_HOLD_YET: Final = (
+    "brain.ops.retention_store refuses a store whose rows a hold might cover and cannot match, "
+    "and brain.audit.ledger.LegalHold is the shape of a hold. Nothing in this repository writes "
+    "or reads one from storage, so the scheduled sweep is handed none. That is safe only "
+    "because the sweep is also in report-only mode until the installation releases it, and "
+    "the two have to be revisited together: a release before holds are recorded would delete "
+    "rows under a hold nobody could see."
+)
+
+#: Why the refresh does nothing in report-only mode.
+A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and the refresh removes nothing, "
+    "so brain.ops.schedule never asks for it. A runner that rebuilt anyway when asked would be "
+    "a runner that ignores the mode it was given, which is the one property a destructive "
+    "control's safety rests on being true of every runner."
 )
 
 #: The advisory lock namespace, so a control's lock cannot collide with `brain.migrate`'s.
@@ -135,7 +172,7 @@ class Runner:
     #: What still has to be built before this can run, empty when it can.
     needs: str = ""
     #: The call, when there is one.
-    run: Callable[[datetime, bool], str] | None = None
+    run: Callable[[datetime, bool, str], str] | None = None
 
     def __post_init__(self) -> None:
         if not self.name.strip():
@@ -156,20 +193,47 @@ class Runner:
             raise RunnerError(msg)
 
 
+def retention_sweep(now: datetime, report_only: bool, database_url: str) -> str:
+    """The retention sweep over PostgreSQL, for the stores it can count, as report lines.
+
+    Holds none. See `NOTHING_RECORDS_A_LEGAL_HOLD_YET`. `prepare_threshold=None` for the reason
+    `brain.session.make_app_engine` gives: the URL is the application's, behind a transaction
+    pooler, and a statement prepared on one server connection is executed on another.
+    """
+    with psycopg.connect(libpq_url(database_url), prepare_threshold=None) as conn:
+        return run_retention_sweep(conn, now=now, report_only=report_only)
+
+
+def spend_report_refresh(now: datetime, report_only: bool, database_url: str) -> str:
+    """Rebuild the materialised spend report, and say what its figures are now as of.
+
+    Declines in report-only mode. See `A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING`.
+
+    The event loop is the worker's, imported when the refresh runs rather than when this module
+    is: `brain.ops.worker` imports this module, and which loop psycopg accepts on a development
+    machine is decided there once rather than twice.
+    """
+    if report_only:
+        return (
+            "report only: ops.spend_daily was not rebuilt. "
+            f"{A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    as_of = refresh_spend_daily_now(database_url, loop_factory=_loop_factory())
+    return (
+        f"ops.spend_daily rebuilt at {now.isoformat()}; its figures are as of {as_of.isoformat()}"
+    )
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Twelve entries and no `run` among them, which is the honest state on 2026-09-09 and is the
-#: point of the module header. Each sentence is a piece of work somebody can pick up, written
-#: from reading the entry point's own signature rather than from a guess about it.
+#: Two with a `run` since 2026-09-15, which the worker's schedule starts, and the rest saying what
+#: they wait for, which is the point of the module header. Each sentence is a piece of work
+#: somebody can pick up, written from reading the entry point's own signature rather than from a
+#: guess about it.
 RUNNERS: Final[tuple[Runner, ...]] = (
-    Runner(
-        name="retention_sweep",
-        needs=(
-            "an executor that walks every store in `brain.ops.retention.Store` and produces "
-            "the `StoreCensus` sequence `enforcement_report` takes. The report is written and "
-            "correct and there is nothing that counts what is actually in each store"
-        ),
-    ),
+    Runner(name="retention_sweep", run=retention_sweep),
     Runner(
         name="canary_run",
         needs=(
@@ -273,6 +337,7 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "itself is written and tested against a real database"
         ),
     ),
+    Runner(name="spend_report_refresh", run=spend_report_refresh),
 )
 
 
@@ -288,6 +353,29 @@ def runner_for(name: str, runners: Sequence[Runner] = RUNNERS) -> Runner:
             return one
     msg = f"no runner named {name!r}; the schedulable controls are {[r.name for r in runners]}"
     raise RunnerError(msg)
+
+
+def start_control(name: str, *, now: datetime, report_only: bool, database_url: str) -> str:
+    """Start one control by name, with a literal call the registry can read.
+
+    See `A_RUNNER_IS_STARTED_BY_A_CALL_THE_REGISTRY_CAN_READ`. A name with a runner that cannot
+    run yet is refused with the sentence saying what it needs, and a name with no runner at all
+    is refused by `runner_for`, so a control added to the registry and not wired is a refusal
+    that names the work rather than a run that silently does nothing.
+    """
+    match name:
+        case "retention_sweep":
+            return retention_sweep(now, report_only, database_url)
+        case "spend_report_refresh":
+            return spend_report_refresh(now, report_only, database_url)
+        case _:
+            runner = runner_for(name)
+            msg = (
+                f"{name!r} cannot be started by this process: it needs {runner.needs}"
+                if runner.run is None
+                else f"{name!r} has a runner and no arm in start_control, so nothing starts it"
+            )
+            raise RunnerError(msg)
 
 
 def runner_gaps(

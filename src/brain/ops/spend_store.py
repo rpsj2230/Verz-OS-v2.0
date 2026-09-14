@@ -23,15 +23,18 @@ an owner may refresh a materialised view, and the application role must not beco
 **The write is the domain row and nothing more.** No question, no answer, no record id, because
 `Actual` has none. See `brain.tables.spend`.
 
-What is not here: a caller. Nothing in this repository completes a run and records its cost, so
-`record` is written and tested against a real server and called by nothing yet, which is stated
-rather than left to be discovered from an empty table.
+What is not here: a caller of `record`. Nothing in this repository completes a run and records
+its cost, so it is written and tested against a real server and called by nothing yet, which is
+stated rather than left to be discovered from an empty table. The refresh does have one: the
+worker's schedule starts `refresh_spend_daily_now` through `brain.ops.schedule_runner`.
 
 Task ids: M36.1.3.1, M36.1.3.2
 """
 
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Callable
 from datetime import datetime
 
 from sqlalchemy import select, text
@@ -42,6 +45,7 @@ from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.gate.context import TrafficClass
 from brain.ops.spend import Actual, Dimension
+from brain.session import make_app_engine, make_session_factory
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 
 #: The view `0035` builds, as `ops.report_refresh` names it.
@@ -96,6 +100,34 @@ async def refresh_spend_daily(session: AsyncSession) -> datetime:
     answer = await session.execute(text("SELECT ops.refresh_spend_daily()"))
     as_of: datetime = answer.scalar_one()
     return as_of
+
+
+def refresh_spend_daily_now(
+    database_url: str, *, loop_factory: Callable[[], asyncio.AbstractEventLoop] | None = None
+) -> datetime:
+    """`refresh_spend_daily`, from a thread with no event loop of its own, committed.
+
+    The worker's schedule runs a control off its event loop, because a runner that blocks on
+    the loop stops the queue's own workers for as long as it runs, and a runner there is a
+    plain function. So this is the one synchronous way into the refresh, and it is a wrapper
+    rather than a second refresh: it opens the application's engine, calls the same coroutine
+    in one transaction, commits, and disposes of the engine before it returns.
+
+    `brain.session.make_app_engine` because the URL is the application's, behind a transaction
+    pooler, and the engine that sets `prepare_threshold=None` for that is the one already
+    written. `loop_factory` is the caller's, because which event loop psycopg accepts is a
+    property of the platform and `brain.ops.worker` is where that decision already lives.
+    """
+
+    async def once() -> datetime:
+        engine = make_app_engine(database_url)
+        try:
+            async with make_session_factory(engine)() as session, session.begin():
+                return await refresh_spend_daily(session)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(once(), loop_factory=loop_factory)
 
 
 async def read_spend_daily(session: AsyncSession) -> tuple[datetime | None, tuple[SpendDay, ...]]:

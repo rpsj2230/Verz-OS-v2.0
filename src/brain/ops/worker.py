@@ -126,6 +126,13 @@ subtraction, and what it catches is a container whose total is right and whose s
 drop `BRAIN_CHECKPOINTER_URL` from the general worker and the queue's share silently becomes
 fifteen against a budget that says five.
 
+**It ticks the control schedule, and nothing else in this repository does.** The general
+worker runs `run_schedule` beside its shards: every tick asks `due_now` which controls are owed,
+takes each one's advisory lock, runs it in a thread through `start_control`, and records the
+start and the finish in `ops.control_run`, including a failure with its reason. Every interval is
+the registry's. A control with no runner is left to `runner_gaps` to report, and the parse worker
+does not tick at all; see `THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_ELSE`.
+
 Not claimed: M32.4.1.4, and the reason has narrowed again. The process starts now, lays out one
 driver worker per shard at the declared concurrency and has been watched fetching and running a
 job against a real database. What has not happened is this compose file running on the host it
@@ -142,6 +149,8 @@ Task ids: none
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import enum
 import os
 import sys
 import tempfile
@@ -149,7 +158,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.gate.context import TrafficClass
 from brain.knowledge.embed_policy import policy_gaps
@@ -189,7 +200,11 @@ from brain.ops.queue import (
     tasks_of_ours,
     worker_shards,
 )
+from brain.ops.schedule_runner import due_now, next_tick, runner_for, start_control
+from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.wiring import WiringError, component
+from brain.session import make_app_engine, make_session_factory
+from brain.tables.schedule import DETAIL_CHARS
 
 #: Why a queue driver with no declared pool size stops this container from starting.
 AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES: Final = (
@@ -205,6 +220,59 @@ AN_UNDECLARED_POOL_IS_A_GUESS_AND_A_GUESS_UNDERSTATES: Final = (
     "outage with a different service in it, and it is silent in exactly the same way. So the "
     "day a driver becomes importable is the day the number has to be declared rather than "
     "assumed, and this refuses the start until it is."
+)
+
+#: Why the schedule runs in one container and not in every one that runs this module.
+THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_ELSE: Final = (
+    "The advisory lock would stop two containers running one control, so this is not about "
+    "correctness. It is about what each container is sized for: the parse worker is sized for "
+    "a document somebody else chose and nothing else, and a retention sweep that happens to "
+    "land there spends the memory a parse was promised. So the general worker ticks the "
+    "schedule and the parse worker drains its queue."
+)
+
+#: Why a run leaves the event loop before it does anything.
+A_RUN_LEAVES_THE_EVENT_LOOP_BEFORE_IT_BLOCKS: Final = (
+    "A runner is a plain function that holds a connection for the length of a sweep. Called "
+    "on the event loop it would stop the queue's own workers, and the heartbeat with them, "
+    "for as long as it ran, so a slow sweep would take the container out of rotation for "
+    "being busy. Each run is handed to a thread and the loop goes on while it waits."
+)
+
+#: Why a runner that raises is written down and the tick carries on.
+A_RUNNER_THAT_RAISES_IS_A_FAILED_RUN_AND_THE_TICK_GOES_ON: Final = (
+    "A control that fails has to be visible as failed, which ops.control_run holds and the "
+    "lateness clock reads, so the exception becomes the finish of its own run with its type "
+    "and message as the reason. It is not raised out of the tick, because the controls owed "
+    "after it would then not run either, and one broken control would silently switch off "
+    "every one declared below it."
+)
+
+#: Why a control with no runner is not attempted.
+A_CONTROL_WITH_NOTHING_TO_RUN_IS_NOT_ATTEMPTED: Final = (
+    "Most controls still wait for their inputs to be gathered, and brain.ops.schedule_runner."
+    "runner_gaps names each one and what it needs. Recording a failed run for each of them on "
+    "every cadence would fill ops.control_run with the same known sentence and bury the one "
+    "failure that is new, so a control with nothing to run is reported by the gaps and left "
+    "alone by the schedule."
+)
+
+#: Why a tick that cannot reach the database is reported and the next one tried.
+A_TICK_THAT_CANNOT_REACH_THE_DATABASE_IS_REPORTED_AND_THE_NEXT_ONE_TRIED: Final = (
+    "The clocks and the locks live in the database, so a tick that cannot reach it cannot "
+    "decide anything and cannot record anything. Stopping the loop would leave every control "
+    "unscheduled for the life of the container after one network blip, and the queue in the "
+    "same container keeps working, so nothing would notice. The failure is printed with its "
+    "reason and the next tick is tried on the tick's own cadence."
+)
+
+#: Why the worker needs the application's URL to run the schedule.
+A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL: Final = (
+    "The control records, the report views and the retention stores are the application's "
+    "tables, reached through the pooler the application uses, which is DATABASE_URL in this "
+    "container. QUEUE_URL goes straight to the database for the queue's LISTEN and is the wrong "
+    "connection for a transaction-scoped lock. A general worker without DATABASE_URL would "
+    "drain its queue and schedule nothing, and nothing would say so, so it refuses to start."
 )
 
 # ------------------------------------------------------------------------ the environment
@@ -928,6 +996,17 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
     which kind of wrong it was. A traceback out of a container's command is the one form of
     report an operator cannot act on without the source in front of them.
     """
+    # First, before the queue is built or anything is opened. A general worker that cannot
+    # schedule is refused rather than started half-working; see
+    # `A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL`.
+    database_url = schedule_url(env) if schedules_here(worker_component) else None
+    if schedules_here(worker_component) and database_url is None:
+        print(
+            f"this worker ticks the control schedule and {APP_URL_ENV} is not set. "
+            f"{A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL}",
+            file=sys.stderr,
+        )
+        return EXIT_MISCONFIGURED
     url = (env.get(QUEUE_URL_ENV) or "").strip()
     allocation, _ = declared_slots(env)
     share, _ = queue_pool_max(env, worker_component=worker_component)
@@ -961,11 +1040,181 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
         print(f"  ~ {gap}", file=sys.stderr)
     path = heartbeat_path(env)
     try:
-        asyncio.run(run_shards(app, shards, beat=lambda: beat(path)), loop_factory=_loop_factory())
+        asyncio.run(
+            serve(app, shards, beat=lambda: beat(path), database_url=database_url),
+            loop_factory=_loop_factory(),
+        )
     except QueueError as exc:
         print(f"the queue driver stopped: {exc}", file=sys.stderr)
         return EXIT_MISCONFIGURED
     return 0
+
+
+# ------------------------------------------------------------------ the schedule (M37.5.1.3)
+def schedules_here(worker_component: str) -> bool:
+    """Whether this container ticks the control schedule.
+
+    See `THE_SCHEDULE_RUNS_IN_THE_GENERAL_WORKER_AND_NOWHERE_ELSE`.
+    """
+    return worker_component == DEFAULT_WORKER_COMPONENT
+
+
+def schedule_url(env: Mapping[str, str]) -> str | None:
+    """The application's database URL this container schedules against, or None when unset.
+
+    `APP_URL_ENV`, read from the environment this module is already handed, which is how
+    `preflight` reads it. See `A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL`.
+    """
+    return (env.get(APP_URL_ENV) or "").strip() or None
+
+
+class Ticked(enum.StrEnum):
+    """What one owed control came to on one tick."""
+
+    #: Started, returned, and recorded as ok.
+    RAN = "ran"
+    #: Started in report-only mode, returned, and recorded as refused.
+    REFUSED = "refused"
+    #: Started, raised, and recorded as failed with the reason.
+    FAILED = "failed"
+    #: Owed, and another replica holds its lock, so it was not started here.
+    LOCKED_ELSEWHERE = "locked_elsewhere"
+    #: Owed, and no runner can start it yet. Not recorded.
+    NOTHING_TO_RUN = "nothing_to_run"
+
+
+@dataclass(frozen=True)
+class ControlTick:
+    """One owed control and what this tick did about it."""
+
+    name: str
+    ticked: Ticked
+    detail: str = ""
+
+
+def _utc_now() -> datetime:
+    return datetime.now(tz=UTC)
+
+
+def _start(name: str, report_only: bool, now: datetime, database_url: str) -> str:
+    """The call a thread makes. A literal call to `start_control`, which the registry reads."""
+    return start_control(name, now=now, report_only=report_only, database_url=database_url)
+
+
+async def tick_controls(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    now: datetime,
+    database_url: str,
+    clock: Callable[[], datetime] = _utc_now,
+) -> tuple[ControlTick, ...]:
+    """Start every control owed at `now`, once, and record what each came to.
+
+    The decision is `brain.ops.schedule_runner.due_now` over the two clocks
+    `brain.ops.schedule_store.clocks` reads, and every interval in it is the registry's: this
+    function holds no cadence of its own. Nothing is released, so a destructive control runs in
+    report-only mode, which is `brain.ops.schedule.DESTRUCTIVE`'s rule.
+
+    Each control gets its own transaction, because the lock lives exactly as long as one: the
+    lock is tried, the start is written, the run happens in a thread, the finish is written,
+    and the commit releases the lock. A control somebody else holds is skipped and not
+    recorded; see
+    `brain.ops.schedule_runner.A_LOCK_THIS_CANNOT_TAKE_MEANS_SOMEBODY_ELSE_IS_RUNNING_IT`.
+    See also `A_RUN_LEAVES_THE_EVENT_LOOP_BEFORE_IT_BLOCKS`,
+    `A_RUNNER_THAT_RAISES_IS_A_FAILED_RUN_AND_THE_TICK_GOES_ON` and
+    `A_CONTROL_WITH_NOTHING_TO_RUN_IS_NOT_ATTEMPTED`.
+
+    `clock` is when a run finished, and a parameter for the reason `now` is: a finish read off
+    the wall clock inside a test is a fixture that goes off.
+    """
+    async with sessions() as session:
+        attempts, successes = await clocks(session)
+    found: list[ControlTick] = []
+    for owed in due_now(now=now, last_attempt=attempts, last_success=successes):
+        if runner_for(owed.name).run is None:
+            found.append(ControlTick(owed.name, Ticked.NOTHING_TO_RUN))
+            continue
+        async with sessions() as session, session.begin():
+            if not await take_the_lock(session, owed.name):
+                found.append(ControlTick(owed.name, Ticked.LOCKED_ELSEWHERE))
+                continue
+            run_id = await record_start(session, owed.name, at=now, report_only=owed.report_only)
+            try:
+                detail = await asyncio.to_thread(
+                    _start, owed.name, owed.report_only, now, database_url
+                )
+            except Exception as exc:
+                reason = f"{type(exc).__name__}: {exc}"
+                await record_finish(
+                    session, run_id, at=clock(), outcome="failed", detail=reason[:DETAIL_CHARS]
+                )
+                found.append(ControlTick(owed.name, Ticked.FAILED, reason))
+                continue
+            outcome = "refused" if owed.report_only else "ok"
+            await record_finish(
+                session, run_id, at=clock(), outcome=outcome, detail=detail[:DETAIL_CHARS]
+            )
+            found.append(
+                ControlTick(owed.name, Ticked.REFUSED if owed.report_only else Ticked.RAN, detail)
+            )
+    return tuple(found)
+
+
+async def run_schedule(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    database_url: str,
+    clock: Callable[[], datetime] = _utc_now,
+    sleep: Callable[[float], Any] = asyncio.sleep,
+) -> None:
+    """Tick the schedule for ever, on `brain.ops.schedule.TICK` aligned by `next_tick`.
+
+    A failed run is printed with its reason as well as recorded. A tick that raises is printed
+    and the next is tried; see
+    `A_TICK_THAT_CANNOT_REACH_THE_DATABASE_IS_REPORTED_AND_THE_NEXT_ONE_TRIED`.
+    Cancellation is not an `Exception` and is not caught, so stopping the worker stops this.
+    """
+    while True:
+        now = clock()
+        try:
+            ticked = await tick_controls(sessions, now=now, database_url=database_url, clock=clock)
+        except Exception as exc:
+            print(
+                f"  ! the control schedule could not tick at {now.isoformat()}: "
+                f"{type(exc).__name__}: {exc}",
+                file=sys.stderr,
+            )
+        else:
+            for one in ticked:
+                if one.ticked is Ticked.FAILED:
+                    print(f"  ! control {one.name} failed: {one.detail}", file=sys.stderr)
+        await sleep(max(0.0, (next_tick(now=now) - clock()).total_seconds()))
+
+
+async def serve(
+    app: Any, shards: Sequence[Shard], *, beat: Callable[[], None], database_url: str | None
+) -> None:
+    """Run the queue's shards, and the control schedule beside them when there is a URL for it.
+
+    The schedule is a task on the same loop and it is cancelled when the shards stop, however
+    they stop, so a worker that is told to shut down does not leave a tick half written. The
+    engine is the application's, built by `brain.session.make_app_engine`, because the URL is
+    the application's and that is the engine written for it.
+    """
+    if database_url is None:
+        await run_shards(app, shards, beat=beat)
+        return
+    engine = make_app_engine(database_url)
+    ticking = asyncio.create_task(
+        run_schedule(make_session_factory(engine), database_url=database_url)
+    )
+    try:
+        await run_shards(app, shards, beat=beat)
+    finally:
+        ticking.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await ticking
+        await engine.dispose()
 
 
 def _loop_factory() -> Callable[[], asyncio.AbstractEventLoop] | None:

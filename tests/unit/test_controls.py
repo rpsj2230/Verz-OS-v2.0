@@ -1008,3 +1008,17 @@ def test_the_handover_line_for_a_wired_control_names_what_starts_it() -> None:
         (_control(symbols=("brain.audit.anchor:take_anchor",), invoked_by=Invocation.IN_PROCESS),)
     )[0]
     assert "brain.audit.anchor:take_anchor" in in_process
+
+
+def test_the_spend_report_refresh_runs_on_the_cadence_its_own_module_declares() -> None:
+    """The refresh's interval is restated in the registry, because the module declaring it
+    imports this one, so this holds the two equal rather than trusting the restatement.
+
+    Delete this and the report's refresh interval could be changed where it is declared while the
+    registry went on alerting, and grading staleness, against the old one."""
+    from brain.console.spend_report_view import REFRESH_EVERY
+
+    one = control("spend_report_refresh")
+
+    assert one.cadence_from == "brain.console.spend_report_view:REFRESH_EVERY"
+    assert one.every == REFRESH_EVERY

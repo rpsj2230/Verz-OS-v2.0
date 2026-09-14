@@ -196,7 +196,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Ten of the fourteen mechanisms are started by nothing
+## Nine of the fifteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -207,13 +207,15 @@ That check exists because this section was wrong. It read "the twelve mechanisms
 on the morning of 2026-09-09 and eleven was already true, because one had acquired a caller and
 the heading, the table and the count were three hand-kept copies of a fact the code holds. Ten
 became true on 2026-09-11, when the console page that lets somebody choose a staff source and
-test it before it runs became the first caller of the roster dry run.
+test it before it runs became the first caller of the roster dry run. Nine became true on
+2026-09-15, when the general worker began ticking the control schedule and the retention
+sweep was the first of these it started.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
 | Mechanism | What it would guard | Started by |
 | --- | --- | --- |
-| `retention_sweep` | that nothing is kept past the window its data class was given | `nothing` |
+| `retention_sweep` | that nothing is kept past the window its data class was given | `in_process` |
 | `canary_run` | that the gate still refuses today what it refused yesterday | `nothing` |
 | `restore_drill` | that the copies being taken can actually be restored | `in_process` |
 | `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
@@ -227,15 +229,18 @@ test it before it runs became the first caller of the roster dry run.
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `nothing` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
 | `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `nothing` |
+| `spend_report_refresh` | that the spend report a reader is shown is rebuilt daily from what runs actually cost | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
-means no call site of any kind. `in_process` means another module calls it and says nothing
-about whether *that* module is ever reached, which for `spend_correction` today means a console
-screen nobody opens on a schedule, for `directory_sync` a console page somebody presses, and for
-`restore_drill` a recovery panel that can only show an alarm, because nothing performs a drill.
-`on_a_route` is the only one that runs: an external timer
-calls an HTTP route, and it is what makes it detectable if entries are ever removed from the
-end of the audit ledger.
+means no call site of any kind. `in_process` means another module calls it, and the word alone
+says nothing about whether *that* module is ever reached. For `retention_sweep` and
+`spend_report_refresh` it is: the general worker ticks the control schedule and starts both,
+and the sweep runs in report-only mode, deleting nothing, until the installation releases it.
+For `spend_correction` it means a console screen nobody opens on a schedule, for
+`directory_sync` a console page somebody presses, and for `restore_drill` a recovery panel that
+can only show an alarm, because nothing performs a drill. `on_a_route` is started from outside:
+an external timer calls an HTTP route, and it is what makes it detectable if entries are ever
+removed from the end of the audit ledger.
 
 **A safety mechanism with no caller is worse than no safety mechanism**, because the console
 says the estate is protected. That is why they are listed here by name rather than summarised,

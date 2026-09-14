@@ -8,14 +8,20 @@ Task ids: M37.5.1.3
 
 from __future__ import annotations
 
+import ast
+import inspect
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from brain.ops.alerting import Severity
 from brain.ops.controls import CONTROLS, Control, Invocation
+from brain.ops.retention import Store
 from brain.ops.schedule import TICK, schedulable
 from brain.ops.schedule_runner import (
+    A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING,
     RUNNERS,
     SCHEDULER_LOCK_NAMESPACE,
     STALLED_AFTER,
@@ -26,8 +32,11 @@ from brain.ops.schedule_runner import (
     next_tick,
     runner_for,
     runner_gaps,
+    spend_report_refresh,
     stalled_runs,
+    start_control,
 )
+from tests.fixtures.scratch_postgres import drop, fresh, migrate, sql
 
 NOW = datetime(2999, 6, 1, 12, 0, tzinfo=UTC)
 DAY = timedelta(days=1)
@@ -211,7 +220,7 @@ def test_every_control_this_process_schedules_has_a_runner_saying_what_it_needs(
     assert "audit_anchor" not in {one.name for one in RUNNERS}, "an external timer runs it"
 
 
-def test_nothing_is_wired_yet_and_each_one_says_what_it_is_waiting_for() -> None:
+def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for() -> None:
     """**The honest state on 2026-09-09, asserted so it cannot quietly stay that way.**
 
     Every control entry point in the registry is a policy function taking its inputs, and
@@ -223,12 +232,16 @@ def test_nothing_is_wired_yet_and_each_one_says_what_it_is_waiting_for() -> None
     Asserted as a count and a name list rather than as "at least one", because "some controls
     are unwired" is a sentence that stays true for ever.
 
+    **Twelve on 2026-09-15**, when the worker's schedule began starting the retention sweep and
+    the spend report refresh, which are the two controls this list no longer names.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 13
+    assert len(found) == 12
     assert all("cannot be started yet: it needs" in one for one in found)
-    assert any("retention_sweep" in one for one in found)
+    assert not any("retention_sweep" in one for one in found)
+    assert not any("spend_report_refresh" in one for one in found)
 
 
 def test_a_control_with_no_runner_is_reported_rather_than_skipped_in_silence() -> None:
@@ -271,7 +284,7 @@ def test_a_runner_that_can_run_and_also_says_what_it_needs_is_refused() -> None:
 
     Delete this and a wired control can stay on the list of unwired ones for ever."""
     with pytest.raises(RunnerError, match="is wired and is not"):
-        Runner(name="sweep", needs="something", run=lambda _now, _report_only: "done")
+        Runner(name="sweep", needs="something", run=lambda _now, _report_only, _url: "done")
 
 
 def test_asking_for_a_runner_that_does_not_exist_refuses_rather_than_answering_none() -> None:
@@ -343,7 +356,7 @@ def test_a_tick_of_nothing_would_wake_the_loop_continuously() -> None:
 
 
 def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> None:
-    """**Nothing here calls a control, so the registry must still say nothing calls them.**
+    """**Only what this runner genuinely calls may leave the orphan list.**
 
     `brain.ops.controls` reads `ast.Call` nodes and its own docstring says it cannot resolve a
     callable passed as an argument. So a dispatch table of function references would run the
@@ -366,11 +379,103 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     `outbox_dispatch` was registered the day `brain.ops.outbox_store` was written, as a
     control nothing calls, so the control count and the runner gaps each rose by one too.
 
+    **And to nine on 2026-09-15, and this runner is why.** `start_control` calls the retention
+    sweep's runner and the worker's schedule calls `start_control`, so `retention_sweep` left the
+    orphan list for a reason this file can name. `spend_report_refresh` arrived the same day
+    already wired, so the control count rose to fifteen and the orphan count did not.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 10
+    assert len(orphans()) == 9
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 14
+    assert len(CONTROLS) == 15
+
+
+# --- the dispatch the worker's schedule starts controls through ---------------------------
+
+
+def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
+    """The match arms in `start_control`, read from its source, are the runners with a `run`.
+
+    Delete this and a runner could be given a `run` with no arm, which the worker would refuse
+    on every tick, or an arm could outlive its runner, which is a control started by a name the
+    table no longer describes."""
+    tree = ast.parse(inspect.getsource(start_control))
+    arms = {
+        node.pattern.value.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.match_case)
+        and isinstance(node.pattern, ast.MatchValue)
+        and isinstance(node.pattern.value, ast.Constant)
+    }
+
+    assert arms == {one.name for one in RUNNERS if one.run is not None}
+    assert arms == {"retention_sweep", "spend_report_refresh"}
+
+
+def test_a_control_with_nothing_to_run_is_refused_by_name_with_what_it_needs() -> None:
+    """A registered control with no runner that can run is refused with its own sentence, and a
+    name nothing registers is refused by `runner_for`.
+
+    Delete this and a control the schedule cannot start could be answered with an empty string,
+    which the worker would record as a run that succeeded."""
+    with pytest.raises(RunnerError, match="cannot be started by this process: it needs"):
+        start_control("canary_run", now=NOW, report_only=False, database_url="postgresql://x")
+    with pytest.raises(RunnerError, match="no runner named"):
+        start_control("no_such_control", now=NOW, report_only=False, database_url="postgresql://x")
+
+
+@contextmanager
+def an_install(database: str) -> Iterator[str]:
+    """A database with the spend report and the control-run table, through `0037`."""
+    url = fresh(database)
+    try:
+        migrate(database, "stamp", "0024")
+        migrate(database, "upgrade", "0025")
+        migrate(database, "stamp", "0033")
+        migrate(database, "upgrade", "0037")
+        yield url
+    finally:
+        drop(database)
+
+
+def test_the_refresh_runner_rebuilds_the_view_and_records_when_it_did() -> None:
+    """Started by name through the dispatch: the view is rebuilt and its refresh is recorded.
+
+    Delete this and the runner the schedule starts could return a sentence without having
+    refreshed anything, and the schedule would record a run that did nothing as ok."""
+    with an_install("brain_schedule_runner_refresh") as url:
+        said = start_control("spend_report_refresh", now=NOW, report_only=False, database_url=url)
+
+        assert said.startswith("ops.spend_daily rebuilt")
+        assert sql(
+            url, "SELECT count(*) FROM ops.report_refresh WHERE view_name = 'ops.spend_daily'"
+        ) == [(1,)]
+
+
+def test_the_refresh_runner_asked_for_a_report_rebuilds_nothing() -> None:
+    """Report-only mode: the runner says so and no refresh is recorded.
+
+    Delete this and a runner could ignore the mode it was handed, which is the property a
+    destructive control's safety rests on being true of every runner."""
+    with an_install("brain_schedule_runner_refresh_report") as url:
+        said = spend_report_refresh(NOW, True, url)
+
+        assert A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING in said
+        assert sql(url, "SELECT count(*) FROM ops.report_refresh") == [(0,)]
+
+
+def test_the_retention_runner_sweeps_the_database_it_is_given_and_reports_every_store() -> None:
+    """Started by name through the dispatch, in report-only mode: every store has a line.
+
+    Delete this and the runner could open a connection somewhere other than the URL it was given,
+    or return before the report is built, with the loop's own tests still green."""
+    with an_install("brain_schedule_runner_retention") as url:
+        said = start_control("retention_sweep", now=NOW, report_only=True, database_url=url)
+
+    lines = said.splitlines()
+    for store in Store:
+        assert any(line.startswith(store.value) for line in lines), store

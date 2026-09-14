@@ -411,7 +411,11 @@ _SIX_HOURLY: Final = timedelta(hours=6)
 CONTROLS: Final[tuple[Control, ...]] = (
     Control(
         name="retention_sweep",
-        symbols=("brain.ops.retention:enforcement_report", "brain.ops.retention:enforcement_gaps"),
+        # `run_retention_sweep` is what the worker's schedule starts, through
+        # `brain.ops.schedule_runner.start_control`, and `sweep` is the run it makes. The report
+        # functions are called from inside `brain.ops.retention` itself, which is not a caller
+        # this registry counts, so naming them here would record a running sweep as an orphan.
+        symbols=("brain.ops.retention_store:run_retention_sweep", "brain.ops.retention:sweep"),
         guards=(
             "that nothing is kept past the window its data class was given: traces, payloads, "
             "recordings, exports, backups and the metadata ledger each stop existing on the "
@@ -425,7 +429,10 @@ CONTROLS: Final[tuple[Control, ...]] = (
         ),
         every=_DAILY,
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-15. In report-only mode until the
+        # installation releases it, which is `brain.ops.schedule.DESTRUCTIVE`'s rule, and
+        # nothing in this repository records a release yet, so every run is a report.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="canary_run",
@@ -694,6 +701,29 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=timedelta(minutes=1),
         severity=Severity.RAISED,
         invoked_by=Invocation.NOTHING,
+    ),
+    Control(
+        name="spend_report_refresh",
+        # Added on 2026-09-15 with `ops.spend_daily`, and started by the worker's schedule
+        # from the day it was registered. The wrapper is the symbol because it is what the
+        # schedule calls; the coroutine inside it is called from its own module only.
+        symbols=("brain.ops.spend_store:refresh_spend_daily_now",),
+        guards=(
+            "that the spend report a reader is shown is rebuilt from what runs actually cost, "
+            "and graded by its age on the scale an answer uses"
+        ),
+        lost_silently=(
+            "The report goes on showing yesterday's figures, and then last week's. It does not "
+            "go blank: the view keeps whatever it last held, so every total still adds up, and "
+            "the only thing that changes is the freshness beside it moving from live to stale."
+        ),
+        # A day, restated rather than imported: `brain.console.spend_report_view` imports
+        # `MISSED_RUN_GRACE` from this module, so importing its cadence here is a cycle.
+        # `cadence_from` names the source and a test holds the two equal.
+        every=_DAILY,
+        cadence_from="brain.console.spend_report_view:REFRESH_EVERY",
+        severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
     ),
 )
 

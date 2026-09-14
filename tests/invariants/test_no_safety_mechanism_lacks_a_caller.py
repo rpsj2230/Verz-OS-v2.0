@@ -13,10 +13,11 @@ were written by somebody who found it in their own module and wrote it down. Thi
 first thing in the tree that asks the question of every module at once.
 
 **What this asserts is that the registry and the source agree, not that everything is
-wired.** Ten of the thirteen controls have no caller of any kind today, two have a caller
-nothing runs on a schedule, and one is on a route. A test asserting
-that they do would be red on arrival, and `brain.ops.sweeps.sweep_house_style` records at
-length what happens to a check that is red the day it lands. So the assertion is agreement in
+wired.** Nine of the fifteen controls have no caller of any kind today, three have a caller
+nothing runs on a schedule, two are started by the worker's schedule, and one is on a route. A
+test asserting that they do would be red on arrival, and
+`brain.ops.sweeps.sweep_house_style` records at length what happens to a check that is red the
+day it lands. So the assertion is agreement in
 both directions, which is green now and goes red on three different regressions: a control
 recorded as running that nothing calls, a control that was wired and stops being, and a
 recurrence predicate added to the tree that no control describes. The orphans are not hidden
@@ -47,6 +48,7 @@ from brain.ops.controls import (
     registry_gaps,
     runbook_for,
 )
+from brain.ops.schedule_runner import RUNNERS
 
 #: The controls nothing calls today, named rather than counted.
 #:
@@ -56,7 +58,8 @@ from brain.ops.controls import (
 #: leaving this set is somebody's good afternoon and one joining it is an incident.
 KNOWN_ORPHANS = frozenset(
     {
-        "retention_sweep",
+        # `retention_sweep` left on 2026-09-15: the worker's schedule starts it. See
+        # `SCHEDULED_BY_THE_WORKER`.
         "canary_run",
         "backup_exposure",
         "denial_digest",
@@ -90,6 +93,17 @@ KNOWN_ORPHANS = frozenset(
 #: and `brain.ops.backup_manifest.read_drills` asks `verification_of`, and nothing performs a
 #: drill, so the rehearsal is exactly as unscheduled as it was and now says so on a screen.
 WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "restore_drill"})
+
+#: Controls the worker's schedule starts, which is the state the two sets above are waiting for.
+#:
+#: `IN_PROCESS` does not distinguish them from the set above, because the registry's word is
+#: about a call site and not about a timer. What does is that each has a runner that can run
+#: and `brain.ops.worker.tick_controls` starts it through `start_control`, so the set is held
+#: to the runners rather than trusted, and a control that loses its runner fails here.
+#:
+#: Both joined on 2026-09-15: `retention_sweep` from `KNOWN_ORPHANS`, in report-only mode
+#: until the installation releases it, and `spend_report_refresh` the day it was registered.
+SCHEDULED_BY_THE_WORKER = frozenset({"retention_sweep", "spend_report_refresh"})
 
 #: Controls whose caller is itself imported by nothing, named rather than counted.
 #:
@@ -243,14 +257,21 @@ def test_a_control_with_a_caller_and_no_schedule_is_recorded_as_neither() -> Non
     `KNOWN_ORPHANS` is: a control that quietly slid back to having no caller would otherwise
     pass, and so would one that became genuinely scheduled without anybody moving it.
 
+    **Two left that state for a running schedule on 2026-09-15.** `retention_sweep` and
+    `spend_report_refresh` are `IN_PROCESS` because the worker's schedule starts them, so they
+    are in `SCHEDULED_BY_THE_WORKER` rather than here, and that set is held to the runners that
+    can actually run.
+
     Delete this and leaving the orphan list reads as arriving, which is the overstatement this
     whole file is written against."""
     from brain.ops.controls import Invocation as Started
 
     in_process = {one.name for one in CONTROLS if one.invoked_by is Started.IN_PROCESS}
 
-    assert in_process == WIRED_BUT_NOT_SCHEDULED
+    assert in_process == WIRED_BUT_NOT_SCHEDULED | SCHEDULED_BY_THE_WORKER
     assert set() == WIRED_BUT_NOT_SCHEDULED & KNOWN_ORPHANS
+    assert set() == WIRED_BUT_NOT_SCHEDULED & SCHEDULED_BY_THE_WORKER
+    assert {one.name for one in RUNNERS if one.run is not None} == SCHEDULED_BY_THE_WORKER
 
 
 def test_a_control_that_is_reachable_is_reachable_from_something_reachable() -> None:
