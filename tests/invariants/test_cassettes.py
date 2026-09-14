@@ -43,6 +43,7 @@ NOT_A_CONNECTOR = frozenset(
         "federation",
         "backfill",
         "change_signal",
+        "write_verification",
     }
 )
 
