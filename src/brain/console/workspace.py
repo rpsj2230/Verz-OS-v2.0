@@ -71,9 +71,9 @@ Scope: domain logic. Nothing here opens a connection, renders anything or reads 
 asks a selector for are declared as `Range`; the selector is a control and is not claimed.
 The header and the right pane are rendered by the console's agent page and are claimed there,
 by its tests, rather than here, because a leaf is closed by what renders it and not by the
-type it reads. The keyboard map is rendered too and is not yet closable: its way back leads to
-a roster page that does not exist. No Python route serves the page's data yet, so every agent
-currently shows the answer a withheld one would.
+type it reads. The keyboard map is rendered too, and its way back now lands on the roster the
+console draws at `/agents`. `brain.agent_routes` serves the page's data and the roster, calling
+`tab_strip` and `composition_rows` from here rather than restating either.
 
 Task ids: M39.1.1.1, M39.1.1.2, M39.1.1.4, M39.1.1.5, M39.1.2.2
 Task ids: M39.1.2.4, M39.1.3.1, M39.1.3.3, M39.1.3.4

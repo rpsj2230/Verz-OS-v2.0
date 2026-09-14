@@ -19,10 +19,10 @@
  * asserts they are one string, and each has a sibling proving the field reaches the screen
  * when it is sent.
  *
- * **No route in this repository serves the address the page asks.** One test reads the API's
- * own document and says so, and it is written to go red on the day that stops being true,
- * because that is the day the wire names here are checked against a declared schema rather
- * than against the Python models they were copied from.
+ * **`brain.agent_routes` serves the address the page asks, and the reader is checked against
+ * the route's declared response.** Until 2026-09-14 one test here asserted no route did, and
+ * was written to go red on the day that stopped being true. It did, and the test that replaced
+ * it reads every wire name off the document the route produces.
  *
  * Task ids: M39.1.2.1, M39.1.2.3, M39.1.2.5, M39.1.1.5
  */
@@ -48,7 +48,12 @@ import {
   backendTabOrder,
   membersOf,
 } from "./support/agentWorkspace";
-import { apiDocument } from "./support/openapi";
+import {
+  apiDocument,
+  declaredProperty,
+  declaredPropertyNames,
+  declaredResponseSchema,
+} from "./support/openapi";
 import { backendEnumMembers, backendModelFields, backendPublicMessages } from "./support/python";
 import { readRepoFile } from "./support/repo";
 import { parseConsoleSource, staticImportGraph } from "./support/typescript";
@@ -58,6 +63,7 @@ const MODEL_MODULE = "src/brain/agents/model.py";
 const TEMPLATE_MODULE = "src/brain/agents/template.py";
 const CONSOLE_ORIGIN = "https://console.test";
 const AGENTS_API = "/api/v1/agents/";
+const WORKSPACE_ROUTE = "/api/v1/agents/{agent_id}/workspace";
 
 /**
  * Transform the split route once, before anything is timed. The first mount of a code-split
@@ -326,15 +332,30 @@ describe("where the workspace is reachable", () => {
     expect(workspaceFiles.filter((file) => !page.has(file))).toEqual([]);
   });
 
-  test("no route in the API document serves the address the page asks, yet", () => {
-    // What breaks if this is deleted: the day a route lands goes unnoticed. Until then the
-    // wire names are checked against the Python models they were copied from; after it, they
-    // have to be checked against the route's declared schema, and this test going red is how
-    // anybody finds out. The records route is asserted too, so an empty document cannot pass.
+  test("the route the page asks is declared, and every name the reader takes is a name it sends", () => {
+    // What breaks if this is deleted: a reader and the route drifting apart on a name, which
+    // renders an agent with a fact silently missing and no test anywhere red. Every name is
+    // read off the declared response of the route this page calls. The sets are exact, so the
+    // two names the route deliberately withholds, the builder and who set a value, are a red
+    // test the day either is sent rather than a header that quietly grew a fact.
     const paths = Object.keys((apiDocument()["paths"] ?? {}) as Record<string, unknown>);
+    expect(paths.filter((path) => path.startsWith(AGENTS_API))).toContain(WORKSPACE_ROUTE);
 
-    expect(paths).toContain("/api/v1/records/{entity}");
-    expect(paths.filter((path) => path.startsWith(AGENTS_API))).toEqual([]);
+    const workspace = declaredResponseSchema(WORKSPACE_ROUTE, "get");
+    expect(declaredPropertyNames(workspace)).toEqual(["agent", "composition", "tabs"]);
+    expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).toEqual([
+      "agent_id",
+      "display_name",
+      "owner_id",
+      "summary",
+      "template_id",
+      "template_version",
+    ]);
+    expect(declaredPropertyNames(declaredProperty(workspace, "tabs"))).toEqual(["label", "purpose", "tab"]);
+    const rows = declaredPropertyNames(declaredProperty(workspace, "composition"));
+    expect(rows).toEqual(["instance", "part", "path", "source", "template"]);
+    expect(rows).not.toContain("set_by");
+    expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).not.toContain("created_by");
   });
 });
 

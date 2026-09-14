@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse
 from pydantic import AliasChoices, BaseModel, BeforeValidator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from brain.agent_routes import router as agent_router
 from brain.api import ErrorBody, TimeoutMiddleware
 from brain.api_routes import router as api_router
 from brain.audit.ledger import TRACE_ID
@@ -508,6 +509,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # write verb is `admin` rather than `write` because what it governs is what other people
     # may see. The same `asking` dependency, imported rather than re-declared.
     app.include_router(classification_router)
+    # The agent roster and one agent's workspace. A fourth router because the refusal differs
+    # again: who may see an agent is its audience rather than a capability, and a hidden agent
+    # and a missing one are one answer. The same `asking` dependency, imported.
+    app.include_router(agent_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

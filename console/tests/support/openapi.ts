@@ -190,6 +190,78 @@ export function declaredRequestBodySchema(
   return found;
 }
 
+/**
+ * A schema with one `$ref` followed, or with its array's item reference followed.
+ *
+ * FastAPI emits a nested model as a reference and a list of models as an array whose items
+ * are a reference, so both shapes are resolved here and a call site never names a component.
+ * Throws on a reference that resolves to nothing, for this directory's usual reason.
+ */
+export function resolvedSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const items = schema["items"] as Record<string, unknown> | undefined;
+  const reference = (schema["$ref"] ?? items?.["$ref"]) as unknown;
+  if (typeof reference !== "string") {
+    return schema;
+  }
+  const name = reference.split("/").at(-1) ?? "";
+  const schemas = (apiDocument()["components"] as Record<string, unknown> | undefined)?.[
+    "schemas"
+  ] as Record<string, Record<string, unknown>> | undefined;
+  const found = schemas?.[name];
+  if (found === undefined) {
+    throw new Error(`${reference} is not in the document's components; the document is stale.`);
+  }
+  return found;
+}
+
+/**
+ * The schema one operation answers a success with, resolved.
+ *
+ * The response is the half of a route a reader copies names out of, so a reader is checked
+ * against this rather than against the Python model the names were first taken from: a route
+ * can serialise a model under different names, and the document is what it actually sends.
+ */
+export function declaredResponseSchema(
+  path: string,
+  method: string,
+  status = "200",
+): Record<string, unknown> {
+  const responses = (operation(path, method) as { readonly responses?: Record<string, unknown> })
+    .responses;
+  const content = (responses?.[status] as Record<string, unknown> | undefined)?.["content"] as
+    | Record<string, { readonly schema?: Record<string, unknown> }>
+    | undefined;
+  const schema = content?.["application/json"]?.schema;
+  if (schema === undefined) {
+    throw new Error(
+      `${method.toUpperCase()} ${path} declares no JSON ${status} response, so a reader of it ` +
+        "is being checked against nothing.",
+    );
+  }
+  return resolvedSchema(schema);
+}
+
+/** The property names a resolved object schema declares, sorted. Throws when it declares none. */
+export function declaredPropertyNames(schema: Record<string, unknown>): string[] {
+  const properties = schema["properties"] as Record<string, unknown> | undefined;
+  if (properties === undefined) {
+    throw new Error("This schema declares no properties, so a set of names read off it is empty.");
+  }
+  return Object.keys(properties).sort();
+}
+
+/** One property of a resolved object schema, itself resolved. */
+export function declaredProperty(
+  schema: Record<string, unknown>,
+  name: string,
+): Record<string, unknown> {
+  const found = (schema["properties"] as Record<string, unknown> | undefined)?.[name];
+  if (found === undefined || typeof found !== "object" || found === null) {
+    throw new Error(`This schema declares no property named ${name}.`);
+  }
+  return resolvedSchema(found as Record<string, unknown>);
+}
+
 /** The schema of one declared parameter, with its bounds as the route states them. */
 export function declaredParameterSchema(
   path: string,

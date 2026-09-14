@@ -2,16 +2,12 @@
  * What the agent page asks the API for, and how an answer becomes the shapes the workspace
  * draws.
  *
- * **No route in this repository answers this address yet, and that is stated here rather than
- * left to be discovered.** `brain.agents.model`, `brain.agents.template` and
- * `brain.agents.upgrade` each record that no HTTP route calls them, and
- * `brain.console.workspace` builds the strip, the deep link and the composition parts with no
- * route behind any of them. So every agent this page is opened on answers 404 today, and the
- * page renders the API's own sentence for it, which is the sentence it renders for an agent
- * the reader may not see. That is the honest direction to fail in: the page never draws a fact
- * nobody sent. See `NO_ROUTE_ANSWERS_THE_WORKSPACE_ADDRESS_YET`. `tests/agent-page.test.tsx`
- * reads the API's own document and goes red on the day it declares the route, because that is
- * the day this reader has to be checked against a declared schema.
+ * **`brain.agent_routes` answers this address, and the reader is checked against its declared
+ * schema.** Until 2026-09-14 nothing did, and every agent rendered the API's 404 sentence. The
+ * route answers an agent outside the reader's audience with exactly the 404 and body a slug
+ * nothing holds gets, so the page still cannot tell the two apart and still renders the one
+ * sentence for both. `tests/agent-page.test.tsx` reads every wire name below off the route's
+ * declared response schema, and pins that `set_by` is not declared: the route withholds it.
  *
  * **Every wire name but three is a field name the Python side already has.** `agent_id` and
  * `display_name` are `AgentRecord`'s, `owner_id` is `AgentAudience`'s, `summary` is
@@ -50,19 +46,7 @@ import type {
   WorkspaceTabView,
 } from "../components/agentWorkspaceState";
 
-/**
- * Written down because the page is reachable and no agent will render on it until a route
- * exists, which is a state somebody will otherwise read as a bug in the console.
- */
-export const NO_ROUTE_ANSWERS_THE_WORKSPACE_ADDRESS_YET =
-  "This page asks the API for one agent's workspace at an address no route in this " +
-  "repository serves, so every agent answers 404 and the page shows the API's own sentence, " +
-  "which is the sentence it shows for an agent the reader may not see. Nothing is invented " +
-  "to fill the gap: the header, the strip and the diff draw only what an answer carried. " +
-  "When a route lands, the wire names this reader copies are checked against its declared " +
-  "schema rather than against the Python models they were taken from.";
-
-/** Where one agent's workspace is asked for, under the API base. See the note above. */
+/** Where one agent's workspace is asked for, under the API base. */
 export function agentWorkspaceApiPath(agentId: string): string {
   return `/agents/${encodeURIComponent(agentId)}/workspace`;
 }

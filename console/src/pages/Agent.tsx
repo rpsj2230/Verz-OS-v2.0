@@ -11,8 +11,8 @@
  * **Nothing on this page decides what a person may see.** It asks, reads and hands over. A
  * failure is the API's sentence and the trace id, exactly as the overview renders one, and a
  * 404 is not explained: it is what an agent that does not exist and an agent this reader may
- * not see both look like, and `NO_ROUTE_ANSWERS_THE_WORKSPACE_ADDRESS_YET` records why it is
- * also what every agent looks like today.
+ * not see both look like, and `brain.agent_routes` answers the two with one status and one
+ * body.
  *
  * **The workspace is keyed on the agent and on the tab the address names.** A different agent
  * is a different workspace, so one agent's open tab and whatever was typed into it cannot turn

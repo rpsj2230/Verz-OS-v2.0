@@ -44,6 +44,7 @@ import { RequireSession } from "./auth/RequireSession";
 import { CallbackRoute, SignedOutRoute } from "./auth/routes";
 import { configProblems } from "./config";
 import { Shell } from "./layout/Shell";
+import { Agents } from "./pages/Agents";
 import { NotFound } from "./pages/NotFound";
 import { Overview } from "./pages/Overview";
 import { Notice } from "./ui/Notice";
@@ -176,12 +177,14 @@ export const routes: RouteObject[] = [
       { path: "classification", element: <Classification /> },
       { path: "classification/:entity", element: <Classification /> },
       { path: "classification/:entity/:column", element: <Classification /> },
+      // The roster, which is where the workspace's way back lands. A different component
+      // from the workspace rather than a third path on it, because it is a listing and the
+      // workspace is one agent, and the rules for the two differ: see `pages/agentsQuery.ts`.
+      { path: "agents", element: <Agents /> },
       // Two paths and one component, at the address `brain.console.workspace.deep_link`
       // spells: an agent, and one tab of it. The bare agent opens the first tab its strip
       // holds, and so does a tab the strip does not hold, because `resolve` gives those one
-      // answer. There is no route at `/agents` itself: the roster is a different screen and
-      // nothing in this console renders it yet, so the workspace's way back lands here on the
-      // not-found page until it does.
+      // answer.
       { path: "agents/:agentId", element: <Agent /> },
       { path: "agents/:agentId/:tab", element: <Agent /> },
       { path: "*", element: <NotFound /> },

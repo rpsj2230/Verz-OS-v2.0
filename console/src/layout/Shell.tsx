@@ -42,6 +42,7 @@ const SECTIONS: readonly { to: string; label: string }[] = [
   { to: "/records", label: "Records" },
   { to: "/routing", label: "Routing" },
   { to: "/classification", label: "Classification" },
+  { to: "/agents", label: "Agents" },
 ];
 
 export function Shell() {
