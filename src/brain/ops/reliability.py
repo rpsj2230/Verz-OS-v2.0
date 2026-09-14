@@ -86,12 +86,31 @@ so a percentile there is an instrument measuring the wrong thing precisely.
 Scope: domain logic and declarations. Nothing here reads a clock, a metric, a compose file
 or an environment.
 
-Task ids: M30.4.1, M30.4.2, M30.5.1
+**A full disk is a row of its own and its component is the host, not the database.** Until
+2026-09-15 it was a phrase in two rows, "out of disk" beside PostgreSQL and beside the column
+store, and the database row's response said "a full disk is the case below" with no case
+below. It is not the database's fault and it does not stay the database's problem: one volume
+under a compose project holds the database, the object store and the backup working directory,
+so a full disk presents as whichever of them writes next. So it is `HOST`, it is the one row
+`matrix_gaps` accepts for something that is not a service, and `is_disk_full` is what
+recognises it on a real path: the PostgreSQL condition 53100 and the operating system's
+ENOSPC and EDQUOT, found anywhere in an exception's chain because a driver error arrives
+wrapped in SQLAlchemy's. See `A_FULL_DISK_REFUSES_THE_WRITE_RATHER_THAN_HALF_WRITING_IT`.
+
+**Recognising it is not the same as handling it everywhere, and this says where it is
+handled.** `brain.deployment.database` translates it into `DiskFullError` on create, migrate
+and seed, each of which writes in one transaction, so the refusal is true when it says nothing
+was written. The request path does not translate it: a disk filling while the application
+serves still surfaces as a generic failure, and that is why the row's `response` names the
+writers that refuse rather than claiming the system does.
+
+Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1
 """
 
 from __future__ import annotations
 
 import enum
+import errno
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
@@ -890,6 +909,112 @@ def all_components() -> tuple[str, ...]:
     return tuple(sorted({*BASELINE_COMPONENTS, *(one.name for one in COMPONENTS)}))
 
 
+# ------------------------------------------------------------------------ a full disk
+#: The one failure mode whose component is not a service: the server's own disk (M30.4.5).
+HOST: Final = "host"
+
+#: Why a full disk is refused at the writer rather than left to whatever the writer does.
+A_FULL_DISK_REFUSES_THE_WRITE_RATHER_THAN_HALF_WRITING_IT: Final = (
+    "A write that fails because the disk is full has usually failed part of the way through, "
+    "and the damage is in what it left: a migration that created four tables of nine, a demo "
+    "load that wrote principals and not their grants. So a writer that can meet a full disk "
+    "does its work in one transaction, recognises the condition when it arrives, and reports "
+    "it by name with the statement that nothing was written. A writer that cannot make that "
+    "statement true does not get to raise DiskFullError, because the error's whole value is "
+    "that the operator can free space and run the same command again."
+)
+
+#: Why the condition is looked for through the whole exception chain.
+A_DRIVER_ERROR_ARRIVES_WRAPPED: Final = (
+    "SQLAlchemy raises its own OperationalError and holds the driver's exception on orig, "
+    "and alembic and the seed re-raise from inside their own frames, so the SQLSTATE a full "
+    "disk produces is one or two links down the chain rather than on the exception caught. "
+    "A check reading only the outer exception answers no on every real full disk and yes on "
+    "none, which is a check that passes its tests and never fires."
+)
+
+#: PostgreSQL's condition for a write that could not extend a file. Class 53 is
+#: insufficient resources; 53100 is `disk_full` in the server's own error table.
+DISK_FULL_SQLSTATE: Final = "53100"
+
+#: The operating system's two ways of saying no space: the device is full, or this user's
+#: quota is. Both leave a partial write behind them and both are fixed by freeing space.
+DISK_FULL_ERRNOS: Final[frozenset[int]] = frozenset({errno.ENOSPC, errno.EDQUOT})
+
+#: How many links of an exception chain are followed. A chain is a handful of links; a
+#: bound exists because `__context__` can be made to cycle and a loop here would hang the
+#: path that is trying to report a failure.
+CHAIN_LIMIT: Final = 16
+
+
+class DiskFullError(ReliabilityError):
+    """A write refused because the disk is full, raised only where nothing was written.
+
+    `writer` names what was writing, in words an operator can find in the runbook. See
+    `A_FULL_DISK_REFUSES_THE_WRITE_RATHER_THAN_HALF_WRITING_IT` for the condition on raising.
+    """
+
+    def __init__(self, writer: str) -> None:
+        self.writer = writer
+        super().__init__(
+            f"{writer} stopped because the disk is full, and nothing it was writing was kept. "
+            "Free space on the server's disk and run the same command again"
+        )
+
+
+def exception_chain(error: BaseException) -> tuple[BaseException, ...]:
+    """This exception and every one it was raised from, each once, to `CHAIN_LIMIT`.
+
+    Three links are followed: `orig`, which is where SQLAlchemy keeps the driver's exception,
+    then `__cause__` and `__context__`. See `A_DRIVER_ERROR_ARRIVES_WRAPPED`.
+    """
+    seen: list[BaseException] = []
+    pending: list[BaseException] = [error]
+    while pending and len(seen) < CHAIN_LIMIT:
+        one = pending.pop()
+        if any(one is already for already in seen):
+            continue
+        seen.append(one)
+        pending.extend(
+            link
+            for link in (getattr(one, "orig", None), one.__cause__, one.__context__)
+            if isinstance(link, BaseException)
+        )
+    return tuple(seen)
+
+
+def sqlstate_in(error: BaseException, state: str) -> bool:
+    """Whether a PostgreSQL condition is anywhere in the chain, as psycopg 3 or 2 spells it."""
+    return any(
+        getattr(one, attribute, None) == state
+        for one in exception_chain(error)
+        for attribute in ("sqlstate", "pgcode")
+    )
+
+
+def is_disk_full(error: BaseException) -> bool:
+    """Whether a full disk is anywhere in this exception's chain (M30.4.5).
+
+    Recognised by PostgreSQL's condition 53100 and by the errno of an `OSError`, at any depth,
+    because the exception a caller catches is almost never the one that saw the disk.
+    """
+    if sqlstate_in(error, DISK_FULL_SQLSTATE):
+        return True
+    return any(
+        isinstance(one, OSError) and one.errno in DISK_FULL_ERRNOS for one in exception_chain(error)
+    )
+
+
+def matrix_components() -> tuple[str, ...]:
+    """What the failure matrix covers: every deployed component, and the host they share.
+
+    Separate from `all_components`, which answers what the deployment runs and is held equal
+    to the compose files and the register. The host runs nothing and every component writes
+    to it, so it belongs in the matrix and in no list of services.
+    """
+    return (*all_components(), HOST)
+
+
 @dataclass(frozen=True)
 class FailureMode:
     """One way a component fails, and everything an operator needs before they touch it.
@@ -941,7 +1066,7 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
     ),
     FailureMode(
         component="db",
-        fails="PostgreSQL is down, out of connections, or out of disk",
+        fails="PostgreSQL is down or out of connections",
         presents_as=(
             "readiness fails; out of connections presents as intermittent failure under load "
             "and nothing at all when it is quiet"
@@ -951,7 +1076,24 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
         response=(
             "brain.ops.connections holds the ceiling arithmetic and its headroom figure is "
             "what a restore, a migration or a diagnosis has to fit in; a full disk is the "
-            "case below and is not the same fault"
+            "host row and is not the same fault"
+        ),
+    ),
+    FailureMode(
+        component=HOST,
+        fails="the disk the database, the object store and the backup copies share is full",
+        presents_as=(
+            "reads keep working and the site looks up. Writes fail with PostgreSQL condition "
+            "53100 or an operating system 'no space left on device', and the first one to "
+            "notice is whichever of the database, the object store or a backup wrote next"
+        ),
+        blocks=("db", "seaweedfs", "every write"),
+        retry=RetryClass.AFTER_VERIFICATION,
+        response=(
+            "free space before anything else, then re-run what failed. brain.deployment."
+            "database create, migrate and seed recognise it, name it, and write in one "
+            "transaction, so they are safe to run again; a write on the request path is not "
+            "translated and has to be checked against the record it was writing"
         ),
     ),
     FailureMode(
@@ -1158,7 +1300,7 @@ def matrix_gaps(
     and is not one: a single token containing a hyphen or matching nothing.
     """
     declared = MATRIX if rows is None else tuple(rows)
-    known = set(all_components() if components is None else components)
+    known = set(matrix_components() if components is None else components)
     findings: list[str] = []
 
     covered: dict[str, int] = {}

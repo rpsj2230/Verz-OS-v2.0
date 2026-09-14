@@ -32,12 +32,19 @@ screen it declines to build.
 
 So the half that can be built is built: **the comparison, and the age of the answer it is
 comparing against**. `Told` is what somebody has said the newest release is, carrying who said
-so and when, and nothing here produces one. That is the honest shape rather than a gap: the day
-an owner decides that an install may ask, the asker produces a `Told` and every sentence below
-is unchanged.
+so and when.
+
+**Since 2026-09-15 an install can be set to ask, and it asks nothing until somebody sets it.**
+`brain.deployment.release_feed` reads a release list at an address the install's own
+configuration names, which can be a copy on the client's own network, and produces either a
+`Told` or an `Unanswered`. The asking lives there and not here, so everything above about this
+module reaching nothing is still true of this module. What changed is what this module has to
+be able to say: a list that was configured and did not answer is `CANNOT_ASK`, and it is kept
+apart from `NOBODY_HAS_SAID` because the remedy differs. Neither is a tick. See
+`A_RELEASE_LIST_THAT_DID_NOT_ANSWER_IS_NOT_A_RELEASE_LIST_WITH_NOTHING_NEWER_ON_IT`.
 
 **"Up to date" and "cannot tell" must not be renderable alike, so the renderer is not trusted
-with the difference.** `Standing` has seven members and `ANSWERS` gives each of them the two
+with the difference.** `Standing` has eight members and `ANSWERS` gives each of them the two
 sentences a client reads, so the words are this module's rather than a template's. `SETTLED`
 holds the one member a tick may be drawn beside, and `Panel` refuses to be built claiming it
 without a known running release and a telling that has not gone off. That is item 44's argument
@@ -141,8 +148,18 @@ AN_INSTALL_THAT_ASKS_A_VENDOR_WHETHER_IT_IS_BEHIND_HAS_TOLD_THE_VENDOR_IT_EXISTS
     "connection nobody agreed to, and the request is the disclosure whatever the reply is: it "
     "says this product is installed at that address, when that server is up and how often "
     "somebody administers it, and a check that sends the running release so the answer can be "
-    "narrower turns the collection into a list of which installs are unpatched. A client can "
-    "decline a thing that is not built."
+    "narrower turns the collection into a list of which installs are unpatched. So the check "
+    "is built switched off: an install asks only once its own configuration names a release "
+    "list, and the list can be a copy on the client's own network."
+)
+
+#: Why a list that did not answer is its own standing.
+A_RELEASE_LIST_THAT_DID_NOT_ANSWER_IS_NOT_A_RELEASE_LIST_WITH_NOTHING_NEWER_ON_IT: Final = (
+    "An install set to read a release list that times out, refuses, or answers with something "
+    "that is not a list of releases has learned nothing about whether it is behind. Drawn as up "
+    "to date it is a firewall change silently turning into reassurance; drawn as nobody having "
+    "said, it sends the reader to configure a thing that is already configured. So it is its own "
+    "answer, it carries the reason, and it is not in SETTLED."
 )
 
 #: Why the measured statement is not the one shown as the version.
@@ -202,7 +219,8 @@ class Told:
     during setup and never touched again. A renderer showing the tag without the source invites
     the reader to treat the second as the first.
 
-    Nothing in this repository produces one. See
+    `brain.deployment.release_feed.ask` produces one when an install is set to read a release
+    list, and nothing produces one otherwise. See
     `AN_INSTALL_THAT_ASKS_A_VENDOR_WHETHER_IT_IS_BEHIND_HAS_TOLD_THE_VENDOR_IT_EXISTS`.
     """
 
@@ -236,6 +254,40 @@ class Told:
                 "now at this machine's offset and makes an answer look fresher or older than "
                 "it is"
             )
+            raise VersionError(msg)
+
+
+class Unasked(enum.StrEnum):
+    """Why an install that could have been told which release is newest was not."""
+
+    #: The install is not set to read a release list, so it asked nobody.
+    NO_SOURCE = "no release list is configured"
+    #: It asked, and the list could not be reached.
+    UNREACHABLE = "the release list could not be reached"
+    #: It asked, and the answer was not a list naming a release this install can order.
+    UNREADABLE = "the release list did not name a release"
+
+
+@dataclass(frozen=True)
+class Unanswered:
+    """The outcome of asking a release list that produced no answer, and why.
+
+    A value rather than an exception, because it is drawn: the reader is owed the reason, and
+    an exception caught by whatever renders the panel is a reason that becomes a blank.
+    """
+
+    why: Unasked
+    #: What happened, in words a reader can act on.
+    detail: str
+    #: When the question was asked. Timezone-aware, for the reason `Told.at` is.
+    at: datetime
+
+    def __post_init__(self) -> None:
+        if not self.detail.strip():
+            msg = f"{self.why.value}, with nothing saying what happened, is a blank with a label"
+            raise VersionError(msg)
+        if self.at.tzinfo is None:
+            msg = "an unanswered question recorded at a naive instant cannot be placed in time"
             raise VersionError(msg)
 
 
@@ -438,7 +490,7 @@ def _commit_fact(commit: str) -> Fact:
 class Standing(enum.StrEnum):
     """Where this install stands against the newest release anybody has named.
 
-    Seven answers rather than two, because the two-answer version of this screen is a tick and
+    Eight answers rather than two, because the two-answer version of this screen is a tick and
     the absence of one, and the absence of a tick is read as a tick that has not loaded. Every
     member has a producer in `standing_of` and a sentence in `ANSWERS`.
     """
@@ -455,6 +507,8 @@ class Standing(enum.StrEnum):
     DIFFERS = "differs"
     #: Nothing has ever told this install which release is newest.
     NOBODY_HAS_SAID = "nobody has said"
+    #: This install is set to read a release list, and the list did not answer this time.
+    CANNOT_ASK = "cannot ask"
     #: Nothing here can say which release is running, so there is nothing to compare.
     UNKNOWN_RUNNING = "unknown running"
 
@@ -502,10 +556,10 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
         ),
         Standing.CURRENT: Answer(
             says=(
-                "This install is running the newest release anybody has told it about, and it "
-                "was told recently. That is as strong as this screen gets: nothing here asks "
-                "anywhere outside your network, so this is a statement about what somebody "
-                "recorded rather than about what has been published."
+                "This install is running the newest release it was told about or read from the "
+                "release list it is set to read, and that answer is recent. That is as strong as "
+                "this screen gets: it is a statement about that record or that list, and not "
+                "about everything that has been published anywhere."
             ),
             what_to_do=(
                 "Nothing today. Keep the recorded release up to date, because everything on "
@@ -547,14 +601,26 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
         ),
         Standing.NOBODY_HAS_SAID: Answer(
             says=(
-                "Nothing has ever told this install which release is the newest, so it cannot "
-                "tell you whether it is behind. This is not the same as being up to date, and "
-                "it is the ordinary state: this product does not ask anywhere outside your "
-                "network on its own."
+                "Nothing has ever told this install which release is the newest, and it is not "
+                "set to read a release list, so it cannot tell you whether it is behind. This "
+                "is not the same as being up to date, and it is the ordinary state: this product "
+                "asks nothing outside your network unless you set it to."
             ),
             what_to_do=(
-                "Check the published list of releases, and record the newest one here. Do it "
-                "again whenever you install one."
+                "Check the published list of releases and record the newest one here, or set "
+                "this install to read that list itself. Do it again whenever you install one."
+            ),
+        ),
+        Standing.CANNOT_ASK: Answer(
+            says=(
+                "This install is set to read a release list and did not get an answer from it "
+                "this time, so it cannot tell you whether a newer release exists. This is not "
+                "the same as being up to date. The reason is shown beside it."
+            ),
+            what_to_do=(
+                "Check that the server can reach the address it is set to read, or check the "
+                "published list of releases by hand. Until it answers, treat this install as "
+                "possibly behind."
             ),
         ),
         Standing.UNKNOWN_RUNNING: Answer(
@@ -578,8 +644,12 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
 ORDERABLE_TAG: Final = re.compile(r"^v(\d+(?:\.\d+)*)$")
 
 
-def _ordinal(tag: str) -> tuple[int, ...] | None:
-    """The tag as numbers to compare, or `None` when it is not a shape this module orders."""
+def ordinal(tag: str) -> tuple[int, ...] | None:
+    """The tag as numbers to compare, or `None` when it is not a shape this module orders.
+
+    Public because `brain.deployment.release_feed` chooses the newest release off a list with
+    it, and a second ordering there would be a second answer to which of two tags is later.
+    """
     found = ORDERABLE_TAG.match(tag.strip())
     if found is None:
         return None
@@ -594,7 +664,7 @@ def _ordered(running: str, newest: str) -> Standing:
     than as equal: they are two tags, a registry holds them as two things, and calling them one
     release is a guess in the reassuring direction.
     """
-    here, there = _ordinal(running), _ordinal(newest)
+    here, there = ordinal(running), ordinal(newest)
     if here is None or there is None:
         return Standing.DIFFERS
     width = max(len(here), len(there))
@@ -609,7 +679,7 @@ def _ordered(running: str, newest: str) -> Standing:
 
 def standing_of(
     running: Running,
-    told: Told | None,
+    told: Told | Unanswered | None,
     *,
     now: datetime,
     goes_off_after_days: int = TELLING_GOES_OFF_AFTER_DAYS,
@@ -639,6 +709,10 @@ def standing_of(
         return Standing.UNKNOWN_RUNNING
     if told is None:
         return Standing.NOBODY_HAS_SAID
+    if isinstance(told, Unanswered):
+        if told.why is Unasked.NO_SOURCE:
+            return Standing.NOBODY_HAS_SAID
+        return Standing.CANNOT_ASK
     if told.at > now:
         msg = (
             f"{told.tag} was recorded later than the moment being asked about, so the two "
@@ -663,7 +737,7 @@ class Panel:
     """
 
     running: Running
-    told: Told | None
+    told: Told | Unanswered | None
     standing: Standing
     #: How long ago somebody last named the newest release, in days. `None` when nobody has.
     told_days_ago: int | None = None
@@ -679,7 +753,7 @@ class Panel:
                 "running, so the reassuring answer would be about an install nobody identified"
             )
             raise VersionError(msg)
-        if self.told is None or self.told_days_ago is None:
+        if not isinstance(self.told, Told) or self.told_days_ago is None:
             msg = (
                 f"{self.standing.value} is claimed and nobody has said which release is "
                 "newest, which is the tick with nothing behind it this panel exists to refuse"
@@ -701,7 +775,7 @@ class Panel:
 
 def panel(
     running: Running,
-    told: Told | None,
+    told: Told | Unanswered | None,
     *,
     now: datetime,
     goes_off_after_days: int = TELLING_GOES_OFF_AFTER_DAYS,
@@ -714,7 +788,7 @@ def panel(
     be the one this module spends its whole length refusing.
     """
     where = standing_of(running, told, now=now, goes_off_after_days=goes_off_after_days)
-    days = None if told is None else (now - told.at).days
+    days = (now - told.at).days if isinstance(told, Told) else None
     return Panel(
         running=running,
         told=told,

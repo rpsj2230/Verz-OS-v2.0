@@ -70,7 +70,7 @@ of those pages advises stays prose, and each page says so at its foot. See
 `AN_ENTRY_THAT_OPENS_WITH_THE_REMEDY_IS_ONE_NOBODY_CAN_FIND`.
 
 Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2
-Task ids: M34.3.3.3, M30.2.8
+Task ids: M34.3.3.3, M30.2.8, M42.3.3
 """
 
 from __future__ import annotations
@@ -1132,5 +1132,47 @@ def update_script_gaps(guide: str, *, scripts: Collection[str]) -> tuple[str, ..
         f"{name}: the page names a script the release does not carry"
         for name in named
         if name not in scripts
+    )
+    return tuple(findings)
+
+
+# ------------------------------------------------ the database commands (M42.3.3)
+#: The table in the operations page naming every database command and how to run it.
+DATABASE_COMMANDS_MARKER: Final = "<!-- checked: the database commands -->"
+
+
+def database_command_gaps(guide: str, *, commands: Sequence[str], module: str) -> tuple[str, ...]:
+    """Every way the page's database command table disagrees with the commands that exist.
+
+    Handed the commands and the module rather than importing them, for the split this module
+    keeps throughout. Both directions and the command column as a value: a command renamed in
+    `brain.deployment.database` with the page left alone is a runbook line that prints a usage
+    message to somebody in the middle of an install.
+    """
+    findings: list[str] = []
+    named: list[str] = []
+    for cells in table_after(guide, DATABASE_COMMANDS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the command, "
+                "how to run it and what it does"
+            )
+            continue
+        name = bare(cells[0])
+        named.append(name)
+        expected = f"python -m {module} {name}"
+        if bare(cells[1]) != expected:
+            findings.append(
+                f"{name}: the page says to run {bare(cells[1])!r}, and the command is {expected!r}"
+            )
+    findings.extend(
+        f"{name}: this command exists and the page does not say how to run it"
+        for name in commands
+        if name not in named
+    )
+    findings.extend(
+        f"{name}: the page names a database command that does not exist"
+        for name in named
+        if name not in commands
     )
     return tuple(findings)

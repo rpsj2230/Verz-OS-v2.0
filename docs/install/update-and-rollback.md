@@ -141,12 +141,42 @@ that window is the system working as designed.
    refuses rather than sending you back to the release you just left, and going back two
    releases is an update to a tag you name.
 
+## Being told that a newer release exists
+
+Nothing reminds a client IT team to update except something that looks. This product can look,
+and it does not until you tell it where.
+
+Set `BRAIN_RELEASE_FEED_URL` to the address of a release list, in the environment the
+application runs in. It has no default. Unset, the install asks nothing outside your network,
+and the version panel says that nobody has told it which release is newest, which is not the
+same as saying it is up to date. The list is the JSON a repository's releases endpoint returns,
+an array of entries each carrying `tag_name`, `draft` and `prerelease`, and it can be a copy you
+serve inside your own network, which is the way to have the reminder without the request leaving.
+
+What the install does with the answer, in the order it decides:
+
+1. An address that is not `https` is not asked. An answer anybody on the path could rewrite is
+   not one the panel will call up to date.
+2. A list it cannot reach, an answer that is not a list of releases, or a list naming no
+   published release it can order, is shown as "cannot ask" with the reason. **None of these is
+   ever shown as up to date.**
+3. Drafts, prereleases and tags that are not releases, including `latest`, are never taken as the
+   newest release. Tags are ordered by their numbers, so `v1.10.0` is newer than `v1.9.0`.
+4. Only then is the running release compared with the newest one the list names.
+
+**What is true today, and it is less than the paragraph above.** No release has been published,
+so there is no list with anything on it. The application container cannot read which release
+it is running, because neither the release marker nor the image pin reaches it, so the panel
+answers that it cannot say what is running before it gets as far as asking about anything newer.
+And no console screen draws the panel yet: it is registered and its tool is not built.
+
 ## What would make this rehearsed
 
 Two things, and neither exists.
 
-**A running version indicator in the console**, showing what is running and whether a newer
-release exists, because nothing else reminds anybody to update.
+**A running version indicator in the console that a person can open**, showing what is running
+and whether a newer release exists. The comparison and the asking are built; the screen and a
+route for the running release into the application container are not.
 
 **A drill.** Everything above run start to finish on a throwaway server, including the rollback,
 including a database that has moved, by somebody following only this page. That is what
@@ -173,6 +203,9 @@ run on a server**, which is why the list above still has a drill in it.
 | That a migration mixing schema and data changes cannot merge | `test_migration_policy.py` |
 | That every migration carries a reverse | the migration files themselves |
 | That the script table names every script in `ops/update`, no other, and the command that runs it | `test_install_docs.py`, against the scripts the release carries |
+| That an unset, unreachable, unreadable or non-https release list is never shown as up to date | `test_release_feed.py`, with the transport handed in |
+| That tags are ordered by their numbers, and drafts, prereleases and `latest` are never the newest | `test_release_feed.py` and `test_version_view.py` |
+| **That a published release list has ever been read by an install** | **nobody. No release has been published.** |
 | **The procedure on this page** | **nobody. It has never been run on a server.** |
 
 ## Task ids

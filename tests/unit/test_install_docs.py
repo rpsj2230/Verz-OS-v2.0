@@ -1455,3 +1455,71 @@ def test_a_command_that_is_the_script_path_with_arguments_is_accepted() -> None:
 
     assert update_script_gaps(good, scripts={"update.sh"}) == ()
     assert update_script_gaps(near, scripts={"update.sh"}) != ()
+
+
+# ================================================================= database_command_gaps
+DATABASE_HEADER = "| Command | How to run it | What it does, and what it refuses |"
+
+
+def _database_rows(*names: str, module: str = "brain.deployment.database") -> list[str]:
+    return [f"| `{name}` | `python -m {module} {name}` | does it |" for name in names]
+
+
+def test_the_operations_page_says_how_to_run_every_database_command() -> None:
+    """M42.3.3's documentation half. Delete this and a command added to, renamed in or removed
+    from `brain.deployment.database` leaves the page telling somebody to run one that is not
+    there, during an install."""
+    from brain.deployment import database
+    from brain.ops.install_docs import database_command_gaps
+
+    found = database_command_gaps(
+        guide("operations.md"), commands=database.COMMANDS, module=database.__name__
+    )
+    assert found == ()
+
+
+def test_a_database_command_the_page_omits_or_invents_is_a_finding() -> None:
+    """Both directions, against a page built to fail. Delete this and the check can pass a page
+    missing `seed` and naming a `build` nobody wrote."""
+    from brain.ops.install_docs import DATABASE_COMMANDS_MARKER, database_command_gaps
+
+    page = a_table(DATABASE_COMMANDS_MARKER, DATABASE_HEADER, *_database_rows("create", "build"))
+    found = database_command_gaps(
+        page, commands=("create", "migrate", "seed"), module="brain.deployment.database"
+    )
+
+    assert found == (
+        "migrate: this command exists and the page does not say how to run it",
+        "seed: this command exists and the page does not say how to run it",
+        "build: the page names a database command that does not exist",
+    )
+
+
+def test_a_database_command_written_with_the_wrong_invocation_is_a_finding() -> None:
+    """The command column is checked as a value. Delete this and a row naming the right command
+    and the module's old path passes, which is the runbook line that fails with no module named."""
+    from brain.ops.install_docs import DATABASE_COMMANDS_MARKER, database_command_gaps
+
+    rows = [*_database_rows("create", "migrate"), "| `seed` | `python -m brain.seed` | does it |"]
+    page = a_table(DATABASE_COMMANDS_MARKER, DATABASE_HEADER, *rows)
+    found = database_command_gaps(
+        page, commands=("create", "migrate", "seed"), module="brain.deployment.database"
+    )
+
+    assert found == (
+        "seed: the page says to run 'python -m brain.seed', and the command is "
+        "'python -m brain.deployment.database seed'",
+    )
+
+
+def test_a_database_command_row_with_too_few_cells_is_a_finding() -> None:
+    """Delete this and a row missing its columns raises inside the check rather than naming it."""
+    from brain.ops.install_docs import DATABASE_COMMANDS_MARKER, database_command_gaps
+
+    page = a_table(DATABASE_COMMANDS_MARKER, DATABASE_HEADER, "| `create` |")
+    found = database_command_gaps(page, commands=(), module="brain.deployment.database")
+
+    assert found == (
+        "a row with 1 cell(s) reads ('`create`',); every row states the command, how to run it "
+        "and what it does",
+    )

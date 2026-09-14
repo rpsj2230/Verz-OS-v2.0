@@ -8,11 +8,12 @@ of the work breakdown, and the baseline component names are read out of the comp
 A test asserting `FAST_P95_MS == 500` beside a module declaring `FAST_P95_MS = 500` compares
 the constant against itself and passes for every value it could hold.
 
-Task ids: M30.4.1, M30.4.2, M30.5.1
+Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1
 """
 
 from __future__ import annotations
 
+import errno
 import json
 import re
 from pathlib import Path
@@ -26,8 +27,12 @@ from brain.ops.idempotency import Disposition
 from brain.ops.reliability import (
     ANSWER_P95_MS,
     BASELINE_COMPONENTS,
+    CHAIN_LIMIT,
+    DISK_FULL_ERRNOS,
+    DISK_FULL_SQLSTATE,
     FAILURE_STATUSES,
     FAST_P95_MS,
+    HOST,
     LANE_OBJECTIVES,
     MATRIX,
     OPERATION_CLASSES,
@@ -35,6 +40,7 @@ from brain.ops.reliability import (
     STAGE_OBJECTIVES,
     SUCCESS_STATUSES,
     SUCCESSFUL_REQUEST_RATE,
+    DiskFullError,
     FailureMode,
     LaneObjective,
     OperationClass,
@@ -46,7 +52,10 @@ from brain.ops.reliability import (
     all_components,
     attainment,
     classification_gaps,
+    exception_chain,
+    is_disk_full,
     lane_objective,
+    matrix_components,
     matrix_gaps,
     measurement_gaps,
     profiles_without_objectives,
@@ -456,7 +465,8 @@ def test_the_matrix_covers_every_component_the_deployment_runs() -> None:
 
     covered = {one.component for one in MATRIX}
 
-    assert covered == set(all_components())
+    assert covered == set(all_components()) | {HOST}
+    assert HOST not in all_components(), "the host runs nothing and is no deployed component"
 
 
 def test_a_component_with_no_failure_mode_and_a_row_for_no_component_are_both_reported() -> None:
@@ -732,3 +742,135 @@ def test_an_operation_class_with_no_name_or_no_reason_is_refused() -> None:
             OperationClass(
                 name="read a row", has_side_effect=False, retry=RetryClass.SAFE, because=reason
             )
+
+
+# ------------------------------------------------------------------- a full disk (M30.4.5)
+def _wrapped(driver_error: BaseException) -> BaseException:
+    """What a caller actually catches: SQLAlchemy's error, holding the driver's on `orig`."""
+    from sqlalchemy.exc import OperationalError
+
+    return OperationalError("INSERT INTO proj.record VALUES (...)", {}, driver_error)
+
+
+def test_a_full_disk_is_recognised_inside_the_driver_error_sqlalchemy_wraps() -> None:
+    """**The shape every real full disk arrives in.** PostgreSQL refuses the write with 53100,
+    psycopg raises `DiskFull`, and SQLAlchemy wraps it, so the exception a writer catches has
+    no SQLSTATE of its own.
+
+    Delete this and `is_disk_full` can read the outer exception only, answer no on every full
+    disk a real writer meets, and still pass a test built from the driver's error directly."""
+    import psycopg.errors
+
+    caught = _wrapped(psycopg.errors.DiskFull("could not extend file"))
+
+    assert is_disk_full(caught)
+
+
+def test_the_operating_systems_no_space_is_recognised_through_a_cause() -> None:
+    """A file write that fails for space raises `OSError` with ENOSPC or EDQUOT, and the writer
+    that re-raises it as its own error keeps it on `__cause__`.
+
+    Delete this and a full disk under a file writer is reported as whatever that writer's own
+    error happens to say, which is the generic failure this leaf exists to name."""
+    for number in (errno.ENOSPC, errno.EDQUOT):
+        try:
+            try:
+                raise OSError(number, "No space left on device")
+            except OSError as low:
+                raise RuntimeError("the write did not finish") from low
+        except RuntimeError as caught:
+            assert is_disk_full(caught), number
+
+
+def test_an_ordinary_failure_is_not_read_as_a_full_disk() -> None:
+    """The sibling of the two above. A check that answered yes to everything would pass both,
+    and would tell an operator to free space on a server whose password was wrong.
+
+    Delete this and `is_disk_full` can be `return True`."""
+    import psycopg.errors
+
+    assert not is_disk_full(_wrapped(psycopg.errors.InvalidPassword("password authentication")))
+    assert not is_disk_full(_wrapped(psycopg.errors.QueryCanceled("statement timeout")))
+    assert not is_disk_full(OSError(errno.EACCES, "Permission denied"))
+    assert not is_disk_full(ValueError("not a disk at all"))
+
+
+def test_the_condition_is_the_one_the_driver_and_the_operating_system_use() -> None:
+    """The constants are asserted against something outside this module, as CLAUDE.md asks of
+    every constant: psycopg's own class for the condition, and the errno module.
+
+    Delete this and `DISK_FULL_SQLSTATE` can be retyped to a neighbouring code, such as 53200
+    for out of memory, with every other test here still green because they build their errors
+    from the same classes."""
+    import psycopg.errors
+
+    assert psycopg.errors.DiskFull.sqlstate == DISK_FULL_SQLSTATE
+    assert {errno.ENOSPC, errno.EDQUOT} == DISK_FULL_ERRNOS
+
+
+def test_a_chain_that_loops_back_on_itself_ends_rather_than_hanging() -> None:
+    """`__context__` can be made to cycle. The path this serves is the one reporting a failure,
+    and a loop there turns a full disk into a hung command.
+
+    Delete this and the walk can lose its record of what it has seen."""
+    first, second = RuntimeError("one"), RuntimeError("two")
+    first.__context__ = second
+    second.__context__ = first
+
+    assert not is_disk_full(first)
+    assert len(exception_chain(first)) == 2
+
+    long: BaseException = ValueError("bottom")
+    for depth in range(CHAIN_LIMIT * 2):
+        above = ValueError(f"level {depth}")
+        above.__cause__ = long
+        long = above
+    assert len(exception_chain(long)) == CHAIN_LIMIT
+
+
+def test_a_full_disk_is_one_row_and_its_component_is_the_host() -> None:
+    """**It was a phrase in the database's row pointing at a case below that did not exist.** A
+    full disk is shared by the database, the object store and the backup copies, so it gets one
+    row, for the host, and the database's row stops claiming it.
+
+    Delete this and the matrix can go back to "out of disk" in two rows and no response to it,
+    which is where it was on 2026-09-14."""
+    rows = [one for one in MATRIX if one.component == HOST]
+    database = next(one for one in MATRIX if one.component == "db")
+
+    assert len(rows) == 1
+    assert "53100" in rows[0].presents_as
+    assert "disk" not in database.fails
+    assert HOST in matrix_components()
+    assert matrix_gaps() == ()
+
+
+def test_the_host_row_names_writers_that_recognise_a_full_disk() -> None:
+    """The row's response tells an operator which commands are safe to run again. Those
+    commands have to exist and have to be the ones that translate the condition, or the row is
+    advice about code nobody wrote.
+
+    Delete this and the response can name a module that was renamed or never built."""
+    import importlib
+
+    row = next(one for one in MATRIX if one.component == HOST)
+    module = importlib.import_module("brain.deployment.database")
+
+    assert "brain.deployment.database" in row.response.replace(" ", "").replace('"', "")
+    for command in ("create", "migrate", "seed"):
+        assert command in row.response
+        assert callable(getattr(module, command))
+
+
+def test_a_disk_full_error_names_the_writer_and_says_what_to_do() -> None:
+    """The error is read by somebody at a terminal. It must say what stopped, that nothing was
+    kept, and that running the same command again is the remedy.
+
+    Delete this and the message can lose the half that makes it safe to act on."""
+    found = DiskFullError("the migration")
+
+    assert found.writer == "the migration"
+    assert str(found).startswith("the migration stopped because the disk is full")
+    assert "nothing it was writing was kept" in str(found)
+    assert "run the same command again" in str(found)
+    assert isinstance(found, ReliabilityError)

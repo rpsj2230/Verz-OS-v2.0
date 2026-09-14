@@ -89,6 +89,35 @@ costs the most in both directions: skipping it leaves a worker that starts and d
 and repeating it raises on a database that was already correct.
 
 
+## Creating, migrating and seeding the database
+
+Three commands, run where the application runs, and each of them is safe to run twice. They read
+`DATABASE_URL` from the application's environment, so on an install they are run inside the
+application container:
+
+```
+docker compose $BRAIN_COMPOSE_FILES exec app python -m brain.deployment.database create
+```
+
+<!-- checked: the database commands -->
+
+| Command | How to run it | What it does, and what it refuses |
+| --- | --- | --- |
+| `create` | `python -m brain.deployment.database create` | Creates the database `DATABASE_URL` names, on the server it names, by connecting to that server's `postgres` database. If the database exists it says so and writes nothing. You need it when the database server is one you already run; the database container on a standard install creates the database itself, and running `create` there reports that it already exists. |
+| `migrate` | `python -m brain.deployment.database migrate` | Brings the schema to this release, in one transaction under the same lock the application takes at startup. At this release already, it applies nothing and says so. Refuses a database the server does not have and tells you to run `create`. |
+| `seed` | `python -m brain.deployment.database seed` | Loads the demo company, for a demonstration or staging server only. Refuses a schema behind this release and tells you to run `migrate`, and refuses any database holding rows the demo did not write, which is every live install. A second run over its own demo writes nothing. It has no way past that refusal; see the seed's own `--force` in `python -m brain.seed` if you are rebuilding a development database. |
+
+The three are the same in every profile. `full` also needs the trace ledger's own database and
+login, and the installer creates those in its step "create the databases the compose files do
+not", so there is nothing extra to run here.
+
+**A full disk is reported by name and exits with status 3.** Refusals exit 1, a missing
+`DATABASE_URL` or an unknown command exits 2. `migrate` and `seed` each write in one transaction,
+so when the disk fills part of the way through, nothing they wrote is kept: free space on the
+server's disk and run the same command again. That is only true of these three commands. A disk
+that fills while the application is serving surfaces as an ordinary failure of whatever was
+writing, and is not yet reported by name.
+
 ## Logging
 
 **The audit ledger is not optional and is not a log.** It records who read what, it is
@@ -234,6 +263,9 @@ before anything else on the list.
 | That a service level statement is refused when the arithmetic does not support it | `test_launch.py` |
 | The thirteen mechanisms, and which have a caller | `test_controls.py`, read out of the source in both directions |
 | That every component declares what ready means | `test_wiring.py` |
+| That the database command table names every command, no other, and how to run it | `test_install_docs.py`, against `brain.deployment.database` |
+| That the commands refuse in order, run twice safely, and name a full disk | `test_deployment_database.py`, against a real server where `DATABASE_URL` is set |
+| **That `migrate` reaches the newest schema on a server without pgvector** | **nobody, and it cannot: the first migration installs `vector`** |
 | **Everything about what you should do next** | **nobody. Prose, kept true by hand.** |
 
 ## Task ids

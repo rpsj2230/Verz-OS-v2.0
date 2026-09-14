@@ -47,6 +47,8 @@ from brain.console.version_view import (
     Running,
     Standing,
     Told,
+    Unanswered,
+    Unasked,
     VersionError,
     facts_the_container_cannot_read,
     image_tag,
@@ -389,6 +391,8 @@ def test_the_only_reassuring_answer_is_the_one_with_every_condition_behind_it():
         standing_of(running, said("hotfix"), now=NOW),
         standing_of(running, said("v1.4.0", days_ago=TELLING_GOES_OFF_AFTER_DAYS + 1), now=NOW),
         standing_of(running_release(marker="v1.4.0"), said("v1.5.0"), now=NOW),
+        standing_of(running, Unanswered(Unasked.UNREACHABLE, "timed out", NOW), now=NOW),
+        standing_of(running, Unanswered(Unasked.NO_SOURCE, "unset", NOW), now=NOW),
     }
 
     assert settled == set(SETTLED)
