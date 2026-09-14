@@ -116,8 +116,9 @@ result the way `complete` does. This is a gap, not a decision to leave it open f
 **What consults this, and what does not.** No HTTP route calls any of it, and there is no
 route behind the gate in this repository at all: `brain.agents.model`, `brain.agents.template`
 and `brain.agents.install` each refused to invent one, and a second request pipeline
-invented here would be a second thing for the real one to be reconciled with. The console
-has no agent page either, so nothing renders the badge today. What is wired is real:
+invented here would be a second thing for the real one to be reconciled with. The console's
+agent page renders a header and tabs and not this badge, so nothing renders it today. What
+is wired is real:
 `publish_version` is a caller of `brain.agents.install.TemplateCatalogue.offer`, `accept`
 is a caller of `brain.agents.template.verify`, `check_overlay` and `materialise`, and
 `review` is a caller of `ownership`. Nothing in `src` writes `agent.upgrade_decline`, which

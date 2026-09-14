@@ -85,6 +85,18 @@ const Classification = lazy(async () => ({
 }));
 
 /**
+ * One agent's workspace, fetched when somebody opens an agent.
+ *
+ * Split for a smaller reason than the three above, and the reason is written in the stylesheet
+ * rather than here. It mounts neither heavy library, so an eager import would not triple the
+ * entry; what it would do is put the workspace's three components and `agent-workspace.css` in
+ * the first response for everybody, and that sheet is imported by the components precisely so
+ * that somebody who never opens an agent does not download it. `tests/agent-page.test.tsx`
+ * walks the static graph from `main.tsx` and fails when either is reachable from it.
+ */
+const Agent = lazy(async () => ({ default: (await import("./pages/Agent")).Agent }));
+
+/**
  * Shown when a page throws while rendering.
  *
  * It deliberately does not print the error. A rendering failure is a bug in this console,
@@ -164,6 +176,14 @@ export const routes: RouteObject[] = [
       { path: "classification", element: <Classification /> },
       { path: "classification/:entity", element: <Classification /> },
       { path: "classification/:entity/:column", element: <Classification /> },
+      // Two paths and one component, at the address `brain.console.workspace.deep_link`
+      // spells: an agent, and one tab of it. The bare agent opens the first tab its strip
+      // holds, and so does a tab the strip does not hold, because `resolve` gives those one
+      // answer. There is no route at `/agents` itself: the roster is a different screen and
+      // nothing in this console renders it yet, so the workspace's way back lands here on the
+      // not-found page until it does.
+      { path: "agents/:agentId", element: <Agent /> },
+      { path: "agents/:agentId/:tab", element: <Agent /> },
       { path: "*", element: <NotFound /> },
     ],
   },

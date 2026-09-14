@@ -1,0 +1,244 @@
+/*
+ * The agent workspace, dressed. Every value here is a token from `theme/tokens.css`, under
+ * the discipline `styles/app.css` states for itself: if a value is needed that the token
+ * file does not define, it is added there first, and the dark theme stays a change to one
+ * file rather than a hunt through every component.
+ *
+ * A separate sheet rather than more of `app.css`, and imported by the three components that
+ * write these class names rather than by `main.tsx`. That is the same argument `App.tsx`
+ * makes about the route chunks: a person who never opens an agent should not download the
+ * rules for one, and a sheet that arrives with the component cannot be left behind when the
+ * component is removed.
+ *
+ * **Nothing here colours a state.** The one row that is emphasised is a row whose value was
+ * set on this agent, and that fact is already in the row as a word. `ui/tone.ts` says why
+ * that matters: a colour that meant refused, withheld or out of scope would rebuild the side
+ * channel `render_lock` takes no arguments to prevent. A quieter background and a rule down
+ * the left are not a severity and do not read as one.
+ */
+
+/* ------------------------------------------------------------------ the frame */
+
+.agent-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.agent-workspace__roster {
+  align-self: flex-start;
+  font-size: var(--text-sm);
+}
+
+.agent-workspace__body {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+}
+
+.agent-workspace__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.agent-workspace__aside {
+  flex: 0 0 auto;
+  width: var(--shell-nav-width);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+@media (max-width: 60rem) {
+  .agent-workspace__body {
+    flex-direction: column;
+  }
+
+  .agent-workspace__aside {
+    width: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ the header */
+
+.agent-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+/*
+ * The avatar is two letters of the name beside it, so it is sized like a letter rather than
+ * like a picture: nothing is loaded, nothing is fetched, and there is no state in which it
+ * is missing.
+ */
+.agent-header__avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  border-radius: 50%;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.agent-header__identity {
+  min-width: 0;
+}
+
+.agent-header__name {
+  margin: 0;
+}
+
+.agent-header__role {
+  margin: var(--space-1) 0 0;
+  color: var(--text-muted);
+}
+
+.agent-header__facts {
+  margin: var(--space-3) 0 0;
+}
+
+.agent-header__version {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ------------------------------------------------------------------ the tab strip */
+
+.agent-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+}
+
+.agent-tabs__tab {
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-tabs__tab:hover {
+  color: var(--text);
+}
+
+/*
+ * The current tab is marked by a rule under it as well as by its colour, for the reason the
+ * shell's navigation carries an underline: colour is never the only channel.
+ */
+.agent-tabs__tab--current {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+  color: var(--text);
+}
+
+.agent-tabs__panel {
+  padding: var(--space-4) 0 0;
+}
+
+.agent-tabs__purpose {
+  margin: 0 0 var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/* ------------------------------------------------------------------ the right pane */
+
+.agent-panes {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.agent-panes__button {
+  appearance: none;
+  flex: 1 1 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.agent-panes__button--current {
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------ the diff */
+
+.composition-diff {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.composition-diff__caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: var(--space-2);
+  color: var(--text-muted);
+}
+
+.composition-diff th,
+.composition-diff td {
+  text-align: left;
+  vertical-align: top;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.composition-diff thead th {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.composition-diff__part th {
+  background: var(--surface-sunken);
+  color: var(--text);
+}
+
+.composition-diff__row th {
+  font-weight: 400;
+}
+
+/*
+ * A value set on this agent rather than taken from the template. The word is in the row
+ * already; this is the second channel and not the only one.
+ */
+.composition-diff__row--local {
+  background: var(--surface-sunken);
+  box-shadow: inset 2px 0 0 0 var(--border-strong);
+}
+
+.composition-diff__value {
+  display: block;
+  max-width: 22rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}
+
+.composition-diff__empty {
+  color: var(--text-muted);
+}

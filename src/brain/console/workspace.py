@@ -55,22 +55,24 @@ its template on any of them. A sixth, the leash, is in the manifest and sealed, 
 diverge either. `PARTS_THAT_CAN_DIVERGE` is the four that are left, derived rather than
 listed, so the day `SEALED_PATHS` changes this changes with it.
 
-**Rejected: a second diff between an instance and its template.** `brain.agents.upgrade`
-already walks `MANIFEST_PATHS` and produces the three columns M13.4.3 asks for, with the
-overlay's own owner on each row. What was missing was not a diff, it was the map from a
-manifest path to the part of the composition it supplies, which is one mapping and is here.
-M39.1.1.5 wants that diff rendered side by side and is not claimed: the rows exist and no
-screen renders them.
+**Rejected: a second diff between an instance and its template, and the reason was half
+wrong.** `brain.agents.upgrade` walks `MANIFEST_PATHS` and produces the three columns M13.4.3
+asks for, but between a pinned version and a newer candidate, returning only the paths that
+moved: with no upgrade waiting it returns nothing. So the map from a manifest path to the
+part it supplies is here, and M39.1.1.5 is not claimed because nothing yet compares an
+instance with the template it came from. The console renders that diff side by side from a
+row shape of its own proposal, and the rows are the missing half.
 
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock;
 `now` is a parameter for the reason `brain.ops.limits` gives about policy that owns a client.
 
-**This declares the surface and builds none of it.** There is no console screen behind any of
-the thirty-five `brain.console.screens` declares, and there is none behind this either. The
-four ranges M39.1.3.2 asks a selector for are declared as `Range`; the selector is a control
-and is not claimed. Nor are the header, the right pane and the keyboard map: each is a
-rendered thing, and a leaf claimed for a type nobody renders would have the traceability
-sweep counting a page nobody can open.
+**This declares the surface, and the console renders part of it.** The four ranges M39.1.3.2
+asks a selector for are declared as `Range`; the selector is a control and is not claimed.
+The header and the right pane are rendered by the console's agent page and are claimed there,
+by its tests, rather than here, because a leaf is closed by what renders it and not by the
+type it reads. The keyboard map is rendered too and is not yet closable: its way back leads to
+a roster page that does not exist. No Python route serves the page's data yet, so every agent
+currently shows the answer a withheld one would.
 
 Task ids: M39.1.1.1, M39.1.1.2, M39.1.1.4, M39.1.2.2, M39.1.2.4, M39.1.3.1, M39.1.3.3, M39.1.3.4
 """
