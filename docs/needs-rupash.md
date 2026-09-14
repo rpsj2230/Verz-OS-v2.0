@@ -2,10 +2,14 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**5 items are open, and every one is an action of yours rather than work of mine.** That is
-new. You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
-verified by mutation and pushed, so nothing on this page is waiting on a decision any more.
-What is left is five things only you can do, and none of them is urgent.
+**7 items are open: five actions of yours, and two new decisions that each unblock a leaf.**
+You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
+verified by mutation and pushed. The two decisions were found on 2026-09-14 while finishing
+waves 0 to 3, and each comes with a recommendation, so one letter each is enough.
+
+**Two are decisions.** Item 56: when an automation runs with nobody present, whose permissions
+it uses. I recommend it runs as its owner. Item 55: where the record matcher's two new packages
+live. I recommend an image of their own, as with the models.
 
 **Four are one action each and all four are settings pages or a terminal.**
 
@@ -34,6 +38,64 @@ machine's Application Control policy blocking four different things over three d
 what fixes it, because the same policy will refuse the next unsigned binary anything installs.
 
 # Open
+
+## 56. When an automation runs with nobody present, it has to run as somebody, and nothing says who
+
+**What you decide: one letter. I recommend Option A.**
+
+An automation runs after its trigger fires: on a schedule, on a new record, sometimes long after
+the person who built it has gone home. Every rule in this system says what a person may do, so a
+step an automation takes has to be taken as somebody, and today nothing says who. That single
+gap is what stops M32.6.1.3, the piece that lets automation steps call this system's tools
+through the gate, from being built.
+
+**Option A (recommended): it runs as the person who owns it, narrowed by the automation's own
+limit.** It can never do more than its owner may do, and never more than the automation
+declares. When the owner leaves or loses a permission, the automation loses it at the same
+moment, because removing a permission here is deleting a grant and there is no second copy
+anywhere to forget. An automation whose owner has gone would stop and ask for a new owner
+rather than carry on. `brain.ops.automation.flow_reach` already computes exactly this
+narrowing: it takes the person as a parameter, and this decision is who that person is.
+
+**Option B: a credential issued to the trigger.** The automation carries its own key. It keeps
+working when people leave, which is the risk as much as the benefit: nobody's departure ever
+narrows it, and a copied key works without anybody behind it.
+
+**Option C: a service account with permissions of its own.** Tidy, and what most automation
+tools do. It is also a holder of permissions that is not a person, which this system is built
+not to have: an agent here is a lens over somebody's permissions and never a holder of its
+own, and a service account is exactly a holder nobody is responsible for.
+
+**Why A.** It is the only option where "who is responsible for what this automation did" has a
+person as its answer, and where removing a person's access removes everything acting for them
+without a list to remember. The cost is real and worth accepting: an automation stops when its
+owner leaves, and somebody has to adopt it. That is a failure you see. B and C fail in ways you
+do not.
+
+## 55. The record matcher needs two new packages, and I recommend they live in their own image
+
+**What you decide: one letter. I recommend Option A.**
+
+When two systems both hold the same client, this system has to decide whether the two records
+are one company. The rest of that work is built and tested in `brain.resolution`, including the
+arithmetic a probabilistic matcher performs. What M14.4.1 asks for is the matcher itself:
+Splink, run over an export held in DuckDB. Neither package is a dependency today, and adding
+them is the same kind of decision you made in item 31 about the model stack.
+
+**Option A (recommended): a separate offline image**, the way the models run beside the
+application rather than inside it. It would read an export and produce match suggestions for a
+person to confirm, and it would never run on the path that answers a question, so
+`tests/invariants/test_no_ml_on_the_request_path.py` stays true without anybody remembering it.
+
+**Option B: add both packages to the application image.** The least wiring, and every install
+then carries a matcher it may never use, inside the process that serves every request.
+
+**Option C: not yet.** Probabilistic matching earns its place when a client has enough
+duplicated records that exact rules miss them, and no install has that data yet. Nothing is
+lost by waiting, and A is still the shape when you want it.
+
+**Why A.** It keeps the line you drew in item 31: heavy analysis lives beside the application,
+never inside it. If you would rather see real duplicates first, C costs nothing today.
 
 ## 52. Two workflow files carry your server's address, and one repository variable removes them
 
