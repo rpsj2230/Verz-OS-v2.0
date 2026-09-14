@@ -57,7 +57,7 @@ Scope: domain logic. This holds declarations in memory; the table that survives 
 somebody else's, and this returns a `LifecycleEvent` per transition so that whoever owns the
 ledger can record one without this module importing the audit layer.
 
-Task ids: M11.1.6, M11.1.7, M11.2.6, M33.5.1.1
+Task ids: M11.1.6, M11.1.7, M11.2.6, M33.5.1.1, M33.5.1.2
 """
 
 from __future__ import annotations
