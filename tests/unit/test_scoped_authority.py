@@ -114,6 +114,16 @@ FINANCE = "finance"
 NAME = "read:client.name"
 CONTRACT_VALUE = "read:client.contract_value"
 EVERY_CLIENT_FIELD = "read:client.*"
+#: The row read an agent's ceiling admits beside the client columns it names.
+#:
+#: Reaching a row and reading a column are two grants. Since 2026-09-14
+#: `brain.agents.model.entitlement_ceiling` derives the row read a column read implies, so a
+#: ceiling naming `read:client.name` also admits `read:client`, and an approver or adopter who
+#: bounds that ceiling has to hold the row read as well. The actors below held columns and no
+#: row, which is the omission the demo's people and the company fixture were both fixed for.
+#: The refusal tests are given it too, so each is still refused for the reason it names rather
+#: than for a missing row read, which would pass while testing nothing.
+CLIENT_ROWS = "read:client"
 
 #: Every leaf of the work breakdown by id, so a constant can be checked against the sentence
 #: that specifies it rather than against itself. See `brain.status.leaf_sentences`.
@@ -877,7 +887,7 @@ def test_an_approver_may_not_approve_a_ceiling_they_could_not_have_written() -> 
     a capability the approver does not hold at all, and one they hold somewhere else.
 
     Delete this and a department admin approves a company-wide agent."""
-    admin = holding(EVERY_CLIENT_FIELD, scope=Scope.department(MAINTENANCE))
+    admin = holding(EVERY_CLIENT_FIELD, CLIENT_ROWS, scope=Scope.department(MAINTENANCE))
     unheld = entitlement_ceiling(
         an_agent("read:invoice.amount", scope=Scope.department(MAINTENANCE))
     )
@@ -894,7 +904,7 @@ def test_an_approver_may_approve_a_ceiling_inside_their_own_reach() -> None:
 
     Delete this and the approval check can refuse everything with every refusal test above
     still green."""
-    admin = holding(EVERY_CLIENT_FIELD, scope=Scope.department(MAINTENANCE))
+    admin = holding(EVERY_CLIENT_FIELD, CLIENT_ROWS, scope=Scope.department(MAINTENANCE))
     inside = entitlement_ceiling(an_agent(NAME, scope=Scope.department(MAINTENANCE)))
 
     assert may_approve_publication(inside, admin, NOW)
@@ -909,7 +919,7 @@ def test_a_publication_queue_is_filtered_rather_than_shown_greyed_out() -> None:
 
     Delete this and the natural next feature is showing every pending publication with the
     out-of-scope ones dimmed."""
-    admin = holding(EVERY_CLIENT_FIELD, scope=Scope.department(MAINTENANCE))
+    admin = holding(EVERY_CLIENT_FIELD, CLIENT_ROWS, scope=Scope.department(MAINTENANCE))
     mine = entitlement_ceiling(an_agent(NAME, scope=Scope.department(MAINTENANCE)))
     theirs = entitlement_ceiling(an_agent(NAME, scope=Scope.department(FINANCE)))
 
@@ -925,7 +935,7 @@ def test_an_admin_may_not_adopt_an_agent_that_reaches_further_than_they_do() -> 
 
     Delete this and the offboarding queue is a list of every departing person's agents,
     adoptable by whichever admin opens it first."""
-    admin = holding(NAME, scope=Scope.department(MAINTENANCE))
+    admin = holding(NAME, CLIENT_ROWS, scope=Scope.department(MAINTENANCE))
     reaches_finance = an_agent(NAME, scope=Scope.department(FINANCE), disabled=True)
 
     assert not may_adopt(reaches_finance, admin, NOW)
@@ -938,7 +948,7 @@ def test_an_admin_may_adopt_an_agent_inside_their_own_reach() -> None:
 
     Delete this and the filter can refuse the whole queue, which presents as an empty
     offboarding report rather than as a bug."""
-    admin = holding(EVERY_CLIENT_FIELD, scope=Scope.department(MAINTENANCE))
+    admin = holding(EVERY_CLIENT_FIELD, CLIENT_ROWS, scope=Scope.department(MAINTENANCE))
     mine = an_agent(NAME, scope=Scope.department(MAINTENANCE), agent_id="a_mine", disabled=True)
     theirs = an_agent(NAME, scope=Scope.department(FINANCE), agent_id="a_theirs", disabled=True)
     queue = (

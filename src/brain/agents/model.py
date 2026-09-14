@@ -445,6 +445,45 @@ def tool_ceiling(record: AgentRecord) -> AgentCeiling:
     )
 
 
+#: Why a ceiling that names a column also admits the row the column is on.
+A_COLUMN_A_CEILING_NAMES_IS_ON_A_ROW_THE_CEILING_ADMITS = (
+    "Reaching a row and reading a column are two grants, because Capability.covers does not "
+    "let read:client.* confer read:client, and brain.demo.record_grants derives the row grant "
+    "for people for exactly that reason. Agent ceilings derived nothing, so a template naming "
+    "read:client.hours_remaining admitted no client row and one naming read:knowledge.document "
+    "reached no document: every agent in the catalogue reached nothing on either plane. The "
+    "row read is derived for read verbs only. A ceiling holding write:ticket.status must not "
+    "gain write:ticket, which a record-level write tool could require, so a field write "
+    "implies nothing."
+)
+
+
+def records_implied_by(capabilities: tuple[Capability, ...]) -> tuple[Capability, ...]:
+    """The row reads a ceiling's column reads imply, and nothing for any other verb.
+
+    **The row read is spelled here, not imported, and that is a dependency decision.**
+    `brain.knowledge.rows.entity_capability` spells the same capability, but that module
+    imports the table models and `brain.tables.agent` imports this one, so importing it here
+    is a cycle that fails at start-up. The first version did exactly that, type-checked clean,
+    and failed on import. `test_the_row_read_a_ceiling_derives_is_the_one_the_row_plane_asks_for`
+    holds this spelling equal to both `entity_capability` and `brain.knowledge.search`'s
+    `KNOWLEDGE_READ`, so the two cannot drift. Order follows the first column read of each
+    entity, and a row read the ceiling already names is not repeated. See
+    `A_COLUMN_A_CEILING_NAMES_IS_ON_A_ROW_THE_CEILING_ADMITS`.
+    """
+    named = {capability.value for capability in capabilities}
+    implied: list[Capability] = []
+    for capability in capabilities:
+        verb, _, rest = capability.value.partition(":")
+        entity, dot, _field = rest.partition(".")
+        if verb != "read" or not dot:
+            continue
+        record = Capability(value=f"read:{entity}")
+        if record.value not in named and record not in implied:
+            implied.append(record)
+    return tuple(implied)
+
+
 def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     """The capability ceiling, in the type `EntitlementSet.intersect` takes.
 
@@ -461,11 +500,19 @@ def entitlement_ceiling(record: AgentRecord) -> EntitlementSet:
     No `not_after`. An agent does not expire; it is disabled or archived, and both of those
     are decisions with a person behind them rather than a clock. A time-boxed ceiling would
     be a fourth lifecycle state that nothing lists and nobody is told about.
+
+    **A column the ceiling names is on a row the ceiling admits.** Reaching a row and reading
+    a column are two separate grants, so a ceiling naming only column reads admitted no row
+    and no document, for every agent in the catalogue. The row reads are derived here, for
+    read verbs only, by `records_implied_by`, and bound to the same scope as everything else.
+    They confer no column: `covers` never lets `read:client` stand in for
+    `read:client.contract_value`. See `A_COLUMN_A_CEILING_NAMES_IS_ON_A_ROW_THE_CEILING_ADMITS`.
     """
+    declared = record.authority.capabilities
     return EntitlementSet(
         principal_id=f"{CEILING_PRINCIPAL_PREFIX}{record.agent_id}",
         grants=tuple(
             Grant(capability=capability, scope=record.authority.scope)
-            for capability in record.authority.capabilities
+            for capability in (*declared, *records_implied_by(declared))
         ),
     )

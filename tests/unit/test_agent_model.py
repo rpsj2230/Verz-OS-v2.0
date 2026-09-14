@@ -623,3 +623,128 @@ def test_two_ceilings_narrow_rather_than_replace() -> None:
     )
     assert not scope.matches({"department": WEB})
     assert not scope.matches({"department": FINANCE})
+
+
+# -------------------------------------------------- a ceiling admits the rows its columns are on
+
+
+def a_ceiling_holding(*capabilities: str) -> EntitlementSet:
+    """The ceiling of a real agent record whose authority names exactly `capabilities`."""
+    from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord, entitlement_ceiling
+    from brain.knowledge.visibility import Visibility
+
+    record = AgentRecord.model_validate(
+        {
+            "agent_id": "ceiling_probe",
+            "display_name": "Ceiling probe",
+            "persona": "Answers from what it may read.",
+            "audience": AgentAudience(level=Visibility.PERSONAL, owner_id="p_owner"),
+            "authority": AgentAuthority(
+                capabilities=tuple(Capability(value=value) for value in capabilities)
+            ),
+            "created_by": "p_owner",
+        }
+    )
+    return entitlement_ceiling(record)
+
+
+def test_a_ceiling_that_names_a_column_admits_the_row_the_column_is_on() -> None:
+    """**The third instance of one defect, closed where it is derived.** The demo's people and
+    the company fixture both held column grants and no row grant, and `record_grants` was the
+    repair for people. Every catalogue template made the same omission in its ceiling, so no
+    agent reached a single row through the row plane.
+
+    Delete this and every agent installed from the catalogue reaches no client row again."""
+    values = {
+        grant.capability.value for grant in a_ceiling_holding("read:client.hours_remaining").grants
+    }
+
+    assert values == {"read:client.hours_remaining", "read:client"}
+
+
+def test_a_ceiling_that_reads_documents_reaches_the_knowledge_plane() -> None:
+    """The same rule on the other plane, asserted against the capability the knowledge module
+    itself requires rather than a string typed here: the ten catalogue templates naming
+    `read:knowledge.document` reached no document for anybody.
+
+    Delete this and the helpdesk and every other knowledge agent retrieves nothing again."""
+    from brain.knowledge.search import KNOWLEDGE_READ
+
+    values = {
+        grant.capability.value for grant in a_ceiling_holding("read:knowledge.document").grants
+    }
+
+    assert KNOWLEDGE_READ.value in values
+
+
+def test_a_field_write_in_a_ceiling_implies_no_write_to_the_record() -> None:
+    """**The refusal that keeps the derivation from widening anything.** A ceiling that may set
+    a ticket's status must not gain `write:ticket`, which a record-level write tool could
+    require. The read beside it is still derived, so a rule that derived nothing also fails.
+
+    Delete this and a field write can quietly become a write to the whole record."""
+    ceiling = a_ceiling_holding("write:ticket.status", "read:ticket.subject")
+    values = {grant.capability.value for grant in ceiling.grants}
+    # A ceiling holding the write alone, and this line exists because a mutation survived
+    # without it: the row read is spelled `read:` whatever verb it came from, so a field write
+    # would derive a row READ, and the read beside the write above derived that row read anyway.
+    write_only = a_ceiling_holding("write:ticket.status")
+
+    assert "write:ticket" not in values
+    assert "read:ticket" in values
+    assert {grant.capability.value for grant in write_only.grants} == {"write:ticket.status"}
+
+
+def test_a_derived_row_read_confers_no_column_the_ceiling_does_not_name() -> None:
+    """The derived row read admits the row and nothing on it: through a ceiling naming only a
+    client's name, a caller holding the contract value keeps the row and the name and loses the
+    value, because `covers` never lets a row read stand in for a column.
+
+    Delete this and deriving the row read can be widened into deriving the columns."""
+    from datetime import UTC, datetime
+
+    from brain.core.scope import Scope
+
+    caller = EntitlementSet(
+        principal_id="p_reader",
+        grants=tuple(
+            Grant(capability=Capability(value=value), scope=Scope.unrestricted())
+            for value in ("read:client", "read:client.name", "read:client.contract_value")
+        ),
+    )
+    run = caller.intersect(a_ceiling_holding("read:client.name"), datetime(2019, 1, 1, tzinfo=UTC))
+
+    assert {grant.capability.value for grant in run.grants} == {"read:client", "read:client.name"}
+
+
+def test_a_row_read_the_ceiling_already_names_is_not_granted_twice() -> None:
+    """A template that names the row read and its columns keeps one grant of it, so a ceiling's
+    grants stay one per capability, which is what the grant table's unique index requires of a
+    person and what a reader of a ceiling expects.
+
+    Delete this and a derived duplicate can stand beside a declared grant."""
+    ceiling = a_ceiling_holding("read:client", "read:client.name", "read:client.status")
+    values = [grant.capability.value for grant in ceiling.grants]
+
+    assert values.count("read:client") == 1
+
+
+def test_the_row_read_a_ceiling_derives_is_the_one_the_row_plane_asks_for() -> None:
+    """**Spelled twice on purpose, and held equal here.** `records_implied_by` cannot import
+    `brain.knowledge.rows.entity_capability`, because that module imports the table models and
+    the agent table imports `brain.agents.model`. So the two spellings are compared: the row
+    read the ceiling derives must be exactly the one the row plane admits a row with, and the
+    one `brain.knowledge.search.reach_for` requires of the document plane.
+
+    Delete this and the ceiling can derive a capability neither plane asks for, which is the
+    original defect again with a different spelling."""
+    from brain.agents.model import records_implied_by
+    from brain.knowledge.rows import entity_capability
+    from brain.knowledge.search import KNOWLEDGE_READ
+
+    derived = records_implied_by(
+        tuple(Capability(value=value) for value in ("read:client.name", "read:knowledge.document"))
+    )
+
+    assert derived == (entity_capability("client"), KNOWLEDGE_READ)
+    assert entity_capability("knowledge") == KNOWLEDGE_READ

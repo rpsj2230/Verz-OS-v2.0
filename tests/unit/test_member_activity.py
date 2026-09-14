@@ -560,7 +560,10 @@ def test_a_personal_agent_cannot_declare_a_ceiling_its_builder_does_not_reach() 
             "authority.capabilities": [{"value": READ_NAME}, {"value": READ_VALUE}],
         },
     )
-    reach = holding(READ_NAME)
+    # The row read beside the column. Since 2026-09-14 an agent's ceiling admits the row its
+    # column reads are on, so a builder holding the column and not the row would be refused for
+    # a missing row read rather than for the capability the refusal below names.
+    reach = holding(READ_NAME, "read:client")
 
     built = build_personal_agent(signed, within, principal_id=ME, reach=reach, now=NOW)
     assert built.record.agent_id == "my_helper"

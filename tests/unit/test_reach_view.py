@@ -330,7 +330,12 @@ def test_two_readers_holding_the_disclosure_see_one_and_the_same_ceiling() -> No
     )
 
     assert one == other
-    assert one.capabilities == (CLIENT_CAP, TICKET_CAP)
+    # Since 2026-09-14 a ceiling carries the row reads its column reads imply, so the expected
+    # set is read off `entitlement_ceiling`, the object `E_run` intersects by, not restated.
+    assert one.capabilities == tuple(
+        sorted(grant.capability.value for grant in entitlement_ceiling(agent).grants)
+    )
+    assert {CLIENT_CAP, TICKET_CAP} <= set(one.capabilities)
 
 
 def test_the_ceiling_shows_what_the_agent_holds_and_not_what_the_reader_holds() -> None:
@@ -350,7 +355,8 @@ def test_the_ceiling_shows_what_the_agent_holds_and_not_what_the_reader_holds() 
     assert block.capabilities == tuple(
         sorted(one.capability.value for one in entitlement_ceiling(agent).grants)
     )
-    assert block.render() == (CLIENT_CAP, TICKET_CAP)
+    assert block.render() == block.capabilities
+    assert {CLIENT_CAP, TICKET_CAP} <= set(block.render())
 
 
 def test_a_reader_without_the_vocabulary_grant_gets_one_lock_and_no_count() -> None:

@@ -57,7 +57,10 @@ exactly that reason.
    answer, the helpdesk would say "I could not find that" to every question with nothing anywhere
    saying why. It is the defect 258c089 fixed for the demo's rows, a record grant missing beside
    its field grants, arriving on the agent side. See
-   `THE_CATALOGUE_NAMES_NO_READ_OF_THE_KNOWLEDGE_PLANE`.
+   `THE_CATALOGUE_NAMES_NO_READ_OF_THE_KNOWLEDGE_PLANE`. **Fixed on 2026-09-14**, as a class
+   rather than as ten omissions: `brain.agents.model.entitlement_ceiling` derives the row read
+   each column read implies, for read verbs only, so the knowledge plane and the row plane both
+   open for every catalogue agent.
 2. **The lens deletes a wildcard instead of narrowing it.** `u_aaron` holds
    `read:client.hours_remaining` through `read:client.*`, the analyst's ceiling admits it, and his
    run through the analyst holds nothing at all: `intersect` asks whether the ceiling covers
@@ -158,8 +161,9 @@ THE_CATALOGUE_NAMES_NO_READ_OF_THE_KNOWLEDGE_PLANE: Final = (
     "brain.agents.catalogue names it: each names field capabilities such as "
     "read:knowledge.document. EntitlementSet.intersect keeps a caller's grant only where the "
     "ceiling covers it and Capability.covers expands only a trailing .*, so read:knowledge never "
-    "survives into a run and no catalogue agent reaches the document plane for anybody. When "
-    "this passes, the marker comes off."
+    "survives into a run and no catalogue agent reaches the document plane for anybody. It "
+    "passed on 2026-09-14, when entitlement_ceiling began deriving row reads, and the marker "
+    "came off."
 )
 
 #: The second defect. See the module docstring, item 2.
@@ -617,9 +621,6 @@ def test_each_person_reaches_their_own_department_and_the_company_without_any_ag
         assert document_ids(documents(reach_of(pid))) == found, pid
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason=THE_CATALOGUE_NAMES_NO_READ_OF_THE_KNOWLEDGE_PLANE
-)
 @pytest.mark.parametrize("pid", ["u_weiling", "u_siti"])
 def test_through_the_helpdesk_a_person_reaches_the_documents_they_reach_alone(
     pid: str, helpdesk: Installation
@@ -629,7 +630,8 @@ def test_through_the_helpdesk_a_person_reaches_the_documents_they_reach_alone(
     alone. Two people in two departments, so a helpdesk that answered everybody from one
     department's documents cannot pass.
 
-    Fails today for `THE_CATALOGUE_NAMES_NO_READ_OF_THE_KNOWLEDGE_PLANE`.
+    Failed until 2026-09-14 for `THE_CATALOGUE_NAMES_NO_READ_OF_THE_KNOWLEDGE_PLANE`, when
+    `brain.agents.model.entitlement_ceiling` began deriving the row read a column read implies.
 
     Delete this and the catalogue's knowledge agents can go on retrieving nothing for everybody,
     which every refusal test in this file reads as the permission model working."""
@@ -646,8 +648,8 @@ def test_no_agent_hands_anybody_a_document_they_cannot_reach_alone(
     alone. Asked of both agents, because the analyst names no knowledge capability at all and
     must hand over no document whatever its caller holds.
 
-    Today it holds partly because of the xfail above, which empties the helpdesk's side; it is
-    the half that must still hold the day that one is fixed.
+    It held partly because of the defect the test above pinned, which emptied the helpdesk's
+    side. Since that was fixed on 2026-09-14 it is the half that shows the fix widened nothing.
 
     Delete this and a fix to the knowledge clause that went too far, a ceiling handing the run
     the whole plane, passes every other test here."""
