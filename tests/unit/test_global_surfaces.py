@@ -19,12 +19,13 @@ real ledger entries throughout. The self-grant test in particular builds its ent
 `AuditChain.append` rather than constructing an `AuditEntry`, because the claim is about what
 the detection reads off a written entry.
 
-Two leaves under this heading are not claimed. All activity under the same filters needs a
-department on an audit entry, which the ledger deliberately does not carry; publishing a global
-agent needs an audience change, which `brain.agents.lifecycle` does not have.
+All activity under the same filters is the ledger through the real `AuditView`, narrowed by a
+department's people (M33.1.1.2). The discriminating fixture is a department member whose entry
+the reader may not see: the page must read exactly as if that entry had never been written,
+and a department nobody sits in must read exactly as one whose people did nothing.
 
 Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.1, M33.1.2.2
-Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5
+Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5, M33.1.1.2
 """
 
 from __future__ import annotations
@@ -36,8 +37,10 @@ import pytest
 
 from brain.agents.lifecycle import AGENT_PUBLICATION_CAPABILITY, archive, publish
 from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
-from brain.audit.ledger import AuditAction, AuditChain
+from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
+from brain.audit.view import AuditFilter, AuditView
 from brain.console.global_surfaces import (
+    ACTIVITY_AXES,
     ESTATE_SCREEN,
     GOVERNANCE_CONTROL,
     KILL_SWITCH,
@@ -48,6 +51,7 @@ from brain.console.global_surfaces import (
     Nomination,
     activity_filter,
     approve_publication,
+    company_activity,
     company_consumption,
     confirm,
     disable_principal,
@@ -326,22 +330,188 @@ def test_an_axis_the_estate_cannot_honour_is_refused_rather_than_dropped() -> No
     assert estate(rows, reader, lens=Lens(department=MAINTENANCE), now=NOW) != ()
 
 
-def test_activity_cannot_be_narrowed_by_a_department_the_ledger_does_not_carry() -> None:
-    """**Not a claim, and the reason M33.1.1.2 is not claimed.** An audit entry carries an
-    action, a subject kind, a subject and an actor. `brain.audit.view._scope_row` lists those
-    four and that module records rejecting per-entry attributes supplied from outside, so a
-    department lens over activity cannot be honoured at all.
+# ------------------------------------------------------------------ all activity
+AUDIT_ALL = Capability(value="read:audit.*")
 
-    The person half is honourable and is asserted working, so this is a statement about which
-    of the two filters exists rather than about the surface being unbuilt.
 
-    Delete this and a department filter over activity returns everything, which reads as the
-    leaf being done."""
+def a_ledger(*actors: str) -> tuple[AuditEntry, ...]:
+    """One chained grant entry per actor, the first named being the most recent."""
+    chain = AuditChain()
+    return tuple(
+        chain.append(
+            at=NOW - timedelta(hours=index + 1),
+            actor_id=actor,
+            action=AuditAction.GRANT,
+            subject=f"principal:u_subject{index}",
+            ent_hash="a" * 32,
+            trace_id="t1",
+            details={"capability": "read:client.name"},
+        )
+        for index, actor in enumerate(actors)
+    )
+
+
+def an_auditor(*, only: tuple[str, ...] = ()) -> EntitlementSet:
+    """A reader of the whole ledger, or of the entries these actors wrote."""
+    where = (
+        Scope(clauses=(Clause(field="actor_id", op=Op.IN, value=only),))
+        if only
+        else Scope.unrestricted()
+    )
+    return EntitlementSet(
+        principal_id="u_admin", grants=(Grant(capability=AUDIT_ALL, scope=where),)
+    )
+
+
+def test_all_activity_is_a_departments_people_within_what_the_reader_sees() -> None:
+    """**M33.1.1.2, end to end.** A department lens is the department's people, applied on top of
+    the view's own visibility. The reader who sees everything gets both members and not the
+    outsider; the reader who may not see one member's entries gets a page byte-identical to a
+    ledger where that member never acted.
+
+    Delete this and a department lens that returned the whole ledger, or one applied before the
+    view, passes every refusal below."""
+    ledger = a_ledger("u_priya", "u_sam", "u_wei")
+    maintenance = Lens(department=MAINTENANCE)
+    members = ["u_priya", "u_wei"]
+
+    everything = company_activity(
+        AuditView(ledger, reader=an_auditor(), now=NOW), lens=maintenance, members=members
+    )
+    assert [row.actor_id for row in everything.rows] == ["u_wei", "u_priya"]
+
+    narrower = an_auditor(only=("u_priya", "u_sam"))
+    seen = company_activity(
+        AuditView(ledger, reader=narrower, now=NOW), lens=maintenance, members=members
+    )
+    never_written = company_activity(
+        AuditView(a_ledger("u_priya", "u_sam"), reader=narrower, now=NOW),
+        lens=maintenance,
+        members=members,
+    )
+    assert [row.actor_id for row in seen.rows] == ["u_priya"]
+    assert seen.model_dump_json() == never_written.model_dump_json()
+
+    unnarrowed = company_activity(AuditView(ledger, reader=an_auditor(), now=NOW))
+    assert [row.actor_id for row in unnarrowed.rows] == ["u_wei", "u_sam", "u_priya"]
+
+
+def test_a_person_and_a_department_together_are_the_people_in_both_and_criteria_cannot_widen() -> (
+    None
+):
+    """Both filters named means the person, if they are in the department, and nobody if not.
+    Actors a caller names in the criteria are intersected rather than substituted.
+
+    Delete this and naming somebody outside a department, in either argument, shows their
+    activity under that department's heading."""
+    view = AuditView(a_ledger("u_priya", "u_sam", "u_wei"), reader=an_auditor(), now=NOW)
+    members = ["u_priya", "u_wei"]
+
+    def actors(page_rows: object) -> list[str]:
+        return [row.actor_id for row in page_rows]  # type: ignore[attr-defined]
+
+    both = company_activity(
+        view, lens=Lens(department=MAINTENANCE, person="u_priya"), members=members
+    )
+    outside = company_activity(
+        view, lens=Lens(department=MAINTENANCE, person="u_sam"), members=members
+    )
+    widened = company_activity(
+        view,
+        lens=Lens(department=MAINTENANCE),
+        members=members,
+        criteria=AuditFilter(actors=frozenset({"u_sam"})),
+    )
+    narrowed = company_activity(
+        view,
+        lens=Lens(department=MAINTENANCE),
+        members=members,
+        criteria=AuditFilter(actors=frozenset({"u_wei"})),
+    )
+    by_criteria_alone = company_activity(view, criteria=AuditFilter(actors=frozenset({"u_sam"})))
+
+    assert actors(both.rows) == ["u_priya"]
+    assert outside.rows == ()
+    assert widened.rows == ()
+    assert actors(narrowed.rows) == ["u_wei"]
+    assert actors(by_criteria_alone.rows) == ["u_sam"]
+
+
+def test_a_department_nobody_sits_in_reads_as_one_whose_people_did_nothing_visible() -> None:
+    """Three different facts and one answer: nobody in the department, a member with no entries,
+    and a member whose entries the reader may not see. `activity_filter` says nobody with None,
+    never with the empty set `AuditFilter` reads as everybody.
+
+    Delete this and an empty member list, the answer a failed directory read gives, widens the
+    page to the whole ledger under a department heading."""
+    ledger = a_ledger("u_priya", "u_sam")
+    view = AuditView(ledger, reader=an_auditor(only=("u_priya",)), now=NOW)
+    lens = Lens(department=FINANCE)
+
+    empty = company_activity(view, lens=lens, members=[])
+    idle = company_activity(view, lens=lens, members=["u_nobody"])
+    hidden = company_activity(view, lens=lens, members=["u_sam"])
+
+    assert empty.model_dump_json() == idle.model_dump_json() == hidden.model_dump_json()
+    assert empty.rows == ()
+    assert activity_filter(lens, members=[]) is None
+    assert activity_filter(Lens(department=FINANCE, person="u_priya"), members=["u_sam"]) is None
+    assert activity_filter(lens, members=["u_sam"]) == frozenset({"u_sam"})
+
+
+def test_narrowed_to_nobody_refuses_a_bad_page_request_exactly_as_a_populated_department() -> None:
+    """A limit or cursor error raised for a department with people and not for one without would
+    say which department names have anybody in them. Both are refused alike.
+
+    Delete this and the cheap early return, which skips the view for an empty member list, turns
+    a malformed page request into a probe for which departments exist."""
+    view = AuditView(a_ledger("u_priya"), reader=an_auditor(), now=NOW)
+    for members in ([], ["u_priya"]):
+        with pytest.raises(ValueError, match="limit"):
+            company_activity(view, lens=Lens(department=MAINTENANCE), members=members, limit=0)
+        with pytest.raises(ValueError, match="malformed cursor"):
+            company_activity(view, lens=Lens(department=MAINTENANCE), members=members, cursor="!!")
+
+
+def test_a_department_lens_without_its_people_is_refused_rather_than_read_as_everybody() -> None:
+    """An audit entry carries no department, so a department lens is honourable only with the
+    department's people. Without them it is refused, and a member list with no department
+    lens is refused too. The person lens and no lens are the siblings, and still work.
+
+    Delete this and a caller who forgot the directory read gets every actor's activity under
+    the department's name."""
     with pytest.raises(GlobalSurfaceError, match="cannot be narrowed by department"):
         activity_filter(Lens(department=MAINTENANCE))
+    with pytest.raises(GlobalSurfaceError, match="cannot be narrowed by department"):
+        company_activity(
+            AuditView(a_ledger("u_priya"), reader=an_auditor(), now=NOW),
+            lens=Lens(department=MAINTENANCE),
+        )
+    with pytest.raises(GlobalSurfaceError, match="no department lens"):
+        activity_filter(Lens(person="u_1"), members=["u_1"])
 
     assert activity_filter(Lens(person="u_1")) == frozenset({"u_1"})
     assert activity_filter(Lens()) == frozenset()
+
+
+def test_activity_refuses_the_axes_the_estate_refuses_and_honours_the_two_it_honours() -> None:
+    """The same filters means the estate's two. Agent, connector and period are refused rather
+    than dropped, and the estate's own axes are asserted equal to the activity axes by
+    exercising both listings with the same lenses rather than by comparing constants.
+
+    Delete this and a period lens over activity is silently ignored, so "the last seven days"
+    reads as the whole ledger."""
+    for lens in (Lens(agent="a_1"), Lens(connector="xero"), Lens(period="7d")):
+        with pytest.raises(GlobalSurfaceError, match="cannot be narrowed by"):
+            activity_filter(lens)
+        with pytest.raises(GlobalSurfaceError, match="cannot be narrowed by"):
+            estate([], holding(), lens=lens, now=NOW)
+
+    assert {Axis.DEPARTMENT, Axis.PERSON} == ACTIVITY_AXES
+    assert estate([], holding(), lens=Lens(department=MAINTENANCE, person="u_1"), now=NOW) == ()
+    assert activity_filter(
+        Lens(department=MAINTENANCE, person="u_1"), members=["u_1"]
+    ) == frozenset({"u_1"})
 
 
 # ------------------------------------------------------- company budget and consumption

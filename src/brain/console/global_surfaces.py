@@ -62,16 +62,21 @@ The global kill switch this leaf asks for is the one that works. `inert_axes` na
 that do not, read off that module's own set rather than restated, so the day a call site learns
 an axis this stops reporting it without anybody editing this file.
 
-**Two leaves under this heading are not claimed and each needs something that does not exist.**
-M33.1.1.2 asks for all activity under the same department and person filters. The activity
-record is the audit ledger, `brain.audit.view.AuditView` filters it to one reader, and
-`AuditFilter` offers actors and not departments. That is not an omission in the filter: an
-audit entry carries no department at all, `_scope_row` says so by listing the four fields a
-grant's scope may be written against, and that module records rejecting the idea of passing
-per-entry attributes in from outside. So the person axis is honourable today and the department
-axis is not, and `activity_filter` refuses a department lens rather than dropping it silently,
-which is `brain.console.screens.Screen.accepts`' rule: a filter that is quietly ignored leaves
-the reader believing they are looking at one department while looking at all of them.
+**M33.1.1.2, all activity under the same filters, was declined here until 2026-09-15.** The
+activity record is the audit ledger, `brain.audit.view.AuditView` filters it to one reader, and
+an audit entry carries no department at all: `_scope_row` lists the four fields a grant's scope
+may be written against, and that module rejects passing per-entry attributes in from outside.
+What changed is not the ledger. The owner answered the same question for a department head on
+item 48, Option A, and `brain.console.scoped_authority.department_activity` is that answer: a
+department's activity is what its people did, read off the directory. `company_activity` takes
+the same answer rather than inventing a second, applies it after the view's own visibility
+decision so a member list can only narrow, and turns a lens that narrows to nobody into an
+empty page rather than into the empty actor filter `AuditFilter` reads as everybody. See
+`ACTIVITY_IN_A_DEPARTMENT_IS_WHAT_ITS_PEOPLE_DID` and
+`NARROWED_TO_NOBODY_IS_AN_EMPTY_PAGE_AND_NEVER_THE_EMPTY_FILTER`. No agent is in this path, so
+`E_run` is not asked: the reach is the reader's own, and it is the one the view was built with.
+**Nothing calls it on a request path yet**, and nothing in `src` reads the directory's members
+for a department to hand it; the caller owes both.
 
 **M33.1.2.1 asks to publish and retire global agents, and until 2026-09-08 only retiring
 existed.** `brain.agents.lifecycle` held enable, disable, archive and transfer_ownership, and
@@ -94,7 +99,7 @@ console screen exists behind any of these, exactly as `brain.console.screens` sa
 registry; what is claimed is the disclosure decision, which is the whole content of each.
 
 Task ids: M33.1.1.1, M33.1.1.3, M33.1.1.4, M33.1.2.1, M33.1.2.2
-Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5
+Task ids: M33.1.2.3, M33.1.2.4, M33.1.2.5, M33.1.1.2
 """
 
 from __future__ import annotations
@@ -109,6 +114,7 @@ from typing import Final
 from brain.agents.lifecycle import AGENT_PUBLICATION_CAPABILITY, PUBLICATION_LEVEL
 from brain.agents.model import AgentRecord
 from brain.audit.ledger import AuditEntry
+from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditPage, AuditView
 from brain.console.govern import Placed
 from brain.console.reads import StewardNotice, permitted, self_grants
 from brain.console.screens import SCREENS, Axis, Lens, screen
@@ -192,15 +198,39 @@ A_HALT_ON_AN_AXIS_NOTHING_CONSULTS_IS_A_SCREEN_READING_STOPPED: Final = (
     "call site learns an axis this stops naming it with no edit here."
 )
 
-#: Why the activity view refuses a department filter rather than ignoring it.
+#: Why a listing refuses a filter it cannot honour rather than ignoring it.
 A_FILTER_SILENTLY_DROPPED_IS_WORSE_THAN_ONE_REFUSED: Final = (
-    "An audit entry carries an action, a subject kind, a subject and an actor, and no "
-    "department: brain.audit.view._scope_row lists those four and that module records "
-    "rejecting the idea of supplying attributes from outside, because it would make an "
-    "entry's visibility depend on a mapping the view cannot check. So a department lens over "
-    "activity cannot be honoured, and honouring it by returning everything is the failure "
-    "brain.console.screens.Screen.accepts names: the reader believes they are looking at one "
-    "department and is looking at all of them."
+    "An estate row carries a department and an owner and nothing a period or a model could "
+    "match. An audit entry carries an action, a subject kind, a subject and an actor, and no "
+    "department: brain.audit.view._scope_row lists those four and that module rejects "
+    "supplying attributes from outside, so a department lens over activity is honoured only "
+    "through the department's people and is refused when nobody supplied them. Honouring a "
+    "filter by returning everything is the failure brain.console.screens.Screen.accepts "
+    "names: the reader believes they are looking at one department and is looking at all of "
+    "them."
+)
+
+#: Why a department lens over activity is a list of people.
+ACTIVITY_IN_A_DEPARTMENT_IS_WHAT_ITS_PEOPLE_DID: Final = (
+    "An audit entry carries no department, and item 48, Option A, is the owner's answer for a "
+    "department head: a department's activity is what its people did, read off the directory. "
+    "The company screen takes that answer rather than a second one. The member list is "
+    "today's, so somebody who moved last week has their earlier activity under their new "
+    "department; the alternative, a department copied onto each entry when it was written, is "
+    "the column brain.chat.turns.A_TURN_CARRIES_THE_AGENT_AND_NEVER_THE_DEPARTMENT refuses. "
+    "The list is applied by AuditView on top of its own visibility decision, so it can narrow "
+    "what the reader sees and never add to it."
+)
+
+#: Why narrowing to nobody still asks the view, and returns what an empty department returns.
+NARROWED_TO_NOBODY_IS_AN_EMPTY_PAGE_AND_NEVER_THE_EMPTY_FILTER: Final = (
+    "brain.audit.view.AuditFilter reads an empty actors set as every actor. So a department "
+    "nobody sits in, or a person named beside a department they are not in, has to become an "
+    "empty page and never a filter with no actors, which is the whole ledger under a "
+    "department heading. The empty page also has to match a department whose people did "
+    "nothing this reader may see, so the view is still asked the same page question: a bad "
+    "limit or cursor is refused alike whether or not the department has anybody in it, and "
+    "a department name cannot be tested for existence through the shape of an error."
 )
 
 
@@ -363,26 +393,103 @@ def estate(
     )
 
 
-# ----------------------------------------------------------------- activity (not claimed)
-def activity_filter(lens: Lens) -> frozenset[str]:
-    """The actor ids an activity view may be narrowed to, or a refusal.
+# ----------------------------------------------------------------- all activity (M33.1.1.2)
+#: The axes an activity listing honours: the estate's two, so the filters are the same ones.
+ACTIVITY_AXES: Final[frozenset[Axis]] = frozenset({Axis.DEPARTMENT, Axis.PERSON})
 
-    The half of "all activity with the same filters" that the ledger can honour. A person
-    lens becomes an exact actor reference, which is what `brain.audit.view.AuditFilter.actors`
-    takes and the only thing it takes: that model refuses anything that is not an identifier,
-    because a substring filter over a ledger is a search engine over a permission map.
 
-    A department lens is refused. See `A_FILTER_SILENTLY_DROPPED_IS_WORSE_THAN_ONE_REFUSED`.
-    Returning everything would be the version somebody builds because it looks like it works.
+def activity_filter(lens: Lens, *, members: Iterable[str] | None = None) -> frozenset[str] | None:
+    """The actors an activity view is narrowed to, or a refusal (M33.1.1.2).
+
+    Three answers, and two of them would look alike as sets. An empty set narrows nothing,
+    which is `AuditFilter.actors`' own reading of empty. A non-empty set is the people named.
+    `None` is nobody, and is `None` precisely so it cannot be handed to `AuditFilter` and read
+    as everybody. See `NARROWED_TO_NOBODY_IS_AN_EMPTY_PAGE_AND_NEVER_THE_EMPTY_FILTER`.
+
+    A person lens becomes an exact actor reference, which is the only thing `AuditFilter`
+    takes: it refuses anything that is not an identifier, because a substring filter over a
+    ledger is a search engine over a permission map. A department lens becomes `members`, the
+    directory's people for that department, intersected with the person when both are named.
+    See `ACTIVITY_IN_A_DEPARTMENT_IS_WHAT_ITS_PEOPLE_DID`.
+
+    Refused: a department lens with no member list, which would read as everybody; a member
+    list with no department lens, which is a narrowing nobody on the screen asked for; and the
+    agent, connector and period axes, as the estate refuses them. See
+    `A_FILTER_SILENTLY_DROPPED_IS_WORSE_THAN_ONE_REFUSED`.
     """
-    if lens.department:
+    used = lens.axes_used()
+    unusable = used - ACTIVITY_AXES
+    if unusable:
+        names = ", ".join(sorted(one.value for one in unusable))
         msg = (
-            f"activity cannot be narrowed by department: an audit entry carries an action, a "
-            f"subject kind, a subject and an actor, and no department. "
-            f"{A_FILTER_SILENTLY_DROPPED_IS_WORSE_THAN_ONE_REFUSED}"
+            f"activity cannot be narrowed by {names}; the filters over activity are the "
+            f"estate's department and person. {A_FILTER_SILENTLY_DROPPED_IS_WORSE_THAN_ONE_REFUSED}"
         )
         raise GlobalSurfaceError(msg)
-    return frozenset({lens.person}) if lens.person else frozenset()
+    if Axis.DEPARTMENT not in used:
+        if members is not None:
+            msg = (
+                "a member list was given with no department lens, which narrows activity by a "
+                "department nobody on the screen chose"
+            )
+            raise GlobalSurfaceError(msg)
+        return frozenset({lens.person}) if Axis.PERSON in used else frozenset()
+    if members is None:
+        msg = (
+            f"activity cannot be narrowed by department without the department's people: an "
+            f"audit entry carries an action, a subject kind, a subject and an actor, and no "
+            f"department. {A_FILTER_SILENTLY_DROPPED_IS_WORSE_THAN_ONE_REFUSED}"
+        )
+        raise GlobalSurfaceError(msg)
+    people = frozenset(members)
+    if Axis.PERSON in used:
+        people &= {lens.person}
+    return people or None
+
+
+def company_activity(
+    view: AuditView,
+    *,
+    lens: Lens = NARROWS_NOTHING,
+    members: Iterable[str] | None = None,
+    criteria: AuditFilter | None = None,
+    limit: int = DEFAULT_PAGE_SIZE,
+    cursor: str | None = None,
+) -> AuditPage:
+    """All activity, narrowed by the estate's department and person filters (M33.1.1.2).
+
+    **A narrowing of `AuditView.page` and nothing else.** The view decides entry by entry what
+    its reader may see, and this adds a set of actors on top, so a reader cannot acquire by
+    asking about a department anything they could not have read one entry at a time.
+    `brain.console.scoped_authority.department_activity` is the same shape for a head and
+    this is its company-wide sibling rather than a reuse of it, because that function's
+    authority is the departments somebody heads and a Super Admin's is their audit grant.
+
+    Actors named in `criteria` are intersected with the lens rather than replacing it, so a
+    caller cannot widen a department page by naming somebody outside it, and an intersection
+    of nobody reads as a department where nothing happened.
+
+    Returns one page with no total, which is `AuditPage`'s own refusal.
+    """
+    people = activity_filter(lens, members=members)
+    base = criteria or AuditFilter()
+    actors = base.actors
+    nobody = people is None
+    if people:
+        actors = people & base.actors if base.actors else people
+        nobody = not actors
+    page = view.page(
+        AuditFilter(
+            actions=base.actions,
+            subject_kinds=base.subject_kinds,
+            actors=actors,
+            since=base.since,
+            until=base.until,
+        ),
+        limit=limit,
+        cursor=cursor,
+    )
+    return AuditPage() if nobody else page
 
 
 # -------------------------------------------------- company budget and consumption (M33.1.1.3)

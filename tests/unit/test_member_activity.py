@@ -43,6 +43,7 @@ from brain.agents.model import (
 from brain.agents.template import blank_template, hand_built
 from brain.audit.ledger import SUBJECT_KINDS, AuditAction
 from brain.channels.adapter import ChannelCapabilities, Feature
+from brain.chat.threads import Thread, ThreadMessage
 from brain.chat.turns import Turn, TurnKind
 from brain.console.workspace import Tab, deep_link
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -1195,25 +1196,24 @@ def test_the_diagnostic_reports_every_way_this_surface_could_answer_for_somebody
     assert MonthlyActivity in MEMBER_SURFACE
 
 
-def test_the_declined_leaf_names_the_field_that_is_missing() -> None:
-    """The finding `member_notes` reports, asserted against the module it is about so a note
-    cannot go stale silently in either direction.
+def test_no_leaf_is_declined_and_the_two_findings_that_were_are_held_to_the_code() -> None:
+    """`member_notes` is empty, and each of the two findings it used to report is asserted
+    against the code that made it stop being true, so the note and the code cannot drift apart
+    in either direction.
 
-    A `Turn` carries no thread and no channel, which is why threads across surfaces cannot be
-    assembled here, and that is asserted on the real type rather than on the sentence.
+    **The thread finding is inverted and not removed.** A `Turn` still carries no thread and no
+    channel, and that is still right: the thread is `Thread` and the channel is on each
+    `ThreadMessage`, which is where `brain.tables.chat` put them. Both halves are asserted, so
+    a thread id added to a turn is noticed as well as a channel removed from a message.
 
-    **There were two of these and now there is one.** The second said the HR read question
-    could not be answered from the ledger, and this test is what would have kept saying so
-    after it stopped being true: it asserted `AuditAction` had no member meaning a read.
-    Needs Rupash item 45 was decided, `AuditAction.RECORD_READ` is the tenth member, and the
-    assertion is inverted here rather than removed, so the note and the vocabulary cannot
-    disagree in that direction either.
+    **The read finding stays inverted.** `AuditAction.RECORD_READ` is the tenth member since
+    Needs Rupash item 45, and the subject is the person rather than a new kind.
 
-    Delete this and the day somebody adds a thread id, the note keeps saying it is missing and
-    the leaf stays unclaimed for a reason that stopped being true.
+    Delete this and either field can move without the note or the leaf saying so.
     """
     assert not set(Turn.__dataclass_fields__) & {"thread_id", "conversation_id", "channel"}
+    assert "channel" in ThreadMessage.__dataclass_fields__
+    assert "channel" not in Thread.__dataclass_fields__
     assert {one for one in AuditAction if "read" in one.value} == {AuditAction.RECORD_READ}
     assert "record" not in SUBJECT_KINDS
-    assert len(member_notes()) == 1
-    assert "no thread id and no channel" in member_notes()[0]
+    assert member_notes() == ()

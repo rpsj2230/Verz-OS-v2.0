@@ -67,11 +67,17 @@ and the certificate is where one appears.
 Scope: domain logic. Nothing here opens a connection, delivers anything or reads a clock; `now`
 and the windows are parameters, as in every module this one calls.
 
-**One leaf of M40 is still not claimed and it is named below.** M40.2.1.5 asks for recent
-threads continued from any channel: `brain.chat.turns.Turn` carries a principal, an instant and
-an agent, and no thread id and no channel, so there is nothing to group by and nothing to say
-which surface a turn arrived on. `brain.tables.chat.ConversationRow` is declared and nothing in
-`src` queries it. `member_notes` reports it.
+**M40.2.1.5 was declined here until 2026-09-15 and is built now, from the schema that already
+had the answer.** The finding was that `brain.chat.turns.Turn` carries no thread and no channel,
+which is still true and is still right: a turn is what a follow-up re-checks. The thread was
+always `brain.tables.chat.ConversationRow`, owned by one person, with the channel on each
+message so that continuing in another app is the same thread. `brain.chat.threads` reads that
+shape, and this module holds the two personal calls: `recent_threads` lists them whichever
+surface asks, and `continue_thread` reopens one on the surface asking, at the reach the reader
+holds now. Neither is offered where the asker is not the whole audience; see
+`A_THREAD_LIST_IN_A_ROOM_IS_EVERY_MEMBER_READING_ONE_PERSONS_QUESTIONS`. **Nothing loads a
+`Thread` yet**: no store queries `chat.conversation`, and no route or adapter calls either
+function.
 
 **M40.4.2.4 was the second of those until 2026-09-10 and is now built, narrowly.** Needs Rupash
 item 45 chose Option A: a read is written down for personnel records and anything carrying a
@@ -84,7 +90,7 @@ file not at all.
 
 Task ids: M40.2.1.1, M40.2.1.2, M40.2.1.3, M40.2.1.4, M40.2.2.1, M40.2.2.2, M40.2.2.3
 Task ids: M40.2.2.4, M40.2.2.5, M40.4.1.1, M40.4.1.2, M40.4.1.3, M40.4.1.4, M40.4.2.1
-Task ids: M40.4.2.2, M40.4.2.3, M40.4.2.4
+Task ids: M40.4.2.2, M40.4.2.3, M40.4.2.4, M40.2.1.5
 """
 
 from __future__ import annotations
@@ -109,7 +115,8 @@ from brain.audit.ledger import AuditAction, AuditEntry
 from brain.audit.view import DEFAULT_PAGE_SIZE, AuditFilter, AuditView
 from brain.builder.publish import widened_capabilities
 from brain.channels.adapter import ChannelCapabilities, Feature
-from brain.chat.turns import Turn, TurnKind
+from brain.chat.threads import Thread, ThreadMessage, continuation_context, shown_on
+from brain.chat.turns import RecordRef, Turn, TurnKind
 from brain.console.own_things import delete_own_memory, export_own_history, is_own, own_gaps
 from brain.console.own_things import own_allowances as _own_allowances
 from brain.console.reach_view import readable
@@ -1473,11 +1480,147 @@ def route(one: DeletionRequest) -> DeletionRoute:
     )
 
 
+# ------------------------------------------------ recent threads, from any channel (M40.2.1.5)
+#: How many threads the landing lists. A page length, and not a statement about how many exist.
+RECENT_THREADS: Final = 10
+
+#: Why a thread list is not offered where the person asking is not the whole audience.
+A_THREAD_LIST_IN_A_ROOM_IS_EVERY_MEMBER_READING_ONE_PERSONS_QUESTIONS: Final = (
+    "A thread's title is the person's first question, and its messages are their questions "
+    "and the answers they were given at their own reach. brain.channels.room computes "
+    "anything a room reads at the floor of everybody in it, and a list of one person's "
+    "threads has no floor: it is one person's history or it is nothing. So on a surface where "
+    "the asker is not the only reader the list is empty and a continuation is absent, which "
+    "is also exactly what somebody with no threads sees. Whether a surface is one person is "
+    "each adapter's audience_is_one_person, where every vendor's conversation kinds were "
+    "already given an answer, and not a second judgement made here."
+)
+
+
+@dataclass(frozen=True)
+class RecentThread:
+    """One of this person's threads, as the landing lists it (M40.2.1.5).
+
+    The title and where the thread was last touched, both facts the person already holds. No
+    field counts messages, and none says how many answers in it would be withheld now: the
+    first is a number that falls when a grant is lost, and the second is that fall.
+    """
+
+    thread_id: str
+    title: str
+    last_at: datetime
+    #: The surface the most recent message arrived on, so the list can say where a thread was
+    #: left off. Never used to decide whether the thread is listed.
+    last_channel: Channel
+
+
+@dataclass(frozen=True)
+class ContinuedThread:
+    """One thread reopened on the surface asking, at the reach held now (M40.2.1.5)."""
+
+    thread_id: str
+    title: str
+    #: Where it is being continued, which may not be where it was started.
+    channel: Channel
+    #: What may be shown here: `brain.chat.threads.shown_on`.
+    shown: tuple[ThreadMessage, ...]
+    #: What a follow-up asked here may draw on: `brain.chat.threads.continuation_context`.
+    context: tuple[RecordRef, ...]
+
+
+def _own_live(threads: Iterable[Thread], principal_id: str) -> list[Thread]:
+    """This person's threads that are not retired, by the surface's one ownership predicate."""
+    return [one for one in threads if not one.retired and is_own(principal_id, one.owner_id)]
+
+
+def recent_threads(
+    threads: Iterable[Thread],
+    *,
+    principal_id: str,
+    reader: EntitlementSet,
+    audience_is_one_person: bool,
+    now: datetime,
+    limit: int = RECENT_THREADS,
+) -> tuple[RecentThread, ...]:
+    """This person's most recent threads, whichever app each was started or left off in.
+
+    **No channel is a parameter**, and that is the leaf: a listing asked for from Lark and a
+    listing asked for from the console are one listing, ordered by the last message wherever
+    it arrived. See
+    `brain.chat.threads.A_THREAD_IS_THE_PERSONS_AND_THE_CHANNEL_IS_WHERE_ONE_MESSAGE_WAS_TYPED`.
+
+    Empty on a surface other people read, and empty for a reader whose principal has expired,
+    because a titled list of questions is the one part of a thread that needs no grant and so
+    the one part that would otherwise survive expiry. See
+    `A_THREAD_LIST_IN_A_ROOM_IS_EVERY_MEMBER_READING_ONE_PERSONS_QUESTIONS`.
+    """
+    _assert_own_reach(reader, principal_id, "this thread list")
+    if limit < 1:
+        # A caller error, raised whatever the person holds, so it cannot say anything about it.
+        msg = f"a thread list must list at least one thread, not {limit}"
+        raise ValueError(msg)
+    if not audience_is_one_person or reader.is_expired(now):
+        return ()
+    latest = sorted(_own_live(threads, principal_id), key=lambda one: one.last.at, reverse=True)
+    return tuple(
+        RecentThread(
+            thread_id=one.thread_id,
+            title=one.title,
+            last_at=one.last.at,
+            last_channel=one.last.channel,
+        )
+        for one in latest[:limit]
+    )
+
+
+def continue_thread(
+    threads: Iterable[Thread],
+    thread_id: str,
+    *,
+    principal_id: str,
+    reader: EntitlementSet,
+    reading: ChannelCapabilities,
+    surfaces: Mapping[Channel, ChannelCapabilities],
+    audience_is_one_person: bool,
+    now: datetime,
+) -> ContinuedThread | None:
+    """One of this person's threads, reopened on the surface they are on now (M40.2.1.5).
+
+    `None` for a thread that is somebody else's, retired, invented, asked for in a room or by
+    an expired reader, and the five are one answer: a continuation that said "not yours"
+    would confirm the id exists.
+
+    What is shown and what a follow-up may draw on are both decided in `brain.chat.threads`
+    at `now` and at the reader's reach, so an answer given under a grant since revoked is
+    absent here and its references are absent from the context. `surfaces` is every
+    surface's declared capabilities, which is how a body rendered for the console is kept off
+    a surface that may carry less.
+    """
+    _assert_own_reach(reader, principal_id, "this thread")
+    if not audience_is_one_person or reader.is_expired(now):
+        return None
+    found = next(
+        (one for one in _own_live(threads, principal_id) if one.thread_id == thread_id), None
+    )
+    if found is None:
+        return None
+    return ContinuedThread(
+        thread_id=found.thread_id,
+        title=found.title,
+        channel=reading.channel,
+        shown=shown_on(found, reader, reading=reading, surfaces=surfaces, now=now),
+        context=continuation_context(found, reader, now=now),
+    )
+
+
 # ------------------------------------------------------------------------- the diagnostic
 #: The types a member is handed. Listed rather than discovered, following
 #: `brain.console.workspace.WORKSPACE_SURFACE`: a type added here and not to this tuple is
 #: one the checks below never see.
 MEMBER_SURFACE: Final[tuple[type, ...]] = (
+    RecentThread,
+    ContinuedThread,
+    ThreadMessage,
     MonthlyActivity,
     CallableAgent,
     PersonalCeiling,
@@ -1500,6 +1643,8 @@ MEMBER_SURFACE: Final[tuple[type, ...]] = (
 #: default, and has no neighbour that could mean everybody. Reused rather than restated: a
 #: second copy of that check is a second place for the list of dangerous names to fall behind.
 PERSONAL_CALLS: Final[tuple[Callable[..., Any], ...]] = (
+    recent_threads,
+    continue_thread,
     activity_this_month,
     callable_agents,
     personal_budget,
@@ -1604,7 +1749,15 @@ def member_gaps(
 
 
 def member_notes() -> tuple[str, ...]:
-    """The M40 leaf this module decides it cannot honestly build.
+    """The M40 leaves this module decides it cannot honestly build. None, as of 2026-09-15.
+
+    **It was one until 2026-09-15.** It said recent threads across channels could not be
+    assembled because a `Turn` has no thread and no channel. The first half is still true and
+    was the wrong place to look: the thread is `brain.tables.chat.ConversationRow` and the
+    channel is on each message, which `brain.chat.threads` now reads and `recent_threads` and
+    `continue_thread` put on this surface. Kept as a function rather than removed so the next
+    declined leaf has somewhere to be said, and so the test holding the note to the code keeps
+    watching in both directions.
 
     Separate from `member_gaps` for the reason `brain.console.agent_output.
     retention_enforcement_gaps` is separate from `artifact_gaps`: that one is a deployment
@@ -1623,9 +1776,4 @@ def member_notes() -> tuple[str, ...]:
     `brain.audit.reads.read_log_gaps` rather than here, because it is a fact about the ledger
     and not about this surface.
     """
-    return (
-        "recent threads across channels cannot be assembled: brain.chat.turns.Turn carries a "
-        "principal, an instant and an agent id, and no thread id and no channel, so there is "
-        "nothing to group a thread by and nothing saying which surface a turn arrived on; "
-        "brain.tables.chat.ConversationRow is declared and nothing in src queries it",
-    )
+    return ()
