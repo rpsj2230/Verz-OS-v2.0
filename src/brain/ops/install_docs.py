@@ -69,14 +69,26 @@ The update page by its script table, read off the scripts the release carries. W
 of those pages advises stays prose, and each page says so at its foot. See
 `AN_ENTRY_THAT_OPENS_WITH_THE_REMEDY_IS_ONE_NOBODY_CAN_FIND`.
 
+**The restore drill page is held by what a person following it writes, because nobody has
+followed it.** The procedure is shell on a client's server and nothing here can run it. What can
+be held is its output: the questions a drill record must answer, the fields it must carry, the
+figures its schedule depends on, and the verdict the product reaches from the page's own worked
+examples. That verdict is obtained through `brain.ops.backup_manifest.read_drills`, the reader
+a real record goes through, and never by calling `verification_of` here:
+`tests/unit/test_installation.py` pins that one module decides what a drill proved, and a
+documentation check is not a second place for it. The page also states, as checked facts, which
+pieces of a drill have no machine yet. See
+`A_PROCEDURE_NOBODY_HAS_RUN_IS_HELD_BY_WHAT_IT_PRODUCES`.
+
 Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2
-Task ids: M34.3.3.3, M30.2.8, M42.3.3
+Task ids: M34.3.3.3, M30.2.8, M42.3.3, M34.3.3.4
 """
 
 from __future__ import annotations
 
 import ast
 import enum
+import json
 import re
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
@@ -86,8 +98,19 @@ from typing import Any, Final
 from brain.connectors.manifest import ConnectorManifest
 from brain.deployment.installer import INSTALL_HOME
 from brain.deployment.installer import Step as InstallStep
+from brain.ops.backup_manifest import (
+    CHECK_REQUIRED_FIELDS,
+    DRILL_REQUIRED_FIELDS,
+    DRILL_SUFFIX,
+    MANIFEST_SUFFIX,
+    ManifestError,
+    backup_from,
+    read_drills,
+)
 from brain.ops.controls import CONTROLS, Control
 from brain.ops.queue import DeployStep
+from brain.ops.recovery import DRILL_INTERVAL_DAYS, REQUIRED_CHECKS, Backup
+from brain.ops.retention import BACKUP_RETENTION_DAYS
 from brain.ops.wiring import PROFILES, assert_known_profile
 from brain.setup_wizard import Step as WizardStep
 
@@ -1175,4 +1198,263 @@ def database_command_gaps(guide: str, *, commands: Sequence[str], module: str) -
         for name in named
         if name not in commands
     )
+    return tuple(findings)
+
+
+# ------------------------------------------------------- the restore drill page (M34.3.3.4)
+#: Why the drill page is checked by what following it produces.
+A_PROCEDURE_NOBODY_HAS_RUN_IS_HELD_BY_WHAT_IT_PRODUCES: Final = (
+    "A restore drill procedure is prose until somebody follows it on a server, and nobody has. "
+    "What can be held is what a person following it writes and what the product makes of that: "
+    "the checks a record must answer, the fields it must carry, and the verdict "
+    "verification_of reaches from the page's own example. A page whose example the product "
+    "refuses teaches everybody who copies it to write a record nothing can read, and the "
+    "recovery panel then says never verified about an install that rehearsed every week."
+)
+
+#: Why the page states, as checked facts, what has no machine.
+A_PROCEDURE_THAT_DOES_NOT_SAY_WHAT_IS_MISSING_READS_AS_AUTOMATION: Final = (
+    "A page describing a weekly drill beside a console screen with a control to run one reads as "
+    "a drill that runs. Nothing performs, schedules or starts one today, so each of those is a "
+    "row stating whether it exists, compared against the repository, and the row goes red on the "
+    "day one is built, which is the day the page's procedure should be read again."
+)
+
+#: Where the drill page lists the checks a drill asks, what each asks, and how.
+DRILL_CHECKS_MARKER: Final = "<!-- checked: the questions a drill asks the copy -->"
+
+#: Where the drill page lists the fields a drill record carries and where each sits.
+DRILL_FIELDS_MARKER: Final = "<!-- checked: the fields a drill record carries -->"
+
+#: Where the drill page states the figures its schedule and its file names depend on.
+DRILL_FIGURES_MARKER: Final = "<!-- checked: the figures this procedure depends on -->"
+
+#: Where the drill page states which pieces of a drill exist today.
+DRILL_PIECES_MARKER: Final = "<!-- checked: what this procedure has no machine for -->"
+
+#: The worked examples, each a fenced JSON block directly after its marker.
+DRILL_COPY_EXAMPLE_MARKER: Final = "<!-- checked: the manifest of the copy the drill read -->"
+DRILL_PASSING_EXAMPLE_MARKER: Final = "<!-- checked: a drill record that verifies -->"
+DRILL_FAILING_EXAMPLE_MARKER: Final = "<!-- checked: a drill record that does not verify -->"
+
+#: Where a field sits, as the fields table says it.
+ON_THE_RECORD: Final = "the record"
+ON_EACH_CHECK: Final = "each check"
+
+#: A command a page tells somebody to run as a module.
+RUNS_A_MODULE: Final = re.compile(r"python -m ([a-z_][a-z0-9_.]*[a-z0-9_])")
+
+#: The object name a worked drill example is read under, ending as a real record's must.
+EXAMPLE_RECORD: Final = f"example{DRILL_SUFFIX}"
+
+_JSON_FENCE: Final = "```json"
+_FENCE: Final = "```"
+
+
+def drill_figures() -> tuple[tuple[str, str], ...]:
+    """What the drill page's figures table has to say, read off the modules that decide each."""
+    return (
+        ("Days between rehearsals", str(DRILL_INTERVAL_DAYS)),
+        ("Days a copy is kept", str(BACKUP_RETENTION_DAYS)),
+        ("A copy's manifest name ends", MANIFEST_SUFFIX),
+        ("A drill record's name ends", DRILL_SUFFIX),
+    )
+
+
+def json_after(text: str, marker: str) -> dict[str, Any]:
+    """The JSON object in the fenced block directly after `marker`.
+
+    Directly after, with nothing but blank lines between, because the first block anywhere after
+    the marker would be the next example's when one is deleted, and a check reading the wrong
+    example agrees with the page for the wrong reason. Raises rather than returning nothing, for
+    `table_after`'s reason.
+    """
+    at = text.find(marker)
+    if at < 0:
+        msg = f"the page carries no {marker!r}, so there is no example to read"
+        raise InstallDocsError(msg)
+    after = at + len(marker)
+    fence = text.find(_JSON_FENCE, after)
+    if fence < 0 or text[after:fence].strip():
+        msg = f"the example after {marker!r} is not a json block directly beneath it"
+        raise InstallDocsError(msg)
+    start = fence + len(_JSON_FENCE)
+    end = text.find(_FENCE, start)
+    if end < 0:
+        msg = f"the example after {marker!r} opens a json block and never closes it"
+        raise InstallDocsError(msg)
+    try:
+        document = json.loads(text[start:end])
+    except json.JSONDecodeError as exc:
+        msg = f"the example after {marker!r} is not JSON: {exc}"
+        raise InstallDocsError(msg) from exc
+    if not isinstance(document, dict):
+        msg = (
+            f"the example after {marker!r} is a {type(document).__name__} and a record is an object"
+        )
+        raise InstallDocsError(msg)
+    return document
+
+
+def drill_procedure_gaps(
+    page: str,
+    *,
+    pieces: Mapping[str, bool],
+    runnable: Collection[str],
+    figures: Sequence[tuple[str, str]] | None = None,
+) -> tuple[str, ...]:
+    """Every way the restore drill page disagrees with what a drill record must be (M34.3.3.4).
+
+    `pieces` is whether each piece of a drill exists, observed by the caller from the repository,
+    and `runnable` is every module that runs as a command, for the split this module keeps: the
+    reading happens in the test. See `A_PROCEDURE_NOBODY_HAS_RUN_IS_HELD_BY_WHAT_IT_PRODUCES` and
+    `A_PROCEDURE_THAT_DOES_NOT_SAY_WHAT_IS_MISSING_READS_AS_AUTOMATION`.
+    """
+    return (
+        *_drill_check_gaps(page, runnable),
+        *_drill_field_gaps(page),
+        *_stated_gaps(
+            page,
+            DRILL_FIGURES_MARKER,
+            dict(drill_figures() if figures is None else figures),
+            noun="figure",
+        ),
+        *_stated_gaps(
+            page,
+            DRILL_PIECES_MARKER,
+            {name: "yes" if built else "no" for name, built in pieces.items()},
+            noun="piece",
+        ),
+        *_drill_example_gaps(page),
+    )
+
+
+def _drill_check_gaps(page: str, runnable: Collection[str]) -> tuple[str, ...]:
+    """The checks, exactly `REQUIRED_CHECKS` in order, and every module a row says to run."""
+    findings: list[str] = []
+    stated: list[str] = []
+    for cells in table_after(page, DRILL_CHECKS_MARKER):
+        if len(cells) < 3:
+            findings.append(
+                f"a check row with {len(cells)} cell(s) reads {cells}; every row states the "
+                "check, what it asks and how"
+            )
+            continue
+        name = bare(cells[0])
+        stated.append(name)
+        findings.extend(
+            f"{name}: the page says to run python -m {module}, and no module of that name runs "
+            "as a command"
+            for module in RUNS_A_MODULE.findall(cells[2])
+            if module not in runnable
+        )
+    required = [one.value for one in REQUIRED_CHECKS]
+    if stated != required:
+        findings.append(
+            f"the page lists the checks {stated} and a drill verifies only on {required}, in "
+            "that order, so a runner following the page writes a record that cannot verify"
+        )
+    return tuple(findings)
+
+
+def _drill_field_gaps(page: str) -> tuple[str, ...]:
+    """Every field a drill record and each of its checks must carry, in both directions."""
+    declared = [(name, ON_THE_RECORD) for name in DRILL_REQUIRED_FIELDS] + [
+        (name, ON_EACH_CHECK) for name in CHECK_REQUIRED_FIELDS
+    ]
+    findings: list[str] = []
+    stated: list[tuple[str, str]] = []
+    for cells in table_after(page, DRILL_FIELDS_MARKER):
+        if len(cells) < 2:
+            findings.append(
+                f"a field row with {len(cells)} cell(s) reads {cells}; every row states the "
+                "field and where it sits"
+            )
+            continue
+        stated.append((bare(cells[0]), bare(cells[1])))
+    findings.extend(
+        f"{name} on {where}: a drill record is refused without it and the page does not ask for it"
+        for name, where in declared
+        if (name, where) not in stated
+    )
+    findings.extend(
+        f"{name} on {where}: the page asks for a field no reader reads, so a runner writes it "
+        "and nothing believes it"
+        for name, where in stated
+        if (name, where) not in declared
+    )
+    return tuple(findings)
+
+
+def _stated_gaps(
+    page: str, marker: str, declared: Mapping[str, str], *, noun: str
+) -> tuple[str, ...]:
+    """A two-column table of names and values against the declared ones, in both directions."""
+    findings: list[str] = []
+    stated: dict[str, str] = {}
+    for cells in table_after(page, marker):
+        if len(cells) < 2:
+            findings.append(f"a {noun} row with {len(cells)} cell(s) reads {cells}")
+            continue
+        stated[bare(cells[0])] = bare(cells[1])
+    findings.extend(
+        f"{name}: the page does not state this {noun}" for name in declared if name not in stated
+    )
+    findings.extend(
+        f"{name}: a {noun} nothing here declares, which reads as one it does"
+        for name in stated
+        if name not in declared
+    )
+    findings.extend(
+        f"{name}: the page says {stated[name]!r} and the repository says {declared[name]!r}"
+        for name in declared
+        if name in stated and stated[name] != declared[name]
+    )
+    return tuple(findings)
+
+
+def _drill_example_gaps(page: str) -> tuple[str, ...]:
+    """The three worked examples, read by the product's own readers and judged by its verdict."""
+    findings: list[str] = []
+    copy: Backup | None = None
+    try:
+        copy = backup_from(
+            json_after(page, DRILL_COPY_EXAMPLE_MARKER), where="the example manifest"
+        )
+    except (InstallDocsError, ManifestError) as exc:
+        findings.append(str(exc))
+    for marker, label, verifies in (
+        (DRILL_PASSING_EXAMPLE_MARKER, "the drill record that verifies", True),
+        (DRILL_FAILING_EXAMPLE_MARKER, "the drill record that does not verify", False),
+    ):
+        try:
+            document = json_after(page, marker)
+        except InstallDocsError as exc:
+            findings.append(str(exc))
+            continue
+        # Through the bucket reader, named as a record in a bucket would be, so the example is
+        # judged by exactly the path a record uploaded in step 9 takes.
+        verifications, unreadable = read_drills([(EXAMPLE_RECORD, json.dumps(document))])
+        if unreadable:
+            findings.extend(f"{label}: {one.why}" for one in unreadable)
+            continue
+        (verdict,) = verifications
+        if verdict.verified is not verifies:
+            findings.append(
+                f"{label}: the product reads it as "
+                f"{'verified' if verdict.verified else 'not verified'}"
+                f"{''.join(f'; {one}' for one in verdict.shortfalls)}"
+            )
+        if copy is None:
+            continue
+        if verdict.backup_id != copy.backup_id:
+            findings.append(
+                f"{label}: reads {verdict.backup_id!r} and the example manifest describes "
+                f"{copy.backup_id!r}"
+            )
+        if verdict.attempted_at < copy.recoverable_to:
+            findings.append(
+                f"{label}: starts before the copy it reads was consistent, which is a drill of a "
+                "copy that did not exist yet"
+            )
     return tuple(findings)

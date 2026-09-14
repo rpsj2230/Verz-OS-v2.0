@@ -942,7 +942,7 @@ def test_one_connectors_tool_names_change_with_how_it_is_configured() -> None:
 
 def test_the_documents_the_checks_read_are_all_present() -> None:
     """Delete this and a guide deleted or renamed makes its own check fail with a missing file
-    rather than with a finding, and the nine-page set can lose a page silently."""
+    rather than with a finding, and the ten-page set can lose a page silently."""
     expected = {
         "README.md",
         "install.md",
@@ -953,6 +953,7 @@ def test_the_documents_the_checks_read_are_all_present() -> None:
         "operations.md",
         "troubleshooting.md",
         "update-and-rollback.md",
+        "restore-drill.md",
         "checklist.md",
     }
     assert {one.name for one in GUIDES.glob("*.md")} == expected

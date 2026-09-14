@@ -345,7 +345,7 @@ INCLUDED: Final[tuple[Rule, ...]] = (
     ),
     Rule(
         "docs/install",
-        "the ten pages somebody reads standing in front of the server. Everything else under "
+        "the eleven pages somebody reads standing in front of the server. Everything else under "
         "docs/ is this project's own record: the work breakdown, the build pages the console "
         "serves, and the owner's decision list",
     ),

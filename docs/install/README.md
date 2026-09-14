@@ -1,6 +1,6 @@
 # Installing this system
 
-Nine pages, written for somebody who has never met anybody who built this and is standing in
+Ten pages, written for somebody who has never met anybody who built this and is standing in
 front of a bare server. Nothing in them names another company's installation.
 
 | Page | What it covers |
@@ -13,6 +13,7 @@ front of a bare server. Nothing in them names another company's installation.
 | [operations.md](operations.md) | Backup, monitoring, logging and health checks |
 | [troubleshooting.md](troubleshooting.md) | What you are seeing, and what it is |
 | [update-and-rollback.md](update-and-rollback.md) | Updating, and going back |
+| [restore-drill.md](restore-drill.md) | Reading a copy back to prove it can be, by hand |
 | [checklist.md](checklist.md) | Everything above as one list to tick, in ten sections |
 
 ## Which half of this is checked
@@ -35,6 +36,7 @@ deployment files rather than against a second copy of them:
 | Every troubleshooting entry says what to do, after saying what is happening | the page's own sections |
 | The update and rollback scripts, and the command that runs each | the scripts the release carries |
 | The checklist's ten sections, the four links a copied install carries, and every timer this repository installs | the timer units under `ops/` |
+| A drill's questions, the fields its record carries, its figures, its worked examples, and which pieces of a drill exist | the drill record reader and verdict, the rehearsal interval, `ops/` and the registered console tools, in `test_install_drill_page.py` |
 
 "In both directions" is load-bearing. A missing row is found the first time somebody looks for
 it. A row for a thing that no longer exists is never found at all, because it reads as coverage,
@@ -48,6 +50,7 @@ so the check refuses that too.
 - The whole of the authentication page, except the four settings it lists
 - Whether each troubleshooting heading reads as a symptom, and each cause is the cause
 - The update and rollback procedure, except its script table
+- Every command in the restore drill procedure, which has never been run on a server
 - What each checklist line tells you to do
 - Everything about DNS, TLS and the firewall
 
@@ -78,13 +81,14 @@ takes a backup and the one that proves a backup can be restored. See operations.
 **No update and no rollback has ever been performed on an install of this product.** See
 update-and-rollback.md.
 
-**Three of the nine pages here do not claim their leaf.** install.md, operations.md and
+**Three of the ten pages here do not claim their leaf.** install.md, operations.md and
 update-and-rollback.md each say why at the foot of the page. They are worth reading anyway; they
 are not worth relying on as finished.
 
 ## Task ids
 
-M42.2.4, M42.2.5, M42.2.6, M42.2.7, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2, M34.3.3.3, M30.2.8
+M42.2.4, M42.2.5, M42.2.6, M42.2.7, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2, M34.3.3.3, M34.3.3.4,
+M30.2.8
 
 M42.2.3, M42.2.8 and M42.2.10 each have a page here and none of the three is claimed. The reason
 is at the foot of its own page.

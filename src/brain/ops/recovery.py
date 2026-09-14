@@ -851,6 +851,8 @@ class Ladder:
 #: See `THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES`. `backup_policy_gaps`
 #: reports the conflict against `BACKUP_RETENTION_DAYS` and there is no pruning function
 #: here, because pruning to this ladder is the act that makes the certificates wrong.
+#: `brain.ops.backup_ladder.select` decides which copies a ladder keeps and refuses this one
+#: against that same horizon, so the selection exists and the adoption still does not.
 RETENTION_LADDER: Final[Ladder] = Ladder(daily=30, weekly=12, monthly=12)
 
 
