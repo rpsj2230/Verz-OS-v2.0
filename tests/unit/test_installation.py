@@ -206,6 +206,27 @@ def test_the_migration_level_is_measured_once_the_pending_list_has_been_read():
     assert level.pending == 1
 
 
+def test_a_fresh_database_with_every_migration_waiting_is_described_rather_than_raised():
+    """**The screen raised on the install that most needs it.** With every migration still
+    waiting, `level_of` measures no applied revision, and until 2026-09-15 `install_facts` built
+    a measured fact with an empty value, which `Fact` refuses. A fresh database is exactly what
+    somebody installing is looking at before they migrate.
+
+    Deleting this lets the empty measured fact come back, and the install screen fails on every
+    new install until somebody has already migrated it."""
+    facts = install_facts(
+        profile="lite",
+        manifest=None,
+        revisions=a_chain("0001", "0002"),
+        pending=["0001", "0002"],
+        env=NOTHING_SET,
+    )
+
+    level = next(one for one in facts if one.name == "migration level")
+    assert level.source is Source.MEASURED
+    assert level.value == "no migration applied, 2 waiting"
+
+
 def test_a_database_on_the_head_reports_the_head_as_applied():
     """Deleting this leaves the measured branch tested only by the behind case, which is
     satisfied by a function that always reports the previous revision."""

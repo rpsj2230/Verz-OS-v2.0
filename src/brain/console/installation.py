@@ -462,6 +462,17 @@ def install_facts(
                 because=THE_HEAD_THE_CODE_CARRIES_IS_NOT_THE_REVISION_THE_DATABASE_IS_ON,
             )
         )
+    elif not level.revision:
+        # Measured, and nothing is applied: a fresh database with every migration waiting.
+        # Until 2026-09-15 this built a measured fact with an empty value, which `Fact` refuses,
+        # so the screen raised on exactly the install that most needs to be told where it is.
+        facts.append(
+            Fact(
+                name="migration level",
+                source=Source.MEASURED,
+                value=f"no migration applied, {level.pending} waiting",
+            )
+        )
     else:
         facts.append(Fact(name="migration level", source=Source.MEASURED, value=level.revision))
     for surface in NAMEABLE_SURFACES:
