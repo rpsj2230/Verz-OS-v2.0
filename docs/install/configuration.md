@@ -65,6 +65,7 @@ somebody wrote, and it is the reason the table is worth reading.
 | `BRAIN_LANGFUSE_SECRET_KEY` | every profile | you | none | The trace ledger's secret key. |
 | `BRAIN_RELEASE` | every profile | you | none | The release tag you are installing. It is the installer's first argument rather than a line in the file, and it deliberately has no default anywhere: a default of `latest` is what makes an install unpinned. |
 | `BRAIN_RELEASE_URL` | every profile | you | none | Where the release archive is fetched from. The installer refuses to run without it. Nothing publishes an archive for it to point at yet; see the install page. |
+| `BRAIN_RELEASE_FEED_URL` | every profile | you | none | The https address of a release list the updates panel may ask which release is newest. Empty means this install asks nobody outside its network, and that is the default on purpose. It can name a copy on your own network. |
 | `BRAIN_PROFILE` | every profile | you | yes | `lite`, `standard` or `full`. Which set of components this install runs. Unset means `lite`, deliberately: forgetting it should leave you under-featured rather than running a trace stack nobody sized. |
 | `BRAIN_REQUEST_TIMEOUT_SECONDS` | every profile | you | yes | The ceiling on a whole request. Distinct from the model's own timeout, and larger. |
 | `BRAIN_RUN_MIGRATIONS` | every profile | you | yes | Whether the application applies its own database migrations at startup, under a lock, before it reports ready. Set it false only if you apply them by hand with `alembic upgrade head`. |

@@ -114,6 +114,11 @@ class Settings(BaseSettings):
     #: request and this address receives the text of the document itself. See
     #: `brain.ops.inference.inference_config_conflicts`.
     inference_url: str = ""
+    #: Where a client's own release list is, for the updates panel. No default, so an install
+    #: asks nobody outside its network unless it names one. Read here and handed to
+    #: `brain.deployment.release_feed.check`, which reads no environment of its own; see
+    #: `release_feed.CONFIGURATION_IS_READ_IN_ONE_PLACE`.
+    release_feed_url: str = ""
     #: Which system the built-in row tools read from, and therefore the first half of every
     #: tool name in the catalogue. `RowTool` refuses an empty source, because two systems'
     #: record ids collide by coincidence of integers, so this carries a real default rather

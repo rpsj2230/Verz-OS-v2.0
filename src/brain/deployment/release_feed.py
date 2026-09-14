@@ -11,7 +11,8 @@ has no default anywhere, and an install where it is unset asks nobody and says s
 `Unasked.NO_SOURCE`, which the panel draws as nobody having said. A client that wants the reminder
 names the list, and the list can be a copy on their own network, which removes every item in
 `version_view.WHAT_A_RELEASE_CHECK_WOULD_SEND` except the outbound allowance to their own mirror.
-See `A_CHECK_NOBODY_SWITCHED_ON_IS_A_DISCLOSURE_NOBODY_AGREED_TO`.
+See `A_CHECK_NOBODY_SWITCHED_ON_IS_A_DISCLOSURE_NOBODY_AGREED_TO`. The variable is read by
+`brain.app.Settings` and handed in, never read here; see `CONFIGURATION_IS_READ_IN_ONE_PLACE`.
 
 **Every way of not getting an answer is an answer that is not a tick.** A list that is not an
 https address, that cannot be reached, that answers with something other than JSON, that is
@@ -45,9 +46,8 @@ from __future__ import annotations
 
 import http.client
 import json
-import os
 import urllib.request
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import datetime
 from typing import Final
 from urllib.parse import urlsplit
@@ -87,10 +87,13 @@ MAX_FEED_BYTES: Final = 2_000_000
 Fetch = Callable[[str], bytes]
 
 
-def feed_url(env: Mapping[str, str] | None = None) -> str:
-    """The configured release list, or an empty string when the install names none."""
-    source = os.environ if env is None else env
-    return source.get(FEED_VARIABLE, "").strip()
+#: Why this module is handed the address rather than reading it.
+CONFIGURATION_IS_READ_IN_ONE_PLACE: Final = (
+    "Anything that differs between installs is configuration, and configuration is read in one "
+    "place: brain.app.Settings reads BRAIN_RELEASE_FEED_URL, and whoever renders the panel hands "
+    "settings.release_feed_url to check. A module reading the environment for itself is a second "
+    "reader of one value, and the place a fallback address gets written where no client looks."
+)
 
 
 def newest_release(payload: object) -> str | None:
@@ -200,8 +203,10 @@ def https_fetch(url: str, *, timeout: float = FEED_TIMEOUT_SECONDS) -> bytes:
     return body
 
 
-def check(
-    *, now: datetime, env: Mapping[str, str] | None = None, fetch: Fetch = https_fetch
-) -> Told | Unanswered:
-    """What the panel is handed: the configured list asked, or the reason it was not."""
-    return ask(feed_url(env), fetch=fetch, now=now)
+def check(*, now: datetime, url: str, fetch: Fetch = https_fetch) -> Told | Unanswered:
+    """What the panel is handed: the configured list asked, or the reason it was not.
+
+    `url` is `brain.app.Settings.release_feed_url`, handed in by whoever renders the panel. See
+    `CONFIGURATION_IS_READ_IN_ONE_PLACE`.
+    """
+    return ask(url, fetch=fetch, now=now)

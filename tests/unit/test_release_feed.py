@@ -36,7 +36,6 @@ from brain.deployment.release_feed import (
     MAX_FEED_BYTES,
     ask,
     check,
-    feed_url,
     https_fetch,
     newest_release,
 )
@@ -239,15 +238,35 @@ def test_a_naive_moment_is_refused_rather_than_recorded() -> None:
         ask(LIST, fetch=serving(), now=datetime(2099, 6, 1, 12, 0))
 
 
-def test_the_configured_list_is_read_from_the_install_configuration_only() -> None:
-    """Delete this and the reader can grow a fallback address, which is a default outbound
-    connection written somewhere a client would not look."""
-    assert feed_url({}) == ""
-    assert feed_url({FEED_VARIABLE: "   "}) == ""
-    assert feed_url({FEED_VARIABLE: f" {LIST} "}) == LIST
+def test_the_configured_list_is_read_from_the_install_configuration_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The address is a setting, read in the one place settings are read.** `brain.app.Settings`
+    reads `BRAIN_RELEASE_FEED_URL`, and nothing in `brain.deployment.release_feed` touches the
+    environment, so the variable has one reader and a fallback address cannot be written into the
+    asking module where a client would not look. Setting the variable under its documented name
+    and reading it back through `Settings` also holds `FEED_VARIABLE` to the field's real name.
 
-    assert isinstance(check(now=NOW, env={}, fetch=refusing(AssertionError())), Unanswered)
-    told = check(now=NOW, env={FEED_VARIABLE: LIST}, fetch=serving(release("v2.0")))
+    Delete this and the asking module can read the environment itself again, which is a second
+    reader of one value."""
+    from brain.app import Settings
+
+    monkeypatch.delenv(FEED_VARIABLE, raising=False)
+    assert Settings().release_feed_url == ""
+    monkeypatch.setenv(FEED_VARIABLE, LIST)
+    assert Settings().release_feed_url == LIST
+
+    source = (REPO / "src" / "brain" / "deployment" / "release_feed.py").read_text(encoding="utf-8")
+    reads_the_environment = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if (isinstance(node, ast.Attribute) and node.attr in {"environ", "getenv"})
+        or (isinstance(node, ast.Name) and node.id in {"environ", "getenv"})
+    ]
+    assert reads_the_environment == []
+
+    assert isinstance(check(now=NOW, url="", fetch=refusing(AssertionError())), Unanswered)
+    told = check(now=NOW, url=f" {LIST} ", fetch=serving(release("v2.0")))
     assert isinstance(told, Told)
 
 
