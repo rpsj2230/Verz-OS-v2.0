@@ -187,6 +187,10 @@ from brain.audit.ledger import ENT_HASH, TRACE_ID
 from brain.core.errors import Outcome
 from brain.core.lane import Lane
 from brain.gate.context import TrafficClass, traffic_class_for
+
+# At run time, unlike `Finished` below: `status_of_finished` branches on this type, and a branch
+# is behaviour rather than an annotation.
+from brain.gate.finish import ToolCallOutcome
 from brain.ops.retention import DataClass, Lifetime, horizon_for
 from brain.ops.tracing import (
     SAFE_ATTRIBUTES,
@@ -732,10 +736,20 @@ def status_of_finished(finished: Finished) -> RequestStatus:
     cannot today: the lane redacts through `serialise_for_channel`, which never takes the
     opaque path that raises `Denied`. `Finished` carries no exception, so the day a lane
     raises one, a status for it is `status_for(outcome)` and needs the exception carried.
+
+    An automation's tool call is `ANSWERED` when it went through and `NOTHING_RETURNED` when it
+    was refused, which is the member that already holds a withheld record and an absent one
+    together. `ToolCallOutcome` carries whether it was refused and nothing about what, so this
+    branch has nothing else it could read. See
+    `brain.gate.finish.A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED`.
     """
     outcome = finished.outcome
     if outcome is None:
         return RequestStatus.FAILED
+    if isinstance(outcome, ToolCallOutcome):
+        if outcome.refused:
+            return RequestStatus.NOTHING_RETURNED
+        return RequestStatus.ANSWERED
     if outcome.abstention is not None:
         return RequestStatus.NOTHING_RETURNED
     return RequestStatus.ANSWERED
@@ -771,7 +785,10 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         entitlement_hash=finished.entitlement_hash,
         lane=finished.lane,
         tool_count=finished.tool_calls,
-        cache_hit=outcome is not None and outcome.from_cache,
+        # A tool call has no cache to have been served from, so it is never a hit.
+        cache_hit=(
+            outcome is not None and not isinstance(outcome, ToolCallOutcome) and outcome.from_cache
+        ),
         status=status_of_finished(finished),
         duration_ms=micros / _MICROSECONDS_PER_MS,
     )

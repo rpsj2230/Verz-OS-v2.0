@@ -74,6 +74,20 @@ and hands the count to every recorder on `Finished`. A channel counting calls wo
 lane it does not run. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS` for why the count is taken at
 the start of a call and not from what it returned.
 
+**A tool call an automation makes finishes here too, and it is not an answer.**
+`brain.ops.automation_piece.call_piece` is the second function that turns an admitted request
+into an outcome, for a step sent to `brain.automation_routes`, and it takes the recorders as a
+required argument and calls `finish` in its `finally` for the reason `answer_lane` does. Until
+2026-09-15 it could not: `outcome` was the answer lane's type or None, and
+`brain.ops.telemetry.status_of_finished` records None as a fault, so a call that succeeded would
+have been written as FAILED or would have needed an `Answered` with invented frames.
+`ToolCallOutcome` is what a call ends as, and it holds one fact: whether it was refused. See
+`A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED`.
+
+Rejected: a field naming the tool, the entity or the kind of refusal. Each is what an operator
+reaches for while debugging a flow, and each turns the metadata ledger, which a usage report
+reads, into a per-principal list of what was withheld and which tools exist to withhold.
+
 Task ids: M37.3.2.4, M30.5.2, M21.3.4
 """
 
@@ -128,11 +142,35 @@ A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS: Final = (
     "says nothing about the asker's reach or about any record."
 )
 
+#: Why a refused tool call is recorded as refused and as nothing more.
+A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED: Final = (
+    "An automation's tool call is refused for a tool its owner does not hold, a tool outside "
+    "its declared set, a tool that does not exist, arguments the tool will not take and an "
+    "entity with no field policy, and the caller is told one sentence for all of them. The "
+    "record keeps that: a refused call is refused and nothing else, with no tool, no entity "
+    "and no reason, so the metadata ledger cannot count what one principal's automations were "
+    "refused or which tools exist to be refused. Success and refusal are told apart, because an "
+    "automation that has stopped working is the operator's to notice."
+)
+
 _TRACE_ID_RE: Final = re.compile(TRACE_ID)
 
 
 class FinishError(ValueError):
     """Raised when a finished request is described in a way no record should be built from."""
+
+
+@dataclass(frozen=True)
+class ToolCallOutcome:
+    """How one automation tool call ended, when it ended without a fault.
+
+    **One field, and read the absences.** There is no tool name, no entity, no automation id
+    and no reason, and each is a field somebody would reasonably add. See
+    `A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED`. A fault is not one of these: it
+    is `Finished.outcome` being None, as it is for a question.
+    """
+
+    refused: bool
 
 
 @dataclass(frozen=True)
@@ -165,12 +203,15 @@ class Finished:
     `outcome` is None when the lane raised, which is how a recorder tells a fault from an
     answer without being handed the exception. A recorder that has no business knowing how a
     request ended, such as the question count, simply does not read it.
+
+    An `Answered` is a question the answer lane finished and a `ToolCallOutcome` is a tool call
+    an automation made; see the module docstring.
     """
 
     origin: Origin
     #: The instant the request was judged at, which the lane is given and never reads itself.
     at: datetime
-    outcome: Answered | None
+    outcome: Answered | ToolCallOutcome | None
     _: KW_ONLY
     #: The instant the lane finished, read once from the clock the caller handed it (M30.5.2).
     completed_at: datetime

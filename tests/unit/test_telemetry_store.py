@@ -225,7 +225,7 @@ def test_a_withheld_record_and_an_absent_one_are_one_row_and_no_rule_means_no_ca
     answered = finished_by(reach=ents(*SEES_HOURS), rows=Rows(ACME))
 
     assert A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS
-    assert withheld.outcome is not None and withheld.outcome.abstention is not None
+    assert isinstance(withheld.outcome, Answered) and withheld.outcome.abstention is not None
     rows = [dict(request_telemetry_of(one).ledger_row()) for one in (withheld, absent, unmatched)]
     assert rows[0] == rows[1]
     assert {**rows[2], "tool_count": rows[0]["tool_count"]} == rows[0]

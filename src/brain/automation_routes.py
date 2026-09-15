@@ -20,6 +20,9 @@ comes back is a page built from a `ChannelPayload`, as `/records` returns.
    reach and the declared tools and reads the leash for the strictest rung.
 5. The step runs: `run_step`, which resolves the tool out of the projected catalogue, calls it
    with the narrowed reach, and redacts what comes back against the same reach.
+6. The call is finished. Steps 4 and 5 run inside `brain.ops.automation_piece.call_piece`,
+   which hands every recorder this process installed one `brain.gate.finish.Finished` however
+   the call ended, in its `finally`. This route writes no record of its own.
 
 **Nothing on this path computes a reach.** There is no `intersect` in this module, and
 `tests/invariants/test_single_implementation.py` reads the call sites out of the source.
@@ -43,14 +46,15 @@ arrangement in which revoking the owner's grant leaves the automation holding it
 
 **Not done here, and each for a reason that is not time.**
 
-*A call is not recorded through `brain.gate.finish`.* That module is the one completion point,
-and a record written from a route is the per-channel hook its docstring refuses, so this route
-writes none of its own. It cannot use `finish` either: `Finished.outcome` is `Answered | None`,
-the answer lane's outcome type, and `brain.ops.telemetry.status_of_finished` records None as a
-fault. A successful tool call handed to `finish` today would be written to the metadata ledger as
-FAILED, or would need an `Answered` with invented frames. The change is to `Finished` in
-`brain.gate.finish`, which gains an outcome a tool call can be, and `status_of_finished` a line
-for it. See `A_TOOL_CALL_IS_NOT_YET_A_FINISHED_REQUEST`.
+**Every call the credential admits is recorded, and not by this route.** Until 2026-09-15 this
+paragraph said a call was recorded nowhere, because `Finished.outcome` was the answer lane's type
+or None and None is recorded as a fault. `Finished` now holds a `ToolCallOutcome`, and
+`call_piece` finishes each call through the recorders `brain.app.lifespan` installed, which are
+the ones the answer route hands its lane: a call that went through is answered in the metadata
+ledger, a refusal is nothing returned and names no tool or entity, and a fault is failed. A
+credential this route refuses is not recorded, as a request the gate refuses before the answer
+lane is not. The question recorder is handed the call too and files it under the automation
+channel, which adoption counts as nobody asking.
 
 *No rate limit applies.* No route in this application consults `brain.ops.limits`, and this one
 is no exception; a limiter wired into one route and not the others would be a limit on the least
@@ -88,13 +92,15 @@ from brain.api_routes import RecordPage, field_policies, page_from, wiring_of
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import ToolDefinition
 from brain.core.errors import Absent, Failed
+from brain.core.principal import Principal
+from brain.gate.finish import Origin, RequestRecorder
 from brain.gate.injection import assess
 from brain.gate.invoke import InvocationRefusedError
 from brain.gate.leash import Leash
 from brain.identity.bearer import token_from_header
 from brain.identity.oidc import TokenRefusal, TokenRefusedError
-from brain.ops.automation import flow_reach
 from brain.ops.automation_owner import (
+    AUTOMATION_CHANNEL,
     AutomationRefusal,
     AutomationRefusedError,
     PrincipalRecords,
@@ -109,9 +115,7 @@ from brain.ops.automation_piece import (
     TOOL_NOT_AVAILABLE,
     PieceRefusedError,
     PieceStep,
-    plan_piece_call,
-    resolve_step,
-    run_step,
+    call_piece,
 )
 from brain.tools.registry import ToolRegistry
 
@@ -120,15 +124,6 @@ log = structlog.get_logger()
 #: Where a step sends its call, under `API_PREFIX`. The piece's `contract.json` names the same
 #: path and a test holds the two equal.
 TOOL_CALL_PATH: Final = "/automation/tool-call"
-
-#: Why this route does not record through `brain.gate.finish` yet.
-A_TOOL_CALL_IS_NOT_YET_A_FINISHED_REQUEST: Final = (
-    "gate.finish is the one completion point and a route writing its own record is the hook "
-    "it refuses. Finished.outcome is the answer lane's outcome or None, and None is recorded "
-    "as a fault, so a successful tool call handed to it would be written as FAILED or would "
-    "need invented frames. The record belongs to finish, once Finished can hold a tool call's "
-    "outcome, and until then this route records nothing rather than something wrong."
-)
 
 #: The leash an automation's call is planned under. Empty; see the module docstring.
 NO_LEASH: Final = Leash()
@@ -223,12 +218,16 @@ class CallingAutomation:
     """One call's automation, and the owner's reach it will run at, as it is now.
 
     `caller` is the owner's reach after `admit` and before the automation's ceiling, which is
-    the left-hand side `flow_reach` takes. The owner is not carried: the reach already names
-    them, and `plan_piece_call` reads the principal off the reach rather than off anything a
-    route could substitute.
+    the left-hand side `flow_reach` takes. `plan_piece_call` still reads the principal off the
+    reach rather than off anything a route could substitute.
+
+    `owner` is carried for the record and for nothing else: `brain.gate.finish.Origin` holds a
+    `Principal`, and the reach holds only an id. `call_piece` refuses an origin whose principal
+    is not the reach's, so carrying it cannot attribute a call to anybody but the owner.
     """
 
     registration: Registration
+    owner: Principal
     caller: EntitlementSet
     now: datetime
 
@@ -263,6 +262,7 @@ async def calling_automation(request: Request) -> CallingAutomation:
 
     return CallingAutomation(
         registration=registration,
+        owner=owner,
         caller=owner_reach(
             owner, versions=gate.versions, store=gate.store, cache=gate.cache, now=now
         ),
@@ -291,8 +291,20 @@ async def tool_call(request: Request, calling: Calling, step: PieceStep) -> Reco
         # credential was accepted, so it discloses nothing to somebody who holds none.
         raise Failed("no tool registry on this process")
 
+    # What a finished request owes, installed by `brain.app.lifespan`, and the same tuple the
+    # answer route reads: there is one set of recorders and this route adds none.
+    recorders: tuple[RequestRecorder, ...] = getattr(request.app.state, "request_recorders", ())
+    # The id the trace middleware vouched for or minted, read as the answer route reads it.
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    # The owner `calling_automation` looked up and the channel an automation is held to, and
+    # nothing the step carried. `call_piece` refuses an owner who is not the reach's principal.
+    origin = Origin(trace_id=trace_id, principal=calling.owner, channel=AUTOMATION_CHANNEL)
+
     try:
-        invocation = plan_piece_call(
+        payload = await call_piece(
+            step,
+            origin=origin,
+            recorders=recorders,
             flow_id=registration.automation_id,
             caller=caller,
             flow_ceiling=registration.ceiling,
@@ -302,18 +314,12 @@ async def tool_call(request: Request, calling: Calling, step: PieceStep) -> Reco
             # The step's arguments are text somebody outside this company may have written,
             # through the trigger. Scored rather than assumed clean; see `plan_piece_call`.
             assessment=assess(json.dumps(step.arguments, sort_keys=True, default=str)),
-            now=now,
-        )
-        policy = field_policies(registry).get(resolve_step(step, invocation).entity)
-        if policy is None:
-            raise PieceRefusedError(TOOL_NOT_AVAILABLE)
-        payload = await run_step(
-            step,
-            invocation,
-            reach=flow_reach(caller, registration.ceiling),
+            policies=field_policies(registry),
             tools=RegistryToolCaller(registry),
-            policy=policy,
             now=now,
+            # The completion instant, read once by `call_piece` in its `finally`. The wall
+            # clock, because `now` was read from it before the credential was checked.
+            clock=lambda: datetime.now(UTC),
         )
     except (InvocationRefusedError, PieceRefusedError) as exc:
         log.info(

@@ -18,6 +18,7 @@ Task ids: none
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import fields
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -25,6 +26,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from brain.adoption import question_of
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
@@ -35,15 +37,24 @@ from brain.automation_routes import (
     _request_type,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
+from brain.core.lane import Lane
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.context import Channel, TrafficClass
+from brain.gate.finish import (
+    A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED,
+    Finished,
+    ToolCallOutcome,
+)
 from brain.identity.bearer import TokenAuthority
 from brain.identity.oidc import SIGN_IN_PROMPT, KeySet, SigningKey
 from brain.knowledge.rows import ID_KEY, RowQuery, RowRequest
 from brain.ops.automation_owner import Registration, register
 from brain.ops.automation_piece import PieceRefusedError
+from brain.ops.telemetry import RequestStatus, request_telemetry_of, status_of_finished
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import build_registry
+from tests.unit.test_request_finish import Kept
 
 REGISTERED_AT = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
 ENDED = datetime(2019, 1, 1, tzinfo=UTC)
@@ -97,9 +108,13 @@ class Rows:
 
     def __init__(self) -> None:
         self.asked = 0
+        #: Set to make the source fail as a system that is down does, part way through a call.
+        self.fault: Exception | None = None
 
     async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
         self.asked += 1
+        if self.fault is not None:
+            raise self.fault
         return SEEDED_ROWS
 
 
@@ -183,6 +198,9 @@ class World:
     def __init__(self, client: TestClient, app: FastAPI) -> None:
         self.client = client
         self.app = app
+        #: Every finished call, installed where `brain.app.lifespan` installs the real recorders.
+        self.kept = Kept()
+        app.state.request_recorders = (self.kept,)
         self.rows = Rows()
         self.grants = Grants()
         self.records = Records(person("u_owner"))
@@ -501,3 +519,177 @@ def test_a_handler_with_no_request_model_is_refused_before_it_is_called(handler:
             entitlement=EntitlementSet(principal_id="u_owner"),
             now=None,
         )
+
+
+# ------------------------------------------------------------------ every call is recorded
+
+#: The fields of a ledger row that differ between two calls by construction, whatever happened.
+PER_CALL = ("trace_id", "received_at", "duration_ms")
+
+
+def ledger_row_of(finished: Finished) -> dict[str, object]:
+    """The ledger row a finished call becomes, without the fields every call has its own of."""
+    row = dict(request_telemetry_of(finished).ledger_row())
+    for name in PER_CALL:
+        row.pop(name)
+    return row
+
+
+def test_a_step_that_went_through_is_recorded_once_as_answered_as_its_owner_under_its_trace(
+    world: World,
+) -> None:
+    """**The route handing its call to `gate.finish`.** One call, one record: the owner the
+    directory holds, the automation channel, the trace id the response carries, the task lane,
+    one tool call started and a status of answered. The question recorder's reading of the same
+    record is a machine's, so adoption counts it as nobody.
+
+    Delete this and the route can stop passing its recorders, and every lane-level recording
+    test still passes against `call_piece` directly."""
+    response = world.call(arguments={"limit": 5})
+
+    assert response.status_code == 200, response.text
+    (finished,) = world.kept.seen
+    assert finished.outcome == ToolCallOutcome(refused=False)
+    assert status_of_finished(finished) is RequestStatus.ANSWERED
+    assert finished.origin.principal.id == "u_owner"
+    assert finished.origin.channel is Channel.API
+    assert finished.origin.trace_id == response.headers["x-trace-id"]
+    telemetry = request_telemetry_of(finished)
+    assert telemetry.lane is Lane.TASK
+    assert telemetry.tool_count == 1
+    assert telemetry.cache_hit is False
+    assert telemetry.ingress.traffic_class is TrafficClass.AUTOMATION
+    asked = question_of(finished)
+    assert asked is not None and asked.machine is True
+
+
+def test_every_refused_step_is_recorded_as_refused_and_no_record_names_what_was_refused(
+    world: World,
+) -> None:
+    """See `A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED`. A tool outside the declared
+    set, a tool that does not exist and arguments the tool will not take are three ledger rows
+    equal in every field a call does not have its own of: nothing returned, no tool started.
+    Neither those records nor their rows hold any tool name tried or the entity. The call that
+    went through beside them is the positive sibling, and its status differs.
+
+    Delete this and a record can grow the tool's name or a count that splits a hidden tool from
+    a reachable one, and the ledger is a list of what each owner's automations were refused."""
+    undeclared = next(d.name for d in world.app.state.tools.definitions() if d.name != world.tool)
+    world.call(tool=undeclared)
+    world.call(tool="local.no_such_tool")
+    world.call(arguments={"limit": 0})
+    world.call()
+
+    *refused, answered = world.kept.seen
+    rows = [ledger_row_of(one) for one in refused]
+    assert len(refused) == 3
+    assert rows[0] == rows[1] == rows[2]
+    assert rows[0]["status"] is RequestStatus.NOTHING_RETURNED
+    assert rows[0]["tool_count"] == 0
+    assert {one.outcome for one in refused} == {ToolCallOutcome(refused=True)}
+    assert ledger_row_of(answered)["status"] is RequestStatus.ANSWERED
+    for one in refused:
+        written = repr(one) + repr(ledger_row_of(one))
+        for name in (world.tool, undeclared, "local.no_such_tool", "price_list"):
+            assert name not in written, name
+    assert world.rows.asked == 1
+
+
+def test_a_step_whose_entity_has_no_field_policy_is_recorded_as_one_more_refusal(
+    world: World,
+) -> None:
+    """The refusal decided between planning and running, recorded as the others are. Its reach
+    differs from the fixture's, so it is compared by outcome, status and count rather than as a
+    whole row.
+
+    Delete this and the field policy check can move outside `call_piece`, and the one refusal
+    it makes is recorded nowhere."""
+    search = next(
+        d for d in world.app.state.tools.definitions() if d.name.endswith(".search_documents")
+    )
+    world.grants.held["u_owner"] = grants(search.required_capability)
+    world.registrations.kept["nightly-prices"] = Registration(
+        automation_id="nightly-prices",
+        owner_principal_id="u_owner",
+        credential_digest=world.registration.credential_digest,
+        declared_tools=frozenset({search.name}),
+        ceiling=EntitlementSet(
+            principal_id="nightly-prices", grants=grants(search.required_capability)
+        ),
+    )
+
+    assert world.call(tool=search.name, arguments={"question": "hosting"}).status_code == 404
+
+    (finished,) = world.kept.seen
+    assert finished.outcome == ToolCallOutcome(refused=True)
+    assert (status_of_finished(finished), finished.tool_calls) == (
+        RequestStatus.NOTHING_RETURNED,
+        0,
+    )
+    assert search.name not in repr(finished)
+
+
+def test_a_refused_credential_is_recorded_nowhere_and_the_next_accepted_one_is(
+    world: World,
+) -> None:
+    """A credential refused before the lane is a request the gate turned away, which is not a
+    call, as a request refused before the answer lane is not a question. The accepted call after
+    it is recorded, which is the positive half.
+
+    Delete this and a flood of copied credentials reads as automations running."""
+    refused = world.call(credential=world.credential.replace("nightly-prices", "nobody"))
+    assert refused.status_code == 401
+    assert world.kept.seen == []
+
+    assert world.call().status_code == 200
+    assert len(world.kept.seen) == 1
+
+
+def test_a_step_whose_source_faulted_is_recorded_as_failed_and_not_as_refused(
+    world: World,
+) -> None:
+    """The source is down, so the call faults after it started. The record has no outcome, the
+    ledger calls it failed, and the call is counted.
+
+    Delete this and a fault can be caught as a refusal, so an outage looks like an automation
+    being refused rather than like a fault somebody should fix."""
+    world.rows.fault = RuntimeError("source unreachable")
+
+    assert world.call().status_code == 500
+
+    (finished,) = world.kept.seen
+    assert finished.outcome is None
+    assert status_of_finished(finished) is RequestStatus.FAILED
+    assert finished.tool_calls == 1
+
+
+def test_a_tool_call_outcome_holds_whether_it_was_refused_and_nothing_else() -> None:
+    """The structural half of the refusal test above. The field list is written here rather than
+    read from the class, so the two cannot agree by being the same list.
+
+    Delete this and a `tool` or `reason` field can be added to the outcome and every record
+    carries it."""
+    assert {one.name for one in fields(ToolCallOutcome)} == {"refused"}
+    assert A_REFUSED_TOOL_CALL_IS_RECORDED_WITHOUT_WHAT_WAS_REFUSED
+
+
+def test_an_owner_who_reaches_no_tool_at_all_is_recorded_as_one_more_refusal(
+    world: World,
+) -> None:
+    """The refusal `invoke` makes rather than the piece: with no grant left the projected
+    catalogue is empty, which is `InvocationRefusedError`, and it is recorded as refused and as
+    starting no tool, exactly as a tool that does not exist is. The reach differs from the
+    fixture's, so it is compared by outcome, status and count rather than as a whole row.
+
+    Delete this and `call_piece` can catch the piece's refusal and not the gate's, so an owner
+    who lost everything has every call recorded as a fault."""
+    world.call(tool="local.no_such_tool")
+    world.grants.revoke_all("u_owner")
+
+    assert world.call().status_code == 404
+
+    missing, emptied = world.kept.seen
+    for one in (missing, emptied):
+        assert one.outcome == ToolCallOutcome(refused=True)
+        assert (status_of_finished(one), one.tool_calls) == (RequestStatus.NOTHING_RETURNED, 0)
+    assert world.rows.asked == 0

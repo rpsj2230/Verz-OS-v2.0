@@ -102,8 +102,16 @@ and are kept because the second of them already records what a stale blocker cos
 
 The TypeScript package is written, in `ops/automation/piece`, and only its request builder runs
 here. M32.6.1.3 is still not claimed on this line, for two reasons the route's own docstring
-states: a call is not recorded through `brain.gate.finish`, whose `Finished` has no outcome a
-tool call can be, and the piece has never been built or loaded by Activepieces.
+states: the piece has never been built or loaded by Activepieces, and nothing constructs the
+route's wiring on a deployed process.
+
+**A call is recorded, and `call_piece` is where.** That sentence used to give a third reason,
+that `brain.gate.finish.Finished` had no outcome a tool call could be. It has one now,
+`ToolCallOutcome`, and `call_piece` finishes every call through `finish` in its `finally`, as
+`brain.gate.answer.answer_lane` finishes every question. A call that went through is recorded as
+answered, a refused one as nothing returned with no tool or entity named, and a fault as a
+fault. The tool count follows `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS` except for a refusal; see
+`A_REFUSED_CALL_IS_RECORDED_AS_STARTING_NO_TOOL`.
 
 Task ids: none
 """
@@ -111,7 +119,7 @@ Task ids: none
 from __future__ import annotations
 
 import inspect
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any, Final, Protocol
 
@@ -120,15 +128,47 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.field_policy import FieldPolicy
+from brain.core.lane import Lane
 from brain.core.redaction import ChannelPayload, require_typed_result, serialise_for_channel
 from brain.gate.catalogue import AgentCeiling
+from brain.gate.finish import (
+    Finished,
+    Origin,
+    RequestRecorder,
+    ToolCallOutcome,
+    attributable,
+    finish,
+)
 from brain.gate.injection import RiskAssessment
-from brain.gate.invoke import Invocation, invoke
+from brain.gate.invoke import Invocation, InvocationRefusedError, invoke
 from brain.gate.leash import Leash
 from brain.ops.automation import AutomationError, StepKind, flow_reach
 from brain.tools.registry import ToolRegistry
 
 # ------------------------------------------------------------------ written-down reasons
+
+#: Why a refused call's record says it started no tool, even when one was entered.
+A_REFUSED_CALL_IS_RECORDED_AS_STARTING_NO_TOOL: Final = (
+    "Most refusals are decided before any tool is entered, and one is not: arguments the tool "
+    "will not take are refused inside the caller, after the call started, and only a tool this "
+    "automation may reach gets that far. A count taken as the call started would record that "
+    "refusal as one call and a hidden tool as none, and the difference is the fact the one "
+    "refusal sentence exists to withhold. So a refused call is recorded as starting nothing "
+    "whatever it started, and a call that went through or faulted keeps its count."
+)
+
+#: Why a tool call is filed under the task lane.
+AN_AUTOMATION_STEP_IS_TASK_LANE_WORK: Final = (
+    "A lane is a budget and an objective, and a step an automation sends is work nobody is "
+    "watching: it is part of a flow a trigger started. The task lane's objective is that work "
+    "finishes and reports, which is what a flow needs, and it is the lane "
+    "brain.orchestration.delegation gives a child run for the same reason. Filed under the fast "
+    "lane because no model ran, a flow's calls would enter the latency percentile sized for a "
+    "person waiting on an answer, and a busy schedule would read as people being kept waiting."
+)
+
+#: The lane a tool call is recorded under. See the constant above.
+PIECE_LANE: Final = Lane.TASK
 
 #: The invariant this leaf exists to keep, stated where a reader meets it.
 A_PIECE_NEVER_EXCEEDS_THE_PRINCIPAL_THE_AUTOMATION_RUNS_AS: Final = (
@@ -485,3 +525,113 @@ async def run_step(
     # should be relying on having happened.
     result = require_typed_result(raw)
     return serialise_for_channel(result, entitlement=reach, policy=policy, now=now)
+
+
+# ------------------------------------------------------------------ finishing the call
+
+
+class CountedToolCaller:
+    """A `ToolCaller` that counts each call as it starts it, and then makes it.
+
+    One instance per call of `call_piece`, so a count cannot leak between steps. Counted before
+    the call for the reason `brain.gate.answer.ToolCalls` counts before it: a call that raises
+    is still a call that started. See `brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
+    """
+
+    def __init__(self, tools: ToolCaller) -> None:
+        self.tools = tools
+        self.started = 0
+
+    def call(
+        self,
+        *,
+        tool: ToolDefinition,
+        arguments: Mapping[str, Any],
+        entitlement: EntitlementSet,
+        now: datetime | None,
+    ) -> object:
+        self.started += 1
+        return self.tools.call(tool=tool, arguments=arguments, entitlement=entitlement, now=now)
+
+
+async def call_piece(
+    step: PieceStep,
+    *,
+    origin: Origin,
+    recorders: Sequence[RequestRecorder],
+    flow_id: str,
+    caller: EntitlementSet,
+    flow_ceiling: EntitlementSet,
+    declared_tools: frozenset[str],
+    registry: ToolRegistry,
+    leash: Leash,
+    assessment: RiskAssessment,
+    policies: Mapping[str, FieldPolicy],
+    tools: ToolCaller,
+    now: datetime,
+    clock: Callable[[], datetime],
+) -> ChannelPayload:
+    """Plan one step, run it, and finish the request once however it ended.
+
+    **This is the single place a tool call ends**, for the reason `brain.gate.answer.answer_lane`
+    is the single place a question does: the recorders are a required argument, and `finish`
+    runs in a `finally`, so a call that went through, every kind of refusal and a fault each
+    reach every recorder exactly once. A route that recorded would be the per-channel hook
+    `brain.gate.finish` refuses.
+
+    The order is `plan_piece_call`, the entity's field policy, then `run_step`. A refusal from
+    any of them is `InvocationRefusedError` or `PieceRefusedError`, recorded as
+    `ToolCallOutcome(refused=True)` and raised on for the caller to answer with its one
+    sentence. Anything else is a fault: the outcome stays None and the exception goes on.
+
+    The origin is checked against the reach before anything is planned. See
+    `brain.gate.finish.A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO`.
+
+    `policies` is a mapping rather than a callback for the reason `answer_lane` gives: a policy
+    chosen after the tool is known is a policy that can be chosen to fit it.
+    """
+    reach = flow_reach(caller, flow_ceiling)
+    attributable(origin, reach.principal_id)
+    calls = CountedToolCaller(tools)
+    outcome: ToolCallOutcome | None = None
+    try:
+        try:
+            invocation = plan_piece_call(
+                flow_id=flow_id,
+                caller=caller,
+                flow_ceiling=flow_ceiling,
+                declared_tools=declared_tools,
+                registry=registry,
+                leash=leash,
+                assessment=assessment,
+                now=now,
+            )
+            policy = policies.get(resolve_step(step, invocation).entity)
+            if policy is None:
+                raise PieceRefusedError(TOOL_NOT_AVAILABLE)
+            payload = await run_step(
+                step, invocation, reach=reach, tools=calls, policy=policy, now=now
+            )
+        except (InvocationRefusedError, PieceRefusedError):
+            outcome = ToolCallOutcome(refused=True)
+            raise
+        outcome = ToolCallOutcome(refused=False)
+        return payload
+    finally:
+        completed_at = clock()
+        started = calls.started
+        if outcome is not None and outcome.refused:
+            # See `A_REFUSED_CALL_IS_RECORDED_AS_STARTING_NO_TOOL`.
+            started = 0
+        await finish(
+            recorders,
+            Finished(
+                origin=origin,
+                at=now,
+                outcome=outcome,
+                completed_at=completed_at,
+                entitlement_hash=reach.ent_hash(),
+                lane=PIECE_LANE,
+                tool_calls=started,
+            ),
+        )

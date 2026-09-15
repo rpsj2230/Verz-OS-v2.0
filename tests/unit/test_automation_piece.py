@@ -15,7 +15,7 @@ import ast
 import asyncio
 import inspect
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -26,18 +26,24 @@ from pydantic import ValidationError
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
+from brain.core.lane import Lane
+from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.redaction import OPAQUE_LABEL, ChannelPayload, UntypedShapeError
 from brain.core.scope import Scope
+from brain.gate.context import Channel
+from brain.gate.finish import Finished, FinishError, Origin, ToolCallOutcome
 from brain.gate.injection import AutonomyTier, RiskAssessment
-from brain.gate.invoke import Invocation
+from brain.gate.invoke import Invocation, InvocationRefusedError
 from brain.gate.leash import Leash, LeashEntry
 from brain.ops.automation import StepKind, assert_deterministic
 from brain.ops.automation_piece import (
+    A_REFUSED_CALL_IS_RECORDED_AS_STARTING_NO_TOOL,
     PIECE_STEP_KIND,
     RESERVED_ARGUMENT_NAMES,
     TOOL_NOT_AVAILABLE,
     PieceRefusedError,
     PieceStep,
+    call_piece,
     offered_tools,
     piece_ceiling,
     plan_piece_call,
@@ -706,3 +712,181 @@ def test_a_result_the_redactor_cannot_walk_never_reaches_the_canvas() -> None:
             policy=POLICY,
             now=NOW,
         )
+
+
+# ------------------------------------------------- finishing a call through gate.finish
+#: The trace the lane-level finishing tests run under, and the instant their clock reports.
+TRACE = "t-piece-1"
+DONE = NOW + timedelta(milliseconds=7)
+
+
+class _Kept:
+    """A `RequestRecorder` that keeps every finished request it is handed."""
+
+    def __init__(self) -> None:
+        self.seen: list[Finished] = []
+
+    async def finished(self, request: Finished) -> None:
+        self.seen.append(request)
+
+
+class _Refusing:
+    """A tool caller entered and then refusing, as a request model refusing arguments does."""
+
+    def __init__(self) -> None:
+        self.entered = 0
+
+    def call(self, **_: Any) -> object:
+        self.entered += 1
+        raise PieceRefusedError(TOOL_NOT_AVAILABLE)
+
+
+class _Down:
+    """A tool caller whose system is down, so the call faults after it started."""
+
+    def call(self, **_: Any) -> object:
+        raise RuntimeError("source unreachable")
+
+
+def _origin(principal_id: str = "u_weiling") -> Origin:
+    return Origin(
+        trace_id=TRACE,
+        principal=Principal(
+            id=principal_id,
+            kind=PrincipalKind.HUMAN,
+            employment=Employment.STAFF,
+            display_name=f"Person {principal_id}",
+            primary_department="web",
+        ),
+        channel=Channel.API,
+    )
+
+
+def _call(
+    tool: str = "client.read_summary",
+    *,
+    tools: Any = None,
+    origin: Origin | None = None,
+    policies: dict[str, FieldPolicy] | None = None,
+    caller: EntitlementSet | None = None,
+) -> tuple[_Kept, ChannelPayload | BaseException]:
+    """Run `call_piece` once with a recorder, and hand back the recorder and what came out."""
+    kept = _Kept()
+    try:
+        payload: ChannelPayload | BaseException = asyncio.run(
+            call_piece(
+                PieceStep(tool=tool),
+                origin=origin if origin is not None else _origin(),
+                recorders=(kept,),
+                flow_id=FLOW,
+                caller=caller
+                if caller is not None
+                else _entitlement("read:client.name", "read:ticket.status"),
+                flow_ceiling=_entitlement("read:client.name", "read:ticket.status"),
+                declared_tools=frozenset({"client.read_summary", "ticket.read_status"}),
+                registry=_registry(),
+                leash=_leash(),
+                assessment=CLEAN,
+                policies={"client": POLICY} if policies is None else policies,
+                tools=tools if tools is not None else _Recorder(_one_client_row()),
+                now=NOW,
+                clock=lambda: DONE,
+            )
+        )
+    except (InvocationRefusedError, PieceRefusedError, RuntimeError, FinishError) as exc:
+        payload = exc
+    return kept, payload
+
+
+def test_a_step_that_went_through_is_finished_once_as_a_call_that_was_not_refused() -> None:
+    """The positive case for every recording refusal below. One record, handed the origin, the
+    judged instant, the clock's instant, the hash of the narrowed reach, the task lane, one tool
+    call started and an outcome that was not refused.
+
+    Delete this and `call_piece` can stop calling `finish` on success, or record a call that
+    went through as refused, and the refusal tests still pass against a lane that records only
+    refusals."""
+    kept, payload = _call()
+
+    assert isinstance(payload, ChannelPayload)
+    (finished,) = kept.seen
+    assert finished.outcome == ToolCallOutcome(refused=False)
+    assert finished.origin == _origin()
+    assert (finished.at, finished.completed_at) == (NOW, DONE)
+    assert finished.entitlement_hash == _plan_reach().ent_hash()
+    assert finished.lane is Lane.TASK
+    assert finished.tool_calls == 1
+
+
+def test_every_kind_of_refused_step_finishes_as_the_same_record_starting_no_tool() -> None:
+    """See `A_REFUSED_CALL_IS_RECORDED_AS_STARTING_NO_TOOL`. A tool outside the declared set is
+    refused before anything is entered, an entity with no field policy is refused before the
+    call, and a caller that refuses its arguments is refused after the call started. All three
+    are one record, compared whole, and it says refused and no tool started.
+
+    The entering case is checked to have entered, so it is the case it is named for.
+
+    Delete this and the tool count can split the refusal that reached a tool from the one that
+    did not, which tells the ledger's reader that the tool is within the automation's reach."""
+    refusing = _Refusing()
+    hidden, _ = _call("archive.read_note")
+    unclassified, _ = _call(policies={})
+    entered, refused = _call(tools=refusing)
+
+    assert isinstance(refused, PieceRefusedError)
+    assert refusing.entered == 1
+    records = {one.seen[0] for one in (hidden, unclassified, entered)}
+    assert len(records) == 1
+    ((record),) = records
+    assert record.outcome == ToolCallOutcome(refused=True)
+    assert record.tool_calls == 0
+    assert A_REFUSED_CALL_IS_RECORDED_AS_STARTING_NO_TOOL
+
+
+def test_a_step_that_faulted_is_finished_once_with_no_outcome_and_the_call_it_started() -> None:
+    """A fault is not a refusal. The exception reaches the caller, the record has no outcome,
+    which is how every recorder tells a fault, and the call that started is counted.
+
+    Delete this and a fault can be caught as a refusal, so an outage is recorded as the
+    automation being refused and answered with the not-found sentence."""
+    kept, raised = _call(tools=_Down())
+
+    assert isinstance(raised, RuntimeError)
+    (finished,) = kept.seen
+    assert finished.outcome is None
+    assert finished.tool_calls == 1
+
+
+def test_a_piece_call_run_at_one_persons_reach_cannot_be_recorded_as_anothers() -> None:
+    """See `brain.gate.finish.A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO`. Refused
+    before anything is planned, so no tool is called and nothing is recorded. The positive
+    sibling is the first test in this section, where origin and reach agree.
+
+    Delete this and a route can record an automation's call against whichever person it
+    names."""
+    tools = _Recorder(_one_client_row())
+
+    kept, raised = _call(tools=tools, origin=_origin("u_somebody_else"))
+
+    assert isinstance(raised, FinishError)
+    assert kept.seen == []
+    assert tools.calls == []
+
+
+def test_a_caller_who_reaches_no_tool_is_refused_by_the_gate_and_recorded_as_refused() -> None:
+    """The one refusal `call_piece` catches that the piece does not raise: a caller holding
+    nothing projects an empty catalogue, and `invoke` refuses with `InvocationRefusedError`.
+    It is recorded as refused and as starting no tool, and the exception still reaches the
+    caller for the route to answer with its one sentence.
+
+    Delete this and the lane can catch only the piece's own refusal, so every call by an owner
+    who has lost every grant is recorded as a fault."""
+    tools = _Recorder(_one_client_row())
+
+    kept, raised = _call(tools=tools, caller=_entitlement())
+
+    assert isinstance(raised, InvocationRefusedError)
+    (finished,) = kept.seen
+    assert finished.outcome == ToolCallOutcome(refused=True)
+    assert finished.tool_calls == 0
+    assert tools.calls == []
