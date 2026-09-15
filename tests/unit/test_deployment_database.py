@@ -293,6 +293,23 @@ def test_seed_reports_a_full_disk_by_name(monkeypatch: pytest.MonkeyPatch) -> No
 
 
 # ------------------------------------------------------------------------ the command line
+def test_the_command_line_reads_the_environment_it_is_handed_and_not_the_machines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A handed environment is the whole environment: the machine's own database names do not
+    answer for one the caller left out, and the prefixed name the application prefers is read.
+
+    Delete this and `main` can build `Settings()` from the process instead of the mapping, which
+    passes every other test here on a machine with no database configured and is wrong on any
+    machine with one."""
+    monkeypatch.setenv("DATABASE_URL", URL)
+    monkeypatch.setenv("BRAIN_DATABASE_URL", URL)
+    assert database.main(["migrate"], env={}) == EXIT_USAGE
+
+    monkeypatch.setattr(database, "migrate", lambda url: [])
+    assert database.main(["migrate"], env={"BRAIN_DATABASE_URL": URL}) == EXIT_DONE
+
+
 def test_the_command_line_answers_each_outcome_with_its_own_status(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

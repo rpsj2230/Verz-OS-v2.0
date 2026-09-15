@@ -241,11 +241,12 @@ def test_a_naive_moment_is_refused_rather_than_recorded() -> None:
 def test_the_configured_list_is_read_from_the_install_configuration_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """**The address is a setting, read in the one place settings are read.** `brain.app.Settings`
-    reads `BRAIN_RELEASE_FEED_URL`, and nothing in `brain.deployment.release_feed` touches the
-    environment, so the variable has one reader and a fallback address cannot be written into the
-    asking module where a client would not look. Setting the variable under its documented name
-    and reading it back through `Settings` also holds `FEED_VARIABLE` to the field's real name.
+    """**The address is a setting, read in the one place settings are read.**
+    `brain.settings.Settings` reads `BRAIN_RELEASE_FEED_URL`, and nothing in
+    `brain.deployment.release_feed` touches the environment, so the variable has one reader and a
+    fallback address cannot be written into the asking module where a client would not look.
+    Setting the variable under its documented name and reading it back through `Settings` also
+    holds `FEED_VARIABLE` to the field's real name.
 
     Delete this and the asking module can read the environment itself again, which is a second
     reader of one value."""

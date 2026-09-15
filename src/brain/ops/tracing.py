@@ -44,7 +44,7 @@ against, and a mismatch is a test failure rather than a discovery made in produc
 weeks later when staging traces stop arriving.
 
 Contradiction worth stating rather than resolving quietly: the tracker asks for this to be
-asserted against "the database enum", and there is no database enum. `brain.app.Settings`
+asserted against "the database enum", and there is no database enum. `brain.settings.Settings`
 carries a `Literal`, `brain.config.REQUIRED` is keyed by the same three names, and no
 migration in this repository creates an environment type. `brain.config.REQUIRED` is what
 is asserted against, because it is the vocabulary that already refuses a deployment, and a

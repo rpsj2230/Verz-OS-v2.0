@@ -40,12 +40,13 @@ Task ids: M5.1.2
 
 from __future__ import annotations
 
-import os
 import re
+from collections.abc import MutableMapping
 from dataclasses import dataclass
 
 from brain.ops.openbao import STATIC_PREFIX, OpenBaoVault, assert_static_path
 from brain.ops.secrets import SecretsUnavailableError
+from brain.settings import writable_process_environment
 
 __all__ = [
     "PROVIDER_SLOTS",
@@ -158,7 +159,9 @@ def load_into_environment(
     means it; and on the server there is nothing in the environment to collide with, because
     the compose file deliberately sets none of these.
     """
-    env = environ if environ is not None else os.environ
+    env: MutableMapping[str, str] = (
+        environ if environ is not None else writable_process_environment()
+    )
     loaded: list[str] = []
     missing: list[str] = []
 

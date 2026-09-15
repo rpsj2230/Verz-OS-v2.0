@@ -525,7 +525,7 @@ def test_bytecode_writing_is_switched_off_for_every_run() -> None:
     assert NO_BYTECODE == {"PYTHONDONTWRITEBYTECODE": "1"}
 
     source = (REPO / "src" / "brain" / "ops" / "mutation.py").read_text(encoding="utf-8")
-    assert "env={**os.environ, **NO_BYTECODE}" in source
+    assert "env={**process_environment(), **NO_BYTECODE}" in source
 
 
 def test_a_test_that_prints_outside_the_platform_encoding_does_not_crash_the_reader() -> None:

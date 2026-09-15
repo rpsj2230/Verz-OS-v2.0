@@ -24,6 +24,7 @@ Task ids: M0.3.2, M31.1.1.2
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Final
 
 import structlog
 from alembic import command
@@ -34,8 +35,42 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 
 from brain.db import normalise_database_url
+from brain.settings import Settings
 
 log = structlog.get_logger()
+
+#: Why the Alembic environment believes the address on its config before any setting.
+THE_ADDRESS_HANDED_TO_ALEMBIC_IS_THE_ONE_MIGRATED: Final = (
+    "run_migrations puts the application's database address on the Alembic config, and "
+    "migrations/env.py used to overwrite it with DATABASE_URL read from the process. On a host "
+    "naming the database only as BRAIN_DATABASE_URL the application's own migration step raised; "
+    "on a host naming both, the application connected to one database and migrated the other. "
+    "The address a caller hands over is the one migrated, and the setting is only the fallback "
+    "for the bare alembic command, which hands over nothing."
+)
+
+
+def alembic_url(configured: str | None) -> str:
+    """The address `migrations/env.py` connects to, in SQLAlchemy's form.
+
+    `configured` is `sqlalchemy.url` as the Alembic config reports it, which `_alembic_config`
+    set and `get_main_option` has already unescaped. When nothing set it, which is the bare
+    `alembic upgrade head` command because `alembic.ini` deliberately names no database, the
+    address is `Settings.database_url`, so the command line and the application agree about
+    which of the two variable names wins. See `THE_ADDRESS_HANDED_TO_ALEMBIC_IS_THE_ONE_MIGRATED`.
+
+    Here rather than in `env.py`, because `env.py` is executed by Alembic and cannot be imported
+    by a test, and the precedence is the part worth holding to a test.
+    """
+    url = (configured or "").strip() or Settings().database_url.strip()
+    if not url:
+        msg = (
+            "no database to migrate: the Alembic config names none, and neither "
+            "BRAIN_DATABASE_URL nor DATABASE_URL is set"
+        )
+        raise RuntimeError(msg)
+    return normalise_database_url(url)
+
 
 REPO = Path(__file__).resolve().parents[2]
 

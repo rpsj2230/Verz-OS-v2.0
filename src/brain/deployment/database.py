@@ -59,7 +59,6 @@ Task ids: M42.3.3, M30.4.5
 from __future__ import annotations
 
 import enum
-import os
 import re
 import sys
 from collections.abc import Mapping, Sequence
@@ -73,6 +72,7 @@ from brain import seed as seeding
 from brain.db import normalise_database_url
 from brain.migrate import pending_revisions, run_migrations
 from brain.ops.reliability import DiskFullError, is_disk_full
+from brain.settings import Settings, settings_from
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why there is no command that runs all three.
@@ -282,11 +282,13 @@ def seed(url: str) -> int:
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """Run one command against DATABASE_URL, and exit with a status a wrapper can act on."""
     args = list(sys.argv[1:] if argv is None else argv)
-    source = os.environ if env is None else env
     if len(args) != 1 or args[0] not in COMMANDS:
         print(USAGE, file=sys.stderr)
         return EXIT_USAGE
-    url = source.get("DATABASE_URL", "").strip() or source.get("BRAIN_DATABASE_URL", "").strip()
+    # Through `Settings`, so this script and the application agree about which of the two
+    # names wins when both are set. It preferred the plain one until 2026-09-15.
+    settings = Settings() if env is None else settings_from(env)
+    url = settings.database_url.strip()
     if not url:
         print("DATABASE_URL is not set, so there is no database to act on", file=sys.stderr)
         return EXIT_USAGE

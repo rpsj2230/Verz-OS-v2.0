@@ -1000,3 +1000,39 @@ def test_the_healthcheck_asks_for_readiness_rather_than_liveness() -> None:
 
     assert isinstance(healthcheck, dict)
     assert healthcheck["test"] == ["CMD", "python", "-m", "brain.ops.worker", "--ready"]
+
+
+# ------------------------------------------------ the database address comes through Settings
+def test_the_applications_connection_string_under_its_prefixed_name_is_refused_as_a_queue() -> None:
+    """`preflight` compares the queue against the application's address as `Settings` reads it,
+    so the refusal holds when the host names that address `BRAIN_DATABASE_URL`.
+
+    Delete this and the comparison can go back to reading `DATABASE_URL` by name, which on such a
+    host compares the queue against an empty string and lets the worker drain the pooler."""
+    env = _sound_environment()
+    app_url = env.pop("DATABASE_URL")
+    findings = preflight({**env, "BRAIN_DATABASE_URL": app_url, "QUEUE_URL": app_url})
+
+    assert any("application's own connection string" in f for f in findings)
+
+
+def test_a_setting_that_does_not_parse_refuses_the_worker_by_name_and_never_by_value(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The preflight reads the database address through `Settings`, and `Settings` validates
+    every field it has, so a malformed one is a refusal in words rather than a traceback, and
+    the words name the field and not what it held.
+
+    Delete this and a mistyped timeout becomes a pydantic traceback out of the container's
+    command, carrying the value, where one of the values it can carry is a password."""
+    from brain.ops.queue import driver_is_installed
+    from brain.ops.worker import main
+
+    if not driver_is_installed():
+        pytest.skip("the driver refusal comes first when the queue driver is absent")
+    env = {**_sound_environment(), "BRAIN_REQUEST_TIMEOUT_SECONDS": "not-a-number-at-all"}
+
+    assert main(["--check"], env=env) == EXIT_MISCONFIGURED
+    err = capsys.readouterr().err
+    assert "request_timeout_seconds" in err
+    assert "not-a-number-at-all" not in err

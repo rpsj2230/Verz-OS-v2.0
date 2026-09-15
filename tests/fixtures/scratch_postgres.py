@@ -100,16 +100,13 @@ def migrate(database: str, verb: str, revision: str) -> None:
     assert url is not None
     config = Config(str(ROOT / "alembic.ini"))
     config.set_main_option("script_location", str(ROOT / "migrations"))
+    # On the config and not in the environment. This used to set `DATABASE_URL` for the length
+    # of the command, which worked only because `migrations/env.py` read that variable; it now
+    # believes the config first and `Settings` after, where `BRAIN_DATABASE_URL` would win over
+    # a `DATABASE_URL` set here and migrate the shared database instead of the scratch one.
+    config.set_main_option("sqlalchemy.url", pointed_at(url, database).replace("%", "%%"))
     commands = {"stamp": command.stamp, "upgrade": command.upgrade, "downgrade": command.downgrade}
-    before = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = pointed_at(url, database)
-    try:
-        commands[verb](config, revision)
-    finally:
-        if before is None:  # pragma: no cover - DATABASE_URL is set whenever this runs
-            os.environ.pop("DATABASE_URL", None)
-        else:
-            os.environ["DATABASE_URL"] = before
+    commands[verb](config, revision)
 
 
 @contextmanager

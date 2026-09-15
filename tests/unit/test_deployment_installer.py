@@ -918,7 +918,7 @@ def test_the_setup_code_and_the_instant_it_was_minted_are_written_by_one_guarded
 
 def test_the_instant_the_installer_writes_is_one_python_reads_back_as_an_aware_time() -> None:
     """The join crosses a language boundary, and this is the only test on either side of it.
-    `date` writes the instant into the environment file and `brain.app.Settings` parses it back
+    `date` writes the instant into the environment file and `brain.settings.Settings` parses it back
     into a `datetime` that `brain.firstrun.Enrolment` refuses unless it carries a zone, so a
     format without the `Z`, or with a space instead of the `T`, produces an install whose
     wizard raises on every screen rather than one that refuses politely.

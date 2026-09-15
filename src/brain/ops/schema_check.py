@@ -72,16 +72,13 @@ def main() -> int:
     empty string and would report a usage error that reads like a broken command. Reading
     the environment inside the process asks the right machine.
 
-    Both names, because `brain.app.Settings` accepts both and a check that disagreed with
-    the application about where the database is would be a check about a different database.
+    Through `brain.settings.Settings`, because a check that disagreed with the application
+    about where the database is would be a check about a different database. It read both
+    names itself until 2026-09-15, in the opposite order to the application.
     """
-    import os
+    from brain.settings import Settings
 
-    url = (
-        (sys.argv[1] if len(sys.argv) > 1 else "")
-        or os.environ.get("DATABASE_URL", "")
-        or os.environ.get("BRAIN_DATABASE_URL", "")
-    )
+    url = (sys.argv[1] if len(sys.argv) > 1 else "") or Settings().database_url
     if not url:
         print(
             "no database url: pass one, or set DATABASE_URL or BRAIN_DATABASE_URL",

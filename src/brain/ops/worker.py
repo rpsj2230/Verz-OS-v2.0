@@ -160,6 +160,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.gate.context import TrafficClass
@@ -204,6 +205,7 @@ from brain.ops.schedule_runner import due_now, next_tick, runner_for, start_cont
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.wiring import WiringError, component
 from brain.session import make_app_engine, make_session_factory
+from brain.settings import process_environment, settings_from
 from brain.tables.schedule import DETAIL_CHARS
 
 #: Why a queue driver with no declared pool size stops this container from starting.
@@ -281,7 +283,11 @@ A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL: Final = (
 QUEUE_URL_ENV: Final = "QUEUE_URL"
 
 #: The application's connection, which the worker also has because it makes ordinary queries
-#: through the pooler like everything else. Read here only so the two can be compared.
+#: through the pooler like everything else. Named here for the messages that tell an operator
+#: what to set, and **read through `brain.settings.settings_from`, never from the mapping by
+#: this name.** It was read by this name until 2026-09-15, which meant a host setting
+#: `BRAIN_DATABASE_URL` gave the application a database and the worker none, and a host
+#: setting both gave the worker the plain one and the application the prefixed one.
 APP_URL_ENV: Final = "DATABASE_URL"
 
 #: Where the graph's saved state goes. Optional: an install with no durable graph has none,
@@ -758,7 +764,7 @@ def preflight(env: Mapping[str, str]) -> tuple[str, ...]:
     not, which is worse than reporting nothing, because it looks like an answer.
     """
     queue_url = (env.get(QUEUE_URL_ENV) or "").strip()
-    app_url = (env.get(APP_URL_ENV) or "").strip()
+    app_url = settings_from(env).database_url.strip()
     checkpointer_url = (env.get(CHECKPOINTER_URL_ENV) or "").strip()
 
     findings: list[str] = []
@@ -1062,10 +1068,11 @@ def schedules_here(worker_component: str) -> bool:
 def schedule_url(env: Mapping[str, str]) -> str | None:
     """The application's database URL this container schedules against, or None when unset.
 
-    `APP_URL_ENV`, read from the environment this module is already handed, which is how
-    `preflight` reads it. See `A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL`.
+    Read from the environment this module is already handed, through `Settings`, which is how
+    `preflight` reads it and how the application reads its own. See
+    `A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL`.
     """
-    return (env.get(APP_URL_ENV) or "").strip() or None
+    return settings_from(env).database_url.strip() or None
 
 
 class Ticked(enum.StrEnum):
@@ -1267,10 +1274,8 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     can be tested without one, which is the same reason `brain.ops.admission` takes `now`
     rather than reading a clock.
     """
-    import os
-
     arguments = list(sys.argv[1:] if argv is None else argv)
-    environment = os.environ if env is None else env
+    environment = process_environment() if env is None else env
 
     if "--deploy-plan" in arguments:
         # Before the preflight and independent of it. An operator asking what installs the
@@ -1294,6 +1299,19 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     if not driver_is_installed():
         print(NO_DRIVER_IS_INSTALLED, file=sys.stderr)
         return EXIT_NO_DRIVER
+
+    # Before the preflight, because the preflight reads the database address through
+    # `Settings` and a value there that does not parse would otherwise leave this command as a
+    # traceback. Named by field and never by value: one of the fields is a password.
+    try:
+        settings_from(environment)
+    except ValidationError as exc:
+        fields = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})
+        print(
+            f"this worker will not start: these settings do not parse: {', '.join(fields)}",
+            file=sys.stderr,
+        )
+        return EXIT_MISCONFIGURED
 
     findings = preflight(environment)
     if findings:

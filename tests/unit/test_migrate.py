@@ -5,13 +5,23 @@ Task ids: M0.3.2
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi.testclient import TestClient
 
 from brain import migrate
 from brain.app import Settings, create_app
+from brain.db import normalise_database_url
+from tests.fixtures.scratch_postgres import database_url, drop, fresh, pointed_at, sql
+
+REPO = Path(__file__).resolve().parents[2]
+HANDED = "postgresql+psycopg://brain@db:5432/handed"
+PREFIXED = "postgresql+psycopg://brain@db:5432/prefixed"
+PLAIN = "postgresql+psycopg://brain@db:5432/plain"
 
 
 def test_the_lock_id_is_a_fixed_constant() -> None:
@@ -220,3 +230,141 @@ def test_nothing_unlocks_by_hand() -> None:
         encoding="utf-8"
     )
     assert "pg_advisory_unlock" not in source
+
+
+# ------------------------------------------------ which address the Alembic environment migrates
+def _bare_config(url: str | None = None) -> Config:
+    """An Alembic config pointed at the migrations, with no ini file.
+
+    No ini file because `env.py` calls `logging.config.fileConfig` on one, and that disables
+    every logger already created in this process, which is every other test's logging. What is
+    under test is the address `env.py` settles on, and `alembic.ini` names no address.
+    """
+    config = Config()
+    config.set_main_option("script_location", str(REPO / "migrations"))
+    if url is not None:
+        config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
+    return config
+
+
+def _run_env_offline(config: Config) -> str:
+    """Execute `migrations/env.py` for the first revision as SQL, and return the address it set.
+
+    Offline mode runs `env.py` to completion without connecting to anything, so the address it
+    resolves is observable on the config it wrote back to, with no database present."""
+    config.output_buffer = io.StringIO()
+    command.upgrade(config, "base:0001", sql=True)
+    return config.get_main_option("sqlalchemy.url") or ""
+
+
+def _no_database_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("BRAIN_DATABASE_URL", raising=False)
+
+
+def test_the_address_on_the_config_beats_both_variable_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What `run_migrations` hands over is what is migrated, whatever the process says.
+
+    Delete this and `alembic_url` can prefer a variable, which on a host with a stale one
+    migrates a database the application is not connected to."""
+    monkeypatch.setenv("BRAIN_DATABASE_URL", PREFIXED)
+    monkeypatch.setenv("DATABASE_URL", PLAIN)
+
+    assert migrate.alembic_url(HANDED) == HANDED
+
+
+def test_with_nothing_on_the_config_the_address_is_the_one_settings_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bare `alembic` command hands over nothing, so the setting answers, with the prefixed
+    name winning exactly as it does for the application; and either name alone is enough.
+
+    Delete this and the command line can grow its own reading of the two names again."""
+    monkeypatch.setenv("BRAIN_DATABASE_URL", PREFIXED)
+    monkeypatch.setenv("DATABASE_URL", PLAIN)
+    assert migrate.alembic_url(None) == normalise_database_url(Settings().database_url)
+    assert migrate.alembic_url("") == PREFIXED
+
+    monkeypatch.delenv("BRAIN_DATABASE_URL")
+    assert migrate.alembic_url(None) == PLAIN
+
+
+def test_with_no_address_anywhere_the_refusal_names_both_variables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delete this and the message can go back to naming `DATABASE_URL` alone, which sends an
+    operator who set the prefixed name to look for a variable they believe they already set."""
+    _no_database_names(monkeypatch)
+
+    with pytest.raises(RuntimeError, match="BRAIN_DATABASE_URL nor DATABASE_URL"):
+        migrate.alembic_url(None)
+
+
+def test_a_percent_in_a_password_survives_the_trip_through_the_config() -> None:
+    """`_alembic_config` doubles a `%` for configparser and `get_main_option` undoes it, so the
+    address `alembic_url` is handed is the one that was given.
+
+    Delete this and a password containing `%` can reach the driver doubled, which fails as an
+    authentication error that reads like a wrong password."""
+    given = "postgresql+psycopg://brain:pa%25ss@db:5432/brain"
+    config = migrate._alembic_config(given)
+
+    assert migrate.alembic_url(config.get_main_option("sqlalchemy.url")) == given
+
+
+def test_the_alembic_environment_keeps_the_address_it_was_handed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`env.py` itself, executed: a config carrying an address comes back carrying the same one
+    with both variables set to another.
+
+    Delete this and `env.py` can stop calling `alembic_url` and read `DATABASE_URL` again, which
+    every test of `alembic_url` above would survive."""
+    monkeypatch.setenv("BRAIN_DATABASE_URL", PREFIXED)
+    monkeypatch.setenv("DATABASE_URL", PLAIN)
+
+    assert _run_env_offline(_bare_config(HANDED)) == HANDED
+    # A `%` in a password, which `env.py` has to double again when it writes the address back.
+    escaped = "postgresql+psycopg://brain:pa%25ss@db:5432/handed"
+    assert _run_env_offline(_bare_config(escaped)) == escaped
+
+
+def test_the_alembic_environment_runs_on_the_prefixed_name_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host naming the database only as `BRAIN_DATABASE_URL` gets a migration rather than
+    `DATABASE_URL is not set`, and a config with no address and no variable is refused.
+
+    Delete this and the application's own migration step can raise inside `env.py` on such a
+    host again, with readiness reporting migrations failed and nothing wrong with the setting."""
+    _no_database_names(monkeypatch)
+    with pytest.raises(RuntimeError, match="BRAIN_DATABASE_URL nor DATABASE_URL"):
+        _run_env_offline(_bare_config())
+
+    monkeypatch.setenv("BRAIN_DATABASE_URL", PREFIXED)
+    assert _run_env_offline(_bare_config()) == PREFIXED
+
+
+def test_a_database_named_only_by_the_prefixed_variable_is_the_one_alembic_writes_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The same claim against a real server: with only `BRAIN_DATABASE_URL` set and nothing on
+    the config, `alembic stamp` lands its revision in that database. Skips with no server.
+
+    Delete this and the offline test above is the only evidence, and offline mode never opens
+    the connection whose address is the whole question."""
+    server = database_url()
+    if server is None:
+        pytest.skip("DATABASE_URL is unset, so there is no server to ask; CI always sets it")
+    name = "brain_test_alembic_prefixed_only"
+    scratch = fresh(name)
+    try:
+        with monkeypatch.context() as scoped:
+            scoped.delenv("DATABASE_URL", raising=False)
+            scoped.setenv("BRAIN_DATABASE_URL", pointed_at(server, name))
+            command.stamp(_bare_config(), "0024")
+        assert sql(scratch, "SELECT version_num FROM alembic_version") == [("0024",)]
+    finally:
+        drop(name)

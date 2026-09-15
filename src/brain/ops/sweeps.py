@@ -16,7 +16,6 @@ Task ids: M0.5.4, M0.5.5, M0.5.6, M0.5.7, M0.5.8, M2.1.5
 
 from __future__ import annotations
 
-import os
 import re
 import sys
 from pathlib import Path
@@ -91,8 +90,10 @@ def _needs_db() -> str | None:
     `postgresql+psycopg://` reaches libpq as a keyword/value string and fails with
     `missing "=" after ...`, which reads like a malformed password.
     """
-    url = os.environ.get("DATABASE_URL")
-    return libpq_url(url) if url else url
+    from brain.settings import Settings
+
+    url = Settings().database_url
+    return libpq_url(url) if url else None
 
 
 # --------------------------------------------------------------------- rls

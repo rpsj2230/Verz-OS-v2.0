@@ -9,14 +9,12 @@ Task ids: M31.1.2.1, M31.1.2.2, M31.1.2.3
 
 from __future__ import annotations
 
-import os
-
 import structlog
 import uvicorn
 
-from brain.app import Settings
 from brain.config import assert_valid
 from brain.runtime import detect_profile
+from brain.settings import Settings
 
 log = structlog.get_logger()
 
@@ -30,7 +28,7 @@ def main() -> None:
         {
             "database_url": settings.database_url,
             "valkey_url": settings.valkey_url,
-            "app_role_password": os.environ.get("APP_ROLE_PASSWORD", ""),
+            "app_role_password": settings.app_role_password,
             "cors_origins": ",".join(settings.cors_origins),
         },
     )

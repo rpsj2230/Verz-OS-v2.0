@@ -41,10 +41,11 @@ Task ids: M41.1.2, M41.1.3, M41.1.4, M41.1.5, M41.1.6, M41.1.7, M41.3.1, M41.3.4
 from __future__ import annotations
 
 import enum
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final
+
+from brain.settings import process_environment
 
 #: Why a second reader is worse than a second literal.
 ONE_READER_OR_TWO_DEFAULTS: Final = (
@@ -376,7 +377,7 @@ def value_of(name: str, env: Mapping[str, str] | None = None) -> str:
         )
         raise InstallError(msg)
 
-    supplied = (os.environ if env is None else env).get(name, "").strip()
+    supplied = (process_environment() if env is None else env).get(name, "").strip()
     if supplied:
         return supplied
     if declared.required:
@@ -416,7 +417,7 @@ def missing(env: Mapping[str, str] | None = None) -> tuple[str, ...]:
     All rather than the first, matching `brain.ops.worker.preflight`: an install missing two
     values has two problems, and fixing one produces a configuration that still refuses.
     """
-    source = os.environ if env is None else env
+    source = process_environment() if env is None else env
     return tuple(
         one.name for one in INSTALLATION if one.required and not source.get(one.name, "").strip()
     )

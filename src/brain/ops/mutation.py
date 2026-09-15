@@ -67,6 +67,8 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Final
 
+from brain.settings import process_environment
+
 #: A pytest failure line, which is the only evidence that counts as a catch.
 #:
 #: `FAILED tests/unit/test_thing.py::test_a_property - AssertionError: ...`. The name is what
@@ -303,7 +305,7 @@ def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProces
         encoding="utf-8",
         errors="replace",
         check=False,
-        env={**os.environ, **NO_BYTECODE},
+        env={**process_environment(), **NO_BYTECODE},
     )
 
 

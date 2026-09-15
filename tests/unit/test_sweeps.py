@@ -355,15 +355,22 @@ def test_db_sweeps_skip_cleanly_without_a_database(monkeypatch: pytest.MonkeyPat
     """A developer with no Postgres must not be blocked, but the skip has to be loud
     enough that nobody mistakes it for a pass. CI always sets DATABASE_URL."""
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("BRAIN_DATABASE_URL", raising=False)
     sweeps.sweep_rls()
     sweeps.sweep_grant_isolation()
 
 
 def test_needs_db_reads_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Under both names, through `Settings`, so the sweeps check the database the application
+    connects to. Delete this and the sweeps can go back to reading `DATABASE_URL` alone, and
+    skip on a host that names the database only as `BRAIN_DATABASE_URL`."""
+    monkeypatch.delenv("BRAIN_DATABASE_URL", raising=False)
     monkeypatch.setenv("DATABASE_URL", "postgresql://localhost/x")
     assert sweeps._needs_db() == "postgresql://localhost/x"
     monkeypatch.delenv("DATABASE_URL")
     assert sweeps._needs_db() is None
+    monkeypatch.setenv("BRAIN_DATABASE_URL", "postgresql://localhost/y")
+    assert sweeps._needs_db() == "postgresql://localhost/y"
 
 
 # --------------------------------------------------------------- grammars

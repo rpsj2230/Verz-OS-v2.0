@@ -1,7 +1,11 @@
 """Alembic environment.
 
-The connection string comes from DATABASE_URL and is never written into alembic.ini, so a
-credential cannot reach the repository by someone running `alembic init` habits.
+The connection string is never written into alembic.ini, so a credential cannot reach the
+repository by someone running `alembic init` habits. It is the address the caller put on the
+config, which is what `brain.migrate.run_migrations` does, or `brain.settings.Settings` when the
+caller put none, which is the bare `alembic` command. **It read `DATABASE_URL` from the process
+until 2026-09-15 and overwrote the caller's address with it**; see
+`brain.migrate.THE_ADDRESS_HANDED_TO_ALEMBIC_IS_THE_ONE_MIGRATED`.
 
 `include_schemas=True` matters: every table lives in a named schema, so without it
 autogenerate would see an empty `public` and cheerfully propose dropping the entire
@@ -12,26 +16,24 @@ Task ids: M0.3.2
 
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 import brain.tables  # noqa: F401  registers every table on `metadata`
-from brain.db import SCHEMAS, metadata, normalise_database_url
+from brain.db import SCHEMAS, metadata
+from brain.migrate import alembic_url
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-url = os.environ.get("DATABASE_URL")
-if not url:
-    msg = "DATABASE_URL is not set; migrations have nothing to connect to"
-    raise RuntimeError(msg)
-
-config.set_main_option("sqlalchemy.url", normalise_database_url(url).replace("%", "%%"))
+# Escaped again on the way back in: `get_main_option` hands the address over with configparser's
+# `%%` already collapsed, and `set_main_option` needs it doubled or a `%` in a password raises.
+url = alembic_url(config.get_main_option("sqlalchemy.url"))
+config.set_main_option("sqlalchemy.url", url.replace("%", "%%"))
 
 target_metadata = metadata
 

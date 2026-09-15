@@ -173,7 +173,7 @@ HOST_RESERVE_MIB: Final = 256
 PROFILES: Final = ("lite", "standard", "full")
 
 #: What an install that never says runs. Declared once, here, because it was briefly
-#: written in both `brain.app.Settings` and `brain.config.check`, and a default in two
+#: written in both `brain.settings.Settings` and `brain.config.check`, and a default in two
 #: places is a default that disagrees with itself the first time one of them is edited.
 #:
 #: Lite is the only safe value. It deploys nothing beyond the four base services, so

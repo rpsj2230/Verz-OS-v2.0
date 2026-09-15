@@ -153,6 +153,29 @@ def test_only_the_general_worker_ticks_the_schedule_and_it_needs_the_application
     )
 
 
+def test_the_worker_finds_the_applications_database_under_the_name_the_application_prefers() -> (
+    None
+):
+    """The worker reads the address through `Settings`, so a host that names it only as
+    `BRAIN_DATABASE_URL` schedules, and a host naming both gives the worker the one the
+    application connects to.
+
+    Delete this and the worker can go back to reading `DATABASE_URL` for itself, which is what it
+    did until 2026-09-15: a general worker on such a host refuses to schedule while the
+    application beside it is healthy, or schedules against the stale one of the two."""
+    from brain.settings import settings_from
+
+    prefixed = {"BRAIN_DATABASE_URL": "postgresql://app@pooler/brain"}
+    assert schedule_url(prefixed) == "postgresql://app@pooler/brain"
+
+    both = {
+        "BRAIN_DATABASE_URL": "postgresql://app@pooler/current",
+        "DATABASE_URL": "postgresql://app@pooler/stale",
+    }
+    assert schedule_url(both) == settings_from(both).database_url
+    assert schedule_url(both) == "postgresql://app@pooler/current"
+
+
 def test_a_general_worker_with_no_application_url_refuses_before_it_opens_anything(
     capsys: pytest.CaptureFixture[str],
 ) -> None:

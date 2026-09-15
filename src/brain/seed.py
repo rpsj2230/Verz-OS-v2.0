@@ -558,10 +558,12 @@ def seed(url: str, *, force: bool = False) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    import os
+    # Imported here rather than at the top, so `brain.deployment.database` importing this
+    # module for `seed` does not also pay for the settings closure it reads through its own.
+    from brain.settings import Settings
 
     args = argv if argv is not None else sys.argv[1:]
-    url = os.environ.get("DATABASE_URL") or os.environ.get("BRAIN_DATABASE_URL", "")
+    url = Settings().database_url
     if not url:
         print("DATABASE_URL is not set", file=sys.stderr)
         return 2

@@ -344,9 +344,9 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     `brain.ops.worker.main`, so every mode can be tested without one.
     """
     _parser().parse_args(list(sys.argv[1:] if argv is None else argv))
-    import os
+    from brain.settings import process_environment
 
-    environment = os.environ if env is None else env
+    environment = process_environment() if env is None else env
 
     try:
         endpoint = embedding_endpoint(environment)
