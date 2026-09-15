@@ -101,6 +101,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -193,6 +194,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -223,6 +225,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -309,6 +312,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -359,6 +363,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -417,6 +422,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -473,6 +479,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -537,6 +544,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -575,6 +583,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -603,6 +612,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -669,6 +679,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -759,6 +770,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -803,6 +815,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -921,6 +934,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1011,6 +1025,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1053,6 +1068,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1119,6 +1135,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1179,6 +1196,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1223,6 +1241,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1307,6 +1326,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1357,6 +1377,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1403,6 +1424,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1441,6 +1463,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1469,6 +1492,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1501,6 +1525,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1537,6 +1562,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1581,6 +1607,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1693,6 +1720,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1727,6 +1755,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1783,6 +1812,44 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {
+    "M29.1.6": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers UNDECIDED: no module defines a retriever contract, and the reach predicate is what decides which rows exist for a caller. A contract is written when a real retriever plug-in exists"
+    },
+    "M29.1.8": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers UNDECIDED: resolution has a cascade and no seam, and a wrong merge joins two parties' rows under one id. A contract is written when a real resolver plug-in exists"
+    },
+    "M29.1.9": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers UNDECIDED: whether an outside party may verify is a question about who the company stands behind. A contract is written when a real verifier plug-in exists"
+    },
+    "M29.1.10": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers UNDECIDED: a guard supplied from outside can be one that passes everything. A contract is written when a real guard plug-in exists, with the rule on replacing a shipped guard decided first"
+    },
+    "M29.1.11": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers FLAG: files are not optional, so a further backend goes into this repository behind a flag against brain.ops.storage.StorageBackend rather than in as a plug-in"
+    },
+    "M29.1.13": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers CONFIGURATION: a provider supplies principals, so one from outside is a second source of grants. Which provider is used is a value set during setup"
+    },
+    "M29.1.14": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers UNDECIDED: an outside surface would have to prove which person approved. A contract is written when a real approver surface plug-in exists"
+    },
+    "M29.1.15": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers UNDECIDED: neither export module declares a format seam. A contract is written when a real export format plug-in exists"
+    },
+    "M29.1.16": {
+     "kind": "DECIDED",
+     "why": "item 58, Option B. The register answers CONFIGURATION: a pack is a source of grants by definition and entitlements are additive, so a pack from outside the company is refused. Packs are set during setup"
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1869,6 +1936,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -1957,6 +2025,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -2057,6 +2126,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -2149,6 +2219,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -2205,6 +2276,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -2251,6 +2323,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -2313,6 +2386,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -2670,6 +2744,7 @@
      "why": "conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off"
     }
    },
+   "leaf_decided": {},
    "act_groups": {
     "M37.2": "Replacing AnyGen",
     "M37.2.1": "What is actually in there",
@@ -2835,6 +2910,7 @@
      "why": "a drill is somebody restoring a real backup onto real hardware and timing it. The machinery it exercises is code and is the recovery screen leaf under M27; the drill is the act, and `brain.launch.service_level` already refuses to report a recovery figure that rests on a schedule rather than on a copy somebody made"
     }
    },
+   "leaf_decided": {},
    "act_groups": {
     "M38.2": "Deploy at the end of every wave",
     "M38.2.1": "Wave close ritual"
@@ -2994,6 +3070,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -3110,6 +3187,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -3164,6 +3242,7 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   },
   {
@@ -3275,6 +3354,7 @@
     "M42.4.6": 6
    },
    "leaf_acts": {},
+   "leaf_decided": {},
    "act_groups": {}
   }
  ]

@@ -44,12 +44,16 @@ TREE.forEach(m => {
   m.k.forEach((t, i) => readIds(t, m.id + "." + (i + 1)));
 });
 // Throws rather than rendering a tracker whose flags point at work nobody chose.
-const ACT_COUNT = ACT.check(id => TEXT_OF[id]);
-//: Leaves a commit can close, and the denominator of every percentage on this page. Acts are
-//: listed and counted beside it, never in it: counted in, they hold the figure short of 100
-//: for ever and read as a stalled build. /build reads status.json, and brain.status counts the
-//: same way (THE_PERCENTAGE_COUNTS_WHAT_A_COMMIT_CAN_CLOSE), so the two pages agree.
-const BUILDABLE = LEAVES - ACT_COUNT;
+const COUNTS = ACT.check(id => TEXT_OF[id]);
+const ACT_COUNT = COUNTS.acts;
+//: Leaves decided as not needed as written. Counted on their own, never as client tasks.
+const DECIDED_COUNT = COUNTS.decided;
+//: Leaves a commit can close, and the denominator of every percentage on this page. Acts and
+//: decided leaves are listed and counted beside it, never in it: counted in, they hold the
+//: figure short of 100 for ever and read as a stalled build. /build reads status.json, and
+//: brain.status counts the same way (THE_PERCENTAGE_COUNTS_WHAT_A_COMMIT_CAN_CLOSE), so the
+//: two pages agree.
+const BUILDABLE = LEAVES - ACT_COUNT - DECIDED_COUNT;
 
 // A leaf can belong to a later wave than its module. M38's pipeline is wave 0, but "what
 // is live after wave 3" cannot be done before wave 3. Counting by module would both put
@@ -176,8 +180,13 @@ function renderNode(node, id, depth) {
   // The flag rides on the checkbox because that is what the counter walks, and the chip sits
   // in the label because a leaf nobody can commit has to be readable as one on the page and
   // not only in a total at the top.
-  const actAttrs = act ? ` data-act="${act.kind}"${act.gate ? ` data-gate="1"` : ""}` : "";
-  const actChip = act ? `<span class="act${act.gate ? " gate" : ""}" title="${esc(act.gate ? "Gates the cutover: " + act.why : act.why || "Work for a person on the week of the migration, not a commit")}">${act.kind === "UNBUILDABLE" ? "NOT CODE HERE" : "ON THE WEEK"}${act.gate ? " · GATES CUTOVER" : ""}</span>` : "";
+  // A decided leaf carries data-decided and never data-act, so nothing that counts client tasks
+  // can count it: it is nobody's work on any week.
+  const isDecided = act && act.kind === ACT.DECIDED;
+  const actAttrs = !act ? "" : isDecided ? ` data-decided="1"` : ` data-act="${act.kind}"${act.gate ? ` data-gate="1"` : ""}`;
+  const actChip = !act ? ""
+    : isDecided ? `<span class="act decided" title="${esc("Decided, not needed as written: " + act.why)}">DECIDED · NOT AS WRITTEN</span>`
+    : `<span class="act${act.gate ? " gate" : ""}" title="${esc(act.gate ? "Gates the cutover: " + act.why : act.why || "Work for a person on the week of the migration, not a commit")}">${act.kind === "UNBUILDABLE" ? "NOT CODE HERE" : "ON THE WEEK"}${act.gate ? " · GATES CUTOVER" : ""}</span>`;
   h += leaf ? `<input type="checkbox" class="cb" id="cb-${id}" data-id="${id}" data-wave="${waveOfLeaf(id, MODWAVE[id.split(".")[0]])}" data-due="${dt?iso(dt):""}"${actAttrs}><label class="lbl" for="cb-${id}"><span class="tid">${id}</span><span class="txt">${esc(node.n)}</span>${actChip}<span class="due" data-due="${dt?iso(dt):""}">${dt?fmt(dt):""}</span></label>`
             : `<span class="tid">${id}</span><span class="txt grp">${esc(node.n)}</span><span class="prog" data-for="${id}"></span>`;
   h += `</div>`;
@@ -282,6 +291,8 @@ li.leaf.done .lbl::after{content:"DONE";font-family:var(--mono);font-size:8.5px;
 .act{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;color:var(--warn);background:var(--warn-bg);padding:2px 5px;border-radius:2px;align-self:flex-start;margin-top:1px;flex:none;white-space:nowrap;cursor:help}
 .act.gate{color:#B4342E;background:var(--warn-bg);box-shadow:inset 0 0 0 1px #B4342E}
 li.leaf .cb[data-act]{accent-color:var(--warn)}
+.act.decided{color:var(--muted);background:var(--sunk)}
+li.leaf .cb[data-decided]{accent-color:var(--muted)}
 .prog{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none;padding-top:3px}
 .prog.full{color:var(--ok);font-weight:700}
 .due{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none;padding-top:3px;margin-left:auto;white-space:nowrap}
@@ -325,6 +336,7 @@ footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-fa
       <span><b id="cLeft">${BUILDABLE}</b> remaining</span>
       <span title="Leaves a commit can close. Every percentage on this page counts only these."><b id="cBuild">0</b> of ${BUILDABLE} buildable</span>
       <span title="Work for a person on the week of the migration, which no commit can close. Listed below, not counted in the percentage."><b id="cActs">${ACT_COUNT}</b> client tasks, not counted</span>
+      <span title="Leaves the owner decided are not needed as written. Nobody's work on any week, so neither in the percentage nor among the client tasks."><b id="cDecided">${DECIDED_COUNT}</b> decided, not needed as written</span>
       <span><b id="cMods">0</b>/${TREE.length} modules complete</span>
     </div>
     <div class="acts">
@@ -368,7 +380,10 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
   var boxes=[].slice.call(document.querySelectorAll(".cb"));
   // Acts are listed but never counted: every percentage divides by the buildable leaves.
   var isActBox=function(b){return b.getAttribute("data-act")!==null};
-  var total=boxes.filter(function(b){return !isActBox(b)}).length;
+  // Decided leaves are counted in no total either, and never as client tasks.
+  var isDecidedBox=function(b){return b.getAttribute("data-decided")!==null};
+  var isOutBox=function(b){return isActBox(b)||isDecidedBox(b)};
+  var total=boxes.filter(function(b){return !isOutBox(b)}).length;
   var waveOf={};
   [].slice.call(document.querySelectorAll("section[data-mod]")).forEach(function(s){
     var w=s.querySelector(".chip.wave").textContent.replace("wave ","").trim();
@@ -389,10 +404,12 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
       var id=b.getAttribute("data-id");
       var mod=id.split(".")[0];
       var isAct=isActBox(b);
+      var isOut=isOutBox(b);
       if(isAct&&!state[id])actsLeft++;
-      if(!isAct&&state[id])buildDone++;
-      // An act is still ticked when a commit closes it, and still counts in no total.
-      if(isAct){
+      if(!isOut&&state[id])buildDone++;
+      // An act or a decided leaf is still ticked when a commit names it, and still counts in
+      // no total. Only an act counts toward actsLeft: a decided leaf is nobody's task.
+      if(isOut){
         if(state[id]){b.checked=true;b.closest("li.leaf").classList.add("done")}
         else{b.checked=false;b.closest("li.leaf").classList.remove("done")}
         return;
@@ -435,7 +452,7 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     [].slice.call(document.querySelectorAll(".prog")).forEach(function(el){
       var pre=el.getAttribute("data-for")+".";
       var t=0,d=0;
-      boxes.forEach(function(b){var id=b.getAttribute("data-id");if(id.indexOf(pre)===0&&!isActBox(b)){t++;if(state[id])d++}});
+      boxes.forEach(function(b){var id=b.getAttribute("data-id");if(id.indexOf(pre)===0&&!isOutBox(b)){t++;if(state[id])d++}});
       el.textContent=t?d+"/"+t:"";
       el.classList.toggle("full",t>0&&d===t);
     });
@@ -464,7 +481,8 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     var nxt=[];
     for(var i=0;i<boxes.length&&nxt.length<3;i++){
       var id=boxes[i].getAttribute("data-id");
-      if(!state[id]&&waveOf[id.split(".")[0]]===current){
+      // Buildable leaves only, as in brain.status: no commit closes an act or a decided leaf.
+      if(!state[id]&&!isOutBox(boxes[i])&&waveOf[id.split(".")[0]]===current){
         nxt.push(id+" "+boxes[i].parentNode.querySelector(".txt").textContent);
       }
     }
@@ -525,5 +543,5 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
 
 fs.writeFileSync(__dirname + "/../tracker.html", html);
 console.log("modules", TREE.length, "| nodes", NODES, "| LEAF TASKS", LEAVES, "| max depth", MAXD);
-console.log("acts no commit can close:", ACT_COUNT, "| buildable:", BUILDABLE);
+console.log("acts no commit can close:", ACT_COUNT, "| decided, not needed as written:", DECIDED_COUNT, "| buildable:", BUILDABLE);
 console.log("leaves by wave:", JSON.stringify(waves));

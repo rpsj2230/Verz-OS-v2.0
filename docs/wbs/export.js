@@ -66,7 +66,7 @@ MODS.forEach((m) => {
 });
 // Throws rather than writing a stale `wbs.json`, so a leaf that moved under a flag is a build
 // failure and not a checklist quietly listing different work. See the header of acts.js.
-const ACT_COUNT = ACT.check((id) => ALL_TEXTS[id]);
+const COUNTS = ACT.check((id) => ALL_TEXTS[id]);
 
 const modules = MODS.map((m) => {
   const pairs = [];
@@ -81,10 +81,17 @@ const modules = MODS.map((m) => {
     if (w !== undefined && w !== modWave) leaf_waves[id] = w;
   });
   const leaf_acts = {};
+  const leaf_decided = {};
   const act_groups = {};
   ids.forEach((id) => {
     const flag = ACT.ACTS[id];
     if (!flag) return;
+    // A decided leaf goes to its own field and gets no heading: it is on no checklist, and
+    // every reader of `leaf_acts` means "a person does it". See the header of acts.js.
+    if (flag.kind === ACT.DECIDED) {
+      leaf_decided[id] = { kind: flag.kind, why: flag.why };
+      return;
+    }
     leaf_acts[id] = { kind: flag.kind, gate: flag.gate === true, why: flag.why || "" };
     // Every ancestor of the leaf that is a group, which is every prefix from the task down.
     const parts = id.split(".");
@@ -108,6 +115,10 @@ const modules = MODS.map((m) => {
     // cutover. Absent from a module holding none, for the reason `leaf_waves` is: the common
     // case should be silence rather than 1218 entries saying nothing.
     leaf_acts,
+    // Leaves the owner decided are not needed as written, by id, with the reason. Kept out of
+    // `leaf_acts` so every reader of that field still means work a person does; `brain.status`
+    // counts these on their own. Absent from a module holding none.
+    leaf_decided,
     // The headings above those leaves, so the generated checklist can be read by somebody who
     // is not holding the tracker open. Only the ancestors of a flagged leaf, so a module with
     // no acts carries nothing.
@@ -127,6 +138,7 @@ const total = modules.reduce((a, m) => a + m.leaf_ids.length, 0);
 const gated = Object.values(ACT.ACTS).filter((one) => one.gate === true).length;
 console.log(`wrote wbs.json: ${modules.length} modules, ${total} leaves`);
 console.log(
-  `  of which ${ACT_COUNT} are acts no commit can close, ${gated} of them gating the cutover;` +
-    ` ${total - ACT_COUNT} buildable`
+  `  of which ${COUNTS.acts} are acts no commit can close, ${gated} of them gating the cutover;` +
+    ` ${COUNTS.decided} decided, not needed as written;` +
+    ` ${total - COUNTS.acts - COUNTS.decided} buildable`
 );

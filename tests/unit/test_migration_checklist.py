@@ -82,7 +82,13 @@ def _flags() -> dict[str, dict[str, Any]]:
     return found
 
 
-def _a_wbs(*, ids: list[str], texts: list[str], acts: dict[str, Any]) -> dict[str, Any]:
+def _a_wbs(
+    *,
+    ids: list[str],
+    texts: list[str],
+    acts: dict[str, Any],
+    decided: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """One module's worth of work breakdown, in the shape `export.js` writes."""
     return {
         "generated_by": "a test",
@@ -95,10 +101,16 @@ def _a_wbs(*, ids: list[str], texts: list[str], acts: dict[str, Any]) -> dict[st
                 "leaf_texts": texts,
                 "leaf_waves": {},
                 "leaf_acts": acts,
+                "leaf_decided": decided or {},
                 "act_groups": {"M90.1": "A group"},
             }
         ],
     }
+
+
+def _decided() -> set[str]:
+    """Every leaf the exported work breakdown records as decided, not needed as written."""
+    return {leaf for module in _wbs()["modules"] for leaf in module.get("leaf_decided", {})}
 
 
 def _written(tmp_path: Path, wbs: dict[str, Any]) -> Path:
@@ -286,12 +298,80 @@ def test_the_tracker_counts_the_buildable_leaves_as_the_total_less_the_acts() ->
     html = TRACKER.read_text("utf-8")
     total = sum(len(m["leaf_ids"]) for m in _wbs()["modules"])
     acts = len(_flags())
+    decided = len(_decided())
 
     buildable = re.search(r'id="cBuild">0</b> of (\d+)', html)
     stated_acts = re.search(r'id="cActs">(\d+)', html)
-    assert buildable is not None and stated_acts is not None
-    assert int(buildable.group(1)) == total - acts
+    stated_decided = re.search(r'id="cDecided">(\d+)</b> decided, not needed as written', html)
+    assert buildable is not None and stated_acts is not None and stated_decided is not None
+    assert int(buildable.group(1)) == total - acts - decided
     assert int(stated_acts.group(1)) == acts
+    assert int(stated_decided.group(1)) == decided
+
+
+def test_the_tracker_marks_the_same_decided_leaves_as_the_work_breakdown_and_never_as_acts() -> (
+    None
+):
+    """The two generators number the tree separately, and a decided leaf the tracker marked as
+    an act would show a person's task on a page the owner reads while the checklist omits it.
+
+    Delete this and `render.js` can give a decided leaf `data-act`, which puts it in the client
+    task count on the tracker while `/build` reports it as decided."""
+    html = TRACKER.read_text("utf-8")
+    marked = set(re.findall(r'data-id="(M[\d.]+)"[^>]*data-decided="1"', html))
+    acts = set(TRACKER_ACT.findall(html))
+
+    assert marked == _decided()
+    assert marked, "the plan records no decided leaf, so this test is watching nothing"
+    assert not marked & {leaf for leaf, _ in acts}
+
+
+def test_a_leaf_decided_against_is_never_on_the_checklist(tmp_path: Path) -> None:
+    """The checklist is work a person does on the week of a migration, and a leaf the owner
+    decided is not needed as written is nobody's work. Delete this and the reader can be
+    widened to include decided leaves, and somebody is sent to build a plugin interface item
+    58 decided against, while every test of the acts keeps passing."""
+    path = _written(
+        tmp_path,
+        _a_wbs(
+            ids=["M90.1.1", "M90.1.2"],
+            texts=["A thing somebody does", "An interface decided against"],
+            acts={"M90.1.1": {"kind": "ACT", "gate": False, "why": ""}},
+            decided={"M90.1.2": {"kind": "DECIDED", "why": "item 58"}},
+        ),
+    )
+
+    assert [one.leaf for one in load_acts(path)] == ["M90.1.1"]
+    assert set(CHECKLIST_ITEM.findall(checklist_markdown(path))) == {"M90.1.1"}
+
+
+def test_the_real_checklist_holds_no_leaf_the_plan_records_as_decided() -> None:
+    """The same property against the plan itself, where the nine plugin interfaces are. Delete
+    this and the fixture above can pass while the export routes a decided leaf among the acts,
+    which is the generator half rather than the reader half."""
+    listed = set(CHECKLIST_ITEM.findall(checklist_markdown(WBS)))
+
+    assert _decided(), "the plan records no decided leaf, so this test is watching nothing"
+    assert not listed & _decided()
+    assert not set(_flags()) & _decided()
+
+
+def test_a_decided_kind_found_among_the_acts_is_refused(tmp_path: Path) -> None:
+    """A `wbs.json` edited by hand, or left by an export from before `leaf_decided` existed, can
+    carry a decided leaf among the acts. Refused rather than listed, because listing it sends a
+    person to do what was decided against, and a bare `ValueError` from the enum would not say
+    so. Delete this and the refusal can quietly become a skip or a listing."""
+    path = _written(
+        tmp_path,
+        _a_wbs(
+            ids=["M90.1.1"],
+            texts=["An interface decided against"],
+            acts={"M90.1.1": {"kind": "DECIDED", "gate": False, "why": "item 58"}},
+        ),
+    )
+
+    with pytest.raises(ChecklistError, match="nobody's work"):
+        load_acts(path)
 
 
 def test_the_four_leaves_that_name_one_companys_things_are_recorded_as_unbuildable() -> None:

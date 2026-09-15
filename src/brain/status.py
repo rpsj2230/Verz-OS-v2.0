@@ -37,6 +37,8 @@ class WaveProgress(BaseModel):
     percent: float = 0.0
     #: Leaves in this wave a person does on the week of a migration, left out of `total`.
     acts: int = 0
+    #: Leaves in this wave decided as not needed as written, left out of `total` and `acts`.
+    decided: int = 0
 
 
 class ModuleProgress(BaseModel):
@@ -47,6 +49,8 @@ class ModuleProgress(BaseModel):
     done: int
     #: Leaves in this module a person does rather than a commit, left out of `total`.
     acts: int = 0
+    #: Leaves in this module decided as not needed as written, left out of `total` and `acts`.
+    decided: int = 0
 
 
 class Status(BaseModel):
@@ -62,6 +66,9 @@ class Status(BaseModel):
     #: Leaves flagged in `docs/wbs/acts.js`: work a person does on the week of a migration,
     #: counted here and never in `total`, so they stay visible without holding the figure down.
     acts: int = 0
+    #: Leaves flagged DECIDED: not needed as written, by the owner's decision. Neither in
+    #: `total` nor in `acts`. See `A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK`.
+    decided: int = 0
     current_wave: int | None = None
     waves: list[WaveProgress] = []
     modules: list[ModuleProgress] = []
@@ -311,14 +318,48 @@ def acts_of(module: dict[str, Any]) -> dict[str, Any]:
     return flags
 
 
+#: Why a leaf decided against is counted on its own rather than as buildable or as an act.
+A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK: Final = (
+    "The owner can decide a leaf is not needed as written, as Needs Rupash item 58 did for "
+    "nine plugin interfaces the extension-point register gives no plugin answer. Left in "
+    "total it holds the percentage down with work nobody will do; folded into acts it "
+    "appears as a client task on the week of a migration and on the delivery checklist, "
+    "which is a person sent to do something that was decided against. So it is its own "
+    "count, beside the other two, and the three together are the whole plan."
+)
+
+#: Why one leaf may not be both an act and decided.
+A_LEAF_IS_EITHER_WORK_FOR_A_PERSON_OR_DECIDED_NEVER_BOTH: Final = (
+    "flagged both as an act and as decided, so the checklist would list it while the "
+    "status page counted it as not needed. export.js writes each flag to one field; a "
+    "wbs.json holding both was edited by hand or left behind by a failed export"
+)
+
+
+def decided_of(module: dict[str, Any]) -> dict[str, Any]:
+    """The DECIDED flags a module carries in the exported work breakdown, keyed by leaf id.
+
+    The one place that flag is read off a module, and it refuses a leaf that `acts_of` also
+    returns, because the checklist reads one field and this page the other, and a leaf in both
+    is the two disagreeing about whether somebody has work to do.
+    """
+    flags: dict[str, Any] = module.get("leaf_decided", {}) or {}
+    both = sorted(set(flags) & set(acts_of(module)))
+    if both:
+        reason = A_LEAF_IS_EITHER_WORK_FOR_A_PERSON_OR_DECIDED_NEVER_BOTH
+        msg = f"{module['id']}: {', '.join(both)} {reason}"
+        raise ValueError(msg)
+    return flags
+
+
 def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     closed, recent = closed_task_ids(repo, ref)
     wave_names: dict[str, str] = wbs.get("wave_names", {})
 
     modules: list[ModuleProgress] = []
-    #: Wave to [buildable leaves, of those closed, acts].
+    #: Wave to [buildable leaves, of those closed, acts, decided].
     per_wave: dict[int, list[int]] = {}
-    total = done = acts = 0
+    total = done = acts = decided = 0
     matched: set[str] = set()
 
     for m in wbs.get("modules", []):
@@ -330,13 +371,20 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         # so the wave could never reach 100% and the figure understated real progress.
         leaf_waves: dict[str, int] = m.get("leaf_waves", {})
         flags = acts_of(m)
-        m_total = m_done = m_acts = 0
+        decisions = decided_of(m)
+        m_total = m_done = m_acts = m_decided = 0
         for leaf in leaves:
             leaf_done = _is_closed(leaf, closed)
             if leaf_done:
                 # Still listed as closed even for an act, so the tracker ticks it.
                 matched.add(leaf)
-            bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0, 0])
+            bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0, 0, 0])
+            # Before the act test, and neither in `total` nor in `acts`. See
+            # A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK.
+            if leaf in decisions:
+                m_decided += 1
+                bucket[3] += 1
+                continue
             if leaf in flags:
                 m_acts += 1
                 bucket[2] += 1
@@ -353,11 +401,13 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
                 total=m_total,
                 done=m_done,
                 acts=m_acts,
+                decided=m_decided,
             )
         )
         total += m_total
         done += m_done
         acts += m_acts
+        decided += m_decided
 
     waves = [
         WaveProgress(
@@ -367,8 +417,9 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             done=d,
             percent=round(100 * d / t, 1) if t else 0.0,
             acts=a,
+            decided=x,
         )
-        for w, (t, d, a) in sorted(per_wave.items())
+        for w, (t, d, a, x) in sorted(per_wave.items())
     ]
     # The first unfinished wave. None means every wave is complete, so there is no
     # current wave rather than a misleading "wave 5".
@@ -387,9 +438,11 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     for m in wbs.get("modules", []):
         waves_by_leaf: dict[str, int] = m.get("leaf_waves", {})
         flags = acts_of(m)
+        decisions = decided_of(m)
         for leaf in m.get("leaf_ids", []):
-            # An act is not "next" for a build: no commit can close it.
-            if leaf in closed or leaf in flags:
+            # An act is not "next" for a build: no commit can close it. Nor is a leaf decided
+            # against, which nobody is meant to close at all.
+            if leaf in closed or leaf in flags or leaf in decisions:
                 continue
             if current is not None and waves_by_leaf.get(leaf, int(m.get("wave", 0))) != current:
                 continue
@@ -407,6 +460,7 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         done=done,
         percent=round(100 * done / total, 1) if total else 0.0,
         acts=acts,
+        decided=decided,
         current_wave=current,
         waves=waves,
         modules=modules,
@@ -488,7 +542,10 @@ def main(repo: Path | None = None) -> int:
     status = build_status(repo, load_wbs(wbs_path))
     out = repo / "docs" / "status.json"
     out.write_text(status.model_dump_json(indent=2), encoding="utf-8")
-    print(f"{status.done}/{status.total} tasks ({status.percent}%) - wave {status.current_wave}")
+    print(
+        f"{status.done}/{status.total} tasks ({status.percent}%) - wave {status.current_wave}"
+        f" - {status.acts} acts, {status.decided} decided"
+    )
     return 0
 
 

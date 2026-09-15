@@ -16,6 +16,7 @@ import os
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi import FastAPI
@@ -131,6 +132,136 @@ def test_a_buildable_leaf_still_counts_when_its_module_carries_an_act(repo: Path
     assert module_one.done == 1
     wave_zero = next(w for w in s.waves if w.wave == 0)
     assert (wave_zero.done, wave_zero.total, wave_zero.acts) == (2, 3, 0)
+
+
+#: The fixture plan with two acts and one leaf decided against, all in M1, as `export.js`
+#: writes. Two acts and one decision rather than one of each, so a wave or a module that
+#: reported one count under the other's name reads a different number and is caught.
+WBS_WITH_A_DECIDED_LEAF: dict[str, Any] = {
+    "wave_names": {"0": "Foundation", "1": "The gate"},
+    "modules": [
+        {"id": "M0", "name": "Foundation", "wave": 0, "leaf_ids": ["M0.1.1", "M0.1.2", "M0.2.1"]},
+        {
+            "id": "M1",
+            "name": "Identity",
+            "wave": 1,
+            "leaf_ids": ["M1.1.1", "M1.1.2", "M1.1.3", "M1.1.4"],
+            "leaf_acts": {
+                "M1.1.2": {"kind": "ACT", "gate": False},
+                "M1.1.4": {"kind": "ACT", "gate": False},
+            },
+            "leaf_decided": {"M1.1.3": {"kind": "DECIDED", "why": "item 58"}},
+        },
+    ],
+}
+
+
+def test_a_decided_leaf_is_left_out_of_the_percentage_per_wave_and_per_module(repo: Path) -> None:
+    """Item 58 recorded nine plugin interfaces as decided, not needed as written. Counted in the
+    denominator they hold the figure down with work nobody will do. Delete this and a decided
+    leaf can slide back into `total`, overall or in its wave or its module, and the headline
+    understates what was built by exactly the work that was decided against."""
+    s = status.build_status(repo, WBS_WITH_A_DECIDED_LEAF)
+
+    assert (s.done, s.total, s.percent) == (3, 4, 75.0)
+    assert s.decided == 1
+    wave_one = next(w for w in s.waves if w.wave == 1)
+    assert (wave_one.done, wave_one.total, wave_one.decided) == (1, 1, 1)
+    module_one = next(m for m in s.modules if m.module == "M1")
+    assert (module_one.done, module_one.total, module_one.decided) == (1, 1, 1)
+
+
+def test_a_decided_leaf_is_not_counted_as_a_client_task(repo: Path) -> None:
+    """A decided leaf is nobody's work on any week, and the act count is read as client tasks
+    on the week of a migration. Delete this and the reader can fold decided leaves into `acts`,
+    which keeps the percentage right and tells the owner there are forty-eight things to do
+    with a client when there are thirty-nine."""
+    s = status.build_status(repo, WBS_WITH_A_DECIDED_LEAF)
+
+    assert (s.acts, s.decided) == (2, 1)
+    wave_one = next(w for w in s.waves if w.wave == 1)
+    assert (wave_one.acts, wave_one.decided) == (2, 1)
+    module_one = next(m for m in s.modules if m.module == "M1")
+    assert (module_one.acts, module_one.decided) == (2, 1)
+
+
+def test_a_buildable_leaf_still_counts_beside_a_decided_one(repo: Path) -> None:
+    """The positive sibling. A decision that took its whole module, or its wave, out of the
+    count would pass both tests above. Delete this and that version is indistinguishable from
+    the right one."""
+    s = status.build_status(repo, WBS_WITH_A_DECIDED_LEAF)
+
+    assert "M1.1.1" in s.done_task_ids
+    wave_zero = next(w for w in s.waves if w.wave == 0)
+    assert (wave_zero.done, wave_zero.total, wave_zero.acts, wave_zero.decided) == (2, 3, 0, 0)
+    assert s.total + s.acts + s.decided == sum(
+        len(m["leaf_ids"]) for m in WBS_WITH_A_DECIDED_LEAF["modules"]
+    )
+
+
+def test_a_decided_leaf_is_never_named_as_the_next_thing_to_build(repo: Path) -> None:
+    """Next up answers what a commit should close next, and nobody should close a leaf that was
+    decided against. Built so the decided leaf is reachable: wave 0 is all closed, so wave 1 is
+    current, and the decided leaf sits before an open buildable one. Delete this and a decided
+    plugin interface can sit at the top of that list for ever."""
+    plan = {
+        "wave_names": WBS["wave_names"],
+        "modules": [
+            {"id": "M0", "name": "Foundation", "wave": 0, "leaf_ids": ["M0.1.1", "M0.1.2"]},
+            {
+                "id": "M1",
+                "name": "Identity",
+                "wave": 1,
+                "leaf_ids": ["M1.1.1", "M1.1.2", "M1.1.3"],
+                "leaf_decided": {"M1.1.2": {"kind": "DECIDED", "why": "item 58"}},
+            },
+        ],
+    }
+
+    s = status.build_status(repo, plan)
+
+    assert s.current_wave == 1
+    assert s.next_up == ["M1.1.3"]
+
+
+def test_a_leaf_flagged_both_as_an_act_and_as_decided_is_refused() -> None:
+    """The checklist reads the acts and this page reads both, so a leaf in both is a person
+    sent to do work the page says was decided against. `export.js` writes each flag to one
+    field; this is the hand-edited or stale `wbs.json` it cannot see. Delete this and such a
+    leaf is silently counted as decided while the checklist lists it."""
+    module = {
+        "id": "M1",
+        "leaf_acts": {"M1.1.2": {"kind": "ACT", "gate": False}},
+        "leaf_decided": {"M1.1.2": {"kind": "DECIDED", "why": "item 58"}},
+    }
+
+    with pytest.raises(ValueError, match="both as an act and as decided"):
+        status.decided_of(module)
+
+
+def test_a_module_whose_act_and_decision_name_different_leaves_is_read(repo: Path) -> None:
+    """The positive sibling of the refusal above. Delete this and `decided_of` can refuse every
+    module that carries both fields, which the refusal test cannot tell apart from the rule."""
+    module = WBS_WITH_A_DECIDED_LEAF["modules"][1]
+
+    assert set(status.decided_of(module)) == {"M1.1.3"}
+
+
+def test_the_decided_leaves_are_the_register_points_that_are_not_plugins() -> None:
+    """Item 58 Option B records the extension-point register's answer as the decision: every
+    M29.1 point the register does not answer PLUGIN is decided, not needed as written. Compared
+    against `brain.plugins.points` rather than against a list here, so a point the register
+    later answers PLUGIN reopens its leaf as buildable, and a flag with no register answer
+    behind it is red. Delete this and the two drift, and the tracker reports a decision the
+    register no longer makes."""
+    from brain.plugins.points import POINTS, Answer
+
+    repo = Path(__file__).resolve().parents[2]
+    wbs = status.load_wbs(repo / "docs" / "wbs.json")
+    decided = {leaf: flag for m in wbs["modules"] for leaf, flag in status.decided_of(m).items()}
+
+    assert set(decided) == {one.leaf for one in POINTS if one.answer is not Answer.PLUGIN}
+    assert all(flag["kind"] == "DECIDED" and "item 58" in flag["why"] for flag in decided.values())
 
 
 def test_an_act_is_never_named_as_the_next_thing_to_build(repo: Path) -> None:
@@ -321,6 +452,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
                 "done": 25,
                 "percent": 25.0,
                 "acts": 39,
+                "decided": 9,
                 "current_wave": 1,
                 "waves": [
                     {"wave": 1, "name": "The gate", "total": 100, "done": 25, "percent": 25.0}
@@ -372,6 +504,21 @@ def test_the_page_says_how_many_client_tasks_the_percentage_leaves_out(
 
     assert "25 of 100 buildable tasks" in text
     assert "39 client tasks on the week of a migration, not counted" in text
+
+
+def test_the_page_reports_decided_leaves_as_their_own_count_and_not_as_client_tasks(
+    client: TestClient,
+) -> None:
+    """Item 58 recorded nine plugin interfaces as decided, not needed as written. They are not
+    client tasks on the week of a migration, so the page states them on their own line with
+    their own label while the client task line keeps its own number. Delete this and the line
+    can vanish, or the nine can be folded into the client tasks, and either way the page says
+    something about the plan that was not decided."""
+    text = client.get("/build").text
+
+    assert "9 decided, not needed as written" in text
+    assert "39 client tasks on the week of a migration, not counted" in text
+    assert "48 client tasks" not in text
 
 
 def test_the_page_says_how_much_closed_today(client: TestClient) -> None:
@@ -601,7 +748,11 @@ def _tracker_leaves_per_wave() -> dict[int, int]:
     # Buildable leaves only: an act's checkbox carries data-act and is counted beside the
     # figure, never in it, on both pages.
     boxes = re.findall(r'<input type="checkbox" class="cb"[^>]*>', html)
-    found = [re.search(r'data-wave="(\d+)"', box) for box in boxes if "data-act=" not in box]
+    found = [
+        re.search(r'data-wave="(\d+)"', box)
+        for box in boxes
+        if "data-act=" not in box and "data-decided=" not in box
+    ]
     counted = collections.Counter(int(w.group(1)) for w in found if w is not None)
     return dict(counted)
 
@@ -625,8 +776,9 @@ def _wbs_leaves_per_wave() -> dict[int, int]:
         module_wave = int(module.get("wave", 0))
         leaf_waves = module.get("leaf_waves", {})
         flags = module.get("leaf_acts", {})
+        decided = module.get("leaf_decided", {})
         for leaf in module["leaf_ids"]:
-            if leaf in flags:
+            if leaf in flags or leaf in decided:
                 continue
             counted[int(leaf_waves.get(leaf, module_wave))] += 1
     return dict(counted)
@@ -890,21 +1042,24 @@ def test_the_generated_status_agrees_with_the_wbs_about_the_waves() -> None:
 
 
 def test_every_leaf_appears_exactly_once_on_the_tracker() -> None:
-    """The buildable leaves and the acts together have to be the whole plan. A partition
-    that dropped a leaf would still let the test above pass if both sides dropped it, so
-    this checks against the WBS itself rather than against the other page, and it counts the
-    acts too, so excluding them from the percentage can never quietly lose one."""
+    """The buildable leaves, the acts and the decided leaves together have to be the whole
+    plan. A partition that dropped a leaf would still let the test above pass if both sides
+    dropped it, so this checks against the WBS itself rather than against the other page, and
+    it counts the acts and the decided leaves too, so excluding them from the percentage can
+    never quietly lose one, or count one twice."""
     repo = Path(__file__).resolve().parents[2]
     wbs = status.load_wbs(repo / "docs" / "wbs.json")
     expected = sum(len(m["leaf_ids"]) for m in wbs["modules"])
     acts = sum(len(status.acts_of(m)) for m in wbs["modules"])
+    decided = sum(len(status.decided_of(m)) for m in wbs["modules"])
 
     built = status.build_status(repo, wbs)
 
     assert acts > 0, "the work breakdown flags no acts, so this test is watching nothing"
-    assert sum(_tracker_leaves_per_wave().values()) + acts == expected
-    assert built.total + built.acts == expected
-    assert built.acts == acts
+    assert decided > 0, "the work breakdown records no decided leaf, so half of this is idle"
+    assert sum(_tracker_leaves_per_wave().values()) + acts + decided == expected
+    assert built.total + built.acts + built.decided == expected
+    assert (built.acts, built.decided) == (acts, decided)
 
 
 # ------------------------------------------------- taking back a claim that was not true

@@ -45,6 +45,12 @@ sits in, and what the outgoing vendor produced that people still rely on. The fi
 unbuildable here rather than left looking merely undone, and the checklist says so beside each
 one. Nothing in this module holds the answers, only the fact that a person supplies them.
 
+**A leaf the owner decided is not needed as written is not on this list at all.** Needs Rupash
+item 58 recorded nine plugin interfaces that way, and they are flagged `DECIDED` in the same
+file. They are nobody's work on any week, so `export.js` writes them to their own field, this
+module never reads it, and a `DECIDED` kind found among the acts is refused rather than listed.
+See `A_DECISION_NOT_TO_BUILD_IS_NOT_WORK_FOR_A_PERSON`.
+
 What was rejected. Moving the thirty out of the work breakdown entirely, which is the cleanest
 tracker and loses the only record that they are in scope at all. Flagging them inside the leaf,
 which means changing the shape of 1251 leaves to mark 33 and is how a group gets inserted by
@@ -110,6 +116,16 @@ A_LEAF_NO_COMMIT_CAN_CLOSE_IS_NOT_A_LEAF_NOBODY_HAS_STARTED: Final = (
     "or because it names one company's own things and a product every client installs cannot "
     "hold them. Recording which is which is what stops the next reader spending a day trying "
     "to make one fit."
+)
+
+
+#: Why a flag of any kind but ACT or UNBUILDABLE is refused rather than listed.
+A_DECISION_NOT_TO_BUILD_IS_NOT_WORK_FOR_A_PERSON: Final = (
+    "This checklist is work a person does on the week of a migration. A leaf the owner decided "
+    "is not needed as written is nobody's work, and listing it sends somebody to do what was "
+    "decided against. export.js writes those to leaf_decided, never among the acts, so a "
+    "different kind here means the export was edited or is stale. See "
+    "brain.status.A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK."
 )
 
 
@@ -230,6 +246,12 @@ def load_acts(wbs_path: Path) -> tuple[Act, ...]:
             flag = flags.get(leaf)
             if flag is None:
                 continue
+            if flag["kind"] not in ActKind.__members__:
+                msg = (
+                    f"{leaf} is flagged {flag['kind']} among the acts. "
+                    f"{A_DECISION_NOT_TO_BUILD_IS_NOT_WORK_FOR_A_PERSON}"
+                )
+                raise ChecklistError(msg)
             found.append(
                 Act(
                     leaf=leaf,

@@ -31,6 +31,14 @@
 //                        in CLAUDE.md is that no company's details go into this repository.
 //                        Recorded rather than left looking merely undone, so nobody spends a
 //                        day trying to make it fit.
+//           DECIDED      nobody does it, because the owner decided it is not needed as written.
+//                        Not a person's task on any week and not code anybody should write,
+//                        so it is neither on the delivery checklist nor in the percentage, and
+//                        it is reported as its own count beside both. `why` is required and
+//                        names the decision. `export.js` writes these into `leaf_decided`
+//                        rather than `leaf_acts`, so every reader of `leaf_acts` keeps meaning
+//                        "a person does it" without being taught a new kind. See
+//                        `brain.status.A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK`.
 //   gate    true         its absence has a security consequence, so it gates the cutover
 //                        rather than only appearing on a list. `brain.migration.decommission`
 //                        refuses to report a completed cutover while any of these is
@@ -58,8 +66,77 @@
 // stay in the breakdown, they are flagged here, and the five with a security consequence gate
 // the cutover.
 
+//: The kind that means "decided: not needed as written". Named once so the generators compare
+//: against a constant rather than each spelling the word.
+const DECIDED = "DECIDED";
+
+//: Every kind a flag may carry. See the header for what each one means.
+const KINDS = ["ACT", "UNBUILDABLE", DECIDED];
+
 //: Leaf id to its flag. Ordered by id, which is also plan order inside a module.
 const ACTS = {
+  // -------------------------------------------------------- M29.1 plugin interfaces, decided
+  //
+  // Needs Rupash item 58, answered Option B on 2026-09-16. `brain.plugins.points` is the
+  // register of every extension point and it gives these nine an answer other than PLUGIN:
+  // six are UNDECIDED, two are CONFIGURATION and one is FLAG. Writing the nine protocols would
+  // close nine leaves with nine files nothing calls, which is the state the register refuses
+  // in A_PROTOCOL_NOTHING_IMPLEMENTS_MAKES_THE_REGISTER_COMPLETE_AND_WORSE. A point gets a
+  // contract on the day a real plug-in for it exists, and is tested against that plug-in.
+  "M29.1.6": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Retriever interface",
+    why: "item 58, Option B. The register answers UNDECIDED: no module defines a retriever contract, and the reach predicate is what decides which rows exist for a caller. A contract is written when a real retriever plug-in exists",
+  },
+  "M29.1.8": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Entity resolver interface",
+    why: "item 58, Option B. The register answers UNDECIDED: resolution has a cascade and no seam, and a wrong merge joins two parties' rows under one id. A contract is written when a real resolver plug-in exists",
+  },
+  "M29.1.9": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Verifier interface",
+    why: "item 58, Option B. The register answers UNDECIDED: whether an outside party may verify is a question about who the company stands behind. A contract is written when a real verifier plug-in exists",
+  },
+  "M29.1.10": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Guard interface",
+    why: "item 58, Option B. The register answers UNDECIDED: a guard supplied from outside can be one that passes everything. A contract is written when a real guard plug-in exists, with the rule on replacing a shipped guard decided first",
+  },
+  "M29.1.11": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Storage backend interface",
+    why: "item 58, Option B. The register answers FLAG: files are not optional, so a further backend goes into this repository behind a flag against brain.ops.storage.StorageBackend rather than in as a plug-in",
+  },
+  "M29.1.13": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Identity provider interface",
+    why: "item 58, Option B. The register answers CONFIGURATION: a provider supplies principals, so one from outside is a second source of grants. Which provider is used is a value set during setup",
+  },
+  "M29.1.14": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Approver surface interface",
+    why: "item 58, Option B. The register answers UNDECIDED: an outside surface would have to prove which person approved. A contract is written when a real approver surface plug-in exists",
+  },
+  "M29.1.15": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Export format interface",
+    why: "item 58, Option B. The register answers UNDECIDED: neither export module declares a format seam. A contract is written when a real export format plug-in exists",
+  },
+  "M29.1.16": {
+    kind: "DECIDED",
+    gate: false,
+    text: "Scope pack interface",
+    why: "item 58, Option B. The register answers CONFIGURATION: a pack is a source of grants by definition and entitlements are additive, so a pack from outside the company is refused. Packs are set during setup",
+  },
   // ---------------------------------------------------- M37.2.1 what is actually in there
   "M37.2.1.1": {
     kind: "UNBUILDABLE",
@@ -346,21 +423,37 @@ const NOT_GATED_ON_PURPOSE = ["M37.4.1.4", "M37.4.1.5", "M37.2.6.3", "M37.2.6.4"
 //: Takes a lookup rather than reading `wbs.json`, because both generators number the leaves
 //: themselves and the point is to check each one's numbering rather than a third copy. Called
 //: from `export.js` and from `render.js`, so a repointed id fails whichever is run first.
+//:
+//: Also refuses a kind outside the vocabulary, an UNBUILDABLE or DECIDED flag with no `why`, and
+//: a DECIDED flag that gates the cutover. A misspelt kind would otherwise be exported as an act
+//: nobody recognises, and a decision with no reason is a leaf somebody reopens to find out why.
+//: Returns the two counts separately, because they are reported separately on both pages.
 function check(textOf) {
   const wrong = [];
   for (const id of Object.keys(ACTS)) {
+    const flag = ACTS[id];
     const actual = textOf(id);
     if (actual === undefined) {
-      wrong.push(`${id} is flagged as an act and names no leaf, so it is a group id or a typo`);
-    } else if (actual !== ACTS[id].text) {
+      wrong.push(`${id} is flagged and names no leaf, so it is a group id or a typo`);
+    } else if (actual !== flag.text) {
       wrong.push(
-        `${id} is flagged against "${ACTS[id].text}" and now reads "${actual}", so a leaf ` +
+        `${id} is flagged against "${flag.text}" and now reads "${actual}", so a leaf ` +
           `has moved and every flag after it points at different work`
       );
     }
+    if (!KINDS.includes(flag.kind)) {
+      wrong.push(`${id} has kind "${flag.kind}", which is none of ${KINDS.join(", ")}`);
+    }
+    if (flag.kind !== "ACT" && !(flag.why || "").trim()) {
+      wrong.push(`${id} is ${flag.kind} with no why, so nobody can tell what was decided`);
+    }
+    if (flag.kind === DECIDED && flag.gate === true) {
+      wrong.push(`${id} is DECIDED and gates the cutover, and nothing waits for work nobody does`);
+    }
   }
   if (wrong.length) throw new Error(`docs/wbs/acts.js:\n  ${wrong.join("\n  ")}`);
-  return Object.keys(ACTS).length;
+  const decided = Object.values(ACTS).filter((flag) => flag.kind === DECIDED).length;
+  return { acts: Object.keys(ACTS).length - decided, decided };
 }
 
-module.exports = { ACTS, NOT_GATED_ON_PURPOSE, check };
+module.exports = { ACTS, DECIDED, KINDS, NOT_GATED_ON_PURPOSE, check };
