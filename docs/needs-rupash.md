@@ -2,7 +2,7 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**11 items are open: five actions of yours, and six decisions, five of which unblock leaves.**
+**12 items are open: five actions of yours, and seven decisions, six of which unblock leaves.**
 You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
 verified by mutation and pushed. The two decisions were found on 2026-09-14 while finishing
 waves 0 to 3, and each comes with a recommendation, so one letter each is enough.
@@ -38,6 +38,38 @@ machine's Application Control policy blocking four different things over three d
 what fixes it, because the same policy will refuse the next unsigned binary anything installs.
 
 # Open
+
+## 61. Should the administrative consoles stay on public addresses or move behind an SSH tunnel?
+
+**What you decide: one letter. I recommend Option A.**
+
+M37.6.1.3 asks for this decision to be made and written down. It is a decision about each client's
+server, not code, so it cannot be answered from the repository.
+
+**The consoles in question** are the ones that control the server rather than the product: the
+deployment panel (Coolify), the identity provider's admin console (Keycloak), the secrets vault's
+interface (OpenBao) and the tracing dashboard (Langfuse). Each of them, if reached, hands over
+every container, every account or every secret. The product's own sign-in page and the Brain
+console that staff use are not part of this question: those have to be reachable by the people
+who use them.
+
+**Option A (recommended): administrative consoles behind an SSH tunnel, on every install.** They
+listen only on the server's own loopback address, and an administrator reaches one with a single
+`ssh -L` command. Nothing about them answers from the internet, so a leaked password or an
+unpatched login page is not reachable by anybody without the server's SSH key. Your own server
+already works this way for the deployment panel on port 8000, so the pattern is proven here.
+
+**Option B: public addresses, protected by a second factor and an IP allowlist.** Easier for a
+client whose IT team has no SSH habit. But it puts the most powerful login pages on the internet
+and depends on two protections being configured correctly on every install, for ever.
+
+**Option C: decide per client.** Each install chooses during setup. Honest to the fact that clients
+differ, and it means the product has to document and test both, and the weaker choice is the one
+somebody picks under time pressure.
+
+**Why A.** The consoles are used a few times a month by one or two people, and the cost of a
+tunnel is one command for them. The cost of exposing them is the whole server. The installer would
+bind them to loopback by default and print the tunnel command at the end of setup.
 
 ## 60. The backup ladder the plan asks for keeps copies for a year, and every erasure certificate promises 35 days
 
