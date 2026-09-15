@@ -87,6 +87,99 @@ def test_progress_counts_only_what_commits_closed(repo: Path) -> None:
     assert s.percent == 60.0
 
 
+#: The fixture plan with one leaf of M1 flagged as an act, as `docs/wbs/acts.js` would.
+WBS_WITH_AN_ACT = {
+    "wave_names": {"0": "Foundation", "1": "The gate"},
+    "modules": [
+        {"id": "M0", "name": "Foundation", "wave": 0, "leaf_ids": ["M0.1.1", "M0.1.2", "M0.2.1"]},
+        {
+            "id": "M1",
+            "name": "Identity",
+            "wave": 1,
+            "leaf_ids": ["M1.1.1", "M1.1.2"],
+            "leaf_acts": {"M1.1.2": {"kind": "ACT", "gate": False}},
+        },
+    ],
+}
+
+
+def test_an_act_is_left_out_of_the_percentage_and_counted_beside_it(repo: Path) -> None:
+    """An act is work a person does on the week of a migration, and no commit can close it.
+    In the denominator it holds the figure short of 100 for ever, which the owner read as a
+    stalled build. Delete this and the act can slide back into `total`, and the headline on
+    /build and /build/tracker drops back below what was actually built."""
+    s = status.build_status(repo, WBS_WITH_AN_ACT)
+
+    assert s.total == 4
+    assert s.done == 3
+    assert s.percent == 75.0
+    assert s.acts == 1
+    wave_one = next(w for w in s.waves if w.wave == 1)
+    assert (wave_one.done, wave_one.total, wave_one.acts) == (1, 1, 1)
+    module_one = next(m for m in s.modules if m.module == "M1")
+    assert (module_one.done, module_one.total, module_one.acts) == (1, 1, 1)
+
+
+def test_a_buildable_leaf_still_counts_when_its_module_carries_an_act(repo: Path) -> None:
+    """The positive sibling. A flag that removed its whole module from the count, or every
+    leaf of its wave, would pass the test above and understate real work. Delete this and
+    that version is indistinguishable from the right one."""
+    s = status.build_status(repo, WBS_WITH_AN_ACT)
+
+    assert "M1.1.1" in s.done_task_ids
+    module_one = next(m for m in s.modules if m.module == "M1")
+    assert module_one.done == 1
+    wave_zero = next(w for w in s.waves if w.wave == 0)
+    assert (wave_zero.done, wave_zero.total, wave_zero.acts) == (2, 3, 0)
+
+
+def test_an_act_is_never_named_as_the_next_thing_to_build(repo: Path) -> None:
+    """Next up answers what a commit should close next, and a commit cannot close an act.
+    Delete this and an act can sit at the top of that list for ever, the same stall the
+    percentage had, in a different place.
+
+    The plan is built so the act is reachable: wave 0 holds only closed leaves, so wave 1 is
+    current, and the act sits before an open buildable leaf in plan order. The first version
+    used the shared fixture, whose current wave was 0, so an act in wave 1 was never a
+    candidate and the test passed with the rule deleted; a mutation found that."""
+    plan = {
+        "wave_names": WBS["wave_names"],
+        "modules": [
+            {"id": "M0", "name": "Foundation", "wave": 0, "leaf_ids": ["M0.1.1", "M0.1.2"]},
+            {
+                "id": "M1",
+                "name": "Identity",
+                "wave": 1,
+                "leaf_ids": ["M1.1.1", "M1.1.2", "M1.1.3"],
+                "leaf_acts": {"M1.1.2": {"kind": "ACT", "gate": False}},
+            },
+        ],
+    }
+
+    s = status.build_status(repo, plan)
+
+    assert s.current_wave == 1
+    assert s.next_up == ["M1.1.3"]
+    assert s.acts == 1
+
+
+def test_an_act_a_commit_names_is_ticked_and_still_left_out_of_the_percentage(
+    repo: Path,
+) -> None:
+    """A commit can name an act, and the tracker ticks every leaf in `done_task_ids`. Leaving
+    an act out of that list would show a leaf somebody recorded as closed as still open, and
+    counting it in `done` would put a leaf back in the figure that the denominator left out,
+    so the percentage could pass 100. Delete this and either half can break unseen, because
+    no commit in this repository has closed an act yet."""
+    git(repo, "commit", "--allow-empty", "-m", "announced\n\nCloses: M1.1.2")
+
+    s = status.build_status(repo, WBS_WITH_AN_ACT)
+
+    assert "M1.1.2" in s.done_task_ids
+    assert (s.done, s.total) == (3, 4)
+    assert s.percent <= 100.0
+
+
 def test_a_parent_id_closes_nothing(repo: Path) -> None:
     """Changed 2026-09-04 after finding the number inflated.
 
@@ -227,6 +320,7 @@ def client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClie
                 "total": 100,
                 "done": 25,
                 "percent": 25.0,
+                "acts": 39,
                 "current_wave": 1,
                 "waves": [
                     {"wave": 1, "name": "The gate", "total": 100, "done": 25, "percent": 25.0}
@@ -265,6 +359,19 @@ def test_index_shows_the_percentage_and_the_commit(client: TestClient) -> None:
     assert "25.0%" in text
     assert "abc1234" in text
     assert "The gate" in text
+
+
+def test_the_page_says_how_many_client_tasks_the_percentage_leaves_out(
+    client: TestClient,
+) -> None:
+    """The percentage counts buildable leaves only, and a figure that silently drops 39
+    leaves reads as a number somebody massaged. So the page states what it left out, next to
+    the figure. Delete this and the line can disappear while the percentage stays buildable,
+    which is the version of this page nobody should trust."""
+    text = client.get("/build").text
+
+    assert "25 of 100 buildable tasks" in text
+    assert "39 client tasks on the week of a migration, not counted" in text
 
 
 def test_the_page_says_how_much_closed_today(client: TestClient) -> None:
@@ -491,8 +598,11 @@ def _tracker_leaves_per_wave() -> dict[int, int]:
     html = (Path(__file__).resolve().parents[2] / "docs" / "tracker.html").read_text(
         encoding="utf-8"
     )
-    found = re.findall(r'class="cb"[^>]*data-wave="(\d+)"', html)
-    counted = collections.Counter(int(w) for w in found)
+    # Buildable leaves only: an act's checkbox carries data-act and is counted beside the
+    # figure, never in it, on both pages.
+    boxes = re.findall(r'<input type="checkbox" class="cb"[^>]*>', html)
+    found = [re.search(r'data-wave="(\d+)"', box) for box in boxes if "data-act=" not in box]
+    counted = collections.Counter(int(w.group(1)) for w in found if w is not None)
     return dict(counted)
 
 
@@ -514,7 +624,10 @@ def _wbs_leaves_per_wave() -> dict[int, int]:
     for module in wbs["modules"]:
         module_wave = int(module.get("wave", 0))
         leaf_waves = module.get("leaf_waves", {})
+        flags = module.get("leaf_acts", {})
         for leaf in module["leaf_ids"]:
+            if leaf in flags:
+                continue
             counted[int(leaf_waves.get(leaf, module_wave))] += 1
     return dict(counted)
 
@@ -777,13 +890,21 @@ def test_the_generated_status_agrees_with_the_wbs_about_the_waves() -> None:
 
 
 def test_every_leaf_appears_exactly_once_on_the_tracker() -> None:
-    """The denominator has to be the whole plan. A partition that dropped a leaf would still
-    let the test above pass if both sides dropped it, so this checks the total against the
-    WBS itself rather than against the other page."""
-    wbs = status.load_wbs(Path(__file__).resolve().parents[2] / "docs" / "wbs.json")
+    """The buildable leaves and the acts together have to be the whole plan. A partition
+    that dropped a leaf would still let the test above pass if both sides dropped it, so
+    this checks against the WBS itself rather than against the other page, and it counts the
+    acts too, so excluding them from the percentage can never quietly lose one."""
+    repo = Path(__file__).resolve().parents[2]
+    wbs = status.load_wbs(repo / "docs" / "wbs.json")
     expected = sum(len(m["leaf_ids"]) for m in wbs["modules"])
+    acts = sum(len(status.acts_of(m)) for m in wbs["modules"])
 
-    assert sum(_tracker_leaves_per_wave().values()) == expected
+    built = status.build_status(repo, wbs)
+
+    assert acts > 0, "the work breakdown flags no acts, so this test is watching nothing"
+    assert sum(_tracker_leaves_per_wave().values()) + acts == expected
+    assert built.total + built.acts == expected
+    assert built.acts == acts
 
 
 # ------------------------------------------------- taking back a claim that was not true

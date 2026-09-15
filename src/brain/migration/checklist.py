@@ -212,7 +212,7 @@ def load_acts(wbs_path: Path) -> tuple[Act, ...]:
     This is the second half of that, and it catches the case the generators cannot: a
     `wbs.json` edited by hand or left behind by a failed export.
     """
-    from brain.status import leaf_sentences, load_wbs
+    from brain.status import acts_of, leaf_sentences, load_wbs
 
     wbs = load_wbs(wbs_path)
     # The one reader of the leaf sentences, which already refuses a module whose sentences and
@@ -221,7 +221,9 @@ def load_acts(wbs_path: Path) -> tuple[Act, ...]:
     texts = leaf_sentences(wbs_path)
     found: list[Act] = []
     for module in wbs.get("modules", []):
-        flags: Mapping[str, Any] = module.get("leaf_acts", {})
+        # The one reader of the flag, shared with the progress page, so the checklist and the
+        # percentage cannot disagree about which leaves are acts.
+        flags: Mapping[str, Any] = acts_of(module)
         if not flags:
             continue
         for leaf in module.get("leaf_ids", []):

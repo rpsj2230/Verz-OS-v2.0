@@ -185,7 +185,8 @@ code{{font-family:{MONO};font-size:11.5px;color:var(--brand)}}
 <div class="sub">{installed_name()} · build status</div>
 <h1>{current_name}</h1>
 <div class="big"><span class="p">{pct}%</span>
-<span class="c">{s.get("done", 0)} of {s.get("total", 0)} tasks · {today_line}<br>
+<span class="c">{s.get("done", 0)} of {s.get("total", 0)} buildable tasks · {today_line}<br>
+{s.get("acts", 0)} client tasks on the week of a migration, not counted<br>
 commit {s.get("commit", "?")}{shipped}</span></div>
 <div class="track"><span style="width:{pct}%"></span></div>
 <table><thead><tr><th>Wave</th><th>Name</th><th style="text-align:right">Done</th><th></th><th style="text-align:right">%</th></tr></thead>

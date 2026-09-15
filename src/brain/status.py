@@ -35,6 +35,8 @@ class WaveProgress(BaseModel):
     total: int
     done: int
     percent: float = 0.0
+    #: Leaves in this wave a person does on the week of a migration, left out of `total`.
+    acts: int = 0
 
 
 class ModuleProgress(BaseModel):
@@ -43,6 +45,8 @@ class ModuleProgress(BaseModel):
     wave: int
     total: int
     done: int
+    #: Leaves in this module a person does rather than a commit, left out of `total`.
+    acts: int = 0
 
 
 class Status(BaseModel):
@@ -51,9 +55,13 @@ class Status(BaseModel):
     generated_at: str
     commit: str
     commit_subject: str = ""
+    #: Buildable leaves only. See `THE_PERCENTAGE_COUNTS_WHAT_A_COMMIT_CAN_CLOSE`.
     total: int = 0
     done: int = 0
     percent: float = 0.0
+    #: Leaves flagged in `docs/wbs/acts.js`: work a person does on the week of a migration,
+    #: counted here and never in `total`, so they stay visible without holding the figure down.
+    acts: int = 0
     current_wave: int | None = None
     waves: list[WaveProgress] = []
     modules: list[ModuleProgress] = []
@@ -281,13 +289,36 @@ def _is_closed(leaf: str, closed: set[str]) -> bool:
     return leaf in closed
 
 
+#: Why the headline leaves out the leaves `docs/wbs/acts.js` flags.
+THE_PERCENTAGE_COUNTS_WHAT_A_COMMIT_CAN_CLOSE: Final = (
+    "An act is work a person does on the week of a migration, such as training staff or "
+    "running the restore drill in front of a client, and no commit can close one. Counted "
+    "in the denominator they hold the figure below 100 percent for ever, and a figure that "
+    "stops rising reads as a build that has stalled. So total, done and percent count the "
+    "leaves a commit can close, per wave and per module as well as overall, and acts are "
+    "reported beside them as their own number rather than dropped."
+)
+
+
+def acts_of(module: dict[str, Any]) -> dict[str, Any]:
+    """The act flags a module carries in the exported work breakdown, keyed by leaf id.
+
+    The one place the flag is read off a module. `brain.migration.checklist.load_acts` builds
+    its checklist from this, so the page and the checklist cannot disagree about which leaves
+    are acts.
+    """
+    flags: dict[str, Any] = module.get("leaf_acts", {}) or {}
+    return flags
+
+
 def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     closed, recent = closed_task_ids(repo, ref)
     wave_names: dict[str, str] = wbs.get("wave_names", {})
 
     modules: list[ModuleProgress] = []
+    #: Wave to [buildable leaves, of those closed, acts].
     per_wave: dict[int, list[int]] = {}
-    total = done = 0
+    total = done = acts = 0
     matched: set[str] = set()
 
     for m in wbs.get("modules", []):
@@ -298,22 +329,35 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         # Counting those against wave 0 puts work in the denominator that wave 0 cannot do,
         # so the wave could never reach 100% and the figure understated real progress.
         leaf_waves: dict[str, int] = m.get("leaf_waves", {})
-        m_done = 0
+        flags = acts_of(m)
+        m_total = m_done = m_acts = 0
         for leaf in leaves:
             leaf_done = _is_closed(leaf, closed)
             if leaf_done:
-                m_done += 1
+                # Still listed as closed even for an act, so the tracker ticks it.
                 matched.add(leaf)
-            bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0])
+            bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0, 0])
+            if leaf in flags:
+                m_acts += 1
+                bucket[2] += 1
+                continue
+            m_total += 1
+            m_done += int(leaf_done)
             bucket[0] += 1
             bucket[1] += int(leaf_done)
         modules.append(
             ModuleProgress(
-                module=m["id"], name=m["name"], wave=wave, total=len(leaves), done=m_done
+                module=m["id"],
+                name=m["name"],
+                wave=wave,
+                total=m_total,
+                done=m_done,
+                acts=m_acts,
             )
         )
-        total += len(leaves)
+        total += m_total
         done += m_done
+        acts += m_acts
 
     waves = [
         WaveProgress(
@@ -322,8 +366,9 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             total=t,
             done=d,
             percent=round(100 * d / t, 1) if t else 0.0,
+            acts=a,
         )
-        for w, (t, d) in sorted(per_wave.items())
+        for w, (t, d, a) in sorted(per_wave.items())
     ]
     # The first unfinished wave. None means every wave is complete, so there is no
     # current wave rather than a misleading "wave 5".
@@ -341,8 +386,10 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     next_up: list[str] = []
     for m in wbs.get("modules", []):
         waves_by_leaf: dict[str, int] = m.get("leaf_waves", {})
+        flags = acts_of(m)
         for leaf in m.get("leaf_ids", []):
-            if leaf in closed:
+            # An act is not "next" for a build: no commit can close it.
+            if leaf in closed or leaf in flags:
                 continue
             if current is not None and waves_by_leaf.get(leaf, int(m.get("wave", 0))) != current:
                 continue
@@ -359,6 +406,7 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         total=total,
         done=done,
         percent=round(100 * done / total, 1) if total else 0.0,
+        acts=acts,
         current_wave=current,
         waves=waves,
         modules=modules,
