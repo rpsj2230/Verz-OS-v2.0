@@ -17,8 +17,7 @@ from typing import Any
 
 import psycopg
 import pytest
-from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError, ProgrammingError
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -38,9 +37,9 @@ from brain.identity.sign_in_binding import (
 )
 from brain.install import InstallError
 from brain.session import make_session_factory
+from tests.fixtures.retirable import retirable
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_automation_owner_store import app_engine
-from tests.fixtures.retirable import retirable
 from tests.unit.test_entitlement_store import LONG_AGO, a_principal, resolver
 from tests.unit.test_keycloak_tokens import ISSUER, NOW, Clock, Idp, token
 
@@ -390,8 +389,8 @@ def test_a_held_subject_is_refused_for_another_principal_and_the_first_binding_s
 
 def retired_by_an_operator(url: str, principal_id: str) -> None:
     """Retirement as a statement on the server's own login, which bypasses the policy. Kept for
-    the tests that retire in order to bind; `test_the_store_retires_a_sign_in_binding_as_the_application_role`
-    is the store's own."""
+    the tests that retire in order to bind;
+    `test_the_store_retires_a_sign_in_binding_as_the_application_role` is the store's own."""
     sql(
         url,
         "UPDATE auth.principal_identity SET deleted_at = now()"
