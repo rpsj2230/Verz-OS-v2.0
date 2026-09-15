@@ -97,6 +97,34 @@ discovered by a resume that never resumes, and it now also asks `channel_policy_
 declared allowlist that has drifted into holding a content channel stops a container instead
 of being found by reading the constant.
 
+**Why the saver is still not a dependency, measured on 2026-09-15 rather than deferred.** The
+earlier reason was cost unmeasured, and it is now measured: `langgraph-checkpoint-postgres`
+3.1.2 resolves for Linux and adds seventeen packages to `uv.lock`, and importing it on top of
+`brain.ops.worker` and the queue driver adds 8.9 to 10.3 MiB of working set and 236 modules
+over three runs, with `langsmith` installed and not loaded. That is affordable inside the
+general worker's gap, and it would be paid only by a process that imports the saver. **What
+stops it is a gate, not a cost.** The package requires `orjson` directly, `orjson` declares
+`MPL-2.0 AND (Apache-2.0 OR MIT)`, and `brain.ops.sweeps.licence_is_allowed` refuses any
+expression with brackets by design so that a person looks, although every operand is already
+on `ALLOWED_LICENCES`. CI runs that sweep and CI gates Deploy, so adding the saver today leaves
+production on the previous commit with nothing saying why. The dependency waits for that
+parser to be taught one level of brackets, or for a person to admit the expression by name.
+
+Rejected in the same measurement: a second checkpoint store of our own on a migration. The
+library ships its own versioned schema and an idempotent `setup()` that records what it has
+applied, which is the property the queue driver's schema command lacked, so the install that
+waits is `brain.ops.queue.install_queue`'s shape (create the schema, run the library's setup,
+secure what the catalogue gained) and not a transcribed CREATE that forks at the next release.
+
+Two things the integration must not take from the library's defaults, both read off the
+installed source. `PostgresSaver.from_conn_string` opens its connection with
+`prepare_threshold=0`, which `CheckpointerConfig` refuses, so the saver has to be constructed
+on a connection or pool built from this configuration and never from a string. And the
+library writes its own reserved channels (`__error__`, `__interrupt__`, `__pregel_tasks`)
+through `put_writes`, and `PERSISTABLE_CHANNELS` refuses all three, so the first graph behind a
+guarded saver will fail on its first interrupt until somebody decides what each of those may
+hold. An interrupt's value is whatever the graph put in it, which is content.
+
 Deliberately absent: a retention rule. It is a real requirement of a checkpoint store, it is
 its own WBS leaf, and writing it here without the thing it acts on would be a mechanism with
 nothing to call it. The resume-time entitlement re-check is no longer on this list, and it is
@@ -317,6 +345,23 @@ CONTENT_CHANNELS: Final[frozenset[str]] = frozenset(
     {"passages", "documents", "retrieved", "messages", "answer", "draft", "tool_results"}
 )
 
+#: Why a value under a declared channel must be a scalar, and not merely short and flat.
+A_CHECKPOINT_CANNOT_CARRY_A_REACH: Final = (
+    "The resume-time guarantee in ENTITLEMENT_IS_RESOLVED_AT_THE_ATTEMPT holds only because a "
+    "checkpoint cannot be reconstituted without going back through the gate. An object saved "
+    "under a declared channel breaks that without tripping either of the other two rules: an "
+    "EntitlementSet or a Scope is not a list, not a dictionary and not a long string, so until "
+    "2026-09-15 it was admitted, and a resumed run could read back the reach its caller held "
+    "when the step was saved rather than the reach they hold now. A revoked grant would then "
+    "outlive its revocation inside the one store built to let a run continue. So a value is a "
+    "string, a number, a boolean or nothing, which is what an identifier, a step count or a "
+    "node name is, and anything else is refused whatever it is."
+)
+
+#: The value types a declared channel may hold. See `A_CHECKPOINT_CANNOT_CARRY_A_REACH`.
+#: `bytes` is absent on purpose: it is content with no length rule, and a reference is text.
+PERSISTABLE_SCALARS: Final[tuple[type, ...]] = (str, int, float, bool, type(None))
+
 
 def checkpoint_refusals(channels: Mapping[str, object]) -> tuple[str, ...]:
     """Every reason this state may not be written to the checkpoint store.
@@ -348,6 +393,14 @@ def checkpoint_refusals(channels: Mapping[str, object]) -> tuple[str, ...]:
                 f"channel {name!r} holds a {type(value).__name__}, which is where somebody "
                 "puts a record while meaning to put a summary; a checkpoint holds references "
                 "and the passages a run retrieved are a list"
+            )
+            continue
+        if not isinstance(value, PERSISTABLE_SCALARS):
+            findings.append(
+                f"channel {name!r} holds a {type(value).__name__}, and a checkpoint holds "
+                "strings, numbers, booleans and nothing else; an object saved here is read "
+                "back on resume instead of being asked for again through the gate, which is "
+                "how a revoked grant would outlive its revocation"
             )
             continue
         if isinstance(value, str) and len(value) > MAX_ARGUMENT_CHARS:

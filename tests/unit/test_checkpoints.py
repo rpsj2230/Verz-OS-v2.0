@@ -13,11 +13,14 @@ from __future__ import annotations
 
 import pytest
 
+from brain.core.entitlement import Capability, EntitlementSet, Grant
+from brain.core.scope import Scope
 from brain.db import SCHEMAS
 from brain.ops.checkpoints import (
     CHECKPOINT_SCHEMA,
     CheckpointerConfig,
     CheckpointerError,
+    checkpoint_refusals,
     connection_refusals,
     search_path_option,
 )
@@ -136,6 +139,78 @@ def test_a_checkpointer_with_no_connection_string_is_refused() -> None:
     Delete this and a saver with nowhere to save is constructible."""
     with pytest.raises(CheckpointerError, match="nowhere to save"):
         CheckpointerConfig(url="   ")
+
+
+# --------------------------------------------------- what a resumed run may read back
+def _a_reach(principal_id: str = "p_1") -> EntitlementSet:
+    return EntitlementSet(
+        principal_id=principal_id,
+        grants=(
+            Grant(capability=Capability(value="read:ticket.status"), scope=Scope.unrestricted()),
+        ),
+        not_after=None,
+    )
+
+
+def test_a_reach_saved_under_a_declared_channel_is_refused() -> None:
+    """**The resume property itself.** A resumed run must never keep reach its caller no longer
+    has, and the only thing that guarantees it is that a checkpoint cannot hold one: the state
+    has to be rebuilt through the gate, and the gate resolves the reach at that instant. An
+    `EntitlementSet` is not a list, a dictionary or a long string, so the two older rules both
+    admitted it under `node`, and a grant revoked while the run was suspended would have been
+    read back out of the store intact.
+
+    Delete this and the scalar rule can be dropped as redundant with the container rule, which
+    it reads as, and the checkpoint becomes a stored permission decision again."""
+    refusals = checkpoint_refusals({"node": _a_reach()})
+
+    assert len(refusals) == 1
+    assert "'node'" in refusals[0]
+    assert "EntitlementSet" in refusals[0]
+
+
+def test_a_scope_saved_under_a_declared_channel_is_refused() -> None:
+    """A `Scope` is the other half of a permission decision and the likelier one to be saved,
+    because it looks like a description of which records a run wants and `record_refs` is
+    exactly that channel. Delete this and the rule can be narrowed to the entitlement type
+    alone, which leaves the half that says which rows."""
+    refusals = checkpoint_refusals({"record_refs": Scope.unrestricted()})
+
+    assert len(refusals) == 1
+    assert "'record_refs'" in refusals[0]
+
+
+def test_bytes_under_a_declared_channel_are_refused_whatever_their_length() -> None:
+    """The length bound applies to text only, so a payload handed over as bytes was admitted
+    at any size. A reference is text. Delete this and `bytes` can be added to the scalar
+    types as a harmless primitive, which is the route a serialised record takes into the
+    store."""
+    assert checkpoint_refusals({"question_id": b"q"}) != ()
+    assert checkpoint_refusals({"question_id": b"x" * 500}) != ()
+
+
+def test_every_scalar_a_reference_is_made_of_is_still_admitted() -> None:
+    """The positive sibling of the three refusals above. A type rule tested only by what it
+    refuses is satisfied by one that refuses everything, and that rule would leave a graph
+    unable to save a step count, a node name, a flag or an empty channel while every refusal
+    test stayed green.
+
+    Delete this and any one of the scalar types can fall off the tuple, which is found by the
+    first graph that saves `step`, in production."""
+    assert (
+        checkpoint_refusals(
+            {
+                "run_id": "r_1",
+                "principal_id": "p_1",
+                "node": "retrieve",
+                "step": 3,
+                "question_id": None,
+                "pending_tool": True,
+                "record_refs": 1.5,
+            }
+        )
+        == ()
+    )
 
 
 def test_a_safe_configuration_is_constructible_and_says_where_its_tables_go() -> None:
