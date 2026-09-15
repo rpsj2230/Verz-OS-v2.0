@@ -85,6 +85,7 @@ from brain.tables.resolution import (
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
+from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
 
@@ -184,6 +185,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0038_question_asked. Points at nothing: a principal and a department are values, so a
     # recorded question outlives both. Keyed on the trace, so a hop is not a second row.
     "ops.question_asked",
+    # 0039_request_telemetry. Points at nothing, and partitioned by when the request arrived,
+    # so its default partition is a table of the migration's and not of the metadata.
+    "obs.request_telemetry",
 )
 
 __all__ = [
@@ -221,6 +225,7 @@ __all__ = [
     "ProjectedRecordRow",
     "QuestionAskedRow",
     "ReportRefreshRow",
+    "RequestTelemetryRow",
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",

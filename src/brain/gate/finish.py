@@ -48,26 +48,36 @@ asked, and a record written on success only would make the count depend on wheth
 reachable, which a department head would read as their people asking less on the day the
 connector was down.
 
-Rejected, for now: writing the whole-request duration onto the metadata ledger from here. It
-belongs here, and it is not small: nothing on any request path builds a
-`brain.ops.telemetry.RequestTelemetry`, and no migration creates the ledger's table, so the
-duration would be one field of a row nobody writes into a table that does not exist. The lane
-also reads no clock, so the completion instant has to arrive from the caller, which is the same
-seam `now` already is. When the ledger is built its recorder attaches to `finish` beside the
-question recorder and needs no second hook.
+**The metadata ledger's row is the second thing a finished request owes, and it needed three
+facts the first did not (M30.5.2).** `brain.ops.telemetry_store.TelemetryRecorder` attaches to
+`finish` beside the question recorder, and `Finished` now carries what it reads: the instant the
+lane finished, the hash of the reach it answered at, and the lane's declaration of the budget it
+ran under. The completion instant comes from a clock the caller hands the lane and the lane reads
+once, in its `finally`, before any recorder runs, so every recorder is handed the same instant
+and none of them is timed by the recorders before it. A recorder reading its own clock was the
+other shape and was rejected for exactly that: the ledger's duration would include the question
+recorder's database write.
 
-Task ids: M37.3.2.4
+**A completion instant before the judged one is not refused here.** `Finished` is built inside
+the lane's `finally`, so a refusal here would turn an answered question into a fault over a clock
+stepping backwards. The telemetry record refuses a negative duration and its recorder logs it,
+which is the rule a measurement follows. A naive completion instant is refused here, as a naive
+judged instant is: it is a wiring fault identical for every request, and it fails the first test
+that runs the lane rather than a report months later.
+
+Task ids: M37.3.2.4, M30.5.2
 """
 
 from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Final, Protocol
 
 from brain.audit.ledger import TRACE_ID
+from brain.core.lane import Lane
 from brain.core.principal import Principal
 from brain.gate.context import Channel
 
@@ -138,10 +148,21 @@ class Finished:
     #: The instant the request was judged at, which the lane is given and never reads itself.
     at: datetime
     outcome: Answered | None
+    _: KW_ONLY
+    #: The instant the lane finished, read once from the clock the caller handed it (M30.5.2).
+    completed_at: datetime
+    #: The hash of the reach the question was answered at, which the ledger quotes beside the
+    #: trace id. A hash identifies a reach and discloses nothing that is in it.
+    entitlement_hash: str
+    #: The budget the lane that finished runs under, as that lane declares it.
+    lane: Lane
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:
             msg = "a naive instant files a finished request in the wrong window"
+            raise FinishError(msg)
+        if self.completed_at.tzinfo is None:
+            msg = "a naive completion instant cannot be subtracted from the judged one"
             raise FinishError(msg)
 
 

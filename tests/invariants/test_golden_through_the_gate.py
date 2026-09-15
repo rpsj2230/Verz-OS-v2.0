@@ -199,6 +199,7 @@ def ask(question: str, entitlement: EntitlementSet) -> Answered:
             reachable_sources=(SOURCE,),
             sink=Sink(),
             now=NOW,
+            clock=lambda: NOW,
         )
     )
 
@@ -605,6 +606,7 @@ def test_the_lane_reaches_a_row_source_for_a_caller_who_holds_the_record_grant()
             reachable_sources=(SOURCE,),
             sink=Sink(),
             now=NOW,
+            clock=lambda: NOW,
         )
     )
 

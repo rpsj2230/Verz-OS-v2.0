@@ -68,6 +68,7 @@ def _ledger_row() -> dict[str, object]:
         lane=Lane.ANSWER,
         cache_hit=False,
         status=RequestStatus.ANSWERED,
+        duration_ms=12.5,
     )
     return dict(record.ledger_row())
 

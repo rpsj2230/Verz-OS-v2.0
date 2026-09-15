@@ -38,8 +38,9 @@ from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app, request_recorders_for
 from brain.core.entitlement import EntitlementSet
+from brain.core.lane import Lane
 from brain.core.principal import Employment, Principal, PrincipalKind
-from brain.gate.answer import Answered, answer_lane
+from brain.gate.answer import LANE, Answered, answer_lane
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.context import Channel
@@ -53,6 +54,7 @@ from brain.gate.finish import (
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.rows import RowQuery
 from brain.ops.question_store import QuestionRecorder
+from brain.ops.telemetry_store import TelemetryRecorder
 from brain.tables.adoption import QuestionAskedRow
 from brain.tools.startup import build_registry
 from tests.unit.test_answer_lane import (
@@ -125,6 +127,28 @@ def origin_for(pid: str = "p_priya", **kwargs: Any) -> Origin:
     return Origin(trace_id=TRACE, principal=asker(pid, **kwargs), channel=Channel.CONSOLE)
 
 
+#: When the lane-level tests' requests finish: forty-two milliseconds after they were judged.
+DONE = NOW + timedelta(milliseconds=42)
+
+
+def done(
+    origin: Origin,
+    outcome: Answered | None = None,
+    *,
+    at: datetime = NOW,
+    completed_at: datetime = DONE,
+) -> Finished:
+    """A finished request as the lane builds one, for the tests that build one by hand."""
+    return Finished(
+        origin,
+        at,
+        outcome,
+        completed_at=completed_at,
+        entitlement_hash=EntitlementSet(principal_id=origin.principal.id).ent_hash(),
+        lane=LANE,
+    )
+
+
 class Broken:
     """A `RowSource` whose system is down, so the lane raises part way through."""
 
@@ -141,6 +165,7 @@ def lane(
     rows: Rows | None = None,
     readers: Mapping[tuple[str, str], Any] | None = None,
     cached: CachedAnswer | None = None,
+    completes_at: datetime = DONE,
 ) -> Answered:
     held = reach if reach is not None else ents(*SEES_HOURS)
     return asyncio.run(
@@ -157,6 +182,7 @@ def lane(
             reachable_sources=("laravel",),
             sink=Sink(),
             now=NOW,
+            clock=lambda: completes_at,
             cached=cached,
         )
     )
@@ -205,6 +231,11 @@ def test_every_way_the_lane_finishes_reaches_the_recorders_exactly_once(case: st
     assert finished.outcome is answered
     assert finished.origin == origin
     assert finished.at == NOW
+    # M30.5.2: the instant the clock gave, the reach the lane answered at, and its budget.
+    reach = arguments.get("reach", ents(*SEES_HOURS))
+    assert finished.completed_at == DONE
+    assert finished.entitlement_hash == reach.ent_hash()
+    assert finished.lane is Lane.FAST
 
 
 def test_the_outcomes_above_are_the_outcomes_they_are_named_for() -> None:
@@ -235,6 +266,7 @@ def test_a_question_that_failed_part_way_is_still_a_question_somebody_asked() ->
 
     assert len(kept.seen) == 1
     assert kept.seen[0].outcome is None
+    assert kept.seen[0].completed_at == DONE
 
 
 def test_a_question_answered_at_one_persons_reach_cannot_be_recorded_as_anothers() -> None:
@@ -277,7 +309,7 @@ def test_finishing_with_no_recorders_is_an_answer_and_not_an_error() -> None:
 
     Delete this and a guard refusing an empty tuple takes down every question on an install
     whose database is not configured yet."""
-    assert asyncio.run(finish((), Finished(origin_for(), NOW, None))) is None
+    assert asyncio.run(finish((), done(origin_for()))) is None
     assert lane(recorders=()).composed is not None
 
 
@@ -293,11 +325,7 @@ def test_a_question_is_the_resolved_principal_the_channel_the_trace_and_the_inst
     # A service principal on a person's channel, so the kind has to come from the principal:
     # every other asker in this file is human, and the channel alone would say a person.
     service = asker("p_ops", department="ops", kind=PrincipalKind.SERVICE)
-    finished = Finished(
-        Origin(trace_id=TRACE, principal=service, channel=Channel.LARK),
-        NOW,
-        None,
-    )
+    finished = done(Origin(trace_id=TRACE, principal=service, channel=Channel.LARK))
 
     assert question_of(finished) == Asked(
         trace_id=TRACE,
@@ -358,7 +386,7 @@ def test_a_person_the_directory_gives_no_department_is_counted_under_none(
 
     Delete this and a guessed department collects questions its head reads as their own
     people's."""
-    finished = Finished(origin_for(department=department), NOW, None)
+    finished = done(origin_for(department=department))
 
     assert question_of(finished) is None
     assert A_PERSON_WITH_NO_DEPARTMENT_IS_COUNTED_UNDER_NONE_RATHER_THAN_A_GUESS
@@ -386,9 +414,9 @@ def test_a_finished_request_with_no_timezone_is_refused() -> None:
     """A naive instant files a question in the wrong day at either end of it.
 
     Delete this and a server running in local time moves questions between adoption windows."""
-    with pytest.raises(FinishError):
-        Finished(origin_for(), NOW.replace(tzinfo=None), None)
-    assert Finished(origin_for(), NOW, None).at == NOW
+    with pytest.raises(FinishError, match="naive instant"):
+        done(origin_for(), at=NOW.replace(tzinfo=None))
+    assert done(origin_for()).at == NOW
 
 
 # --- the recorder, without a server ---------------------------------------------------------
@@ -433,9 +461,12 @@ def test_a_wired_process_records_questions_and_one_with_no_database_records_noth
     sessions: async_sessionmaker[AsyncSession] = async_sessionmaker()
 
     assert request_recorders_for(None) == ()
-    (installed,) = request_recorders_for(sessions)
-    assert isinstance(installed, QuestionRecorder)
-    assert installed.sessions is sessions
+    questions, ledger = request_recorders_for(sessions)
+    assert isinstance(questions, QuestionRecorder)
+    assert questions.sessions is sessions
+    # M30.5.2: the metadata ledger's recorder, beside the question recorder and not instead.
+    assert isinstance(ledger, TelemetryRecorder)
+    assert ledger.sessions is sessions
 
 
 def test_the_recorder_writes_and_commits_the_question_it_was_handed() -> None:
@@ -447,7 +478,7 @@ def test_the_recorder_writes_and_commits_the_question_it_was_handed() -> None:
     journal: list[str] = []
     recorder = QuestionRecorder(lambda: FakeSession(journal))  # type: ignore[arg-type]
 
-    asyncio.run(recorder.finished(Finished(origin_for(), NOW, None)))
+    asyncio.run(recorder.finished(done(origin_for())))
 
     assert journal == ["open", "execute", "commit"]
 
@@ -465,10 +496,10 @@ def test_a_second_record_under_a_trace_is_logged_as_already_recorded_and_a_first
     capsys.readouterr()
 
     first = QuestionRecorder(lambda: FakeSession(journal))  # type: ignore[arg-type]
-    asyncio.run(first.finished(Finished(origin_for(), NOW, None)))
+    asyncio.run(first.finished(done(origin_for())))
     after_first = capsys.readouterr().out
     again = QuestionRecorder(lambda: FakeSession(journal, kept=None))  # type: ignore[arg-type]
-    asyncio.run(again.finished(Finished(origin_for(), NOW, None)))
+    asyncio.run(again.finished(done(origin_for())))
     after_second = capsys.readouterr().out
 
     assert "question.already_recorded" not in after_first, after_first
@@ -483,7 +514,7 @@ def test_the_recorder_opens_no_session_for_a_person_with_no_department() -> None
     journal: list[str] = []
     recorder = QuestionRecorder(lambda: FakeSession(journal))  # type: ignore[arg-type]
 
-    asyncio.run(recorder.finished(Finished(origin_for(department=None), NOW, None)))
+    asyncio.run(recorder.finished(done(origin_for(department=None))))
 
     assert journal == []
 
@@ -505,7 +536,7 @@ def test_a_question_that_cannot_be_written_is_logged_and_does_not_fail_the_reque
     capsys.readouterr()
     recorder = QuestionRecorder(unreachable)  # type: ignore[arg-type]
 
-    asyncio.run(recorder.finished(Finished(origin_for(), NOW, None)))
+    asyncio.run(recorder.finished(done(origin_for())))
 
     written = capsys.readouterr().out
     assert "question.unrecorded" in written, written
@@ -754,3 +785,74 @@ def test_the_instant_a_question_is_recorded_at_is_the_one_its_reach_was_judged_a
 
     after = datetime.now(UTC)
     assert before <= kept.seen[0].at <= after
+
+
+def test_a_naive_completion_instant_is_refused_and_a_late_or_early_one_is_not() -> None:
+    """M30.5.2. A clock with no timezone is a wiring fault identical for every request and fails
+    the first test that runs the lane. A completion instant before the judged one is not refused
+    here, because `Finished` is built in the lane's `finally` and refusing would turn an answer
+    into a fault over a clock that stepped backwards; the ledger's record refuses the negative
+    duration instead, and its recorder logs it.
+
+    Delete this and either a naive clock reaches a subtraction that raises inside every
+    recorder, or the ordering check moves here and fails answered questions."""
+    with pytest.raises(FinishError, match="naive completion instant"):
+        done(origin_for(), completed_at=DONE.replace(tzinfo=None))
+    assert done(origin_for(), completed_at=NOW - timedelta(seconds=1)).completed_at < NOW
+    assert done(origin_for()).completed_at == DONE
+
+
+def test_the_lane_reads_its_clock_once_after_the_outcome_exists_and_before_any_recorder() -> None:
+    """M30.5.2. The completion instant is taken when the outcome exists, and every recorder is
+    handed that one instant, so none of them is timed by the recorders before it.
+
+    A clock that counts its reads shows both halves: one read for a request, and the first
+    recorder's instant equal to the second's.
+
+    Delete this and the clock can be read inside each recorder, or before the outcome, and the
+    ledger's duration includes somebody else's database write or excludes the lane."""
+    reads: list[datetime] = []
+
+    def clock() -> datetime:
+        reads.append(DONE + timedelta(milliseconds=len(reads)))
+        return reads[-1]
+
+    first, second = Kept("first"), Kept("second")
+    answered = asyncio.run(
+        answer_lane(
+            "hours left on Acme",
+            origin=origin_for(),
+            recorders=(first, second),
+            rules=(HOURS,),
+            readers=readers_for(Rows(ACME)),
+            entitlement=ents(*SEES_HOURS),
+            policies={"client": CLIENTS.policy()},
+            reachable_sources=("laravel",),
+            sink=Sink(),
+            now=NOW,
+            clock=clock,
+        )
+    )
+
+    assert answered.composed is not None
+    assert reads == [DONE]
+    assert first.seen[0].completed_at == second.seen[0].completed_at == DONE
+
+
+def test_a_question_asked_over_http_finishes_at_a_wall_clock_instant_after_it_was_judged(
+    routed: tuple[TestClient, Kept],
+) -> None:
+    """M30.5.2. The route hands the lane the wall clock, so the completion instant falls after
+    the judged instant and inside the request, and the difference is the duration the ledger
+    records.
+
+    Delete this and the route can hand the lane its own judged instant as the clock, and every
+    request is recorded as taking no time at all."""
+    client, kept = routed
+    before = datetime.now(UTC)
+
+    post(client)
+
+    after = datetime.now(UTC)
+    (finished,) = kept.seen
+    assert before <= finished.at < finished.completed_at <= after

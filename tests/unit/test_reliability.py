@@ -8,7 +8,7 @@ of the work breakdown, and the baseline component names are read out of the comp
 A test asserting `FAST_P95_MS == 500` beside a module declaring `FAST_P95_MS = 500` compares
 the constant against itself and passes for every value it could hold.
 
-Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1
+Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1, M30.5.2
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from brain.ops.reliability import (
     STAGE_OBJECTIVES,
     SUCCESS_STATUSES,
     SUCCESSFUL_REQUEST_RATE,
+    WHOLE_REQUEST_DURATION_FIELDS,
     DiskFullError,
     FailureMode,
     LaneObjective,
@@ -65,7 +66,7 @@ from brain.ops.reliability import (
     status_gaps,
     success_rate,
 )
-from brain.ops.telemetry import RequestStatus
+from brain.ops.telemetry import COMPLETION_FIELDS, TELEMETRY_FIELDS, RequestStatus
 from brain.ops.wiring import COMPONENTS, PROFILES
 
 REPO = Path(__file__).resolve().parents[2]
@@ -310,23 +311,22 @@ def test_an_objective_promising_more_than_all_requests_is_refused() -> None:
 
 
 # ---------------------------------------------------- what the ledger can actually measure
-def test_the_ledger_can_measure_the_success_rate_and_cannot_measure_any_latency() -> None:
-    """**M30.5.2 is not claimed and this is the finding rather than an omission.**
+def test_the_ledger_measures_each_lane_and_cannot_measure_any_stage() -> None:
+    """M30.5.2. **The duration finding is gone from the real declarations and the stage one is
+    not.** `brain.ops.telemetry.TELEMETRY_FIELDS` carries `duration_ms` and `status` on every
+    row, so every lane objective, latency and success rate both, is measurable from the ledger.
+    It carries no field naming a stage, so the nine stage budgets are still an allocation
+    nothing observes.
 
-    `brain.ops.telemetry.TELEMETRY_FIELDS` carries `received_at` and no completion time, so
-    there is no duration in a ledger row to take a percentile of, and it carries no field
-    naming a stage, so the nine stage budgets are an allocation nothing observes. What it
-    does carry, required and on every row, is `status`, so the success-rate half of every
-    objective is measurable today.
+    Derived from telemetry's own declarations rather than restated here: the default arguments
+    are the only input, so this is a claim about the ledger as declared.
 
-    Derived from telemetry's own declarations rather than restated here, so the day somebody
-    adds a completion timestamp the first finding disappears on its own.
-
-    Delete this and the objectives read as measured, which is the exact failure
-    `brain.console.installation` exists to prevent one screen over."""
+    Delete this and the duration field can be renamed out of `WHOLE_REQUEST_DURATION_FIELDS`
+    and the lane objectives read as unmeasurable again with nobody told, or the stage finding
+    can be dropped and the stage budgets read as measured."""
     findings = measurement_gaps()
 
-    assert any("no duration in it to take a percentile of" in one for one in findings)
+    assert not any("no duration in it to take a percentile of" in one for one in findings)
     assert any("no field naming a stage" in one for one in findings)
     assert not any("no status" in one for one in findings)
 
@@ -338,6 +338,20 @@ def test_the_ledger_can_measure_the_success_rate_and_cannot_measure_any_latency(
     arrival_only = measurement_gaps(("received_at", "status"), ())
 
     assert any("no duration in it to take a percentile of" in one for one in arrival_only)
+
+
+def test_the_duration_the_ledger_records_is_one_a_lane_percentile_can_be_taken_from() -> None:
+    """M30.5.2. The field telemetry adds and the names this module looks for are declared in two
+    modules, and the finding above disappears only while one is inside the other. Asserted
+    between the two declarations rather than against a string written here, so renaming
+    `duration_ms` in either module fails this rather than silently restoring the finding.
+
+    Delete this and `COMPLETION_FIELDS` can be renamed to something `measurement_gaps` does not
+    recognise, which reports every lane latency objective as unmeasurable over a ledger that
+    measures it."""
+    assert COMPLETION_FIELDS
+    assert set(COMPLETION_FIELDS) <= set(WHOLE_REQUEST_DURATION_FIELDS)
+    assert set(COMPLETION_FIELDS) <= set(TELEMETRY_FIELDS)
 
 
 def test_a_ledger_with_a_completion_time_and_a_stage_measures_all_of_it() -> None:

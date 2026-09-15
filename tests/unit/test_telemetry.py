@@ -36,8 +36,10 @@ from brain.ops.telemetry import (
     _DURATION_FIELDS,
     _FLAG_FIELDS,
     _NAME_FIELDS,
+    COMPLETION_FIELDS,
     LEDGER_DATA_CLASS,
     LEDGER_RETENTION_DAYS,
+    REQUEST_FIELDS,
     TELEMETRY_FIELDS,
     UNFILLABLE_TODAY,
     Ingress,
@@ -103,7 +105,7 @@ def _ingress(**overrides: object) -> Ingress:
 
 
 def _record(**overrides: object) -> RequestTelemetry:
-    """A record holding the five fields a route could fill honestly today, and nothing else."""
+    """A record holding the six fields a lane can fill honestly today, and nothing else."""
     base: dict[str, object] = {
         "ingress": _ingress(),
         "principal": "u_weiling",
@@ -111,13 +113,14 @@ def _record(**overrides: object) -> RequestTelemetry:
         "lane": Lane.FAST,
         "cache_hit": False,
         "status": RequestStatus.ANSWERED,
+        "duration_ms": 12.5,
     }
     base.update(overrides)
     return RequestTelemetry(**base)  # type: ignore[arg-type]
 
 
 def _full_record(**overrides: object) -> RequestTelemetry:
-    """Every one of the eighteen fields filled, as on the day the model lane exists.
+    """Every one of the nineteen fields filled, as on the day the model lane exists.
 
     Needed because a record tested only through its refusals is satisfied by a record that
     carries nothing, and because the masking tests need something to keep as well as
@@ -347,12 +350,20 @@ def test_the_record_carries_exactly_the_fields_the_leaf_names() -> None:
     in the order the leaf names its fields. A set comparison holds while the two orders drift
     apart, and the order is what a reader comparing the tuple against the leaf checks by eye.
 
+    Since M30.5.2 the record carries one field the leaf does not name, `duration_ms`, declared
+    in its own slice. So the leaf is compared against `REQUEST_FIELDS`, the record against both
+    slices in order, and the added slice must share no name with the leaf, which is what stops
+    a field of M27.1.5's being moved into it to escape this comparison.
+
     Delete this and a field can be dropped from the record, or added without being declared,
     and the ledger row quietly stops matching the leaf it exists to satisfy."""
     assert len(LEAF_FIELDS) == 18, LEAF_FIELDS
 
-    without_units = tuple(one.removesuffix("_ms") for one in TELEMETRY_FIELDS)
+    without_units = tuple(one.removesuffix("_ms") for one in REQUEST_FIELDS)
     assert without_units == LEAF_FIELDS
+
+    assert (*REQUEST_FIELDS, *COMPLETION_FIELDS) == TELEMETRY_FIELDS
+    assert not {one.removesuffix("_ms") for one in COMPLETION_FIELDS} & set(LEAF_FIELDS)
 
     on_record = tuple(declared.name for declared in fields(RequestTelemetry))
     assert on_record == ("ingress", *TELEMETRY_FIELDS)
@@ -373,15 +384,19 @@ def test_the_only_fields_carrying_a_unit_are_the_ones_the_leaf_names_as_duration
     said_as_a_duration = {
         one for one in LEAF_FIELDS if one.startswith("time_") or one.endswith("_latency")
     }
-    carrying_a_unit = {one.removesuffix("_ms") for one in TELEMETRY_FIELDS if one.endswith("_ms")}
+    carrying_a_unit = {one.removesuffix("_ms") for one in REQUEST_FIELDS if one.endswith("_ms")}
+    leaf_durations = _DURATION_FIELDS - set(COMPLETION_FIELDS)
 
     assert said_as_a_duration == {"time_to_first_token", "tool_latency"}
     assert carrying_a_unit == said_as_a_duration
-    assert {one.removesuffix("_ms") for one in _DURATION_FIELDS} == said_as_a_duration
+    assert {one.removesuffix("_ms") for one in leaf_durations} == said_as_a_duration
+    # M30.5.2's slice is durations and nothing else, and every one carries the unit.
+    assert set(COMPLETION_FIELDS) <= _DURATION_FIELDS
+    assert all(one.endswith("_ms") for one in COMPLETION_FIELDS)
 
 
 def test_every_declared_field_is_a_name_a_count_a_duration_or_a_flag() -> None:
-    """The property that makes a five-year window affordable: not one of the eighteen fields
+    """The property that makes a five-year window affordable: not one of the nineteen fields
     can hold a thing somebody said. The partition is exact and disjoint, so a nineteenth field
     holding a sentence belongs to no kind and fails here first. Delete this and a `question`
     field can be added that nothing would check."""
@@ -409,6 +424,7 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         "lane",
         "cache_hit",
         "status",
+        "duration_ms",
     }
     for name, because in UNFILLABLE_TODAY.items():
         assert because.strip(), f"{name} says nothing about why it cannot be filled"

@@ -36,13 +36,16 @@ still passes, which is how nine stages each grow by thirty milliseconds and the 
 its target with every component inside its own allocation. Raising one stage has to mean
 lowering another, and the check is what makes that true.
 
-**None of the latency objectives can be measured today, and one of them can.** The metadata
-ledger carries `received_at` and no completion time, so there is no duration in it to take a
-percentile of, and `time_to_first_token_ms` is in `brain.ops.telemetry.UNFILLABLE_TODAY`
-because nothing calls a model. It does carry `status`, with no default, on every row. So the
-success-rate half of every objective is measurable from the ledger now and the latency half
-is not measurable at all, and `measurement_gaps` derives that from telemetry's own
-declarations rather than restating them. M30.5.2 is not claimed: what it needs is one field.
+**The lane objectives are measurable from the ledger, and the stage budgets are not (M30.5.2).**
+Until 2026-09-15 the metadata ledger carried `received_at` and no completion time, so there was
+no duration to take a percentile of and this paragraph said so. It carries `duration_ms` now,
+written for every request the answer lane finishes by
+`brain.ops.telemetry_store.TelemetryRecorder`, into `obs.request_telemetry`, beside `status` on
+every row. What remains unmeasurable is per stage: a row is one request and no field names a
+stage, and `time_to_first_token_ms` is still in `brain.ops.telemetry.UNFILLABLE_TODAY` because
+nothing calls a model. `measurement_gaps` derives all of that from telemetry's own declarations
+rather than restating them, so the duration finding left on its own when the field arrived.
+`brain.ops.service_levels` folds the rows into a reading per lane against `LANE_OBJECTIVES`.
 
 **The failure-mode matrix declares what an outage blocks because nothing can derive it.**
 `brain.ops.wiring.COMPONENTS` is the component register and it carries a memory limit, a
@@ -104,7 +107,7 @@ was written. The request path does not translate it: a disk filling while the ap
 serves still surfaces as a generic failure, and that is why the row's `response` names the
 writers that refuse rather than claiming the system does.
 
-Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1
+Task ids: M30.4.1, M30.4.2, M30.4.5, M30.5.1, M30.5.2
 """
 
 from __future__ import annotations
@@ -539,12 +542,13 @@ def attainment(
 
 
 # ------------------------------------------------- what the ledger can and cannot measure
-#: Field names a whole-request duration could be computed from. None is in the ledger.
+#: Field names a whole-request duration could be computed from. `duration_ms` is in the ledger.
 #:
-#: Written as a set of candidates rather than one name because the fix has several shapes: a
+#: Written as a set of candidates rather than one name because the fix had several shapes: a
 #: completion timestamp subtracted from `received_at`, or a duration recorded directly. Any
-#: of them makes the lane objectives measurable, so the check asks whether any is present
-#: rather than naming the one somebody ought to add.
+#: of them makes the lane objectives measurable, so the check asks whether any is present.
+#: M30.5.2 chose the second, and `brain.ops.telemetry.COMPLETION_FIELDS` is held inside this
+#: tuple by a test, so renaming the field cannot quietly bring the finding back.
 WHOLE_REQUEST_DURATION_FIELDS: Final[tuple[str, ...]] = (
     "completed_at",
     "duration_ms",
@@ -573,10 +577,10 @@ def measurement_gaps(
     matters here more than usual because the declared case is entirely unhealthy and a check
     with no passing input is a check nobody has watched succeed.
 
-    Three findings and a fourth that is currently silent. No whole-request duration, so no
-    lane percentile. No stage field, so no stage percentile. `time_to_first_token_ms`
-    declared unfillable, so even the partial timing that exists is not being filled. And a
-    missing `status`, which would take the one half that works away too.
+    Four possible findings, two of which fire against the declarations. No stage field, so no
+    stage percentile. `time_to_first_token_ms` declared unfillable, so that partial timing is
+    empty. Silent since M30.5.2: no whole-request duration, so no lane percentile. And silent
+    throughout: a missing `status`, which would take the success-rate half away too.
     """
     present = set(TELEMETRY_FIELDS if fields is None else fields)
     blocked = set(UNFILLABLE_TODAY if unfillable is None else unfillable)

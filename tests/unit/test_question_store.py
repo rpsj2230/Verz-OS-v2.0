@@ -260,7 +260,7 @@ def test_a_process_started_with_a_database_installs_the_question_recorder(databa
         Settings(env="development", database_url=database, run_migrations=False)
     )
     with TestClient(app, raise_server_exceptions=False, backend_options=options):
-        (installed,) = app.state.request_recorders
+        installed, _ledger = app.state.request_recorders
         assert isinstance(installed, QuestionRecorder)
         assert installed.sessions is app.state.db_sessions
 

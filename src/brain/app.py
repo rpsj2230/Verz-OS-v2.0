@@ -49,6 +49,7 @@ from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.leases import SealedSecret
 from brain.ops.question_store import QuestionRecorder
+from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.wiring import DEFAULT_PROFILE
 from brain.routing_routes import router as routing_router
@@ -341,7 +342,8 @@ def request_recorders_for(
 ) -> tuple[RequestRecorder, ...]:
     """What a finished request is recorded to on this process. See `brain.gate.finish`.
 
-    The question recorder when there is a database, and nothing when there is not. A process
+    The question recorder and the metadata ledger's recorder when there is a database, both
+    bound to its sessions, and nothing when there is not. A process
     with no database has nowhere to keep a record and nowhere an adoption report could read
     one back from, so an in-memory recorder there would be a count that vanishes on restart
     and that no reader can reach. A function rather than two lines in `lifespan`, so which
@@ -349,7 +351,7 @@ def request_recorders_for(
     """
     if sessions is None:
         return ()
-    return (QuestionRecorder(sessions),)
+    return (QuestionRecorder(sessions), TelemetryRecorder(sessions))
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

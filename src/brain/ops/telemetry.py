@@ -52,13 +52,22 @@ to a trace store cannot reconstruct a person's movements. That difference is not
 written here. It falls out of running the row through `tracing.mask`, which is the only way
 anything in this module produces a span.
 
-**Thirteen of the eighteen fields are None today, and the reasons are declared rather than
+**Thirteen of the nineteen fields are None today, and the reasons are declared rather than
 implied.** `UNFILLABLE_TODAY` names each one and says what is missing. There is no model call
 anywhere in this repository, so there is no provider, no time to first token and no token
 count; there is no agent on the one live request path, so there is no agent version; nothing
 counts or times a tool call. Those fields are optional and default to None, and the fields
 that can be filled honestly today are required and have no default, so the difference is
 enforced by the dataclass rather than by a comment.
+
+**Eighteen of the fields are M27.1.5's and the nineteenth is M30.5.2's, and they are declared
+as two slices so the leaf test can still read the first off the leaf.** `duration_ms` is how
+long the request took from the instant the gate judged it at to the instant the lane finished
+with it. Without it the ledger recorded when a request arrived and never when it ended, so
+`brain.ops.reliability.measurement_gaps` reported every lane latency objective as unmeasurable.
+A completion timestamp was the other shape and was rejected: `Ingress.received_at` is already on
+the row, so a second instant would be a duration every reader subtracts for themselves, and a
+duration is a kind this record already partitions its fields into.
 
 `redaction_count` is the one worth naming separately, because a plausible value exists and it
 would be wrong. `brain.gate.answer._redacted` builds a `RedactionTrace` with an empty
@@ -115,26 +124,30 @@ has already refused to widen it with the reason: every holder of `read:audit.*` 
 seeing trace-payload reads in the client-facing audit view. Deciding it differently here would
 leave two answers to one question in one package.
 
-What is not built, said rather than left to be inferred. There is **no ledger table**: `obs`
-holds the audit chain and nothing else, and no migration in this repository creates a
-metadata-ledger row. There is **no payload store**: `brain.ops.trace_sink` drops the payload
-because there is nowhere with the right permissions to put it. And **nothing calls any of
-this**, which is more than a matter of this module owning no route.
+**A row is built from a finished request, at the one place a request finishes (M30.5.2).**
+`request_telemetry_of` reads a `brain.gate.finish.Finished`, which `brain.gate.answer.answer_lane`
+hands every recorder on every way out of it, and `brain.ops.telemetry_store.TelemetryRecorder`
+writes the row to `obs.request_telemetry`. The six required fields each come from something
+the gate or the lane decided: `principal` from the resolved principal on the origin,
+`entitlement_hash` from the reach the lane answered at, `lane` from the lane's own declaration
+of the budget it runs under, `cache_hit` from the outcome, `status` from `status_of_finished`,
+and `duration_ms` from the judged instant and a completion instant read from a clock the caller
+handed the lane. The ingress is built directly and **not through `open_request`**:
+`brain.app.trace` has already minted an id before the gate runs, so minting here would file one
+request under two ids.
 
-`brain.api_routes.answer` is the one live request path, and it can read three of the five
-required fields off what it already holds: `principal` from `asked.caller.principal.id`,
-`entitlement_hash` from `asked.reach.ent_hash()`, and `cache_hit` from `Answered.from_cache`.
-The other two it cannot. Nothing on that path carries a `Lane`: `api_routes.Asking` has no
-field for one and no `GateContext` is built there, so a `lane` would be an assertion about
-which lane ran rather than a reading. And `status_for` is unreachable from it, because
-`Answered` carries a `brain.gate.abstain.Abstention` whose `AbstentionReason` deliberately
-shares no value with `Outcome` and has no mapping onto one, so only the answered case has a
-status at all. The ingress is buildable there and **not through `open_request`**:
-`brain.app.trace` has already minted an id into structlog's context variables before the gate
-runs, which `brain.api` reads back, so a route calling `open_request` would mint a second id
-for a request that already has one and file half its evidence under each.
+**The status never reads why the lane abstained.** `status_for` maps an `Outcome`, and the lane
+hands back an `Abstention` whose reason deliberately shares no value with one. Mapping the five
+reasons would have been possible and would have had to keep `NOT_ENTITLED` and
+`NOTHING_RETRIEVED` together by care; `status_of_finished` instead has no branch that reads the
+reason at all, so a withheld record and an absent one cannot produce different rows. See
+`AN_ABSTENTION_IS_RECORDED_WITHOUT_ITS_REASON`.
 
-Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6
+What is still not built, said rather than left to be inferred. There is **no payload store**:
+`brain.ops.trace_sink` drops the payload because there is nowhere with the right permissions to
+put it. And `open_request` still has no caller, for the reason above.
+
+Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2
 """
 
 from __future__ import annotations
@@ -147,12 +160,12 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import MISSING, dataclass, fields
 from datetime import datetime
 from types import MappingProxyType
-from typing import Final, assert_never, get_type_hints
+from typing import TYPE_CHECKING, Final, assert_never, get_type_hints
 
 from brain.audit.ledger import ENT_HASH, TRACE_ID
 from brain.core.errors import Outcome
 from brain.core.lane import Lane
-from brain.gate.context import TrafficClass
+from brain.gate.context import TrafficClass, traffic_class_for
 from brain.ops.retention import DataClass, Lifetime, horizon_for
 from brain.ops.tracing import (
     SAFE_ATTRIBUTES,
@@ -163,6 +176,11 @@ from brain.ops.tracing import (
     may_read_payloads,
     read_payload,
 )
+
+if TYPE_CHECKING:
+    # Typing only. `brain.gate.finish` is what a row is built from, and importing it at run
+    # time would make this module's import depend on the gate's for an annotation.
+    from brain.gate.finish import Finished
 
 
 class TelemetryError(Exception):
@@ -243,6 +261,19 @@ A_FIELD_NOBODY_MEASURES_IS_NONE_AND_NEVER_ZERO: Final = (
     "first is believed. So a field nothing can fill today carries None, the reason it cannot "
     "be filled is declared beside it in UNFILLABLE_TODAY, and filling it means deleting an "
     "entry from that mapping rather than quietly changing a default."
+)
+
+#: Why the ledger's status is decided without looking at the abstention's reason.
+AN_ABSTENTION_IS_RECORDED_WITHOUT_ITS_REASON: Final = (
+    "The lane abstains for five reasons and two of them, a record withheld and a record that "
+    "does not exist, must never be told apart outside the audit chain. A mapping over the "
+    "reasons would keep them together only for as long as nobody edited it, and the edit "
+    "that splits them reads as making the ledger more precise. So an abstention is "
+    "NOTHING_RETURNED whatever its reason, the function deciding it has no branch that reads "
+    "one, and the reason stays where it already lives: the audit log, which is filtered by "
+    "entitlement. The cost is stated rather than hidden: nothing connected and a content "
+    "refusal are also NOTHING_RETURNED, so the ledger cannot count how often an install "
+    "answers nothing because nothing is connected."
 )
 
 #: Why the role is checked before the audit row and the row before the read.
@@ -441,7 +472,7 @@ def status_for(outcome: Outcome) -> RequestStatus:
 #: a list restated in a test is a list that agrees with itself while disagreeing with the
 #: leaf. A field silently missing from here is a request nobody can reconstruct, and the
 #: reconstruction is the only reason the row is kept for five years.
-TELEMETRY_FIELDS: Final[tuple[str, ...]] = (
+REQUEST_FIELDS: Final[tuple[str, ...]] = (
     "principal",
     "agent_version",
     "policy_epoch",
@@ -461,6 +492,17 @@ TELEMETRY_FIELDS: Final[tuple[str, ...]] = (
     "retry_count",
     "status",
 )
+
+#: The fields M30.5.2 adds so a lane objective has something to be measured from.
+#:
+#: A separate slice rather than a nineteenth line in the tuple above, because that tuple is
+#: read against M27.1.5's own sentence and a field that leaf does not name would make it
+#: disagree with the leaf it is a copy of. `brain.ops.reliability.WHOLE_REQUEST_DURATION_FIELDS`
+#: is what `measurement_gaps` looks for, and a test holds this slice inside it.
+COMPLETION_FIELDS: Final[tuple[str, ...]] = ("duration_ms",)
+
+#: Every field a request record declares, in the order the record declares them.
+TELEMETRY_FIELDS: Final[tuple[str, ...]] = (*REQUEST_FIELDS, *COMPLETION_FIELDS)
 
 #: The fields holding a name, an identifier or a hash. Checked against `tracing.mask` before
 #: a record exists, so none of them can hold a sentence.
@@ -485,7 +527,9 @@ _COUNT_FIELDS: Final[frozenset[str]] = frozenset(
 )
 
 #: The fields holding a duration in milliseconds.
-_DURATION_FIELDS: Final[frozenset[str]] = frozenset({"time_to_first_token_ms", "tool_latency_ms"})
+_DURATION_FIELDS: Final[frozenset[str]] = frozenset(
+    {"time_to_first_token_ms", "tool_latency_ms", "duration_ms"}
+)
 
 #: The one field holding a flag.
 _FLAG_FIELDS: Final[frozenset[str]] = frozenset({"cache_hit"})
@@ -561,13 +605,14 @@ UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
 class RequestTelemetry:
     """One request, as the metadata ledger holds it. Names and counts, and no content.
 
-    Keyword-only, because eighteen positional fields is an ordering nobody can hold in their
+    Keyword-only, because nineteen positional fields is an ordering nobody can hold in their
     head and a swapped pair of counts is a silent wrong number rather than an error.
 
-    Fields are declared in the order M27.1.5 names them, and `TELEMETRY_FIELDS` is that order
-    written once. The five with no default are the five a caller can fill honestly today;
-    the thirteen defaulting to None are `UNFILLABLE_TODAY`, and a test pins the two sets
-    against each other so the mapping cannot describe a record that no longer matches it.
+    Fields are declared in the order M27.1.5 names them and then M30.5.2's, and
+    `TELEMETRY_FIELDS` is that order written once. The six with no default are the six a
+    caller can fill honestly today; the thirteen defaulting to None are `UNFILLABLE_TODAY`,
+    and a test pins the two sets against each other so the mapping cannot describe a record
+    that no longer matches it.
 
     Every string field is checked against `tracing.mask` at construction, so a record
     carrying a person's name rather than their identifier does not exist to be written. See
@@ -596,6 +641,10 @@ class RequestTelemetry:
     fallback_count: int | None = None
     retry_count: int | None = None
     status: RequestStatus
+    #: Milliseconds from the instant the gate judged the request at to the instant the lane
+    #: finished with it (M30.5.2). Required, because every request that reaches the lane has
+    #: both instants and a record without one is a latency objective with a gap in it.
+    duration_ms: float
 
     def __post_init__(self) -> None:
         for name in sorted(_NAME_FIELDS):
@@ -646,6 +695,67 @@ class RequestTelemetry:
         for name in TELEMETRY_FIELDS:
             row[name] = getattr(self, name)
         return MappingProxyType(row)
+
+
+# ------------------------------------------------------- from a finished request (M30.5.2)
+
+
+def status_of_finished(finished: Finished) -> RequestStatus:
+    """How a finished request is recorded as having ended. Three answers, and no reason read.
+
+    A fault is `FAILED`: the lane raised, so `outcome` is None. An abstention is
+    `NOTHING_RETURNED` whatever it abstained for, which is
+    `AN_ABSTENTION_IS_RECORDED_WITHOUT_ITS_REASON` as a function body: `abstention.reason` is
+    not read here, so there is no edit to this function that splits a withheld record from an
+    absent one short of adding a line that reads it. Anything else, an answer or a cache hit,
+    is `ANSWERED`.
+
+    A refusal the lane raised rather than abstained on would arrive here as a fault, and it
+    cannot today: the lane redacts through `serialise_for_channel`, which never takes the
+    opaque path that raises `Denied`. `Finished` carries no exception, so the day a lane
+    raises one, a status for it is `status_for(outcome)` and needs the exception carried.
+    """
+    outcome = finished.outcome
+    if outcome is None:
+        return RequestStatus.FAILED
+    if outcome.abstention is not None:
+        return RequestStatus.NOTHING_RETURNED
+    return RequestStatus.ANSWERED
+
+
+#: Microseconds in a millisecond, for a duration read off a `timedelta` exactly.
+_MICROSECONDS_PER_MS: Final = 1000
+
+
+def request_telemetry_of(finished: Finished) -> RequestTelemetry:
+    """The ledger row a finished request becomes, through the record's own checks (M30.5.2).
+
+    Raises `TelemetryError` for a record the ledger refuses: a principal the trace grammar
+    masks (`A_PRINCIPAL_THE_TRACE_GRAMMAR_REFUSES_HAS_NO_LEDGER_ROW_AT_ALL`), or a completion
+    instant before the judged one, which is a negative duration. The recorder decides what a
+    refusal costs, not this function.
+
+    The duration is taken from the `timedelta` in whole microseconds rather than through
+    `total_seconds`, which is a float and rounds a long request's sub-millisecond digits.
+    `cache_hit` is False on a fault: nothing was served from the cache, whatever was consulted.
+    """
+    origin = finished.origin
+    outcome = finished.outcome
+    elapsed = finished.completed_at - finished.at
+    micros = (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds
+    return RequestTelemetry(
+        ingress=Ingress(
+            trace_id=origin.trace_id,
+            traffic_class=traffic_class_for(origin.channel),
+            received_at=finished.at,
+        ),
+        principal=origin.principal.id,
+        entitlement_hash=finished.entitlement_hash,
+        lane=finished.lane,
+        cache_hit=outcome is not None and outcome.from_cache,
+        status=status_of_finished(finished),
+        duration_ms=micros / _MICROSECONDS_PER_MS,
+    )
 
 
 # ------------------------------------------------------------ the masked span (M27.1.4)

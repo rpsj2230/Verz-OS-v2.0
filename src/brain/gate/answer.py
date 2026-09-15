@@ -53,23 +53,36 @@ caller may be told about, which the caller computes from their own entitlements.
 assembled from the sources that actually answered would vary with whether a record existed,
 and the variation is readable by asking twice.
 
-Scope: this module opens no connection and reads no clock. `now` is a parameter, the readers
-are handed in, the rules are handed in, and the trace sink is handed in. It is `async` only
-because a row read is, which is the one thing here that waits on anything.
+**The lane declares the budget it runs under, and it is the fast lane's.** No path through this
+module calls a model, so every request it finishes spent what `brain.core.lane.Lane.FAST`
+allows, including a question `brain.gate.classify` would have sent to the answer lane and this
+lane abstained on. Recording those as `ANSWER` would compare a two-millisecond abstention against
+an eight-second objective and report it met. See
+`NO_PATH_THROUGH_THIS_LANE_CALLS_A_MODEL_SO_EVERY_REQUEST_SPENT_THE_FAST_BUDGET`; when the model
+lane goes where `_abstained` sits, which lane produced an outcome becomes a property of the
+outcome rather than of this module.
 
-Task ids: none
+Scope: this module opens no connection and reads no clock of its own. `now` is a parameter, the
+readers are handed in, the rules are handed in, and the trace sink is handed in. The completion
+instant comes from `clock`, which the caller hands in and the lane reads exactly once, in the
+`finally` that finishes the request. It is `async` only because a row read is, which is the one
+thing here that waits on anything.
+
+Task ids: M30.5.2
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Final
 
 import structlog
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.field_policy import FieldPolicy
+from brain.core.lane import Lane
 from brain.core.redaction import (
     ChannelPayload,
     RedactedAnswer,
@@ -113,6 +126,18 @@ A_SENTENCE_BUILT_BEFORE_REDACTION_IS_A_SENTENCE_THAT_SKIPPED_IT = (
     "did not. If it did not, the field was withheld, and the answer is an abstention rather "
     "than a sentence with a gap in it."
 )
+
+#: Why every request this lane finishes is recorded under the fast lane.
+NO_PATH_THROUGH_THIS_LANE_CALLS_A_MODEL_SO_EVERY_REQUEST_SPENT_THE_FAST_BUDGET: Final = (
+    "A lane is a budget, and the budget a request spent is decided by what ran, not by what "
+    "the question would have been classified as. Nothing in this module calls a model, so an "
+    "answer, an abstention, a cache hit and a fault all spent the fast lane's allowance. "
+    "Filing the abstentions under the answer lane because a model would have read them there "
+    "measures a lane that did not run against an objective sized for one that did."
+)
+
+#: The lane this module is, for the ledger. See the constant above.
+LANE: Final = Lane.FAST
 
 #: Why a cache hit does not re-run the lane.
 A_CACHED_ANSWER_IS_SERVED_WITHOUT_ASKING_ANYTHING_AGAIN = (
@@ -184,6 +209,7 @@ async def answer_lane(
     reachable_sources: Iterable[str],
     sink: TraceSink,
     now: datetime,
+    clock: Callable[[], datetime],
     cached: CachedAnswer | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
@@ -199,6 +225,12 @@ async def answer_lane(
     `finish` runs in a `finally`, so an answer, every kind of abstention, a cache hit and a
     fault all reach the recorders exactly once. The recorders are told which of those it was
     through `Finished.outcome`, and a recorder with no business knowing does not look.
+
+    `clock` is read once, as the first thing the `finally` does, so the completion instant is
+    the moment the outcome existed and not the moment some earlier recorder finished writing.
+    It is a required argument with no default for the reason the recorders are: a default
+    wall clock would be a clock this module reads, and a test passing a fixed `now` would then
+    record a duration measured against the machine's real time.
     """
     attributable(origin, entitlement.principal_id)
     outcome: Answered | None = None
@@ -216,7 +248,18 @@ async def answer_lane(
         )
         return outcome
     finally:
-        await finish(recorders, Finished(origin=origin, at=now, outcome=outcome))
+        completed_at = clock()
+        await finish(
+            recorders,
+            Finished(
+                origin=origin,
+                at=now,
+                outcome=outcome,
+                completed_at=completed_at,
+                entitlement_hash=entitlement.ent_hash(),
+                lane=LANE,
+            ),
+        )
 
 
 async def _outcome(

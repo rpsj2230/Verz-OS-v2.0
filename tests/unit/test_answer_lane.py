@@ -169,6 +169,7 @@ def run(
             reachable_sources=sources,
             sink=sink if sink is not None else Sink(),
             now=NOW,
+            clock=lambda: NOW,
             cached=cached,
         )
     )

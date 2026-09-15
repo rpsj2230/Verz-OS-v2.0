@@ -52,14 +52,13 @@ computes it from that window rather than from a habit. See
 `A_PARTITION_SET_THAT_STOPS_AT_TODAY_REFUSES_TOMORROWS_WRITE`.
 
 **What is not built, said here rather than left to be inferred.** M36.1.1.1 asks for pg_partman
-on the metadata ledger and there is **no ledger table to partition**.
-`brain.ops.telemetry`'s docstring says so in as many words: `obs` holds the audit chain, no
-migration in this repository creates a metadata-ledger row, and nothing calls `open_request`.
-`partman_settings` is therefore the configuration that migration will need, as data a test can
-check against the row shape `RequestTelemetry.ledger_row` actually produces, and the migration
-itself is not written here. Writing one would mean inventing M27's eighteen-column schema, its
-row-level security and its indexes in a module about partitioning, and the first thing to go
-wrong would be that the invented schema and the real one disagree.
+on the metadata ledger. The ledger table exists since `0039` (`obs.request_telemetry`), and it
+was created partitioned by range on `CONTROL_COLUMN` with a default partition, so that pg_partman,
+which takes an existing partitioned parent, has a parent to take and nothing to rewrite.
+pg_partman itself is not installed, no period partitions exist, and nothing detaches one, so every
+row lands in the default partition and nothing yet enforces this scheme. `partman_settings` is
+the configuration that step will need, as data a test can check against the row shape
+`RequestTelemetry.ledger_row` actually produces.
 
 Rejected: a partition per data class, so that traces and payloads ride the same scheme. They
 are three horizons in one schema, which is precisely why `brain.ops.retention.store_gaps`
@@ -623,12 +622,11 @@ def spec_gaps(
 
 # ------------------------------------------------------------- what is deliberately absent
 #: Why there is no migration in this module, said where somebody looking for one will read it.
-THERE_IS_NO_LEDGER_TABLE_TO_PARTITION: Final = (
-    "M36.1.1.1 asks for pg_partman on the metadata ledger and no migration in this repository "
-    "creates that table. brain.ops.telemetry says so in its own docstring: obs holds the audit "
-    "chain, nothing calls open_request, and the eighteen-column record exists as a dataclass "
-    "and nowhere else. A migration written here would have to invent that schema, its "
-    "row-level security and its indexes, and the invented version would then be the one the "
-    "real table has to be reconciled with. So the scheme is data, PARTMAN_SETTINGS is what the "
-    "migration will need, and the migration belongs with the table."
+THE_LEDGER_IS_PARTITIONED_AND_NOTHING_MANAGES_ITS_PARTITIONS: Final = (
+    "M36.1.1.1 asks for pg_partman on the metadata ledger. Migration 0039 creates that table "
+    "partitioned by range on received_at with one default partition, because converting a "
+    "populated table later rewrites it, and the migration belongs with the table rather than "
+    "here. pg_partman is not installed, so no period partitions are made and none is detached: "
+    "every row lands in the default partition and the scheme below is data nothing applies "
+    "yet. PARTMAN_SETTINGS is what that step will need."
 )

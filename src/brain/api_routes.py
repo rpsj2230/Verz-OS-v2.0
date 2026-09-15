@@ -776,6 +776,11 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
             reachable_sources=reachable_sources(registry, asked),
             sink=sink,
             now=asked.now,
+            # The completion instant, read by the lane once in its `finally`. The wall clock,
+            # because `asked.now` was read from it at the top of `asking`, before
+            # authentication, so the ledger's duration covers identifying, entitling and
+            # answering, and ends before the frames are written.
+            clock=lambda: datetime.now(UTC),
             # The answer cache is not read here yet. `brain.gate.answer_cache.lookup` needs an
             # `AnswerStore` and this process installs none, so every question is computed. The
             # lane's cache path is built and tested; what is missing is the store, and passing
