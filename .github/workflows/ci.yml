@@ -31,9 +31,28 @@ jobs:
       - name: Types (strict)
         run: uv run mypy
       - name: Invariants
+        id: invariants
         # These encode rules that must never break. A failure here blocks the deploy,
         # and the job is named so a red check says which rule broke.
-        run: uv run pytest tests/invariants -q
+        #
+        # M37.4.1.2. The report is the evidence that they passed at this commit, which a tick
+        # in the interface is not. `brain.ops.invariant_evidence` says where it is kept, what it
+        # proves and what it does not, and holds this step and the two after it to that.
+        run: uv run pytest tests/invariants -q --junitxml=evidence/invariants.xml
+      - name: The invariant report ran every invariant and skipped none
+        # pytest exits zero when every test it collected skipped, so the exit status of the step
+        # above is not enough to call its report green.
+        run: uv run python -m brain.ops.invariant_evidence evidence/invariants.xml
+      - name: Keep the invariant report, named for the commit
+        # Kept when the suite fails as well, because that is the report naming the rule that
+        # broke. Not attempted when the suite never ran, which is what the outcome test is for.
+        if: ${{ !cancelled() && steps.invariants.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: invariants-${{ github.sha }}
+          path: evidence/invariants.xml
+          if-no-files-found: error
+          retention-days: 90
 
   tests:
     name: Unit tests and coverage
