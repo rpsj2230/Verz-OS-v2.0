@@ -53,9 +53,9 @@ which is the platform's own invariant rather than an inconvenience:
 `E_run(caller, agent) = E(caller) ∩ ceiling` means there is no principal here with more
 reach than a caller, and a worker re-chunking a document runs as that document's owner.
 
-`WITH CHECK (true)` for the same reason 0002 gives on every soft-deleted table. Without an
-explicit one, PostgreSQL reuses the USING expression against the new row, so marking a chunk
-superseded would be refused by the very policy meant to stop it being read afterwards.
+`WITH CHECK (true)` for the reason 0002 gave on every soft-deleted table, and that reason was
+wrong there and here: an UPDATE with a WHERE clause checks its new row against this policy's
+USING regardless, so the application role could not retire a chunk. 0046 replaces the policy.
 
 **`string_to_array(..., ',')` is sound because the column cannot hold a comma.**
 `department_is_a_slug` pins the column to `brain.core.department.SLUG_PATTERN`, which admits

@@ -105,12 +105,12 @@ LIVE = "deleted_at IS NULL"
 # ------------------------------------------------------------ row-level security
 # One pair per soft-deletable table: enable, then a policy naming the application role.
 #
-# `WITH CHECK (true)` beside `USING (deleted_at IS NULL)` is not sloppiness. Without an
-# explicit WITH CHECK, PostgreSQL reuses the USING expression as the check on the new row,
-# so retiring a row would be refused by the very policy that is meant to hide it afterwards:
-# the update sets `deleted_at`, the resulting row fails `deleted_at IS NULL`, and a soft
-# delete becomes impossible. USING decides which rows are visible and touchable; WITH CHECK
-# decides what a row may become, and a row may become retired.
+# `WITH CHECK (true)` beside `USING (deleted_at IS NULL)` was meant to let an UPDATE retire a
+# row, and it does not. An UPDATE with a WHERE clause checks its new row against the USING of
+# every SELECT and ALL policy as well, so as `brain_app` every retirement on these tables was
+# refused with "new row violates row-level security policy". Measured on 2026-09-15; 0045
+# replaces these policies and argues the shape that works. This file still describes the
+# database it built, defect included.
 RLS: tuple[str, ...] = (
     "ALTER TABLE auth.principal ENABLE ROW LEVEL SECURITY",
     """

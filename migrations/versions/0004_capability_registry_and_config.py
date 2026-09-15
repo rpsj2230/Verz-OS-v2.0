@@ -127,10 +127,9 @@ VALUE_MATCHES_ITS_TYPE = (
 LIVE = "deleted_at IS NULL"
 
 # ------------------------------------------------------------ row-level security
-# The same pair per table as 0002 and 0003, and the same `WITH CHECK (true)` beside a
-# `USING` that hides retired rows: without it PostgreSQL reuses the USING expression to
-# check the new row, so setting `deleted_at` would be refused by the very policy meant to
-# hide the row afterwards, and a soft delete would be impossible.
+# The same pair per table as 0002 and 0003, with the same defect: `WITH CHECK (true)` beside
+# a `USING` that hides retired rows does not let the application role set `deleted_at`, for
+# the reason 0045 gives, and 0045 replaces these policies.
 #
 # `ops.setting` is the first table added since `brain.ops.sweeps.sweep_rls` learned about
 # the `ops` schema, so this is also the first policy in that schema whose absence CI would

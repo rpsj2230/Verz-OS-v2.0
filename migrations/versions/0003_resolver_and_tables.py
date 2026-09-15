@@ -585,9 +585,9 @@ TRIGGER_TARGETS: tuple[tuple[str, str], ...] = (
 )
 
 # ------------------------------------------------------------ row-level security
-# Same pair per table as 0002, and the same `WITH CHECK (true)` beside a `USING` that hides
-# retired rows: without it PostgreSQL reuses the USING expression to check the new row, so
-# setting `deleted_at` would be refused by the very policy meant to hide the row afterwards.
+# Same pair per table as 0002, with 0002's defect: `WITH CHECK (true)` beside a `USING` that
+# hides retired rows does not let the application role set `deleted_at`, for the reason 0045
+# gives, and 0045 replaces these policies.
 #
 # The four tables with no `deleted_at` get `USING (true)`. That is not a weaker policy by
 # accident: row-level security on these tables is a floor, so that a table added later cannot

@@ -93,6 +93,16 @@ A_NARROWING_ON_A_TABLE_THIS_MIGRATION_CREATED_IS_NOT_A_NARROWING: Final = (
     "here and one with thirteen of twenty three migrations flagged for building a schema."
 )
 
+#: Why a policy dropped and written again is unreadable rather than breaking.
+A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED: Final = (
+    "A policy dropped and written again in one body changes which rows each command admits, "
+    "and whether the new policies admit everything the old one did is an ordering of boolean "
+    "expressions this check does not attempt. Breaking would refuse every repair of a policy "
+    "ever written, and 0045 is one; safe would pass a narrowing unread. A policy written on "
+    "an existing table whose policies this body did not drop is still a restriction on a "
+    "table that was already there."
+)
+
 #: Why an unreadable statement is a third answer rather than a lenient second one.
 A_STATEMENT_THIS_CHECK_CANNOT_READ_IS_REPORTED_AND_NEVER_PASSED: Final = (
     "A statement assembled at run time, a check constraint written as a regular expression, "
@@ -121,6 +131,9 @@ WHAT_THIS_CHECK_CANNOT_SEE: Final[tuple[str, ...]] = (
     "`op`. `0001` does exactly that for the role password.",
     "A DO block, a trigger body, or a function redefined by CREATE OR REPLACE. Any of them "
     "can reject what the previous release wrote and none of them is DDL a reader can order.",
+    "A policy dropped and written again. `0045` replaces the policies on sixteen tables that "
+    "were already there, and every statement comes back unreadable, because ordering two "
+    "policy expressions is a proof this check does not attempt.",
     "A column type widened or narrowed. `varchar(64)` to `varchar(200)` is safe and the "
     "reverse is not, and this check does not order types.",
     "A backfill that changes what a value means without changing the schema at all.",
@@ -662,14 +675,22 @@ _NARROWING_HEADS: Final[tuple[str, ...]] = (
 )
 
 
-def _from_statement(statement: str, made: frozenset[str]) -> Change:
-    """One SQL statement, read against the tables this body creates."""
+def _from_statement(
+    statement: str, made: frozenset[str], replaced: frozenset[str] = frozenset()
+) -> Change:
+    """One SQL statement, read against the tables this body creates and re-polices."""
     upper = statement.upper()
     if upper.startswith("DROP INDEX"):
         return Change(
             Verdict.SAFE,
             "index dropped",
             f"no query names an index, so the previous release's SQL still runs: {statement}",
+        )
+    if upper.startswith("DROP POLICY"):
+        return Change(
+            Verdict.UNREADABLE,
+            "policy replaced",
+            f"{statement}. {A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED}",
         )
     for head in _NARROWING_HEADS:
         if upper.startswith(head):
@@ -680,6 +701,12 @@ def _from_statement(statement: str, made: frozenset[str]) -> Change:
                 )
             if table in made:
                 return Change(Verdict.SAFE, "restriction on a table created here", statement)
+            if head == "CREATE POLICY" and table in replaced:
+                return Change(
+                    Verdict.UNREADABLE,
+                    "policy replaced",
+                    f"{statement}. {A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED}",
+                )
             return Change(
                 Verdict.BREAKING,
                 "restriction on a table that was already there",
@@ -895,6 +922,13 @@ def changes_in(
     calls, complete = _calls(tree, applying)
     counterpart, _ = _calls(tree, reversing)
     made = _tables_created(calls)
+    replaced = frozenset(
+        table
+        for call in calls
+        if call.name == "execute"
+        for one in call.sql
+        if one.upper().startswith("DROP POLICY") and (table := _table_of(one)) is not None
+    )
     reversed_by = _check_predicates(counterpart)
     out: list[Change] = []
     if not complete:
@@ -919,7 +953,7 @@ def changes_in(
                 )
             )
             continue
-        out.extend(_from_statement(one, made) for one in call.sql)
+        out.extend(_from_statement(one, made, replaced) for one in call.sql)
     return tuple(out)
 
 

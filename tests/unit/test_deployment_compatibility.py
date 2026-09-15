@@ -173,9 +173,9 @@ def test_the_first_revision_is_safe_because_there_is_no_release_before_it() -> N
     assert changes[0].verdict is Verdict.SAFE
 
 
-@pytest.mark.parametrize("named", ["0015", "0001"])
+@pytest.mark.parametrize("named", ["0015", "0001", "0045"])
 def test_every_migration_the_stated_limits_name_still_behaves_that_way(named: str) -> None:
-    """The prose in `WHAT_THIS_CHECK_CANNOT_SEE` names two files, and it has to keep being true.
+    """The prose in `WHAT_THIS_CHECK_CANNOT_SEE` names three files, and it has to keep being true.
 
     A boundary written down once and never re-measured is the drift this repository has
     already had: four documents agreed with each other about `intersect` and none of them with
@@ -337,6 +337,39 @@ def test_row_level_security_switched_on_over_an_existing_table_is_a_finding() ->
     existing = _migration('    op.execute("ALTER TABLE know.chunk ENABLE ROW LEVEL SECURITY")')
     assert not breaking_changes(fresh)
     assert [one.rule for one in breaking_changes(existing)] == [
+        "restriction on a table that was already there"
+    ]
+
+
+READ_ANY_CHUNK = "CREATE POLICY chunk_live ON know.chunk FOR SELECT TO brain_app USING (true)"
+
+
+def test_a_replaced_policy_is_unreadable_and_a_new_one_is_still_a_finding() -> None:
+    """`0045` drops and rewrites the policies on sixteen tables that were already there. Whether
+    the new policies admit everything the old ones did is an ordering of boolean expressions this
+    check does not attempt, so both statements are unreadable: reported on every run and never
+    passed. See `A_POLICY_REPLACED_IN_THE_SAME_BODY_CANNOT_BE_ORDERED`.
+
+    The two siblings are what keep that from becoming an escape. A policy added to an existing
+    table with no drop in the body is still the finding it was, and a drop on one table does not
+    excuse a policy written on another. Delete this and the rule can widen to every policy on
+    every existing table, which is a narrowing on live rows passing a gate built to refuse it.
+    """
+    replaced = _migration(
+        '    op.execute("DROP POLICY chunk_live ON know.chunk")\n'
+        f'    op.execute("{READ_ANY_CHUNK}")'
+    )
+    added = _migration(f'    op.execute("{READ_ANY_CHUNK}")')
+    elsewhere = _migration(
+        f'    op.execute("DROP POLICY item_live ON know.item")\n    op.execute("{READ_ANY_CHUNK}")'
+    )
+
+    assert not breaking_changes(replaced)
+    assert [one.rule for one in unreadable_changes(replaced)] == ["policy replaced"] * 2
+    assert [one.rule for one in breaking_changes(added)] == [
+        "restriction on a table that was already there"
+    ]
+    assert [one.rule for one in breaking_changes(elsewhere)] == [
         "restriction on a table that was already there"
     ]
 
