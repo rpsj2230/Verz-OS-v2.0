@@ -2,15 +2,11 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**4 items are open: one decision and three short actions of yours.**
+**3 items are open, all short actions of yours, and none is urgent.**
 
-**Item 65: one line** to change in Coolify's copy of the compose file. Nothing breaks while it waits.
+**Item 65: one line** to replace in Coolify's compose text box. Nothing breaks while it waits.
 
-**Item 64: one letter.** Whether three permissive licences numpy carries may be allowed, so the record
-matcher's image can be built. I recommend A.
-
-**Item 63: four tidy-ups** on GitHub and your server, now that deploys no longer come from GitHub.
-None is urgent.
+**Item 63: two tidy-ups** on GitHub and in the consoles. The server checks are done.
 
 **Item 52: one repository variable** in GitHub, `BRAIN_URL`, so your server's address can come out
 of two workflow files.
@@ -19,114 +15,64 @@ of two workflow files.
 
 ## 65. One line to change in Coolify's copy of the compose file, whenever you have five minutes
 
-**What you do: one edit in Coolify. Nothing is broken while it waits.**
+**What you do: replace one line of text in a text box in Coolify. Nothing is broken while it waits.**
 
-**In plain words.** Your answer to item 51 is built: every container of the product now refuses to
-start unless it is told exactly which image to run, instead of quietly falling back to `latest`.
-Coolify keeps its own copy of the compose file, so your server still has the old line. Because
-`APP_IMAGE` is already set there, it keeps deploying exactly as it does today until you change it.
+**What the "code" is.** Coolify keeps the list of containers for your Brain as a block of text,
+which it calls the compose file. You edit it in a text box on a Coolify page, like editing a
+document. The line below is a line of that text, not a file on your computer and not something to
+run. The `${...}` part is how that text says "use the value of the setting called `APP_IMAGE`".
 
-1. Open Coolify through your SSH tunnel as usual, open the Company Brain service, and go to its
-   **Environment Variables**. Check that `APP_IMAGE` is set (it is the image address the service
-   already runs, ending in `:latest`). If it is empty, stop here and tell me.
-2. Go to the **Configuration** tab and click **Edit Compose File**.
-3. Find the `app:` service and its `image:` line. It currently ends in `:-` followed by an image
-   address. Replace the whole line with exactly:
+1. Open Coolify the way you normally do.
+2. Open the **Company Brain** service.
+3. Click the **Configuration** tab, then **Edit Compose File**. A text box opens.
+4. Press **Ctrl+F** in the text box and search for `APP_IMAGE`. The first match is on a line that
+   starts with `image:`, under the `app:` block, and looks like this (your address after `:-` may
+   differ slightly):
+
+   ```
+       image: ${APP_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
+   ```
+
+5. Select that whole line and replace it with this line, keeping the same spaces at the start:
 
    ```
        image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
    ```
 
-   Keep the same indentation as the line you replaced.
-4. Click **Save**, then **Deploy**.
-5. Open `/health/ready` on your Brain address. It should answer and show the latest commit.
+   The only real change is `:-` followed by an address becoming `:?` followed by a message. The old
+   line means "if `APP_IMAGE` is empty, quietly use the latest image". The new line means "if
+   `APP_IMAGE` is empty, refuse to start and show this message".
+6. If the search finds more lines starting with `image: ${APP_IMAGE:-`, replace each the same way.
+7. Click **Save**, then **Deploy**.
+8. When it finishes, open your Brain address with `/health/ready` added to the end. It should answer.
 
-**If the deploy fails**, Coolify may not accept the `:?` form. Put the old line back, save, deploy,
-and tell me; I will change the approach rather than ask you to experiment.
+**If the deploy fails**, open **Edit Compose File** again, put the old line back, save and deploy,
+and tell me. That returns everything to how it is now.
 
-## 64. The record matcher needs three more permissive licences allowed before its image can be built
+## 63. Two short tidy-ups of yours on GitHub and in the consoles; the server checks are done
 
-**What you decide: one letter. I recommend Option A.**
+**What you do: two things, neither urgent. I did the rest on 2026-09-15.**
 
-**In plain words.** Your answer to item 55 is built: the record matcher runs in its own image,
-and it has been run for real against a test export. The image cannot be built yet, because it
-checks the licence of every package it installs against the same list of allowed licences the main
-application uses, and one package fails that check.
+**Done by me:**
 
-That package is **numpy**, the standard number-crunching library nearly every data tool depends on.
-Its licence statement names five licences at once: `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND
-CC0-1.0`. Two of those are already allowed. The other three are not on the list yet:
+- **The old GitHub deploy key.** I checked `/root/.ssh/authorized_keys` on your server, reading
+  only: it holds 3 keys and none carries a forced command, so there is no GitHub deploy line to
+  remove. Nothing was changed.
+- **The Traefik allowlist placeholder.** Nothing on your server uses that template, so there is
+  nothing to change until it is deployed.
 
-- **0BSD** (Zero-Clause BSD): use it for anything, with no conditions at all, not even keeping a
-  copyright notice. It asks less of you than MIT, which is already allowed.
-- **Zlib**: use it for anything; do not claim you wrote it, and mark changed copies as changed.
-- **CC0-1.0**: the author gives up their rights, as close to public domain as the law allows.
+**Still yours, because they are security settings and deleting secrets cannot be undone, which I
+do not do on anyone's behalf even with permission:**
 
-None of the three is copyleft: none requires sharing your own source code, and none places any
-condition on the software built with it. They are all less demanding than licences the list already
-accepts.
+1. **Delete three GitHub secrets nothing uses any more.** Go to
+   `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`. Beside each of
+   `COOLIFY_URL`, `COOLIFY_SERVICE_UUID` and `COOLIFY_TOKEN`, click the bin icon and confirm.
+   Nothing stops working: no workflow reads them since item 42.
+2. **Switch on a second login factor** in the Coolify panel, the Keycloak admin console, and
+   Langfuse if you use it. The "Administrative consoles" section of `docs/install/network.md`
+   says where each setting is.
 
-**Option A (recommended): add 0BSD, Zlib and CC0-1.0 to the allowed list.** The matcher's image then
-builds, and so does anything else that depends on numpy. The list still refuses copyleft licences
-such as GPL, which is what it exists to catch.
-
-**Option B: allow them for the matcher's image only.** The main application's list stays as it is.
-It is narrower, and it means two lists that can drift apart, which is the kind of second copy this
-system avoids.
-
-**Option C: leave the list alone.** The matcher stays built and tested but cannot be packaged, until
-you decide otherwise.
-
-**Why A.** These three licences ask less than MIT, which is already allowed, so refusing them protects
-nothing, and one list is easier to trust than two.
-
-**One licence of the same kind was added while this waits, and you can undo it.** Checking sign-in
-tokens on the server needed the standard `cryptography` library, which brings in a helper called
-**cffi** licensed **MIT-0**: MIT without even the duty to keep the copyright notice. It is on the
-allowed list now, because without it the application's own image would not build. If you answer B or
-C, say so and I will take MIT-0 off the list again and find another way to check tokens.
-
-## 63. Four short tidy-ups on GitHub and your server, now that deploys no longer come from GitHub
-
-**What you do: four steps, none urgent, and nothing is broken while they wait.**
-
-Your answers to items 42 and 61 are built. GitHub no longer tries to deploy to your server, and the
-administrative consoles' protection is written into the install guide. That leaves four things only
-you can do, because they are settings on GitHub and on your server, which I do not change.
-
-1. **Delete three GitHub secrets nothing uses any more.**
-   Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`. For each of
-   `COOLIFY_URL`, `COOLIFY_SERVICE_UUID` and `COOLIFY_TOKEN`, click the bin icon beside it and
-   confirm. They were always empty, so nothing stops working.
-
-2. **Remove an old GitHub deploy key line from your server, if it is there.** In PowerShell:
-
-   ```
-   ssh verz-vps
-   ```
-
-   Then on the server, see whether any line mentions a forced command:
-
-   ```
-   grep -n "command=" /root/.ssh/authorized_keys
-   ```
-
-   If it prints nothing, you are done with this step. If it prints a line, send me what it
-   printed before removing anything, so we remove the right line and not your own login key.
-
-3. **Before the deployment panel template is ever copied onto a server, put a real address
-   range into its allowlist.** The template in `ops/vps/traefik-coolify-panel.yaml` now has an
-   `admin-allowlist` with a placeholder. Traefik refuses to serve the panel until the placeholder
-   is replaced, which is deliberate. Nothing on your server uses the template today, so there is
-   nothing to do until you choose to deploy it. When you do, the value is the address range you
-   administer from.
-
-4. **Switch on a second login factor in each administrative console you use:** the deployment
-   panel (Coolify), the Keycloak admin console, and Langfuse if you run it. This is a setting inside
-   each one, so I cannot check it from here. The install guide's "Administrative consoles" section
-   in `docs/install/network.md` says where each setting lives.
-
-Tell me when step 2 has been checked, and whether any of the others are done.
+Tell me when either is done and I close this item.
 
 ## 52. Two workflow files carry your server's address, and one repository variable removes them
 
@@ -176,6 +122,52 @@ built now, with a check that fails if a client value ever reaches it.
 **Your answer, 2026-09-16:** go with the recommendation. The step above is yours, because my GitHub access can read this repository but cannot change its settings. Tell me when the variable exists and I remove the address from both workflow files.
 
 # Answered
+
+## 64. The record matcher needs three more permissive licences allowed before its image can be built - DONE: 0BSD, Zlib and CC0-1.0 are allowed
+
+**What you decide: one letter. I recommend Option A.**
+
+**In plain words.** Your answer to item 55 is built: the record matcher runs in its own image,
+and it has been run for real against a test export. The image cannot be built yet, because it
+checks the licence of every package it installs against the same list of allowed licences the main
+application uses, and one package fails that check.
+
+That package is **numpy**, the standard number-crunching library nearly every data tool depends on.
+Its licence statement names five licences at once: `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND
+CC0-1.0`. Two of those are already allowed. The other three are not on the list yet:
+
+- **0BSD** (Zero-Clause BSD): use it for anything, with no conditions at all, not even keeping a
+  copyright notice. It asks less of you than MIT, which is already allowed.
+- **Zlib**: use it for anything; do not claim you wrote it, and mark changed copies as changed.
+- **CC0-1.0**: the author gives up their rights, as close to public domain as the law allows.
+
+None of the three is copyleft: none requires sharing your own source code, and none places any
+condition on the software built with it. They are all less demanding than licences the list already
+accepts.
+
+**Option A (recommended): add 0BSD, Zlib and CC0-1.0 to the allowed list.** The matcher's image then
+builds, and so does anything else that depends on numpy. The list still refuses copyleft licences
+such as GPL, which is what it exists to catch.
+
+**Option B: allow them for the matcher's image only.** The main application's list stays as it is.
+It is narrower, and it means two lists that can drift apart, which is the kind of second copy this
+system avoids.
+
+**Option C: leave the list alone.** The matcher stays built and tested but cannot be packaged, until
+you decide otherwise.
+
+**Why A.** These three licences ask less than MIT, which is already allowed, so refusing them protects
+nothing, and one list is easier to trust than two.
+
+**One licence of the same kind was added while this waits, and you can undo it.** Checking sign-in
+tokens on the server needed the standard `cryptography` library, which brings in a helper called
+**cffi** licensed **MIT-0**: MIT without even the duty to keep the copyright notice. It is on the
+allowed list now, because without it the application's own image would not build. If you answer B or
+C, say so and I will take MIT-0 off the list again and find another way to check tokens.
+
+**Your answer, 2026-09-15:** Option A. Built the same day: the three are on the allowed list in
+`brain.ops.sweeps`, beside MIT-0, with a test holding numpy's own expression allowed and GPL still
+refused.
 
 ## 62. Keycloak shows "Starting" on your server: the cause is found and fixed, and two settings in Coolify finish it - DONE: Keycloak is up and healthy
 

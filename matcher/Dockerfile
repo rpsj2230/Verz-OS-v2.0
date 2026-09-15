@@ -7,8 +7,8 @@
 # this checkout rather than copied, so there is one cascade and not two.
 #
 # Never built. There is no Docker on the machine this was written on. See
-# `docker-compose.matcher.yml` for what has run instead, and for why the licence step below is
-# expected to refuse until the owner decides about numpy's licence expression.
+# `docker-compose.matcher.yml` for what has run instead. The licence step below accepts numpy's
+# licence expression since the owner allowed its three extra licences (needs-rupash item 64).
 #
 # Task ids: M14.4.1
 

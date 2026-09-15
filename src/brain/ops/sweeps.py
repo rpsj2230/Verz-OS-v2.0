@@ -565,9 +565,16 @@ ALLOWED_LICENCES: frozenset[str] = frozenset(
         # MIT with the one condition MIT has, keeping the notice, removed. It asks less than
         # the entry above, so refusing it protects nothing. `cffi` is under it, and `cffi` is
         # how `cryptography` binds OpenSSL, which `brain.identity.keycloak_tokens` needs to
-        # verify a Keycloak signature at all. The same reasoning as the three licences in
-        # docs/needs-rupash.md item 64, which is still open: this entry decides nothing there.
+        # verify a Keycloak signature at all. The same reasoning as the three below.
         "MIT-0",
+        # The three numpy's expression names beside BSD-3-Clause and MIT, allowed by the owner
+        # in docs/needs-rupash.md item 64. Each asks no more than MIT: 0BSD asks nothing, Zlib
+        # asks that a changed copy say so, CC0-1.0 waives the author's rights. None is copyleft,
+        # so allowing them admits nothing this list exists to refuse, and one list for the
+        # application and the matcher's image is one list to trust rather than two.
+        "0BSD",
+        "Zlib",
+        "CC0-1.0",
         "Apache-2.0",
         "BSD-3-Clause",
         "BSD-2-Clause",

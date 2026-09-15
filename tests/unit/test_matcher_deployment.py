@@ -8,8 +8,8 @@ something compares the two.
 **None of this has been built or started.** There is no Docker on the machine these were
 written on. The job ran once in a throwaway environment holding exactly this lock's packages;
 these tests are about the files, and a green run here says the files agree with the code and
-nothing about whether the image builds. It is expected not to, today: its licence step refuses
-numpy's declared licence expression until the owner decides about it.
+nothing about whether the image builds. Its licence step accepts numpy's declared licence
+expression since the owner allowed its three extra licences in `docs/needs-rupash.md` item 64.
 
 Task ids: M14.4.1
 """

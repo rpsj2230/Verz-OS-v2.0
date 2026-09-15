@@ -711,6 +711,19 @@ def test_the_licence_the_signature_verifier_depends_on_is_allowed() -> None:
     assert licence_is_allowed("Apache-2.0 OR BSD-3-Clause")
 
 
+def test_numpys_declared_licence_expression_is_allowed_and_copyleft_still_is_not() -> None:
+    """The owner allowed 0BSD, Zlib and CC0-1.0 (docs/needs-rupash.md item 64) so the record
+    matcher's image builds: its licence step applies this list to numpy, whose expression is the
+    one below, read by the parser. Deleting this lets any of the three be removed as looking
+    unused in the application's own lock, and the matcher's image then refuses to build on a
+    machine where nobody connects the failure to a licence. The GPL line is the sibling: an
+    allowlist that grew to admit everything would pass the first assertion too."""
+    from brain.ops.sweeps import licence_is_allowed
+
+    assert licence_is_allowed("BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0")
+    assert not licence_is_allowed("BSD-3-Clause AND GPL-3.0-only")
+
+
 # ---------------------------------------------- the two records of what is built (M0.5.8)
 def test_a_source_claim_that_no_commit_closed_is_counted() -> None:
     """**A counter that always returns nought is this sweep's own history.**
