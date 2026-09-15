@@ -177,20 +177,28 @@ class GuardedSaver(BaseCheckpointSaver[str]):
         super().__init__(serde=inner.serde)
         self.inner = inner
         self.principal_id = principal_id
-        #: Threads a save was refused on. See `A_REFUSED_RUN_SAVES_NOTHING_MORE`.
-        self.refused_threads: set[str] = set()
+        #: Each thread a save was refused on, with the reason the first refusal gave. See
+        #: `A_REFUSED_RUN_SAVES_NOTHING_MORE`.
+        #:
+        #: **The first reason is kept and repeated, because the library saves in the background
+        #: and which refusal reaches the caller first is a race.** It was a set, so a later save
+        #: on a refused thread raised "already refused" with no reason, and on a run where that
+        #: later save surfaced first the caller never learnt what was refused. CI caught it on
+        #: 2026-09-15 as a test that passed on one run and failed on the next.
+        self.refused_threads: dict[str, str] = {}
 
     def _refuse_if_already_refused(self, config: RunnableConfig) -> None:
         thread = _thread_of(config)
-        if thread in self.refused_threads:
+        first = self.refused_threads.get(thread)
+        if first is not None:
             msg = (
                 f"a save on this run was already refused, so nothing more of it is saved. "
-                f"{A_REFUSED_RUN_SAVES_NOTHING_MORE}"
+                f"The first refusal: {first} {A_REFUSED_RUN_SAVES_NOTHING_MORE}"
             )
             raise CheckpointerError(msg)
 
     def _refuse(self, config: RunnableConfig, message: str) -> CheckpointerError:
-        self.refused_threads.add(_thread_of(config))
+        self.refused_threads.setdefault(_thread_of(config), message)
         return CheckpointerError(message)
 
     def _owns(self, found: CheckpointTuple) -> bool:

@@ -16,6 +16,7 @@ So every directory below is one of three things, and the third column is the one
 | `tests/` | The suite, the invariants, the fixtures and the golden corpus. | Never |
 | `docs/` | The work breakdown, the build pages the application serves, and this file. | Never |
 | `ops/` | The Keycloak realm, OpenBao policies, runbooks and git hooks. | Never |
+| `matcher/` | The record matcher's own offline image: its dependencies, lock file and Dockerfile, kept apart from the application. | Never |
 | `Dockerfile` | How the image is built. One image for every client. | Never |
 | `docker-compose*.yml` | What runs, and what each container may have. Values come from the environment. | Never |
 | `pyproject.toml`, `uv.lock` | Dependencies, pinned. | Never |
