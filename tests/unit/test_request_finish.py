@@ -550,8 +550,8 @@ def test_a_question_that_cannot_be_written_is_logged_and_does_not_fail_the_reque
 class DepartmentlessDirectory(Directory):
     """The test directory, with one person it gives no department."""
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
-        found = super().principal_for_subject(issuer, subject)
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+        found = await super().principal_for_subject(issuer, subject)
         if found is not None and found.id == "u_elsewhere":
             return found.model_copy(update={"primary_department": None})
         return found

@@ -154,7 +154,7 @@ def person(pid: str) -> Principal:
 class Directory:
     """A `PrincipalDirectory` whose people sit in different departments."""
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         for pid, sub in SUBJECTS.items():
             if issuer == ISSUER and sub == subject:
                 return person(pid)

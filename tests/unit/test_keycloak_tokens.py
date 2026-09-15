@@ -12,6 +12,7 @@ Task ids: M1.1.2
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -150,7 +151,7 @@ class Clock:
 class Directory:
     """One person, at the issuer this installation trusts."""
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         if issuer != ISSUER or subject != SUBJECT:
             return None
         return Principal(
@@ -177,7 +178,7 @@ class Realm:
 
     def present(self, compact: str, *, at: datetime = NOW) -> Caller:
         self.clock.now = at
-        return self.authority.authenticate(f"Bearer {compact}", now=at)
+        return asyncio.run(self.authority.authenticate(f"Bearer {compact}", now=at))
 
     def refused(self, compact: str, *, at: datetime = NOW) -> TokenRefusedError:
         with pytest.raises(TokenRefusedError) as caught:

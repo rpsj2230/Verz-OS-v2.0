@@ -57,6 +57,7 @@ import binascii
 import enum
 import inspect
 import json
+import threading
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, is_dataclass
 from dataclasses import fields as dataclass_fields
@@ -261,6 +262,18 @@ JWKS_STALE_GRACE: Final = timedelta(hours=6)
 #: which is a denial of service carried out with our own credentials.
 JWKS_MIN_REFETCH: Final = timedelta(seconds=30)
 
+#: Why the cache holds a lock across a fetch.
+SIMULTANEOUS_FIRST_REQUESTS_FETCH_ONCE: Final = (
+    "Every sign-in on a cold process, or in the moment after the set expires, reaches an "
+    "empty or stale cache together. Without a lock each of them fetches, so the identity "
+    "provider sees one request per waiting person, and the refetch floor for an unknown kid "
+    "is recorded only after the fetches it exists to prevent have all begun. The lock is "
+    "held across the fetch on purpose: the requests queued behind it would fetch the same "
+    "document, and they find it cached when the lock is released. Rejected: an asyncio "
+    "lock, because bearer.TokenAuthority asks the cache on worker threads so that a fetch "
+    "never holds the event loop, and an asyncio lock does not exclude two threads."
+)
+
 
 class JwksCache:
     """A key-set cache with the fetch injected, and a rate-limited path for key rotation.
@@ -288,9 +301,16 @@ class JwksCache:
         self._min_refetch = min_refetch
         self._sets: dict[str, KeySet] = {}
         self._last_attempt: dict[str, datetime] = {}
+        # See SIMULTANEOUS_FIRST_REQUESTS_FETCH_ONCE. Not reentrant: the locked methods
+        # call the unlocked bodies, never each other.
+        self._lock = threading.Lock()
 
     def keys_for(self, issuer: str, now: datetime) -> KeySet:
         """The current key set for this issuer, fetching when there is nothing fresh."""
+        with self._lock:
+            return self._current(issuer, now)
+
+    def _current(self, issuer: str, now: datetime) -> KeySet:
         cached = self._sets.get(issuer)
         if cached is not None and now - cached.fetched_at < self._ttl:
             return cached
@@ -312,7 +332,11 @@ class JwksCache:
         Raises rather than returning None. A caller holding an `Optional[SigningKey]` is one
         `if key is None: key = keys[0]` away from the fallback this exists to refuse.
         """
-        keys = self.keys_for(issuer, now)
+        with self._lock:
+            return self._named(issuer, kid, now)
+
+    def _named(self, issuer: str, kid: str, now: datetime) -> SigningKey:
+        keys = self._current(issuer, now)
         found = keys.by_kid(kid)
         if found is not None:
             return found
@@ -609,12 +633,16 @@ class PrincipalDirectory(Protocol):
     A protocol rather than a query, for the reason `EntitlementStore` is one: this module
     stays testable without a database, and the table behind it (`principal_identity`,
     M1.2.2) belongs to whoever owns `src/brain/tables`.
+
+    Awaitable, because the implementation reads the application's only pool, which is
+    asynchronous, and a synchronous lookup there would hold the event loop for every
+    sign-in. `brain.identity.principal_directory.StoredDirectory` is that implementation.
     """
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None: ...
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None: ...
 
 
-def principal_for(
+async def principal_for(
     claims: VerifiedClaims,
     directory: PrincipalDirectory,
     *,
@@ -633,7 +661,7 @@ def principal_for(
     principal object. `Principal.is_active` is still enforced at entitlement time; this is
     the earlier of two gates rather than a replacement for it.
     """
-    found = directory.principal_for_subject(claims.issuer, claims.subject)
+    found = await directory.principal_for_subject(claims.issuer, claims.subject)
     if found is None or not found.is_active(now):
         return UnmappedSubject(issuer=claims.issuer, subject=claims.subject)
     return found

@@ -307,7 +307,7 @@ class SeededDirectory:
 
     seeded: Seeded
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         if issuer != ISSUER:
             return None
         return next(

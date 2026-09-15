@@ -63,14 +63,17 @@ in the log and never in the response; see `bearer.EVERY_REFUSAL_SAYS_THE_SAME_SE
 Faults inside this module (a document that is not a key set, a transport error) raise
 `IdentityError`, which `JwksCache` turns into `NO_KEYS_AVAILABLE` or `UNKNOWN_KEY`.
 
-**Synchronous, because the seams it fills are.** `JwksFetch`, `KeySource` and
-`TokenAuthority.authenticate` are synchronous, and `brain.api_routes.asking` is a plain `def`,
-so FastAPI runs it on its thread pool and a fetch holds a worker thread rather than the event
-loop. A fetch happens at most once an hour plus once per refetch window, and priming the cache
-at startup moves the first one out of a request.
+**The fetch is synchronous and never runs on the event loop.** `JwksFetch` and `KeySource` are
+synchronous, and `TokenAuthority.authenticate`, a coroutine since `brain.api_routes.asking`
+became one, asks its key source through `asyncio.to_thread`
+(`bearer.A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP`), so a fetch holds a worker thread and not
+every request in the process. `oidc.JwksCache` holds a lock across the fetch, so the sign-ins
+that reach a cold cache together cost the realm one request
+(`oidc.SIMULTANEOUS_FIRST_REQUESTS_FETCH_ONCE`). A fetch happens at most once an hour plus
+once per refetch window, and priming the cache at startup moves the first one out of a request.
 
-Not built here: constructing this in the application's lifespan, and the `PrincipalDirectory`
-it is handed, which reads `auth.principal` and belongs to whoever builds that store.
+Not built here: constructing this in the application's lifespan. The `PrincipalDirectory` it
+is handed is `brain.identity.principal_directory.StoredDirectory`.
 
 Task ids: M1.1.2
 """

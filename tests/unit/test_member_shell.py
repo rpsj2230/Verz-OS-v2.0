@@ -28,6 +28,7 @@ Task ids: M40.1.2.1, M40.1.2.2, M40.1.2.4
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
 
@@ -101,7 +102,7 @@ class Directory:
     def __init__(self, rows: dict[tuple[str, str], Principal]) -> None:
         self._rows = rows
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         return self._rows.get((issuer, subject))
 
 
@@ -543,7 +544,7 @@ def test_a_member_signs_in_as_the_principal_the_directory_names_and_never_as_the
 
     Delete this and the sign-in can assemble a principal out of claims, which
     `principal_for` exists to refuse."""
-    signed = sign_in(claims(), directory(), now=NOW)
+    signed = asyncio.run(sign_in(claims(), directory(), now=NOW))
 
     assert not isinstance(signed, UnmappedSubject)
     assert signed.principal_id == ME
@@ -558,7 +559,7 @@ def test_a_valid_token_for_somebody_nobody_has_onboarded_opens_no_session() -> N
 
     Delete this and a stranger with a valid token holds a live session with an unmapped
     identity behind it."""
-    signed = sign_in(claims(subject="somebody-else"), directory(), now=NOW)
+    signed = asyncio.run(sign_in(claims(subject="somebody-else"), directory(), now=NOW))
 
     assert isinstance(signed, UnmappedSubject)
     assert signed.subject == "somebody-else"
@@ -582,7 +583,7 @@ def test_a_binding_naming_another_principal_is_refused_rather_than_resolved() ->
 
     Delete this and a chat account bound to somebody else resolves quietly to whichever of
     the two identities the code happened to read first."""
-    signed = sign_in(claims(), directory(), now=NOW)
+    signed = asyncio.run(sign_in(claims(), directory(), now=NOW))
     assert not isinstance(signed, UnmappedSubject)
 
     with pytest.raises(MemberShellError, match="different principal"):
@@ -594,7 +595,7 @@ def test_the_web_and_the_channel_resolve_to_the_one_principal() -> None:
     refuses everything.
 
     Delete this and `one_principal` can raise unconditionally."""
-    signed = sign_in(claims(), directory(), now=NOW)
+    signed = asyncio.run(sign_in(claims(), directory(), now=NOW))
     assert not isinstance(signed, UnmappedSubject)
 
     assert one_principal(signed, binding_for(ME)) == ME
@@ -637,7 +638,7 @@ def test_a_channel_only_person_signs_in_on_the_web_and_holds_the_same_entitlemen
 
     reach_on_the_channel = store[only_ever_on_lark.principal_id]
 
-    signed = sign_in(claims(), directory(), now=NOW)
+    signed = asyncio.run(sign_in(claims(), directory(), now=NOW))
     assert not isinstance(signed, UnmappedSubject)
     reach_on_the_web = store[one_principal(signed, only_ever_on_lark)]
 

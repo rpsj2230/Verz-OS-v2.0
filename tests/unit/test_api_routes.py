@@ -181,7 +181,7 @@ def principal(pid: str) -> Principal:
 class Directory:
     """A `PrincipalDirectory` over the subjects above. The real one reads a table."""
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         if issuer != ISSUER:
             return None
         for pid, sub in SUBJECTS.items():

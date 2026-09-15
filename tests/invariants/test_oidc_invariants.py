@@ -23,6 +23,7 @@ Task ids: M1.1.2, M1.1.3, M1.1.5, M1.1.6, M1.1.7
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
@@ -498,10 +499,10 @@ def test_an_unmapped_subject_is_not_a_principal_and_holds_no_entitlement_set() -
     """
 
     class EmptyDirectory:
-        def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+        async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
             return None
 
-    result = principal_for(check(token()), EmptyDirectory(), now=NOW)
+    result = asyncio.run(principal_for(check(token()), EmptyDirectory(), now=NOW))
 
     assert isinstance(result, UnmappedSubject)
     assert not isinstance(result, Principal)
@@ -520,10 +521,11 @@ def test_a_principal_who_has_expired_never_reaches_a_caller_as_a_principal() -> 
     """
 
     class Directory:
-        def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+        async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
             return person(employment=Employment.CONTRACTOR, not_after=NOW - timedelta(days=1))
 
-    assert isinstance(principal_for(check(token()), Directory(), now=NOW), UnmappedSubject)
+    found = asyncio.run(principal_for(check(token()), Directory(), now=NOW))
+    assert isinstance(found, UnmappedSubject)
 
 
 # ----------------------------------------- INV: logout propagates

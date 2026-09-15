@@ -585,7 +585,7 @@ class MemberSignIn:
             raise ValueError(msg)
 
 
-def sign_in(
+async def sign_in(
     claims: VerifiedClaims,
     directory: PrincipalDirectory,
     *,
@@ -608,7 +608,7 @@ def sign_in(
     `principal_for`: a valid token from somebody nobody has onboarded is a normal event with
     an instruction attached, and no session is opened for it.
     """
-    found = principal_for(claims, directory, now=now)
+    found = await principal_for(claims, directory, now=now)
     if isinstance(found, UnmappedSubject):
         return found
     session = open_session(

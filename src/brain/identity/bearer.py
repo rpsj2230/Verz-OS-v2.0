@@ -56,6 +56,7 @@ Task ids: M1.1.2
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -112,6 +113,19 @@ A_SECOND_FACTOR_IS_A_CLAIM_ABOUT_THIS_SESSION: Final = (
     "make a step-up flow unreachable, and fixing it at STRONG would hand every "
     "password-only session the approve and admin verbs that gate.admission exists to "
     "withhold from them."
+)
+
+#: Why the key source is asked on a worker thread.
+A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP: Final = (
+    "The route that authenticates is a coroutine on the event loop every request in the "
+    "process shares, and a key-set fetch is a blocking HTTP call of up to five seconds. "
+    "Made on the loop, one cold cache or one rotated key stops every request, the health "
+    "check included, for as long as the identity provider takes to answer. So the key "
+    "source is asked on a worker thread, cached answers included, which costs a thread hop "
+    "per request and leaves KeySource synchronous for every source that satisfies it. "
+    "Rejected: an awaitable KeySource over an async HTTP client, which would put "
+    "JwksCache's refetch floor and stale grace behind an await, a rewrite of the cache "
+    "oidc already has, to gain nothing a thread does not."
 )
 
 
@@ -242,7 +256,7 @@ class TokenAuthority:
     directory: PrincipalDirectory
     leeway: timedelta = DEFAULT_LEEWAY
 
-    def authenticate(self, header: str | None, *, now: datetime) -> Caller:
+    async def authenticate(self, header: str | None, *, now: datetime) -> Caller:
         """A verified caller, or `TokenRefusedError`. Never anything in between.
 
         The `kid` is read off the unverified header before validation, and only to give the
@@ -255,13 +269,12 @@ class TokenAuthority:
         """
         raw = parse_unverified(token_from_header(header))
 
-        kid = raw.header.get("kid")
-        if isinstance(kid, str) and kid:
-            self.keys.key_for(self.issuer, kid, now)
+        # On a worker thread. See A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP.
+        keys = await asyncio.to_thread(self._current_keys, raw.header.get("kid"), now)
 
         claims = validate_token(
             raw,
-            keys=self.keys.keys_for(self.issuer, now),
+            keys=keys,
             verify=self.verify,
             expected_issuer=self.issuer,
             expected_audience=self.audience,
@@ -269,7 +282,7 @@ class TokenAuthority:
             leeway=self.leeway,
         )
 
-        found = principal_for(claims, self.directory, now=now)
+        found = await principal_for(claims, self.directory, now=now)
         if isinstance(found, UnmappedSubject):
             # A valid token from somebody with no live principal here. `oidc` argues why this
             # is not an empty `Principal`: an empty one type-checks everywhere a real one
@@ -284,8 +297,19 @@ class TokenAuthority:
 
         return Caller(principal=found, claims=claims, assurance=assurance_from(claims))
 
+    def _current_keys(self, kid: object, now: datetime) -> KeySet:
+        """The key set to validate against, after warming it for the token's `kid`.
 
-def authenticate(authority: TokenAuthority | None, header: str | None, *, now: datetime) -> Caller:
+        Blocking, because a fetch is, and so called only through `asyncio.to_thread`.
+        """
+        if isinstance(kid, str) and kid:
+            self.keys.key_for(self.issuer, kid, now)
+        return self.keys.keys_for(self.issuer, now)
+
+
+async def authenticate(
+    authority: TokenAuthority | None, header: str | None, *, now: datetime
+) -> Caller:
     """The only way a request becomes a caller, including when nothing is configured.
 
     The `None` case is handled here rather than at each route, so that "this deployment has
@@ -299,7 +323,7 @@ def authenticate(authority: TokenAuthority | None, header: str | None, *, now: d
         raise TokenRefusedError(
             TokenRefusal.NO_KEYS_AVAILABLE, "no token authority is configured on this process"
         )
-    return authority.authenticate(header, now=now)
+    return await authority.authenticate(header, now=now)
 
 
 def log_refusal(error: TokenRefusedError, *, path: str) -> None:

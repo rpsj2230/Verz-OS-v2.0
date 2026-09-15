@@ -363,7 +363,7 @@ async def asking(request: Request) -> Asking:
     """
     now = datetime.now(UTC)
     wiring = wiring_of(request)
-    caller = authenticate(
+    caller = await authenticate(
         wiring.authority if wiring is not None else None,
         request.headers.get("authorization"),
         now=now,

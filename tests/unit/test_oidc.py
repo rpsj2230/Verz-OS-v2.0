@@ -14,6 +14,7 @@ Task ids: M1.1.1, M1.1.2, M1.1.3, M1.1.4, M1.1.5, M1.1.6, M1.1.7
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from datetime import UTC, datetime, timedelta
@@ -152,7 +153,7 @@ class Directory:
     def __init__(self, people: dict[tuple[str, str], Principal]) -> None:
         self._people = people
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         return self._people.get((issuer, subject))
 
 
@@ -580,7 +581,7 @@ def test_a_groups_claim_that_is_not_a_list_yields_no_groups():
 def test_a_subject_the_directory_does_not_know_is_not_a_principal():
     """A real person with a valid token who has not been onboarded is a normal event. An
     empty `Principal` would flow onward and produce a confident "I could not find that"."""
-    result = principal_for(check(raw()), Directory({}), now=NOW)
+    result = asyncio.run(principal_for(check(raw()), Directory({}), now=NOW))
 
     assert isinstance(result, UnmappedSubject)
     assert result.subject == SUBJECT
@@ -593,14 +594,15 @@ def test_a_principal_whose_time_has_run_out_is_unmapped_rather_than_inactive():
     contractor = person(employment=Employment.CONTRACTOR, not_after=NOW - timedelta(days=1))
     directory = Directory({(ISSUER, SUBJECT): contractor})
 
-    assert isinstance(principal_for(check(raw()), directory, now=NOW), UnmappedSubject)
+    found = asyncio.run(principal_for(check(raw()), directory, now=NOW))
+    assert isinstance(found, UnmappedSubject)
 
 
 def test_a_known_subject_resolves_to_the_principal_the_directory_holds():
     """The other half: the directory is the authority on who somebody is, and the token only
     says which record to look up."""
     directory = Directory({(ISSUER, SUBJECT): person()})
-    found = principal_for(check(raw()), directory, now=NOW)
+    found = asyncio.run(principal_for(check(raw()), directory, now=NOW))
 
     assert isinstance(found, Principal)
     assert found.id == "u_priya"

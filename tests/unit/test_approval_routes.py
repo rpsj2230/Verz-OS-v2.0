@@ -90,7 +90,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
 class Directory:
     """A `PrincipalDirectory` over the subjects `test_api_routes` mints tokens for."""
 
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         for pid, sub in SUBJECTS.items():
             if issuer == ISSUER and sub == subject:
                 return Principal(

@@ -91,7 +91,7 @@ def principal_from(row: Mapping[str, Any]) -> Principal | None:
         raise PrincipalStoreError(msg) from exc
 
 
-def _readable(row: Mapping[str, Any]) -> Principal | None:
+def readable(row: Mapping[str, Any]) -> Principal | None:
     """A row as a live principal, or None and a log line. See the module note on refused rows."""
     try:
         return principal_from(row)
@@ -119,4 +119,4 @@ class StoredPrincipals:
                 .mappings()
                 .one_or_none()
             )
-        return None if row is None else _readable(dict(row))
+        return None if row is None else readable(dict(row))

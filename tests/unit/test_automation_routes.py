@@ -184,7 +184,7 @@ class Keys:
 
 
 class NoDirectory:
-    def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
+    async def principal_for_subject(self, issuer: str, subject: str) -> Principal | None:
         raise AssertionError("the automation route asked a person's directory")
 
 
