@@ -32,6 +32,7 @@ from brain.gate.entitlement_store import (
 )
 from brain.gate.resolve import Resolved, resolve
 from brain.session import make_session_factory
+from tests.fixtures.retirable import LAPSE_MIGRATION, predecessor, revision_of
 from tests.fixtures.scratch_postgres import drop, fresh, migrate, run, sql
 from tests.unit.test_automation_owner_store import app_engine
 
@@ -91,11 +92,17 @@ def test_a_grant_that_does_not_construct_fails_the_whole_reach_rather_than_being
 
 @contextmanager
 def resolver(database: str) -> Iterator[str]:
-    """A fresh database holding `auth.principal`, the grant tables and the resolver."""
+    """A fresh database holding `auth.principal`, the grant tables, the resolver and `0048`.
+
+    `0048` is the function the store calls. It reads only `0002`'s and `0003`'s tables, so it is
+    run for real over them with everything between stamped, and its revision is read off the file.
+    """
     scratch = fresh(database)
     try:
         migrate(database, "stamp", "0001")
         migrate(database, "upgrade", "0003")
+        migrate(database, "stamp", predecessor(LAPSE_MIGRATION))
+        migrate(database, "upgrade", revision_of(LAPSE_MIGRATION))
         yield scratch
     finally:
         drop(database)

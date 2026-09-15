@@ -342,3 +342,97 @@ def test_a_caller_with_no_instant_has_the_store_asked_at_a_real_one() -> None:
 
     [asked] = store.asked_at
     assert before <= asked <= datetime.now(UTC)
+
+
+# ------------------------------------------------------------------- the lapse
+#: Far outside any plausible wall clock, on purpose. Every instant below is handed to `resolve`
+#: as `now`, so nothing here reads the clock and nothing here can go off on a schedule.
+AT = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
+
+
+def _lapsing(principal: str, *caps: str, lapse: datetime | None) -> EntitlementSet:
+    return _ents(principal, *caps).model_copy(update={"next_grant_lapse": lapse})
+
+
+def test_a_grant_lapsing_inside_the_ttl_is_not_served_from_cache_once_it_lapses() -> None:
+    """The defect b53eace and 07fb96b measured, with a cache that never forgets so the TTL cannot
+    be what saves it. Served the second before the lapse, refused at the lapse, and loaded fresh
+    without the grant. Delete this and the read-side check can go, and a cache whose clock runs
+    behind ours serves a grant whose own expiry has passed."""
+    lapse = AT + timedelta(seconds=30)
+    store = FakeStore({"p": _lapsing("p", "read:client.name", "read:client.phone", lapse=lapse)})
+    cache, versions = FakeCache(), FakeVersions(1)
+
+    resolve("p", versions=versions, store=store, cache=cache, now=AT)
+    store.sets["p"] = _ents("p", "read:client.name")
+    before = resolve(
+        "p", versions=versions, store=store, cache=cache, now=lapse - timedelta(seconds=1)
+    )
+    at = resolve("p", versions=versions, store=store, cache=cache, now=lapse)
+
+    assert before.from_cache is True
+    assert before.entitlements.holds(Capability(value="read:client.phone"), AT)
+    assert at.from_cache is False
+    assert not at.entitlements.holds(Capability(value="read:client.phone"), AT)
+    assert store.loads == 2
+
+
+def test_a_cache_entry_is_written_for_no_longer_than_its_first_lapsing_grant_has_left() -> None:
+    """The cap itself. Delete this and the write can go back to the full TTL with the read check
+    above still green, leaving an entry every other reader of the cache trusts for a minute."""
+    store = FakeStore({"p": _lapsing("p", "read:client.name", lapse=AT + timedelta(seconds=30))})
+    cache = FakeCache()
+
+    resolve("p", versions=FakeVersions(1), store=store, cache=cache, now=AT)
+
+    assert cache.ttls[cache_key("p", 1)] == 30
+
+
+def test_part_of_a_second_left_is_rounded_down_so_the_entry_is_gone_by_the_lapse() -> None:
+    """Rounding up would let the entry outlive the grant by up to a second. Delete this and the
+    rounding can change direction with every other lifetime test green, since they use whole
+    seconds."""
+    store = FakeStore(
+        {"p": _lapsing("p", "read:client.name", lapse=AT + timedelta(seconds=30, milliseconds=500))}
+    )
+    cache = FakeCache()
+
+    resolve("p", versions=FakeVersions(1), store=store, cache=cache, now=AT)
+
+    assert cache.ttls[cache_key("p", 1)] == 30
+
+
+@pytest.mark.parametrize("lapse", [None, AT + timedelta(days=1)], ids=["no_lapse", "beyond_ttl"])
+def test_a_set_with_no_lapse_inside_the_ttl_keeps_exactly_the_full_ttl(
+    lapse: datetime | None,
+) -> None:
+    """The positive sibling of the cap, both ways it must not bind. Delete this and a cap that
+    ignores the TTL writes a day-long entry for a grant lapsing tomorrow, or one that shortens
+    every entry makes the cache worth nothing, and the tests above still pass."""
+    store = FakeStore({"p": _lapsing("p", "read:client.name", lapse=lapse)})
+    cache = FakeCache()
+
+    resolve("p", versions=FakeVersions(1), store=store, cache=cache, now=AT)
+
+    assert cache.ttls[cache_key("p", 1)] == CACHE_TTL_SECONDS
+
+
+@pytest.mark.parametrize(
+    "left",
+    [timedelta(seconds=-1), timedelta(0), timedelta(milliseconds=500)],
+    ids=["past", "now", "under_a_second"],
+)
+def test_a_bound_already_reached_writes_no_cache_entry_and_still_answers(left: timedelta) -> None:
+    """Nothing is written when no whole second is left, and the load is still returned. Delete
+    this and an entry for a set that is already untrue can be written, or the guard can become a
+    refusal, and a caller whose grant lapses this instant gets an error instead of a reach."""
+    loaded = _lapsing("p", "read:client.name", lapse=AT + left)
+    cache = FakeCache()
+
+    resolved = resolve(
+        "p", versions=FakeVersions(1), store=FakeStore({"p": loaded}), cache=cache, now=AT
+    )
+
+    assert cache.data == {}
+    assert resolved.entitlements == loaded
+    assert resolved.from_cache is False

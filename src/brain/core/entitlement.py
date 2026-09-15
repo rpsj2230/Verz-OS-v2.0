@@ -108,6 +108,17 @@ class EntitlementSet(BaseModel):
     grants: tuple[Grant, ...] = ()
     #: Copied from the principal at construction. None means no time bound.
     not_after: datetime | None = None
+    #: The earliest instant after the load at which one of these grants lapses, as
+    #: `gate.entitlements_with_lapse` reports it. None means no grant here is dated. It is not a
+    #: bound on the principal and nothing here judges it: a lapsed grant is already absent from
+    #: `grants`, so this says only when that list stops being the truth, and
+    #: `brain.gate.resolve` reads it to decide how long a cached copy may live. Left out of
+    #: `ent_hash` because the grants themselves change at the lapse, and out of `intersect`'s
+    #: result because a run reach is derived per request and never cached by `resolve`. Omitted
+    #: from the JSON when None, so a reach with no dated grant serialises exactly as it did
+    #: before the field existed: `tests/unit/test_delegation_sql.py` pins that document's keys,
+    #: because the delegation trigger reads it by name.
+    next_grant_lapse: datetime | None = Field(default=None, exclude_if=lambda value: value is None)
 
     def is_expired(self, now: datetime | None = None) -> bool:
         if self.not_after is None:

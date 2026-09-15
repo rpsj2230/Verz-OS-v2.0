@@ -1,4 +1,4 @@
-"""Where a principal's reach is loaded from, over `gate.resolve_entitlements` from `0003`.
+"""Where a principal's reach is loaded from, over the resolver `0003` wrote and `0048` extended.
 
 `brain.gate.resolve` has asked an `EntitlementStore` for a reach on every miss since it was
 written, and nothing implemented one, so `app.state.gate` could not be built on any process.
@@ -17,6 +17,12 @@ Rejected: reading `auth.principal` and the grants in two statements and assembli
 It is cheaper to write and it is exactly the drift `0003` exists to make impossible: the
 function already refuses a disabled or deleted principal every grant, and a Python assembly
 would have to remember to.
+
+**It asks for the resolver's answer with the date that answer stops being true.**
+`gate.entitlements_with_lapse` from `0048` is `gate.resolve_entitlements`'s document with
+`next_grant_lapse` added, both read off the one row set `gate.held_grants` decides, so this store
+still names one function and no grant table. Without the date, `brain.gate.resolve` has no way to
+stop serving a cached grant whose own expiry has passed. See `THE_LOAD_SAYS_WHEN_IT_LAPSES`.
 
 **Additive, and nothing here can subtract.** The function unions direct grants and pack
 members; revocation is a retired row, which the policy hides and the function skips. There is no
@@ -64,9 +70,16 @@ THE_DATABASE_IS_TOLD_WHOSE_GRANTS_ARE_READ: Final = (
     "whoever borrows the connection next."
 )
 
+#: Why the store calls the function that carries the lapse.
+THE_LOAD_SAYS_WHEN_IT_LAPSES: Final = (
+    "A grant's own expiry moves no version, so a cached reach is retired at that instant only if "
+    "the reach says when it is. The store reads the resolver's document together with the "
+    "earliest lapse among the grants in it, from one function over one row set, in one statement."
+)
+
 PRINCIPAL_SETTING: Final = "app.principal_id"
 
-RESOLVE: Final = text("SELECT gate.resolve_entitlements(:principal_id, :at)")
+RESOLVE: Final = text("SELECT gate.entitlements_with_lapse(:principal_id, :at)")
 
 
 class EntitlementStoreError(Exception):
@@ -96,7 +109,7 @@ def _set_config(name: str, value: str) -> Any:
 
 @dataclass(frozen=True)
 class StoredEntitlements:
-    """`gate.resolve_entitlements`. Implements `brain.gate.resolve.EntitlementStore`."""
+    """`gate.entitlements_with_lapse`. Implements `brain.gate.resolve.EntitlementStore`."""
 
     sessions: async_sessionmaker[AsyncSession]
 

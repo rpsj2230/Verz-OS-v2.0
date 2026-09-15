@@ -218,6 +218,22 @@ def test_an_entitlement_set_survives_a_round_trip_through_the_cache() -> None:
     assert got(cache, cache_key("u_weiling", 3)) == value
 
 
+def test_a_grants_lapse_survives_the_round_trip_so_a_hit_can_still_be_refused_by_it() -> None:
+    """`resolve` refuses a hit whose `next_grant_lapse` has passed, and it can only read a date
+    the cache gave back. Delete this and a payload that drops the date passes the round trip
+    above, and every cached reach is trusted past its first lapsing grant for as long as Valkey
+    keeps it."""
+    cache = ValkeyEntitlementCache(Awaited(FakeValkey()))
+    lapse = datetime(2999, 6, 1, 9, 0, 30, tzinfo=UTC)
+    value = ents("u_weiling", "read:client.name").model_copy(update={"next_grant_lapse": lapse})
+
+    put(cache, cache_key("u_weiling", 3), value, CACHE_TTL_SECONDS)
+    back = got(cache, cache_key("u_weiling", 3))
+
+    assert back is not None
+    assert back.next_grant_lapse == lapse
+
+
 def test_the_stored_bytes_are_the_models_own_json() -> None:
     """A shared cache is read by other tools and other people. A payload that is not JSON is a
     payload nobody can inspect without running our code, which is how a debugging session ends

@@ -143,7 +143,10 @@ def test_the_resolver_returns_the_shape_an_entitlement_set_validates() -> None:
     which is where expiry is enforced. Returning the document `EntitlementSet` validates means
     the type's own validators run on the way out of the database."""
     body = squash(resolver_body())
-    for field in EntitlementSet.model_fields:
+    # `next_grant_lapse` is added beside this document by `0048`'s `gate.entitlements_with_lapse`
+    # and asserted there, in `tests/unit/test_grant_lapse.py`. The resolver's own answer does not
+    # carry it, so the release before `0048` still validates what the resolver returns.
+    for field in set(EntitlementSet.model_fields) - {"next_grant_lapse"}:
         assert f"'{field}'," in body, f"the resolver never builds {field}"
     # The nested shapes, so a `Grant` and its `Capability` round trip rather than arriving as
     # a bare string the model would reject.
