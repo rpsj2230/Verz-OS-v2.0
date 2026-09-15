@@ -81,7 +81,7 @@ reach your server by itself.
 
 1. Open the **Keycloak** service, go to **Environment Variables**, and add:
    - Name: `INSTALL_OIDC_REDIRECT_URIS`
-   - Value: `https://brain.194.233.66.89.sslip.io/auth/callback`
+   - Value: the address you open the console at, followed by `/auth/callback` (for example `https://<your console address>/auth/callback`)
 
    One address only: the settings step refuses a second one.
 2. Open the service's **Docker Compose** edit view. In the `keycloak-realm:` section, directly
