@@ -2,11 +2,8 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open: one short action of yours in GitHub, and one fix to finish in Coolify.** You
-answered eleven items on 2026-09-16, and every answer that unblocks work is being built.
-
-**Item 62: Keycloak.** The reason it would not start is found and fixed in the repository. One
-variable and two lines in Coolify finish it on your server, with exact steps.
+**1 item is open: one short action of yours in GitHub.** You answered twelve items on
+2026-09-16, Keycloak is running again, and every answer that unblocks work is being built.
 
 **Item 52: one repository variable** in GitHub, `BRAIN_URL`, so your server's address can come out
 of two workflow files.
@@ -60,7 +57,11 @@ built now, with a check that fails if a client value ever reaches it.
 
 **Your answer, 2026-09-16:** go with the recommendation. The step above is yours, because my GitHub access can read this repository but cannot change its settings. Tell me when the variable exists and I remove the address from both workflow files.
 
-## 62. Keycloak shows "Starting" on your server: the cause is found and fixed, and two settings in Coolify finish it
+# Answered
+
+## 62. Keycloak shows "Starting" on your server: the cause is found and fixed, and two settings in Coolify finish it - DONE: Keycloak is up and healthy
+
+**Your result, 2026-09-16:** after the variable and the compose lines were added in Coolify and the service restarted, `keycloak` reported **Up (healthy)**, `keycloak-db` **Up (healthy)** and `keycloak-realm` **Exited (0)**. Sign-in works, and the repository fix keeps it working through the next restart.
 
 **What you do: add one variable and two lines in Coolify, then redeploy the Keycloak service.**
 
@@ -101,8 +102,6 @@ reach your server by itself.
    `keycloak-realm` should say **Exited (0)** and `keycloak` should say **Up**. If `keycloak-realm`
    says **Exited (1)** again, run `sudo docker logs keycloak-realm-iii3i6yyvra7tvzr5s6vhwod` and send
    me what it prints.
-
-# Answered
 
 ## 58. Nine "plug-in points" in the plan: build empty sockets for them now, or mark them as not needed yet - DECIDED: Option B, the nine plug-in points are marked as not needed yet
 
