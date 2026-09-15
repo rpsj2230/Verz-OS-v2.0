@@ -97,7 +97,7 @@ Rejected: generalising `brain.console.workspace.basis_for` in place, for the rea
 `agent_output` gives about a file two other agents are editing tonight.
 
 Rejected: a tile for the landing screen itself. Its only possible figure is how many of the
-other eleven it could show, which is the count of what it hid; `Panel` refuses the landing key
+other twelve it could show, which is the count of what it hid; `Panel` refuses the landing key
 in its constructor rather than leaving that to a reviewer.
 
 **Nothing here computes a reach.** `brain.console.reads.audience` and
@@ -326,7 +326,7 @@ class Attribution(enum.StrEnum):
     WHOLE_INSTALL = "whole_install"
 
 
-#: The screen the other eleven lend a figure to.
+#: The screen the other twelve lend a figure to.
 #:
 #: Named rather than assumed to be the first entry of the screen registry, because the
 #: registry's order is the menu's order and a later insertion would silently repoint this.
@@ -541,14 +541,25 @@ PANELS: Final[tuple[Panel, ...]] = (
             "the subject is a column name and a list of them is the schema"
         ),
     ),
+    Panel(
+        key="service_levels",
+        row="brain.ops.service_levels.LaneReading",
+        counts="lanes short of their objective in the window",
+        attribution=Attribution.WHOLE_INSTALL,
+        shows="each lane's latency and success rate beside the objective it promises",
+        never=(
+            "a reading to a reader whose usage grant names a department, because a reading is "
+            "every department's traffic and their own department's count subtracts from it"
+        ),
+    ),
 )
 
 #: How many panels there are, so a test can pin it and a person can quote it.
 #:
 #: Pinned rather than computed for the reason `brain.console.screens.SCREEN_COUNT` is: the
 #: interesting failure is a panel disappearing in a refactor, and `len(x) == len(x)` would not
-#: notice. Eleven rather than twelve because the landing screen lends itself nothing.
-PANEL_COUNT: Final = 11
+#: notice. Twelve rather than thirteen because the landing screen lends itself nothing.
+PANEL_COUNT: Final = 12
 
 #: The two screen groups this module covers, so the completeness check names them once.
 COVERED_GROUPS: Final[tuple[Group, ...]] = (Group.OPERATE, Group.REPORT)

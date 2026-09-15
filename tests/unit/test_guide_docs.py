@@ -609,15 +609,17 @@ def test_a_wrong_fact_a_missing_fact_an_invented_fact_and_a_wrong_title_are_find
 
 
 def test_the_department_admin_fact_is_read_off_the_withheld_list() -> None:
-    """Rate limits is the one screen a department admin is not offered. Delete this and the
-    runbook fact can be computed from something else and agree with the registry by accident on
-    every screen but that one."""
+    """Rate limits and Service levels are the two screens a department admin is not offered, and
+    they are named here rather than read off the withheld list the fact is computed from. Delete
+    this and the runbook fact can be computed from something else and agree with the registry by
+    accident on every screen but those two."""
     offered = {
         one.key: dict(runbook_facts(one, registered_tools=()))["Offered to a department admin"]
         for one in SCREENS
     }
 
     assert offered.pop("limits") == "no"
+    assert offered.pop("service_levels") == "no"
     assert set(offered.values()) == {"yes"}
 
 

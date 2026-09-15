@@ -18,8 +18,8 @@ five screens sat behind it on the argument that at a department's scope each was
 or a leak. The owner overruled the scoping: a department admin gets every screen the
 requirements call for. Empty is not a reason to withhold a screen, because a scoped surface
 that shows no rows has disclosed nothing and a missing menu heading has; a leak is. One screen
-is left, and the test for it checks the argument against the module whose rows it cites rather
-than taking the argument on trust.
+was left, a second joined it on 2026-09-15 when Service levels was registered, and the test for
+both checks each argument against the modules whose rows it cites rather than taking it on trust.
 
 **The registry stopped being exactly M27's screens on 2026-09-11.** Version and updates is
 asked for by M42.3.9 and `brain.console.version_view` had been written for a day with no screen
@@ -73,10 +73,13 @@ from brain.console.screens import (
     screen_gaps,
     unregistered_tools,
 )
+from brain.console.service_level_view import READING_ROW
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.identity.roles import Role
 from brain.ops.limits import Limit, LimitScope
+from brain.ops.service_levels import Observation
+from brain.tables.telemetry import RequestTelemetryRow
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -529,9 +532,14 @@ def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_discl
     which is derived from the same list the function reads: taking it from there would pass for
     any list at all. The constant is then pinned against the difference.
 
-    The positive half is the decision. Thirty-four of the thirty-five screens are a department
+    The positive half is the decision. Thirty-four of the thirty-six screens are a department
     admin's, including the four that used to be withheld, so this is not passing because
     `for_department` returns everything either.
+
+    **Service levels is the second withheld screen, added on 2026-09-15**, and it is withheld
+    for the reason rate limits is rather than for the reason the owner overruled: its reading
+    is a sum over every department's traffic that no department-scoped grant can narrow, so
+    beside a department's own usage it is a subtraction.
 
     **Version and updates is offered, and it is the screen that tests the rule rather than the
     flag.** It is an Install screen added on 2026-09-11 and every earlier Install screen was
@@ -547,7 +555,7 @@ def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_discl
     ours = {one.key for one in navigation(everything)}
     theirs = {one.key for one in for_department(everything)}
 
-    assert ours - theirs == {"limits"}
+    assert ours - theirs == {"limits", "service_levels"}
     assert set(WITHHELD_AT_DEPARTMENT_SCOPE) == ours - theirs
     assert len(theirs) == 34
     assert {"install", "recovery", "connections", "staff_sources", "updates"} <= theirs
@@ -587,11 +595,20 @@ def test_a_screen_is_withheld_only_by_naming_the_disclosure_the_row_form_and_the
 
     Delete this and a `Disclosure` can be written with three empty strings, which is
     `company_wide=True` with more typing."""
-    assert [one.screen for one in NOT_AT_DEPARTMENT_SCOPE] == ["limits"]
+    assert [one.screen for one in NOT_AT_DEPARTMENT_SCOPE] == ["limits", "service_levels"]
 
     assert "department" not in {one.value for one in LimitScope}
     assert set(_limit_row(A_LIMIT)) == {"scope", "subject"}
     assert Scope.department("maintenance").matches(_limit_row(A_LIMIT)) is False
+
+    # The service levels argument, against the modules it cites: the row the store reads has no
+    # department column, the observation it becomes has no department field, and the row a
+    # reading offers a grant's scope has no field at all.
+    assert "department" not in RequestTelemetryRow.__table__.columns
+    assert "department" not in {one.name for one in dataclass_fields(Observation)}
+    assert dict(READING_ROW) == {}
+    assert Scope.department("maintenance").matches(dict(READING_ROW)) is False
+    assert Scope.unrestricted().matches(dict(READING_ROW)) is True
 
     for one in NOT_AT_DEPARTMENT_SCOPE:
         assert one.screen in {other.key for other in SCREENS}
@@ -706,7 +723,7 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
     every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}
 
     assert set(SCREENS_ASKED_FOR_ELSEWHERE) <= {one.key for one in SCREENS}
-    assert SCREENS_ASKED_FOR_ELSEWHERE == {"updates": "M42.3.9"}
+    assert SCREENS_ASKED_FOR_ELSEWHERE == {"updates": "M42.3.9", "service_levels": "M30.5.3"}
     for key, leaf in SCREENS_ASKED_FOR_ELSEWHERE.items():
         assert leaf in every_leaf, key
         assert not leaf.startswith("M27."), key
@@ -738,7 +755,7 @@ def test_every_screen_is_registered_once_and_the_count_is_pinned() -> None:
     them audits under the other's name.
 
     **And the constant is asserted to be a literal, which a comparison cannot do.** A mutation
-    replacing `SCREEN_COUNT: Final = 35` with `len(SCREENS)` survived every assertion below,
+    replacing `SCREEN_COUNT: Final = 36` with `len(SCREENS)` survived every assertion below,
     because the derived value equals the pin today and a test comparing two numbers cannot see
     where one of them came from. A pin that is computed from the registry it guards is the
     trap this docstring already warns about, arriving by a route the same docstring did not
@@ -752,8 +769,8 @@ def test_every_screen_is_registered_once_and_the_count_is_pinned() -> None:
     keys = [one.key for one in SCREENS]
 
     assert len(keys) == len(set(keys))
-    assert len(SCREENS) == SCREEN_COUNT == 35
-    assert len({one.read.tool for one in SCREENS}) == 35
+    assert len(SCREENS) == SCREEN_COUNT == 36
+    assert len({one.read.tool for one in SCREENS}) == 36
 
     declared = ast.parse(Path(screens_module.__file__).read_text(encoding="utf-8"))
     pins = [
@@ -963,7 +980,7 @@ def test_screen_gaps_reports_a_screen_wired_to_a_tool_no_registry_holds() -> Non
 def test_the_tools_these_screens_name_are_all_still_unwritten() -> None:
     """**The honest gap, asserted so it cannot be forgotten quietly.** The screens are declared
     before the tools behind them exist, deliberately, so the shape of the console can be argued
-    about before thirty-four tools are written. Every one of them is unregistered today, which
+    about before thirty-six tools are written. Every one of them is unregistered today, which
     is why this module claims no screen leaf.
 
     Kept apart from `screen_gaps` because this one is expected to be red for a while, and a

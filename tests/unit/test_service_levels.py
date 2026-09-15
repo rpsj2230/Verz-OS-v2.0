@@ -8,9 +8,9 @@ nearest rank rather than a declaration anywhere in this repository.
 The store query that feeds this, and the whole path from the route, are in
 `tests/unit/test_telemetry_store.py`.
 
-M30.5.3 is not claimed; see `brain.ops.service_levels` for why.
+Who may be shown a reading is `tests/unit/test_service_level_view.py`.
 
-Task ids: M30.5.2
+Task ids: M30.5.2, M30.5.3
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from brain.ops.reliability import (
 )
 from brain.ops.service_levels import (
     A_LANE_WITH_NO_REQUESTS_IN_THE_WINDOW_IS_UNMEASURED_RATHER_THAN_MET,
-    A_READING_WITH_NO_SCREEN_HAS_NO_READER_DECISION,
+    A_READING_HAS_NO_READER_DECISION_OF_ITS_OWN,
     LaneReading,
     Observation,
     ServiceLevelError,
@@ -254,14 +254,17 @@ def test_objectives_declaring_one_lane_twice_are_refused() -> None:
         against_target([], start=START, end=END, objectives=doubled)
 
 
-def test_the_reading_names_its_window_and_why_it_has_no_reader_check() -> None:
+def test_the_reading_names_its_window_and_where_its_reader_is_decided() -> None:
     """The window a reading covers travels with it, so a renderer cannot show the figures without
-    the period they are over. And the absence of a reader decision is stated where the screen's
-    author will look.
+    the period they are over. And the reason the read model has no reader check names the
+    module that has one, which is asserted to exist rather than taken on the sentence's word.
 
     Delete this and a reading can be rendered with no period, which is a percentile of nothing
-    in particular."""
+    in particular, or the reason can go on naming a decision nobody wrote."""
+    from brain.console import service_level_view
+
     levels = against_target([seen()], start=START, end=END)
 
     assert (levels.start, levels.end) == (START, END)
-    assert "No screen" in A_READING_WITH_NO_SCREEN_HAS_NO_READER_DECISION
+    assert service_level_view.__name__ in A_READING_HAS_NO_READER_DECISION_OF_ITS_OWN
+    assert callable(service_level_view.may_read_service_levels)

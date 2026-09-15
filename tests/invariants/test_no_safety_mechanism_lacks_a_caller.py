@@ -118,7 +118,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
 #: reason is not about this control: `dry_run` is called from `brain.console.staff_source_view`,
 #: a console page, and **no console page in this repository is imported by anything**, because
 #: nothing here wires a screen to a tool yet. `brain.console.screens.unregistered_tools([])`
-#: still returns all thirty-five, which is the same fact stated about the console instead of
+#: still returns all thirty-six, which is the same fact stated about the console instead of
 #: about one control.
 #:
 #: So this is recorded rather than argued away. A set rather than a relaxed assertion, for

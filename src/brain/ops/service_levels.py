@@ -26,17 +26,17 @@ in `SUCCESS_STATUSES` for the reason `reliability` gives. There is no count of a
 reading, only the number of requests and the success rate, and neither is a count of anything
 hidden. See `A_WITHHELD_REQUEST_AND_AN_ABSENT_ONE_ARE_ONE_OBSERVATION`.
 
-**What is not built, and why M30.5.3 is not claimed.** The leaf is a dashboard. There is no
-screen for it in `brain.console.screens`, so no capability decides who may read a reading and
-nothing renders one. A reading carries no principal, no department and no trace, so what it
-discloses is how the install is performing, which is less than any row it was built from; but
-who may be shown that is a screen's decision, and writing a capability here for a screen that
-does not exist would be a permission waiting for a caller. See
-`A_READING_WITH_NO_SCREEN_HAS_NO_READER_DECISION`.
+**Who may be shown a reading is decided by the screen, not here.** A reading carries no
+principal, no department and no trace, so what it discloses is how the install is performing,
+which is less than any row it was built from. It is still a sum over every department's
+traffic, and who may be shown that is `brain.console.service_level_view`'s decision, made
+against the capability `brain.console.screens` declares for the Service levels screen. This
+module said until 2026-09-15 that no such screen existed and that M30.5.3 waited for one. See
+`A_READING_HAS_NO_READER_DECISION_OF_ITS_OWN`.
 
 Scope: pure. `brain.ops.telemetry_store.service_levels_between` is the store query feeding it.
 
-Task ids: none
+Task ids: M30.5.3
 """
 
 from __future__ import annotations
@@ -77,11 +77,11 @@ A_WITHHELD_REQUEST_AND_AN_ABSENT_ONE_ARE_ONE_OBSERVATION: Final = (
 )
 
 #: Why the read model has no reader check of its own.
-A_READING_WITH_NO_SCREEN_HAS_NO_READER_DECISION: Final = (
+A_READING_HAS_NO_READER_DECISION_OF_ITS_OWN: Final = (
     "Who may see how the install is performing is decided per screen, by the capability the "
-    "screen registry declares for it. No screen shows service levels yet, so there is no "
-    "capability to check, and inventing one here would be a grant nobody can be given through "
-    "the console and a rule the screen, when it is written, would have to agree with."
+    "screen registry declares for it, and brain.console.service_level_view makes that decision "
+    "for the Service levels screen. A second check here would be a second answer to one "
+    "question, and the two would disagree the first time either was changed."
 )
 
 #: The percentile every lane objective is stated at.
@@ -202,7 +202,7 @@ def against_target(
     end: datetime,
     objectives: Sequence[LaneObjective] | None = None,
 ) -> ServiceLevels:
-    """Every declared lane's attainment over `[start, end)` (M30.5.3, not claimed).
+    """Every declared lane's attainment over `[start, end)` (M30.5.3).
 
     Refuses an observation on a lane no objective declares rather than dropping it: a request
     measured against nothing is a request the reading silently leaves out, and the lane it was

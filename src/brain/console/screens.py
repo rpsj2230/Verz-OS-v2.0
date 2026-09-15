@@ -44,7 +44,7 @@ same shape as the Super Admin view". Every screen is offered at a department's s
 the row form that cannot carry a department, and what would have to change for the screen to
 be offered. A flag can be set in a moment of tidying; three sentences cannot.
 
-**One screen qualifies today, and it is rate limits.** `brain.ops.limits.LimitScope` has six
+**Two screens qualify today, and rate limits was the first.** `brain.ops.limits.LimitScope` has six
 members and not one of them is a department: a limit's subject is a principal, a channel, an
 agent, a connector or a widget origin. `brain.console.installation._limit_row` therefore
 offers a grant's scope `{scope, subject}` and nothing else, and `Clause.matches` refuses a
@@ -56,6 +56,22 @@ last backup was and how much memory the profile wants are the same facts for eve
 install, and where the staff list is linked from renders empty at a department's scope, which
 `brain.console.govern_surfaces.A_ROSTER_IS_THE_WHOLE_COMPANYS_LIST_AND_SITS_IN_NO_DEPARTMENT`
 already argues is the correct answer rather than a gap.
+
+**Service levels is the second, and it differs from the four offered ones in one fact.** What
+release is running is the same for everybody on the install and is nobody's activity. A
+service level reading is a sum of everybody's activity: `obs.request_telemetry` carries no
+department, so the reading cannot be narrowed, and shown whole to a reader whose usage grant
+names one department it is the install's request count beside their own department's, which is
+every other department's traffic by subtraction. `brain.console.service_level_view` offers a
+grant's scope a row with no fields, so the answer at a department's scope is nothing rather than
+everybody, and the screen is withheld from that menu with the argument written down.
+
+**That screen requires `read:usage`, which is a decision rather than reuse.** A reading is how
+many requests each lane carried and how they went, and that is the activity Usage counts in
+tokens and adoption counts in questions. A capability of its own, or the nearer-sounding
+`read:incident`, would let somebody hold the install's request volume without holding any
+department's usage, which is the gap `brain.console.adoption_view` refused to open between
+adoption and spend.
 
 **Screens are grouped by the question they answer, not by the module behind them.** Operate is
 "what is happening now", Govern is "who may do what", Report is "what did it cost and was it
@@ -295,7 +311,7 @@ def _screen(
 
     Department and person are added to whatever a screen declares rather than repeated on
     every entry, because the requirement is that they are on everything and a list repeated
-    thirty-five times is a list with an omission in it.
+    thirty-six times is a list with an omission in it.
 
     There is deliberately no parameter here for withholding a screen from a department's
     menu. See `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT`: that decision is
@@ -665,6 +681,17 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "regressed since the last release.",
         axes=[Axis.PERIOD],
     ),
+    _screen(
+        "service_levels",
+        "Service levels",
+        Group.REPORT,
+        "console.service_levels",
+        "read:usage",
+        Plane.CONFIGURATION,
+        "Each lane's measured latency and success rate over a window, against the objective "
+        "it promises, and which lanes could not be measured at all.",
+        axes=[Axis.PERIOD],
+    ),
     # --- Install: what this deployment is ---------------------------------------------------
     _screen(
         "install",
@@ -762,9 +789,9 @@ class Disclosure:
 
 #: Every screen a department admin is not offered, and the argument for each.
 #:
-#: One entry, and the four screens that used to sit beside it are offered now. See the module
-#: docstring for what changed and why: the previous rule conflated a screen that renders empty
-#: with a screen that renders somebody else's rows, and only the second is a reason.
+#: Two entries, and the four screens that used to sit beside the first are offered now. See the
+#: module docstring for what changed and why: the previous rule conflated a screen that renders
+#: empty with a screen that renders somebody else's rows, and only the second is a reason.
 NOT_AT_DEPARTMENT_SCOPE: Final[tuple[Disclosure, ...]] = (
     Disclosure(
         screen="limits",
@@ -787,6 +814,28 @@ NOT_AT_DEPARTMENT_SCOPE: Final[tuple[Disclosure, ...]] = (
             "scoped grant can narrow the throttling list to that department's own people. "
             "That is a change to brain.ops.limits.Limit rather than to this registry, and "
             "until it is made there is no third answer between empty and everybody."
+        ),
+    ),
+    Disclosure(
+        screen="service_levels",
+        discloses=(
+            "how many requests every lane carried across the whole install in the window. "
+            "Beside the reader's own department's question count on Usage, the difference is "
+            "every other department's traffic, which is the subtraction disclosure with each "
+            "figure on both screens correct."
+        ),
+        row_form=(
+            "brain.console.service_level_view.READING_ROW offers a grant's scope no field at "
+            "all, because brain.ops.telemetry_store.observed_between selects the lane, status, "
+            "duration and instant and obs.request_telemetry carries no department. brain.core."
+            "scope.Clause.matches refuses a field the row does not have, so a department-scoped "
+            "read:usage grant matches no reading and an unrestricted one matches the install."
+        ),
+        offered_when=(
+            "the telemetry row carries the asking principal's department, as ops.question_asked "
+            "already does, and the read model folds only the rows a department-scoped grant "
+            "admits. That is a migration and a change to brain.ops.service_levels.Observation "
+            "rather than to this registry."
         ),
     ),
 )
@@ -937,7 +986,7 @@ def unregistered_tools(registered_tools: Iterable[str]) -> tuple[str, ...]:
 
     Separate from `screen_gaps` because this one is expected to be non-empty for a while:
     the screens are declared before the tools behind them exist, deliberately, so the shape
-    of the console can be argued about before thirty-five tools are written. A diagnostic
+    of the console can be argued about before thirty-six tools are written. A diagnostic
     that is red for a month is one somebody switches off, so the honest thing is to keep it
     apart from the ones that must always be green.
     """
@@ -964,6 +1013,10 @@ SCREENS_ASKED_FOR_ELSEWHERE: Final[Mapping[str, str]] = MappingProxyType(
         # builds the panel; M42.3.9 is a deployment leaf rather than a console one because the
         # thing it is about is the update, and the console is where it has to be read.
         "updates": "M42.3.9",
+        # Each lane's attainment against its objective. `brain.console.service_level_view`
+        # decides who may read it; M30.5.3 is a hosting leaf because the objectives are part of
+        # what an install promises, and the console is where the measurement has to be read.
+        "service_levels": "M30.5.3",
     }
 )
 
@@ -972,7 +1025,7 @@ SCREENS_ASKED_FOR_ELSEWHERE: Final[Mapping[str, str]] = MappingProxyType(
 #: Pinned rather than computed at the call site, because the interesting failure is a screen
 #: disappearing in a refactor, and a test asserting `len(SCREENS) == len(SCREENS)` would not
 #: notice.
-SCREEN_COUNT: Final = 35
+SCREEN_COUNT: Final = 36
 
 #: The screens a department admin is not offered, in registry order.
 #:
