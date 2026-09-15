@@ -82,11 +82,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked, wiring_of
-from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.firstrun import GRANTED_BY, Enrolment
 from brain.gate.resolve import EntitlementStore
 from brain.identity.bearer import TokenAuthority, token_from_header
+
+# Re-exported, because the route tests read the capability from this module.
+from brain.identity.first_administrator import SIGN_IN_AUTHORITY as SIGN_IN_AUTHORITY
+from brain.identity.first_administrator import holds_everywhere
 from brain.identity.oidc import (
     KeySet,
     TokenRefusal,
@@ -146,9 +150,10 @@ A_CALLER_WITH_NO_SESSION_IS_NOT_A_SIGN_IN: Final = (
 
 # --------------------------------------------------------------------- the figures
 
-#: The capability that binds a sign-in. An `admin:` verb, so admission withholds it from a
-#: session-less token and a password-only session before this module is asked.
-SIGN_IN_AUTHORITY: Final = Capability(value="admin:sign_in")
+#: `SIGN_IN_AUTHORITY`, the capability that binds a sign-in, is imported from
+#: `brain.identity.first_administrator` beside `holds_everywhere`, because the wizard's count of
+#: administrators and this module's check are one test. It is an `admin:` verb, so admission
+#: withholds it from a session-less token and a password-only session before this module is asked.
 
 #: Where the administrator's route and the finishing screen are served.
 SIGN_INS_PATH: Final = f"{API_PREFIX}/sign-ins"
@@ -234,15 +239,6 @@ class SignInView(BaseModel):
 
 
 # ------------------------------------------------------------------------ the decisions
-
-
-def holds_everywhere(reach: EntitlementSet, now: datetime) -> bool:
-    """Whether this reach holds `SIGN_IN_AUTHORITY` over everything, at this instant.
-
-    See `A_SIGN_IN_IS_BOUND_BY_AN_ADMINISTRATOR_OVER_EVERYTHING`.
-    """
-    scope = reach.scope_for(SIGN_IN_AUTHORITY, now)
-    return scope is not None and scope.is_unrestricted()
 
 
 def _nothing_to_finish() -> Absent:
