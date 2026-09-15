@@ -18,7 +18,14 @@
  * approval of a re-rendered artefact is an approval of something nobody read, and trimming is
  * the smallest re-render there is.
  *
- * Task ids: M35.3.1.2
+ * **A decision is two shapes and this file will not build a third.** Approving sends the verdict
+ * alone and rejecting sends the verdict with one of the route's reason codes, which are the
+ * ledger's codes rather than a sentence, because a sentence is stored as the redaction marker and
+ * the why is lost. `decisionBody` returns nothing for a rejection with no reason this console
+ * offers, so a click with nothing chosen sends nothing. See
+ * `A_DECISION_IS_SENT_AS_THE_ROUTE_TAKES_IT_OR_NOT_AT_ALL`.
+ *
+ * Task ids: M35.3.1.2, M35.3.1.1
  */
 
 /** Written down because an approvals screen is tempted by a count above it and a call below it. */
@@ -117,4 +124,51 @@ export function readApprovalQueue(payload: unknown): ApprovalQueueAnswer | null 
     cards.push(read);
   }
   return { cards, truncated: fields["truncated"] === true };
+}
+
+/** Written down because a reject button that sends whatever is in the field is the easy version. */
+export const A_DECISION_IS_SENT_AS_THE_ROUTE_TAKES_IT_OR_NOT_AT_ALL =
+  "An approval carries no reason and a rejection carries one of the route's codes. A body " +
+  "built out of a field nobody chose is a rejection with no why, which the route refuses " +
+  "after a round trip, so a rejection with no reason is not sent at all.";
+
+/** Where one approval's decision is sent, under the API base. */
+export function approvalDecisionApiPath(suspensionId: string): string {
+  return `${approvalApiPath(suspensionId)}/decision`;
+}
+
+/**
+ * The reasons a rejection may give, keyed by the route's own codes, in the words a person reads.
+ * The keys are held to `brain.approval_routes.RejectionReason` by a test.
+ */
+export const REJECTION_REASONS: Readonly<Record<string, string>> = {
+  not_what_was_asked: "It is not what was asked for",
+  wrong_target: "It is aimed at the wrong record",
+  no_longer_needed: "It is no longer needed",
+  needs_more_detail: "It needs more detail first",
+};
+
+/** What a person decided, before it is a body. */
+export type Decision =
+  | { readonly verdict: "approved" }
+  | { readonly verdict: "rejected"; readonly reasonCode: string };
+
+/** The body one decision is sent as, or `null` for a rejection with no reason offered here. */
+export function decisionBody(decision: Decision): Readonly<Record<string, string>> | null {
+  if (decision.verdict === "approved") {
+    return { verdict: "approved" };
+  }
+  return Object.prototype.hasOwnProperty.call(REJECTION_REASONS, decision.reasonCode)
+    ? { verdict: "rejected", reason_code: decision.reasonCode }
+    : null;
+}
+
+/** The verdict an answer confirms for this approval, or `null` when it confirms nothing. */
+export function readDecision(payload: unknown, suspensionId: string): "approved" | "rejected" | null {
+  const fields = fieldsOf(payload);
+  if (fields === undefined || fields["suspension_id"] !== suspensionId) {
+    return null;
+  }
+  const verdict = fields["verdict"];
+  return verdict === "approved" || verdict === "rejected" ? verdict : null;
 }

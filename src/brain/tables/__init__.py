@@ -87,6 +87,7 @@ from brain.tables.resolution import (
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
+from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
@@ -196,6 +197,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0041_browser_envelope. Points at nothing: the asker and the agent are values, so what a
     # run was permitted outlives both.
     "agent.browser_envelope",
+    # 0042_suspension. Points at nothing: the principal and the agent are values, so what a
+    # person was shown before something ran in somebody's name outlives both.
+    "gate.suspension",
 )
 
 __all__ = [
@@ -243,6 +247,7 @@ __all__ = [
     "SettingRow",
     "SettingType",
     "SpendActualRow",
+    "SuspensionRow",
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",

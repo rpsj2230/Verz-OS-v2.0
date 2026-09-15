@@ -24,8 +24,6 @@ Task ids: M35.3.1.2
 
 from __future__ import annotations
 
-import ast
-import inspect
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -33,13 +31,11 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from brain import approval_routes
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
 from brain.approval_routes import (
     MAX_QUEUE_CARDS,
-    NOTHING_STORES_A_SUSPENSION_SO_NOTHING_IS_DECIDED_HERE,
     ApprovalCardView,
     ApprovalQueue,
     queue,
@@ -423,30 +419,3 @@ def test_a_process_with_no_suspension_store_answers_every_caller_and_every_id_al
 
         app.state.suspensions = MemorySource()
         assert get(c, "u_narrow", APPROVALS).status_code == 200
-
-
-def test_the_router_serves_reads_and_decides_nothing() -> None:
-    """Every approvals path is GET, and the module calls nothing that moves a suspension.
-
-    `NOTHING_STORES_A_SUSPENSION_SO_NOTHING_IS_DECIDED_HERE` is the reason. A decide route
-    added over a source that cannot keep the result fails here, and the person adding it is
-    sent to that constant before they ship a verdict that is recorded and then lost.
-
-    Delete this and a POST can arrive that approves the same action twice."""
-    assert "store" in NOTHING_STORES_A_SUSPENSION_SO_NOTHING_IS_DECIDED_HERE
-    document = create_app(Settings(env="development")).openapi()["paths"]
-    approval_paths = {
-        path: set(ops) for path, ops in document.items() if path.startswith(APPROVALS)
-    }
-
-    assert approval_paths == {
-        APPROVALS: {"get"},
-        f"{APPROVALS}/{{suspension_id}}": {"get"},
-    }
-    tree = ast.parse(inspect.getsource(approval_routes))
-    called = {
-        node.attr if isinstance(node, ast.Attribute) else node.id
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Attribute, ast.Name))
-    }
-    assert not called & {"decide", "approved_by", "rejected_by", "resume"}

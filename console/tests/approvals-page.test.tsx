@@ -18,21 +18,34 @@
  * **"Nothing else" is compared as markup.** A body carrying a count, a tool call and a state
  * beside the cards renders byte for byte what the same cards render alone.
  *
- * Task ids: M35.3.1.2
+ * **Deciding is driven through the buttons a person presses**, against a stand-in API that
+ * answers the decision and then answers the queue again without the decided card. The body sent
+ * is compared with the route's own document, and the reasons with the Python enum.
+ *
+ * Task ids: M35.3.1.2, M35.3.1.1
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   APPROVALS_ADDRESS,
   APPROVALS_HEADING,
+  APPROVE_LABEL,
   approvalAddress,
-  DECIDING_IS_NOT_HERE,
+  APPROVED_SENTENCE,
   MORE_APPROVALS,
   NO_APPROVALS,
+  REJECT_LABEL,
+  REJECTED_SENTENCE,
 } from "../src/pages/Approvals";
-import { readApprovalCard, readApprovalQueue } from "../src/pages/approvalsQuery";
+import {
+  decisionBody,
+  readApprovalCard,
+  readApprovalQueue,
+  readDecision,
+  REJECTION_REASONS,
+} from "../src/pages/approvalsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { asPythonName, backendHiddenCountNames, membersOf } from "./support/agentWorkspace";
 import { consoleRules, declared } from "./support/cascade";
@@ -41,9 +54,12 @@ import {
   declaredParameterNames,
   declaredProperty,
   declaredPropertyNames,
+  declaredPropertySchema,
+  declaredRequestBodySchema,
   declaredResponseSchema,
+  resolvedSchema,
 } from "./support/openapi";
-import { backendModelFields, backendPublicMessages } from "./support/python";
+import { backendEnumMembers, backendModelFields, backendPublicMessages } from "./support/python";
 import { readConsoleFile } from "./support/repo";
 import { parseConsoleSource, staticImportGraph } from "./support/typescript";
 
@@ -78,10 +94,28 @@ interface Mounted {
   readonly idp: FakeIdp;
 }
 
-async function consoleAt(path: string, answers: Readonly<Record<string, Answer>>): Promise<Mounted> {
+/**
+ * The console at one address over a stand-in API. An address given a list of answers gives them in
+ * order and repeats the last, which is how a queue asked again after a decision comes back without
+ * the card that was decided.
+ */
+async function consoleAt(
+  path: string,
+  answers: Readonly<Record<string, Answer | readonly Answer[]>>,
+): Promise<Mounted> {
+  const asked: Record<string, number> = {};
   const idp = fakeIdentityProvider({
     api(url) {
-      const answer = answers[new URL(url, CONSOLE_ORIGIN).pathname];
+      const pathname = new URL(url, CONSOLE_ORIGIN).pathname;
+      const entry = answers[pathname];
+      if (entry === undefined) {
+        return null;
+      }
+      const seen = asked[pathname] ?? 0;
+      asked[pathname] = seen + 1;
+      const answer: Answer | undefined = Array.isArray(entry)
+        ? (entry as readonly Answer[])[Math.min(seen, (entry as readonly Answer[]).length - 1)]
+        : (entry as Answer);
       if (answer === undefined) {
         return null;
       }
@@ -328,6 +362,7 @@ describe("an approval card on a phone", () => {
     expect([...(drawn as Element).children].map((child) => child.getAttribute("class"))).toEqual([
       "approval-card__artefact",
       "approval-card__facts",
+      "approval-card__decision",
       "approval-card__link",
     ]);
 
@@ -395,7 +430,7 @@ describe("the approvals queue", () => {
       "2019-03-04T09:00:00Z",
       "2019-03-04T13:00:00Z",
     ]);
-    expect(page(container).textContent).toContain(DECIDING_IS_NOT_HERE);
+    expect(cards.map((card) => card.querySelectorAll("button.approval-card__action").length)).toEqual([2, 2]);
   });
 
   test("a count, a tool call or a state the API sends beside a card reaches nothing on the page", async () => {
@@ -570,5 +605,161 @@ describe("one approval on its own", () => {
 
     expect(nav).toContainEqual([APPROVALS_HEADING, APPROVALS_ADDRESS]);
     expect(approvalAddress("sus_1").startsWith(`${APPROVALS_ADDRESS}/`)).toBe(true);
+  });
+});
+
+// -------------------------------------------------------------------------- deciding
+
+const DECISION_ROUTE = "/api/v1/approvals/{suspension_id}/decision";
+
+/** Every POST the console made under the approvals API, with its parsed body. */
+function posts(idp: FakeIdp): { path: string; body: unknown }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST")
+    .map((call) => ({ path: new URL(call.url, CONSOLE_ORIGIN).pathname, body: call.init?.body }))
+    .filter((call) => call.path.startsWith(QUEUE_API))
+    .map((call) => ({ path: call.path, body: JSON.parse(String(call.body)) as unknown }));
+}
+
+function button(root: Element, label: string): HTMLButtonElement {
+  const found = [...root.querySelectorAll("button")].find((one) => one.textContent === label);
+  if (!found) {
+    throw new Error(`No button labelled ${label}.`);
+  }
+  return found;
+}
+
+describe("deciding an approval", () => {
+  test("approving a card in the queue sends that card's approval, and the queue is asked again without it", async () => {
+    // What breaks if this is deleted: a button that approves the wrong card, sends a body the
+    // route does not take, or leaves the decided card on the screen to be pressed again. The
+    // queue's second answer is what the API says after the decision, and the page draws it.
+    const { container, idp } = await consoleAt(APPROVALS_ADDRESS, {
+      [QUEUE_API]: [
+        { body: { items: [wireCard("sus_1"), wireCard("sus_2", { artefact: "second" })] } },
+        { body: { items: [wireCard("sus_2", { artefact: "second" })] } },
+      ],
+      [`${QUEUE_API}/sus_1/decision`]: { body: { suspension_id: "sus_1", verdict: "approved" } },
+    });
+    const first = page(container).querySelectorAll("article.approval-card")[0] as Element;
+
+    fireEvent.click(button(first, APPROVE_LABEL));
+
+    await waitFor(() => {
+      expect(page(container).querySelectorAll("article.approval-card pre")[0]?.textContent).toBe("second");
+    });
+    expect(page(container).querySelectorAll("article.approval-card")).toHaveLength(1);
+    expect(posts(idp)).toEqual([{ path: `${QUEUE_API}/sus_1/decision`, body: { verdict: "approved" } }]);
+    expect(idp.urls.filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === QUEUE_API)).toHaveLength(2);
+    expect(page(container).textContent).toContain(APPROVED_SENTENCE);
+  });
+
+  test("a rejection is not sent until a reason is chosen, and is then sent with that reason", async () => {
+    // What breaks if this is deleted: a reject button that sends a rejection with no why, which
+    // the route refuses after a round trip, or one that sends the wrong code. After the answer
+    // confirms it, the card on its own says so and offers nothing more to press.
+    const { container, idp } = await consoleAt(approvalAddress("sus_1"), {
+      [`${QUEUE_API}/sus_1`]: { body: wireCard("sus_1") },
+      [`${QUEUE_API}/sus_1/decision`]: { body: { suspension_id: "sus_1", verdict: "rejected" } },
+    });
+    const card = page(container).querySelector("article.approval-card") as Element;
+
+    expect(button(card, REJECT_LABEL).disabled).toBe(true);
+    fireEvent.click(button(card, REJECT_LABEL));
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.change(card.querySelector("select") as HTMLSelectElement, { target: { value: "wrong_target" } });
+    expect(button(card, REJECT_LABEL).disabled).toBe(false);
+    fireEvent.click(button(card, REJECT_LABEL));
+
+    await waitFor(() => {
+      expect(page(container).textContent).toContain(REJECTED_SENTENCE);
+    });
+    expect(posts(idp)).toEqual([
+      { path: `${QUEUE_API}/sus_1/decision`, body: { verdict: "rejected", reason_code: "wrong_target" } },
+    ]);
+    expect(page(container).querySelector("article.approval-card button")).toBeNull();
+  });
+
+  test("a decision the API refuses shows the API's sentence and claims nothing was decided", async () => {
+    // What breaks if this is deleted: "Approved." on a card somebody else had already decided,
+    // or a refusal in the page's own words that tells the reader why. The sentence is the one
+    // the Python side sends for an absent thing, and the buttons stay where they were.
+    const sentence = backendPublicMessages()["ABSENT"];
+    const { container } = await consoleAt(approvalAddress("sus_1"), {
+      [`${QUEUE_API}/sus_1`]: { body: wireCard("sus_1") },
+      [`${QUEUE_API}/sus_1/decision`]: { status: 404, body: { message: sentence }, traceId: "trace-decide" },
+    });
+    const card = page(container).querySelector("article.approval-card") as Element;
+
+    fireEvent.click(button(card, APPROVE_LABEL));
+
+    await waitFor(() => {
+      expect(card.querySelector(".notice__body")?.textContent).toBe(sentence);
+    });
+    expect(card.querySelector(".notice__trace code")?.textContent).toBe("trace-decide");
+    expect(page(container).textContent).not.toContain(APPROVED_SENTENCE);
+    expect(button(card, APPROVE_LABEL).disabled).toBe(false);
+  });
+
+  test("the reasons offered are the route's reasons, and the body and the answer are the route's shapes", () => {
+    // What breaks if this is deleted: a reason the console offers that the route refuses, a
+    // reason the route takes that nobody can pick, or a body key the route does not declare.
+    // Held against the Python enum and against the route's own document, both ways.
+    const reasons = Object.values(backendEnumMembers("src/brain/approval_routes.py", "RejectionReason")).sort();
+    expect(Object.keys(REJECTION_REASONS).sort()).toEqual(reasons);
+
+    const reasonSchema = declaredPropertySchema(DECISION_ROUTE, "post", "reason_code");
+    const reference = (reasonSchema["anyOf"] as Record<string, unknown>[] | undefined)?.find(
+      (one) => typeof one["$ref"] === "string",
+    );
+    expect(reference).toBeDefined();
+    expect([...(resolvedSchema(reference as Record<string, unknown>)["enum"] as string[])].sort()).toEqual(reasons);
+    expect([...(declaredPropertySchema(DECISION_ROUTE, "post", "verdict")["enum"] as string[])].sort()).toEqual([
+      "approved",
+      "rejected",
+    ]);
+
+    const declared = declaredPropertyNames(declaredRequestBodySchema(DECISION_ROUTE, "post"));
+    for (const reason of reasons) {
+      const body = decisionBody({ verdict: "rejected", reasonCode: reason });
+      expect(body).toEqual({ verdict: "rejected", reason_code: reason });
+      expect(Object.keys(body ?? {}).filter((key) => !declared.includes(key))).toEqual([]);
+    }
+    expect(decisionBody({ verdict: "approved" })).toEqual({ verdict: "approved" });
+    expect(decisionBody({ verdict: "rejected", reasonCode: "" })).toBeNull();
+    expect(decisionBody({ verdict: "rejected", reasonCode: "constructor" })).toBeNull();
+
+    expect(declaredPropertyNames(declaredResponseSchema(DECISION_ROUTE, "post"))).toEqual(["suspension_id", "verdict"]);
+    expect(readDecision({ suspension_id: "sus_1", verdict: "approved" }, "sus_1")).toBe("approved");
+    expect(readDecision({ suspension_id: "sus_2", verdict: "approved" }, "sus_1")).toBeNull();
+    expect(readDecision({ suspension_id: "sus_1", verdict: "taken_over" }, "sus_1")).toBeNull();
+  });
+
+  test("the decision's controls are a thumb tall and wrap inside the card at a phone's width", async () => {
+    // What breaks if this is deleted: two buttons a cursor can hit and a thumb cannot, or a
+    // reason field that holds its row open past the edge of a 360 pixel card. The rules are read
+    // out of the sheet and paired with the rendered markup that carries each class.
+    const sheet = parseCss(readConsoleFile(SHEET));
+    expect(pixels(baseRule(sheet, "approval-card__action").declarations["min-height"] ?? "")).toBeGreaterThanOrEqual(
+      TAP_TARGET_PX,
+    );
+    expect(pixels(baseRule(sheet, "approval-card__choice").declarations["min-height"] ?? "")).toBeGreaterThanOrEqual(
+      TAP_TARGET_PX,
+    );
+    expect(baseRule(sheet, "approval-card__decision").declarations["flex-wrap"]).toBe("wrap");
+    const reason = baseRule(sheet, "approval-card__reason");
+    expect(reason.declarations["min-width"]).toBe("0");
+    expect(reason.declarations["flex"]).toBe("1 1 100%");
+
+    const { container } = await consoleAt(APPROVALS_ADDRESS, {
+      [QUEUE_API]: { body: { items: [wireCard("sus_1")] } },
+    });
+    const drawn = page(container).querySelector("article.approval-card > div.approval-card__decision");
+    expect(drawn).not.toBeNull();
+    expect(
+      [...(drawn as Element).querySelectorAll("button.button.approval-card__action")].map((one) => one.textContent),
+    ).toEqual([APPROVE_LABEL, REJECT_LABEL]);
+    expect((drawn as Element).querySelector("label.approval-card__reason > select.form-control.approval-card__choice")).not.toBeNull();
   });
 });

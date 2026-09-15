@@ -74,6 +74,34 @@
   min-height: 2.75rem;
 }
 
+/*
+ * The decision sits under the facts, so a thumb reaches it after the eye has passed the action.
+ * It wraps rather than shrinking: the reason takes a whole line, and the two buttons sit either
+ * side of it at whatever width a phone has.
+ */
+.approval-card__decision {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.approval-card__reason {
+  display: grid;
+  gap: var(--space-1);
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.approval-card__action {
+  min-height: 2.75rem;
+}
+
+.approval-card__choice {
+  min-height: 2.75rem;
+}
+
 @media (min-width: 64rem) {
   .approval-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));

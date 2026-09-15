@@ -34,11 +34,13 @@ from brain.api import ErrorBody, TimeoutMiddleware
 from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.audit.ledger import TRACE_ID
+from brain.audit.record import LedgerWriter
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
 from brain.gate.finish import RequestRecorder
 from brain.gate.rule_store import load_rules, rule_ids
+from brain.gate.suspension_store import StoredSuspensions
 from brain.identity.bearer import log_refusal, refusal_headers
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
 from brain.install import installed_name
@@ -176,6 +178,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # rules, because a lane with no sink cannot compose at all.
     app.state.trace_sink = CountingTraceSink()
     app.state.request_recorders = request_recorders_for(app.state.db_sessions)
+    # No ledger writer survives a restart yet, so no store is built even with a database. See
+    # `suspension_store_for`.
+    app.state.suspensions = suspension_store_for(app.state.db_sessions, ledger=None)
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
@@ -220,6 +225,24 @@ def request_recorders_for(
     return (QuestionRecorder(sessions), TelemetryRecorder(sessions))
 
 
+def suspension_store_for(
+    sessions: async_sessionmaker[AsyncSession] | None, ledger: LedgerWriter | None
+) -> StoredSuspensions | None:
+    """What `app.state.suspensions` holds on this process. See `brain.approval_routes`.
+
+    A store only when there is both a database to keep the suspension and a ledger to keep the
+    decision, and nothing otherwise. The lifespan passes no ledger, because the only writer in
+    this repository is `brain.audit.ledger.AuditChain`, which lives in the process: a decision
+    recorded there is recorded and then lost at the next restart, and the approval routes would
+    then answer as though it had been kept. So a deployed process has no store and every
+    approval route answers with the one process fault, which is true, until a writer for
+    `obs.audit_entry` exists and is passed here.
+    """
+    if sessions is None or ledger is None:
+        return None
+    return StoredSuspensions(sessions, ledger)
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     in_production = settings.env == "production"
@@ -253,6 +276,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `EntitlementStore` implementation to put beside it. Every route under `API_PREFIX`
     # therefore refuses, which is what a missing authenticator has to mean.
     app.state.gate = None
+    # The same, for where approvals are read from and decided. See `suspension_store_for`.
+    app.state.suspensions = None
 
     # Registered first, which makes it innermost: Starlette inserts each new middleware at
     # the front of the stack, so the last one registered runs outermost. Inside `trace`
