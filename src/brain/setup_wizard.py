@@ -103,12 +103,24 @@ and an error key per field, and `catalogue_gaps` already proves both exist in ev
 language. Writing English strings here would have made the first screen of the product the one
 screen nobody can read in their own language.
 
+**The finishing screen signs the first administrator in, once.** Until 2026-09-15 the wizard
+appointed an administrator and ended, and a Keycloak subject is accepted only once an
+administrator binds it, so nobody could ever sign in to bind anybody. `finish` is the rule for
+the one binding that needs no administrator: the setup code, exactly as every other screen
+asks for it, an administrator to bind, and no sign-in bound anywhere on the install yet.
+**The last condition is what makes it single-use**, and it is a count read from the table the
+binding lands in rather than a flag somebody stores, for the reason `is_open` takes a count.
+It is the finishing screen rather than a ninth one because M42.5.14 names that screen as the
+one that hands the person into the console signed in, and a screen after it would be a second
+"finished" with a back button onto a written install. The token, the database and the binding
+are `brain.sign_in_routes`'; see `THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE`.
+
 Scope: domain logic and one file. Nothing here opens a socket, reads a clock or renders
 anything; the three functions that read or write the draft are handed the path, and the only
 other file this touches is its own source, which `minting_gaps` reads to check itself.
 
 Task ids: M42.5.3, M42.5.4, M42.5.5, M42.5.6, M42.5.8
-Task ids: M42.5.10, M42.5.11, M42.5.12, M42.5.13
+Task ids: M42.5.10, M42.5.11, M42.5.12, M42.5.13, M42.5.14
 """
 
 from __future__ import annotations
@@ -227,6 +239,17 @@ A_CONNECTION_SKIPPED_NOW_IS_NOT_A_CONNECTION_REFUSED: Final = (
     "which is the worst version of this decision. Skipping records that it was skipped and "
     "nothing else, and answering it commits nothing either: the connections screen sets no "
     "installation value, so a skipped install and an answered one are the same install."
+)
+
+#: Why the finishing screen binds one sign-in and then never another.
+THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE: Final = (
+    "A subject signs in only once an administrator binds it, and binding needs an "
+    "administrator signed in, so the first binding is the one act with nobody to authorise it "
+    "but the holder of the setup code. It is open while no sign-in is bound anywhere on the "
+    "install and closed the moment one is, keyed on a count of bindings and not on a flag, "
+    "and the refusal after that names nobody: somebody holding an old setup code learns that "
+    "the install is finished, never who finished it. It binds only an administrator, because "
+    "a first sign-in bound to anybody else closes the screen with nobody able to bind the next."
 )
 
 
@@ -986,7 +1009,14 @@ MINTING_NAMES: Final[frozenset[str]] = frozenset(
 #: Every function a browser can reach. Named rather than derived from what happens to be
 #: public, so a function added without being listed is one the closure check never runs
 #: against, and `reopening_gaps` says so rather than silently covering less.
-ENTRY_POINTS: Final[tuple[str, ...]] = ("unlock", "answer", "skip", "review", "apply_install")
+ENTRY_POINTS: Final[tuple[str, ...]] = (
+    "unlock",
+    "answer",
+    "skip",
+    "review",
+    "apply_install",
+    "finish",
+)
 
 
 def assert_open(administrators: int) -> None:
@@ -1578,3 +1608,42 @@ def apply_install(
         provider=provider.get("model_provider", "").strip(),
         provider_key=provider.get("provider_key", "").strip(),
     )
+
+
+# ------------------------------------------------------------------ the finishing screen
+def finish(
+    enrolment: Enrolment,
+    presented: str,
+    *,
+    administrators: int,
+    signing_in: int,
+    now: datetime,
+) -> None:
+    """Whether the finishing screen may bind the first administrator's sign-in (M42.5.14).
+
+    `administrators` is how many administrators the sign-in could be bound to, which the
+    caller counts over the principal it was asked to bind: one when that principal holds the
+    administrator capability over everything, and none otherwise. `signing_in` is how many
+    sign-in bindings the install holds. Raises, and returns nothing, because the binding is
+    the caller's and this module writes nothing.
+
+    Three refusals, in the order `apply_install` argues for. Closed first, so a finished
+    install does not tell somebody whether their code was right, and in words naming nobody.
+    The code second, through `assert_unlocked`, exactly as every other screen asks it. Then
+    somebody to bind, which is a `WizardError` and neither of the other two, because on this
+    screen it is the one mistake the person holding the code can correct. See
+    `THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE`.
+    """
+    if signing_in != 0:
+        msg = (
+            "this install already has somebody signing in, so the finishing screen has "
+            f"nothing left to do. {THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE}"
+        )
+        raise WizardClosedError(msg)
+    assert_unlocked(enrolment, presented, now=now)
+    if administrators < 1:
+        msg = (
+            "the principal asked about is not an administrator over everything, and the first "
+            "sign-in is bound only to one"
+        )
+        raise WizardError(msg)

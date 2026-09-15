@@ -186,6 +186,20 @@ class AuditAction(enum.StrEnum):
     list out literally; `0022` supersedes it in the way `0007`, `0011` and `0012` already
     supersede each other for the channel vocabulary. The migration must land before code
     writes the new action, or a write fails at the database rather than in a test.
+
+    SIGN_IN was added on 2026-09-15, and it is the eleventh. `brain.identity.sign_in_binding`
+    binds a Keycloak subject to a principal, and `auth.principal_identity` has no column saying
+    who did it, so "who gave this account a way in as her, and when" had nowhere to be
+    answered. **It is recorded by the database, from a trigger, the way a grant is**, because
+    a binding written by an operator's statement is exactly as much a way in as one written
+    by the console, and a caller that has to remember to audit forgets during an incident.
+
+    Recording it as GRANT was the tempting precedent and was rejected for the reason
+    COMPOSE_CHANGE gives: `PACK_ASSIGNMENT_ACTION` is GRANT because a pack assignment really
+    is capabilities gained, and a binding gains no capability. It decides which person a
+    token is, and "what did this person gain" filled with rows about accounts breaks the
+    query GRANT serves. One member for both directions, bound and retired, with the change
+    in the details, for the reason APPROVAL carries its verdict there. Seven characters.
     """
 
     GRANT = "grant"
@@ -206,6 +220,9 @@ class AuditAction(enum.StrEnum):
     #: A record in `brain.audit.reads.WRITTEN_DOWN` was read, and shown. Never every read:
     #: the declared set is two entries and `record_read` refuses anything outside it.
     RECORD_READ = "record_read"
+    #: A Keycloak subject was bound to a principal, or a binding was retired. Which of the two
+    #: is in the details. Written by `0047`'s trigger on `auth.principal_identity`.
+    SIGN_IN = "sign_in"
 
 
 # --------------------------------------------------------------------- redaction

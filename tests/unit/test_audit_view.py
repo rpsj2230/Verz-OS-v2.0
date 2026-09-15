@@ -40,6 +40,7 @@ from brain.audit.record import (
     ApprovalVerdict,
     AuditRecorder,
     DenyReason,
+    SignInChange,
     subject,
 )
 from brain.audit.verify import (
@@ -367,6 +368,7 @@ CALLS: dict[str, dict[str, object]] = {
         "disclosed": ("name", "salary"),
         "agent_id": "hr_desk",
     },
+    "sign_in": {"principal_id": "u_weiling", "change": SignInChange.BOUND},
 }
 
 

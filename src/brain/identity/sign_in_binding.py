@@ -74,12 +74,18 @@ both land: the second writes nothing and is refused as bound elsewhere. See
 the refusal names no principal but the one asked about. That is the DENIED-and-ABSENT
 discipline applied to the one screen where the reader is entitled to most of the answer.
 
-Not built here: the console route, which belongs in `brain.api_routes` behind the
-administrator capability and must append the audit entry, since `principal_identity` has no
-column recording who bound it. Not built either: the first administrator's binding. The setup
-wizard appoints a principal with no Keycloak session in hand, so nobody can yet bind that
-principal and nobody can sign in to bind anybody else. That is the owner's decision, and the
-options are in the commit message that introduced this module.
+**Who did it is written by the database, in the same transaction.** `principal_identity` has no
+column naming who bound a subject, and adding one would record it only for writes that go
+through this module. `0047` puts a trigger on the table instead, which appends a `sign_in`
+entry to `obs.audit_entry` for every sign-in binding and every retirement, from whatever wrote
+it, and this module names the actor for it by setting `brain.actor_id` beside the write. A
+binding that names nobody is refused by the database; a retirement that names nobody is
+recorded as unattributed and never refused. See `A_WAY_IN_NAMES_WHO_MADE_IT` and
+`A_WAY_OUT_IS_NEVER_REFUSED_FOR_WANT_OF_A_NAME`.
+
+The two callers are `brain.sign_in_routes`: an administrator's route, and the setup wizard's
+finishing screen, which binds the first administrator's sign-in once and is the answer to how
+anybody signs in to bind anybody at all.
 
 Task ids: M1.2.2
 """
@@ -103,6 +109,7 @@ from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
 from brain.identity.principal_store import COLUMNS, PRINCIPAL_SETTING, readable
 from brain.identity.roles import IdentityError
 from brain.install import value_of
+from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
 log = structlog.get_logger(__name__)
@@ -161,6 +168,21 @@ NOBODY_BINDS_THEIR_OWN_SIGN_IN: Final = (
     "A binding is a way into a principal. Written by that principal it is somebody vouching "
     "for their own second account, and a stolen administrator session could attach the thief's "
     "Keycloak account to the administrator's own principal without anybody else being asked."
+)
+
+#: Why the database refuses a binding with no actor named.
+A_WAY_IN_NAMES_WHO_MADE_IT: Final = (
+    "A binding is a new way into a principal, and the audit entry is the only record of who "
+    "made it, because principal_identity has no column for that. A binding nobody is named "
+    "for is the one an audit exists to find, so 0047's trigger refuses it, and an operator "
+    "binding by hand sets brain.actor_id in the same transaction first."
+)
+
+#: Why the database never refuses a retirement with no actor named.
+A_WAY_OUT_IS_NEVER_REFUSED_FOR_WANT_OF_A_NAME: Final = (
+    "A retirement takes a way in away. Refusing an offboarding at midnight because a setting "
+    "was not typed leaves the leaver signing in, which is the failure in the wrong direction, "
+    "so it is recorded under the actor 'unattributed' and allowed."
 )
 
 
@@ -250,13 +272,38 @@ class SignInBindings:
         query = _live_sign_ins().where(PrincipalIdentityRow.identity_hash == digest)
         return (await session.execute(query)).scalars().one_or_none()
 
+    async def sign_ins(self) -> int:
+        """How many live sign-in bindings this install holds.
+
+        For the setup wizard's finishing screen, which is open only while this is zero, and
+        never for a person to read: see `brain.sign_in_routes`.
+        """
+        async with self.sessions() as session, session.begin():
+            counted = select(func.count()).select_from(_live_sign_ins().subquery())
+            return int((await session.execute(counted)).scalar_one())
+
     async def bind(
-        self, subject: str, *, principal_id: str, bound_by: str, now: datetime
+        self,
+        subject: str,
+        *,
+        principal_id: str,
+        bound_by: str,
+        now: datetime,
+        ent_hash: str = "",
+        trace_id: str = "",
     ) -> Binding:
-        """Bind this subject at the configured issuer to this principal, or raise why not."""
+        """Bind this subject at the configured issuer to this principal, or raise why not.
+
+        `bound_by`, `ent_hash` and `trace_id` are set on the transaction for `0047`'s trigger,
+        which writes the audit entry. An empty `ent_hash` or `trace_id` is recorded as the
+        ledger's sentinel, as a grant's is. See `A_WAY_IN_NAMES_WHO_MADE_IT`.
+        """
         digest = subject_digest(self.issuer, subject)
         async with self.sessions() as session, session.begin():
             await session.execute(_set_config(PRINCIPAL_SETTING, principal_id))
+            await session.execute(_set_config(ACTOR_SETTING, bound_by))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             # Held to the end of the transaction, so a second bind for this principal waits
             # and then sees the first one's row.
             row = (
@@ -315,6 +362,7 @@ class SignInBindings:
         """
         async with self.sessions() as session, session.begin():
             await session.execute(_set_config(PRINCIPAL_SETTING, principal_id))
+            await session.execute(_set_config(ACTOR_SETTING, retired_by))
             written = await session.execute(
                 update(PrincipalIdentityRow)
                 .where(

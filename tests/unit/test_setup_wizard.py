@@ -67,6 +67,7 @@ from brain.setup_wizard import (
     apply_install,
     discard_draft,
     draft_from,
+    finish,
     is_answered,
     minting_gaps,
     module_functions,
@@ -1595,7 +1596,7 @@ def test_this_module_reads_its_own_source_and_finds_the_module_it_is_in() -> Non
         isinstance(node, ast.FunctionDef) and node.name == "unlock"
         for node in ast.walk(ast.parse(source))
     )
-    assert set(ENTRY_POINTS) == {"unlock", "answer", "skip", "review", "apply_install"}
+    assert set(ENTRY_POINTS) == {"unlock", "answer", "skip", "review", "apply_install", "finish"}
 
 
 def test_nothing_the_wizard_returns_carries_a_value_a_reader_should_not_have() -> None:
@@ -1630,3 +1631,44 @@ def test_a_finished_install_is_the_one_act_and_the_enrolment_comes_back_spent() 
     assert finished.enrolment.claimed_at == INSIDE
     assert finished.enrolment.digest == enrolment.digest
     assert isinstance(finished, Applied)
+
+
+# ------------------------------------------------------------------ M42.5.14, the finishing screen
+def test_the_finishing_screen_opens_to_the_code_an_administrator_and_no_sign_in() -> None:
+    """The positive case for the three refusals below. Delete it and a `finish` that refuses
+    everything passes all of them, and no install can ever have anybody sign in."""
+    finish(an_enrolment(), SECRET, administrators=1, signing_in=0, now=INSIDE)
+
+
+def test_the_finishing_screen_closes_once_anybody_signs_in_and_names_nobody() -> None:
+    """See `THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE`. The right code does not reopen
+    it. Delete this and a second holder of the setup code, inside its hour, binds their own
+    account to the widest role on an install that already has an administrator signing in."""
+    with pytest.raises(WizardClosedError) as closed:
+        finish(an_enrolment(), SECRET, administrators=1, signing_in=1, now=INSIDE)
+    assert PERSON not in str(closed.value)
+
+
+def test_a_finished_install_refuses_before_it_compares_the_code() -> None:
+    """The order `apply_install` argues for. Delete this and the checks can swap, so somebody with
+    a guess learns from a finished install whether it was the right code."""
+    with pytest.raises(WizardClosedError):
+        finish(an_enrolment(), WRONG, administrators=1, signing_in=1, now=INSIDE)
+
+
+def test_the_finishing_screen_wants_the_code_as_every_other_screen_does() -> None:
+    """A wrong code and an expired one are `WizardLockedError`. Delete this and the finishing
+    screen is the one screen reachable without the setup code, which is the screen that hands
+    out a sign-in."""
+    with pytest.raises(WizardLockedError):
+        finish(an_enrolment(), WRONG, administrators=1, signing_in=0, now=INSIDE)
+    with pytest.raises(WizardLockedError):
+        finish(an_enrolment(), SECRET, administrators=1, signing_in=0, now=AFTER)
+
+
+def test_the_first_sign_in_is_bound_only_to_an_administrator() -> None:
+    """A plain `WizardError`, the one refusal the holder of the code can correct. Delete this and
+    a first sign-in bound to somebody else closes the screen with nobody able to bind the next."""
+    with pytest.raises(WizardError) as refused:
+        finish(an_enrolment(), SECRET, administrators=0, signing_in=0, now=INSIDE)
+    assert not isinstance(refused.value, WizardClosedError | WizardLockedError)

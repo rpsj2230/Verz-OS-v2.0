@@ -153,8 +153,16 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "compose_change": AuditAction.COMPOSE_CHANGE,
         "approval": AuditAction.APPROVAL,
         "record_read": AuditAction.RECORD_READ,
+        "sign_in": AuditAction.SIGN_IN,
     }
 )
+
+
+class SignInChange(enum.StrEnum):
+    """What happened to a sign-in binding. The two values `0047`'s trigger writes."""
+
+    BOUND = "bound"
+    RETIRED = "retired"
 
 
 #: A reason code, not a sentence. Same grammar as a field name, so it survives
@@ -549,3 +557,16 @@ class AuditRecorder:
         }
         _with_names(details, "notified", notified)
         return self._write(AuditAction.BREAK_GLASS, subject("session", session_id), details)
+
+    def sign_in(self, *, principal_id: str, change: SignInChange) -> AuditEntry:
+        """Record that a sign-in was bound to a principal or retired from one.
+
+        The entry a deployed database keeps is written by `0047`'s trigger, the way a grant's
+        is, so a binding made by an operator's statement is recorded as well as one made by the
+        console. This is the same entry for a chain held anywhere else, and a test holds its
+        details to the trigger's. The subject is never recorded: it is an account's identifier
+        at the identity provider, and the digest `principal_identity` holds already says which.
+        """
+        return self._write(
+            AuditAction.SIGN_IN, subject("principal", principal_id), {"change": change.value}
+        )
