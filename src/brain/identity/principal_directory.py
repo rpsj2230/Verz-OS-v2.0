@@ -42,9 +42,9 @@ disabled or deleted principal whatever role read it.
 change. This read is how a request learns which principal it is, so there is nobody to name
 yet; see `THE_LOOKUP_THAT_FINDS_THE_PRINCIPAL_NAMES_NOBODY`.
 
-Not built here: writing a binding. Provisioning a sign-in identity is
-`brain.identity.lifecycle`'s, and until something writes rows under `SIGN_IN_CHANNEL` every
-valid token is refused as an unmapped subject, which is the fail-closed direction.
+Not built here: writing a binding. That is `brain.identity.sign_in_binding`, which binds a
+subject at the configured issuer to one live principal on an administrator's act and never
+moves an existing binding.
 
 Task ids: M1.2.2
 """
