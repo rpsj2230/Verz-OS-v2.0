@@ -2,122 +2,16 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**6 items are open: three decisions, two short actions of yours, and one question about your
-server.** You answered seven items on 2026-09-16 (60, 59, 57, 56, 55, 51 and 32), and every answer
-that unblocks work is being built now.
+**2 items are open: one short action of yours in GitHub, and one fix to finish in Coolify.** You
+answered eleven items on 2026-09-16, and every answer that unblocks work is being built.
 
-**Three are decisions, one letter each.** Item 61: whether the administrative consoles move behind
-an SSH tunnel. I recommend A. Item 58, rewritten in plain words: nine "plug-in points" in the plan.
-I recommend B. Item 42, now a decision: remove the GitHub deploy step that needs three secrets,
-because your server already deploys itself. I recommend A, and it needs nothing from you.
+**Item 62: Keycloak.** The reason it would not start is found and fixed in the repository. One
+variable and two lines in Coolify finish it on your server, with exact steps.
 
-**Two are actions.** Item 52: one repository variable in GitHub. Item 49: three lines to paste
-on your server, with exact copy-and-paste steps.
-
-**One is a question about your server.** Item 62: Keycloak shows "Starting". Two read-only
-commands tell us why.
+**Item 52: one repository variable** in GitHub, `BRAIN_URL`, so your server's address can come out
+of two workflow files.
 
 # Open
-
-## 61. Should the administrative consoles stay on public addresses or move behind an SSH tunnel?
-
-**What you decide: one letter. I recommend Option A.**
-
-M37.6.1.3 asks for this decision to be made and written down. It is a decision about each client's
-server, not code, so it cannot be answered from the repository.
-
-**The consoles in question** are the ones that control the server rather than the product: the
-deployment panel (Coolify), the identity provider's admin console (Keycloak), the secrets vault's
-interface (OpenBao) and the tracing dashboard (Langfuse). Each of them, if reached, hands over
-every container, every account or every secret. The product's own sign-in page and the Brain
-console that staff use are not part of this question: those have to be reachable by the people
-who use them.
-
-**Option A (recommended): administrative consoles behind an SSH tunnel, on every install.** They
-listen only on the server's own loopback address, and an administrator reaches one with a single
-`ssh -L` command. Nothing about them answers from the internet, so a leaked password or an
-unpatched login page is not reachable by anybody without the server's SSH key. Your own server
-already works this way for the deployment panel on port 8000, so the pattern is proven here.
-
-**Option B: public addresses, protected by a second factor and an IP allowlist.** Easier for a
-client whose IT team has no SSH habit. But it puts the most powerful login pages on the internet
-and depends on two protections being configured correctly on every install, for ever.
-
-**Option C: decide per client.** Each install chooses during setup. Honest to the fact that clients
-differ, and it means the product has to document and test both, and the weaker choice is the one
-somebody picks under time pressure.
-
-**Why A.** The consoles are used a few times a month by one or two people, and the cost of a
-tunnel is one command for them. The cost of exposing them is the whole server. The installer would
-bind them to loopback by default and print the tunnel command at the end of setup.
-
-## 58. Nine "plug-in points" in the plan: build empty sockets for them now, or mark them as not needed yet
-
-**What you decide: one letter. I recommend Option B.**
-
-**In plain words.** The plan lists nine places where somebody could one day swap in their own
-part of the system: a different search engine, a different login provider, a different way of
-exporting data, and six more like them. Making a place "pluggable" means writing down the exact
-shape a replacement part must have, like the shape of a socket.
-
-Nobody has built a replacement part for any of the nine. The code already has one list that
-decides which places are allowed to be plug-in points, and it answers these nine:
-
-- **Six of them should not get a socket yet.** A socket that nothing plugs into makes the system
-  look more flexible than it is, and it still has to be kept working. The list says: write the
-  socket on the day a real replacement part exists, and use that part to test it.
-- **The other three are already handled as settings, not plug-ins.** For example, which login
-  provider you use is a choice made during setup. Calling it a plug-in would suggest an outside
-  developer can replace it with their own code, which is not true.
-
-**Option A: build all nine sockets now.** Nine tasks close on the tracker, and you own nine
-empty sockets that nothing uses and somebody has to maintain.
-
-**Option B (recommended): record the list's answer as the decision.** The nine tasks are marked
-"decided, not needed as written", the same way the 39 client tasks were taken out of the
-percentage, so they stop showing as unfinished work. A socket gets built the day a real
-replacement part needs one.
-
-**Option C: leave all nine open** until a client asks for one. Nothing is built either way, but
-the nine stay on the tracker as unfinished for as long as nobody asks.
-
-**Why B.** The answer already exists in the code, it avoids building things nobody uses, and the
-tracker then counts only real work.
-
-## 42. Deploying from GitHub needs three secrets, but your server already deploys itself, so I recommend removing that step instead
-
-**What you decide: one letter. I recommend Option A, and it needs nothing from you.**
-
-**In plain words.** New code reaches your server in two ways, and only one of them has ever
-worked:
-
-- **Your server deploys itself.** A timer on the server checks for a newly built version every two
-  minutes and installs it. Every deploy so far has come this way.
-- **GitHub also tries to tell your deployment panel (Coolify) to deploy.** That step has never
-  worked. It needs three secrets that were saved empty, and the panel is not reachable from the
-  internet anyway, because its port is firewalled, which is correct (see item 61).
-
-You asked me to re-enter the three secrets myself. I am not able to type passwords, tokens or other
-secrets into GitHub on anyone's behalf, including with your permission, so that fix would have to
-be yours. There is a better fix that needs no secret at all.
-
-**Option A (recommended): remove the GitHub step.** I delete it from the deploy workflow and
-record the server's own two-minute check as the way this system deploys. No secrets are stored in
-GitHub, the deployment panel stays private, and nothing changes about how deploys actually happen
-today. This is also what the plan asks for in M30.2.4, "pull-based deployment so the server needs
-no inbound access".
-
-**Option B: keep the GitHub step and make it work.** You would have to open the deployment panel
-to GitHub and re-enter the three secrets yourself:
-
-1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
-2. Click **Update** beside `COOLIFY_URL` and paste your Coolify panel's address.
-3. Click **Update** beside `COOLIFY_SERVICE_UUID` and paste the identifier item 49 prints.
-4. Click **Update** beside `COOLIFY_TOKEN` and paste a Coolify API token (Coolify, your avatar,
-   **Keys & Tokens**, **API tokens**, create one with deploy permission, copy it when shown).
-
-**Why A.** It already works, it needs no secret, and it keeps the most powerful console on your
-server off the internet.
 
 ## 52. Two workflow files carry your server's address, and one repository variable removes them
 
@@ -166,7 +60,159 @@ built now, with a check that fails if a client value ever reaches it.
 
 **Your answer, 2026-09-16:** go with the recommendation. The step above is yours, because my GitHub access can read this repository but cannot change its settings. Tell me when the variable exists and I remove the address from both workflow files.
 
-## 49. The service identifier on your server is written, and the value in it is the wrong one
+## 62. Keycloak shows "Starting" on your server: the cause is found and fixed, and two settings in Coolify finish it
+
+**What you do: add one variable and two lines in Coolify, then redeploy the Keycloak service.**
+
+**What your two commands showed.** `keycloak` was **Created** and had never run,
+`keycloak-db` was **Up (healthy)**, and `keycloak-realm` had **Exited (1)**. Keycloak starts only
+after `keycloak-realm` finishes writing its sign-in settings file, so when that step fails,
+Keycloak waits for ever. The logs came back empty because the command picked the Keycloak
+container, which had never started.
+
+**The cause, reproduced here.** Since a change on 2026-09-09, the settings step needs one value,
+`INSTALL_OIDC_REDIRECT_URIS`: the address sign-in returns to. The compose file never passed that
+step any settings at all, so it failed on every start. It stayed hidden until your stack restarted.
+The repository is fixed, and a test now fails if a future setting that step reads is left out.
+
+**What you do in Coolify.** Coolify keeps its own copy of the compose file, so the fix does not
+reach your server by itself.
+
+1. Open the **Keycloak** service, go to **Environment Variables**, and add:
+   - Name: `INSTALL_OIDC_REDIRECT_URIS`
+   - Value: `https://brain.194.233.66.89.sslip.io/auth/callback`
+
+   One address only: the settings step refuses a second one.
+2. Open the service's **Docker Compose** edit view. In the `keycloak-realm:` section, directly
+   above its `volumes:` line, add these two lines, indented exactly like `volumes:`:
+
+   ```
+       environment:
+         INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:?set INSTALL_OIDC_REDIRECT_URIS}
+   ```
+
+3. Save, then **Deploy** or **Restart** the service.
+4. Check, in PowerShell: `ssh verz-vps`, then on the server:
+
+   ```
+   sudo docker ps -a --filter name=keycloak --format '{{.Names}}  {{.Status}}'
+   ```
+
+   `keycloak-realm` should say **Exited (0)** and `keycloak` should say **Up**. If `keycloak-realm`
+   says **Exited (1)** again, run `sudo docker logs keycloak-realm-iii3i6yyvra7tvzr5s6vhwod` and send
+   me what it prints.
+
+# Answered
+
+## 58. Nine "plug-in points" in the plan: build empty sockets for them now, or mark them as not needed yet - DECIDED: Option B, the nine plug-in points are marked as not needed yet
+
+**Your answer, 2026-09-16:** Option B. The nine tasks are being marked decided, so the tracker stops counting them as unfinished work. A plug-in point gets built the day a real replacement part needs one.
+
+**What you decide: one letter. I recommend Option B.**
+
+**In plain words.** The plan lists nine places where somebody could one day swap in their own
+part of the system: a different search engine, a different login provider, a different way of
+exporting data, and six more like them. Making a place "pluggable" means writing down the exact
+shape a replacement part must have, like the shape of a socket.
+
+Nobody has built a replacement part for any of the nine. The code already has one list that
+decides which places are allowed to be plug-in points, and it answers these nine:
+
+- **Six of them should not get a socket yet.** A socket that nothing plugs into makes the system
+  look more flexible than it is, and it still has to be kept working. The list says: write the
+  socket on the day a real replacement part exists, and use that part to test it.
+- **The other three are already handled as settings, not plug-ins.** For example, which login
+  provider you use is a choice made during setup. Calling it a plug-in would suggest an outside
+  developer can replace it with their own code, which is not true.
+
+**Option A: build all nine sockets now.** Nine tasks close on the tracker, and you own nine
+empty sockets that nothing uses and somebody has to maintain.
+
+**Option B (recommended): record the list's answer as the decision.** The nine tasks are marked
+"decided, not needed as written", the same way the 39 client tasks were taken out of the
+percentage, so they stop showing as unfinished work. A socket gets built the day a real
+replacement part needs one.
+
+**Option C: leave all nine open** until a client asks for one. Nothing is built either way, but
+the nine stay on the tracker as unfinished for as long as nobody asks.
+
+**Why B.** The answer already exists in the code, it avoids building things nobody uses, and the
+tracker then counts only real work.
+
+## 61. Should the administrative consoles stay on public addresses or move behind an SSH tunnel? - DECIDED: Option B, the administrative consoles stay on public addresses
+
+**Your answer, 2026-09-16:** Option B: public addresses, protected by a second login factor and an IP allowlist. This is being written into the install documentation, which is what M37.6.1.3 asks for.
+
+**What you decide: one letter. I recommend Option A.**
+
+M37.6.1.3 asks for this decision to be made and written down. It is a decision about each client's
+server, not code, so it cannot be answered from the repository.
+
+**The consoles in question** are the ones that control the server rather than the product: the
+deployment panel (Coolify), the identity provider's admin console (Keycloak), the secrets vault's
+interface (OpenBao) and the tracing dashboard (Langfuse). Each of them, if reached, hands over
+every container, every account or every secret. The product's own sign-in page and the Brain
+console that staff use are not part of this question: those have to be reachable by the people
+who use them.
+
+**Option A (recommended): administrative consoles behind an SSH tunnel, on every install.** They
+listen only on the server's own loopback address, and an administrator reaches one with a single
+`ssh -L` command. Nothing about them answers from the internet, so a leaked password or an
+unpatched login page is not reachable by anybody without the server's SSH key. Your own server
+already works this way for the deployment panel on port 8000, so the pattern is proven here.
+
+**Option B: public addresses, protected by a second factor and an IP allowlist.** Easier for a
+client whose IT team has no SSH habit. But it puts the most powerful login pages on the internet
+and depends on two protections being configured correctly on every install, for ever.
+
+**Option C: decide per client.** Each install chooses during setup. Honest to the fact that clients
+differ, and it means the product has to document and test both, and the weaker choice is the one
+somebody picks under time pressure.
+
+**Why A.** The consoles are used a few times a month by one or two people, and the cost of a
+tunnel is one command for them. The cost of exposing them is the whole server. The installer would
+bind them to loopback by default and print the tunnel command at the end of setup.
+
+## 42. Deploying from GitHub needs three secrets, but your server already deploys itself, so I recommend removing that step instead - DECIDED: Option A, the GitHub deploy step is removed
+
+**Your answer, 2026-09-16:** Option A. The GitHub step that needed three secrets is being removed, and the server's own two-minute check is recorded as how this system deploys. No secrets are needed.
+
+**What you decide: one letter. I recommend Option A, and it needs nothing from you.**
+
+**In plain words.** New code reaches your server in two ways, and only one of them has ever
+worked:
+
+- **Your server deploys itself.** A timer on the server checks for a newly built version every two
+  minutes and installs it. Every deploy so far has come this way.
+- **GitHub also tries to tell your deployment panel (Coolify) to deploy.** That step has never
+  worked. It needs three secrets that were saved empty, and the panel is not reachable from the
+  internet anyway, because its port is firewalled, which is correct (see item 61).
+
+You asked me to re-enter the three secrets myself. I am not able to type passwords, tokens or other
+secrets into GitHub on anyone's behalf, including with your permission, so that fix would have to
+be yours. There is a better fix that needs no secret at all.
+
+**Option A (recommended): remove the GitHub step.** I delete it from the deploy workflow and
+record the server's own two-minute check as the way this system deploys. No secrets are stored in
+GitHub, the deployment panel stays private, and nothing changes about how deploys actually happen
+today. This is also what the plan asks for in M30.2.4, "pull-based deployment so the server needs
+no inbound access".
+
+**Option B: keep the GitHub step and make it work.** You would have to open the deployment panel
+to GitHub and re-enter the three secrets yourself:
+
+1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
+2. Click **Update** beside `COOLIFY_URL` and paste your Coolify panel's address.
+3. Click **Update** beside `COOLIFY_SERVICE_UUID` and paste the identifier item 49 prints.
+4. Click **Update** beside `COOLIFY_TOKEN` and paste a Coolify API token (Coolify, your avatar,
+   **Keys & Tokens**, **API tokens**, create one with deploy permission, copy it when shown).
+
+**Why A.** It already works, it needs no secret, and it keeps the most powerful console on your
+server off the internet.
+
+## 49. The service identifier on your server is written, and the value in it is the wrong one - DONE: the service identifier on your server is correct
+
+**Your answer, 2026-09-16:** you ran the steps, and the check printed `that service exists`.
 
 **What you do: paste three lines, in this order. It takes about a minute.**
 
@@ -211,43 +257,6 @@ working when it is not. An empty file makes it refuse and say so.
 
 **Nothing is broken today.** The deploy scripts on the server were installed with the old value
 built in, so deploys keep working. The file only matters when those scripts are reinstalled.
-
-## 62. Keycloak shows "Starting" on your server, and two commands will tell us why
-
-**What you do: paste two lines and send me what they print.**
-
-You saw `quay.io/keycloak/keycloak:26.0` showing **Starting**. I am not allowed to connect to your
-live server from here, so this needs you. It is read-only: nothing below changes anything.
-
-**Where to run it.** On your own computer, in PowerShell.
-
-1. Connect to your server:
-
-   ```
-   ssh verz-vps
-   ```
-
-2. See the Keycloak containers and their status:
-
-   ```
-   sudo docker ps -a --filter name=keycloak --format '{{.Names}}  {{.Status}}'
-   ```
-
-3. See the last lines Keycloak wrote:
-
-   ```
-   sudo docker logs --tail 60 $(sudo docker ps -a --filter name=keycloak --format '{{.Names}}' | grep -v -i db | head -1)
-   ```
-
-4. Type `exit`, then paste what steps 2 and 3 printed into our conversation.
-
-**What I expect to find.** Keycloak can be running perfectly well and still be reported as
-"starting" for ever, if the check that asks "are you healthy?" uses a tool the Keycloak 26 image
-does not contain. If step 3 shows a line like `Keycloak 26.0 ... started in`, sign-in works and
-only that health check needs changing, which I can do in the repository. If it shows an error, the
-lines tell us what to fix.
-
-# Answered
 
 ## 60. The backup ladder the plan asks for keeps copies for a year, and every erasure certificate promises 35 days - DECIDED: Option A, the backup ladder fits inside the 35-day promise
 
