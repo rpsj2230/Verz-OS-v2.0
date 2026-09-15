@@ -105,12 +105,13 @@ def _ingress(**overrides: object) -> Ingress:
 
 
 def _record(**overrides: object) -> RequestTelemetry:
-    """A record holding the six fields a lane can fill honestly today, and nothing else."""
+    """A record holding the seven fields a lane can fill honestly today, and nothing else."""
     base: dict[str, object] = {
         "ingress": _ingress(),
         "principal": "u_weiling",
         "entitlement_hash": ENT_HASH,
         "lane": Lane.FAST,
+        "tool_count": 1,
         "cache_hit": False,
         "status": RequestStatus.ANSWERED,
         "duration_ms": 12.5,
@@ -422,6 +423,7 @@ def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> No
         "principal",
         "entitlement_hash",
         "lane",
+        "tool_count",
         "cache_hit",
         "status",
         "duration_ms",

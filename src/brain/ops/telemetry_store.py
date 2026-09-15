@@ -28,12 +28,19 @@ the exception's class.
 `[start, end)` on `received_at`, the partition key, so a reading of one month touches one
 partition. `against_target` applies the same window to what it is handed.
 
-Task ids: M30.5.2
+**A shape is read by trace id, and the read selects four columns (M21.3.4).** `shapes_for` is
+handed the trace ids of recorded costs and reads the trace, the principal, the lane and the tool
+count, which is what `brain.ops.telemetry.shapes_by_request` resolves a request's shape from. It
+decides nothing about who may see a shape: the rows it returns carry no department, and
+`brain.console.spend_view.shape_report` reads a shape only through a cost the reader's usage
+grant already admits.
+
+Task ids: M30.5.2, M21.3.4
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 
 import structlog
@@ -47,7 +54,13 @@ from brain.ops.question_store import (
 )
 from brain.ops.reliability import LaneObjective
 from brain.ops.service_levels import Observation, ServiceLevels, against_target
-from brain.ops.telemetry import RequestStatus, RequestTelemetry, request_telemetry_of
+from brain.ops.telemetry import (
+    QuestionShape,
+    RequestStatus,
+    RequestTelemetry,
+    request_telemetry_of,
+    shapes_by_request,
+)
 from brain.tables.telemetry import RequestTelemetryRow
 
 log = structlog.get_logger(__name__)
@@ -58,6 +71,7 @@ __all__ = [
     "observed_between",
     "record",
     "service_levels_between",
+    "shapes_for",
 ]
 
 
@@ -112,6 +126,28 @@ async def service_levels_between(
     """Each lane's measured attainment over `[start, end)` against its objective (M30.5.3)."""
     observed = await observed_between(session, start=start, end=end)
     return against_target(observed, start=start, end=end, objectives=objectives)
+
+
+async def shapes_for(
+    session: AsyncSession, trace_ids: Collection[str]
+) -> Mapping[tuple[str, str], QuestionShape | None]:
+    """The shape of every request recorded under these trace ids, keyed by trace and principal.
+
+    See the module docstring. Every row under a trace id is read, and the resolution of two
+    rows naming different shapes is `shapes_by_request`'s rather than a query's.
+    """
+    found = await session.execute(
+        select(
+            RequestTelemetryRow.trace_id,
+            RequestTelemetryRow.principal,
+            RequestTelemetryRow.lane,
+            RequestTelemetryRow.tool_count,
+        ).where(RequestTelemetryRow.trace_id.in_(tuple(trace_ids)))
+    )
+    return shapes_by_request(
+        (trace_id, principal, lane, tool_count)
+        for trace_id, principal, lane, tool_count in found.all()
+    )
 
 
 class TelemetryRecorder:

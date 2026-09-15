@@ -118,6 +118,7 @@ def _actual(principal_id: str, department: str, cost_minor: int) -> Actual:
         lane=next(iter(Lane)),
         cost_minor=cost_minor,
         at=NOW - timedelta(days=1),
+        trace_id="t-cost-1",
     )
 
 

@@ -102,6 +102,7 @@ def a_run(
         lane=lane,
         cost_minor=cost,
         at=at,
+        trace_id="t-cost-1",
     )
 
 

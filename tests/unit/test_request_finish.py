@@ -146,6 +146,7 @@ def done(
         completed_at=completed_at,
         entitlement_hash=EntitlementSet(principal_id=origin.principal.id).ent_hash(),
         lane=LANE,
+        tool_calls=0,
     )
 
 

@@ -38,7 +38,7 @@ from brain.db import metadata
 from brain.gate.abstain import Abstention, AbstentionReason, scope_of_reach
 from brain.gate.answer import Answered
 from brain.gate.context import Channel, TrafficClass
-from brain.gate.finish import Finished, Origin
+from brain.gate.finish import A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS, Finished, Origin
 from brain.ops.partitioning import CONTROL_COLUMN
 from brain.ops.service_levels import Observation
 from brain.ops.telemetry import (
@@ -205,25 +205,31 @@ def test_every_abstention_is_nothing_returned_whatever_it_abstained_for(
     assert AN_ABSTENTION_IS_RECORDED_WITHOUT_ITS_REASON
 
 
-def test_a_withheld_record_an_absent_one_and_an_unmatched_question_are_the_same_row() -> None:
+def test_a_withheld_record_and_an_absent_one_are_one_row_and_no_rule_means_no_call() -> None:
     """**DENIED and ABSENT in the ledger, through the real lane.** One person, one reach, one
-    trace: a question about a record whose answer field they may not read, a question about a
-    record that does not exist, and a question no rule matches produce three rows that are equal
-    in every field. The answered request beside them is the positive sibling, and it differs.
+    trace: a question about a record whose answer field they may not read and a question about a
+    record that does not exist produce two rows equal in every field. A question no rule matches
+    is equal to them in every field but `tool_count`, which is zero because no read started, and
+    that says whether the installation has a rule for the question's form, which is the same for
+    every asker and every record. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`. The answered
+    request beside them is the positive sibling, and it differs.
 
     Compared as whole ledger rows, so any field that differed would fail it whatever its name.
 
-    Delete this and a row can grow a reason, or a status that splits the two, and the ledger is
-    a count of what each person was refused."""
+    Delete this and a row can grow a reason, or a status or a count that splits the first two,
+    and the ledger is a count of what each person was refused."""
     narrow = ents(*SEES_NAME_ONLY)
     withheld = finished_by(reach=narrow, rows=Rows(ACME))
     absent = finished_by(reach=narrow, rows=Rows())
     unmatched = finished_by(reach=narrow, question="what colour is the sky")
     answered = finished_by(reach=ents(*SEES_HOURS), rows=Rows(ACME))
 
+    assert A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS
     assert withheld.outcome is not None and withheld.outcome.abstention is not None
     rows = [dict(request_telemetry_of(one).ledger_row()) for one in (withheld, absent, unmatched)]
-    assert rows[0] == rows[1] == rows[2]
+    assert rows[0] == rows[1]
+    assert {**rows[2], "tool_count": rows[0]["tool_count"]} == rows[0]
+    assert (rows[0]["tool_count"], rows[2]["tool_count"]) == (1, 0)
     assert request_telemetry_of(answered).status is not rows[0]["status"]
 
 
@@ -438,6 +444,7 @@ def a_row(
         completed_at=at + timedelta(microseconds=int(duration_ms * 1000)),
         entitlement_hash=ents(*SEES_HOURS, principal="u_one").ent_hash(),
         lane=lane,
+        tool_calls=0,
     )
     built_row = request_telemetry_of(finished)
     return RequestTelemetry(
@@ -445,6 +452,7 @@ def a_row(
         principal=built_row.principal,
         entitlement_hash=built_row.entitlement_hash,
         lane=lane,
+        tool_count=built_row.tool_count,
         cache_hit=False,
         status=status,
         duration_ms=built_row.duration_ms,

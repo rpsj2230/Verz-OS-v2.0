@@ -23,12 +23,21 @@ an owner may refresh a materialised view, and the application role must not beco
 **The write is the domain row and nothing more.** No question, no answer, no record id, because
 `Actual` has none. See `brain.tables.spend`.
 
+**The question-shape report is two reads and one call, and the call is the console's (M21.3.4).**
+`question_shape_report` reads every recorded cost, reads the trace ledger's shapes for their
+trace ids through `brain.ops.telemetry_store.shapes_for`, and hands both to
+`brain.console.spend_view.shape_report`, which filters by the reader's grant before it groups.
+The join is in Python rather than SQL for the reason the unmaterialised report already is: the
+filter is `may_read_spend`, which a predicate would be a second implementation of.
+
 What is not here: a caller of `record`. Nothing in this repository completes a run and records
 its cost, so it is written and tested against a real server and called by nothing yet, which is
 stated rather than left to be discovered from an empty table. The refresh does have one: the
-worker's schedule starts `refresh_spend_daily_now` through `brain.ops.schedule_runner`.
+worker's schedule starts `refresh_spend_daily_now` through `brain.ops.schedule_runner`. And the
+answer lane, the one path that finishes a request, spends nothing, so no recorded cost has a
+trace the ledger holds until a lane that calls a model records one.
 
-Task ids: M36.1.3.1, M36.1.3.2
+Task ids: M36.1.3.1, M36.1.3.2, M21.3.4
 """
 
 from __future__ import annotations
@@ -41,10 +50,13 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.console.spend_report_view import SpendDay
+from brain.console.spend_view import ShapeReport, shape_report
+from brain.core.entitlement import EntitlementSet
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.gate.context import TrafficClass
 from brain.ops.spend import Actual, Dimension
+from brain.ops.telemetry_store import shapes_for
 from brain.session import make_app_engine, make_session_factory
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 
@@ -53,7 +65,13 @@ SPEND_DAILY = "ops.spend_daily"
 
 
 def actual_from(stored: SpendActualRow) -> Actual:
-    """The accounting row a stored cost holds, through `Actual`'s own checks."""
+    """The accounting row a stored cost holds, through `Actual`'s own checks.
+
+    A row with no trace id reaches `Actual` as an empty one and is refused there, loudly, rather
+    than read back under a trace nobody recorded. The column is nullable only so the previous
+    release's insert survives a deploy (see `0043`), and nothing that writes through `record`
+    can produce such a row.
+    """
     return Actual(
         principal_id=stored.principal_id,
         principal_kind=PrincipalKind(stored.principal_kind),
@@ -64,6 +82,7 @@ def actual_from(stored: SpendActualRow) -> Actual:
         lane=Lane(stored.lane),
         cost_minor=stored.cost_minor,
         at=stored.at,
+        trace_id=stored.trace_id or "",
     )
 
 
@@ -80,6 +99,7 @@ async def record(session: AsyncSession, actual: Actual) -> None:
             lane=actual.lane.value,
             cost_minor=actual.cost_minor,
             at=actual.at,
+            trace_id=actual.trace_id,
         )
     )
     await session.flush()
@@ -89,6 +109,19 @@ async def recorded(session: AsyncSession) -> tuple[Actual, ...]:
     """Every recorded cost, oldest first. What the unmaterialised report is built from."""
     found = await session.execute(select(SpendActualRow).order_by(SpendActualRow.at))
     return tuple(actual_from(one) for one in found.scalars().all())
+
+
+async def question_shape_report(
+    session: AsyncSession,
+    entitlement: EntitlementSet,
+    *,
+    now: datetime,
+    include_machine: bool = False,
+) -> ShapeReport:
+    """What each question shape cost, at this reader's reach. See the module docstring."""
+    actuals = await recorded(session)
+    shapes = await shapes_for(session, {one.trace_id for one in actuals})
+    return shape_report(actuals, shapes, entitlement, now=now, include_machine=include_machine)
 
 
 async def refresh_spend_daily(session: AsyncSession) -> datetime:

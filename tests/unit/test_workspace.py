@@ -169,6 +169,7 @@ def a_run(
         lane=Lane.ANSWER,
         cost_minor=cost,
         at=at,
+        trace_id="t-cost-1",
     )
 
 
@@ -946,6 +947,7 @@ def test_visible_actuals_keeps_a_machines_rows_because_the_label_is_not_a_filter
         lane=Lane.ANSWER,
         cost_minor=40,
         at=MIDMONTH,
+        trace_id="t-cost-1",
     )
     since, until = window(Range.THIRTY_DAYS, MIDMONTH)
 

@@ -52,11 +52,12 @@ to a trace store cannot reconstruct a person's movements. That difference is not
 written here. It falls out of running the row through `tracing.mask`, which is the only way
 anything in this module produces a span.
 
-**Thirteen of the nineteen fields are None today, and the reasons are declared rather than
+**Twelve of the nineteen fields are None today, and the reasons are declared rather than
 implied.** `UNFILLABLE_TODAY` names each one and says what is missing. There is no model call
 anywhere in this repository, so there is no provider, no time to first token and no token
 count; there is no agent on the one live request path, so there is no agent version; nothing
-counts or times a tool call. Those fields are optional and default to None, and the fields
+times a tool call. `tool_count` left that mapping on 2026-09-15, when the lane started counting
+the calls it makes (M21.3.4). Those fields are optional and default to None, and the fields
 that can be filled honestly today are required and have no default, so the difference is
 enforced by the dataclass rather than by a comment.
 
@@ -143,11 +144,31 @@ reasons would have been possible and would have had to keep `NOT_ENTITLED` and
 reason at all, so a withheld record and an absent one cannot produce different rows. See
 `AN_ABSTENTION_IS_RECORDED_WITHOUT_ITS_REASON`.
 
+**A question's shape is read from this ledger and nowhere else (M21.3.4).** `docs/needs-rupash.md`
+item 59 was answered Option B: a spend row carries the trace id of the request it paid for, and
+the shape of that request is read here. `QUESTION_SHAPE_FIELDS` names what a shape is, the lane
+and the tool count, and both are fields this record already declared, so a shape is a projection
+of a row rather than a second record. Neither is text anybody typed. See
+`A_QUESTION_SHAPE_IS_HOW_THE_REQUEST_RAN_AND_NEVER_WHAT_WAS_ASKED`.
+
+**Fan-out is not in the shape, because nothing that finishes a request fans out.** Item 59 names
+it as an example, and a column for it could only be filled with a width the lane declares rather
+than measures. `brain.orchestration.delegation.fan_out_request` admits the children of a run and
+has no completion point; `brain.gate.finish` is reached only from the answer lane, which calls no
+agent. A zero written for every request would be `A_FIELD_NOBODY_MEASURES_IS_NONE_AND_NEVER_ZERO`
+broken on purpose. See `FAN_OUT_IS_NOT_A_SHAPE_UNTIL_A_REQUEST_THAT_FANS_OUT_FINISHES_SOMEWHERE`.
+
+**A trace two requests share has no shape.** The middleware accepts a caller-proposed trace id,
+so two requests can finish under one, which `brain.tables.telemetry` already argues. A cost joined
+to both would be counted twice, and a cost joined to either would be a guess. So a trace is
+matched on the id and the principal together, and a pair that still names two shapes is
+unrecorded. See `A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE`.
+
 What is still not built, said rather than left to be inferred. There is **no payload store**:
 `brain.ops.trace_sink` drops the payload because there is nowhere with the right permissions to
 put it. And `open_request` still has no caller, for the reason above.
 
-Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2
+Task ids: M27.1.1, M27.1.2, M27.1.3, M27.1.4, M27.1.5, M27.1.6, M30.5.2, M21.3.4
 """
 
 from __future__ import annotations
@@ -569,10 +590,6 @@ UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
         ),
         "tokens_in": "nothing counts tokens, because nothing sends any",
         "tokens_out": "nothing counts tokens, because nothing produces any",
-        "tool_count": (
-            "brain.gate.fast_lane has nowhere to put a tool and says so, and the row read the "
-            "answer path performs is not counted by anything between the reader and the route"
-        ),
         "tool_latency_ms": (
             "nothing times the row read. brain.gate.answer takes now as a parameter and reads "
             "no clock, deliberately, so the lane cannot time itself"
@@ -609,8 +626,8 @@ class RequestTelemetry:
     head and a swapped pair of counts is a silent wrong number rather than an error.
 
     Fields are declared in the order M27.1.5 names them and then M30.5.2's, and
-    `TELEMETRY_FIELDS` is that order written once. The six with no default are the six a
-    caller can fill honestly today; the thirteen defaulting to None are `UNFILLABLE_TODAY`,
+    `TELEMETRY_FIELDS` is that order written once. The seven with no default are the seven a
+    caller can fill honestly today; the twelve defaulting to None are `UNFILLABLE_TODAY`,
     and a test pins the two sets against each other so the mapping cannot describe a record
     that no longer matches it.
 
@@ -633,7 +650,8 @@ class RequestTelemetry:
     time_to_first_token_ms: float | None = None
     tokens_in: int | None = None
     tokens_out: int | None = None
-    tool_count: int | None = None
+    #: How many tool calls the lane started, from `brain.gate.finish.Finished.tool_calls`.
+    tool_count: int
     tool_latency_ms: float | None = None
     connector: str | None = None
     cache_hit: bool
@@ -752,9 +770,92 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         principal=origin.principal.id,
         entitlement_hash=finished.entitlement_hash,
         lane=finished.lane,
+        tool_count=finished.tool_calls,
         cache_hit=outcome is not None and outcome.from_cache,
         status=status_of_finished(finished),
         duration_ms=micros / _MICROSECONDS_PER_MS,
+    )
+
+
+# ------------------------------------------------------------ a question's shape (M21.3.4)
+
+#: What a question's shape is: the lane it ran in and how many tool calls it made.
+#:
+#: Both are fields this record already declares, and a test holds this tuple inside
+#: `TELEMETRY_FIELDS`, outside `UNFILLABLE_TODAY` and inside the name and count partitions, so a
+#: shape can never grow a field nothing fills or a field that could hold a sentence.
+QUESTION_SHAPE_FIELDS: Final[tuple[str, ...]] = ("lane", "tool_count")
+
+#: Why a shape is structure and never content.
+A_QUESTION_SHAPE_IS_HOW_THE_REQUEST_RAN_AND_NEVER_WHAT_WAS_ASKED: Final = (
+    "The most expensive questions are worth knowing about and the questions themselves are "
+    "not this ledger's to hold: it is kept for years and read by whoever reads usage. So a "
+    "shape is what ran, the lane and the number of tool calls, and a field is only a shape "
+    "field if this ledger fills it from what the lane did. A shape field nothing fills would "
+    "put every request in one bucket named after a measurement nobody took."
+)
+
+#: Why fan-out is not part of a shape today.
+FAN_OUT_IS_NOT_A_SHAPE_UNTIL_A_REQUEST_THAT_FANS_OUT_FINISHES_SOMEWHERE: Final = (
+    "Fan-out is how many runs a request spread across, and the only request that reaches "
+    "brain.gate.finish is one the answer lane finished, which calls no agent. The delegation "
+    "module admits the children of a run and has no completion point, so no finished request "
+    "has ever fanned out and no finished request could report that it had. A fan-out field "
+    "filled today would be the lane's declaration wearing a measurement's name, and the day a "
+    "run that fans out finishes through the same point is the day the field is real."
+)
+
+#: Why a trace naming two different shapes is reported as having none.
+A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE: Final = (
+    "A caller may propose its own trace id, so two requests can finish under one. A cost "
+    "joined to both of them is counted twice and a cost joined to either is a guess. The "
+    "trace is matched together with the principal, which keeps one person's request from "
+    "being read as another's, and a pair that still names two shapes is unrecorded rather "
+    "than resolved, because every rule for choosing one is a rule for choosing wrong."
+)
+
+
+@dataclass(frozen=True)
+class QuestionShape:
+    """The shape of one request: the lane it ran in and the tool calls it made.
+
+    `key` is what a report groups by and shows. It is built from a lane name and a count, so
+    it is system vocabulary by construction and never holds anything a person typed.
+    """
+
+    lane: Lane
+    tool_count: int
+
+    def __post_init__(self) -> None:
+        if self.tool_count < 0:
+            msg = f"a request that made {self.tool_count} tool calls did not happen"
+            raise TelemetryError(msg)
+
+    @property
+    def key(self) -> str:
+        """The name this shape is reported under."""
+        return f"{self.lane.value} lane, {self.tool_count} tool call(s)"
+
+
+#: One ledger row as a shape is read from it: trace id, principal, lane and tool count.
+ShapeRow = tuple[str, str, str, int | None]
+
+
+def shapes_by_request(rows: Iterable[ShapeRow]) -> Mapping[tuple[str, str], QuestionShape | None]:
+    """Each request's shape, keyed by trace id and principal, from the ledger rows given.
+
+    None for a pair whose rows name more than one shape, which is
+    `A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE`, and for a row recorded with no tool count,
+    which is a row written before the lane counted and has no shape to report. Rows that
+    agree collapse into one, so a request recorded twice under the same shape is still one
+    shape and a cost joined to it is counted once.
+    """
+    seen: dict[tuple[str, str], set[QuestionShape | None]] = {}
+    for trace_id, principal, lane, tool_count in rows:
+        shape = None if tool_count is None else QuestionShape(Lane(lane), tool_count)
+        seen.setdefault((trace_id, principal), set()).add(shape)
+    return MappingProxyType(
+        {pair: next(iter(found)) if len(found) == 1 else None for pair, found in seen.items()}
     )
 
 

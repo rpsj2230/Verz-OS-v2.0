@@ -42,13 +42,22 @@ roll, so there is no elapsed fraction of it and a percentage would be a share of
 does not exist. `pace` refuses it rather than returning something a dashboard would draw. See
 `A_PER_RUN_BUDGET_HAS_NO_PACE`.
 
-**M21.3.4 is claimed for agents and not for question shapes, and the reason is a decision
-somebody else already made correctly.** `spend.Actual` carries no question and no record id,
-because a cost ledger with the question in it is a second copy of the business activity with
-its own retention. So the dearest agents are here and the dearest question shapes cannot be:
-answering that needs a shape on the ledger that is structural rather than content, and the
-obvious one is whether the run fanned out and how many tools it called. Neither is on `Actual`
-today. See `A_COST_LEDGER_HAS_NO_QUESTION_IN_IT`.
+**M21.3.4 is both halves now: the dearest agents, and the dearest question shapes.** `spend.Actual`
+still carries no question and no record id, because a cost ledger with the question in it is a
+second copy of the business activity with its own retention. What it carries since
+`docs/needs-rupash.md` item 59 was answered Option B is the trace id of the request it paid for,
+and `brain.ops.telemetry.QuestionShape` is read from the trace ledger through it. `shape_report`
+filters the costs by the reader's grant first, exactly as `spend_report` does, and only then looks
+up a shape for each cost that survived, so a shape is never read for a cost the reader could not
+see and a cost the reader cannot see never moves a line or the total.
+
+Two rules about the join, each with its constant. A cost is joined to its own request and nobody
+else's: the trace id and the principal together, because a caller may propose a trace id and a
+second person's request under the same one is not this cost's shape. See
+`A_COST_IS_JOINED_TO_ITS_OWN_REQUEST_AND_NOBODY_ELSES`. And a cost whose shape is unknown, because
+its trace has no ledger row or names two shapes, is shown under `UNRECORDED_SHAPE` rather than
+dropped or assigned. The line is made of rows the reader may see, so it is not a residual of
+hidden ones. See `A_COST_WHOSE_SHAPE_IS_UNKNOWN_IS_SHOWN_AND_NEVER_GUESSED`.
 
 What was rejected. A `department` parameter, so a reader could narrow the report themselves:
 `brain.console.screens.A_FILTER_LIST_IS_A_LISTING_OF_EVERYTHING_IT_OFFERS` is the same refusal
@@ -101,7 +110,7 @@ That section is also why `brain.ops.retune` is imported by anything at all.
 the estimator correction was called from a module nothing imported, which
 `chains_worth_checking` reports as a caller as unreached as the control itself.
 
-Task ids: M21.3.1, M21.3.2, M21.3.3, M21.3.5, M21.3.6
+Task ids: M21.3.1, M21.3.2, M21.3.3, M21.3.4, M21.3.5, M21.3.6
 """
 
 from __future__ import annotations
@@ -121,6 +130,7 @@ from brain.ops.budgets import Allowance, BudgetLevel, BudgetPeriod
 from brain.ops.retune import Distribution as SpendWindow
 from brain.ops.retune import Variance, post_launch_correction, variance
 from brain.ops.spend import Actual, Correction, Dimension, Observation, Refusal, Rung, spend_by
+from brain.ops.telemetry import QuestionShape
 
 
 class SpendViewError(Exception):
@@ -171,14 +181,26 @@ A_PER_RUN_BUDGET_HAS_NO_PACE: Final = (
     "dashboard draws a zero."
 )
 
-#: Why the dearest question shapes are not answered here.
-A_COST_LEDGER_HAS_NO_QUESTION_IN_IT: Final = (
-    "brain.ops.spend.Actual deliberately carries no question, no answer and no record id, "
-    "because a cost ledger holding them is a second copy of the business activity with its "
-    "own retention. So the dearest agents can be reported and the dearest question shapes "
-    "cannot, and the fix is a structural shape on the ledger rather than the question: "
-    "whether the run fanned out, and how many tools it called."
+#: Why a cost's shape is looked up by its trace and its principal together.
+A_COST_IS_JOINED_TO_ITS_OWN_REQUEST_AND_NOBODY_ELSES: Final = (
+    "A caller may propose its own trace id, so a trace id alone can name two people's "
+    "requests. A cost read against somebody else's request under the same id would report "
+    "that request's shape as this one's, and a reader could learn from the shape line that "
+    "another request exists. So the lookup is the trace id and the principal the cost was "
+    "recorded against, and a shape is never read for a cost the reader's grant does not admit."
 )
+
+#: Why a cost with no known shape is a line of its own.
+A_COST_WHOSE_SHAPE_IS_UNKNOWN_IS_SHOWN_AND_NEVER_GUESSED: Final = (
+    "Dropping a cost whose trace has no shape makes the shape report smaller than the agent "
+    "report over the same rows, and the first person to notice is reconciling an invoice. "
+    "Assigning it the nearest shape makes a figure nobody measured. So it is a line of its "
+    "own, built from rows the reader may see and from nothing else, which is the difference "
+    "between an unrecorded bucket and a residual of hidden ones."
+)
+
+#: The key a cost with no known shape is reported under.
+UNRECORDED_SHAPE: Final = "(shape not recorded)"
 
 
 #: Why a refusal names the budget to one reader and nothing at all to another.
@@ -281,12 +303,28 @@ class Report:
     total_minor: int
 
     def __post_init__(self) -> None:
-        if self.total_minor != sum(one.cost_minor for one in self.lines):
-            msg = (
-                "the total does not equal the lines shown. "
-                f"{A_TOTAL_OVER_ROWS_THE_READER_MAY_NOT_SEE_IS_A_SUBTRACTION}"
-            )
-            raise SpendViewError(msg)
+        _refuse_a_total_that_is_not_its_lines(self.lines, self.total_minor)
+
+
+def _refuse_a_total_that_is_not_its_lines(lines: Sequence[Line], total_minor: int) -> None:
+    """The one check both reports make.
+
+    See `A_TOTAL_OVER_ROWS_THE_READER_MAY_NOT_SEE_IS_A_SUBTRACTION`.
+    """
+    if total_minor != sum(one.cost_minor for one in lines):
+        msg = (
+            "the total does not equal the lines shown. "
+            f"{A_TOTAL_OVER_ROWS_THE_READER_MAY_NOT_SEE_IS_A_SUBTRACTION}"
+        )
+        raise SpendViewError(msg)
+
+
+def _lines_of(totals: Mapping[str, int]) -> tuple[Line, ...]:
+    """Lines dearest first, with the key as the tie-break, written once for both reports."""
+    return tuple(
+        Line(key=key, cost_minor=cost)
+        for key, cost in sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))
+    )
 
 
 def spend_report(
@@ -324,10 +362,7 @@ def report_from_totals(
     is the precondition in its first line: it is handed totals, not rows, so whether they
     were filtered first is the caller's to prove.
     """
-    lines = tuple(
-        Line(key=key, cost_minor=cost)
-        for key, cost in sorted(totals.items(), key=lambda pair: (-pair[1], pair[0]))
-    )
+    lines = _lines_of(totals)
     return Report(
         dimension=dimension,
         lines=lines,
@@ -336,9 +371,59 @@ def report_from_totals(
     )
 
 
-def dearest(report: Report, limit: int) -> tuple[Line, ...]:
-    """The most expensive lines of a report, dearest first (M21.3.4, agents only).
+@dataclass(frozen=True)
+class ShapeReport:
+    """What each question shape cost, at one reader's reach (M21.3.4).
 
+    A report of its own rather than a sixth `Dimension`, because a dimension is a key an
+    `Actual` holds and a shape is not: it is read from the trace ledger through the cost's
+    trace id. Same three fields as `Report` without the dimension, and the same check that the
+    total is the lines. No count of rows per line and no count of anything else.
+    """
+
+    lines: tuple[Line, ...]
+    machine_included: bool
+    total_minor: int
+
+    def __post_init__(self) -> None:
+        _refuse_a_total_that_is_not_its_lines(self.lines, self.total_minor)
+
+
+def shape_report(
+    actuals: Sequence[Actual],
+    shapes: Mapping[tuple[str, str], QuestionShape | None],
+    entitlement: EntitlementSet,
+    *,
+    now: datetime | None = None,
+    include_machine: bool = False,
+) -> ShapeReport:
+    """Spend by question shape, over the costs this reader may see (M21.3.4).
+
+    `shapes` is keyed by trace id and principal, as `brain.ops.telemetry.shapes_by_request`
+    builds it. Filtered by `visible` first, then machine traffic, and only then is a shape
+    looked up, so nothing about a cost the reader may not see reaches a line or the total. See
+    `A_COST_IS_JOINED_TO_ITS_OWN_REQUEST_AND_NOBODY_ELSES` and
+    `A_COST_WHOSE_SHAPE_IS_UNKNOWN_IS_SHOWN_AND_NEVER_GUESSED`.
+    """
+    totals: dict[str, int] = {}
+    for one in visible(actuals, entitlement, now=now):
+        if one.machine and not include_machine:
+            continue
+        shape = shapes.get((one.trace_id, one.principal_id))
+        key = UNRECORDED_SHAPE if shape is None else shape.key
+        totals[key] = totals.get(key, 0) + one.cost_minor
+    lines = _lines_of(totals)
+    return ShapeReport(
+        lines=lines,
+        machine_included=include_machine,
+        total_minor=sum(one.cost_minor for one in lines),
+    )
+
+
+def dearest(report: Report | ShapeReport, limit: int) -> tuple[Line, ...]:
+    """The most expensive lines of a report, dearest first (M21.3.4).
+
+    An agent report for the dearest agents and a shape report for the dearest question shapes.
     A slice of what the reader is already looking at, so it discloses nothing the report did
     not. It carries no rank number and no "of N", for the same reason the report carries no
     total over rows it did not show.

@@ -378,6 +378,7 @@ def a_run(
         lane=lane,
         cost_minor=cost,
         at=at,
+        trace_id="t-cost-1",
     )
 
 
@@ -403,6 +404,10 @@ RUNS: tuple[Actual, ...] = (
 @pytest.fixture(scope="module")
 def server() -> Iterator[str]:
     with built("brain_spend_report_view_check", "0036") as url:
+        # `0043` gives `ops.spend_actual` the trace id the model now declares. Nothing from
+        # `0037` to `0042` touches either table here, so they are stamped rather than run.
+        migrate("brain_spend_report_view_check", "stamp", "0042")
+        migrate("brain_spend_report_view_check", "upgrade", "0043")
         run(lambda: _record_all(url, RUNS))
         yield url
 
@@ -541,6 +546,9 @@ def test_a_view_nobody_has_refreshed_is_read_as_unbuilt_without_touching_it() ->
     Delete this and the first console load after an install raises PostgreSQL's refusal to read
     an unpopulated materialised view."""
     with built("brain_spend_report_unbuilt", "0036") as url:
+        # `0043`, for the column `recorded` now selects; stamped past what touches neither table.
+        migrate("brain_spend_report_unbuilt", "stamp", "0042")
+        migrate("brain_spend_report_unbuilt", "upgrade", "0043")
         freshness, days, _ = run(lambda: _read(url))
         assert freshness is None
         assert days == ()

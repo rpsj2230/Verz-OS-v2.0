@@ -116,6 +116,7 @@ def run(cost_minor: int, *, agent: str | None = None, service: bool = False) -> 
         lane=Lane.ANSWER,
         cost_minor=cost_minor,
         at=NOW,
+        trace_id="t-cost-1",
     )
 
 
@@ -155,11 +156,14 @@ def test_the_estimator_cannot_become_async_and_cannot_be_handed_a_client() -> No
         "__future__",
         "enum",
         "math",
+        "re",
         "collections.abc",
         "dataclasses",
         "datetime",
         "itertools",
         "types",
+        # The trace id grammar a cost row is held to (M21.3.4): a constant, and no transport.
+        "brain.audit.ledger",
         "typing",
         "brain.core.lane",
         "brain.core.principal",
@@ -763,6 +767,7 @@ def test_machine_traffic_is_read_from_the_declared_class_and_never_from_a_field(
                 lane=Lane.ANSWER,
                 cost_minor=1,
                 at=NOW,
+                trace_id="t-cost-1",
             )
             assert row.machine == is_automated(kind, traffic), f"{kind} on {traffic}"
 
@@ -802,6 +807,7 @@ def test_an_accounting_row_refuses_to_be_written_without_what_it_is_grouped_by()
         "lane": Lane.ANSWER,
         "cost_minor": 1,
         "at": NOW,
+        "trace_id": "t-cost-1",
     }
     assert Actual(**sound).cost_minor == 1  # type: ignore[arg-type]
 
@@ -810,6 +816,9 @@ def test_an_accounting_row_refuses_to_be_written_without_what_it_is_grouped_by()
         ({"model": ""}, "needs a principal"),
         ({"cost_minor": -1}, "less than nothing"),
         ({"at": datetime(2026, 9, 1, 9, 0)}, "naive instant"),
+        ({"trace_id": ""}, "could never be joined"),
+        ({"trace_id": "t-cost-1\n"}, "could never be joined"),
+        ({"trace_id": "a trace with spaces"}, "could never be joined"),
     ):
         with pytest.raises(SpendError, match=expected):
             Actual(**{**sound, **broken})  # type: ignore[arg-type]

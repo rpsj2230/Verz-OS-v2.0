@@ -2,8 +2,8 @@
 
 A finished request owes more than its answer. Adoption needs to know that somebody asked
 (M37.3.2.4), the metadata ledger needs to know when the request ended so that a lane latency
-objective has a duration to take a percentile of (M30.5.2), and a spend row will want the trace
-it paid for (`docs/needs-rupash.md` item 59). Each of those is written by a different module
+objective has a duration to take a percentile of (M30.5.2), and a spend row names the trace it
+paid for (`docs/needs-rupash.md` item 59, M21.3.4). Each of those is written by a different module
 with a different table, and the obvious way to get them is a hook per concern, each added where
 its author happened to be looking: a line in a route for one, a line in a channel adapter for
 the next. **That is the shape this module exists to refuse.** A record written from a route is
@@ -65,7 +65,16 @@ which is the rule a measurement follows. A naive completion instant is refused h
 judged instant is: it is a wiring fault identical for every request, and it fails the first test
 that runs the lane rather than a report months later.
 
-Task ids: M37.3.2.4, M30.5.2
+**The tool count is the fourth fact, and it is counted here rather than in a channel
+(M21.3.4).** `docs/needs-rupash.md` item 59 was answered Option B: a spend row carries the trace
+id of its request and the question's shape is read from the trace ledger, which had declared
+`tool_count` and never set it. The lane is the only place that knows how many readers it called,
+because it is the only place that calls them, so `answer_lane` counts each call as it starts it
+and hands the count to every recorder on `Finished`. A channel counting calls would be counting a
+lane it does not run. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS` for why the count is taken at
+the start of a call and not from what it returned.
+
+Task ids: M37.3.2.4, M30.5.2, M21.3.4
 """
 
 from __future__ import annotations
@@ -103,6 +112,20 @@ A_QUESTION_IS_ATTRIBUTED_TO_WHOEVER_ITS_REACH_BELONGS_TO: Final = (
     "the two could name different people, a question would be answered as one person and "
     "counted as another, and no figure built from the records could be traced back to what "
     "anybody actually did. The pair is refused before anything is read."
+)
+
+#: What a tool count on a finished request counts, and why it cannot tell a refusal from an
+#: absence.
+A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS: Final = (
+    "A tool call is counted when the lane starts it, before anything comes back, so the count "
+    "is a fact about what the lane did and never about what the source held. A record that "
+    "exists and is withheld, a record that does not exist, and a name two records answer to "
+    "are one read each and one call each. A count taken from what came back would be a count "
+    "of rows, which separates those three, and a count of rows per request in a usage report "
+    "is a count of things that exist. A question no rule matches makes no call, so its count "
+    "is zero: that says whether the installation has a rule for the question's form, and the "
+    "readers a rule is matched against are the registry's, the same for every asker, so it "
+    "says nothing about the asker's reach or about any record."
 )
 
 _TRACE_ID_RE: Final = re.compile(TRACE_ID)
@@ -156,6 +179,9 @@ class Finished:
     entitlement_hash: str
     #: The budget the lane that finished runs under, as that lane declares it.
     lane: Lane
+    #: How many tool calls the lane started, counted by the lane as it made them (M21.3.4). A
+    #: call that raised is still a call started. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
+    tool_calls: int
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

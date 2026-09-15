@@ -168,6 +168,7 @@ def an_actual(
         lane=Lane.ANSWER,
         cost_minor=cost_minor,
         at=at,
+        trace_id="t-cost-1",
     )
 
 

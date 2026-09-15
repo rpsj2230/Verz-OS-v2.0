@@ -66,6 +66,7 @@ def _ledger_row() -> dict[str, object]:
         principal="staff-1",
         entitlement_hash="b" * 32,
         lane=Lane.ANSWER,
+        tool_count=0,
         cache_hit=False,
         status=RequestStatus.ANSWERED,
         duration_ms=12.5,

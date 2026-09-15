@@ -5,13 +5,14 @@
 hands them, and no caller had anywhere to read them from. This is the table, and it mirrors
 `Actual` field for field and adds nothing to it.
 
-**Nothing is added, and the absence is the design that was already made.** `Actual` carries
-no question, no answer and no record identifier, because a cost ledger holding them is a
-second copy of the business activity with its own retention; see
-`brain.console.spend_view.A_COST_LEDGER_HAS_NO_QUESTION_IN_IT`. A column for a question shape
-would be that decision taken again by whoever wrote a migration, so there is no such column,
-and M21.3.4's question shapes stay unanswered until somebody decides what shape the ledger may
-carry.
+**No question, no answer, no record identifier and no shape.** `Actual` carries none of them,
+because a cost ledger holding them is a second copy of the business activity with its own
+retention. What it does carry since `0043` is the trace id of the request it paid for, which is
+`docs/needs-rupash.md` item 59 answered Option B: the question's shape stays in the trace ledger,
+`obs.request_telemetry`, and M21.3.4's report joins the two on the trace. A column holding fan-out
+or tool count here was Option A and was rejected, because it copies facts the ledger owns into a
+second table where they drift. See
+`brain.ops.spend.A_COST_NAMES_ITS_REQUEST_AND_COPIES_NOTHING_ABOUT_IT`.
 
 **Machine is not a column.** `Actual.machine` is derived from the principal's kind and the
 traffic class through `brain.ops.limits.is_automated`, and the two inputs are stored rather
@@ -26,7 +27,7 @@ function in the transaction that rebuilds the view, so the timestamp and the con
 disagree about which refresh they came from. See
 `brain.console.spend_report_view.STALENESS_IS_A_FIGURE_ON_THE_REPORT_AND_NEVER_A_CAPTION`.
 
-Task ids: M36.1.3.1, M36.1.3.2
+Task ids: M36.1.3.1, M36.1.3.2, M21.3.4
 """
 
 from __future__ import annotations
@@ -49,6 +50,9 @@ PRINCIPAL_ID_CHARS: Final = 128
 
 #: A department slug, an agent identifier or a model name. The widest of the three with room.
 NAME_CHARS: Final = 120
+
+#: A trace id, at the width `brain.audit.ledger.TRACE_ID` admits and `brain.db` sizes one.
+TRACE_ID_CHARS: Final = 64
 
 #: The views whose refreshes are recorded. Closed, so a timestamp cannot be written for a view
 #: that does not exist and read by a screen as the age of one that does.
@@ -80,6 +84,10 @@ class SpendActualRow(Base):
     cost_minor: Mapped[int] = mapped_column(BigInteger, nullable=False)
     #: When the run completed. The report's day is taken from this, in UTC.
     at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: The request this cost paid for (`0043`). What the question-shape report joins on.
+    #: Nullable in this release only, so the previous release's insert still succeeds during a
+    #: deploy; `Actual` requires it. See `0043`'s `REQUIRED_IN_A_LATER_RELEASE`.
+    trace_id: Mapped[str | None] = mapped_column(String(TRACE_ID_CHARS), nullable=True)
 
     __table_args__ = (
         CheckConstraint(one_of("principal_kind", PrincipalKind), name="principal_kind"),
@@ -90,6 +98,7 @@ class SpendActualRow(Base):
         CheckConstraint("length(btrim(model)) >= 1", name="model_present"),
         CheckConstraint("cost_minor >= 0", name="cost_is_not_negative"),
         Index("ix_spend_actual_at", "at"),
+        Index("ix_spend_actual_trace_id", "trace_id"),
         {"schema": "ops"},
     )
 

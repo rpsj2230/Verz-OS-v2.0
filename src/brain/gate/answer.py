@@ -68,12 +68,20 @@ instant comes from `clock`, which the caller hands in and the lane reads exactly
 `finally` that finishes the request. It is `async` only because a row read is, which is the one
 thing here that waits on anything.
 
-Task ids: M30.5.2
+**Every reader call is counted as it starts, by a wrapper the lane puts around the readers it was
+handed (M21.3.4).** The count reaches `Finished.tool_calls` and from there the trace ledger's
+`tool_count`, which is one half of a question's shape. The lane wraps rather than `respond`
+counting, because `respond` returns None both before a read and after one, and a count it
+reported would have to be threaded out through every one of those returns. A wrapper cannot
+miss a return, and it counts a read that raised, which is a call the lane made. See
+`brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
+
+Task ids: M30.5.2, M21.3.4
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Iterable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
@@ -81,6 +89,7 @@ from typing import Final
 import structlog
 
 from brain.core.entitlement import EntitlementSet
+from brain.core.envelope import TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.core.lane import Lane
 from brain.core.redaction import (
@@ -104,6 +113,7 @@ from brain.gate.compose import ComposedAnswer, TraceSink, compose
 from brain.gate.fast_lane import FastLaneAnswer, FastPathRule, RowReader, respond
 from brain.gate.finish import Finished, Origin, RequestRecorder, attributable, finish
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
+from brain.knowledge.rows import RowRecord, RowRequest
 
 log = structlog.get_logger(__name__)
 
@@ -138,6 +148,37 @@ NO_PATH_THROUGH_THIS_LANE_CALLS_A_MODEL_SO_EVERY_REQUEST_SPENT_THE_FAST_BUDGET: 
 
 #: The lane this module is, for the ledger. See the constant above.
 LANE: Final = Lane.FAST
+
+
+class ToolCalls:
+    """How many reader calls one request has started, counted by wrapping the readers.
+
+    One instance per request, made inside `answer_lane`, so a count cannot leak from one
+    request into the next. See `brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
+    """
+
+    def __init__(self) -> None:
+        self.started = 0
+
+    def counting(
+        self, readers: Mapping[tuple[str, str], RowReader]
+    ) -> Mapping[tuple[str, str], RowReader]:
+        """The same readers under the same keys, each counting a call before it makes it."""
+        return {pair: self._counted(reader) for pair, reader in readers.items()}
+
+    def _counted(self, reader: RowReader) -> RowReader:
+        def call(
+            request: RowRequest,
+            *,
+            entitlement: EntitlementSet,
+            now: datetime | None = None,
+        ) -> Awaitable[TypedResult[RowRecord]]:
+            # Counted before the call, so a read that raises is still a read that started.
+            self.started += 1
+            return reader(request, entitlement=entitlement, now=now)
+
+        return call
+
 
 #: Why a cache hit does not re-run the lane.
 A_CACHED_ANSWER_IS_SERVED_WITHOUT_ASKING_ANYTHING_AGAIN = (
@@ -233,12 +274,13 @@ async def answer_lane(
     record a duration measured against the machine's real time.
     """
     attributable(origin, entitlement.principal_id)
+    calls = ToolCalls()
     outcome: Answered | None = None
     try:
         outcome = await _outcome(
             question,
             rules=rules,
-            readers=readers,
+            readers=calls.counting(readers),
             entitlement=entitlement,
             policies=policies,
             reachable_sources=reachable_sources,
@@ -258,6 +300,7 @@ async def answer_lane(
                 completed_at=completed_at,
                 entitlement_hash=entitlement.ent_hash(),
                 lane=LANE,
+                tool_calls=calls.started,
             ),
         )
 

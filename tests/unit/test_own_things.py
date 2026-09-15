@@ -164,6 +164,7 @@ def an_actual(*, principal_id: str, cost_minor: int, hours_ago: int) -> Actual:
         lane=Lane.ANSWER,
         cost_minor=cost_minor,
         at=NOW - timedelta(hours=hours_ago),
+        trace_id="t-cost-1",
     )
 
 

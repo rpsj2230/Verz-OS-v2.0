@@ -61,20 +61,22 @@ is here is the shape the decision has to have before anything starts making it, 
 half worth writing first, because an estimator is easy to start trusting and very hard to
 stop once a wrong number is in the ledger.
 
-Task ids: M21.2.1, M21.2.2, M21.2.3, M21.2.4, M21.2.5, M21.2.6
+Task ids: M21.2.1, M21.2.2, M21.2.3, M21.2.4, M21.2.5, M21.2.6, M21.3.4
 """
 
 from __future__ import annotations
 
 import enum
 import math
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from itertools import pairwise
 from types import MappingProxyType
-from typing import assert_never
+from typing import Final, assert_never
 
+from brain.audit.ledger import TRACE_ID
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.gate.context import TrafficClass
@@ -831,6 +833,20 @@ class Dimension(enum.StrEnum):
     LANE = "lane"
 
 
+#: Why a cost row carries a trace id and no shape.
+A_COST_NAMES_ITS_REQUEST_AND_COPIES_NOTHING_ABOUT_IT: Final = (
+    "A question's shape is how the request ran, and the trace ledger is where how a request "
+    "ran is recorded. Copying the shape onto the cost row would put the same fact in two "
+    "tables with two retentions, and the copy is the one that drifts, because the ledger is "
+    "where a later field is added. So a cost carries one link, the trace id of the request it "
+    "paid for, and the report joins the two. The link carries no question, no answer and no "
+    "record: a trace id is quotable and grants nothing."
+)
+
+#: The grammar a cost row's trace id is held to, imported rather than retyped, so a cost can be
+#: joined to the ledger row and the audit entries that share it.
+_TRACE_ID_RE: Final = re.compile(TRACE_ID)
+
 #: The key rows with no agent are grouped under. A bucket rather than a filter, so that the
 #: agent breakdown still totals to the same figure as every other breakdown. Dropping the rows
 #: instead makes the agent report quietly smaller than the department report, and the first
@@ -850,6 +866,11 @@ class Actual:
 
     Whether this was a machine is derived rather than stored. See
     `MACHINE_TRAFFIC_IS_LABELLED_NOT_DROPPED`.
+
+    **It carries the trace id of the request it paid for, and that is a link rather than a
+    copy (M21.3.4).** `docs/needs-rupash.md` item 59 was answered Option B: a question's shape
+    is read from the trace ledger through this id, and nothing about the shape is written
+    here. See `A_COST_NAMES_ITS_REQUEST_AND_COPIES_NOTHING_ABOUT_IT`.
     """
 
     principal_id: str
@@ -861,10 +882,21 @@ class Actual:
     lane: Lane
     cost_minor: int
     at: datetime
+    #: The request this cost paid for, in `brain.audit.ledger.TRACE_ID`'s grammar. Required,
+    #: because a cost with no trace is a cost no shape can be read for.
+    trace_id: str
 
     def __post_init__(self) -> None:
         if not self.principal_id or not self.department or not self.model:
             msg = "an accounting row needs a principal, a department and a model to group by"
+            raise SpendError(msg)
+        if not _TRACE_ID_RE.fullmatch(self.trace_id):
+            # `fullmatch` for the reason `brain.gate.finish.Origin` gives: the pattern ends in
+            # `$`, which `match` would let a trailing newline through.
+            msg = (
+                f"trace id {self.trace_id!r} is not one the audit ledger accepts, so this cost "
+                "could never be joined to the request it paid for"
+            )
             raise SpendError(msg)
         if self.cost_minor < 0:
             msg = "a run cannot have cost less than nothing"

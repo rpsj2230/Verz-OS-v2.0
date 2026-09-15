@@ -189,6 +189,7 @@ def an_actual(agent_id: str, *, at: datetime = NOW, principal: str = ME) -> Actu
         lane=Lane.ANSWER,
         cost_minor=100,
         at=at,
+        trace_id="t-cost-1",
     )
 
 
