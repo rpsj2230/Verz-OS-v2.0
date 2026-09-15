@@ -542,7 +542,12 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="knowledge_reverification",
+        # Three since 2026-09-15. `run_reverification_now` is what the worker's schedule starts,
+        # through `brain.ops.schedule_runner.start_control`, and the other two are the decision
+        # it makes. Naming only those two would have measured this control as running the day
+        # `brain.knowledge.item_store` was written, whether or not anything started the store.
         symbols=(
+            "brain.knowledge.item_store:run_reverification_now",
             "brain.knowledge.verification:open_reverification_tasks",
             "brain.knowledge.item:due_for_reverification",
         ),
@@ -558,7 +563,10 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=DEFAULT_CADENCE,
         cadence_from="brain.knowledge.verification:DEFAULT_CADENCE",
         severity=Severity.NOTICED,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-15. It records a nag as an outbox
+        # event and sends nothing, because nothing drains the outbox:
+        # `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` is that sentence.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="resolution_calibration",

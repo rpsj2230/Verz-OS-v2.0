@@ -13,8 +13,8 @@ were written by somebody who found it in their own module and wrote it down. Thi
 first thing in the tree that asks the question of every module at once.
 
 **What this asserts is that the registry and the source agree, not that everything is
-wired.** Nine of the fifteen controls have no caller of any kind today, three have a caller
-nothing runs on a schedule, two are started by the worker's schedule, and one is on a route. A
+wired.** Eight of the fifteen controls have no caller of any kind today, three have a caller
+nothing runs on a schedule, three are started by the worker's schedule, and one is on a route. A
 test asserting that they do would be red on arrival, and
 `brain.ops.sweeps.sweep_house_style` records at length what happens to a check that is red the
 day it lands. So the assertion is agreement in
@@ -63,7 +63,8 @@ KNOWN_ORPHANS = frozenset(
         "canary_run",
         "backup_exposure",
         "denial_digest",
-        "knowledge_reverification",
+        # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
+        # `SCHEDULED_BY_THE_WORKER`.
         "resolution_calibration",
         "queue_redrive",
         "side_effect_resume",
@@ -103,7 +104,11 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #:
 #: Both joined on 2026-09-15: `retention_sweep` from `KNOWN_ORPHANS`, in report-only mode
 #: until the installation releases it, and `spend_report_refresh` the day it was registered.
-SCHEDULED_BY_THE_WORKER = frozenset({"retention_sweep", "spend_report_refresh"})
+#: `knowledge_reverification` joined later that day from `KNOWN_ORPHANS`, recording nags that
+#: nothing sends yet: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` says so.
+SCHEDULED_BY_THE_WORKER = frozenset(
+    {"retention_sweep", "knowledge_reverification", "spend_report_refresh"}
+)
 
 #: Controls whose caller is itself imported by nothing, named rather than counted.
 #:
@@ -277,11 +282,11 @@ def test_a_control_with_a_caller_and_no_schedule_is_recorded_as_neither() -> Non
 def test_a_control_that_is_reachable_is_reachable_from_something_reachable() -> None:
     """Delete this and a chain of three uncalled functions reads as wired at every link.
 
-    `brain.knowledge.verification.open_reverification_tasks` is exactly that shape: it calls
-    `brain.knowledge.item.due_for_reverification`, so the inner function has a caller, and
-    nothing calls the outer one. Counting the inner function as reached would have put a
-    knowledge control in the wired column while nothing ran it. This asserts the one level
-    that can be measured exactly.
+    `brain.knowledge.verification.open_reverification_tasks` was exactly that shape until
+    2026-09-15: it calls `brain.knowledge.item.due_for_reverification`, so the inner function
+    had a caller, and nothing called the outer one. `brain.knowledge.item_store` does now.
+    Counting the inner function as reached would have put a knowledge control in the wired
+    column while nothing ran it. This asserts the one level that can be measured exactly.
 
     **This asserted an empty answer until 2026-09-11 and now asserts a named set**, for the
     reason `KNOWN_ORPHANS` is a set rather than a count: the finding is real and hiding it

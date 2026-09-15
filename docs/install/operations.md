@@ -196,7 +196,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Nine of the fifteen mechanisms are started by nothing
+## Eight of the fifteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -209,7 +209,8 @@ the heading, the table and the count were three hand-kept copies of a fact the c
 became true on 2026-09-11, when the console page that lets somebody choose a staff source and
 test it before it runs became the first caller of the roster dry run. Nine became true on
 2026-09-15, when the general worker began ticking the control schedule and the retention
-sweep was the first of these it started.
+sweep was the first of these it started. Eight became true the same day, when the schedule began
+starting the re-verification nag.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -221,7 +222,7 @@ sweep was the first of these it started.
 | `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `nothing` |
 | `directory_sync` | that the roster follows employment: joiners, movers and leavers | `in_process` |
-| `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `nothing` |
+| `knowledge_reverification` | that an answer drawn from something somebody once approved is not still being given long afterwards | `in_process` |
 | `resolution_calibration` | that the weights deciding whether two records are the same person stay fitted to the data | `nothing` |
 | `queue_redrive` | that a job whose worker died underneath it is reclaimed rather than left | `nothing` |
 | `side_effect_resume` | that a side effect issued by a process which then died is read back from the source before anything is retried | `nothing` |
@@ -233,9 +234,12 @@ sweep was the first of these it started.
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
-says nothing about whether *that* module is ever reached. For `retention_sweep` and
-`spend_report_refresh` it is: the general worker ticks the control schedule and starts both,
-and the sweep runs in report-only mode, deleting nothing, until the installation releases it.
+says nothing about whether *that* module is ever reached. For `retention_sweep`,
+`knowledge_reverification` and `spend_report_refresh` it is: the general worker ticks the control
+schedule and starts all three. The sweep runs in report-only mode, deleting nothing, until the
+installation releases it. The re-verification nag records each nag in the webhook outbox, asks
+the owner only while the owner can still reach the document, and sends nothing yet, because
+nothing drains the outbox.
 For `spend_correction` it means a console screen nobody opens on a schedule, for
 `directory_sync` a console page somebody presses, and for `restore_drill` a recovery panel that
 can only show an alarm, because nothing performs a drill. `on_a_route` is started from outside:

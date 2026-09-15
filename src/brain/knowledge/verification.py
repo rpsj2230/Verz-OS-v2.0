@@ -100,6 +100,7 @@ from brain.knowledge.item import (
     KnowledgeError,
     KnowledgeItem,
     ReverificationTask,
+    UnderReview,
     VerificationState,
     badge,
     due_for_reverification,
@@ -471,7 +472,7 @@ def key_for(task: ReverificationTask) -> ReviewKey:
 
 
 def open_reverification_tasks(
-    items: Sequence[KnowledgeItem],
+    items: Sequence[UnderReview],
     *,
     now: datetime,
     log: ReverificationLog = NO_TASKS_OPENED,

@@ -31,16 +31,17 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Two controls are wired, and the rest are stated rather than implied.** `retention_sweep` and
-`spend_report_refresh` have a runner that gathers what they need, and `brain.ops.worker` starts
-them on the schedule through `start_control`. Every other control entry point is a policy
-function that takes its inputs: `retention.enforcement_report`
+**Three controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+`knowledge_reverification` and `spend_report_refresh` have a runner that gathers what they
+need, and `brain.ops.worker` starts them on the schedule through `start_control`. Every other
+control entry point is a policy function that takes its inputs: `retention.enforcement_report`
 takes a census "the executor saw", `denial_alerts.digest` takes patterns and recipients,
 `recovery.alerts` takes backups and verifications. None of them gathers anything. So the
-registry's eleven orphans are not eleven mechanisms waiting for a timer, they are eleven
-mechanisms whose policy is written and whose input gathering does not exist, and a scheduler
-alone does not switch them on. `runner_gaps` reports each one by name, which turns "eleven
-mechanisms nothing runs" into a list of named pieces of work. See
+registry's orphans are not mechanisms waiting for a timer, they are mechanisms whose policy is
+written and whose input gathering does not exist, and a scheduler alone does not switch them
+on. `runner_gaps` reports each one by name, which turns a count of mechanisms nothing runs
+into a list of named pieces of work, and no count is written here because this one went stale
+twice. See
 `A_SCHEDULER_WITH_NOTHING_TO_RUN_IS_HONEST_AND_A_SCHEDULER_THAT_PRETENDS_IS_NOT`.
 
 **A runner has to call its control in a way `brain.ops.controls` can see.** That registry
@@ -60,7 +61,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3
+Task ids: M37.5.1.3, M34.2.1.3
 """
 
 from __future__ import annotations
@@ -74,6 +75,7 @@ from typing import Final
 import psycopg
 
 from brain.db import libpq_url
+from brain.knowledge.item_store import run_reverification_now
 from brain.ops.controls import Control
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
@@ -132,6 +134,14 @@ A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING: Final = (
     "so brain.ops.schedule never asks for it. A runner that rebuilt anyway when asked would be "
     "a runner that ignores the mode it was given, which is the one property a destructive "
     "control's safety rests on being true of every runner."
+)
+
+#: Why the re-verification nag records nothing in report-only mode.
+A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and recording a nag removes nothing, "
+    "so brain.ops.schedule never asks for it. A runner that recorded anyway when asked would be a "
+    "runner that ignores the mode it was given, which is the property every runner has to keep "
+    "for the one control whose safety rests on it."
 )
 
 #: The advisory lock namespace, so a control's lock cannot collide with `brain.migrate`'s.
@@ -226,6 +236,25 @@ def spend_report_refresh(now: datetime, report_only: bool, database_url: str) ->
     )
 
 
+def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
+    """Record the re-verification nags owed at `now`, and say what the run did.
+
+    `brain.knowledge.item_store.run_reverification_now` reads what is due, asks whether each
+    owner can still reach it and records the nag; this is the literal call the registry reads.
+    Declines in report-only mode, see `A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING`, and takes the
+    worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no re-verification nag was recorded. "
+            f"{A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    ran = run_reverification_now(database_url, now=now, loop_factory=_loop_factory())
+    return ran.summary(now)
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
 #: Two with a `run` since 2026-09-15, which the worker's schedule starts, and the rest saying what
@@ -274,18 +303,10 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "settles that every source stays selectable at deploy time"
         ),
     ),
-    Runner(
-        name="knowledge_reverification",
-        needs=(
-            "a table the knowledge items live in, because `KnowledgeItem` is a model with no "
-            "row and nothing under `brain.tables` or `migrations` stores one, so there is no "
-            "query for the items whose `review_by` has passed; somewhere the "
-            "`ReverificationLog` is kept between runs; and a delivery addressed to the owner. "
-            "That last one needs a rule first: `owner_id` never moves and a department does, "
-            "so an owner who has left the item's department is sent its title by a nag they "
-            "can no longer reach the item behind"
-        ),
-    ),
+    # Wired on 2026-09-15. `know.item` holds the items, the outbox is the log, and the rule
+    # this sentence asked for is `brain.knowledge.item_store.route_for`. What it still does not
+    # do is send: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET`.
+    Runner(name="knowledge_reverification", run=knowledge_reverification),
     Runner(
         name="resolution_calibration",
         needs=(
@@ -366,6 +387,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
     match name:
         case "retention_sweep":
             return retention_sweep(now, report_only, database_url)
+        case "knowledge_reverification":
+            return knowledge_reverification(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
         case _:

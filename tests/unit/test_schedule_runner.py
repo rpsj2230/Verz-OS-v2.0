@@ -21,6 +21,7 @@ from brain.ops.controls import CONTROLS, Control, Invocation
 from brain.ops.retention import Store
 from brain.ops.schedule import TICK, schedulable
 from brain.ops.schedule_runner import (
+    A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING,
     A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING,
     RUNNERS,
     SCHEDULER_LOCK_NAMESPACE,
@@ -235,13 +236,17 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Twelve on 2026-09-15**, when the worker's schedule began starting the retention sweep and
     the spend report refresh, which are the two controls this list no longer names.
 
+    **Eleven later the same day**, when `knowledge_reverification` was given the store its
+    sentence here said it waited for, and a runner that reads it.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 12
+    assert len(found) == 11
     assert all("cannot be started yet: it needs" in one for one in found)
     assert not any("retention_sweep" in one for one in found)
     assert not any("spend_report_refresh" in one for one in found)
+    assert not any("knowledge_reverification" in one for one in found)
 
 
 def test_a_control_with_no_runner_is_reported_rather_than_skipped_in_silence() -> None:
@@ -384,11 +389,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     orphan list for a reason this file can name. `spend_report_refresh` arrived the same day
     already wired, so the control count rose to fifteen and the orphan count did not.
 
+    **And to eight later that day, for the same reason.** `start_control` calls the
+    re-verification runner, so `knowledge_reverification` left the list too.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 9
+    assert len(orphans()) == 8
+    assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
     assert len(CONTROLS) == 15
@@ -413,7 +422,24 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
     }
 
     assert arms == {one.name for one in RUNNERS if one.run is not None}
-    assert arms == {"retention_sweep", "spend_report_refresh"}
+    assert arms == {"retention_sweep", "knowledge_reverification", "spend_report_refresh"}
+
+
+def test_the_nag_runner_asked_for_a_report_records_nothing_and_reaches_no_database() -> None:
+    """Report-only mode: the runner says so before it opens anything, which is why a URL that
+    points nowhere is enough here.
+
+    Delete this and a runner could ignore the mode it was handed, which is the property a
+    destructive control's safety rests on being true of every runner."""
+    said = start_control(
+        "knowledge_reverification",
+        now=NOW,
+        report_only=True,
+        database_url="postgresql://nobody@127.0.0.1:1/none",
+    )
+
+    assert said.startswith("report only: no re-verification nag was recorded.")
+    assert A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING in said
 
 
 def test_a_control_with_nothing_to_run_is_refused_by_name_with_what_it_needs() -> None:

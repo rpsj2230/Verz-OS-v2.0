@@ -44,7 +44,7 @@ import enum
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Final, Self
+from typing import Final, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -268,8 +268,35 @@ class ReverificationTask:
         return f"{named} was due for review on {self.review_by.date().isoformat()}."
 
 
+class UnderReview(Protocol):
+    """What deciding a review needs of an item, which is everything but what the item says.
+
+    **A protocol rather than `KnowledgeItem`, because the sweep never holds the text.**
+    `brain.knowledge.item_store` reads the stewardship of every due item out of `know.item`,
+    and what an item says lives in `know.chunk` behind a policy the sweep has no principal
+    for. Requiring a `KnowledgeItem` here would make the store either read a corpus it has no
+    reach over or fill `content` with a placeholder, and a placeholder that type checks is a
+    record that lies. `KnowledgeItem` satisfies this unchanged.
+    """
+
+    @property
+    def item_id(self) -> str: ...
+
+    @property
+    def owner_id(self) -> str: ...
+
+    @property
+    def title(self) -> str: ...
+
+    @property
+    def review_by(self) -> datetime | None: ...
+
+    @property
+    def is_retrievable(self) -> bool: ...
+
+
 def due_for_reverification(
-    items: Iterable[KnowledgeItem], *, now: datetime, lead_time: timedelta = timedelta()
+    items: Iterable[UnderReview], *, now: datetime, lead_time: timedelta = timedelta()
 ) -> tuple[ReverificationTask, ...]:
     """The items a scheduled sweep should open tasks for (M7.4.6).
 

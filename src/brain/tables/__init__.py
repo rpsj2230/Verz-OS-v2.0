@@ -72,6 +72,7 @@ from brain.tables.identity import (
     SessionRow,
     one_of,
 )
+from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
@@ -188,6 +189,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0039_request_telemetry. Points at nothing, and partitioned by when the request arrived,
     # so its default partition is a table of the migration's and not of the metadata.
     "obs.request_telemetry",
+    # 0040_knowledge_item. Points at nothing: a chunk names its document by id and this row is
+    # that document, and no key runs between them while neither of their writers exists.
+    "know.item",
 )
 
 __all__ = [
@@ -211,6 +215,7 @@ __all__ = [
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GrantsVersionRow",
+    "KnowledgeItemRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",

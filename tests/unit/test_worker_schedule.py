@@ -1,13 +1,19 @@
 """The control schedule the worker ticks: what runs, what is recorded, and what is left alone.
 
-This is where M25.1.5 and M36.1.3.2 stop being "a runner exists" and become "a schedule starts
-them": a tick against a real `ops.control_run` starts the retention sweep and the spend report
-refresh once, records both, leaves every control with nothing to run unrecorded, skips a control
-another replica holds, and records a runner that raises as a failed run while the next control
-still runs. The runners themselves are replaced by a recording stand-in here, because what is
-under test is the loop; `tests/unit/test_schedule_runner.py` runs the real runners.
+This is where M25.1.5, M36.1.3.2 and M34.2.1.3 stop being "a runner exists" and become "a
+schedule starts them": a tick against a real `ops.control_run` starts the retention sweep, the
+re-verification nag and the spend report refresh once, records each, leaves every control with
+nothing to run unrecorded, skips a control another replica holds, and records a runner that
+raises as a failed run while the next control still runs. The runners are replaced by a
+recording stand-in for those, because what is under test is the loop.
+
+One test does not replace the runner. The re-verification nag is started through the real
+`start_control` against a database holding the grant tables, the outbox and `know.item`, so the
+tick is shown to reach an owner's nag end to end rather than a stand-in's sentence.
 
 The clock is 2999, for the reason CLAUDE.md records.
+
+Task ids: M34.2.1.3
 """
 
 from __future__ import annotations
@@ -21,8 +27,10 @@ from typing import Any
 import psycopg
 import pytest
 
+from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.parse_budget import PARSE_WORKER_COMPONENT
-from brain.ops import worker
+from brain.knowledge.visibility import KnowledgeVisibility
+from brain.ops import schedule_runner, worker
 from brain.ops.queue import SlotClass
 from brain.ops.schedule import schedulable
 from brain.ops.schedule_runner import RUNNERS, lock_id
@@ -38,6 +46,13 @@ from brain.ops.worker import (
     tick_controls,
 )
 from brain.session import make_app_engine, make_session_factory
+from tests.fixtures.knowledge_items import (
+    a_person,
+    a_reader,
+    knowledge_items,
+    nags,
+    put,
+)
 from tests.fixtures.scratch_postgres import drop, fresh, migrate, run, sql
 
 NOW = datetime(2999, 3, 1, 9, 0, tzinfo=UTC)
@@ -45,6 +60,13 @@ FINISHED = NOW + timedelta(seconds=7)
 
 #: The runners that can start, read off the table the worker dispatches from.
 WIRED = [one.name for one in RUNNERS if one.run is not None]
+
+#: What each wired control is started with on a fresh install, in the order the tick starts them.
+STARTED = [
+    ("retention_sweep", True),
+    ("knowledge_reverification", False),
+    ("spend_report_refresh", False),
+]
 
 
 @contextmanager
@@ -108,12 +130,12 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_two_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_three_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
-    Delete this and every assertion below that names the two could be satisfied by a table that
-    had quietly lost one of them."""
-    assert WIRED == ["retention_sweep", "spend_report_refresh"]
+    Delete this and every assertion below that names the three could be satisfied by a table
+    that had quietly lost one of them."""
+    assert WIRED == ["retention_sweep", "knowledge_reverification", "spend_report_refresh"]
 
 
 def test_only_the_general_worker_ticks_the_schedule_and_it_needs_the_applications_url() -> None:
@@ -234,18 +256,19 @@ def test_the_schedule_runs_beside_the_shards_and_stops_when_they_do(
 
 # ------------------------------------------------------------------------ with a server
 def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -> None:
-    """Both wired controls are owed on a fresh install and each starts exactly once: the sweep in
-    report-only mode, recorded as refused, and the refresh recorded as ok, each with the runner's
-    sentence and the finish taken from the clock. Every other schedulable control is reported as
-    having nothing to run and leaves no row.
+    """Every wired control is owed on a fresh install and each starts exactly once: the sweep in
+    report-only mode, recorded as refused, and the nag and the refresh recorded as ok, each with
+    the runner's sentence and the finish taken from the clock. Every other schedulable control is
+    reported as having nothing to run and leaves no row.
 
     Delete this and the loop could start a control twice in one tick, record it under the wrong
     outcome, or write rows for controls that cannot run."""
     with control_runs("brain_worker_schedule_due") as url:
         found = tick(url, at=NOW)
 
-        assert starts.calls == [("retention_sweep", True), ("spend_report_refresh", False)]
+        assert starts.calls == STARTED
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
+            ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
         ]
@@ -253,6 +276,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert {row[5] for row in recorded(url)} == {FINISHED}
         by_name = {one.name: one.ticked for one in found}
         assert by_name["retention_sweep"] is Ticked.REFUSED
+        assert by_name["knowledge_reverification"] is Ticked.RAN
         assert by_name["spend_report_refresh"] is Ticked.RAN
         unwired = {one.name for one in schedulable()} - set(WIRED)
         assert {name for name, ticked in by_name.items() if ticked is Ticked.NOTHING_TO_RUN} == (
@@ -264,7 +288,7 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
     starts: Starts,
 ) -> None:
     """A second tick a minute later starts nothing and records nothing; a tick a day and a minute
-    after the first starts both again.
+    after the first starts all three again.
 
     Delete this and the loop could restart every wired control on every thirty-second tick, which
     is a retention sweep two thousand eight hundred and eighty times a day."""
@@ -272,20 +296,20 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
         tick(url, at=NOW)
         later = tick(url, at=NOW + timedelta(minutes=1))
 
-        assert starts.calls == [("retention_sweep", True), ("spend_report_refresh", False)]
-        assert len(recorded(url)) == 2
+        assert starts.calls == STARTED
+        assert len(recorded(url)) == 3
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 4
-        assert len(recorded(url)) == 4
+        assert len(starts.calls) == 6
+        assert len(recorded(url)) == 6
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
     starts: Starts,
 ) -> None:
     """Another connection holds the refresh's advisory lock in an open transaction: the refresh is
-    reported as locked elsewhere, is not started and leaves no row, and the sweep still runs.
+    reported as locked elsewhere, is not started and leaves no row, and the other two still run.
 
     Delete this and two replicas ticking together could both start one control, which for the
     sweep is two deletions of one window."""
@@ -295,8 +319,8 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [("retention_sweep", True)]
-        assert [row[0] for row in recorded(url)] == ["retention_sweep"]
+        assert starts.calls == STARTED[:2]
+        assert [row[0] for row in recorded(url)] == ["knowledge_reverification", "retention_sweep"]
         assert {one.name: one.ticked for one in found}["spend_report_refresh"] is (
             Ticked.LOCKED_ELSEWHERE
         )
@@ -306,7 +330,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The sweep's runner raises: its run is finished as failed with the exception's type and
-    message, and the refresh declared after it still starts and is recorded as ok.
+    message, and the two declared after it still start and are recorded as ok.
 
     Delete this and one broken control would either vanish from the record or stop every control
     declared after it."""
@@ -315,12 +339,69 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
     with control_runs("brain_worker_schedule_failed") as url:
         found = tick(url, at=NOW)
 
-        assert fake.calls == [("retention_sweep", True), ("spend_report_refresh", False)]
+        assert fake.calls == STARTED
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
+            ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
         ]
         assert {one.name: one.ticked for one in found}["retention_sweep"] is Ticked.FAILED
+
+
+def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**The leaf, end to end.** One tick of the worker's schedule starts
+    `knowledge_reverification` through the real `start_control`, which reads a lapsed item out
+    of `know.item`, resolves its owner's grants, records the owner's nag in the outbox and
+    commits, and the tick records the run as ok with the store's sentence. The other two wired
+    controls are stood in for, because they need tables this database does not hold.
+
+    Delete this and every other test of the nag could pass with nothing on a schedule reaching
+    it, which is the state this control was in for as long as it had no row."""
+    real = schedule_runner.start_control
+    others = Starts()
+
+    def started(name: str, *, now: datetime, report_only: bool, database_url: str) -> str:
+        if name == "knowledge_reverification":
+            return real(name, now=now, report_only=report_only, database_url=database_url)
+        return others(name, now=now, report_only=report_only, database_url=database_url)
+
+    monkeypatch.setattr(worker, "start_control", started)
+    lapsed = NOW - timedelta(days=1)
+    item = KnowledgeItem(
+        item_id="kb.renewals",
+        content="What the document says.",
+        title="Renewal pricing",
+        visibility=KnowledgeVisibility.of_department("web", owner_id="u_owner"),
+        owner_id="u_owner",
+    ).verified(by="u_verifier", at=lapsed - timedelta(days=365), review_by=lapsed)
+
+    with knowledge_items("brain_kr_worker_tick") as url:
+        a_person(url, "u_owner")
+        a_reader(url, "u_owner", "web")
+        put(url, item)
+
+        found = tick(url, at=NOW)
+        runs = {row[0]: (row[1], row[3]) for row in recorded(url)}
+        recorded_nags = nags(url)
+
+    assert {one.name: one.ticked for one in found}["knowledge_reverification"] is Ticked.RAN
+    outcome, detail = runs["knowledge_reverification"]
+    assert outcome == "ok"
+    assert detail.startswith(f"knowledge re-verification at {NOW.isoformat()}: ")
+    assert "a nag was recorded: yes;" in detail
+    assert recorded_nags == [
+        ("kb.renewals", {"route": "owner", "recipient": "u_owner", "review_by": lapsed.isoformat()})
+    ]
+    assert others.calls == [("retention_sweep", True), ("spend_report_refresh", False)]
+    # The registry's entry point is what the schedule starts, so the control cannot measure as
+    # running through its decision functions while the store they need goes uncalled.
+    from brain.ops.controls import control
+
+    assert control("knowledge_reverification").entry_point == (
+        "brain.knowledge.item_store:run_reverification_now"
+    )
 
 
 class _Row:

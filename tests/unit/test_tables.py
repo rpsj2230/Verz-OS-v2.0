@@ -93,6 +93,7 @@ MIGRATION_SPEND = VERSIONS / "0034_spend_ledger.py"
 MIGRATION_SPEND_REPORT = VERSIONS / "0035_materialised_spend_report.py"
 MIGRATION_QUESTIONS = VERSIONS / "0038_question_asked.py"
 MIGRATION_TELEMETRY = VERSIONS / "0039_request_telemetry.py"
+MIGRATION_KNOWLEDGE_ITEM = VERSIONS / "0040_knowledge_item.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -220,6 +221,9 @@ QUESTION_TABLES: tuple[str, ...] = ("ops.question_asked",)
 #: And the one 0039 adds: the metadata ledger, one row per request the answer lane finished.
 TELEMETRY_TABLES: tuple[str, ...] = ("obs.request_telemetry",)
 
+#: And the one 0040 adds: a knowledge item's stewardship, without its text.
+KNOWLEDGE_ITEM_TABLES: tuple[str, ...] = ("know.item",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -242,6 +246,7 @@ ALL_TABLES = (
     + SPEND_REPORT_TABLES
     + QUESTION_TABLES
     + TELEMETRY_TABLES
+    + KNOWLEDGE_ITEM_TABLES
 )
 
 
@@ -941,6 +946,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     spend_report = migration_module(MIGRATION_SPEND_REPORT)
     questions = migration_module(MIGRATION_QUESTIONS)
     telemetry = migration_module(MIGRATION_TELEMETRY)
+    knowledge_item = migration_module(MIGRATION_KNOWLEDGE_ITEM)
+    assert knowledge_item.TABLES == KNOWLEDGE_ITEM_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -986,6 +993,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(spend_report.TABLES)
         + tuple(questions.TABLES)
         + tuple(telemetry.TABLES)
+        + tuple(knowledge_item.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1012,6 +1020,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(spend_report.TABLES),
         set(questions.TABLES),
         set(telemetry.TABLES),
+        set(knowledge_item.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

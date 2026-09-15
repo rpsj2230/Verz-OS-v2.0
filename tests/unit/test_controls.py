@@ -323,17 +323,15 @@ def test_a_control_is_in_process_only_when_every_part_of_it_is_called() -> None:
     """Delete this and a system asks whether a sweep is due, for ever, and never sweeps.
 
     A control is usually a predicate plus the work, and counting it as wired because one of
-    them has a caller is the failure being avoided. `due_for_reverification` genuinely has a
-    caller and `open_reverification_tasks` does not, so the pair measures as unreached.
+    them has a caller is the failure being avoided. `verdict_for` genuinely has a caller and
+    `redrive`, the driver that asks it, does not, so the pair measures as unreached.
+
+    It named the re-verification pair until 2026-09-15, when `brain.knowledge.item_store`
+    became the outer function's caller and the pair stopped being an example of anything.
     """
-    partly = _control(
-        symbols=(
-            "brain.knowledge.verification:open_reverification_tasks",
-            "brain.knowledge.item:due_for_reverification",
-        )
-    )
-    assert call_sites("brain.knowledge.item:due_for_reverification") != ()
-    assert call_sites("brain.knowledge.verification:open_reverification_tasks") == ()
+    partly = _control(symbols=("brain.ops.crash:redrive", "brain.ops.queue:verdict_for"))
+    assert call_sites("brain.ops.queue:verdict_for") != ()
+    assert call_sites("brain.ops.crash:redrive") == ()
     assert measured_invocation(partly) is Invocation.NOTHING
 
 
@@ -374,21 +372,25 @@ def test_a_route_that_does_not_reach_the_control_is_not_an_invocation() -> None:
 def test_a_control_whose_only_caller_is_itself_uncalled_is_reported() -> None:
     """Delete this and a chain of three uncalled functions reads as wired at every link.
 
-    The check exists because `brain.knowledge.verification.open_reverification_tasks` is
+    The check exists because `brain.knowledge.verification.open_reverification_tasks` was
     exactly that shape, and asserting only that it currently finds nothing would leave a
-    function that could return nothing for every input. This is the case it was written for,
-    declared as in-process so the finding can be produced.
+    function that could return nothing for every input. The fixture is a real chain in this
+    tree, declared as in-process so the finding can be produced.
+
+    **It named that function until 2026-09-15**, when `brain.knowledge.item_store` became its
+    caller and the worker's schedule the store's, so the chain it described was repaired rather
+    than hidden. The recovery panel is the same shape today: `drill_due` is called from
+    `brain.console.recovery_view`, a console page nothing imports.
     """
     from brain.ops.controls import chains_worth_checking
 
     inner_only = _control(
-        symbols=("brain.knowledge.item:due_for_reverification",),
+        symbols=("brain.ops.recovery:drill_due",),
         invoked_by=Invocation.IN_PROCESS,
     )
     findings = chains_worth_checking((inner_only,))
     assert any(
-        "called from brain.knowledge.verification:open_reverification_tasks," in one
-        and "as unreached as the control" in one
+        "called from brain.console.recovery_view:" in one and "as unreached as the control" in one
         for one in findings
     )
     assert chains_worth_checking((control("audit_anchor"),)) == ()
