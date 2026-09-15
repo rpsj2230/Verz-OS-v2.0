@@ -216,6 +216,9 @@ def client(executed: Executed) -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         app.state.db_sessions = async_sessionmaker(class_=StubSession)
+        # The lifespan built its console reads over whatever DATABASE_URL named, and CI names a
+        # real database. Replacing the factory without them would read the matrix from there.
+        app.state.console_reads = None
         yield c
 
 
@@ -226,6 +229,7 @@ def unwired() -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         app.state.db_sessions = None
+        app.state.console_reads = None
         yield c
 
 
