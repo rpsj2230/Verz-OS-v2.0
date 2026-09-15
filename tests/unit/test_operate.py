@@ -87,6 +87,7 @@ from brain.console.operate import (
     ceilings_in_reach,
     connector_rows,
     coverage,
+    figure_basis,
     findings_in_reach,
     freshness_of,
     gaps,
@@ -108,7 +109,9 @@ from brain.console.operate import (
 )
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import SCREENS, Group, screen
+from brain.console.spend_view import PLACE_FIELD
 from brain.console.workspace import Basis, intersections_in
+from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.abstain import AbstentionReason, SearchScope, nothing_connected, nothing_retrieved
@@ -367,6 +370,211 @@ def test_a_figure_from_a_screen_nobody_registered_is_refused():
     carries a basis nothing decided and a number nothing counted."""
     with pytest.raises(OperateError, match="unregistered"):
         overview([Tile(key="invented", basis=Basis.EVERYONE, value=1)])
+
+
+# --------------------------------------- a department's grant on the landing screen (M27.2.1)
+#: The panels whose rows a department-scoped grant narrows, measured on 2026-09-15 by handing
+#: each owning screen's own filter a maintenance-scoped grant and a colleague's row: usage's
+#: `spend_view.visible` admitted the colleague's maintenance row and `reach_for` reduced the
+#: knowledge reach to maintenance, while the run, question, budget and halt filters and the
+#: service levels row admitted nothing of anybody else's, and connectors, models, incidents and
+#: quality have no grant row form at all. Written out rather than read off
+#: `Panel.department_field`, so the tests below do not compare the register with itself.
+NARROWS_BY_DEPARTMENT = frozenset({"usage", "knowledge_coverage"})
+
+
+@dataclass(frozen=True)
+class _Owned:
+    """A row belonging to somebody, which is all `tile` reads of a row on any branch."""
+
+    principal_id: str
+
+
+def _three_readers(one: Panel) -> dict[str, EntitlementSet]:
+    """An unrestricted, a department-scoped and a no-grant reader of one panel's screen.
+
+    Every console plane is held unrestricted by all three, so the only thing that differs is
+    the screen's own capability and the scope it is held in.
+    """
+    held = Capability(value=screen(one.key).read.requires.value)
+    planes = tuple(Grant(capability=plane_capability(plane), scope=Scope()) for plane in Plane)
+
+    def reader(*grants: Grant) -> EntitlementSet:
+        return EntitlementSet(principal_id=READER, grants=(*grants, *planes))
+
+    return {
+        "unrestricted": reader(Grant(capability=held, scope=Scope())),
+        "department": reader(Grant(capability=held, scope=department_scope(MAINTENANCE))),
+        "no grant": reader(),
+    }
+
+
+def _claiming(key: str, department_field: str) -> Panel:
+    """A registered panel with its department's version replaced, and nothing else."""
+    real = panel(key)
+    return Panel(
+        key=real.key,
+        row=real.row,
+        counts=real.counts,
+        attribution=real.attribution,
+        shows=real.shows,
+        never=real.never,
+        department_field=department_field,
+    )
+
+
+def _gaps_with(one: Panel) -> tuple[str, ...]:
+    return operate_gaps(panels=[*[entry for entry in PANELS if entry.key != one.key], one])
+
+
+@pytest.mark.parametrize("one", PANELS, ids=lambda one: one.key)
+def test_a_department_scoped_reader_of_a_panel_with_no_departments_version_is_told_what_nobody_is(
+    one: Panel,
+) -> None:
+    """Deleting this lets a whole-install figure read 0 on the everybody basis to a reader whose
+    grant names a department, where a reader holding nothing is shown no figure at all. A zero
+    is a figure and it is false, and the difference between it and nothing is how somebody
+    tells a narrowed grant from none. Over every panel and all three readers, so a panel added
+    later is held to it without anybody remembering to add a case.
+
+    The department reader is handed a colleague's row beside their own and the no-grant reader
+    only their own, because a screen's filter can hand a scoped grant more than the reader's
+    rows: identical output from different input is the version of indistinguishable worth
+    having, and it is compared as bytes as well as by equality."""
+    readers = _three_readers(one)
+    everybody = [_Owned(READER), _Owned(COLLEAGUE)]
+
+    unrestricted = tile(one, everybody, readers["unrestricted"], NOW)
+    department = tile(one, everybody, readers["department"], NOW)
+    nothing = tile(one, [_Owned(READER)], readers["no grant"], NOW)
+
+    assert unrestricted == Tile(key=one.key, basis=Basis.EVERYONE, value=2)
+    if one.key in NARROWS_BY_DEPARTMENT:
+        assert department == Tile(key=one.key, basis=Basis.EVERYONE, value=2)
+        assert department != nothing
+    else:
+        assert repr(department).encode() == repr(nothing).encode()
+        assert department == nothing
+
+
+def test_a_new_panel_with_no_departments_version_is_withheld_from_a_department_by_default():
+    """Deleting this lets the default of `Panel.department_field` become one that admits, and
+    every panel registered afterwards is counted at everybody's scale for a department-scoped
+    reader without anybody having shown its rows narrow. Withheld is the default because the
+    register cannot know what a panel added next year counts. Both attributions, because the
+    refusal takes a different shape in each: no tile for a whole-install figure, and the
+    reader's own count for a per-person one."""
+    whole = a_panel(
+        key="connectors",
+        row="brain.connectors.registry.RegisteredConnector",
+        counts="sources this install reads",
+        attribution=Attribution.WHOLE_INSTALL,
+    )
+    per_person = a_panel()
+    everybody = [_Owned(READER), _Owned(COLLEAGUE)]
+
+    for one in (whole, per_person):
+        readers = _three_readers(one)
+        refused = tile(one, everybody, readers["department"], NOW)
+        assert refused == tile(one, [_Owned(READER)], readers["no grant"], NOW)
+        assert tile(one, everybody, readers["unrestricted"], NOW) == Tile(
+            key=one.key, basis=Basis.EVERYONE, value=2
+        )
+
+    assert tile(whole, everybody, _three_readers(whole)["department"], NOW) is None
+    assert tile(per_person, everybody, _three_readers(per_person)["department"], NOW) == Tile(
+        key="runs", basis=Basis.OWN, value=1
+    )
+
+
+def test_a_panel_whose_rows_narrow_by_department_still_counts_a_department_reader_at_that_scope():
+    """The positive sibling of the two above. Deleting it lets the refusal be satisfied by
+    withholding every scoped grant, which takes the usage and coverage figures away from every
+    department admin while each test of a refusal stays green. The declarations are held to
+    things outside the register: usage to the field `spend_view` admits a grant by, and
+    coverage to the one field every department predicate tests."""
+    assert {one.key for one in PANELS if one.department_field} == NARROWS_BY_DEPARTMENT
+    assert panel("usage").department_field == PLACE_FIELD
+    assert panel("knowledge_coverage").department_field.rpartition(".")[2] == DEPARTMENT_FIELD
+
+    for key in sorted(NARROWS_BY_DEPARTMENT):
+        readers = _three_readers(panel(key))
+        assert figure_basis(panel(key), readers["department"], NOW) is Basis.EVERYONE
+        assert figure_basis(panel(key), readers["no grant"], NOW) is Basis.OWN
+
+
+def test_a_departments_version_does_not_admit_a_grant_scoped_on_some_other_field():
+    """Deleting this lets a usage grant scoped to one model count everybody's usage on the front
+    page. The rows usage hands over are narrowed by department and by nothing else, so that
+    scope matches none of them and the figure is the same false zero, arriving through a panel
+    that does narrow. A grant naming the department and a second field is refused as well,
+    because the second clause is one the rows cannot honour."""
+    one = panel("usage")
+    held = Capability(value=screen("usage").read.requires.value)
+    planes = tuple(Grant(capability=plane_capability(plane), scope=Scope()) for plane in Plane)
+    by_model = Clause(field="model", op=Op.EQ, value="m")
+    by_place = Clause(field=DEPARTMENT_FIELD, op=Op.EQ, value=MAINTENANCE)
+
+    for clauses in ((by_model,), (by_place, by_model)):
+        scoped = Grant(capability=held, scope=Scope(clauses=clauses))
+        reader = EntitlementSet(principal_id=READER, grants=(scoped, *planes))
+        assert figure_basis(one, reader, NOW) is Basis.OWN
+
+
+def test_a_grant_for_the_screen_without_its_console_plane_is_no_grant_for_its_figure():
+    """Deleting this lets the scope check stand in for the screen check. An unrestricted grant
+    of the capability with no console plane cannot open the screen, so a figure over
+    everybody's rows would be a shortcut past it, which is the first rule of this module."""
+    held = Capability(value=screen("usage").read.requires.value)
+    bare = EntitlementSet(principal_id=READER, grants=(Grant(capability=held, scope=Scope()),))
+
+    assert figure_basis(panel("usage"), bare, NOW) is Basis.OWN
+    assert figure_basis(panel("usage"), _three_readers(panel("usage"))["unrestricted"], NOW) is (
+        Basis.EVERYONE
+    )
+
+
+def test_a_department_scoped_reader_of_the_questions_screen_sees_only_their_own_questions():
+    """Deleting this puts every department's questions in front of somebody whose question
+    grant names one department. A turn carries no department, so that grant cannot narrow the
+    list, and measured on 2026-09-15 the list a maintenance-scoped reader was handed held a
+    colleague's question. It is the landing screen's false zero in rows rather than a number."""
+    mine = Turn(kind=TurnKind.QUESTION, at=NOW, principal_id=READER, text="where is the file")
+    theirs = Turn(kind=TurnKind.QUESTION, at=NOW, principal_id=COLLEAGUE, text="what did we bill")
+    readers = _three_readers(panel("questions"))
+
+    assert visible_questions([mine, theirs], readers["department"], NOW) == (mine,)
+    assert visible_questions([mine, theirs], readers["no grant"], NOW) == (mine,)
+    assert visible_questions([mine, theirs], readers["unrestricted"], NOW) == (mine, theirs)
+
+
+def test_a_departments_version_the_row_does_not_carry_is_reported():
+    """Deleting this lets a panel claim a department's version by naming a field its rows do
+    not have, or one that is not a department, and every department-scoped reader is then
+    counted at everybody's scale over rows no filter could narrow: the false zero, declared
+    correct. A nested path the row does carry is the sibling, because coverage's is one."""
+    for key, path in (
+        ("runs", "department"),
+        ("runs", "nowhere.department"),
+        ("runs", "job.department"),
+        ("usage", "principal_id"),
+    ):
+        assert any("does not carry a department" in one for one in _gaps_with(_claiming(key, path)))
+
+    assert _gaps_with(_claiming("knowledge_coverage", "visibility.department")) == ()
+    assert operate_gaps() == ()
+
+
+def test_a_screen_withheld_from_a_department_admin_cannot_claim_a_departments_version():
+    """Deleting this lets service levels be declared as narrowing by department while
+    `NOT_AT_DEPARTMENT_SCOPE` argues it has no department to narrow to. The menu would hide it
+    and the landing screen would count it, each register right about a different system."""
+    found = _gaps_with(_claiming("service_levels", "department"))
+
+    assert any("NOT_AT_DEPARTMENT_SCOPE" in one for one in found)
+    assert not any(
+        "NOT_AT_DEPARTMENT_SCOPE" in one for one in _gaps_with(_claiming("usage", "department"))
+    )
 
 
 # ------------------------------------------------------------ the register (M27.2.1)

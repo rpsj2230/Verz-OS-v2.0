@@ -106,11 +106,18 @@ ESTATE_CAPABILITIES = tuple(
 def holding(
     *capabilities: str,
     principal_id: str = "u_admin",
-    department: str = MAINTENANCE,
+    department: str | None = MAINTENANCE,
     planes: tuple[Plane, ...] = (Plane.CONFIGURATION,),
 ) -> EntitlementSet:
-    """A reader holding these capabilities in one department, plus the plane grants named."""
-    where = Scope(clauses=(Clause(field="department", op=Op.EQ, value=department),))
+    """A reader holding these capabilities in one department, plus the plane grants named.
+
+    `department=None` holds them unrestricted, which is the reader a company total is for:
+    `brain.console.workspace.basis_of` counts a department-scoped budget grant as none."""
+    where = (
+        Scope(clauses=())
+        if department is None
+        else Scope(clauses=(Clause(field="department", op=Op.EQ, value=department),))
+    )
     grants = [Grant(capability=Capability(value=one), scope=where) for one in capabilities]
     grants += [Grant(capability=plane_capability(one), scope=where) for one in planes]
     return EntitlementSet(principal_id=principal_id, grants=tuple(grants))
@@ -524,20 +531,29 @@ def test_company_consumption_is_withheld_rather_than_narrowed() -> None:
     Both halves are needed: the refusal alone would pass for a function that always returns
     None.
 
+    **The reader was scoped to maintenance until 2026-09-15**, and this test asserted they were
+    shown finance's 250. Nothing here narrows a row by the grant's scope, so a budget grant
+    naming one department was every department's spend; it is now the outsider's answer, byte
+    for byte.
+
     Delete this and the company screen shows a reader their own spend under a heading reading
     company consumption."""
     rows = [
         an_actual(principal_id="u_admin", cost_minor=100),
         an_actual(principal_id="u_other", department=FINANCE, cost_minor=250),
     ]
-    reader = holding(screen("budget").read.requires.value)
+    reader = holding(screen("budget").read.requires.value, department=None)
+    one_department = holding(screen("budget").read.requires.value)
     outsider = holding("read:client.name")
+    window = {"since": NOW - timedelta(days=1), "until": NOW}
 
-    seen = company_consumption(rows, reader, since=NOW - timedelta(days=1), until=NOW)
+    seen = company_consumption(rows, reader, **window)
     assert seen == CompanyConsumption(
         spend_minor=350, by_department=((FINANCE, 250), (MAINTENANCE, 100))
     )
-    assert company_consumption(rows, outsider, since=NOW - timedelta(days=1), until=NOW) is None
+    refused = company_consumption(rows, one_department, **window)
+    assert refused is None
+    assert repr(refused).encode() == repr(company_consumption(rows, outsider, **window)).encode()
 
 
 def test_the_company_total_reconciles_with_its_own_breakdown_and_carries_no_share() -> None:
@@ -555,7 +571,7 @@ def test_the_company_total_reconciles_with_its_own_breakdown_and_carries_no_shar
         an_actual(department=MAINTENANCE, cost_minor=50),
         an_actual(department=FINANCE, cost_minor=250),
     ]
-    reader = holding(screen("budget").read.requires.value)
+    reader = holding(screen("budget").read.requires.value, department=None)
 
     seen = company_consumption(rows, reader, since=NOW - timedelta(days=1), until=NOW)
 
@@ -575,7 +591,7 @@ def test_a_row_outside_the_window_is_not_counted() -> None:
         an_actual(cost_minor=100, at=NOW),
         an_actual(cost_minor=999, at=NOW - timedelta(days=40)),
     ]
-    reader = holding(screen("budget").read.requires.value)
+    reader = holding(screen("budget").read.requires.value, department=None)
 
     seen = company_consumption(rows, reader, since=NOW - timedelta(days=7), until=NOW)
 

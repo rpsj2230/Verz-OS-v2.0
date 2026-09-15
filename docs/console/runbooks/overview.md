@@ -27,7 +27,7 @@ The landing screen: one figure for each Operate and Report panel in `brain.conso
 
 Opening it needs `read:overview` and `read:console.existence`, both, and a role on its own confers neither. A department admin is offered it, and sees it narrowed to their own scope.
 
-Each figure is decided separately by `operate.tile`. It is counted at everybody's scale only when you could open the screen it came from and count those rows yourself. Otherwise a per-person panel (runs, queue, usage, questions) counts only your own rows, and a panel about the whole install (connectors, models, knowledge coverage, incidents, stop, budget, quality) is not shown at all.
+Each figure is decided separately by `operate.tile`, on the basis `operate.figure_basis` gives it. It is counted at everybody's scale only when you could open the screen it came from and count those rows yourself. If your grant for that screen is narrowed, it counts only when the grant names departments and the panel's rows can be narrowed by department, which today is usage and knowledge coverage. Otherwise a per-person panel (runs, queue, usage, questions) counts only your own rows, and a panel about the whole install (connectors, models, knowledge coverage, incidents, stop, budget, quality, service levels) is not shown at all. So a department admin whose grant names their department sees, on every other panel, exactly what somebody holding no grant sees.
 
 ## When it is empty or refuses
 

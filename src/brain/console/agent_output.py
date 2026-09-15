@@ -101,9 +101,14 @@ from datetime import datetime
 from typing import Any, Final
 
 from brain.agents.model import AgentRecord
-from brain.console.reads import ConsoleRead, permitted
+from brain.console.reads import ConsoleRead
 from brain.console.screens import screen
-from brain.console.workspace import MOVING_PINS, NAMES_THAT_WOULD_BE_AN_INLINE_COPY, Basis
+from brain.console.workspace import (
+    MOVING_PINS,
+    NAMES_THAT_WOULD_BE_AN_INLINE_COPY,
+    Basis,
+    basis_of,
+)
 from brain.console.workspace_capabilities import run_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.field_policy import Classification, FieldPolicy
@@ -726,20 +731,35 @@ def archive(one: Artifact) -> Artifact:
 
 
 # ------------------------------------------------- count and storage (M39.5.2.5)
-def basis_over(screen_key: str, entitlement: EntitlementSet, now: Any = None) -> Basis:
+def basis_over(
+    screen_key: str,
+    entitlement: EntitlementSet,
+    now: Any = None,
+    *,
+    narrowed_to_department: bool = False,
+) -> Basis:
     """Whose figures this caller may be shown, decided by one screen's own grant.
 
     `brain.console.workspace.basis_for` is this rule against the budget screen, written before
-    a second surface needed it. This is the same rule with the screen as a parameter, and the
-    parameter is the only difference: `permitted` is asked about that screen's registered
-    read, so the figure carries both the tool's capability and the console plane, exactly as
-    opening the screen would.
+    a second surface needed it. This is the same rule with the screen as a parameter, and both
+    are `brain.console.workspace.basis_of`: the screen's registered read, so the figure carries
+    both the tool's capability and the console plane exactly as opening the screen would, held
+    in a scope the caller's rows can honour.
+
+    `narrowed_to_department` is the caller saying its rows were narrowed to the grant's
+    department before they reach a count, and it is off unless said. See
+    `brain.console.workspace.A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT`.
 
     No capability is invented for a front page. A new capability is a second answer to a
     question the screen registry already answers, and the reviewer approving one would never
     see the other.
     """
-    return Basis.EVERYONE if permitted(screen(screen_key).read, entitlement, now) else Basis.OWN
+    return basis_of(
+        screen(screen_key).read,
+        entitlement,
+        now,
+        narrowed_to_department=narrowed_to_department,
+    )
 
 
 @dataclass(frozen=True)

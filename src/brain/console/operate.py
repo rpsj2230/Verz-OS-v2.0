@@ -23,6 +23,27 @@ is the two cases and `tile` returns `None` for the second, which is `brain.conso
 projection` returning `None` on the narrower basis for the same reason: withheld beats
 narrowed when narrowing would produce a confident number that is wrong.
 
+**A department's grant counts only over a figure that has a department's version.**
+`basis_over` asks whether the reader holds the screen's capability, and a grant scoped to one
+department holds it. Over usage or knowledge coverage that is honest, because the rows arrive
+already narrowed to the department. Over connectors, incidents or service levels there is no
+department to narrow by, so the owning screen admitted none of the rows and the figure came out
+as a zero on the everybody basis while a reader with no grant was shown nothing. Measured on
+2026-09-15, every one of the twelve panels told those two readers apart, and so did every other
+basis on the console. The rule is `brain.console.workspace.basis_of`, which they all ask;
+`figure_basis` is the one caller that opts in, through `Panel.department_field`, and a panel
+naming nothing is withheld from a department-scoped reader exactly as from a reader with no
+grant. See `A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT`.
+
+Rejected: a list of whole-install panel keys beside `brain.console.screens.
+NOT_AT_DEPARTMENT_SCOPE`. It would be a second list, and a panel added later would be offered
+until somebody remembered it; the opt-in withholds by default, and `operate_gaps` refuses a
+panel that list withholds claiming a department's version. Rejected too: reading the version
+off the row type because it has a `department` field. That fails open: a type can gain a
+department the owning screen never matches a grant against, and the false zero would come back
+with nothing red. An opt-in that is wrong is reported by `operate_gaps`; an inference that is
+wrong is silent.
+
 **Which case a screen is in is checked against the row rather than declared.** A per-person
 figure is counted over rows carrying `principal_id`, which is what this system calls the
 person a thing is attributed to: `JobRecord`, `Actual` and `Turn` all have one. Authorship is
@@ -130,15 +151,26 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, get_type_hints
 
 from brain.chat.turns import Turn, TurnKind
 from brain.connectors.contract import ConnectorHealth
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.registry import RegisteredConnector
 from brain.console.agent_output import basis_over
-from brain.console.screens import SCREENS, Group, Screen, offerable, screen
-from brain.console.workspace import Basis
+from brain.console.screens import (
+    SCREENS,
+    WITHHELD_AT_DEPARTMENT_SCOPE,
+    Group,
+    Screen,
+    offerable,
+    screen,
+)
+from brain.console.workspace import (
+    A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT,
+    Basis,
+)
+from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Scope
 from brain.gate.abstain import Abstention, AbstentionReason
@@ -173,6 +205,7 @@ A_FIGURE_WITH_NO_NARROWER_VERSION_IS_WITHHELD_AND_NEVER_NARROWED: Final = (
     "brain.console.workspace.projection returns None on the narrower basis rather than "
     "projecting one person's afternoon against a ceiling everybody shares."
 )
+
 
 #: Why a per-person figure is recognised from the row rather than declared by the register.
 ATTRIBUTION_IS_A_FACT_ABOUT_THE_ROW_AND_NOT_A_LABEL_ON_THE_SCREEN: Final = (
@@ -373,6 +406,12 @@ class Panel:
     shows: str
     #: What it must never put in front of one, however useful that would be.
     never: str
+    #: Where a row carries the department a grant's scope narrows it by, as a dotted attribute
+    #: path, or empty when the rows have no department's version. Empty is the default, so a
+    #: new panel is withheld from a department-scoped reader until somebody shows otherwise,
+    #: and `operate_gaps` walks a named path through the row type rather than believing it.
+    #: See `A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT`.
+    department_field: str = ""
 
     def __post_init__(self) -> None:
         if self.key == LANDING:
@@ -474,6 +513,7 @@ PANELS: Final[tuple[Panel, ...]] = (
             "an area the reader's own reach does not admit, and never the size of the "
             "corpus beside the size of what they can see"
         ),
+        department_field="visibility.department",
     ),
     Panel(
         key="incidents",
@@ -507,6 +547,7 @@ PANELS: Final[tuple[Panel, ...]] = (
             "a group whose members the reader cannot enumerate, because a breakdown by "
             "person is a listing of people wearing an arithmetic label"
         ),
+        department_field="department",
     ),
     Panel(
         key="budget",
@@ -632,6 +673,39 @@ def _principal_of(row: object) -> str:
     return found
 
 
+def _carries(record_type: type, path: str) -> bool:
+    """Whether a row of this type carries the dotted attribute path, walked through its fields.
+
+    Through the declarations rather than an instance, so the register is checked without
+    building a row, and through `get_type_hints` so a pydantic field typed as another model is
+    followed exactly as a dataclass field is. A hop into anything with no declared fields,
+    a union included, ends the walk as not carried, which is the closed answer.
+    """
+    *hops, last = path.split(".")
+    current: Any = record_type
+    for hop in hops:
+        if hop not in _field_names(current):
+            return False
+        current = get_type_hints(current)[hop]
+    return last in _field_names(current)
+
+
+def figure_basis(one: Panel, reader: EntitlementSet, now: datetime | None = None) -> Basis:
+    """Whose rows one panel's figure may be over, for this reader (M27.2.1).
+
+    `brain.console.agent_output.basis_over`, the rule every basis on this console asks, with the
+    panel saying whether its rows arrive narrowed to the grant's department. A panel names where
+    its rows carry one in `Panel.department_field`, and naming nothing is the default, so a
+    department-scoped reader of any other panel gets exactly what a reader with no grant gets.
+    See `A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT`.
+
+    The one caller of that rule which opts in. Every other basis on the console is over rows
+    nothing narrows by the grant's scope, and `tests/unit/test_scoped_basis.py` reads the call
+    sites out of the source so a second caller cannot opt in without a test saying why.
+    """
+    return basis_over(one.key, reader, now, narrowed_to_department=bool(one.department_field))
+
+
 def tile(
     one: Panel,
     rows: Sequence[object],
@@ -644,16 +718,16 @@ def tile(
     What is decided here is the second question: whether the figure may be over all of them
     or only over the reader's own, and whether a narrower one exists at all.
 
-    The basis comes from `brain.console.agent_output.basis_over` against this panel's own
-    screen, so the grant behind the figure is the grant behind the screen. See
-    `A_FRONT_PAGE_FIGURE_IS_A_SHORTCUT_PAST_THE_SCREEN_IT_CAME_FROM`.
+    The basis comes from `figure_basis`, which is the screen's own grant held in a scope this
+    panel's rows can honour. See `A_FRONT_PAGE_FIGURE_IS_A_SHORTCUT_PAST_THE_SCREEN_IT_CAME_FROM`
+    and `A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT`.
 
     `None` for a whole-install figure on the narrower basis, withheld rather than narrowed:
     see `A_FIGURE_WITH_NO_NARROWER_VERSION_IS_WITHHELD_AND_NEVER_NARROWED`. There is no
     parameter through which a precomputed figure could arrive; `operate_gaps` reads this
     signature rather than trusting the sentence.
     """
-    basis = basis_over(one.key, reader, now)
+    basis = figure_basis(one, reader, now)
     if basis is Basis.EVERYONE:
         return Tile(key=one.key, basis=basis, value=len(rows))
     if one.attribution is Attribution.WHOLE_INSTALL:
@@ -1251,10 +1325,15 @@ def visible_questions(
     their own. The same rule as every figure in this module, applied to rows: a transcript is
     the strongest form of the disclosure a count of it would only hint at.
 
+    The basis is `figure_basis`, the landing figure's own. A turn carries no department, so a
+    question grant scoped to one department cannot narrow this list, and until 2026-09-15 it
+    was answered with everybody's questions. It is the landing screen's false zero in rows
+    rather than in a number, and it is decided in the same place.
+
     Answers are dropped whichever basis applies. The screen is questions and gaps, and an
     answer is the content plane rather than the existence plane the screen is registered on.
     """
-    basis = basis_over(panel("questions").key, reader, now)
+    basis = figure_basis(panel("questions"), reader, now)
     return tuple(
         one
         for one in turns
@@ -1420,8 +1499,10 @@ def operate_gaps(
     function in this module, so a check that could only read `tile` would be one whose
     refusal nothing could reach and whose removal nothing would notice.
 
-    Five checks. The first three hold the register to the screen registry and to the row types
-    it claims; the last two hold the surface and the counting function to their shapes.
+    Seven checks. The first three hold the register to the screen registry and to the row types
+    it claims; the next two hold a claimed department's version to the row that has to carry
+    it and to `brain.console.screens.NOT_AT_DEPARTMENT_SCOPE`, which may not argue the
+    opposite; the last two hold the surface and the counting function to their shapes.
     """
     findings: list[str] = []
 
@@ -1470,6 +1551,23 @@ def operate_gaps(
                 f"declared {one.attribution.value}, so the narrower figure belongs to nobody "
                 f"and comes out zero for every reader. "
                 f"{ATTRIBUTION_IS_A_FACT_ABOUT_THE_ROW_AND_NOT_A_LABEL_ON_THE_SCREEN}"
+            )
+        if not one.department_field:
+            continue
+        named = one.department_field.rpartition(".")[2]
+        if named != DEPARTMENT_FIELD or not _carries(record_type, one.department_field):
+            findings.append(
+                f"{one.key} names {one.department_field!r} as where its rows carry a "
+                f"department, and {one.row} does not carry a department there, so a "
+                f"department-scoped reader is counted at everybody's scale over rows nothing "
+                f"could narrow. "
+                f"{A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT}"
+            )
+        if one.key in WITHHELD_AT_DEPARTMENT_SCOPE:
+            findings.append(
+                f"{one.key} claims a department's version and is withheld from a department "
+                "admin's menu by NOT_AT_DEPARTMENT_SCOPE, whose argument is that it has none, "
+                "so the menu and the landing screen disagree about one set of rows"
             )
 
     findings.extend(

@@ -104,6 +104,7 @@ from brain.agents.template import (
 from brain.chat.turns import Turn, TurnKind
 from brain.console.reads import ConsoleRead, Plane, permitted
 from brain.console.screens import SCREENS, screen
+from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.ops.budgets import DAYS_IN_BUDGET_MONTH, Allowance
 from brain.ops.jobs import hidden_count_fields
@@ -853,21 +854,68 @@ class Basis(enum.StrEnum):
 #: both the tool's capability and the console plane, exactly as opening the screen would be.
 SPEND_OF_OTHERS_SCREEN: Final = "budget"
 
+#: Why a grant scoped to a department is no grant at all for a basis, unless the caller says
+#: its rows were narrowed to that department before they were counted.
+A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT: Final = (
+    "A grant scoped to one department holds the screen's capability, so it passes permitted, "
+    "but a basis only says whose rows a figure or a listing is over, and nothing that consumes "
+    "one matches a row against the scope. Measured on 2026-09-15 over every caller: an "
+    "automation's history, an agent's skill tallies, the library's department grouping, tier "
+    "three of the learning review, an agent's headline and the company's consumption each "
+    "handed a maintenance-scoped reader exactly what an unrestricted reader got, finance "
+    "included, where a reader with no grant got their own rows or nothing. So a scoped grant "
+    "is counted at everybody's scale only when every clause of it tests the department and "
+    "the caller says its rows were narrowed to that department first. Anything else is the "
+    "narrower basis, which is what a reader holding no grant gets, so the two cannot be told "
+    "apart. The caller opts in and the default withholds."
+)
+
+
+def basis_of(
+    read: ConsoleRead,
+    entitlement: EntitlementSet,
+    now: Any = None,
+    *,
+    narrowed_to_department: bool = False,
+) -> Basis:
+    """Whose rows this caller may be shown, decided by one screen's read (M39.1.3.1).
+
+    The one implementation behind `basis_for` and `brain.console.agent_output.basis_over`,
+    here rather than in `agent_output` because that module imports this one. Two halves.
+    `brain.console.reads.permitted` first, so the grant behind the figure is the grant behind
+    the screen, capability and console plane both. Then the scope that grant is held in:
+    unrestricted is everybody, a scope whose every clause tests the department is everybody
+    only for a caller passing `narrowed_to_department`, and anything else is the narrower
+    basis. See `A_SCOPED_GRANT_COUNTS_ONLY_OVER_ROWS_ALREADY_NARROWED_TO_ITS_DEPARTMENT`.
+
+    A scope on any other field is refused rather than admitted. No caller narrows its rows by
+    a second field, and a refusal here costs a reader a figure where an admission costs
+    somebody else a disclosure.
+    """
+    where = entitlement.scope_for(read.requires, now)
+    if where is None or not permitted(read, entitlement, now):
+        return Basis.OWN
+    if where.is_unrestricted():
+        return Basis.EVERYONE
+    if narrowed_to_department and all(one.field == DEPARTMENT_FIELD for one in where.clauses):
+        return Basis.EVERYONE
+    return Basis.OWN
+
 
 def basis_for(entitlement: EntitlementSet, now: Any = None) -> Basis:
     """Whose figures this caller may be shown on an agent's front page (M39.1.3.1).
 
-    Asked of `brain.console.reads.permitted` against the budget screen's own read rather
-    than of a capability invented here. See
-    `A_FIGURE_THAT_MOVES_WHEN_SOMEBODY_ELSE_WORKS_IS_THEIR_ACTIVITY`: a front page that had
-    its own grant would be a way of reading a screen's contents without the screen's grant,
-    and the reviewer approving one would never see the other.
+    Asked of `basis_of` against the budget screen's own read rather than of a capability
+    invented here. See `A_FIGURE_THAT_MOVES_WHEN_SOMEBODY_ELSE_WORKS_IS_THEIR_ACTIVITY`: a
+    front page that had its own grant would be a way of reading a screen's contents without
+    the screen's grant, and the reviewer approving one would never see the other.
+
+    Not narrowed to a department. `visible_actuals` and `brain.console.global_surfaces.
+    company_consumption` filter by agent, window and person and never by the grant's scope, so
+    a budget grant naming one department is the narrower basis here and not every
+    department's spend.
     """
-    return (
-        Basis.EVERYONE
-        if permitted(screen(SPEND_OF_OTHERS_SCREEN).read, entitlement, now)
-        else Basis.OWN
-    )
+    return basis_of(screen(SPEND_OF_OTHERS_SCREEN).read, entitlement, now)
 
 
 def _in_window(at: datetime, since: datetime, until: datetime) -> bool:
