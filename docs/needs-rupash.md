@@ -2,8 +2,10 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**2 items are open, and both are short actions of yours.** Every decision is answered, and every
-answer that unblocks work is built or being built.
+**3 items are open: one decision and two short actions of yours.**
+
+**Item 64: one letter.** Whether three permissive licences numpy carries may be allowed, so the record
+matcher's image can be built. I recommend A.
 
 **Item 63: four tidy-ups** on GitHub and your server, now that deploys no longer come from GitHub.
 None is urgent.
@@ -12,6 +14,42 @@ None is urgent.
 of two workflow files.
 
 # Open
+
+## 64. The record matcher needs three more permissive licences allowed before its image can be built
+
+**What you decide: one letter. I recommend Option A.**
+
+**In plain words.** Your answer to item 55 is built: the record matcher runs in its own image,
+and it has been run for real against a test export. The image cannot be built yet, because it
+checks the licence of every package it installs against the same list of allowed licences the main
+application uses, and one package fails that check.
+
+That package is **numpy**, the standard number-crunching library nearly every data tool depends on.
+Its licence statement names five licences at once: `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND
+CC0-1.0`. Two of those are already allowed. The other three are not on the list yet:
+
+- **0BSD** (Zero-Clause BSD): use it for anything, with no conditions at all, not even keeping a
+  copyright notice. It asks less of you than MIT, which is already allowed.
+- **Zlib**: use it for anything; do not claim you wrote it, and mark changed copies as changed.
+- **CC0-1.0**: the author gives up their rights, as close to public domain as the law allows.
+
+None of the three is copyleft: none requires sharing your own source code, and none places any
+condition on the software built with it. They are all less demanding than licences the list already
+accepts.
+
+**Option A (recommended): add 0BSD, Zlib and CC0-1.0 to the allowed list.** The matcher's image then
+builds, and so does anything else that depends on numpy. The list still refuses copyleft licences
+such as GPL, which is what it exists to catch.
+
+**Option B: allow them for the matcher's image only.** The main application's list stays as it is.
+It is narrower, and it means two lists that can drift apart, which is the kind of second copy this
+system avoids.
+
+**Option C: leave the list alone.** The matcher stays built and tested but cannot be packaged, until
+you decide otherwise.
+
+**Why A.** These three licences ask less than MIT, which is already allowed, so refusing them protects
+nothing, and one list is easier to trust than two.
 
 ## 63. Four short tidy-ups on GitHub and your server, now that deploys no longer come from GitHub
 
