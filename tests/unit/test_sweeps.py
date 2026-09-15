@@ -699,6 +699,18 @@ def test_the_copyleft_licences_that_would_reach_a_client_are_not_allowed() -> No
         assert refused not in ALLOWED_LICENCES
 
 
+def test_the_licence_the_signature_verifier_depends_on_is_allowed() -> None:
+    """`cffi` is MIT-0, and `cryptography` cannot be installed without it, so refusing MIT-0
+    refuses the only RS256 verifier this system has. Deleting this lets the entry be removed
+    as looking redundant beside MIT, with `sweep_dependencies` then failing on a machine where
+    nobody connects the failure to signing in. The expression is cryptography's own, read by
+    the parser rather than looked up, so it is the precedence and the list together."""
+    from brain.ops.sweeps import licence_is_allowed
+
+    assert licence_is_allowed("MIT-0")
+    assert licence_is_allowed("Apache-2.0 OR BSD-3-Clause")
+
+
 # ---------------------------------------------- the two records of what is built (M0.5.8)
 def test_a_source_claim_that_no_commit_closed_is_counted() -> None:
     """**A counter that always returns nought is this sweep's own history.**

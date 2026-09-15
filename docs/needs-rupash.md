@@ -80,6 +80,12 @@ you decide otherwise.
 **Why A.** These three licences ask less than MIT, which is already allowed, so refusing them protects
 nothing, and one list is easier to trust than two.
 
+**One licence of the same kind was added while this waits, and you can undo it.** Checking sign-in
+tokens on the server needed the standard `cryptography` library, which brings in a helper called
+**cffi** licensed **MIT-0**: MIT without even the duty to keep the copyright notice. It is on the
+allowed list now, because without it the application's own image would not build. If you answer B or
+C, say so and I will take MIT-0 off the list again and find another way to check tokens.
+
 ## 63. Four short tidy-ups on GitHub and your server, now that deploys no longer come from GitHub
 
 **What you do: four steps, none urgent, and nothing is broken while they wait.**
