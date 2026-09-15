@@ -13,12 +13,24 @@
 # a route Let's Encrypt would try to certify for somebody else's name. A placeholder that
 # Traefik refuses to route is the failure worth having: it is loud, immediate, and it is not
 # a certificate request against a host you do not own.
+#
+# **Every router passes `admin-allowlist` first.** The administrative consoles stay on public
+# addresses (docs/install/network.md, "Administrative consoles"), and that decision holds only
+# while each one carries a second factor and an IP allowlist. The second factor is a setting on
+# each account inside the panel and cannot live in a file; the allowlist can, so it is here.
+# Replace <admin-source-range> with the addresses administrators sign in from, in CIDR form,
+# one entry per range. Until then Traefik refuses the middleware and every router naming it,
+# which is the same loud failure the hostname placeholder is chosen for: a panel nobody can
+# reach until somebody decides who may, never a panel everybody can. Traefik 2 names the
+# middleware `ipWhiteList`; the `sourceRange` key under it is the same.
 http:
   routers:
     coolify-panel-https:
       rule: "Host(`<coolify-hostname>`)"
       entryPoints:
         - https
+      middlewares:
+        - admin-allowlist
       service: coolify-panel
       tls:
         certResolver: letsencrypt
@@ -27,6 +39,7 @@ http:
       entryPoints:
         - http
       middlewares:
+        - admin-allowlist
         - coolify-panel-to-https
       service: coolify-panel
   services:
@@ -35,6 +48,10 @@ http:
         servers:
           - url: "http://<coolify-container>:8080"
   middlewares:
+    admin-allowlist:
+      ipAllowList:
+        sourceRange:
+          - "<admin-source-range>"
     coolify-panel-to-https:
       redirectScheme:
         scheme: https

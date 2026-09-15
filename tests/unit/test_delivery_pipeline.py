@@ -14,7 +14,7 @@ which drives the real script against a stubbed docker through six failure scenar
 a rollback is a sequence of decisions and not a line in a file.
 
 Task ids: M0.5.3, M38.1.1.3, M38.1.2.2, M38.1.2.3, M38.1.2.4, M38.1.2.5, M38.1.3.1,
-M38.1.3.2, M38.1.3.3, M38.1.3.4, M38.1.4.1, M38.1.4.3, M38.2.2.1, M30.2.2, M30.2.3
+M38.1.3.2, M38.1.3.3, M38.1.3.4, M38.1.4.1, M38.1.4.3, M38.2.2.1, M30.2.2, M30.2.3, M30.2.4
 """
 
 from __future__ import annotations
@@ -239,20 +239,208 @@ def test_a_red_build_never_reaches_the_server() -> None:
     assert "github.event.workflow_run.conclusion == 'success'" in str(job["if"])
 
 
+#: The step that asks the live site which commit it serves, and the only thing in the workflow
+#: that can report a deploy as having happened.
+LIVE_CHECK = "The site is actually serving this commit"
+
+
 def test_the_deploy_waits_for_the_signature() -> None:
-    """Deploying first and signing afterwards would mean the running container is the one
-    build nobody has verified.
+    """Counting a commit as deployed before its build has signed and verified it would mean the
+    run reports as live the one build nobody has verified.
 
     Asserted as a job dependency rather than as step order, because that is how it is
     actually arranged and it is the stronger arrangement: `needs` makes the whole build job
     - sign and verify included - a precondition, where step order inside one job could be
-    rearranged by anybody adding a step in the wrong place."""
+    rearranged by anybody adding a step in the wrong place.
+
+    The deploy job triggers nothing since M30.2.4: the server pulls. So what waits on the build
+    is the check that the site serves the commit, and it is asserted by name because a job that
+    `needs` the build and has lost that step goes green having checked nothing."""
     jobs = _workflow("deploy.yml")["jobs"]
     assert jobs["deploy"]["needs"] == "build"
     signing = [str(s.get("name", "")) for s in _steps("deploy.yml", "build")]
     assert any("Sign" in n for n in signing)
     assert any("Verify" in n for n in signing)
-    assert any(str(s.get("name", "")) == "Deploy" for s in _steps("deploy.yml", "deploy"))
+    assert any(str(s.get("name", "")) == LIVE_CHECK for s in _steps("deploy.yml", "deploy"))
+
+
+# ------------------------------------------------ the server pulls, and nothing pushes (M30.2.4)
+#: A stored credential for the deployment panel, as a workflow expression names one.
+PANEL_CREDENTIAL = re.compile(r"\b(?:secrets|vars)\.COOLIFY_[A-Z_]+\b")
+
+#: The deployment panel's deploy endpoint, which is what the removed step called.
+PANEL_DEPLOY_ENDPOINT = "/api/v1/deploy"
+
+
+def _strings(node: Any) -> list[str]:
+    """Every key and every scalar in a parsed document, as text.
+
+    Parsed rather than read, so the comment in `deploy.yml` recording what was removed and why
+    is not a finding; and keys as well as values, so a variable named for the panel is read
+    even when the value beside it is innocuous.
+    """
+    if isinstance(node, dict):
+        return [text for key, value in node.items() for text in (str(key), *_strings(value))]
+    if isinstance(node, list):
+        return [text for one in node for text in _strings(one)]
+    return [str(node)]
+
+
+def _panel_references(document: Any) -> list[str]:
+    return [
+        one
+        for one in _strings(document)
+        if PANEL_CREDENTIAL.search(one) or PANEL_DEPLOY_ENDPOINT in one
+    ]
+
+
+def test_no_workflow_holds_a_deployment_panel_credential_or_calls_its_api() -> None:
+    """**M30.2.4, pull-based deployment so the server needs no inbound access.** The server's own
+    timer pulls a new image and installs it, so no workflow needs a way into the server and
+    none may hold one.
+
+    The job this replaced read three repository secrets and called the panel's deploy endpoint.
+    The secrets were empty on every run and the panel's port is firewalled, so it deployed
+    nothing, and it was still the one thing asking for the panel to be reachable from GitHub's
+    address ranges and for a token able to redeploy every container to be stored in GitHub.
+
+    Delete this and the step can be put back to fix a deploy that is not broken, which reopens
+    both."""
+    workflows = sorted(
+        [
+            *(REPO / ".github" / "workflows").glob("*.yml"),
+            *(REPO / ".github" / "workflows").glob("*.yaml"),
+        ]
+    )
+    assert workflows, "no workflow was read, so this asserts nothing"
+
+    found = {path.name: _panel_references(_workflow(path.name)) for path in workflows}
+
+    assert {name: refs for name, refs in found.items() if refs} == {}
+
+
+def test_the_panel_check_finds_a_credential_wherever_a_step_can_name_one() -> None:
+    """The sibling that proves the check above can fail. A walk that skipped step `env` blocks,
+    `run` scripts or mapping keys would pass every workflow here, including one that put the
+    trigger back, so it is run against the removed step's own shapes, and against the real
+    registry login it must see and must not report.
+
+    Delete this and the refusal above can be satisfied by a walker that reads nothing."""
+    token = "${{ secrets.COOLIFY_TOKEN }}"
+    removed = {"jobs": {"deploy": {"steps": [{"name": "Deploy", "env": {"TOKEN": token}}]}}}
+    called = {"jobs": {"deploy": {"steps": [{"run": 'curl -X POST "$U/api/v1/deploy?uuid=$I"'}]}}}
+    keyed = {"env": {"${{ vars.COOLIFY_URL }}": "x"}}
+
+    assert _panel_references(removed) == [token]
+    assert _panel_references(called) == ['curl -X POST "$U/api/v1/deploy?uuid=$I"']
+    assert _panel_references(keyed) == ["${{ vars.COOLIFY_URL }}"]
+    assert "${{ secrets.GITHUB_TOKEN }}" in _strings(_workflow("deploy.yml"))
+    assert _panel_references({"env": {"TOKEN": "${{ secrets.GITHUB_TOKEN }}"}}) == []
+
+
+def _live_assignment(script: str, name: str) -> str:
+    """The value a shell script assigns to `name`, read off its live lines only."""
+    for line in _live(script).splitlines():
+        match = re.fullmatch(rf'\s*{name}="([^"]*)"\s*', line)
+        if match:
+            return match.group(1)
+    raise AssertionError(f"the script assigns no {name}")
+
+
+def test_the_server_deploys_the_one_tag_only_a_passing_build_moves() -> None:
+    """The CI gate survives the trigger's removal because of this and nothing else. The timer
+    watches `:latest`, `:latest` is pushed only by the build job, and the build job runs only
+    when CI succeeded, so the tag moving is the statement that the gate passed.
+
+    Point the timer at a tag a person or another workflow can move and a red build reaches the
+    server with nothing in the workflow to say so. The image test above compares the repository
+    half only, and an image ending `:main` passes it. Delete this and the gate is a comment."""
+    published = str(_workflow("deploy.yml")["env"]["IMAGE"])
+    build = next(s for s in _steps("deploy.yml", "build") if s.get("id") == "build")
+    tags = [one.strip() for one in str(build["with"]["tags"]).splitlines() if one.strip()]
+    deploy_dir = REPO / "ops" / "deploy"
+    watched = _live_assignment(
+        (deploy_dir / "brain-autodeploy").read_text(encoding="utf-8"), "IMAGE"
+    )
+    deployed = _live_assignment((deploy_dir / "brain-deploy").read_text(encoding="utf-8"), "IMAGE")
+
+    assert watched == f"{published}:latest"
+    assert deployed == watched
+    assert "${{ env.IMAGE }}:latest" in tags
+    job = _workflow("deploy.yml")["jobs"]["build"]
+    assert "github.event.workflow_run.conclusion == 'success'" in str(job["if"])
+
+
+def _unit_lines(unit: str) -> list[str]:
+    """A systemd unit as the lines systemd reads: comments and blank lines dropped."""
+    return [
+        line.strip()
+        for line in unit.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def _written_units(installer: str) -> dict[str, str]:
+    """The units an install script writes, by file name, read out of its heredocs."""
+    return {
+        match.group(1): match.group(2)
+        for match in re.finditer(
+            r"^cat > /etc/systemd/system/(\S+) <<'UNIT'\n(.*?)^UNIT$", installer, re.M | re.S
+        )
+    }
+
+
+def test_the_units_the_install_script_writes_are_the_units_this_repository_ships() -> None:
+    """The timer reaches a server through heredocs inside `brain-install-autodeploy`, and the unit
+    files beside it are what a reader, the checklist and `install_docs.scheduled_job_gaps` read.
+    Two copies and nothing held them equal: change the interval in the file and the server keeps
+    the old one while every document describes the new.
+
+    Compared line by line with comments dropped, because the two copies explain themselves in
+    different words and that is allowed; what systemd reads is not. The script must also switch
+    the timer on and the service must run the pull script, or the install writes two files that
+    do nothing. Delete this and the pull deploy is whichever copy was edited last."""
+    deploy_dir = REPO / "ops" / "deploy"
+    installer = (deploy_dir / "brain-install-autodeploy").read_text(encoding="utf-8")
+    written = _written_units(installer)
+
+    assert sorted(written) == ["brain-autodeploy.service", "brain-autodeploy.timer"]
+    for name, unit in written.items():
+        shipped = (deploy_dir / name).read_text(encoding="utf-8")
+        assert _unit_lines(unit) == _unit_lines(shipped), name
+    service = _unit_lines((deploy_dir / "brain-autodeploy.service").read_text(encoding="utf-8"))
+    assert "ExecStart=/usr/local/bin/brain-autodeploy" in service
+    assert "systemctl enable --now brain-autodeploy.timer" in _live(installer).splitlines()
+
+
+def _seconds(value: str) -> int:
+    match = re.fullmatch(r"(\d+)(min|s)", value)
+    assert match, f"{value!r} is not a span this test reads"
+    return int(match.group(1)) * (60 if match.group(2) == "min" else 1)
+
+
+def test_the_live_check_outlasts_the_servers_pull_interval() -> None:
+    """The check that the site serves this commit is the only thing in the workflow that can go
+    red about a deploy now, so its patience has to fit the timer it waits on. Three intervals:
+    the tick that just missed the push, the tick that sees it, and the deploy that tick starts,
+    which the unit's own comment puts at a couple of minutes.
+
+    A timer lengthened past that turns every healthy deploy into a red build, and a check that
+    is red for a working system is one somebody deletes. The check also has to be waiting for
+    the commit this run built rather than one it was told about. Delete this and the two numbers
+    live in two files with a comment in each asserting they agree."""
+    live = next(s for s in _steps("deploy.yml", "deploy") if s.get("name") == LIVE_CHECK)
+    waited = re.search(r"deadline=\$\(\(SECONDS \+ (\d+)\)\)", str(live["run"]))
+    assert waited, "the live check no longer states how long it waits"
+    timer_path = REPO / "ops" / "deploy" / "brain-autodeploy.timer"
+    timer = dict(
+        line.split("=", 1)
+        for line in _unit_lines(timer_path.read_text(encoding="utf-8"))
+        if "=" in line
+    )
+
+    assert int(waited.group(1)) >= 3 * _seconds(timer["OnUnitActiveSec"])
+    assert live["env"]["SHA"] == "${{ needs.build.outputs.sha }}"
 
 
 def test_migrations_run_before_the_new_image_takes_traffic() -> None:

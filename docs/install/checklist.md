@@ -109,6 +109,9 @@ starts.
   [authentication.md](authentication.md).
 - [ ] No administrative panel answering plain HTTP on a public address. See
   [network.md](network.md).
+- [ ] Every administrative console that answers from the internet has a second factor switched
+  on and an IP allowlist in front of it, and the identity provider's allowlist covers only its
+  admin paths. See "Administrative consoles" in [network.md](network.md).
 - [ ] The four links a copied install carries, above, all cut.
 
 ## Testing

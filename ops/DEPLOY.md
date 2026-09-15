@@ -1,16 +1,40 @@
 # Deploying to the VPS
 
-Laptop → GitHub → GHCR → Coolify → VPS.
+Laptop → GitHub → GHCR, and the VPS pulls from GHCR.
 
-The first three legs are built and verified. The last two need two credentials that only
-the account holder can create, so they are listed here as steps rather than automated.
+**The server deploys itself, and that is the only automatic deploy there is.** A systemd timer on
+the server checks the registry every two minutes and installs a new image when `:latest` moves.
+Nothing outside the server tells it to deploy.
+
+## Why the server pulls
+
+Two reasons, and either would be enough.
+
+- **No inbound access to the server.** A deploy is a connection the server opens to the registry,
+  never one something else opens to the server. The deployment panel's port stays firewalled, and
+  nothing about deploying asks for an address range to be let in. The ports that are open, 80 and
+  443 for the people using the system and 22 for its administrators, are open for those reasons and
+  would be open without deploys.
+- **No deployment secrets in GitHub.** A token that can redeploy every container on the host is not
+  stored in a repository's settings, where every workflow and every administrator of the repository
+  can reach it.
+
+**And the CI gate is kept.** `:latest` is moved only by the `Deploy` workflow's build job, which
+runs only when CI succeeded, so the tag moving is the statement that the tests passed.
+
+Until 2026-09-15 the workflow also had a step calling the panel's deploy API with three repository
+secrets, `COOLIFY_URL`, `COOLIFY_SERVICE_UUID` and `COOLIFY_TOKEN`. They were empty on every run,
+the panel is not reachable from GitHub, and every deploy that ever happened came through the timer,
+so the step was removed. The three secrets are read by nothing now and can be deleted from the
+repository's settings.
 
 ## What already works
 
 Every push to `main` runs CI. If CI passes, `Deploy` builds the image and pushes it to
-`ghcr.io/rpsj2230/verz-brain-v2.0`, tagged with the short commit SHA and `latest`. The
-Coolify step then checks for its two secrets and **skips cleanly if they are absent**, so
-an unarmed pipeline shows green rather than looking broken.
+`ghcr.io/rpsj2230/verz-brain-v2.0`, tagged with the short commit SHA and `latest`, and signs
+it. Its second job then waits up to eight minutes for the live site's `/api/status.json` to
+report that commit, and **fails if it does not**, because a published image nobody pulled is
+not a deploy.
 
 Verified 2026-09-04: `ghcr.io/rpsj2230/verz-brain-v2.0:6593cf3`,
 digest `sha256:131e228179c16705a9cb6c31fc15ef05a18bed91f892d0d3048e5e3d278d5f53`.
@@ -80,31 +104,29 @@ the process is running. A container that is up but cannot reach the database sti
 questions, from whatever it can still reach, which is how this system would start
 returning wrong answers while appearing healthy.
 
-### 4. Arm the pipeline
+### 4. Install the pull timer
 
-Coolify Services have no git webhook, but they do not need one: the generic API deploy
-endpoint handles them (`DeployController::deploy_resource` → `StartService`). Calling that
-from GitHub Actions also keeps the CI gate, which a push webhook could not - a push webhook
-fires whether or not the tests passed.
+On the server, as root, once:
 
-In Coolify: **Keys & Tokens → API tokens → + Add**, with write permission. Then three
-repository secrets:
+1. Copy `ops/deploy/brain-autodeploy` and `ops/deploy/brain-deploy` to `/usr/local/bin/` and
+   make both executable.
+2. Write `<deploy-uuid>` into `/root/.coolify-service-uuid`. Both scripts refuse without it
+   rather than guessing which containers are this deployment's.
+3. Run `/usr/local/bin/brain-install-autodeploy`, copied from `ops/deploy/` the same way. It
+   writes `brain-autodeploy.service` and `brain-autodeploy.timer` and switches the timer on.
 
-```bash
-gh secret set COOLIFY_URL --repo rpsj2230/verz-brain-v2.0
-gh secret set COOLIFY_SERVICE_UUID --repo rpsj2230/verz-brain-v2.0
-gh secret set COOLIFY_TOKEN --repo rpsj2230/verz-brain-v2.0
-```
+After that, every merge to `main` that passes CI is live within a few minutes, and the
+`Deploy` workflow goes red if it is not. `journalctl -u brain-autodeploy.service -n 50` is
+the history, and `/var/lib/brain-deploy/heartbeat.json` says what the last check decided.
 
-Values: the Coolify panel's own address, `<deploy-uuid>`, and the API token.
+`brain-deploy` prefers to ask Coolify to deploy, on `127.0.0.1` with a token in
+`/root/.coolify-deploy-token`, so the panel's own record stays true; with no token it
+recreates the app with compose from Coolify's own directory. Either way the call is made on
+the server, to the server.
 
-After that, every merge to `main` that passes CI deploys on its own.
-
-**One caveat worth knowing.** Coolify here is served over plain HTTP on port 8000, so the
-API token would cross the internet unencrypted on every deploy. That is a real exposure,
-not a theoretical one. Two ways to close it: put a domain on Coolify so it gets HTTPS, or
-leave deploys manual (one click per wave) until a domain exists. Waves are days apart, so
-manual costs almost nothing.
+**By hand, when you need one now.** `make deploy` runs `ops/deploy.sh` from a machine with
+ssh access to the server. It uses the administrative SSH access that is already open, and
+nothing automatic depends on it.
 
 ## Rollback
 

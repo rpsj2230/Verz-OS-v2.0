@@ -81,7 +81,17 @@ pieces of a drill have no machine yet. See
 `A_PROCEDURE_NOBODY_HAS_RUN_IS_HELD_BY_WHAT_IT_PRODUCES`.
 
 Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2
-Task ids: M34.3.3.3, M30.2.8, M42.3.3, M34.3.3.4
+**The administrative console decision is held by what can be read off a file, and no further.**
+M37.6.1.3 asks for a decision to be written down: the consoles that control the server stay on
+public addresses, each behind a second factor and an IP allowlist. The network page records it,
+and what is checked is the part a document can get wrong on its own: the four consoles in both
+directions, neither protection left blank on any of them, the two rejected options with their
+reasons, the allowlist middleware the panel's proxy template defines and passes every router
+through first, and whether the vault's interface is served at all. Whether a second factor is
+switched on is a setting on an account inside a running console, and no check here pretends to
+read it. See `A_PUBLIC_CONSOLE_NEEDS_A_SECOND_FACTOR_AND_AN_ALLOWLIST`.
+
+Task ids: M34.3.3.3, M30.2.8, M42.3.3, M34.3.3.4, M37.6.1.3
 """
 
 from __future__ import annotations
@@ -1458,3 +1468,175 @@ def _drill_example_gaps(page: str) -> tuple[str, ...]:
                 "copy that did not exist yet"
             )
     return tuple(findings)
+
+
+# ------------------------------------------------ the administrative consoles (M37.6.1.3)
+#: The decision the network page records, and why it is two protections and not one.
+A_PUBLIC_CONSOLE_NEEDS_A_SECOND_FACTOR_AND_AN_ALLOWLIST: Final = (
+    "The administrative consoles stay on public addresses rather than behind an SSH tunnel, so "
+    "that an administrator with no SSH habit can reach them. That leaves the most powerful "
+    "sign-in pages on the server answering from the internet, and the decision holds only while "
+    "every one of them carries both protections: a second factor, so a guessed or leaked "
+    "password is not enough on its own, and an IP allowlist, so the sign-in page is not offered "
+    "to the whole internet to be guessed at. A console with one of the two fails on the day that "
+    "one does, which is the exposure the tunnel would have removed and this decision accepted."
+)
+
+#: The consoles the decision covers, named for what they control rather than by product, in the
+#: order the network page lists them. The console staff use and the identity provider's sign-in
+#: page are not among them: those have to answer the people who use them.
+ADMINISTRATIVE_CONSOLES: Final = (
+    "deployment panel",
+    "identity provider admin console",
+    "secrets vault interface",
+    "trace ledger dashboard",
+)
+
+#: The options considered and not taken. A decision written down without them is one the next
+#: reader reopens, because the argument against the alternative is the half that gets lost.
+REJECTED_CONSOLE_OPTIONS: Final = (
+    "an SSH tunnel on every install",
+    "a choice made per client",
+)
+
+#: Where the network page lists the consoles.
+CONSOLES_MARKER: Final = "<!-- checked: the administrative consoles -->"
+
+#: Where the network page lists the options that were rejected.
+REJECTED_CONSOLES_MARKER: Final = "<!-- checked: the options rejected for the consoles -->"
+
+#: The proxy middleware carrying the allowlist, by the name `ops/vps/traefik-coolify-panel.yaml`
+#: gives it. The page names it and the template defines it, and the checks hold the two equal.
+ALLOWLIST_MIDDLEWARE: Final = "admin-allowlist"
+
+#: How a console row's last cell opens when this product does not serve that console at all.
+NOT_SERVED: Final = "Not served"
+
+#: Cells that say a protection is absent rather than how it is provided.
+ABSENT: Final = frozenset({"", "none", "no", "nothing", "n/a"})
+
+#: One `ui` setting in an OpenBao configuration.
+VAULT_UI_SETTING: Final = re.compile(r"^\s*ui\s*=\s*(true|false)\s*$", re.M)
+
+
+def console_gaps(guide: str, *, vault_served: bool) -> tuple[str, ...]:
+    """Every way the network page has stopped recording the console decision M37.6.1.3 asks for.
+
+    The four consoles by name in both directions; a second factor and an allowlist stated for
+    every one; the panel's allowlist named as the middleware its proxy template defines; the
+    vault's row saying it is not served exactly when its interface is off; and the two rejected
+    options in both directions, each with its reason.
+
+    `vault_served` is read out of the vault's compose file by the caller, for the split this
+    module keeps: the page is text, and the compose file is somebody else's parse.
+    """
+    findings: list[str] = []
+    named: list[str] = []
+    for cells in table_after(guide, CONSOLES_MARKER):
+        if len(cells) < 5:
+            findings.append(
+                f"a row with {len(cells)} cell(s) reads {cells}; every row states the console, "
+                "what it hands over, its second factor, its allowlist and what this repository "
+                "configures"
+            )
+            continue
+        name = bare(cells[0])
+        named.append(name)
+        if bare(cells[2]).lower() in ABSENT:
+            findings.append(f"{name}: no second factor, and the decision requires one")
+        if bare(cells[3]).lower() in ABSENT:
+            findings.append(f"{name}: no IP allowlist, and the decision requires one")
+        if name == ADMINISTRATIVE_CONSOLES[0] and f"`{ALLOWLIST_MIDDLEWARE}`" not in cells[3]:
+            findings.append(
+                f"{name}: the allowlist cell does not name `{ALLOWLIST_MIDDLEWARE}`, the "
+                "middleware its proxy template defines"
+            )
+        if name == ADMINISTRATIVE_CONSOLES[2] and cells[4].startswith(NOT_SERVED) == vault_served:
+            state = "on" if vault_served else "off"
+            findings.append(
+                f"{name}: the vault's compose file switches its interface {state} and the "
+                "page says otherwise"
+            )
+    findings.extend(
+        f"{name!r}: a console the decision covers and the page does not list"
+        for name in ADMINISTRATIVE_CONSOLES
+        if name not in named
+    )
+    findings.extend(
+        f"{name!r}: a console the page lists and the decision does not cover, which reads as "
+        "coverage"
+        for name in named
+        if name not in ADMINISTRATIVE_CONSOLES
+    )
+    rejected: list[str] = []
+    for cells in table_after(guide, REJECTED_CONSOLES_MARKER):
+        if len(cells) < 2 or not bare(cells[1]):
+            findings.append(
+                f"a rejected option reads {cells}; every row states the option and why it was "
+                "not taken"
+            )
+            continue
+        rejected.append(bare(cells[0]))
+    findings.extend(
+        f"{option!r}: an option that was rejected and the page does not record"
+        for option in REJECTED_CONSOLE_OPTIONS
+        if option not in rejected
+    )
+    findings.extend(
+        f"{option!r}: a rejected option the decision never considered"
+        for option in rejected
+        if option not in REJECTED_CONSOLE_OPTIONS
+    )
+    return tuple(findings)
+
+
+def panel_allowlist_gaps(route: Mapping[str, Any]) -> tuple[str, ...]:
+    """Every way the deployment panel's proxy template lets a request past without the allowlist.
+
+    `route` is `ops/vps/traefik-coolify-panel.yaml`, parsed by the caller. The middleware has to
+    exist, be an allowlist, and name at least one range; and every router has to pass it first,
+    so nothing on the route, not even the redirect to HTTPS, answers an address it refuses.
+    """
+    http = route.get("http")
+    if not isinstance(http, Mapping):
+        msg = "the panel template has no http section, so there is no route to check"
+        raise InstallDocsError(msg)
+    findings: list[str] = []
+    middleware = (http.get("middlewares") or {}).get(ALLOWLIST_MIDDLEWARE)
+    allow = middleware.get("ipAllowList") if isinstance(middleware, Mapping) else None
+    if not isinstance(allow, Mapping) or not allow.get("sourceRange"):
+        findings.append(
+            f"{ALLOWLIST_MIDDLEWARE}: not defined as an ipAllowList with a sourceRange, so a "
+            "router naming it restricts nothing"
+        )
+    routers = http.get("routers") or {}
+    if not routers:
+        findings.append("the panel template defines no router, so the allowlist guards nothing")
+    for name, router in sorted(routers.items()):
+        chain = list(router.get("middlewares") or ()) if isinstance(router, Mapping) else []
+        if chain[:1] != [ALLOWLIST_MIDDLEWARE]:
+            findings.append(
+                f"{name}: answers before {ALLOWLIST_MIDDLEWARE} is consulted, so the panel is "
+                "reachable from any address on this route"
+            )
+    return tuple(findings)
+
+
+def vault_interface_served(compose: Mapping[str, Any]) -> bool:
+    """Whether the vault's compose file switches its web interface on.
+
+    Read from the configuration the container starts with. A configuration that sets no `ui`
+    leaves the interface off, which is the server's own default. A compose file with no vault
+    configuration in it is refused rather than answered: "off" for a file whose configuration
+    has moved would be the check agreeing with the page about a setting it never read.
+    """
+    try:
+        config = compose["services"]["vault"]["environment"]["BAO_LOCAL_CONFIG"]
+    except (KeyError, TypeError) as exc:
+        msg = "the vault compose file carries no BAO_LOCAL_CONFIG, so its interface is unread"
+        raise InstallDocsError(msg) from exc
+    if not isinstance(config, str):
+        msg = f"the vault's BAO_LOCAL_CONFIG is a {type(config).__name__}, not a configuration"
+        raise InstallDocsError(msg)
+    found = VAULT_UI_SETTING.findall(config)
+    return bool(found) and found[-1] == "true"

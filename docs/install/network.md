@@ -113,6 +113,77 @@ starts, so anything you insert by hand is gone. Persist it with a small unit ord
 `After=docker.service`, or the thing you are constraining wipes the constraint on every boot.
 `ops/vps/brain-firewall.service` in this repository is one worked example of that unit.
 
+## Administrative consoles
+
+**The decision: the administrative consoles stay on public addresses, and every one of them has
+a second factor and an IP allowlist.** Both, on every install, for as long as the console answers
+from the internet. One without the other is not a lighter version of this decision; it is a
+sign-in page that fails on the day its single protection does.
+
+These are the consoles that control the server rather than the product. Reaching any of them
+hands over every container, every account or every secret. The console your staff use, and the
+identity provider's sign-in page they are sent to, are not on this list: those have to answer the
+people who use them, and they are protected by the sign-in itself.
+
+<!-- checked: the administrative consoles -->
+
+| Console | What reaching it hands over | Second factor | IP allowlist | In this repository |
+| --- | --- | --- | --- | --- |
+| `deployment panel` | Every container, database and environment variable on the host | The panel's own two-factor sign-in, switched on for every account on it | The `admin-allowlist` middleware, passed first by every router in `ops/vps/traefik-coolify-panel.yaml` | The allowlist, in that template, with `<admin-source-range>` to replace. The second factor is a setting on each account inside the panel, and no file can hold it |
+| `identity provider admin console` | Every account, every role and every sign-in policy | A one-time password required of every administrator of the `master` realm | The same middleware, on a router matching only the admin paths on the identity provider's address, described below | Nothing. `ops/keycloak/realm-export.json` asks every new account in the product's own realm to set up a second factor, and the admin console signs in against `master`, which no file here configures |
+| `secrets vault interface` | Every secret the system holds | Required on every sign-in method the interface accepts, if it is ever switched on | Required on its router, if it is ever switched on | Not served. `ops/openbao/compose.yml` sets `ui = false` and the vault publishes no port, so there is no page to protect until somebody switches it on |
+| `trace ledger dashboard` | Every trace, which is every question and answer after masking | Sign-in through the identity provider, whose one-time password is the second factor, with the dashboard's own password sign-in switched off | The same middleware, on the router for the address `LANGFUSE_PUBLIC_URL` names | Nothing. `docker-compose.langfuse.yml` configures no single sign-on, so as shipped the dashboard signs in with a password alone |
+
+### How the allowlist is configured
+
+It is a middleware on the reverse proxy, attached to each console's router **ahead of every other
+middleware**, so nothing on that route answers an address it refuses. On Traefik it reads:
+
+```yaml
+http:
+  middlewares:
+    admin-allowlist:
+      ipAllowList:
+        sourceRange:
+          - "<admin-source-range>"
+```
+
+`<admin-source-range>` is the addresses your administrators sign in from, in CIDR form, one entry
+per range. `ops/vps/traefik-coolify-panel.yaml` carries this middleware for the deployment panel,
+and it is the worked example for the other three.
+
+- **The placeholder refuses to route, on purpose.** Until it is replaced, Traefik rejects the
+  middleware and every router naming it, so the panel answers nobody rather than everybody.
+- **The identity provider shares its address with your staff's sign-in**, so its allowlist goes on
+  a router for the admin paths and never on the whole host. Match the host together with a path
+  prefix of `/admin` or of `/realms/master`, give that rule a higher priority than the host's own
+  router, and leave the host's own router without the allowlist. An allowlist on the whole host
+  locks every member of staff out of signing in.
+- **Behind a CDN or a second proxy**, the address Traefik sees is that proxy's rather than the
+  person's, and an allowlist of it admits everybody. Set the middleware's `ipStrategy` so it reads
+  the forwarded address, and only from that proxy.
+- **Traefik 2 names the middleware `ipWhiteList`.** The `sourceRange` key under it is the same.
+- **The panel's own port stays closed.** The allowlist guards the route; it guards nothing if the
+  panel also answers on its published port, which is what the `DOCKER-USER` rule above is for.
+
+### Second factor
+
+The deployment panel's is a setting on each account inside the panel, and switching it on is its
+own step in the go-live work. The identity provider's is a required action on each administrator
+of the `master` realm, which is a different realm from the one this product imports. The trace
+ledger dashboard has no second factor of its own to switch on, which is why it signs in through
+the identity provider. The vault's interface is off; if it is ever switched on, it takes a second
+factor on every sign-in method before it takes a router.
+
+### What was rejected
+
+<!-- checked: the options rejected for the consoles -->
+
+| Option | Why it was not taken |
+| --- | --- |
+| `an SSH tunnel on every install` | The safest of the three: every console listens on the server's loopback address only, and an administrator reaches one with a single `ssh -L` command, so a leaked password or an unpatched sign-in page is reachable by nobody without the server's key. Not taken because an IT team with no SSH habit could not administer its own server, and a control people cannot use is one they work around. What this decision accepts in exchange is that the sign-in pages are on the internet and both protections above have to be right on every install for as long as it runs. |
+| `a choice made per client` | The product would have to document and test both arrangements, and the weaker one is the one somebody picks under time pressure. |
+
 ## What is checked and what is not
 
 | Claim | Held by |
@@ -120,8 +191,12 @@ starts, so anything you insert by hand is gone. Persist it with a small unit ord
 | Every service that opens a port has a row, and no row names one that does not | `test_install_docs.py`, against the compose files |
 | The port numbers | the same test |
 | That nothing publishes a port to the host | `test_deployment_requirements.py` |
+| The four administrative consoles, in both directions, with a second factor and an allowlist stated for each, and the two rejected options with their reasons | `test_install_consoles.py` |
+| That the panel's proxy template defines the allowlist and every router passes it first | the same test, against `ops/vps/traefik-coolify-panel.yaml` |
+| That the vault's interface is not served, exactly when this page says so | the same test, against `ops/openbao/compose.yml` |
+| **Whether each console's second factor is switched on** | **nobody, and nothing can. It is a setting inside each console on each server.** |
 | **Which addresses you need, and what to point them at** | **nobody. Prose, kept true by hand.** |
-| **Everything about TLS and the firewall** | **nobody. Prose, kept true by hand.** |
+| **Everything else about TLS and the firewall** | **nobody. Prose, kept true by hand.** |
 
 ## What has never been done
 
@@ -131,6 +206,10 @@ against one particular server for one particular panel. So the port numbers and 
 requirements above are read out of the deployment and are true; the sequence as a whole has
 never been walked by anybody starting from a bare machine.
 
+**No allowlist from this page has been applied to a server from this repository.** The
+`admin-allowlist` middleware was added to the panel's proxy template when the console decision
+was written down, and a template is not a route.
+
 ## Task ids
 
-M42.2.4
+M42.2.4, M37.6.1.3

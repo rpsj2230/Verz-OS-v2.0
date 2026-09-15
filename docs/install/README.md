@@ -37,6 +37,7 @@ deployment files rather than against a second copy of them:
 | The update and rollback scripts, and the command that runs each | the scripts the release carries |
 | The checklist's ten sections, the four links a copied install carries, and every timer this repository installs | the timer units under `ops/` |
 | A drill's questions, the fields its record carries, its figures, its worked examples, and which pieces of a drill exist | the drill record reader and verdict, the rehearsal interval, `ops/` and the registered console tools, in `test_install_drill_page.py` |
+| The administrative consoles, a second factor and an allowlist for each, the options rejected, and whether the vault's interface is served | the panel's proxy template under `ops/vps/` and the vault's compose file, in `test_install_consoles.py` |
 
 "In both directions" is load-bearing. A missing row is found the first time somebody looks for
 it. A row for a thing that no longer exists is never found at all, because it reads as coverage,
@@ -88,7 +89,7 @@ are not worth relying on as finished.
 ## Task ids
 
 M42.2.4, M42.2.5, M42.2.6, M42.2.7, M42.2.9, M42.3.7, M34.3.3.1, M34.3.3.2, M34.3.3.3, M34.3.3.4,
-M30.2.8
+M30.2.8, M37.6.1.3
 
 M42.2.3, M42.2.8 and M42.2.10 each have a page here and none of the three is claimed. The reason
 is at the foot of its own page.

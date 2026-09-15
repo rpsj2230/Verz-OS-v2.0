@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# The only thing the GitHub deploy key can run. Installed at /usr/local/bin/brain-deploy
-# and named in a `command=` restriction in root's authorized_keys, so a holder of that key
-# gets this and nothing else - no shell, no arbitrary command, no port forwarding.
+# The deploy itself. Installed at /usr/local/bin/brain-deploy and run by brain-autodeploy when
+# the server's own timer sees a new image, or by an administrator by hand. Nothing outside this
+# machine calls it.
 #
-# WHY THIS EXISTS RATHER THAN AN OPEN PORT. Coolify's API is on :8000 and ufw allows only
-# 22, 80 and 443 from the internet. Reaching it from GitHub Actions would mean allowlisting
-# GitHub's Actions ranges, which are thousands of CIDRs that change without notice and from
-# which anybody with a GitHub account can run a job. That exposes the panel that controls
-# every container on this box, including the database, to a large slice of the internet.
-# SSH is already open, so this adds no new exposure and bounds the credential to one action.
+# WHY NOTHING OUTSIDE CALLS IT. Coolify's API is on :8000 and the firewall allows only 22, 80
+# and 443 from the internet. Reaching it from GitHub Actions would mean allowlisting GitHub's
+# Actions ranges, which are thousands of CIDRs that change without notice and from which
+# anybody with a GitHub account can run a job. That exposes the panel that controls every
+# container on this box, including the database, to a large slice of the internet. This script
+# was once also meant as the one command a GitHub deploy key could run over SSH; no workflow
+# holds such a key now, and a `command=` line for one left in root's authorized_keys is a
+# credential with nothing to do that should be removed. The API call below is to 127.0.0.1.
 #
 # WHY IT PREFERS COOLIFY'S API. Coolify owns the stored compose, and a deploy it does not
 # know about leaves its UI describing a state that is not real. The compose fallback exists
