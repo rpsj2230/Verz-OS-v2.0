@@ -49,11 +49,12 @@ same reader with its two arguments swapped answers whether going back is safe. S
 `WHETHER_IT_CHANGES_THE_DATABASE_IS_READ_AND_NEVER_TYPED`.
 
 **Moving an install between releases is the other half, and the half nothing recorded.**
-`brain.deployment.installer.PLAN` writes the tag it unpacked into `/opt/brain/RELEASE` and
-writes nothing that selects an image, so a fresh install pinned to a tag runs containers that
-resolve `${APP_IMAGE:-...:latest}` and the two facts disagree from the first day. That is one
-finding. The second is worse for a rollback: `RELEASE` is the only version fact an install
-holds, an update overwrites it, and nothing anywhere records what it overwrote. So
+`brain.deployment.installer.PLAN` wrote the tag it unpacked into `/opt/brain/RELEASE` and,
+until 2026-09-15, nothing that selected an image, so a fresh install pinned to a tag ran
+containers that resolved `${APP_IMAGE:-...:latest}` and the two facts disagreed from the first
+day. The compose files now require the variable and the install writes it with the step these
+scripts take by name. The second is worse for a rollback: `RELEASE` is the only version fact an
+install holds, an update overwrites it, and nothing anywhere records what it overwrote. So
 `update_plan` **copies the marker before it writes over it**, which is the whole of what makes
 `rollback_plan` possible, and `rollback_plan` refuses when that copy is missing rather than
 guessing. See `RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE` and
@@ -112,6 +113,8 @@ from brain.deployment.installer import (
     INSTALL_ENV_FILE,
     INSTALL_HOME,
     PLAN,
+    PRODUCT_IMAGE,
+    THE_IMAGE_VARIABLE,
     Step,
     compose_files_argument,
     step_named,
@@ -186,16 +189,6 @@ A_NOTE_A_CLIENT_CANNOT_ACT_ON_IS_A_COMMIT_SUBJECT: Final = (
     "the one field written for somebody outside this repository, and it reads as coverage: "
     "the release has notes, and nobody can act on them. Plain English is the requirement and "
     "this is the part of it a machine can hold."
-)
-
-#: Why an install can be pinned to a tag and running something else from the day it was built.
-THE_MARKER_AND_THE_RUNNING_IMAGE_ARE_TWO_DIFFERENT_FACTS: Final = (
-    "The install writes the tag it unpacked into a marker file and writes nothing into the "
-    "environment file that selects an image, so every container of a fresh install falls back "
-    "to the compose default, which ends in latest. The marker and the running image therefore "
-    "disagree from the first install, and an update that only moved the marker would go on "
-    "disagreeing while reporting a version. Pinning is writing the image variable beside the "
-    "marker, and these two scripts are the only thing in this repository that does it."
 )
 
 #: Why an update writes down what it is replacing before it replaces it.
@@ -994,15 +987,6 @@ PREVIOUS_MARKER: Final = "PREVIOUS_RELEASE"
 #: The tag that is not one. See `LATEST_IS_AN_UNPIN_WEARING_AN_UPDATES_CLOTHES`.
 NOT_A_RELEASE_TAG: Final = "latest"
 
-#: The variable that selects every container of an install.
-#:
-#: `docker-compose.staging.yml` keeps `STAGING_IMAGE` deliberately and no profile composes it,
-#: so nothing here reads it: staging exists to run a build production has not taken yet, and
-#: one variable for both would be a staging stack that can only ever run what production runs.
-#: `brain.deployment.installer.release_pinning_gaps` is what holds that boundary; this is the
-#: one name on the install side of it.
-THE_IMAGE_VARIABLE: Final = "APP_IMAGE"
-
 #: The one question the rollback asks of a running database.
 #:
 #: Written whole rather than composed from a table name, because there is one form of it and
@@ -1046,20 +1030,21 @@ def release_marker(plan: Sequence[Step] = PLAN) -> tuple[str, str]:
 
 
 def image_repository(files: ComposeFiles) -> str:
-    """The published image an install pins a tag of, read off the compose files.
+    """The published image an install pins a tag of, once the compose files are shown to read it.
 
-    Read rather than written down, for the same reason `_compose_rules` derives the include
-    list: the reference is already in every compose file, and a copy of it in this module would
-    be the copy that stops matching. Only the default is read, because that is where the image
-    name lives: `${APP_IMAGE:-name:tag}` names the image and `${APP_IMAGE}` names nothing.
+    **The name is `brain.deployment.installer.PRODUCT_IMAGE`, and it was read off a default
+    until 2026-09-15.** Needs Rupash item 51 made the variable required, and `${APP_IMAGE:?...}`
+    names no image, so a reader of defaults would have had nothing to read. What the compose
+    files can still answer is whether anything reads the variable these scripts write, and
+    whether a default left behind names a different image from the one they pin.
 
     Two refusals, and they fail for different people. No reference at all means these scripts
     would write a variable nothing reads, which is a pin that pins nothing and reports success.
-    Two different repositories means a script that pins one of them, so an install runs two
-    builds of one product, which is the failure `release_pinning_gaps` describes arriving
-    through the update rather than through a compose file.
+    A default naming another repository means a script that pins one image while an install
+    that loses the variable starts another, so it runs two builds of one product, which is the
+    failure `release_pinning_gaps` describes arriving through the update.
     """
-    found: set[str] = set()
+    readers = 0
     for name in sorted(files):
         for body in _services_in(files[name]).values():
             if not isinstance(body, Mapping):
@@ -1067,25 +1052,25 @@ def image_repository(files: ComposeFiles) -> str:
             match = IMAGE_VARIABLE.match(str(body.get("image", "")))
             if match is None or match.group(1) != THE_IMAGE_VARIABLE:
                 continue
-            default = match.group(2) or ""
-            if ":" in default:
-                found.add(default.rsplit(":", 1)[0])
-    if not found:
+            readers += 1
+            default = (match.group(3) or "") if match.group(2) == "-" else ""
+            named = default.rsplit(":", 1)[0] if ":" in default else default
+            if named and named != PRODUCT_IMAGE:
+                msg = (
+                    f"{name} gives {THE_IMAGE_VARIABLE} a default naming {named!r} while these "
+                    f"scripts pin {PRODUCT_IMAGE!r}, so an install that loses the variable starts "
+                    "a different image from the one it was pinned to and runs two builds of one "
+                    "product"
+                )
+                raise ReleaseError(msg)
+    if not readers:
         msg = (
-            f"no service in these compose files chooses an image through {THE_IMAGE_VARIABLE} "
-            "with a default naming one, so there is no image reference for an update to pin "
-            f"and writing {THE_IMAGE_VARIABLE} would put a variable nothing reads into the "
-            "environment file"
+            f"no service in these compose files chooses an image through {THE_IMAGE_VARIABLE}, "
+            "so there is no image reference for an update to pin and writing "
+            f"{THE_IMAGE_VARIABLE} would put a variable nothing reads into the environment file"
         )
         raise ReleaseError(msg)
-    if len(found) > 1:
-        msg = (
-            f"{THE_IMAGE_VARIABLE} selects {sorted(found)} in these compose files, so a script "
-            "pinning a tag of one of them leaves the rest wherever they were and the install "
-            "runs two builds of one product"
-        )
-        raise ReleaseError(msg)
-    return found.pop()
+    return PRODUCT_IMAGE
 
 
 def refusal(condition: str, message: str) -> str:
@@ -1149,40 +1134,20 @@ def _onto_this_release(variable: str, plan: Sequence[Step] = PLAN) -> tuple[Step
     One tuple rather than two copies, because an update and a rollback do exactly the same
     thing from here and differ only in how they decided which tag.
 
-    **Two of the five are the installer's own, taken by name.** The settings step is first
-    because a release that adds a fifth file four containers might mount would otherwise reach
-    a server with nobody creating it, and a bind mount whose source does not exist is the one
-    failure that starts the container anyway: its own guard is per file, so an allowlist a
-    client has edited is not touched. The readiness step is last because readiness is what
-    tells a person the swap worked, and a second copy of that check here would be a second
-    answer to the only question either script is run to have answered.
+    **Three of the five are the installer's own, taken by name.** Pinning the image is one of
+    them since 2026-09-15, because the install has to write the variable too now that the
+    compose files refuse without it, and two copies of a pin are two ways to pin. The settings
+    step is first because a release that adds a fifth file four containers might mount would
+    otherwise reach a server with nobody creating it, and a bind mount whose source does not
+    exist is the one failure that starts the container anyway: its own guard is per file, so
+    an allowlist a client has edited is not touched. The readiness step is last because
+    readiness is what tells a person the swap worked, and a second copy of that check here
+    would be a second answer to the only question either script is run to have answered.
     """
     pinned = f'"$BRAIN_REPOSITORY:${variable}"'
-    environment = f"{INSTALL_HOME}/{INSTALL_ENV_FILE}"
     return (
         step_named("create the settings the containers mount", plan),
-        Step(
-            name="pin the image this install runs",
-            # Rewritten rather than appended to, because a second APP_IMAGE line lower down the
-            # file is the one compose reads and the first is the one a person finds.
-            run=(
-                "umask 077\n"
-                "{\n"
-                f'  grep -v "^{THE_IMAGE_VARIABLE}=" "{environment}" || true\n'
-                f'  printf "{THE_IMAGE_VARIABLE}=%s\\n" {pinned}\n'
-                f'}} > "{environment}.pinned"\n'
-                f'mv "{environment}.pinned" "{environment}"'
-            ),
-            why=THE_MARKER_AND_THE_RUNNING_IMAGE_ARE_TWO_DIFFERENT_FACTS,
-            on_failure=(
-                f"the file is rewritten beside itself and moved into place, so a failure here "
-                f"leaves {environment} as it was. Check the directory is writable and run this "
-                "again"
-            ),
-            changes=True,
-            already_done=f'grep -qxF "{THE_IMAGE_VARIABLE}=$BRAIN_REPOSITORY:${variable}" '
-            f'"{environment}"',
-        ),
+        step_named("pin the image this install runs", plan),
         Step(
             name="pull the image this release publishes",
             run="docker compose $BRAIN_COMPOSE_FILES pull --quiet",
@@ -1237,7 +1202,7 @@ def update_plan(plan: Sequence[Step] = PLAN) -> tuple[Step, ...]:
     back to; guarded on the marker already naming the target, the second run skips it and the
     real previous release survives.
 
-    Four of the steps are the installer's own, taken by name. Fetching and unpacking one archive
+    Five of the steps are the installer's own, taken by name. Fetching and unpacking one archive
     of one tag is the same act whether the directory is empty or holds the release before it,
     and the failure of a second copy of it is that only one of the two would be corrected.
     """

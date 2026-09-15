@@ -20,18 +20,20 @@ So an update is: pin the image tag, pull, recreate, wait for readiness, check th
 
 ## The thing that was missing, and why this page changed
 
-**Your install records which release it unpacked and never which image it runs, and until you
-run the update script those are two different facts.**
+**Until 2026-09-15 an install recorded which release it unpacked and never which image it ran,
+and those were two different facts.**
 
-The installer writes the tag you gave it into `/opt/brain/RELEASE`, and it writes nothing into
-`/opt/brain/.env` that selects an image. Every container therefore falls back to the default in
-the compose file, which ends in `:latest`. So a server whose `RELEASE` file says `v1.4.0` may be
-running whatever `latest` pointed at on the afternoon it pulled, and every version figure it
-reports is true of the marker rather than of the containers.
+The installer wrote the tag you gave it into `/opt/brain/RELEASE` and nothing into
+`/opt/brain/.env` that selected an image, so every container fell back to a default in the
+compose file ending in `:latest`. A server whose `RELEASE` file said `v1.4.0` could be running
+whatever `latest` pointed at on the afternoon it pulled.
 
-The update script closes that: it writes `APP_IMAGE` into your environment file, so from the
-first update the marker and the running image are the same fact. Until then, treat `RELEASE` as
-a record of what was downloaded and `/health/ready` as the record of what is running.
+That default is gone. **`APP_IMAGE` is required**: every compose file refuses to start without
+it and names the variable. The installer, the update script and the rollback script all write it
+from the tag they have just recorded, as `ghcr.io/rpsj2230/verz-brain-v2.0:<tag>`, so the
+marker and the running image are one fact from the first install. An install made before that
+date has no `APP_IMAGE` line and will refuse to start on the next compose command: run the
+update script to the tag in `RELEASE`, which writes it.
 
 **The second gap was worse and it is the one the rollback needed.** `RELEASE` is the only
 version fact an install holds, an update overwrites it, and nothing recorded what it overwrote.
@@ -193,7 +195,7 @@ run on a server**, which is why the list above still has a drill in it.
 | Claim | Held by |
 | --- | --- |
 | That no service is built on a client's machine, and none is deployed untagged | `test_deployment_installer.py` |
-| That one variable selects every container of an install, and that an install pinning nothing is not pinned | the same test, which reports both as findings rather than hiding them |
+| That one variable selects every container of an install, that no container of this product can start without it, and that the check still sees all seven of them | the same test, which asserts the findings are empty and the containers it recognises are the exact set in the files |
 | That the update records the release it replaces before it writes the new one | `test_deployment_release.py`, which runs the step against a throwaway install directory |
 | That a rollback with nothing recorded refuses, and that one with a record reads it | the same test, by running both scripts |
 | That neither script will put an install on `latest` | the same test, in both directions |

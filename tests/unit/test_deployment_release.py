@@ -42,7 +42,15 @@ from typing import Any
 import pytest
 import yaml
 
-from brain.deployment.installer import INSTALL_ENV_FILE, INSTALL_HOME, PLAN, Step, step_named
+from brain.deployment.installer import (
+    INSTALL_ENV_FILE,
+    INSTALL_HOME,
+    PLAN,
+    PRODUCT_IMAGE,
+    THE_IMAGE_VARIABLE,
+    Step,
+    step_named,
+)
 from brain.deployment.release import (
     A_BREAKING_SCHEMA_CHANGE_IS_NEVER_ROUTINE,
     A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA,
@@ -54,7 +62,6 @@ from brain.deployment.release import (
     NOT_A_RELEASE_TAG,
     PREVIOUS_MARKER,
     RECORDING_THE_PREVIOUS_RELEASE_AFTER_THE_NEW_ONE_RECORDS_THE_NEW_ONE,
-    THE_IMAGE_VARIABLE,
     URGENCY,
     DatabaseChange,
     Level,
@@ -905,35 +912,46 @@ def an_archive(path: Path, revisions: Sequence[str]) -> Path:
 
 
 # ---------------------------------------------------------------- what an install records
-def test_the_install_records_which_release_it_unpacked_and_never_which_image_it_runs() -> None:
-    """**The finding this leaf turns on, asserted rather than argued.** The install plan writes
-    the tag into a marker file and writes nothing that selects an image, so every container of
-    a fresh install falls back to a compose default ending in `latest`: the marker and the
-    running image disagree from the first day, and an update that only moved the marker would
-    go on disagreeing while reporting a version.
+def test_the_install_pins_the_image_it_runs_before_anything_runs_compose() -> None:
+    """**This test asserted the opposite until 2026-09-15**, as the finding the leaf turned on:
+    the install wrote the tag into a marker and nothing that selected an image, so every
+    container fell back to a compose default ending in `latest`.
 
-    Delete this and the pin step can be dropped from both plans with every other test here
-    still green, because nothing else asserts that anything anywhere writes the image
-    variable."""
+    Needs Rupash item 51 made the compose files require the variable, and that turns the
+    finding into a broken install: a plan that never writes it cannot run `docker compose` at
+    all, `config` included. So the install pins the variable to the tag it unpacked, before the
+    first step that runs compose, and the update and the rollback take that one step by name.
+
+    Delete this and the pin can move below a compose command, or be dropped from the install,
+    with the scripts still rendering and every server refusing on its first compose call."""
     assert release_marker(PLAN) == ("BRAIN_RELEASE", "RELEASE")
-    assert [one.name for one in PLAN if THE_IMAGE_VARIABLE in one.run + one.already_done] == []
+    names = [one.name for one in PLAN]
+    # Writes it, rather than merely naming it. The step reads the old line out as well as
+    # writing the new one, so a check for the name alone passes with the write removed.
+    writes = [one.name for one in PLAN if f'printf "{THE_IMAGE_VARIABLE}=%s\\n"' in one.run]
+    assert writes == ["pin the image this install runs"]
+    # `$BRAIN_COMPOSE_FILES` rather than `docker compose`: the first step asks for the compose
+    # version, which reads no file and cannot meet the refusal; every step naming the files can.
+    first_compose = min(i for i, one in enumerate(PLAN) if "$BRAIN_COMPOSE_FILES" in one.run)
+    assert (
+        names.index("download and unpack the release")
+        < names.index("write the environment file from the template")
+        < names.index("pin the image this install runs")
+        < first_compose
+    )
 
-    defaults = {
+    references = {
         str(body.get("image", ""))
         for document in compose_documents().values()
         for body in dict(document.get("services") or {}).values()
         if isinstance(body, dict)
     }
-    assert any(
-        one.startswith(f"${{{THE_IMAGE_VARIABLE}:-") and one.endswith(":latest}")
-        for one in defaults
-    )
+    assert any(one.startswith(f"${{{THE_IMAGE_VARIABLE}:?") for one in references)
+    assert not any(one.startswith(f"${{{THE_IMAGE_VARIABLE}:-") for one in references)
 
-    pinning = [one for one in update_plan() if THE_IMAGE_VARIABLE in one.run]
-    assert [one.name for one in pinning] == ["pin the image this install runs"]
-    # Writes it, rather than merely naming it. The step reads the old line out as well as
-    # writing the new one, so a check for the name alone passes with the write removed.
-    assert f'printf "{THE_IMAGE_VARIABLE}=%s\\n"' in pinning[0].run
+    pin = step_named("pin the image this install runs")
+    for plan in (update_plan(), rollback_plan()):
+        assert [one for one in plan if THE_IMAGE_VARIABLE in one.run] == [pin]
 
 
 def test_a_plan_that_writes_no_release_tag_anywhere_is_refused_rather_than_defaulted() -> None:
@@ -1269,46 +1287,44 @@ def test_a_rollback_forgets_the_record_it_acted_on(tmp_path: Path) -> None:
 
 
 # ------------------------------------------------------------------- what the scripts are
-def test_the_image_an_update_pins_is_read_off_the_compose_files() -> None:
-    """The reference is already in every compose file, so a copy of it in the module would be
-    the copy that stops matching. Only the default is read, because that is where the image
-    name lives: `${APP_IMAGE}` with no default names no image at all.
+def test_the_image_an_update_pins_is_the_one_the_product_declares_and_the_files_read() -> None:
+    """**Read off a compose default until 2026-09-15, and there is no default to read now.**
+    Needs Rupash item 51 made every reference `${APP_IMAGE:?...}`, which names no image, so the
+    name is declared once in `brain.deployment.installer` and what the compose files still
+    answer is that something reads the variable these scripts write.
 
-    Delete this and the repository becomes a literal somebody keeps in step by hand, which is
-    the arrangement that puts a client's containers on an image that stopped being published."""
-    assert image_repository(compose_documents()) == REPOSITORY
-    assert f"${{{THE_IMAGE_VARIABLE}:-{REPOSITORY}:latest}}" in {
-        str(body.get("image", ""))
-        for document in compose_documents().values()
-        for body in dict(document.get("services") or {}).values()
-        if isinstance(body, dict)
-    }
+    Delete this and the scripts can pin a repository no compose file is shown to read."""
+    assert image_repository(compose_documents()) == REPOSITORY == PRODUCT_IMAGE
+    assert f'BRAIN_REPOSITORY="{PRODUCT_IMAGE}"' in render_update(repository=REPOSITORY)
 
 
-def test_compose_files_selecting_two_repositories_or_none_are_refused() -> None:
+def test_compose_files_reading_no_image_variable_or_defaulting_it_elsewhere_are_refused() -> None:
     """Both refusals, against documents built to fail, because a check that can only be run
     against the healthy declaration has no test for the case it exists to find. No reference is
-    a pin that sets a variable nothing reads and reports success. Two references is one script
-    pinning half an install, which is the failure `release_pinning_gaps` describes arriving
-    through the update instead of through a compose file.
+    a pin that sets a variable nothing reads and reports success. A default naming another
+    repository is an install that loses the variable and starts a different image from the one
+    it was pinned to, which is the failure `release_pinning_gaps` describes arriving through
+    the update instead of through a compose file.
+
+    The positive case is the required reference, which is what every compose file holds now.
 
     Delete this and both refusals survive a mutation run, for the reason
     `brain.ops.starter.starter_gaps` records: no test could hand them a bad case."""
     with pytest.raises(ReleaseError, match="no service"):
-        image_repository({"a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}}}"}}}})
+        image_repository({"a.yml": {"services": {"app": {"image": "${OTHER_IMAGE:?set it}"}}}})
     with pytest.raises(ReleaseError, match="two builds of one product"):
         image_repository(
             {
-                "a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:-one/x:v1}}"}}},
+                "a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:?set it}}"}}},
                 "b.yml": {"services": {"job": {"image": f"${{{THE_IMAGE_VARIABLE}:-two/y:v1}}"}}},
             }
         )
-    assert (
-        image_repository(
-            {"a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:-one/x:v1}}"}}}}
-        )
-        == "one/x"
-    )
+    required = {"a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:?set it}}"}}}}
+    assert image_repository(required) == PRODUCT_IMAGE
+    defaulted_to_itself = {
+        "a.yml": {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:-{PRODUCT_IMAGE}:v1}}"}}}
+    }
+    assert image_repository(defaulted_to_itself) == PRODUCT_IMAGE
 
 
 def test_a_refusal_the_shell_would_act_on_rather_than_print_is_refused() -> None:

@@ -188,13 +188,10 @@ knows its own commit and anything you set replaces a true answer with a stale on
 An image reference with no tag resolves to `latest`, and `latest` moves.
 
 **What to do.** Pin the tag. That is what release pinning is for, and it is how one install
-holds a version back while others move on. Note that today several services default to a
-`:latest` reference, so **an install that pins nothing is not pinned at all**.
-
-Note also that one image in this deployment is selected by two different variables. Setting one
-of them pins some containers and leaves the rest on the other one's default, so an install can
-be running two builds of one product at once while every version figure it reports is true of
-only part of it.
+holds a version back while others move on. Every container of this product reads `APP_IMAGE`,
+which is required and has no default, so an install that names no image refuses to start rather
+than following `latest`. If a server does run `latest`, it is because somebody set `APP_IMAGE`
+to it: set it to a release tag instead.
 
 ---
 

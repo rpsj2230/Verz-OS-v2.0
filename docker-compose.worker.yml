@@ -90,7 +90,7 @@ services:
     # The same image as the application. A worker is the same code with a different command,
     # and a second image would be a second build that can be one commit behind the one whose
     # jobs it is running - which presents as a task that fails only in production.
-    image: ${APP_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
     # The profiles `brain.ops.wiring` gives the `brain-worker` component, spelled the way
     # compose selects them. Held equal by test, in both directions.

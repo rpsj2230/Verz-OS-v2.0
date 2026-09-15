@@ -27,6 +27,8 @@ from typing import Any
 import pytest
 import yaml
 
+from brain.deployment.installer import PRODUCT_IMAGE
+
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -123,9 +125,11 @@ def test_the_image_the_pipeline_pushes_is_the_image_the_server_pulls() -> None:
     script = (REPO / "ops" / "deploy.sh").read_text(encoding="utf-8")
     watcher = (REPO / "ops" / "deploy" / "brain-autodeploy").read_text(encoding="utf-8")
 
-    # The compose default is `${APP_IMAGE:-<image>:latest}`; what matters is the image, not
-    # the tag or the override, so the repository half is what is compared.
-    assert published in compose, f"compose pulls {compose}, the pipeline pushes {published}"
+    # The compose file names no image since Needs Rupash item 51: `${APP_IMAGE:?...}` is
+    # required, and the name is declared once in `brain.deployment.installer`. So the
+    # pipeline is held to that declaration, and the compose file to reading the variable.
+    assert published == PRODUCT_IMAGE, f"the product is {PRODUCT_IMAGE}, CI pushes {published}"
+    assert compose.startswith("${APP_IMAGE:?"), f"compose chooses its image as {compose}"
     assert published in script, "ops/deploy.sh names an image the pipeline does not publish"
     assert published in watcher, "the watcher pulls an image the pipeline does not publish"
 
@@ -670,7 +674,7 @@ def test_the_local_stack_can_run_an_image_built_on_this_machine() -> None:
     mechanism the `stack` job depends on rather than a convenience nobody uses.
     """
     image = str(_compose("docker-compose.yml")["services"]["app"]["image"])
-    assert image.startswith("${APP_IMAGE:-"), f"the app image is fixed at {image}"
+    assert image.startswith("${APP_IMAGE:?"), f"the app image is fixed at {image}"
     stack_env = _workflow("ci.yml")["jobs"]["stack"]["env"]
     assert "APP_IMAGE" in stack_env
 

@@ -343,11 +343,21 @@ def test_a_cell_is_compared_without_its_code_span() -> None:
 
 
 # ======================================================================== the minted register
-def test_the_installer_mints_four_values_and_the_register_reads_them_off_the_plan() -> None:
-    """Delete this and a fifth credential added to the mint step is a value every install has
-    and no guide mentions, which is the exact failure a hand-kept list produces."""
+def test_the_installer_writes_five_values_and_the_register_reads_them_off_the_plan() -> None:
+    """The fifth is `APP_IMAGE`, since 2026-09-15. Needs Rupash item 51 made the compose files
+    require it, so the install writes it from the tag it unpacked and the guide's provenance
+    column says the installer supplies it rather than asking a client to type it.
+
+    Delete this and a sixth value added to the plan is a value every install has and no guide
+    mentions, which is the exact failure a hand-kept list produces."""
     assert minted_variables(PLAN) == frozenset(
-        {"POSTGRES_PASSWORD", "APP_ROLE_PASSWORD", "BRAIN_SETUP_SECRET", "BRAIN_SETUP_ISSUED_AT"}
+        {
+            "POSTGRES_PASSWORD",
+            "APP_ROLE_PASSWORD",
+            "BRAIN_SETUP_SECRET",
+            "BRAIN_SETUP_ISSUED_AT",
+            "APP_IMAGE",
+        }
     )
 
 

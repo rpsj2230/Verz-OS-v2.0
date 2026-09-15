@@ -98,8 +98,8 @@ from types import MappingProxyType
 from typing import Any, Final
 
 from brain.console.installation import Fact, Source
-from brain.deployment.installer import INSTALL_ENV_FILE, INSTALL_HOME
-from brain.deployment.release import NOT_A_RELEASE_TAG, THE_IMAGE_VARIABLE, release_marker
+from brain.deployment.installer import INSTALL_ENV_FILE, INSTALL_HOME, THE_IMAGE_VARIABLE
+from brain.deployment.release import NOT_A_RELEASE_TAG, release_marker
 from brain.ops.compose import ComposeFiles, mounted_paths
 from brain.ops.recovery import DRILL_INTERVAL_DAYS
 

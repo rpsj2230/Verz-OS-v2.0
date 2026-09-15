@@ -79,7 +79,7 @@ services:
     # The same image as the application, for the reason the general worker gives: a worker is
     # the same code with a different command, and a second image is a second build that can
     # be one commit behind the one whose jobs it runs.
-    image: ${APP_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
     # The profiles `brain.ops.wiring` gives the `brain-parse-worker` component. Held equal by
     # test, in both directions.

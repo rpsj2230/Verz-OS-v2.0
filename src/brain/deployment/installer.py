@@ -81,8 +81,9 @@ Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15, M30.2.5
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any, Final
 
 from brain.deployment.requirements import (
@@ -142,6 +143,55 @@ INSTALL_HOME: Final = "/opt/brain"
 #: The environment file the install owns. One per server, gitignored everywhere, and a copy of
 #: the template with values filled in. See `brain.deployment.variables`.
 INSTALL_ENV_FILE: Final = ".env"
+
+#: The image this product publishes, by repository and without a tag. Declared once, here.
+#:
+#: **Here rather than read out of a compose default, because there is no default any more.**
+#: Until 2026-09-15 every compose file said `${APP_IMAGE:-<this>:latest}`, and both readers of
+#: the name, `release_pinning_gaps` and `brain.deployment.release.image_repository`, took it out
+#: of that text. Needs Rupash item 51 made the variable required, and a required reference
+#: names no image, so the first attempt at that watched both readers go blind and put the
+#: default back. The name is the address `.github/workflows/deploy.yml` publishes to, and
+#: `tests/unit/test_delivery_pipeline.py` holds the two equal.
+PRODUCT_IMAGE: Final = "ghcr.io/rpsj2230/verz-brain-v2.0"
+
+#: The variable that selects every container of an install.
+#:
+#: `docker-compose.staging.yml` keeps `STAGING_IMAGE` deliberately and no profile composes it:
+#: staging exists to run a build production has not taken yet, and one variable for both would
+#: be a staging stack that can only ever run what production runs. `release_pinning_gaps` is
+#: what holds that boundary; this is the one name on the install side of it.
+THE_IMAGE_VARIABLE: Final = "APP_IMAGE"
+
+#: Every variable that selects an image built from this repository, against the image it
+#: selects. The record matcher is built from `matcher/Dockerfile` and nothing publishes it, so
+#: what its variable selects is named by the file it is built from.
+PRODUCT_IMAGE_VARIABLES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        THE_IMAGE_VARIABLE: PRODUCT_IMAGE,
+        "STAGING_IMAGE": PRODUCT_IMAGE,
+        "MATCHER_IMAGE": "matcher/Dockerfile",
+    }
+)
+
+#: Why a container of this product is recognised by its variable and not by its default.
+A_PRODUCT_CONTAINER_IS_RECOGNISED_BY_ITS_VARIABLE_AND_NOT_BY_ITS_DEFAULT: Final = (
+    "A required image reference names no image, so a check that recognised this product's "
+    "containers by the name inside a default could not see a single one of them once the "
+    "defaults were removed, and would report a clean deployment because it was looking at "
+    "nothing. The variables are declared once with the image each selects, so removing a "
+    "default costs the check nothing and keeping one is a finding."
+)
+
+#: Why the install writes the image variable as well as the marker.
+THE_MARKER_AND_THE_RUNNING_IMAGE_ARE_TWO_DIFFERENT_FACTS: Final = (
+    "The marker file says which release was unpacked and the image variable says which image "
+    "every container runs, and they are one fact only when the same step writes both from the "
+    "same tag. Until 2026-09-15 the install wrote the marker and left the variable to a compose "
+    "default ending in latest, so the two disagreed from the first install. The compose files "
+    "now refuse to start without the variable, and the install, the update and the rollback "
+    "all write it from the tag they have just recorded."
+)
 
 #: Where the settings four containers read at startup live on the server.
 #:
@@ -545,6 +595,33 @@ PLAN: Final[tuple[Step, ...]] = (
         already_done=f'test -f "{INSTALL_HOME}/{INSTALL_ENV_FILE}"',
     ),
     Step(
+        # Straight after the file exists and before anything runs compose, because every
+        # compose command below it, `config` included, refuses while the variable is unset.
+        # Taken by name into the update and the rollback, so all three pin one way.
+        name="pin the image this install runs",
+        # Rewritten rather than appended to, because a second APP_IMAGE line lower down the
+        # file is the one compose reads and the first is the one a person finds.
+        run=(
+            "umask 077\n"
+            "{\n"
+            f'  grep -v "^{THE_IMAGE_VARIABLE}=" "{INSTALL_HOME}/{INSTALL_ENV_FILE}" || true\n'
+            f'  printf "{THE_IMAGE_VARIABLE}=%s\\n" "$BRAIN_REPOSITORY:$BRAIN_RELEASE"\n'
+            f'}} > "{INSTALL_HOME}/{INSTALL_ENV_FILE}.pinned"\n'
+            f'mv "{INSTALL_HOME}/{INSTALL_ENV_FILE}.pinned" "{INSTALL_HOME}/{INSTALL_ENV_FILE}"'
+        ),
+        why=THE_MARKER_AND_THE_RUNNING_IMAGE_ARE_TWO_DIFFERENT_FACTS,
+        on_failure=(
+            f"the file is rewritten beside itself and moved into place, so a failure here "
+            f"leaves {INSTALL_HOME}/{INSTALL_ENV_FILE} as it was. Check the directory is "
+            "writable and run this again"
+        ),
+        changes=True,
+        already_done=(
+            f'grep -qxF "{THE_IMAGE_VARIABLE}=$BRAIN_REPOSITORY:$BRAIN_RELEASE" '
+            f'"{INSTALL_HOME}/{INSTALL_ENV_FILE}"'
+        ),
+    ),
+    Step(
         # The sibling of the step above it, and it is the same argument twice: the release
         # ships a template, the install copies it once into the deployment's own directory,
         # and the deployment's copy is what runs. Guarded per file rather than on the
@@ -901,6 +978,7 @@ def render(profile: str, *, services: int, memory_mib: int) -> str:
         "",
         f'BRAIN_PROFILE="{profile}"',
         f'BRAIN_HOME="{INSTALL_HOME}"',
+        f'BRAIN_REPOSITORY="{PRODUCT_IMAGE}"',
         f'BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}"',
         f'BRAIN_SERVICES="{services}"',
         f'BRAIN_MEMORY_MIB="{memory_mib}"',
@@ -962,8 +1040,53 @@ def rebuild_gaps(files: ComposeFiles) -> tuple[str, ...]:
     return tuple(found)
 
 
-#: `${VAR:-default}` or `${VAR:?message}` or `${VAR}`, as a whole image reference.
-IMAGE_VARIABLE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::[-?]([^}]*))?\}$")
+#: `${VAR:-default}` or `${VAR:?message}` or `${VAR}`, as a whole image reference. The groups
+#: are the variable, the operator, and what follows the operator.
+IMAGE_VARIABLE = re.compile(r"^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::([-?])([^}]*))?\}$")
+
+#: The images this repository builds, whichever variable selects them.
+_PRODUCT_IMAGES: Final = frozenset(PRODUCT_IMAGE_VARIABLES.values())
+
+
+def _without_tag(reference: str) -> str:
+    """An image reference with its tag taken off, leaving a registry port where it is."""
+    head, _, last = reference.rpartition("/")
+    name = last.split(":", 1)[0]
+    return f"{head}/{name}" if head else name
+
+
+def _reading(reference: str) -> tuple[str, str, str, str]:
+    """One image reference as (variable, operator, default, image it selects).
+
+    **A declared variable selects the image it is declared against, whatever its default
+    says.** See `A_PRODUCT_CONTAINER_IS_RECOGNISED_BY_ITS_VARIABLE_AND_NOT_BY_ITS_DEFAULT`. An
+    undeclared variable selects whatever its default names, which is nothing when it has none,
+    and a plain reference selects itself.
+    """
+    match = IMAGE_VARIABLE.match(reference)
+    if match is None:
+        return "", "", "", _without_tag(reference)
+    variable, operator, default = match.group(1), match.group(2) or "", match.group(3) or ""
+    declared = PRODUCT_IMAGE_VARIABLES.get(variable)
+    named = _without_tag(default) if operator == "-" and default else ""
+    return variable, operator, default, declared or named
+
+
+def product_services(files: ComposeFiles) -> tuple[str, ...]:
+    """Every service that runs an image this repository builds, as `file: service`.
+
+    The count of these over the real files is what shows `release_pinning_gaps` is looking at
+    something. A check that recognised nothing would report a clean deployment, and the only
+    evidence against that is a number that has to match the files.
+    """
+    found: list[str] = []
+    for name in sorted(files):
+        for service, body in sorted(_services(files[name]).items()):
+            if not isinstance(body, dict) or not body.get("image"):
+                continue
+            if _reading(str(body["image"]))[3] in _PRODUCT_IMAGES:
+                found.append(f"{name}: {service}")
+    return tuple(found)
 
 
 #: A compose file with no `name:` is an overlay: `docker compose -f a -f b` merges it into the
@@ -996,34 +1119,55 @@ def release_pinning_gaps(files: ComposeFiles) -> tuple[str, ...]:
     exceptions here: the staging file declares `name:`, so it is its own project, and every
     other file is an overlay merged into the install.
 
-    The second shape is the default. `${VAR:-name:latest}` means an install that pins nothing
-    is not pinned at all, and the release it runs changes under it on the next pull. That one
-    is per service and is not scoped to a stack, because a staging stack that follows a moving
-    tag is still an install whose version changed under it.
+    The second shape is a container of this product that starts without anybody naming its
+    image. A default does that: `${APP_IMAGE:-name:latest}` means an install that pins nothing
+    is not pinned at all, and the release it runs changes under it on the next pull. So does a
+    bare `${APP_IMAGE}`, which compose substitutes with an empty string and a warning, and so
+    does a reference written out in full, which no variable can hold back. Only `:?` refuses to
+    start, and that is Needs Rupash item 51. Per service and not scoped to a stack, because a
+    staging stack whose version changes under it is still an install whose version changed.
 
-    Reported rather than raised, in the shape `test_compose.py` uses: this is true on arrival,
-    and a check that is red the day it lands is a check somebody switches off. What pins it is
-    a test asserting the exact set, so a fourth variable fails rather than joining a list
-    nobody reads.
+    **This product's containers are recognised by their variable, never by a default.** See
+    `A_PRODUCT_CONTAINER_IS_RECOGNISED_BY_ITS_VARIABLE_AND_NOT_BY_ITS_DEFAULT`. What that
+    cannot see is an undeclared variable with no default, which names no image to anybody; the
+    count `product_services` returns over the real files is what catches a container moved onto
+    one, because it drops out of the count.
+
+    Reported rather than raised, in the shape `test_compose.py` uses: a check that is red the
+    day it lands is a check somebody switches off. What pins it is a test asserting the tree
+    reports nothing, so a new container with a default fails rather than joining a list.
     """
     selected: dict[tuple[str, str], set[str]] = {}
     found: list[str] = []
     for name in sorted(files):
         stack = _stack(files[name])
         for service, body in sorted(_services(files[name]).items()):
-            if not isinstance(body, dict):
+            if not isinstance(body, dict) or not body.get("image"):
                 continue
-            match = IMAGE_VARIABLE.match(str(body.get("image", "")))
-            if match is None:
-                continue
-            variable, default = match.group(1), match.group(2) or ""
-            image = default.rsplit(":", 1)[0] if ":" in default else default
-            if image:
+            reference = str(body["image"])
+            variable, operator, default, image = _reading(reference)
+            if variable and image:
                 selected.setdefault((stack, image), set()).add(variable)
-            if default.endswith(":latest"):
+            if image not in _PRODUCT_IMAGES:
+                if default.endswith(":latest"):
+                    found.append(
+                        f"{name}: {service!r} defaults to {default!r}, so an install that pins "
+                        "nothing follows whatever latest points at on the day it pulls"
+                    )
+            elif not variable:
                 found.append(
-                    f"{name}: {service!r} defaults to {default!r}, so an install that pins "
-                    "nothing follows whatever latest points at on the day it pulls"
+                    f"{name}: {service!r} names {reference!r} outright, so no variable selects "
+                    "it and a client cannot hold it back without editing the file"
+                )
+            elif operator == "-":
+                found.append(
+                    f"{name}: {service!r} gives {variable} the default {default!r}, so an "
+                    "install that names no image starts on that one rather than refusing"
+                )
+            elif operator != "?":
+                found.append(
+                    f"{name}: {service!r} reads {variable} with no refusal, so an install that "
+                    "names no image gets an empty reference and a warning rather than a stop"
                 )
     for (_stack_name, image), variables in sorted(selected.items()):
         if len(variables) < 2:

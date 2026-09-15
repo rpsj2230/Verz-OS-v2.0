@@ -72,7 +72,7 @@
 
 services:
   app:
-    image: ${APP_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
+    image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     restart: unless-stopped
     depends_on:
       pgbouncer:

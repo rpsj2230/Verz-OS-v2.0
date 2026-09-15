@@ -95,7 +95,7 @@ On the resource, set:
 | Variable | Value |
 |---|---|
 | `POSTGRES_PASSWORD` | generate one; Coolify can do this |
-| `APP_IMAGE` | `ghcr.io/rpsj2230/verz-brain-v2.0:latest` |
+| `APP_IMAGE` | `ghcr.io/rpsj2230/verz-brain-v2.0:latest` (required: the compose file has no default and refuses to deploy without it) |
 | `BRAIN_ENV` | `production` |
 | `BRAIN_COMMIT_SHA` | leave to the pipeline |
 

@@ -24,7 +24,7 @@ name: brain-staging
 
 services:
   app:
-    image: ${STAGING_IMAGE:-ghcr.io/rpsj2230/verz-brain-v2.0:latest}
+    image: ${STAGING_IMAGE:?set STAGING_IMAGE to the candidate build this staging stack tries}
     restart: unless-stopped
     depends_on:
       pgbouncer:

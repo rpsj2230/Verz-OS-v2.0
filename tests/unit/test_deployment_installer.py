@@ -5,8 +5,8 @@ they are enforced when the plan is written rather than when a script is reviewed
 fourth is the answer to the question this module exists to settle: whether one command needs
 the aggregate compose file `brain.ops.compose` argues against.
 
-The step count is not in this docstring and used to be. It said twelve, the plan holds
-fourteen since item 43 added the two steps that create the settings four containers mount and
+The step count is not in this docstring and used to be. It said twelve, the plan held
+fourteen once item 43 added the two steps that create the settings four containers mount and
 the database the trace ledger connects to, and a number written in a sentence is the one that
 stops being true. `test_every_step_that_writes_something_says_when_it_is_already_done` asserts
 it against `len(PLAN)`, which is the only place it belongs.
@@ -37,6 +37,9 @@ from brain.deployment.installer import (
     INSTALL_SETTINGS,
     MOUNTED_SETTINGS,
     PLAN,
+    PRODUCT_IMAGE,
+    PRODUCT_IMAGE_VARIABLES,
+    THE_IMAGE_VARIABLE,
     TRACE_LEDGER_ROLE,
     TRACE_LEDGER_SERVICE,
     InstallerError,
@@ -45,6 +48,7 @@ from brain.deployment.installer import (
     compose_files_argument,
     health_report,
     one_command_blockers,
+    product_services,
     rebuild_gaps,
     release_pinning_gaps,
     render,
@@ -262,7 +266,7 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
 
     Delete this and a step added next year makes the whole installer unsafe to re-run, with
     nothing to say which one."""
-    assert len(PLAN) == 14
+    assert len(PLAN) == 15
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"
@@ -641,40 +645,130 @@ def test_one_variable_now_selects_every_container_of_this_product() -> None:
     assert [one for one in findings if "is selected by" in one] == []
 
 
-def test_every_image_still_defaults_to_a_moving_tag_and_that_is_a_decision() -> None:
-    """**Not the leaf, and a decision rather than a defect.**
+def test_no_container_of_this_product_starts_on_an_image_nobody_named() -> None:
+    """**Needs Rupash item 51, and this test measured the opposite until 2026-09-15.**
 
-    M42.1.4 asks that a client who pins can hold a version back, and that works. This is the
-    other question: what happens to a client who pins nothing.
-    `${APP_IMAGE:-...:latest}` means an install that pins nothing follows whatever `latest`
-    points at on the day it pulls. The obvious repair is `:?`, the same shape `ops/deploy.sh`
-    took for the host it used to guess, and it was tried and reverted on 2026-09-09 for a
-    reason worth recording: the image name lives in the default, so a reference with no default
-    names no image, and the duplicate-variable check one test up goes blind. Removing the
-    default would trade a finding somebody can act on for a check that reports nothing.
+    It was named "every image still defaults to a moving tag and that is a decision", and it
+    asserted six `:latest` defaults. `${APP_IMAGE:-...:latest}` meant an install that pinned
+    nothing followed whatever `latest` pointed at on the day it pulled. The owner set the
+    variable on the live server, and every compose file now refuses to start without it.
 
-    It is also a live decision rather than a tidy-up. This deployment's automatic deploy pulls
-    `latest`, so requiring the variable stops it until somebody sets one. That is Needs Rupash
-    item 51.
+    Asserted as no findings at all rather than as a filter on one message, because the three
+    ways a container starts on an unnamed image (a default, a bare variable, a reference
+    written out in full) are three messages, and a filter on one of them passes the other two.
 
-    The count is asserted so a seventh service added with a moving tag fails here rather than
-    joining a number nobody re-derives.
+    Delete this and a default added back to one compose file ships with nothing saying so."""
+    assert release_pinning_gaps(every_compose_file()) == ()
 
-    Delete this and the open half of the question stops being measured, and the reason item 51
-    is on the page at all is a sentence in a commit message."""
-    findings = release_pinning_gaps(every_compose_file())
 
-    assert len([one for one in findings if "follows whatever latest" in one]) == 6
+def test_the_check_still_sees_every_container_of_this_product_in_the_real_files() -> None:
+    """**The reason the first attempt at item 51 was reverted, and the proof it did not recur.**
+
+    The image name lived inside the default, so removing the default made the check that found
+    the duplicate variables see none of this product's containers, and a check that sees
+    nothing reports a clean tree. The test above passing is therefore worth nothing on its own:
+    it passes for a check that recognises no service at all.
+
+    Asserted as the exact set, against the files, so a container moved onto a variable nobody
+    declared drops out of it and fails here rather than going quiet.
+
+    Delete this and the test above can be satisfied by a check that is blind."""
+    assert product_services(every_compose_file()) == (
+        "docker-compose.keycloak.yml: keycloak-realm",
+        "docker-compose.lite.yml: app",
+        "docker-compose.matcher.yml: record-matcher",
+        "docker-compose.parse-worker.yml: brain-parse-worker",
+        "docker-compose.staging.yml: app",
+        "docker-compose.worker.yml: brain-worker",
+        "docker-compose.yml: app",
+    )
+    required = {
+        f"{name}: {service}"
+        for name, document in every_compose_file().items()
+        for service, body in dict(document.get("services") or {}).items()
+        if isinstance(body, dict)
+        and any(
+            str(body.get("image", "")).startswith(f"${{{variable}:?")
+            for variable in PRODUCT_IMAGE_VARIABLES
+        )
+    }
+    assert set(product_services(every_compose_file())) == required
+
+
+def test_a_product_container_that_can_start_on_an_image_nobody_named_is_a_finding() -> None:
+    """The three refusals, against a document built to fail. A check exercised only against the
+    tree it was written for has no test for the case it exists to find.
+
+    The written-out reference is the one that reads as fine: it is tagged, so `rebuild_gaps`
+    passes it, and no variable selects it, so no client can hold it back without a fork.
+
+    Delete this and any of the three branches can be removed with the tree still green."""
+    document = {
+        "services": {
+            "defaulted": {"image": f"${{{THE_IMAGE_VARIABLE}:-{PRODUCT_IMAGE}:v1.2.3}}"},
+            "bare": {"image": f"${{{THE_IMAGE_VARIABLE}}}"},
+            "written": {"image": f"{PRODUCT_IMAGE}:v1.2.3"},
+        }
+    }
+
+    found = release_pinning_gaps({"one.yml": document})
+
+    assert len(found) == 3
+    assert any("'defaulted' gives APP_IMAGE the default" in one for one in found)
+    assert any("'bare' reads APP_IMAGE with no refusal" in one for one in found)
+    assert any("'written' names" in one for one in found)
+
+
+def test_a_product_container_whose_variable_is_required_is_clean() -> None:
+    """The positive sibling, and it is what item 51 looks like: every container of this product
+    selected by a declared variable that refuses to start unset, with third-party images
+    written out and tagged beside them.
+
+    Delete this and the check can report every product container and pass the test above."""
+    document = {
+        "services": {
+            "app": {"image": f"${{{THE_IMAGE_VARIABLE}:?set it}}"},
+            "worker": {"image": f"${{{THE_IMAGE_VARIABLE}:?set it}}"},
+            "matcher": {"image": "${MATCHER_IMAGE:?build it}"},
+            "db": {"image": "pgvector/pgvector:pg18"},
+        }
+    }
+
+    assert release_pinning_gaps({"one.yml": document}) == ()
+    assert product_services({"one.yml": document}) == (
+        "one.yml: app",
+        "one.yml: matcher",
+        "one.yml: worker",
+    )
+
+
+def test_the_install_script_names_the_repository_its_pin_step_writes() -> None:
+    """The pin step writes `APP_IMAGE=$BRAIN_REPOSITORY:$BRAIN_RELEASE`, and until 2026-09-15
+    only the update and rollback scripts defined `BRAIN_REPOSITORY`. Rendered without it, the
+    install runs under `set -u` and stops at the pin, on the first install after the compose
+    files began requiring the variable.
+
+    Asserted on whole lines of the rendered script, and before the first step, because `sh -n`
+    checks syntax and an unset variable is not a syntax error.
+
+    Delete this and the preamble line can go with every other test in this file still green."""
+    script = render("lite", services=4, memory_mib=3968).splitlines()
+    defined = f'BRAIN_REPOSITORY="{PRODUCT_IMAGE}"'
+
+    assert defined in script
+    assert script.index(defined) < script.index(f"# step 1 of {len(PLAN)}: {PLAN[0].name}")
+    assert "$BRAIN_REPOSITORY:$BRAIN_RELEASE" in step_named("pin the image this install runs").run
 
 
 def test_a_second_variable_selecting_one_image_inside_one_stack_is_still_a_finding() -> None:
     """The check has to keep working now that the tree is clean, and a check that can only be
     run against a healthy declaration cannot be shown to fail.
 
-    Both defaults name one image, which is what makes this the case the check is for. The
-    first draft gave the first service `${APP_IMAGE:?set it}`, and a reference with no default
-    names no image, so the two services were two different images and the document could not
-    have produced the finding it asserts.
+    **The first service has no default, and until 2026-09-15 that made this test impossible.**
+    A first draft gave it `${APP_IMAGE:?set it}` and could not produce the finding, because the
+    image name was read out of defaults and a required reference named none. The variable is
+    now declared against the image it selects, so the required reference and the other
+    variable's default name one image, which is the case the check is for.
 
     **Two files rather than one, because that is the shape the real defect had.** The
     application declared `APP_IMAGE` in `docker-compose.yml` and the realm importer declared
@@ -684,8 +778,8 @@ def test_a_second_variable_selecting_one_image_inside_one_stack_is_still_a_findi
     have found nothing in the tree it was written for.
 
     Delete this and the tree passing is the only evidence the check does anything."""
-    application = {"services": {"app": {"image": "${APP_IMAGE:-ghcr.io/x/brain:v1.2.3}"}}}
-    beside_it = {"services": {"realm": {"image": "${OTHER_IMAGE:-ghcr.io/x/brain:v1.2.3}"}}}
+    application = {"services": {"app": {"image": f"${{{THE_IMAGE_VARIABLE}:?set it}}"}}}
+    beside_it = {"services": {"realm": {"image": f"${{OTHER_IMAGE:-{PRODUCT_IMAGE}:v1.2.3}}"}}}
 
     found = release_pinning_gaps(
         {"docker-compose.yml": application, "docker-compose.keycloak.yml": beside_it}
@@ -709,10 +803,10 @@ def test_a_stack_of_its_own_may_pin_the_same_image_separately() -> None:
 
     Delete this and the next reader unifies the variables again, because the finding says to
     and nothing says not to."""
-    overlay = {"services": {"app": {"image": "${APP_IMAGE:-ghcr.io/x/brain:v1.2.3}"}}}
+    overlay = {"services": {"app": {"image": "${APP_IMAGE:?set it}"}}}
     beside_it = {
         "name": "brain-staging",
-        "services": {"app": {"image": "${STAGING_IMAGE:-ghcr.io/x/brain:v1.2.3}"}},
+        "services": {"app": {"image": "${STAGING_IMAGE:?set it}"}},
     }
 
     assert release_pinning_gaps({"a.yml": overlay, "b.yml": beside_it}) == ()
@@ -720,8 +814,8 @@ def test_a_stack_of_its_own_may_pin_the_same_image_separately() -> None:
     two_inside_the_named_one = {
         "name": "brain-staging",
         "services": {
-            "app": {"image": "${STAGING_IMAGE:-ghcr.io/x/brain:v1.2.3}"},
-            "worker": {"image": "${STAGING_WORKER_IMAGE:-ghcr.io/x/brain:v1.2.3}"},
+            "app": {"image": "${STAGING_IMAGE:?set it}"},
+            "worker": {"image": f"${{STAGING_WORKER_IMAGE:-{PRODUCT_IMAGE}:v1.2.3}}"},
         },
     }
     found = release_pinning_gaps({"b.yml": two_inside_the_named_one})
