@@ -7,7 +7,8 @@ nothing at all from outside its own Docker network.
 
 That is correct for the database, the cache and the pooler. It means the reverse proxy holding
 your certificate is **part of the install rather than an optional extra**, and no compose file
-in this product declares one. You supply it.
+in this product declares one. You supply it, or, on `lite`, you use the Cloudflare Tunnel
+option further down this page, which takes its place and opens no inbound port at all.
 
 ## The one number this deployment does not write down
 
@@ -91,7 +92,8 @@ Two rules and one trap.
 
 **Allow 80 and 443 to the proxy, and your own administrative access, and nothing else.** The
 services above are on a Docker network and are not published, so there is nothing else to
-allow.
+allow. With the Cloudflare Tunnel option above, allow only your own administrative access: the
+tunnel needs no inbound rule.
 
 **The trap: a host firewall does not block a port Docker published.** If you ever add a
 `ports:` entry to a compose file, or run any other container that publishes a port, `ufw deny`
@@ -184,10 +186,138 @@ factor on every sign-in method before it takes a router.
 | `an SSH tunnel on every install` | The safest of the three: every console listens on the server's loopback address only, and an administrator reaches one with a single `ssh -L` command, so a leaked password or an unpatched sign-in page is reachable by nobody without the server's key. Not taken because an IT team with no SSH habit could not administer its own server, and a control people cannot use is one they work around. What this decision accepts in exchange is that the sign-in pages are on the internet and both protections above have to be right on every install for as long as it runs. |
 | `a choice made per client` | The product would have to document and test both arrangements, and the weaker one is the one somebody picks under time pressure. |
 
+## Cloudflare Tunnel instead of opening 80 and 443
+
+An option, and not the default. Instead of a reverse proxy answering on 80 and 443, one small
+container on the server dials out to Cloudflare and carries your staff's requests back over
+that connection. The server then needs **no inbound port at all**, apart from whatever you
+administer it through.
+
+Read these three things before choosing it.
+
+**Cloudflare reads every request.** Cloudflare holds the certificate and decrypts each request
+at its edge before the tunnel carries it on, so every question your staff ask and every answer
+this system gives passes through Cloudflare in the clear. With a reverse proxy on your own
+server, nothing outside that server does. If your company's data may not pass through a third
+party, use the reverse proxy described above instead.
+
+**It is complete for `lite` only.** On `standard` and `full` the identity provider sits on the
+deployment panel's proxy network, which the tunnel does not join, so the sign-in page is not
+reachable through it. Use the reverse proxy for those profiles.
+
+**The release archive does not carry the file yet.** The archive holds the compose files a
+profile composes, and no profile composes the tunnel, so step 5 below copies the file by hand
+and you start the tunnel again after every update.
+
+### What you need
+
+- The `lite` install finished, so `/opt/brain/.env` and the compose files are on the server.
+- A domain whose DNS Cloudflare manages. The console's address has to be a name in it.
+- A Cloudflare account that can create tunnels, which live in its Zero Trust dashboard.
+- SSH access to the server, so closing 80 and 443 does not close you out.
+
+### Steps
+
+1. **Create the tunnel.** In the Cloudflare dashboard, open Zero Trust, then Networks, then
+   Tunnels, and create a tunnel of the `Cloudflared` type. Name it after the server. Cloudflare
+   renames these menus from time to time; what you are looking for is a tunnel whose connector
+   is installed with Docker.
+2. **Copy the token.** Choose Docker as the environment. The page shows a command ending in
+   `--token` followed by one long string. Copy that string only. Do not run the command: this
+   install starts the container itself, in step 6.
+3. **Put the token in the install's environment file.** On the server, add one line to
+   `/opt/brain/.env`, reading `CLOUDFLARE_TUNNEL_TOKEN=` followed by the string from step 2.
+   Anybody holding that string can connect a machine as your tunnel, so it is a password: it
+   lives in that file and nowhere else.
+4. **Point the console's address at the application.** In the dashboard, on the tunnel's public
+   hostname page, add one hostname. The subdomain and domain are the console's address, the one
+   `INSTALL_OIDC_REDIRECT_URIS` names. The service type is `HTTP` and the URL is `app:8000`,
+   which is the application service on the compose network and the port from the section above.
+   Cloudflare creates the DNS record for that address itself, so delete any A or AAAA record
+   you made for it earlier.
+5. **Put the overlay on the server.** Copy `docker-compose.tunnel.yml` from the same release of
+   this product into `/opt/brain/`, beside the other compose files. The same release, because
+   the file names that release's application service.
+6. **Start it.**
+
+   ```
+   docker compose -f /opt/brain/docker-compose.lite.yml -f /opt/brain/docker-compose.tunnel.yml up -d
+   ```
+
+   If `CLOUDFLARE_TUNNEL_TOKEN` is not set, compose refuses to start and names it. The tunnel
+   container waits until the application reports ready.
+7. **Check it connected.** The tunnel's status in the dashboard reads healthy, and this shows
+   it registering its connections:
+
+   ```
+   docker compose -f /opt/brain/docker-compose.lite.yml -f /opt/brain/docker-compose.tunnel.yml logs cloudflared
+   ```
+
+   Then open the console's address in a browser.
+8. **Close 80 and 443.** Only once the console answers through the tunnel. Allow SSH first, or
+   enabling the firewall closes your own session:
+
+   ```
+   sudo ufw allow OpenSSH
+   sudo ufw delete allow 80/tcp
+   sudo ufw delete allow 443/tcp
+   sudo ufw default deny incoming
+   sudo ufw enable
+   ```
+
+   A `delete` for a rule you never added says so and changes nothing. The tunnel needs
+   **outbound** port 7844, over TCP and UDP, to reach Cloudflare. `ufw` allows outbound traffic
+   by default; if your server or your network restricts outbound traffic, allow 7844.
+
+### Confirm there is no inbound port
+
+Three checks, in this order, because each one misses something the next one catches.
+
+1. **Nothing on the server is listening on 80 or 443.**
+
+   ```
+   sudo ss -tlnp
+   sudo ss -ulnp
+   ```
+
+   No line may show `0.0.0.0:80`, `0.0.0.0:443`, `[::]:80`, `[::]:443`, `*:80` or `*:443`. The
+   SSH port is expected.
+2. **No container publishes a port.** A firewall cannot tell you this, for the reason in the
+   firewall section below:
+
+   ```
+   docker ps --format '{{.Names}}  {{.Ports}}'
+   ```
+
+   No line may contain `0.0.0.0:` or `[::]:`. An entry such as `5432/tcp` with no address in
+   front of it is a port on the compose network and is expected. If the deployment panel runs
+   its own proxy on this server, that proxy publishes 80 and 443 itself, and the tunnel does not
+   change it.
+3. **Nothing answers from outside.** From a machine on a different network, with the server's
+   public address from your hosting provider's control panel:
+
+   ```
+   nc -vz -w 5 <server address> 443
+   nc -vz -w 5 <server address> 80
+   ```
+
+   Both must time out or be refused.
+
+### After an update or a rollback
+
+The update and rollback scripts compose the profile's own files, and the tunnel is not one of
+them. Run step 6 again after either, so the tunnel is brought up from the release you are now
+on.
+
 ## What is checked and what is not
 
 | Claim | Held by |
 | --- | --- |
+| The tunnel overlay publishes nothing, runs a release tag, requires its token, keeps it off the command line, joins only `default` and waits for the application | `test_tunnel_option.py`, against `docker-compose.tunnel.yml` |
+| That every profile with the tunnel composed on top still publishes no port | the same test |
+| That the tunnel section names the overlay, its variable, the application's address, the outbound port and the listening check | the same test, reading the section alone |
+| That the release archive does not carry the overlay, and that the identity provider is not on the tunnel's network | the same test, which fails on the day either stops being true |
+| **Whether the tunnel connects, and what its public hostname points at** | **nobody. Both are settings in the client's own Cloudflare account.** |
 | Every service that opens a port has a row, and no row names one that does not | `test_install_docs.py`, against the compose files |
 | The port numbers | the same test |
 | That nothing publishes a port to the host | `test_deployment_requirements.py` |
@@ -209,6 +339,10 @@ never been walked by anybody starting from a bare machine.
 **No allowlist from this page has been applied to a server from this repository.** The
 `admin-allowlist` middleware was added to the panel's proxy template when the console decision
 was written down, and a template is not a route.
+
+**No tunnel has ever been started from `docker-compose.tunnel.yml`.** Its image tag and that
+image's entrypoint and user were read from the registry on 2026-09-15, and nothing else about
+the option has been run: not the token, not the public hostname, and not the three checks.
 
 ## Task ids
 

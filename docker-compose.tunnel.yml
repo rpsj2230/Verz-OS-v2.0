@@ -1,0 +1,60 @@
+# The Cloudflare Tunnel option: the console answers from the internet with no inbound port open.
+#
+# Composed on top of a profile, never on its own:
+#
+#   docker compose -f /opt/brain/docker-compose.lite.yml -f /opt/brain/docker-compose.tunnel.yml up -d
+#
+# The argument is in `brain.ops.tunnel` and the steps a person follows are in
+# `docs/install/network.md`, under "Cloudflare Tunnel instead of opening 80 and 443". What is
+# written here is what a reader of this file needs in order not to undo it.
+#
+# **Nothing here publishes a port, and nothing has to be taken away from the base files
+# either.** Compose cannot remove a `ports` entry from an overlay, so this option would need
+# every profile to bind its published ports to 127.0.0.1 if any profile published one. None
+# does: every service in every profile uses `expose`, and the application declares no port at
+# all. So the base files stay exactly as they are, and a profile with this overlay publishes
+# nothing, which `tests/unit/test_tunnel_option.py` checks for every profile.
+#
+# The container dials out to Cloudflare on port 7844 and carries requests back over that
+# connection, so there is nothing for it to listen on.
+#
+# Task ids: M30.1.3
+
+services:
+  cloudflared:
+    # Pinned to a release, never `latest`. This container holds the credential that decides
+    # which server a public address reaches, and a moving tag is a different binary holding it
+    # after every pull. 2026.9.1 was the newest release in the registry on 2026-09-15. Read
+    # from its image configuration that day: it runs as uid 65532 on a distroless base, and its
+    # entrypoint is already `cloudflared --no-autoupdate`, so nothing inside undoes the pin.
+    image: cloudflare/cloudflared:2026.9.1
+    restart: unless-stopped
+    # The image's own entrypoint is kept, for the flag above. Only its default command, which
+    # is `version`, is replaced.
+    command: ["tunnel", "run"]
+    environment:
+      # Read from the environment rather than passed as `--token` on the command, because a
+      # command line is readable by every user on the host through the process list. Required
+      # rather than defaulted: unset, compose refuses to start the stack, instead of starting a
+      # tunnel that fails in a restart loop.
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN to the token Cloudflare shows for this tunnel}
+    depends_on:
+      # Traffic is carried only once the application reports ready, so the first request after
+      # a start is not a gateway error.
+      app:
+        condition: service_healthy
+    networks:
+      # `default` alone. It resolves `app:8000`, which is the address the tunnel's public
+      # hostname points at. `tool-api` is deliberately absent: that network is the automation
+      # canvas's only route to this application, and a service added to it is a service the
+      # canvas can reach.
+      - default
+    # No healthcheck. The image has no shell to run one in, and no readiness command of this
+    # release has been tried here. Whether the tunnel is connected is read in the Cloudflare
+    # dashboard and in this container's log, as the network guide describes.
+    deploy:
+      resources:
+        limits:
+          # A ceiling, not a measurement. Nobody here has run this container and read its
+          # memory, so the figure protects the neighbours and is not a budget.
+          memory: 256M
