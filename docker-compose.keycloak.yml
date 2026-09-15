@@ -116,6 +116,15 @@ services:
             importable_realm(Path("/app/ops/keycloak/realm-export.json")), encoding="utf-8"
         )
         print(f"wrote {out} for --import-realm")
+    # **Every install setting `brain.ops.realm_import` reads has to be passed here.** The
+    # importer reads `INSTALL_OIDC_REDIRECT_URIS` through `brain.install.value_of`, which has no
+    # default, and this service had no environment at all, so from 2026-09-09 the importer
+    # exited 1 on every start and Keycloak, which waits for it to complete, stayed "Created" and
+    # never ran. Required with `:?` so an unset value fails when the stack is composed, naming
+    # the setting, rather than inside a container nobody reads the logs of.
+    # `tests/unit/test_realm_importer_settings.py` holds the list to what the importer reads.
+    environment:
+      INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:?set INSTALL_OIDC_REDIRECT_URIS}
     volumes:
       # Only the output. The reviewed realm arrives inside the image rather than through a
       # bind mount, because this Coolify installation deploys a stored compose with no
