@@ -72,6 +72,7 @@ from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
+from brain.identity.first_administrator import FirstAdministrators
 from brain.identity.keycloak_tokens import http_get, keycloak_authority
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
 from brain.identity.principal_directory import StoredDirectory
@@ -100,6 +101,7 @@ from brain.session import (
 # process that needs a setting and not the application imports that instead. See
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
+from brain.setup_routes import router as setup_router
 from brain.sign_in_routes import router as sign_in_router
 from brain.tools.startup import build_registry
 
@@ -307,6 +309,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.gate = None
     app.state.automation = None
     app.state.sign_in_bindings = None
+    app.state.first_administrators = None
     app.state.key_client = None
     app.state.valkey = None
     priming: asyncio.Task[None] | None = None
@@ -328,6 +331,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             app.state.gate, app.state.automation = wired
             # `wirings_for` has already refused an unset or unusable issuer, so this cannot raise.
             app.state.sign_in_bindings = sign_in_bindings(app.state.db_sessions)
+            # Beside the bindings writer and never without it. See
+            # `brain.setup_routes.NO_APPOINTMENT_WHERE_NOBODY_COULD_SIGN_IN_AFTER_IT`.
+            app.state.first_administrators = FirstAdministrators(app.state.db_sessions)
             if await prime_keys(wired[0].authority, wall_clock):
                 app.state.reported[SIGN_IN_CHECK] = True
             else:
@@ -525,6 +531,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # in `lifespan`, because it writes at the issuer the gate validates against, and a process
     # without it refuses both routes alike.
     app.state.sign_in_bindings = None
+    # The same, for the first administrator store `brain.setup_routes` appoints through. Built
+    # beside `sign_in_bindings` in `lifespan`, so the appointment is offered only where the
+    # finishing screen that follows it is.
+    app.state.first_administrators = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None
     # The same, for an automation's registration and its owner's standing. Built beside `gate`
@@ -698,6 +708,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified
     # token and no `asking`, and closes once anybody signs in. See `brain.sign_in_routes`.
     app.include_router(sign_in_router)
+    # The setup wizard's appointment, which runs `apply_install` and appoints the first
+    # administrator the finishing screen above then signs in. An eighth router because its caller
+    # holds the setup code and no token at all. See `brain.setup_routes`.
+    app.include_router(setup_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
