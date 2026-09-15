@@ -264,9 +264,10 @@ nobody.
 | A drill record's name ends | `.drill.json` |
 
 Rehearse more often than copies expire, or a copy can be taken, kept and expired without anybody
-having read it back once. The ladder of thirty daily, twelve weekly and twelve monthly copies the
-plan describes is not in effect: copies are kept for the window above and no longer, because
-every erasure certificate this product writes promises that window.
+having read it back once. No copy is kept past the window above, because every erasure
+certificate this product writes promises that window. The retention ladder is thirty daily copies
+and weekly copies to the end of that window, decided that way so it fits inside the promise
+rather than the year the plan first named.
 
 ## What this procedure has no machine for
 
@@ -302,6 +303,6 @@ button.
 M34.3.3.4 is claimed: the leaf asks for a restore drill procedure, which this page is, and the
 parts of it a machine can hold are held.
 
-M30.3.9 is not claimed, and neither is M30.3.5. The first is the one-click drill, and the table
-above says there is no control. The second is the retention ladder, and the paragraph under the
-figures says why it is not in effect.
+M30.3.9 is not claimed. It is the one-click drill, and the table above says there is no control.
+The retention ladder, M30.3.5, is not this page's claim: it is decided and held in
+`brain.ops.recovery`, and nothing but the bucket's own rule removes a copy yet.

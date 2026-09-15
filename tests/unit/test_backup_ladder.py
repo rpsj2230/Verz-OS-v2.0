@@ -6,16 +6,18 @@ fixtures are pinned years away from any wall clock this suite will run under, fo
 `CLAUDE.md` gives about a fixture being a clock. 2020 is a leap year and is inside the range on
 purpose.
 
-The central test states what thirty daily, twelve weekly and twelve monthly copies are without
-using the module's arithmetic: the last thirty days, the Sunday of each of the last eleven
-finished weeks, and the last day of each of the last eleven finished months, plus today. It is
-asked for every day across fifteen months, so every month length and two new years are crossed.
+The central test states what a ladder keeps without using the module's arithmetic: the last
+`daily` days, the Sunday of each finished week the weekly rung reaches, and the last day of each
+finished month the monthly rung reaches, plus today. It is asked for every day across fifteen
+months, so every month length and two new years are crossed, for the decided ladder with the
+defaults and for the plan's year-long one with a horizon stated to hold it.
 
-M30.3.5 is not claimed here and the leaf is named only to read its sentence: the ladder it asks
-for is refused against the horizon every erasure certificate promises, and that refusal is the
-first test.
+M30.3.5 is closed as decided by Needs Rupash item 60, Option A: thirty daily copies and weekly
+copies to day 35. The first tests hold that ladder against the leaf's own sentence, against
+`brain.ops.erasure.backup_horizon`, and against the bucket rule that is still the only thing
+removing a copy.
 
-Task ids: none
+Task ids: M30.3.5
 """
 
 from __future__ import annotations
@@ -38,8 +40,10 @@ from brain.ops.backup_ladder import (
     period_of,
     select,
 )
+from brain.ops.erasure import backup_horizon
 from brain.ops.recovery import (
     RETENTION_LADDER,
+    THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT,
     Backup,
     Coverage,
     Ladder,
@@ -47,12 +51,17 @@ from brain.ops.recovery import (
     RecoveryError,
 )
 from brain.ops.retention import BACKUP_RETENTION_DAYS
+from brain.ops.storage import bucket
 from brain.status import leaf_sentences
 
 REPO = Path(__file__).resolve().parents[2]
 
-#: The horizon a caller has to state before the declared ladder may be selected to at all.
-ADOPTED: int = RETENTION_LADDER.horizon_days()
+#: The ladder the plan's leaf first named, which item 60 decided against. Held equal to the
+#: leaf's sentence by the first test below, so it is not a second opinion about the plan.
+PLANNED = Ladder(daily=30, weekly=12, monthly=12)
+
+#: The horizon a caller has to state before the plan's ladder may be selected to at all.
+PLANNED_HORIZON: int = PLANNED.horizon_days()
 
 #: When the nightly copy lands, as `ops/backup/brain-backup.timer` schedules it.
 COPY_HOUR = 2
@@ -98,46 +107,130 @@ def noon(day: date) -> datetime:
 _WORDS = {"thirty": 30, "twelve": 12}
 
 
-def test_the_declared_ladder_is_the_one_the_leaf_names() -> None:
+def test_the_decided_ladder_keeps_the_leafs_daily_rung_and_drops_what_outlived_the_promise() -> (
+    None
+):
     """**The counts are asserted against the leaf sentence, not against themselves.**
 
     `RETENTION_LADDER` is imported by the module under test, so a test comparing a selection
     against it moves with it. The work breakdown's sentence is written somewhere else by
-    somebody else, and it is the only thing that can say thirty rather than thirteen.
+    somebody else, and it is the only thing that can say thirty rather than thirteen. Item 60
+    kept the leaf's daily rung whole and replaced the weekly and monthly rungs, which is what
+    this states: the daily counts agree, and the plan's ladder is the one the sentence names.
 
-    Delete this and a one-word change to the ladder is green everywhere, including in the
+    Delete this and a one-word change to the daily rung is green everywhere, including in the
     exhaustive test below, which is parameterised by the ladder it would be checking."""
     sentence = leaf_sentences(REPO / "docs" / "wbs.json")["M30.3.5"]
     found = re.fullmatch(r"Retention: (\w+) daily, (\w+) weekly, (\w+) monthly", sentence)
 
     assert found is not None
     daily, weekly, monthly = (_WORDS[word] for word in found.groups())
-    assert Ladder(daily=daily, weekly=weekly, monthly=monthly) == RETENTION_LADDER
+    assert Ladder(daily=daily, weekly=weekly, monthly=monthly) == PLANNED
+    assert RETENTION_LADDER.daily == daily
+    assert RETENTION_LADDER.monthly == 0
 
 
-def test_the_declared_ladder_is_refused_against_the_horizon_every_certificate_promises() -> None:
-    """**The refusal that stops M30.3.5 being adopted, made structural in the one function that
-    could adopt it.** Thirty, twelve and twelve keep a copy up to 372 days and a certificate
-    promises 35. Selecting with the defaults is the adoption, so the defaults refuse.
+def test_the_decided_ladder_keeps_no_copy_past_the_date_every_erasure_certificate_states() -> None:
+    """**The decided ladder against the promise it was decided to keep, read from the function
+    that writes the promise.** `brain.ops.erasure.backup_horizon` is what a certificate states
+    as the moment a deletion is beyond backup reach; the ladder's horizon has to be no later,
+    and Option A chose to fill the window, so it is exactly that and not a day short.
 
-    Delete this and a pruner calling `select` with no arguments deletes nothing it should and
-    keeps a year of copies every certificate says are gone."""
-    copies = nightly(date(2019, 1, 1), date(2019, 3, 1))
+    Weekly copies to day 35 is five weeks, stated as the number of days in a week rather than as
+    the module's own constant, which would compare it with itself.
 
-    assert RETENTION_LADDER.horizon_days() > BACKUP_RETENTION_DAYS
+    Delete this and `RETENTION_LADDER` can grow a sixth weekly copy, or the retention window can
+    shrink under it, with every certificate then false by a week and nothing red."""
+    completed = datetime(2019, 6, 1, COPY_HOUR, tzinfo=UTC)
+    promised = backup_horizon(completed) - completed
+
+    assert timedelta(days=RETENTION_LADDER.horizon_days()) == promised
+    assert RETENTION_LADDER.horizon_days() == BACKUP_RETENTION_DAYS == 35
+    assert RETENTION_LADDER.weekly * 7 == promised.days
+    assert RETENTION_LADDER.daily < RETENTION_LADDER.horizon_days()
+    assert "item 60, Option A" in THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT
+
+
+def test_with_nightly_copies_the_decided_weekly_rung_keeps_nothing_the_daily_rung_does_not() -> (
+    None
+):
+    """**A finding pinned so it is not forgotten, not a property anybody wanted.** Five weekly
+    copies including this week's newest reach back at most 28 days with a copy every night, and
+    thirty daily copies already hold those days. A sixth weekly copy would keep a Sunday between
+    day 30 and day 35, and `Ladder.horizon_days` counts it as 42, so it is refused.
+
+    Asked for every day of a year so every weekday is `now`. Delete this and a change to how the
+    horizon rounds a weekly rung, which would let a sixth copy in, arrives with nobody told that
+    the ladder item 60 decided on started keeping more."""
+    copies = nightly(date(2019, 1, 1), date(2020, 1, 31))
+    daily_only = Ladder(RETENTION_LADDER.daily, 0, 0)
+    today = date(2019, 3, 1)
+    while today <= date(2020, 1, 31):
+        present = [one for one in copies if one.recoverable_to <= noon(today)]
+
+        decided = select(present, now=noon(today))
+        daily = select(present, now=noon(today), ladder=daily_only, horizon_days=35)
+
+        assert kept_days(decided) == kept_days(daily), today
+        assert all(one.rungs >= {Rung.DAILY} for one in decided.kept), today
+        today += timedelta(days=1)
     with pytest.raises(RecoveryError, match="beyond backup reach"):
-        select(copies, now=noon(date(2019, 3, 1)))
+        select(copies, now=noon(date(2020, 1, 31)), ladder=Ladder(RETENTION_LADDER.daily, 6, 0))
 
 
-def test_the_declared_ladder_selects_once_a_horizon_that_holds_it_is_stated() -> None:
-    """The positive sibling. A refusal tested alone is satisfied by a function that refuses
-    every ladder, which would also refuse the one a client configured inside the horizon.
+def test_a_ladder_one_rung_longer_than_the_decided_one_is_refused_by_default() -> None:
+    """**The refusal that holds item 60's answer in the one function that could break it.**
+    One more weekly copy reaches 42 days, and the plan's thirty, twelve and twelve reach 372;
+    a certificate promises 35, so selecting either with the default horizon raises.
 
-    Delete this and `select` can raise unconditionally with the test above still green."""
+    Delete this and a pruner handed a longer ladder keeps copies every certificate says are
+    gone, with the selection reporting success."""
     copies = nightly(date(2019, 1, 1), date(2019, 3, 1))
+    now = noon(date(2019, 3, 1))
 
-    assert select(copies, now=noon(date(2019, 3, 1)), horizon_days=ADOPTED).kept
-    assert select(copies, now=noon(date(2019, 3, 1)), ladder=Ladder(7, 4, 1)).kept
+    for longer in (
+        PLANNED,
+        Ladder(RETENTION_LADDER.daily, RETENTION_LADDER.weekly + 1, RETENTION_LADDER.monthly),
+        Ladder(RETENTION_LADDER.horizon_days() + 1, 0, 0),
+    ):
+        with pytest.raises(RecoveryError, match="beyond backup reach"):
+            select(copies, now=now, ladder=longer)
+
+
+def test_a_selection_with_no_arguments_applies_the_decided_ladder() -> None:
+    """The positive sibling. A refusal tested alone is satisfied by a function that refuses
+    every ladder, which would also refuse the decided one; and a default that silently pointed
+    at another ladder would pass the refusal test too.
+
+    Delete this and `select` can raise unconditionally, or default to a shorter ladder, with the
+    test above still green."""
+    copies = nightly(date(2019, 1, 1), date(2019, 3, 1))
+    now = noon(date(2019, 3, 1))
+
+    by_default = select(copies, now=now)
+    assert by_default == select(copies, now=now, ladder=Ladder(30, 5, 0), horizon_days=35)
+    assert kept_days(by_default) == {date(2019, 3, 1) - timedelta(days=back) for back in range(30)}
+    assert select(copies, now=now, ladder=PLANNED, horizon_days=PLANNED_HORIZON).kept
+
+
+def test_the_bucket_rule_keeps_every_copy_the_decided_ladder_keeps_and_nothing_prunes_yet() -> None:
+    """`THE_BUCKET_RULE_KEEPS_WHAT_THE_LADDER_KEEPS_AND_NOTHING_OLDER`, against the bucket's own
+    declaration and the nightly taker's own text. The bucket expires at the ladder's horizon, so
+    no copy the ladder keeps is gone from it, and the taker only ever copies into the bucket.
+
+    The second half is the stated gap: nothing removes a copy but the bucket rule. Delete this
+    and a pruner can arrive in the taker with no test having to read it, or the bucket's window
+    can shrink below the ladder so the ladder lists copies that were already expired."""
+    window = bucket("backups").retention_days
+    now = noon(date(2019, 3, 1))
+
+    assert window == RETENTION_LADDER.horizon_days()
+    assert all(
+        now - one.backup.recoverable_to < timedelta(days=window)
+        for one in select(nightly(date(2019, 1, 1), date(2019, 3, 1)), now=now).kept
+    )
+    taker = (REPO / "ops" / "backup" / "brain-backup").read_text(encoding="utf-8")
+    assert set(re.findall(r"\bs3 (\w+)", taker)) == {"cp"}
 
 
 # ------------------------------------------------------------------ the exhaustive property
@@ -162,10 +255,17 @@ def _expected_under_daily_copies(today: date, ladder: Ladder) -> set[date]:
     return days | set(sundays[: ladder.weekly]) | set(month_ends[: ladder.monthly])
 
 
-def test_with_a_copy_every_night_the_ladder_keeps_the_days_the_sundays_and_the_month_ends() -> None:
+@pytest.mark.parametrize("decided", [True, False], ids=["decided-defaults", "plan-stated-horizon"])
+def test_with_a_copy_every_night_the_ladder_keeps_the_days_the_sundays_and_the_month_ends(
+    decided: bool,
+) -> None:
     """**Every day from December 2019 to February 2021 is `now` once.** That crosses two new
     years, an ISO week that straddles one, a leap day and every length of month, and each is
     compared against a statement of the ladder that shares no arithmetic with the module.
+
+    Run twice. Once for the decided ladder through `select`'s defaults, which is what a pruner
+    calling it would get. Once for the plan's year with its horizon stated, because only a
+    monthly rung reaches the month-end and new-year cases, and the decided ladder has none.
 
     It also proves `Ladder.horizon_days` is a real bound rather than a label: the age cap is set
     to exactly that horizon and removes nothing a rung keeps, for every one of those days.
@@ -173,13 +273,17 @@ def test_with_a_copy_every_night_the_ladder_keeps_the_days_the_sundays_and_the_m
     Delete this and the selection is tested at a handful of dates chosen by the person who
     wrote it, which is how an off-by-one at a month of thirty days ships."""
     copies = nightly(date(2018, 11, 1), date(2021, 2, 28))
+    ladder = RETENTION_LADDER if decided else PLANNED
     today = date(2019, 12, 1)
     asked = 0
     while today <= date(2021, 2, 28):
         present = [one for one in copies if one.recoverable_to <= noon(today)]
-        chosen = select(present, now=noon(today), horizon_days=ADOPTED)
+        if decided:
+            chosen = select(present, now=noon(today))
+        else:
+            chosen = select(present, now=noon(today), ladder=PLANNED, horizon_days=PLANNED_HORIZON)
 
-        assert kept_days(chosen) == _expected_under_daily_copies(today, RETENTION_LADDER), today
+        assert kept_days(chosen) == _expected_under_daily_copies(today, ladder), today
         asked += 1
         today += timedelta(days=1)
     assert asked == 456
@@ -316,7 +420,7 @@ def test_no_copy_is_kept_once_it_reaches_the_horizon_whatever_a_rung_counted() -
     copies = nightly(date(2019, 1, 1), date(2019, 3, 31), every=3)
     now = datetime(2019, 3, 31, COPY_HOUR, tzinfo=UTC)
 
-    counted = select(copies, now=now, ladder=Ladder(30, 0, 0), horizon_days=ADOPTED)
+    counted = select(copies, now=now, ladder=Ladder(30, 0, 0), horizon_days=PLANNED_HORIZON)
     capped = select(copies, now=now, ladder=Ladder(30, 0, 0), horizon_days=60)
 
     assert len(counted.kept) == 30

@@ -10,7 +10,7 @@ The positive cases sit beside them deliberately. A guard tested only by its refu
 satisfied by a function that refuses everything, and a recovery layer that refuses every
 drill is a recovery layer nobody runs twice.
 
-Task ids: M30.3.3, M30.3.4, M30.3.6, M30.3.7, M30.3.8, M30.3.10, M30.3.11
+Task ids: M30.3.3, M30.3.4, M30.3.5, M30.3.6, M30.3.7, M30.3.8, M30.3.10, M30.3.11
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from brain.ops.recovery import (
     LONGEST_MONTH_DAYS,
     RETENTION_LADDER,
     SCHEDULE,
+    THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT,
     Alert,
     Backup,
     Check,
@@ -436,23 +437,35 @@ def test_the_drill_interval_is_shorter_than_the_window_a_copy_is_kept_for() -> N
 
 
 # ------------------------------------------------------------------ the retention ladder
-def test_the_retention_ladder_outlives_the_horizon_every_erasure_certificate_promises() -> None:
-    """**The finding that stops M30.3.5 being implemented, asserted rather than written in a
-    commit message nobody re-reads.**
+def test_the_plans_year_long_ladder_is_reported_against_every_erasure_certificate() -> None:
+    """**The finding that made Needs Rupash item 60, kept as a finding after it was decided.**
 
     Thirty daily, twelve weekly and twelve monthly copies keeps a backup up to 372 days old.
     `brain.ops.erasure.backup_horizon` adds `BACKUP_RETENTION_DAYS` to a completed deletion
-    and a certificate states that date as the moment the data is beyond backup reach. Pruning
-    to this ladder without moving that number does not make a certificate late, it makes it
-    false, on a document written for somebody who asked to be forgotten.
+    and a certificate states that date as the moment the data is beyond backup reach. Option A
+    kept that promise, so the plan's ladder is still a policy gap if anybody configures it.
 
-    Delete this and the ladder gets implemented, because it is what the leaf asks for and the
-    conflict is two modules away."""
-    reach = RETENTION_LADDER.horizon_days()
+    Delete this and the ladder the leaf's sentence still names can be configured with the
+    policy check silent, because the conflict is two modules away."""
+    planned = Ladder(daily=30, weekly=12, monthly=12)
 
-    assert reach > BACKUP_RETENTION_DAYS
-    assert reach == 12 * LONGEST_MONTH_DAYS
-    assert any("beyond backup reach" in one for one in backup_policy_gaps(ladder=RETENTION_LADDER))
+    assert planned.horizon_days() > BACKUP_RETENTION_DAYS
+    assert planned.horizon_days() == 12 * LONGEST_MONTH_DAYS
+    assert any("beyond backup reach" in one for one in backup_policy_gaps(ladder=planned))
+    assert THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT.startswith(
+        "Needs Rupash item 60, Option A"
+    )
+
+
+def test_the_declared_ladder_is_the_decided_one_and_raises_no_policy_finding() -> None:
+    """The positive sibling: with its defaults the policy check finds nothing about retention,
+    because the declared ladder reaches the 35 days a certificate promises and no further.
+
+    Delete this and `RETENTION_LADDER` can drift back to a year with `backup_policy_gaps`
+    reporting it only to somebody who happens to call it with no arguments."""
+    assert Ladder(daily=30, weekly=5, monthly=0) == RETENTION_LADDER
+    assert RETENTION_LADDER.horizon_days() == BACKUP_RETENTION_DAYS
+    assert not any("beyond backup reach" in one for one in backup_policy_gaps())
 
 
 def test_a_ladder_inside_the_horizon_is_reported_as_no_conflict() -> None:
@@ -608,11 +621,9 @@ def test_the_declared_schedule_can_meet_every_declared_recovery_objective() -> N
     assert min(one.rpo_seconds for one in RECOVERY_OBJECTIVES) >= slowest
     standing = backup_policy_gaps()
 
-    assert len(standing) == 1, f"a second policy finding appeared: {standing}"
-    assert "beyond backup reach" in standing[0], (
-        "the retention ladder's conflict with the erasure horizon is the only finding this "
-        "module is meant to be standing on, and something else is now failing too"
-    )
+    # This was one finding, the retention ladder's conflict with the erasure horizon, until
+    # Needs Rupash item 60 was answered Option A and the ladder was fitted inside the promise.
+    assert standing == (), f"a policy finding appeared: {standing}"
 
 
 def test_an_objective_the_schedule_cannot_meet_is_reported() -> None:

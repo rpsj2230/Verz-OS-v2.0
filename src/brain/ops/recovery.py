@@ -56,15 +56,22 @@ database can do. `backup_policy_gaps` compares the objectives against `SCHEDULE`
 leaving the promise to be read off the fastest component. See
 `AN_RPO_IS_A_PROMISE_ABOUT_THE_SLOWEST_COPY`.
 
-**M30.3.5's retention ladder cannot be adopted today and this module says so rather than
-implementing it.** Thirty daily, twelve weekly and twelve monthly copies puts the oldest
-retained backup 372 days old. `BACKUP_RETENTION_DAYS` is 35, and every erasure certificate
-this system has a shape for tells a person their data is beyond backup reach 35 days after
-the deletion completed. Adopting the ladder without moving that number makes every one of
-those certificates wrong by 337 days, silently, in the direction that matters to a
-regulator. `RETENTION_LADDER` is declared so the arithmetic is checkable and
-`backup_policy_gaps` reports the conflict; nothing prunes to it. See
+**M30.3.5's retention ladder is thirty daily copies and weekly copies to day 35, because the
+owner decided the promise wins.** The plan named thirty daily, twelve weekly and twelve monthly,
+which puts the oldest retained backup 372 days old. `BACKUP_RETENTION_DAYS` is 35, and every
+erasure certificate this system has a shape for tells a person their data is beyond backup
+reach 35 days after the deletion completed, so that ladder would have made every certificate
+wrong by 337 days. Needs Rupash item 60 put the two numbers side by side and the answer was
+Option A: keep the 35-day promise and fit the ladder inside it. `RETENTION_LADDER` is that
+ladder, `Ladder(daily=30, weekly=5, monthly=0)`, whose horizon is exactly the promise, and
+`backup_policy_gaps` still reports any ladder that outlives it. See
+`THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT` and
 `THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES`.
+
+Rejected, by that decision: moving the promise to 372 days (Option B), which is lawful if said
+plainly and is a year of recovery points bought with every certificate saying a deletion reaches
+backups after a year; and erasing from retained copies (Option C), which makes a backup a thing
+that changes after it was taken.
 
 **A console needs a third question and it is not the sibling of the other two.**
 `last_verified_restore` refuses to move when a drill fails, which is correct for the field and
@@ -90,7 +97,7 @@ a clock or writes a schedule. Every clock is a parameter and every observation i
 for the reason `brain.ops.limits` gives about policy that owns a client: the case that is
 always wrong is the one you cannot reach through the module that owns the data.
 
-Task ids: M30.3.3, M30.3.4, M30.3.6, M30.3.7, M30.3.8, M30.3.10, M30.3.11
+Task ids: M30.3.3, M30.3.4, M30.3.5, M30.3.6, M30.3.7, M30.3.8, M30.3.10, M30.3.11
 """
 
 from __future__ import annotations
@@ -177,15 +184,27 @@ AN_RPO_IS_A_PROMISE_ABOUT_THE_SLOWEST_COPY: Final = (
     "than against the component whose figure sounds best."
 )
 
-#: Why the ladder M30.3.5 asks for is declared and not adopted.
+#: Why a ladder keeping a copy past the erasure horizon is refused rather than pruned to.
 THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES: Final = (
-    "Thirty daily, twelve weekly and twelve monthly copies keeps a backup that is up to "
-    "372 days old. brain.ops.erasure.backup_horizon adds BACKUP_RETENTION_DAYS to a "
-    "completed deletion and a certificate states that date as the moment the data is "
-    "beyond backup reach. Adopting the ladder without moving that number does not make a "
-    "certificate late, it makes it false, by 337 days, on a document written for somebody "
-    "who asked to be forgotten. Which of the two numbers moves is a decision with a legal "
-    "side and a storage bill, and it is not one this module may take by pruning."
+    "brain.ops.erasure.backup_horizon adds BACKUP_RETENTION_DAYS to a completed deletion and "
+    "a certificate states that date as the moment the data is beyond backup reach. A ladder "
+    "keeping a copy older than that does not make a certificate late, it makes it false, on "
+    "a document written for somebody who asked to be forgotten: the thirty daily, twelve "
+    "weekly and twelve monthly copies the plan first named would have kept one 372 days, "
+    "337 past the promise. The promise was decided to win, so the ladder is what gives way."
+)
+
+#: Why the declared ladder is thirty daily and weekly to day 35, and not the plan's year.
+THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT: Final = (
+    "Needs Rupash item 60, Option A: keep the 35-day erasure promise and fit the retention "
+    "ladder inside it. The promise is already made in writing on every certificate and the "
+    "ladder was a line in a plan, so when the two disagreed the plan's line moved. Thirty "
+    "daily copies keep the last month day by day, and five weekly copies bring the ladder's "
+    "horizon to 35 days, the whole window and not a day of it more. With a copy every night "
+    "the weekly rung keeps nothing the daily rung does not: a sixth weekly copy would keep a "
+    "Sunday between day 30 and day 35, and Ladder.horizon_days counts it as 42 because it "
+    "rounds a rung up, so it is refused. No copy past day 35 is the substance of the decision "
+    "and that is what holds."
 )
 
 #: Why every figure below is a default rather than a requirement.
@@ -846,14 +865,18 @@ class Ladder:
         )
 
 
-#: The ladder M30.3.5 asks for, declared and deliberately not applied to anything.
+#: The ladder this install keeps, as decided by Needs Rupash item 60, Option A (M30.3.5).
 #:
-#: See `THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES`. `backup_policy_gaps`
-#: reports the conflict against `BACKUP_RETENTION_DAYS` and there is no pruning function
-#: here, because pruning to this ladder is the act that makes the certificates wrong.
-#: `brain.ops.backup_ladder.select` decides which copies a ladder keeps and refuses this one
-#: against that same horizon, so the selection exists and the adoption still does not.
-RETENTION_LADDER: Final[Ladder] = Ladder(daily=30, weekly=12, monthly=12)
+#: Thirty daily copies and five weekly ones, so its horizon is 35 days and equal to
+#: `BACKUP_RETENTION_DAYS`. With a copy every night the weekly rung adds no copy, measured
+#: rather than assumed; the constant below says why a sixth is not the fix. See
+#: `THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT`. It is written
+#: as three numbers rather than derived from the window, so a change to either is a change a
+#: test has to be shown: `tests/unit/test_backup_ladder.py` holds the horizon equal to the one
+#: `brain.ops.erasure.backup_horizon` puts on a certificate. There is no pruning function here;
+#: `brain.ops.backup_ladder.select` applies this ladder by default and refuses any ladder that
+#: outlives the horizon.
+RETENTION_LADDER: Final[Ladder] = Ladder(daily=30, weekly=5, monthly=0)
 
 
 def backup_policy_gaps(

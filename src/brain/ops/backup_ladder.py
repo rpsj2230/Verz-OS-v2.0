@@ -1,26 +1,37 @@
 """Which copies a retention ladder keeps, decided without deleting anything.
 
-`brain.ops.recovery` declares the ladder M30.3.5 asks for, thirty daily, twelve weekly and twelve
-monthly, and refuses to adopt it: the ladder keeps a copy up to 372 days old and every erasure
-certificate promises a deletion is beyond backup reach after `BACKUP_RETENTION_DAYS`, which is 35.
-That refusal stands and this module keeps it. What was missing beside it is the selection itself,
-so that on the day somebody moves one of the two numbers the pruning is a function that has
-already been tested across a year boundary, rather than a date calculation written that
-afternoon against a live bucket.
+**The ladder is decided: thirty daily copies and weekly copies to day 35.** The plan's leaf,
+M30.3.5, named thirty daily, twelve weekly and twelve monthly, which keeps a copy 372 days, and
+every erasure certificate promises a deletion is beyond backup reach after
+`BACKUP_RETENTION_DAYS`, which is 35. Needs Rupash item 60 was answered Option A: the promise
+stays and the ladder fits inside it. `brain.ops.recovery.RETENTION_LADDER` is now
+`Ladder(daily=30, weekly=5, monthly=0)` and `select` applies it with no arguments. See
+`brain.ops.recovery.THE_PROMISE_WINS_AND_THE_LADDER_FITS_INSIDE_IT`.
 
-**This module decides and does not prune.** It takes copies and an instant and returns which are
-kept and which are not, and nothing here lists a bucket, deletes an object or reads a clock.
-Nothing anywhere prunes to a ladder today either: the only thing that removes a copy is the
-bucket's own lifecycle rule in `ops/seaweedfs/provision.sh`, which expires every object at 35
-days whatever this module would have said. A pruner is a runner on the client's own server, in
-the shape of `ops/backup/brain-backup`, and it is not written.
+**A ladder is refused when it outlives the horizon, and the decided one sits exactly on it.**
+`select` takes the horizon as a parameter defaulting to `BACKUP_RETENTION_DAYS` and raises when
+`Ladder.horizon_days` exceeds it, with
+`THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES` as the reason. One more weekly copy
+is refused with the defaults, and so is the plan's year. A caller can still select to a longer
+ladder by stating a longer horizon, which is how the selection is tested across a year of monthly
+copies, and stating one for real would be reopening item 60.
 
-**The ladder is refused when it outlives the horizon, so the declared one is refused by
-default.** `select` takes the horizon as a parameter defaulting to `BACKUP_RETENTION_DAYS` and
-raises when `Ladder.horizon_days` exceeds it, with
-`THE_LADDER_OUTLIVES_THE_HORIZON_EVERY_CERTIFICATE_PROMISES` as the reason. A caller can only
-select to thirty, twelve and twelve by stating a horizon of at least 372 days, and stating that
-is the decision `brain.ops.recovery` says is not this repository's to take.
+**This module decides and does not prune, and nothing prunes to the ladder yet.** It takes copies
+and an instant and returns which are kept and which are not, and nothing here lists a bucket,
+deletes an object or reads a clock. The only thing that removes a copy today is the bucket's own
+lifecycle rule in `ops/seaweedfs/provision.sh`, which expires every object at 35 days. That is
+not a breach of the decision, and `THE_BUCKET_RULE_KEEPS_WHAT_THE_LADDER_KEEPS_AND_NOTHING_OLDER`
+says why: with a copy a night, the bucket holds a superset of what this ladder keeps and nothing
+past the same 35 days, so the promise holds whether or not a pruner ever runs. What a pruner
+would add, with a copy every night, is the removal of the up to five copies aged between 30 and
+35 days, because the decided weekly rung keeps none of them.
+
+Rejected, for now: wiring a pruner into `ops/backup/brain-backup`. The taker is a shell script on
+the host with a container runtime and an object store client and no Python package of this
+product, so a pruner there either restates `select` in shell, which is a second copy of a rule
+that decides what gets deleted, or needs a runner with delete rights on the backup bucket that
+nothing installs yet. Both buy back a few days of a few copies' storage, and the failure of
+either is deleted backups. The runner belongs beside the drill runner (M30.3.9) when that exists.
 
 **A ladder counts periods that hold a copy, not calendar periods.** Thirty daily copies means the
 newest copy from each of the thirty most recent days on which a copy was taken, which is
@@ -51,11 +62,9 @@ as kept. So chained methods are refused rather than guessed at. See
 `A_CHAIN_IS_NOT_PRUNED_BY_THE_CALENDAR`. The nightly taker writes `full` today, so nothing it
 produces is refused.
 
-Rejected: a pruning function in `brain.ops.recovery` beside the ladder. That module's docstring
-argues there is none there because pruning to the declared ladder is the act that makes the
-certificates wrong, and it imports nothing that could act. A selection that refuses the declared
-ladder is not that act, and keeping it out of the declaration keeps the declaration's argument
-true as written.
+Rejected: a pruning function in `brain.ops.recovery` beside the ladder. That module declares what
+a backup is and imports nothing that could act on one, and a selection kept out of the
+declaration keeps it that way when a runner arrives to call it.
 
 Rejected: keeping the newest copy of a coverage unconditionally, as a floor under the age cap.
 It is the obvious safety net against a taker that stopped, and it is a copy past the horizon a
@@ -67,7 +76,7 @@ Scope: domain logic. Every clock and every copy is a parameter, for the reason
 `brain.ops.recovery` gives: the cases that are always wrong are the ones you cannot reach
 through a module that owns the bucket.
 
-Task ids: none
+Task ids: M30.3.5
 """
 
 from __future__ import annotations
@@ -130,6 +139,16 @@ A_CHAIN_IS_NOT_PRUNED_BY_THE_CALENDAR: Final = (
     "a full that the kept incrementals still need, and they go on being listed as kept while "
     "restoring nothing. A chain is pruned by the tool that knows its links, never by a ladder "
     "that can only see dates."
+)
+
+#: Why nothing pruning to the ladder yet does not break the decision it records.
+THE_BUCKET_RULE_KEEPS_WHAT_THE_LADDER_KEEPS_AND_NOTHING_OLDER: Final = (
+    "Nothing prunes to the ladder yet. The backups bucket expires every object once it is "
+    "BACKUP_RETENTION_DAYS old, which is the decided ladder's horizon, and the ladder keeps only "
+    "copies younger than that. So every copy the ladder keeps is still in the bucket, and no "
+    "copy outlives the window a certificate states beyond the compaction delay provision.sh "
+    "already records. The bucket holds a few copies more than the ladder, between day 30 and "
+    "day 35, and never an older one."
 )
 
 #: The methods whose copies restore on their own, and so the only ones a ladder may select.
