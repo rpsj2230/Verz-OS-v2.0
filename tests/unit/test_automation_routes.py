@@ -130,7 +130,7 @@ class Grants:
         self.loads += 1
         return EntitlementSet(principal_id=principal_id, grants=self.held.get(principal_id, ()))
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         return self.version
 
     def revoke_all(self, principal_id: str, *, keep: tuple[str, ...] = ()) -> None:
@@ -144,10 +144,10 @@ class Cache:
     def __init__(self) -> None:
         self.kept: dict[str, EntitlementSet] = {}
 
-    def get(self, key: str) -> EntitlementSet | None:
+    async def get(self, key: str) -> EntitlementSet | None:
         return self.kept.get(key)
 
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
         self.kept[key] = value
 
 

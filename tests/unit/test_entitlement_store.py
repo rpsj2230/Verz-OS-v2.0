@@ -296,10 +296,10 @@ class Kept:
     def __init__(self) -> None:
         self.kept: dict[str, EntitlementSet] = {}
 
-    def get(self, key: str) -> EntitlementSet | None:
+    async def get(self, key: str) -> EntitlementSet | None:
         return self.kept.get(key)
 
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
         self.kept[key] = value
 
 
@@ -311,10 +311,12 @@ def test_a_revocation_reaches_resolve_through_this_store_and_the_bumped_version(
     with resolver("brain_es_resolve") as url:
         a_principal(url, "u_reader")
         a_grant(url, "u_reader", READ_PRICES)
-        versions = PostgresVersionSource(lambda: psycopg.connect(url))
         cache = Kept()
 
         async def work(store: StoredEntitlements) -> tuple[Resolved, Resolved, Resolved]:
+            # The version source over the store's own session factory, as lifespan
+            # will build both over `app.state.db_sessions`.
+            versions = PostgresVersionSource(store.sessions)
             first = await resolve("u_reader", versions=versions, store=store, cache=cache, now=NOW)
             again = await resolve("u_reader", versions=versions, store=store, cache=cache, now=NOW)
             revoke(url, "u_reader", READ_PRICES)

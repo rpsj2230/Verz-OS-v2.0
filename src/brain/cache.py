@@ -55,9 +55,10 @@ parsed under `try`, never trusted to be well formed, and a stored answer whose o
 disagrees with the key it was found under is refused.
 
 **Every call has a timeout, and redis-py's defaults are not one.** Two facts, both measured
-against redis 8.1 rather than read off the signature. It retries ten times with exponential
-jitter backoff: against a closed port on this machine one `get` took 2.07 seconds to fail
-with the defaults and 0.50 with the settings below. And `Redis.from_url` leaves both socket
+against redis 8.1 rather than read off the signature, for the synchronous client first. It
+retries ten times with exponential jitter backoff: against a closed port on this machine one
+`get` took 2.07 seconds to fail with the defaults and 0.50 with the settings below. And
+`Redis.from_url` leaves both socket
 timeouts at None, which is no timeout at all, where the `Redis(...)` constructor defaults
 them to five seconds. The constructor's five seconds is what a reader expects and is not what
 this code path gets, so a `from_url` client that is not given timeouts explicitly waits for
@@ -66,12 +67,35 @@ the optimistic case: it is fast because the connection was refused, and a cache 
 and then stops answering is the one that hangs. A cache that hangs is worse than a cache that
 is down, because the request waits instead of falling through.
 
+The asyncio client was measured the same way on 2026-09-15 and is not better by default. With
+the library's defaults a `get` against a closed port took 2.06 seconds, and against a local
+socket that accepts and never replies it took 5.02 seconds; with the settings below, 0.50 and
+0.26. `make_async_client` therefore passes every bound `make_client` does, and
+`tests/invariants/test_cache_invariants.py` holds the second measurement against a real socket
+rather than against the keyword arguments.
+
+**Two clients, and the entitlement cache is the one that awaits.** `resolve` reads the grants
+version and the entitlement cache on every request, hit or miss, on a process whose only pool
+is an `AsyncEngine`. A blocking `GET` there holds the event loop, and so does a synchronous
+version read over psycopg, which is what `PostgresVersionSource` was until 2026-09-15. So
+`ValkeyEntitlementCache` is written over `AsyncValkeyClient` and the version source over the
+application's async session factory. See `resolve.THE_REQUEST_PATH_AWAITS_WHAT_IT_READS`.
+
+Rejected: `asyncio.to_thread` around the synchronous client. It is a smaller diff and it moves
+the block rather than removing it: one thread per request from a default executor of a few
+dozen, so a cache that hangs for its timeout empties the executor that migrations and readiness
+also run on. Also rejected, for now: moving the answer store and the four record caches with it.
+Their protocols in `brain.gate.answer_cache` and `brain.gate.caches` are synchronous, nothing on
+a wired request path calls them yet, and changing them is their callers' change. What must not
+drift between the two halves is how a failure is read, so the outage, miss, TTL and rejection
+decisions live once in `_CacheBooks` and each half holds only the call it makes.
+
 **What the application should do when Valkey is unreachable.** Requests keep working and get
 slower, because resolution falls through to `EntitlementStore`. Readiness is a separate
 question and this module deliberately answers only half of it: `check_reachable` reports the
 fact, and whoever wires `app.py` decides what it means. The lines are:
 
-    app.state.valkey = make_client(settings.valkey_url)
+    app.state.valkey = make_async_client(settings.valkey_url)
     app.state.ready["cache"] = await check_reachable_async(app.state.valkey)
 
 Marking the instance unready on a cache outage is the conservative reading of `app.py`'s own
@@ -94,18 +118,19 @@ Task ids: M1.4.5, M6.2.2, M6.2.3, M6.2.4, M6.2.5
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable, Sequence
-from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Any, Final, Protocol, cast
+from typing import Final, Protocol, cast
 
 import structlog
 from pydantic import TypeAdapter, ValidationError
 from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
+from redis.asyncio.retry import Retry as AsyncRetry
 from redis.backoff import NoBackoff
 from redis.exceptions import RedisError
 from redis.retry import Retry
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.entitlement import EntitlementSet
 from brain.gate.cache_key import CachedAnswer
@@ -116,6 +141,7 @@ from brain.gate.caches import (
     CachedRetrieval,
     CacheLayerError,
 )
+from brain.gate.entitlement_store import PRINCIPAL_SETTING
 from brain.gate.resolve import ResolutionFailedError
 
 log = structlog.get_logger()
@@ -149,12 +175,31 @@ STATEMENT_TIMEOUT_MS: Final = 250
 #: Read `gate.grants_version`. A missing row is zero by design, so this is a plain select and
 #: the coalesce happens in Python, where the difference between "no row" and "no answer" is
 #: still visible. `COALESCE` in SQL would collapse them into one integer.
-VERSION_SQL: Final = "SELECT version FROM gate.grants_version WHERE principal_id = %s"
+VERSION_SQL: Final = text(
+    "SELECT version FROM gate.grants_version WHERE principal_id = :principal_id"
+)
 
 #: `SET LOCAL statement_timeout` cannot take a bound parameter, and building the statement by
 #: interpolation puts a value into SQL text for no reason. `set_config(..., is_local => true)`
 #: is the same thing as a parameterised function call.
-STATEMENT_TIMEOUT_SQL: Final = "SELECT set_config('statement_timeout', %s, true)"
+STATEMENT_TIMEOUT_SQL: Final = text("SELECT set_config('statement_timeout', :bound, true)")
+
+#: Names the principal to the transaction, transaction-locally, as the entitlement store does.
+PRINCIPAL_SQL: Final = text("SELECT set_config(:setting, :principal_id, true)")
+
+#: Every exception a client can fail with that means "could not ask" rather than a bug. One
+#: tuple for both clients, so the synchronous and the awaited half cannot come to disagree about
+#: what an outage is. `OSError` because a socket can fail before the client wraps it, and
+#: because asyncio's own `TimeoutError` is one.
+OUTAGES: Final = (RedisError, OSError)
+
+#: Why the version read tells the transaction whose version it reads.
+A_VERSION_READ_NAMES_ITS_PRINCIPAL: Final = (
+    "The version read sets app.principal_id before it selects, for the reason the entitlement "
+    "store does, and with a worse failure if it did not. A policy narrowing grants_version to the "
+    "principal named would hide the row from a read that named nobody, a hidden row reads as "
+    "version zero, and a version that never moves is a cache key that no revocation retires."
+)
 
 
 class ValkeyClient(Protocol):
@@ -208,6 +253,46 @@ def make_client(
     )
 
 
+class AsyncValkeyClient(Protocol):
+    """`ValkeyClient`, awaited. The same three commands and not one more.
+
+    `redis.asyncio.Redis` satisfies it, and so does `valkey.asyncio.Valkey`. There is no
+    `delete` and no `flushdb` here either, for the reason given on `ValkeyClient`.
+    """
+
+    async def get(self, name: str) -> bytes | None: ...
+    async def setex(self, name: str, time: int, value: bytes) -> object: ...
+    async def ping(self) -> object: ...
+
+
+def make_async_client(
+    url: str,
+    *,
+    connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
+    operation_timeout: float = OPERATION_TIMEOUT_SECONDS,
+) -> AsyncValkeyClient:
+    """`make_client` for the event loop, bounded identically. TLS is the URL's job.
+
+    Every argument `make_client` passes is passed here, and the module docstring has the
+    measurement that says why: the asyncio client's defaults took 5.02 seconds to give up on a
+    socket that accepted and never replied. The cast is at a library boundary: redis-py types
+    its commands as returning `Awaitable | Any` for both clients, so proving the structural
+    match buys nothing mypy can check.
+    """
+    return cast(
+        AsyncValkeyClient,
+        AsyncRedis.from_url(
+            url,
+            socket_timeout=operation_timeout,
+            socket_connect_timeout=connect_timeout,
+            retry=AsyncRetry(NoBackoff(), RETRIES),
+            retry_on_error=[],
+            health_check_interval=HEALTH_CHECK_INTERVAL_SECONDS,
+            decode_responses=False,
+        ),
+    )
+
+
 @dataclass
 class CacheHealth:
     """What happened, in numbers an operator can read, and no key or value anywhere.
@@ -244,63 +329,53 @@ class CacheHealth:
         self.last_failure = type(exc).__name__
 
 
-class _ValkeyCache:
-    """The byte-level half, shared by both caches because both failure modes are identical.
+class _CacheBooks:
+    """What a cache call's outcome means, once, for the synchronous and the awaited client.
 
-    Subclasses add serialisation and nothing else. Splitting it this way keeps exactly one
-    place where an exception from the client is turned into "not in hand", which is the
-    behaviour the whole module exists to guarantee.
+    Holds no client. The two subclasses below each make the call and hand the outcome here, so
+    "an exception from the client is not in hand", "a None is a miss", "a TTL must be positive"
+    and "a refused value is counted apart" are decided in one place however the call was made.
+    Two copies of `_read` differing only by an `await` was the alternative, and the copy that
+    drifts would be the one on the request path.
     """
 
     #: Named in log lines so a reader can tell which cache degraded.
     name: str = "cache"
 
-    def __init__(self, client: ValkeyClient, *, health: CacheHealth | None = None) -> None:
-        self._client = client
+    def __init__(self, *, health: CacheHealth | None = None) -> None:
         #: Injectable so a deployment can share one counter across both caches, or keep them
         #: apart. Default is per instance, which is the safer of the two to get wrong.
         self.health = health if health is not None else CacheHealth()
 
-    def _read(self, key: str) -> bytes | None:
-        """Bytes, or None for both "not there" and "could not ask".
+    def _outage(self, exc: BaseException, op: str) -> None:
+        """The client could not be asked. Counted, and logged by class name only.
 
-        Broad on the exception, like `resolve` is around its store, and for the same reason:
-        whatever redis-py raises must not leave this module. `OSError` is caught beside
-        `RedisError` because a socket can fail before the client wraps it.
+        The key is not logged. `ent:<principal>:<version>` names a person, and a log line is
+        read by more people, for longer, than the cache entry ever was.
         """
-        try:
-            found = self._client.get(key)
-        except (RedisError, OSError) as exc:
-            self.health.record_outage(exc)
-            # The key is not logged. `ent:<principal>:<version>` names a person, and a log
-            # line is read by more people, for longer, than the cache entry ever was.
-            log.warning("cache unreachable", cache=self.name, op="get", error=type(exc).__name__)
-            return None
+        self.health.record_outage(exc)
+        log.warning("cache unreachable", cache=self.name, op=op, error=type(exc).__name__)
+
+    def _arrived(self, found: bytes | None) -> bytes | None:
+        """The client answered. None is a miss, which is the cache working normally."""
         self.health.record_ok()
         if found is None:
             self.health.misses += 1
         return found
 
-    def _write(self, key: str, payload: bytes, ttl_seconds: int) -> None:
-        """Store with an expiry, and never fail the request for it.
+    def _checked_ttl(self, ttl_seconds: int) -> int:
+        """A positive TTL, or a raise.
 
-        A cache write failing after a successful load means the answer is already in hand;
-        raising here would turn a slow request into a broken one. The TTL check is the
-        exception, and it is not an outage: a non-positive TTL is a caller bug that Valkey
-        would report as a command error, which this module would then swallow, leaving a cache
-        that silently stores nothing.
+        Not an outage: a non-positive TTL is a caller bug that Valkey would report as a command
+        error, which this module would then swallow, leaving a cache that silently stores
+        nothing.
         """
         if ttl_seconds <= 0:
             msg = f"{self.name} refuses a non-positive ttl ({ttl_seconds}); nothing would store"
             raise ValueError(msg)
-        try:
-            # SETEX rather than SET with an expiry argument, so there is no spelling of this
-            # call that writes a key with no expiry at all.
-            self._client.setex(key, ttl_seconds, payload)
-        except (RedisError, OSError) as exc:
-            self.health.record_outage(exc)
-            log.warning("cache unreachable", cache=self.name, op="set", error=type(exc).__name__)
-            return
+        return ttl_seconds
+
+    def _stored(self) -> None:
         self.health.record_ok()
         self.health.writes += 1
 
@@ -314,8 +389,78 @@ class _ValkeyCache:
         log.warning("cache value refused", cache=self.name, reason=reason)
 
 
-class ValkeyEntitlementCache(_ValkeyCache):
-    """`brain.gate.resolve.EntitlementCache`, over Valkey.
+class _ValkeyCache(_CacheBooks):
+    """The byte-level half over the synchronous client: the answer store and the record caches.
+
+    Subclasses add serialisation and nothing else. Broad on the exception, like `resolve` is
+    around its store, and for the same reason: whatever redis-py raises must not leave this
+    module.
+    """
+
+    def __init__(self, client: ValkeyClient, *, health: CacheHealth | None = None) -> None:
+        super().__init__(health=health)
+        self._client = client
+
+    def _read(self, key: str) -> bytes | None:
+        """Bytes, or None for both "not there" and "could not ask"."""
+        try:
+            found = self._client.get(key)
+        except OUTAGES as exc:
+            self._outage(exc, "get")
+            return None
+        return self._arrived(found)
+
+    def _write(self, key: str, payload: bytes, ttl_seconds: int) -> None:
+        """Store with an expiry, and never fail the request for it.
+
+        A cache write failing after a successful load means the answer is already in hand;
+        raising here would turn a slow request into a broken one.
+        """
+        ttl = self._checked_ttl(ttl_seconds)
+        try:
+            # SETEX rather than SET with an expiry argument, so there is no spelling of this
+            # call that writes a key with no expiry at all.
+            self._client.setex(key, ttl, payload)
+        except OUTAGES as exc:
+            self._outage(exc, "set")
+            return
+        self._stored()
+
+
+class _AwaitedValkeyCache(_CacheBooks):
+    """The byte-level half over `AsyncValkeyClient`, for the cache `resolve` awaits.
+
+    The same two calls as `_ValkeyCache`, awaited, with every decision about their outcome in
+    `_CacheBooks`. A cancelled request is not an outage: `CancelledError` is not in `OUTAGES`,
+    so it leaves as it arrived and the request that was cancelled stays cancelled.
+    """
+
+    def __init__(self, client: AsyncValkeyClient, *, health: CacheHealth | None = None) -> None:
+        super().__init__(health=health)
+        self._client = client
+
+    async def _read(self, key: str) -> bytes | None:
+        """Bytes, or None for both "not there" and "could not ask"."""
+        try:
+            found = await self._client.get(key)
+        except OUTAGES as exc:
+            self._outage(exc, "get")
+            return None
+        return self._arrived(found)
+
+    async def _write(self, key: str, payload: bytes, ttl_seconds: int) -> None:
+        """Store with an expiry, and never fail the request for it. SETEX, as next door."""
+        ttl = self._checked_ttl(ttl_seconds)
+        try:
+            await self._client.setex(key, ttl, payload)
+        except OUTAGES as exc:
+            self._outage(exc, "set")
+            return
+        self._stored()
+
+
+class ValkeyEntitlementCache(_AwaitedValkeyCache):
+    """`brain.gate.resolve.EntitlementCache`, over Valkey, awaited.
 
     Keys arrive built by `resolve.cache_key` and are used verbatim. Nothing here prefixes or
     namespaces them, which was the obvious alternative and was rejected: the key *is* the
@@ -329,7 +474,7 @@ class ValkeyEntitlementCache(_ValkeyCache):
 
     name = "entitlements"
 
-    def get(self, key: str) -> EntitlementSet | None:
+    async def get(self, key: str) -> EntitlementSet | None:
         """The set, or None. None on a miss, on an outage, and on anything unparseable.
 
         The stored bytes are validated rather than trusted. `resolve._usable` then checks the
@@ -338,7 +483,7 @@ class ValkeyEntitlementCache(_ValkeyCache):
         that gets to disagree. What is done here is the check `_usable` cannot do, because it
         needs an object to look at: refusing bytes that are not an `EntitlementSet` at all.
         """
-        raw = self._read(key)
+        raw = await self._read(key)
         if raw is None:
             return None
         try:
@@ -351,9 +496,9 @@ class ValkeyEntitlementCache(_ValkeyCache):
         self.health.hits += 1
         return found
 
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
         """Store the set as its own JSON. Expired sets included, as `resolve` requires."""
-        self._write(key, value.model_dump_json().encode("utf-8"), ttl_seconds)
+        await self._write(key, value.model_dump_json().encode("utf-8"), ttl_seconds)
 
 
 #: pydantic's serialiser for a frozen stdlib dataclass. `CachedAnswer` is not a `BaseModel`,
@@ -540,26 +685,32 @@ def freshness_cache(
     return ValkeyRecordCache(client, _FRESHNESS, name="freshness", health=health)
 
 
-class Cursor(Protocol):
-    """The two calls a version read needs. A psycopg 3 cursor satisfies it."""
+def version_from(found: object) -> int:
+    """A version read's single value as the version. No row is zero; anything else is an int.
 
-    def execute(self, query: str, params: Sequence[object] = ..., /) -> object: ...
-    def fetchone(self) -> tuple[Any, ...] | None: ...
-
-
-class Connection(Protocol):
-    """A connection that hands out cursors. A psycopg 3 connection satisfies it."""
-
-    def cursor(self) -> AbstractContextManager[Cursor]: ...
+    Separate from the read so the one `if` that must never be confused with a failure is a
+    function a test can hand None to directly.
+    """
+    if found is None:
+        # A principal who has never held a grant has no row, and `0003` writes none. This is
+        # the successful-read branch; a failed read raises before it gets here.
+        return 0
+    return int(cast(int, found))
 
 
 class PostgresVersionSource:
-    """`brain.gate.resolve.VersionSource`, over `gate.grants_version` (M1.4.5).
+    """`brain.gate.resolve.VersionSource`, over `gate.grants_version` (M1.4.5), awaited.
 
     Here rather than in `brain.gate.resolve`, which holds the protocol and nothing that opens
     a socket, and rather than in `brain.tables.gate`, which describes the schema and runs no
     queries. It reads on the same path and in the same breath as the cache it invalidates, so
     it lives with the cache client.
+
+    **Over the application's async session factory, the one `app.state.db_sessions` holds.**
+    Until 2026-09-15 this took a synchronous psycopg connection factory, which on a process
+    whose only pool is an `AsyncEngine` meant either a second pool or a blocked event loop on
+    every request. It is the same factory `brain.gate.entitlement_store.StoredEntitlements`
+    reads through, so the version and the reach it keys come from one pool.
 
     **A failed read is never a version.** The one thing this class must not do is return a
     number when it does not know the number, and specifically not zero: zero is a real version,
@@ -570,54 +721,53 @@ class PostgresVersionSource:
     consequences are not comparable.
 
     It raises `ResolutionFailedError`, which is `resolve`'s own failure type, rather than
-    letting a psycopg exception out. `resolve` wraps `store.load` but not
-    `versions.grants_version`, so anything raised here reaches the caller as it is, and a
-    driver error carries a connection string in its message.
+    letting a driver exception out. `resolve` wraps this call as well, but a detail naming the
+    exception class and not its message is this class's to guarantee: a driver error carries a
+    connection string in its message.
 
-    The connection is supplied per call, so this is safe to hold across threads and works
-    directly with `psycopg_pool.ConnectionPool.connection`.
+    **The transaction is told whose version it reads.** See
+    `A_VERSION_READ_NAMES_ITS_PRINCIPAL`.
     """
 
     def __init__(
         self,
-        connect: Callable[[], AbstractContextManager[Connection]],
+        sessions: async_sessionmaker[AsyncSession],
         *,
         statement_timeout_ms: int | None = STATEMENT_TIMEOUT_MS,
     ) -> None:
-        self._connect = connect
+        self._sessions = sessions
         self._statement_timeout_ms = statement_timeout_ms
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         """The principal's current version. Zero when they have never held a grant.
 
         The id is a bound parameter, never interpolated, so it reaches the database as data
         and reaches no log line at all.
         """
         try:
-            with self._connect() as connection, connection.cursor() as cur:
+            async with self._sessions() as session, session.begin():
                 if self._statement_timeout_ms is not None:
                     # `SET LOCAL` through `set_config`, so the bound is scoped to this
                     # transaction and cannot leak onto the next borrower of a pooled
-                    # connection. It requires a transaction: on an autocommit connection
-                    # PostgreSQL downgrades this to a warning and the read is unbounded, which
-                    # is why psycopg's default of autocommit off is the supported shape and
-                    # why a caller who sets `options=-c statement_timeout=...` on the
-                    # connection string should pass None here rather than have both.
-                    cur.execute(STATEMENT_TIMEOUT_SQL, (f"{self._statement_timeout_ms}ms",))
-                cur.execute(VERSION_SQL, (principal_id,))
-                row = cur.fetchone()
+                    # connection. `session.begin()` is what makes it a transaction; a caller
+                    # who sets `options=-c statement_timeout=...` on the connection string
+                    # should pass None here rather than have both.
+                    await session.execute(
+                        STATEMENT_TIMEOUT_SQL, {"bound": f"{self._statement_timeout_ms}ms"}
+                    )
+                await session.execute(
+                    PRINCIPAL_SQL, {"setting": PRINCIPAL_SETTING, "principal_id": principal_id}
+                )
+                found = (
+                    await session.execute(VERSION_SQL, {"principal_id": principal_id})
+                ).scalar_one_or_none()
         except Exception as exc:
             # Broad, like `resolve` is around its store. The detail names the principal and
             # the exception class, never its message: `app.py` logs `exc.detail`, and a
-            # psycopg message can carry the host, the user and the password it dialled with.
+            # driver message can carry the host, the user and the password it dialled with.
             msg = f"reading grants_version for {principal_id} failed: {type(exc).__name__}"
             raise ResolutionFailedError(msg) from exc
-
-        if row is None:
-            # A principal who has never held a grant has no row, and `0003` writes none. This
-            # is the successful-read branch; the failure branch above cannot reach it.
-            return 0
-        return int(row[0])
+        return version_from(found)
 
 
 def check_reachable(client: ValkeyClient) -> bool:
@@ -632,7 +782,7 @@ def check_reachable(client: ValkeyClient) -> bool:
     """
     try:
         client.ping()
-    except (RedisError, OSError) as exc:
+    except OUTAGES as exc:
         # Class name only. `str(exc)` on a connection error can contain the URL, and the URL
         # contains the password. `session.check_reachable` logs the message and predates this
         # module; it is not a precedent worth copying into a line about a credentialed cache.
@@ -641,12 +791,16 @@ def check_reachable(client: ValkeyClient) -> bool:
     return True
 
 
-async def check_reachable_async(client: ValkeyClient) -> bool:
-    """`check_reachable` off the event loop, for `app.py`'s async lifespan.
+async def check_reachable_async(client: AsyncValkeyClient) -> bool:
+    """`check_reachable` for the awaited client, for `app.py`'s async lifespan.
 
-    The client is synchronous because `resolve` and `answer_cache` are, and a synchronous
-    socket call awaited directly in a coroutine blocks every other request on that worker for
-    the duration of the timeout. `app.py` already runs migrations through `asyncio.to_thread`
-    for the same reason.
+    A native `PING` on the client the entitlement cache uses, rather than the synchronous probe
+    pushed to a thread as this was until 2026-09-15: readiness is then a question about the
+    client requests actually go through, bounded by that client's own socket timeout.
     """
-    return await asyncio.to_thread(check_reachable, client)
+    try:
+        await client.ping()
+    except OUTAGES as exc:
+        log.warning("cache unreachable", cache="valkey", op="ping", error=type(exc).__name__)
+        return False
+    return True

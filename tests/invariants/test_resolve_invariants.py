@@ -49,7 +49,7 @@ class FakeVersions:
         self.version = version
         self.reads = 0
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         del principal_id
         self.reads += 1
         return self.version
@@ -70,10 +70,10 @@ class FakeCache:
         self.data: dict[str, EntitlementSet] = {}
         self.ttls: dict[str, int] = {}
 
-    def get(self, key: str) -> EntitlementSet | None:
+    async def get(self, key: str) -> EntitlementSet | None:
         return self.data.get(key)
 
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
         self.data[key] = value
         self.ttls[key] = ttl_seconds
 
@@ -167,7 +167,7 @@ class BrokenVersions:
     OperationalError, and it is the thing that must not cross the gate.
     """
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         del principal_id
         msg = "connection to server at 'db' (172.18.0.3), port 5432 failed: password=hunter2"
         raise RuntimeError(msg)

@@ -200,17 +200,17 @@ class Store:
 class Versions:
     """A `VersionSource`. One version for everybody; nothing here mutates grants."""
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         return 1
 
 
 class NoCache:
     """An `EntitlementCache` that forgets everything, which it is allowed to do."""
 
-    def get(self, key: str) -> EntitlementSet | None:
+    async def get(self, key: str) -> EntitlementSet | None:
         return None
 
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
         return None
 
 

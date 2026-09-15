@@ -16,7 +16,9 @@ slow.
 - Every call is bounded, because a cache that hangs is worse than one that is down: the
   request waits instead of falling through.
 
-No Valkey and no PostgreSQL are contacted anywhere in this file.
+No Valkey and no PostgreSQL are contacted anywhere in this file. One test opens a local socket
+that accepts and never replies, because the bound on the awaited client is a property of the
+library's behaviour and not of the arguments it was given.
 
 Task ids: M1.4.5
 """
@@ -26,7 +28,10 @@ from __future__ import annotations
 import ast
 import asyncio
 import pickle
-from collections.abc import Callable, Iterator, Sequence
+import socket
+import threading
+import time
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -36,18 +41,23 @@ import pytest
 from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from structlog.testing import capture_logs
 
 import brain.cache
 from brain.cache import (
+    OPERATION_TIMEOUT_SECONDS,
     STATEMENT_TIMEOUT_MS,
     STATEMENT_TIMEOUT_SQL,
     VERSION_SQL,
+    AsyncValkeyClient,
     PostgresVersionSource,
     ValkeyAnswerStore,
     ValkeyClient,
     ValkeyEntitlementCache,
     check_reachable,
+    check_reachable_async,
+    make_async_client,
     make_client,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -117,8 +127,32 @@ class RawSocketValkey:
         raise OSError(104, "Connection reset by peer")
 
 
+class Awaited:
+    """A synchronous fake behind `AsyncValkeyClient`, so one fake's data serves both clients."""
+
+    def __init__(self, sync: FakeValkey | DeadValkey | RawSocketValkey) -> None:
+        self.sync = sync
+
+    async def get(self, name: str) -> bytes | None:
+        return self.sync.get(name)
+
+    async def setex(self, name: str, time: int, value: bytes) -> object:
+        return self.sync.setex(name, time, value)
+
+    async def ping(self) -> object:
+        return self.sync.ping()
+
+
+def got(cache: ValkeyEntitlementCache, key: str) -> EntitlementSet | None:
+    return asyncio.run(cache.get(key))
+
+
+def put(cache: ValkeyEntitlementCache, key: str, value: EntitlementSet, ttl: int) -> None:
+    asyncio.run(cache.set(key, value, ttl))
+
+
 def resolve(principal_id: str, **seams: Any) -> Resolved:
-    """`brain.gate.resolve.resolve`, run to completion. It awaits the store."""
+    """`brain.gate.resolve.resolve`, run to completion. It awaits every seam."""
     return asyncio.run(resolve_awaited(principal_id, **seams))
 
 
@@ -141,59 +175,65 @@ class FixedVersions:
     def __init__(self, version: int = 1) -> None:
         self.version = version
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         del principal_id
         return self.version
 
 
-class FakeCursor:
+class FakeResult:
+    def __init__(self, value: object) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self) -> object:
+        return self._value
+
+
+class FakeSession:
+    """Answers `VERSION_SQL` from a dict, or fails as a database that is not there fails."""
+
     def __init__(
-        self, versions: dict[str, int], seen: list[tuple[str, tuple[object, ...]]]
+        self,
+        versions: dict[str, int],
+        seen: list[tuple[str, dict[str, object]]],
+        *,
+        broken: bool,
     ) -> None:
         self._versions = versions
         self.seen = seen
-        self._row: tuple[Any, ...] | None = None
+        self._broken = broken
 
-    def execute(self, query: str, params: Sequence[object] = ()) -> object:
-        self.seen.append((query, tuple(params)))
-        if query == VERSION_SQL:
-            found = self._versions.get(str(params[0]))
-            self._row = None if found is None else (found,)
+    async def __aenter__(self) -> FakeSession:
+        return self
+
+    async def __aexit__(self, *exc: object) -> None:
         return None
 
-    def fetchone(self) -> tuple[Any, ...] | None:
-        return self._row
+    def begin(self) -> FakeSession:
+        return self
 
-
-class BrokenCursor:
-    def execute(self, query: str, params: Sequence[object] = ()) -> object:
-        del query, params
-        raise RuntimeError(f"connection to {DB_URL} failed")
-
-    def fetchone(self) -> tuple[Any, ...] | None:  # pragma: no cover - execute raises first
-        return None
-
-
-class FakeConnection:
-    def __init__(self, cursor: FakeCursor | BrokenCursor) -> None:
-        self._cursor = cursor
-
-    @contextmanager
-    def cursor(self) -> Iterator[FakeCursor | BrokenCursor]:
-        yield self._cursor
+    async def execute(self, statement: object, params: dict[str, object]) -> FakeResult:
+        if self._broken:
+            raise RuntimeError(f"connection to {DB_URL} failed")
+        self.seen.append((str(statement), dict(params)))
+        if str(statement) == str(VERSION_SQL):
+            return FakeResult(self._versions.get(str(params["principal_id"])))
+        return FakeResult(None)
 
 
 def version_source(
     versions: dict[str, int], *, broken: bool = False
-) -> tuple[PostgresVersionSource, list[tuple[str, tuple[object, ...]]]]:
-    seen: list[tuple[str, tuple[object, ...]]] = []
-    connection = FakeConnection(BrokenCursor() if broken else FakeCursor(versions, seen))
+) -> tuple[PostgresVersionSource, list[tuple[str, dict[str, object]]]]:
+    seen: list[tuple[str, dict[str, object]]] = []
 
-    @contextmanager
-    def connect() -> Iterator[FakeConnection]:
-        yield connection
+    def sessions() -> FakeSession:
+        return FakeSession(versions, seen, broken=broken)
 
-    return PostgresVersionSource(connect), seen
+    # A cast at the seam: the fake answers the calls the source makes and nothing else.
+    return PostgresVersionSource(cast(async_sessionmaker[AsyncSession], sessions)), seen
+
+
+def version_of(source: PostgresVersionSource, principal_id: str) -> int:
+    return asyncio.run(source.grants_version(principal_id))
 
 
 def ents(principal: str, *caps: str, not_after: datetime | None = None) -> EntitlementSet:
@@ -208,9 +248,9 @@ def ents(principal: str, *caps: str, not_after: datetime | None = None) -> Entit
 def test_a_cache_outage_falls_through_to_the_database() -> None:
     """The property the whole module exists for. An unreachable cache must make the system
     slower and never change what it says, so `get` reports "not in hand" rather than raising:
-    `resolve` wraps `store.load` and nothing else, so an exception from the cache would leave
-    the gate as an unhandled error on every single request."""
-    cache = ValkeyEntitlementCache(DeadValkey())
+    `resolve` guards the version read and the store and nothing around the cache, so an
+    exception from the cache would leave the gate as an unhandled error on every request."""
+    cache = ValkeyEntitlementCache(Awaited(DeadValkey()))
     store = GoodStore({"u_weiling": ents("u_weiling", "read:client.name")})
 
     resolved = resolve("u_weiling", versions=FixedVersions(1), store=store, cache=cache)
@@ -225,7 +265,7 @@ def test_a_cache_outage_never_becomes_an_empty_entitlement_set() -> None:
     """The tempting default looks safe and is not. An empty set flows onward, gets hashed, and
     produces a confident "I could not find that" for a person who should have seen the record,
     which is indistinguishable from a correct answer at every point downstream."""
-    cache = ValkeyEntitlementCache(DeadValkey())
+    cache = ValkeyEntitlementCache(Awaited(DeadValkey()))
     resolved = resolve(
         "u_weiling",
         versions=FixedVersions(1),
@@ -243,7 +283,7 @@ def test_a_cache_outage_on_top_of_a_database_outage_raises_rather_than_returning
             "u_weiling",
             versions=FixedVersions(1),
             store=BrokenStore(),
-            cache=ValkeyEntitlementCache(DeadValkey()),
+            cache=ValkeyEntitlementCache(Awaited(DeadValkey())),
         )
 
 
@@ -251,31 +291,62 @@ def test_a_failed_cache_write_does_not_fail_the_request() -> None:
     """By the time the write happens the answer is already in hand. Raising here would turn a
     degraded cache into a broken system, which is the failure this module is meant to rule
     out."""
-    cache = ValkeyEntitlementCache(DeadValkey())
-    cache.set(cache_key("u_weiling", 1), ents("u_weiling", "read:client.name"), CACHE_TTL_SECONDS)
+    cache = ValkeyEntitlementCache(Awaited(DeadValkey()))
+    put(cache, cache_key("u_weiling", 1), ents("u_weiling", "read:client.name"), CACHE_TTL_SECONDS)
     assert cache.health.outages == 1
 
 
 def test_a_bare_socket_error_is_handled_like_any_other_outage() -> None:
     """redis-py wraps most failures, and not all of them. Catching only `RedisError` leaves a
-    reset connection propagating out of the gate on a path nobody tests."""
-    cache = ValkeyEntitlementCache(RawSocketValkey())
-    assert cache.get(cache_key("u_weiling", 1)) is None
-    cache.set(cache_key("u_weiling", 1), ents("u_weiling"), CACHE_TTL_SECONDS)
+    reset connection propagating out of the gate on a path nobody tests. Both clients are
+    asked, because they share the tuple that decides it."""
+    cache = ValkeyEntitlementCache(Awaited(RawSocketValkey()))
+    assert got(cache, cache_key("u_weiling", 1)) is None
+    put(cache, cache_key("u_weiling", 1), ents("u_weiling"), CACHE_TTL_SECONDS)
     assert cache.health.outages == 2
+
+    answers = ValkeyAnswerStore(RawSocketValkey())
+    assert answers.get("k") is None
+    assert answers.health.outages == 1
 
 
 def test_a_miss_and_an_outage_are_counted_apart() -> None:
     """They are the same instruction to `resolve` and a different fact for an operator. Merged
     into one counter, a dead cache reads as a cache that is merely cold, and the difference is
     the one worth paging somebody about."""
-    cold = ValkeyEntitlementCache(FakeValkey())
-    cold.get(cache_key("u_weiling", 1))
-    dead = ValkeyEntitlementCache(DeadValkey())
-    dead.get(cache_key("u_weiling", 1))
+    cold = ValkeyEntitlementCache(Awaited(FakeValkey()))
+    got(cold, cache_key("u_weiling", 1))
+    dead = ValkeyEntitlementCache(Awaited(DeadValkey()))
+    got(dead, cache_key("u_weiling", 1))
 
     assert (cold.health.misses, cold.health.outages, cold.health.degraded) == (1, 0, False)
     assert (dead.health.misses, dead.health.outages, dead.health.degraded) == (0, 1, True)
+
+
+def test_a_cancelled_request_stays_cancelled_rather_than_becoming_a_miss() -> None:
+    """Cancellation is not an outage. Read as one, a request its caller abandoned would fall
+    through to the database and do the whole load for nobody, on exactly the occasions a
+    server is shedding work. Delete this and `OUTAGES` can be widened to `BaseException` with
+    every other test here green."""
+
+    class Cancelled:
+        async def get(self, name: str) -> bytes | None:
+            raise asyncio.CancelledError
+
+        async def setex(self, name: str, time: int, value: bytes) -> object:
+            raise asyncio.CancelledError
+
+        async def ping(self) -> object:
+            raise asyncio.CancelledError
+
+    cache = ValkeyEntitlementCache(Cancelled())
+
+    async def ask() -> EntitlementSet | None:
+        return await cache.get(cache_key("u_weiling", 1))
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(ask())
+    assert cache.health.outages == 0
 
 
 # ------------------------------------------------------------- nothing is deleted
@@ -285,7 +356,7 @@ def test_neither_cache_offers_a_way_to_delete_an_entry() -> None:
     permission and nothing reports it. A second invalidation path is one that will be relied
     on, so there is not one to reach for."""
     forbidden = ("delete", "remove", "evict", "invalidate", "flush", "purge", "unlink", "expire")
-    for cls in (ValkeyEntitlementCache, ValkeyAnswerStore, ValkeyClient):
+    for cls in (ValkeyEntitlementCache, ValkeyAnswerStore, ValkeyClient, AsyncValkeyClient):
         named = [n for n in dir(cls) if any(word in n.lower() for word in forbidden)]
         assert named == [], f"{cls.__name__} exposes {named}"
 
@@ -295,8 +366,11 @@ def test_every_write_carries_an_expiry() -> None:
     space and not invalidation, which is why the TTL is the caller's constant rather than a
     number this module chooses."""
     client = FakeValkey()
-    ValkeyEntitlementCache(client).set(
-        cache_key("u_weiling", 1), ents("u_weiling"), CACHE_TTL_SECONDS
+    put(
+        ValkeyEntitlementCache(Awaited(client)),
+        cache_key("u_weiling", 1),
+        ents("u_weiling"),
+        CACHE_TTL_SECONDS,
     )
     ValkeyAnswerStore(client).set(
         "k", CachedAnswer(key="k", payload="p", stored_at=NOW, source_epochs={}), STORE_TTL_SECONDS
@@ -309,7 +383,7 @@ def test_an_expired_entitlement_set_is_still_cached() -> None:
     on every request from a contractor whose access ended, which is when the load is least
     useful. Expiry is a property of the set, checked where the set is read."""
     client = FakeValkey()
-    cache = ValkeyEntitlementCache(client)
+    cache = ValkeyEntitlementCache(Awaited(client))
     expired = ents("u_temp", "read:client.name", not_after=NOW - timedelta(minutes=1))
 
     resolve(
@@ -346,7 +420,7 @@ def test_a_pickle_sitting_in_the_cache_is_refused_rather_than_executed() -> None
     key = cache_key("u_weiling", 1)
     client.data[key] = pickle.dumps(_HostilePayload())
 
-    assert ValkeyEntitlementCache(client).get(key) is None
+    assert got(ValkeyEntitlementCache(Awaited(client)), key) is None
     assert _EXECUTED == [], "a stored payload ran code inside the gate"
 
 
@@ -354,7 +428,7 @@ def test_both_payloads_are_json_that_another_tool_can_read() -> None:
     """The positive half. A cache somebody can inspect with `redis-cli` is one they debug
     without running our deserialiser over whatever is in there."""
     client = FakeValkey()
-    ValkeyEntitlementCache(client).set(cache_key("p", 1), ents("p", "read:client.name"), 60)
+    put(ValkeyEntitlementCache(Awaited(client)), cache_key("p", 1), ents("p", "read:x.name"), 60)
     ValkeyAnswerStore(client).set(
         "k", CachedAnswer(key="k", payload="p", stored_at=NOW, source_epochs={"x": 1}), 60
     )
@@ -368,11 +442,11 @@ def test_a_value_that_is_not_well_formed_is_a_miss_and_not_a_crash() -> None:
     to parse turns somebody else's write into an exception on the permission path."""
     client = FakeValkey()
     key = cache_key("u_weiling", 1)
-    cache = ValkeyEntitlementCache(client)
+    cache = ValkeyEntitlementCache(Awaited(client))
 
     for rubbish in (b"", b"{", b"null", b'{"principal_id": 4}', b"\xff\xfe not utf-8"):
         client.data[key] = rubbish
-        assert cache.get(key) is None
+        assert got(cache, key) is None
     assert cache.health.rejections == 5
 
 
@@ -384,9 +458,9 @@ def test_a_cache_entry_for_the_wrong_principal_is_left_for_resolve_to_refuse() -
     client.data[cache_key("u_weiling", 1)] = (
         ents("u_someone_else", "read:client.contract_value").model_dump_json().encode()
     )
-    cache = ValkeyEntitlementCache(client)
+    cache = ValkeyEntitlementCache(Awaited(client))
 
-    assert cache.get(cache_key("u_weiling", 1)) is not None  # the cache is not the judge
+    assert got(cache, cache_key("u_weiling", 1)) is not None  # the cache is not the judge
     resolved = resolve(
         "u_weiling",
         versions=FixedVersions(1),
@@ -424,7 +498,7 @@ def test_the_key_reaches_the_store_exactly_as_the_gate_built_it() -> None:
     orphaned by the version bump" a question about two pieces of code instead of one, and the
     answer stops being obvious at exactly the moment somebody needs it to be."""
     client = FakeValkey()
-    ValkeyEntitlementCache(client).set(cache_key("u_weiling", 7), ents("u_weiling"), 60)
+    put(ValkeyEntitlementCache(Awaited(client)), cache_key("u_weiling", 7), ents("u_weiling"), 60)
     assert list(client.data) == ["ent:u_weiling:7"]
 
     answers = FakeValkey()
@@ -447,23 +521,80 @@ def test_every_call_the_client_makes_is_bounded() -> None:
     """A cache that hangs is worse than a cache that is down, because the request waits instead
     of falling through. Asserted on the type and not on a value, because the trap is that
     `Redis.from_url` leaves both timeouts at None: a test comparing against redis-py's
-    documented five seconds would pass on a client that waits forever."""
-    client = cast(Redis, make_client(DEAD_URL))
-    kwargs = client.connection_pool.connection_kwargs
+    documented five seconds would pass on a client that waits forever. Both builders, since
+    the awaited one is the one on the request path."""
+    for built in (make_client(DEAD_URL), make_async_client(DEAD_URL)):
+        kwargs = cast(Redis, built).connection_pool.connection_kwargs
 
-    for name in ("socket_timeout", "socket_connect_timeout"):
-        bound = kwargs.get(name)
-        assert isinstance(bound, float), f"{name} is not set to a number"
-        assert 0 < bound <= 1, f"{name} is {bound}, which is not a bound worth having"
-    assert kwargs["retry"].get_retries() == 0
+        for name in ("socket_timeout", "socket_connect_timeout"):
+            bound = kwargs.get(name)
+            assert isinstance(bound, float), f"{name} is not set to a number"
+            assert 0 < bound <= 1, f"{name} is {bound}, which is not a bound worth having"
+        assert kwargs["retry"].get_retries() == 0
+
+
+@contextmanager
+def a_cache_that_never_answers() -> Iterator[str]:
+    """A local socket that accepts every connection and never writes a byte back."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(8)
+    held: list[socket.socket] = []
+
+    def accept() -> None:
+        while True:
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            held.append(conn)
+
+    threading.Thread(target=accept, daemon=True).start()
+    try:
+        yield f"redis://127.0.0.1:{listener.getsockname()[1]}/0"
+    finally:
+        listener.close()
+        for conn in held:
+            conn.close()
+
+
+def test_a_cache_that_accepts_and_never_answers_is_a_miss_within_the_bound() -> None:
+    """The hang the module docstring measured, carried out against the real awaited client.
+    Unbounded, this `get` waited 5.02 seconds; a request waiting that long on a cache key has
+    not failed over, it has stalled. Delete this and the bound is only ever proved on keyword
+    arguments, which is the trap `Redis.from_url` already set once.
+
+    The test bounds itself. An unbounded client waits on this socket for ever, so without the
+    outer `wait_for` the failure this test exists for would present as a suite that never
+    finishes rather than as a red test; a mutation run removing the bound hung for two hours
+    that way before this line was added."""
+    ceiling = OPERATION_TIMEOUT_SECONDS * 8
+    with a_cache_that_never_answers() as url:
+        cache = ValkeyEntitlementCache(make_async_client(url))
+
+        async def ask() -> tuple[EntitlementSet | None, float] | None:
+            started = time.perf_counter()
+            try:
+                found = await asyncio.wait_for(cache.get(cache_key("u_weiling", 1)), ceiling)
+            except TimeoutError:
+                return None
+            return found, time.perf_counter() - started
+
+        answered = asyncio.run(ask())
+
+    assert answered is not None, f"a silent cache held the request past {ceiling:.2f}s"
+    found, took = answered
+    assert found is None
+    assert cache.health.outages == 1
+    assert took < ceiling, f"a silent cache held the request {took:.2f}s"
 
 
 def test_the_version_read_is_bounded_too() -> None:
     """It is a network call like the others. A primary key lookup that hangs holds up a request
     before it has begun its real work, and nothing downstream can tell it is waiting."""
     versions, seen = version_source({"u_weiling": 3})
-    versions.grants_version("u_weiling")
-    assert seen[0] == (STATEMENT_TIMEOUT_SQL, (f"{STATEMENT_TIMEOUT_MS}ms",))
+    version_of(versions, "u_weiling")
+    assert seen[0] == (str(STATEMENT_TIMEOUT_SQL), {"bound": f"{STATEMENT_TIMEOUT_MS}ms"})
     assert STATEMENT_TIMEOUT_MS <= 1000
 
 
@@ -474,11 +605,11 @@ def test_a_missing_version_row_is_zero_and_a_failed_read_is_never_a_number() -> 
     version, so returning it would mint a key that was already used, under a wider entitlement,
     and whatever is cached there is still readable."""
     present, _ = version_source({"u_weiling": 4})
-    assert present.grants_version("u_new_starter") == 0
+    assert version_of(present, "u_new_starter") == 0
 
     broken, _ = version_source({}, broken=True)
     with pytest.raises(ResolutionFailedError):
-        broken.grants_version("u_new_starter")
+        version_of(broken, "u_new_starter")
 
 
 # ---------------------------------------------------------------- nothing leaks
@@ -486,14 +617,15 @@ def test_no_credential_and_no_key_reaches_a_log_line() -> None:
     """A log line is read by more people, for longer, than the cache entry it describes. A
     redis-py connection error carries the URL it dialled and the URL carries the password, and
     `ent:<principal>:<version>` names a person."""
-    cache = ValkeyEntitlementCache(DeadValkey())
+    cache = ValkeyEntitlementCache(Awaited(DeadValkey()))
     with capture_logs() as events:
-        cache.get(cache_key("u_weiling", 1))
-        cache.set(cache_key("u_weiling", 1), ents("u_weiling"), CACHE_TTL_SECONDS)
+        got(cache, cache_key("u_weiling", 1))
+        put(cache, cache_key("u_weiling", 1), ents("u_weiling"), CACHE_TTL_SECONDS)
         check_reachable(DeadValkey())
+        asyncio.run(check_reachable_async(Awaited(DeadValkey())))
 
     blob = repr(events)
-    assert events, "an outage was not reported at all"
+    assert len(events) == 4, "an outage was not reported"
     assert "s3cr3t-valkey-password" not in blob
     assert "cache.internal" not in blob
     assert "u_weiling" not in blob
@@ -504,10 +636,10 @@ def test_no_credential_and_no_key_reaches_a_log_line() -> None:
 
 def test_a_failed_version_read_reports_no_connection_string_either() -> None:
     """`app.py` logs `exc.detail` on every `BrainError`, so the detail is a log line by another
-    name, and a psycopg message names the host, the user and the password it dialled with."""
+    name, and a driver message names the host, the user and the password it dialled with."""
     versions, _ = version_source({}, broken=True)
     with pytest.raises(ResolutionFailedError) as caught:
-        versions.grants_version("u_weiling")
+        version_of(versions, "u_weiling")
 
     assert "d1fferent-db-password" not in str(caught.value)
     assert "db.internal" not in str(caught.value)

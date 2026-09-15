@@ -314,7 +314,7 @@ class Versions:
     def __init__(self) -> None:
         self.version = 1
 
-    def grants_version(self, principal_id: str) -> int:
+    async def grants_version(self, principal_id: str) -> int:
         return self.version
 
 
@@ -334,10 +334,10 @@ class Cache:
     def __init__(self) -> None:
         self.kept: dict[str, EntitlementSet] = {}
 
-    def get(self, key: str) -> EntitlementSet | None:
+    async def get(self, key: str) -> EntitlementSet | None:
         return self.kept.get(key)
 
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
         self.kept[key] = value
 
 

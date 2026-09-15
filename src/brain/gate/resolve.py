@@ -23,8 +23,16 @@ row is the catastrophic failure, and it is one comparison to rule out.
 **The store is awaited, for the reason `brain.knowledge.rows.RowSource` is.** The only pool the
 application holds is an `AsyncEngine`, and a synchronous `load` could be implemented against it
 only by a second pool or a thread per request. `brain.gate.entitlement_store` is the
-implementation, over `gate.resolve_entitlements`. The version source and the cache stay
-synchronous here: neither was in the way of that store, and changing them is a separate piece.
+implementation, over `gate.resolve_entitlements`.
+
+**The version source and the cache are awaited too, and for a sharper reason.** They are read on
+every request, hit or miss, where the store is read only on a miss. A synchronous version read
+over psycopg, or a synchronous `GET` against Valkey, holds the event loop for as long as the far
+end takes, which is every other request on that worker waiting on one person's cache key. Running
+them through `asyncio.to_thread` was the cheaper change and was rejected: it spends a thread from a
+default executor of a few dozen per request, so a cache that hangs for its timeout drains the
+executor that migrations and readiness also use, and the loop is then blocked by proxy. See
+`THE_REQUEST_PATH_AWAITS_WHAT_IT_READS`. `brain.cache` holds both implementations.
 
 **The store is told the caller's instant.** `gate.resolve_entitlements` drops a grant whose own
 `not_after` has passed, and the grant type carries no expiry, so that judgement is made when the
@@ -57,6 +65,14 @@ THE_STORE_IS_ASKED_AT_THE_CALLERS_INSTANT: Final = (
     "when a date passes; that bound is CACHE_TTL_SECONDS."
 )
 
+#: Why every seam `resolve` reads is awaitable, and not only the store.
+THE_REQUEST_PATH_AWAITS_WHAT_IT_READS: Final = (
+    "The grants version and the cache are read on every request, so a blocking read of either "
+    "stops every request on the worker for as long as the far end takes. They are awaited on the "
+    "application's own event loop rather than pushed to a thread, because a thread per request "
+    "drains a small shared executor exactly when the cache is hanging."
+)
+
 
 class ResolutionFailedError(BrainError):
     """Resolution could not complete. Deliberately not an empty entitlement set.
@@ -75,10 +91,10 @@ class VersionSource(Protocol):
 
     Separate from the store because the whole design depends on learning the version
     without loading the grants. If reading the version cost what loading costs, the cache
-    would save nothing.
+    would save nothing. Awaitable: see `THE_REQUEST_PATH_AWAITS_WHAT_IT_READS`.
     """
 
-    def grants_version(self, principal_id: str) -> int: ...
+    async def grants_version(self, principal_id: str) -> int: ...
 
 
 class EntitlementStore(Protocol):
@@ -96,10 +112,14 @@ class EntitlementCache(Protocol):
 
     `get` returning None is always safe. There is no method to delete, on purpose: version
     bumping is the invalidation mechanism, and offering a delete invites a second one.
+
+    Awaitable, and neither method may raise for an outage: `resolve` guards the version read
+    and the store, and nothing around these two. `brain.cache.ValkeyEntitlementCache` turns
+    every client failure into None or a dropped write.
     """
 
-    def get(self, key: str) -> EntitlementSet | None: ...
-    def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None: ...
+    async def get(self, key: str) -> EntitlementSet | None: ...
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None: ...
 
 
 def cache_key(principal_id: str, grants_version: int) -> str:
@@ -147,7 +167,7 @@ async def resolve(
     """
     instant = now if now is not None else datetime.now(UTC)
     try:
-        version = versions.grants_version(principal_id)
+        version = await versions.grants_version(principal_id)
     except Exception as exc:
         # The same guard as `store.load` below, and it was missing here for the same
         # reason it is easy to miss: this call looks like bookkeeping rather than I/O. It
@@ -162,7 +182,7 @@ async def resolve(
         raise ResolutionFailedError(f"reading grants version for {principal_id}: {exc}") from exc
     key = cache_key(principal_id, version)
 
-    cached = cache.get(key)
+    cached = await cache.get(key)
     if cached is not None and _usable(cached, principal_id, instant):
         return Resolved(
             entitlements=cached,
@@ -190,7 +210,7 @@ async def resolve(
     # Cached even when expired. Expiry is a property of the set, checked wherever the set
     # is used, and refusing to cache an expired set would mean re-loading it on every
     # request from a contractor whose access ended, which is when the load is least useful.
-    cache.set(key, loaded, CACHE_TTL_SECONDS)
+    await cache.set(key, loaded, CACHE_TTL_SECONDS)
     return Resolved(
         entitlements=loaded,
         ent_hash=loaded.ent_hash(),
