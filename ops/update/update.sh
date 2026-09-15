@@ -23,7 +23,7 @@ off_the_pin() {
 case "$BRAIN_PROFILE" in
   lite) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.lite.yml" ;;
   standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml" ;;
-  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml" ;;
+  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml" ;;
   *) fail "unknown profile; one of: lite standard full" ;;
 esac
 

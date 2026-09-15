@@ -88,7 +88,7 @@ def test_every_file_the_full_profile_names_exists_and_parses() -> None:
 
     files = profile_files()
     assert BASELINE_FILE in files
-    assert len(declared_services(files)) == 19
+    assert len(declared_services(files)) == 20
 
 
 def test_one_component_of_the_full_profile_has_no_service_anywhere() -> None:
@@ -229,7 +229,7 @@ def test_no_mount_is_left_that_a_stored_compose_would_resolve_to_nothing() -> No
 
 def test_a_named_volume_and_an_absolute_path_are_not_reported_as_relative_mounts() -> None:
     """The positive case. Every service in the profile mounts something, and a check that
-    reported all of them would name nineteen containers and be read as noise.
+    reported all of them would name twenty containers and be read as noise.
 
     Delete this and `relative_bind_mounts` can start reporting every volume entry, which makes
     the pinned set above fail for reasons that have nothing to do with a stored compose."""
@@ -425,7 +425,7 @@ def test_the_deployment_and_the_budget_describe_the_same_host_once_both_gaps_are
     answers differ by 1088 MiB with nothing saying which is right."""
     files = profile_files()
 
-    assert deployment_mib(files) == 12096
+    assert deployment_mib(files) == 13120
     assert undeployed_mib("full", files) == 512
     assert unbudgeted_mib("full", files) == 576
 
@@ -463,7 +463,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     """**The honest answer to "why is there no full profile deployed", and it is not the same
     answer as the budget's.** `budget_breaches("full")` compares wave 2 against a cap measured
     on one machine, which is a fact about that machine and not about the product. This is the
-    fact about the product: the profile needs 12864 MiB of reservations, and the machine the
+    fact about the product: the profile needs 13888 MiB of reservations, and the machine the
     measurements were taken on has 11960 MiB in total, so it does not fit there with every
     neighbour removed and nothing left for the kernel.
 
@@ -475,7 +475,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
     head, which is how "it does not fit our server" became "it cannot be built"."""
     files = profile_files()
 
-    assert host_mib_for("full", files) == 12864
+    assert host_mib_for("full", files) == 13888
     assert host_mib_for("full", files) == (
         deployment_mib(files) + undeployed_mib("full", files) + HOST_RESERVE_MIB
     )
@@ -487,7 +487,7 @@ def test_the_host_this_profile_needs_is_larger_than_the_whole_of_the_measured_ma
 
 
 def test_a_service_with_no_memory_limit_is_refused_rather_than_costed_at_nothing() -> None:
-    """The failure that would matter here is in the affordable direction: eighteen of nineteen
+    """The failure that would matter here is in the affordable direction: nineteen of twenty
     containers costed is a profile that looks like it fits by exactly the size of the one that
     was skipped.
 

@@ -39,10 +39,11 @@ second, which is a statement about the estate made to somebody entitled to no pa
 
 **What the millisecond claim is and is not.** It is that scoring N candidate pairs costs one
 statement rather than N: no round trip per pair, no per-pair Python, and nothing fitted loaded
-into the request process. It is not a claim about the join that produces the candidates. There
-is no blocking pass in this repository, `calibration.OFFLINE_TOOLING` records that as the
-largest gap in M14.4, and an unblocked self join is every record against every other however
-cheap each term is. See `THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN`.
+into the request process. It is not a claim about the join that produces the candidates. The
+only blocking pass in this repository is the offline matcher's, `matcher.blocking_rules`, which
+chooses pairs for Splink and none for this statement, and an unblocked self join is every
+record against every other however cheap each term is. See
+`THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN`.
 
 **None of these columns exists.** `cascade.SQL_PREDICATES` says so about the comparison columns
 and the same is true of the key columns here: no migration in this repository creates a table
@@ -131,8 +132,8 @@ THE_COST_CLAIM_IS_ABOUT_THE_SCORING_AND_NOT_ABOUT_THE_JOIN: Final = (
     "M14.3.6 asks for millisecond online cost and this delivers one part of it: scoring N "
     "candidate pairs is one statement rather than N, with no per-pair round trip, no per-pair "
     "Python and nothing fitted loaded into the request process. It says nothing about how the "
-    "N candidates were chosen. There is no blocking pass in this repository, "
-    "calibration.OFFLINE_TOOLING records that as the largest gap in M14.4, and an unblocked "
+    "N candidates were chosen. The only blocking pass in this repository is the offline "
+    "matcher's, which chooses pairs for Splink and none for this statement, and an unblocked "
     "self join is every record against every other regardless of how cheap each term is. "
     "Claiming the cost of the scoring is honest; claiming the cost of the query would not be."
 )

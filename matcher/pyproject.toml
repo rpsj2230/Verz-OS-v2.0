@@ -1,0 +1,39 @@
+# The record matcher's own dependency set, and the reason it is not in ../pyproject.toml.
+#
+# `docs/needs-rupash.md` item 55 decided on Option A: Splink and DuckDB run in an offline image
+# of their own and never in the process that answers requests. So they are declared here and
+# locked in `uv.lock` beside this file, and the application's `pyproject.toml` and `uv.lock` do
+# not name them. `tests/invariants/test_no_ml_on_the_request_path.py` reads both lock files
+# and holds that.
+#
+# The application is a dependency rather than a copy. The job imports `brain.resolution`, and
+# a second copy of the cascade inside this image is the second implementation of the matching
+# rule this image exists to avoid. `tests/unit/test_matcher_deployment.py` holds every package
+# the two locks share to the same version, so the matcher runs the application's code on the
+# application's libraries.
+#
+# Task ids: M14.4.1
+
+[project]
+name = "brain-record-matcher"
+version = "0.1.0"
+description = "The offline record matcher: Splink over a DuckDB export, writing suggestions"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "verz-brain",
+    "splink==4.0.17",
+    "duckdb==1.5.5",
+]
+
+[tool.uv]
+# Not a package: the image runs `python -m brain.resolution.splink_job` from the application.
+package = false
+# Splink 4.0.17 declares igraph, which is GPL, and never imports it: nothing under the
+# installed `splink` package names it. The application's licence allowlist refuses GPL, and an
+# image shipped to a client carries every package installed in it, so the declaration is
+# overridden away rather than admitted. The real run recorded in the commit ran with igraph
+# uninstalled.
+override-dependencies = ["igraph; sys_platform == 'never'"]
+
+[tool.uv.sources]
+verz-brain = { path = "..", editable = false }

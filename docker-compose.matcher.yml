@@ -1,0 +1,104 @@
+# The record matcher: Splink over a DuckDB export, run as a job that exits, never as a service.
+#
+# **This is item 55 of `docs/needs-rupash.md` as a deployment.** Decided on Option A: Splink and
+# DuckDB live in an offline image of their own, the way item 31 put the models behind their own
+# server, and never in the process that answers a question. The application image does not
+# contain either package; `matcher/Dockerfile` builds the one that does.
+#
+# ---------------------------------------------------------------------------------------
+# Two caps, as everywhere else here, and for once the runtime has a real second one.
+#
+# | cap | value | enforced by | what it does not cover |
+# | --- | --- | --- | --- |
+# | cgroup limit | 1024M | the kernel, by killing the container | nothing; it is the backstop |
+# | DuckDB memory_limit | 640 MiB, two threads | DuckDB, which spills to disk past it | the interpreter, pandas and Splink's own objects |
+#
+# 640 is `brain.resolution.matcher.duckdb_statements`: the component's limit less
+# `MATCHER_RESERVE_MIB`, which is what the interpreter and the imports hold before DuckDB reads
+# a row. The job sets it on the connection itself, so it is not an environment variable here,
+# and `tests/unit/test_matcher_deployment.py` holds the limit below to the component.
+#
+# ---------------------------------------------------------------------------------------
+# It suggests and it never merges, and this file is where that is structural.
+#
+# It is given no connection string to this system's database and joins an internal network
+# with nothing else on it, so there is nothing it could merge into and nowhere it could send a
+# record. It reads one export from a read-only volume and writes one file of review items to
+# another. What happens to those items is a person's decision, through the review queue, which
+# shows an item only to somebody who reaches both records.
+#
+# **A run on an export it has already matched is refused**, because the output file is named by
+# the export's digest and created exclusively, and a run with no export exits 3 rather than 0:
+# a scheduled job that finds nothing and reports success is a control that is on and never runs.
+#
+# ---------------------------------------------------------------------------------------
+# **There is no image, and this file says so rather than defaulting to one.** `MATCHER_IMAGE`
+# is required with `:?` for the reason `docker-compose.inference.yml` requires its own: a
+# default would be a container that starts and runs something nobody chose.
+#
+# **The image has never been built and this file has never been started.** There is no Docker
+# on the machine this was written on. What has run is the job itself, in a throwaway
+# environment holding exactly the matcher's locked packages, against a generated export; the
+# commit that added this file records the result. And the image as defined refuses to build
+# today, on purpose: its licence step applies the application's allowlist and numpy declares
+# `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0`, three of which the allowlist does not
+# name. That is an owner's decision about the allowlist, not a step to skip.
+#
+# **It sits in `full` only, and it is costed there as if resident.** A job holds its limit
+# while it runs, and a budget that counted it at nought would be right between runs and wrong
+# during the one that matters. `standard` is already over on this host and probabilistic
+# matching is the part of M14 an install can do without.
+#
+# Task ids: none. M14.4.1 is claimed by `brain.resolution.splink_job` and
+# `brain.resolution.matcher` for a job that has run; this file is a design until it has.
+
+services:
+  record-matcher:
+    # Required, never defaulted. Built from `matcher/Dockerfile` with the repository root as
+    # the context; nothing publishes it.
+    image: ${MATCHER_IMAGE:?set MATCHER_IMAGE; build matcher/Dockerfile, no image is published}
+    # A job, so it is not restarted. A matcher restarted on failure re-reads the same export
+    # and is refused by its own output file, which is a loop with a log line in it.
+    restart: "no"
+    # The profiles `brain.ops.wiring` gives the `record-matcher` component. Held equal by test,
+    # in both directions.
+    profiles: ["full"]
+    command:
+      - python
+      - -m
+      - brain.resolution.splink_job
+      - --export
+      - /exports/export.duckdb
+      - --suggestions
+      - /suggestions
+    networks:
+      # One network, internal, no default entry. It reads a file and writes a file, and the
+      # records in that file have no business on any route off this host.
+      - matcher
+    environment:
+      # glibc hands a threaded process up to eight arenas per core and never returns them.
+      # DuckDB and pandas allocate and free in large blocks, which is the pattern arenas keep.
+      MALLOC_ARENA_MAX: "2"
+      # numpy's pool, which sizes itself from the host's cores rather than the cgroup's share.
+      OMP_NUM_THREADS: "2"
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      # Read-only. The export is the evidence the suggestions were made from, and a job that
+      # could write to it could change what it was asked about.
+      - matcher-exports:/exports:ro
+      - matcher-suggestions:/suggestions
+    deploy:
+      resources:
+        limits:
+          # Matches the `record-matcher` component in `brain.ops.wiring`, which is where the
+          # budget is decided and what every profile's arithmetic is computed from.
+          memory: 1024M
+
+networks:
+  # No internet and nothing else of ours. The job needs neither.
+  matcher:
+    internal: true
+
+volumes:
+  matcher-exports:
+  matcher-suggestions:

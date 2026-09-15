@@ -59,7 +59,7 @@ EXPECTED: dict[str, tuple[int, int, int, int]] = {
     # profile: (memory MiB, containers, cores, disk GiB)
     "lite": (3968, 4, 2, 28),
     "standard": (9920, 12, 5, 36),
-    "full": (12864, 19, 7, 48),
+    "full": (13888, 20, 7, 50),
 }
 
 

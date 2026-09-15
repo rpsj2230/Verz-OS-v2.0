@@ -14,12 +14,17 @@ because importing the roots would execute them and would report what a particula
 to touch, and parsed rather than grepped, because a module mentioning `numpy` in a docstring is
 not a module that imports it.
 
-**Two halves, and the second is the one that is not vacuous today.** Splink and DuckDB are not
-installed, so "no ML library is reachable" is true of every file in this repository whether
-anybody meant it or not. The half with teeth is structural: `brain.resolution.calibration` is
-the offline module, it exists, it imports the cascade, and nothing the gate reaches imports it.
-That is a property of this repository as it stands rather than of its virtualenv, and it is the
-property that stops being true first.
+**Three halves since M14.4.1, and none of them is vacuous any more.** Until the record matcher
+existed no file here imported Splink or DuckDB, so "no ML library is reachable" was true of
+every file whether anybody meant it or not. Now `brain.resolution.splink_job` imports both, in
+the image `docs/needs-rupash.md` item 55 gave it, and the assertions have something to find:
+nothing the request path reaches imports the job or the two other offline modules, the job is
+the only module under `src/brain` that imports a numerical library at all, and the
+application's lock file, which is what its image is built from, names none of them.
+
+Rejected: an allowlist of modules that may import such a package, checked per package. A second
+job that needed one would then be one line in a set, and the point of naming the job is that
+adding a second place a fitted library runs is a decision somebody makes in a review.
 
 **The controls are what make this a test rather than a green run.** A walker that resolved no
 imports would find no forbidden module and would pass for ever, so the same finder is asked for
@@ -28,7 +33,7 @@ contain modules a reader can check by hand, and the third-party set is asserted 
 `tests/invariants/test_fast_lane_zero_network.py` makes the same argument about its audit hook,
 which is where the shape comes from.
 
-Task ids: M14.4.5
+Task ids: M14.4.5, M14.4.1
 """
 
 from __future__ import annotations
@@ -100,6 +105,13 @@ NUMERICAL_AND_MODEL_PACKAGES: frozenset[str] = frozenset(
 #: The offline module, named as a module rather than as a package so the assertion is about
 #: this file and not about anything that might later be put beside it.
 OFFLINE_MODULE = "brain.resolution.calibration"
+
+#: The record matcher's two halves (M14.4.1): the decisions, and the job that imports Splink.
+MATCHER_DECISIONS = "brain.resolution.matcher"
+MATCHER_JOB = "brain.resolution.splink_job"
+
+#: Every module that runs offline and must never be reachable from a request.
+OFFLINE_MODULES: tuple[str, ...] = (OFFLINE_MODULE, MATCHER_DECISIONS, MATCHER_JOB)
 
 
 def _module_file(name: str) -> Path | None:
@@ -199,21 +211,53 @@ def test_nothing_the_request_path_reaches_imports_a_numerical_or_model_library()
 
 
 @pytest.mark.invariant
-def test_the_offline_calibration_is_not_reachable_from_the_request_path() -> None:
-    """The half of M14.4.5 that is not vacuous while Splink is uninstalled.
+def test_no_offline_module_is_reachable_from_the_request_path() -> None:
+    """The structural half: the calibration and both halves of the record matcher exist, and
+    nothing the gate or the cascade reaches imports any of them.
 
-    Splink and DuckDB are absent, so the test above is true of every file here whether anybody
-    meant it or not. This one is a property of the code as written: the module holding the
-    expectation-maximisation exists, it is importable, and nothing the gate or the cascade
-    reaches imports it. That is what stops being true first, and it stops being true the moment
-    somebody wires a re-fit into a request.
+    The matcher's decisions module imports no numerical package, so the test above would stay
+    green if the request path imported it. It still must not: it builds a Splink model, and the
+    step from importing that to calling the job is one convenience import. That is what stops
+    being true first, and it stops being true the moment somebody wires a re-match or a re-fit
+    into a request.
 
     Delete this and the offline half can be imported by the online half without anything
     noticing, and every other paragraph about M14.4.5 becomes a comment."""
     reached, _ = _closure(REQUEST_PATH_ROOTS)
 
-    assert OFFLINE_MODULE not in reached
-    assert _module_file(OFFLINE_MODULE) is not None, "the offline module has to exist to be absent"
+    for module in OFFLINE_MODULES:
+        assert module not in reached, f"the request path reaches {module}"
+        assert _module_file(module) is not None, f"{module} has to exist to be absent"
+
+
+def _numerical_importers() -> dict[str, frozenset[str]]:
+    """Every module under `src/brain` that imports a numerical package directly, with them."""
+    found: dict[str, frozenset[str]] = {}
+    for path in sorted((SRC / "brain").rglob("*.py")):
+        module = ".".join(path.relative_to(SRC).with_suffix("").parts)
+        tops = {one.split(".")[0] for one in _imported_names(path)}
+        hits = frozenset(tops & NUMERICAL_AND_MODEL_PACKAGES)
+        if hits:
+            found[module.removesuffix(".__init__")] = hits
+    return found
+
+
+@pytest.mark.invariant
+def test_the_matcher_job_is_the_only_module_that_imports_a_numerical_library() -> None:
+    """**M14.4.1's half of the rule.** Item 55 decided Splink and DuckDB run in an image of their
+    own, and the job that imports them is one named module. A second module importing one of
+    them is a second place a fitted library runs, and it is the place nobody decided on.
+
+    Every file under `src/brain`, not only the closure of the request path, because the module
+    that breaks this will not be reachable today. It will be a helper beside the job that the
+    console imports next month. The positive half is exact: the job imports both packages, so a
+    walk that parsed nothing could not satisfy it.
+
+    Delete this and a pandas import can arrive in any offline-looking module, and the only
+    remaining protection is that nothing on the request path happens to import that module yet."""
+    importers = _numerical_importers()
+
+    assert importers == {MATCHER_JOB: frozenset({"duckdb", "splink"})}, importers
 
 
 @pytest.mark.invariant
@@ -224,11 +268,22 @@ def test_the_arrow_runs_offline_to_online_and_the_offline_half_is_a_real_module(
     table the online scorer sums. That is the direction that is safe, and asserting it is what
     distinguishes this design from two unrelated files that happen not to import each other.
 
+    The matcher is held to the same arrow: its job reaches the cascade through the decisions
+    module, and it reaches both numerical packages, which is what the reachability test would
+    report if the request path ever reached the job.
+
     Delete this and the test above is satisfied by deleting the calibration module."""
     reached, _ = _closure([OFFLINE_MODULE])
 
     assert "brain.resolution.cascade" in reached
     assert OFFLINE_MODULE in reached
+
+    found = _forbidden_found(
+        [MATCHER_JOB],
+        modules=frozenset({"brain.resolution.cascade", MATCHER_DECISIONS}),
+        packages=NUMERICAL_AND_MODEL_PACKAGES,
+    )
+    assert found == ("brain.resolution.cascade", MATCHER_DECISIONS, "duckdb", "splink")
 
 
 @pytest.mark.invariant
@@ -262,19 +317,42 @@ def test_no_numerical_or_model_library_is_a_runtime_dependency() -> None:
     The request path is protected by what the code imports, and this is protected by what the
     deployment contains: a numerical library declared under `[project] dependencies` is present
     in every process this repository starts, including the one that answers requests. M14.4.1
-    would add Splink and DuckDB, and when it does they belong in an optional group or a
-    dependency group, never here.
+    added Splink and DuckDB, and item 55 put them in `matcher/pyproject.toml` rather than in an
+    optional group here: an extra in this file is one flag away from the application image.
 
-    Read from `pyproject.toml` rather than from the installed environment, because the
-    environment is whatever a machine happens to have and the file is what a deploy builds.
+    Read from the files rather than from the installed environment, because the environment is
+    whatever a machine happens to have and the files are what a deploy builds. The lock is read
+    as well as the declaration because it is what `Dockerfile` installs from, and a numerical
+    package can arrive in it as somebody else's dependency without ever being declared.
 
     Delete this and Splink arrives as a runtime dependency alongside an offline job, which is
     the change that makes every assertion above true and irrelevant."""
     parsed = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
-    declared = parsed["project"]["dependencies"]
+    declared = [
+        *parsed["project"]["dependencies"],
+        *(
+            one
+            for group in parsed["project"].get("optional-dependencies", {}).values()
+            for one in group
+        ),
+    ]
     tops = {
         str(one).split("[")[0].split(">")[0].split("=")[0].split("<")[0].strip() for one in declared
     }
+    locked = {
+        str(one["name"]).replace("-", "_")
+        for one in tomllib.loads((REPO / "uv.lock").read_text(encoding="utf-8"))["package"]
+    }
 
     assert tops, "pyproject declares no runtime dependencies, so this check read the wrong table"
+    assert "pydantic" in locked, "the lock names no pydantic, so this check read the wrong file"
     assert not tops & NUMERICAL_AND_MODEL_PACKAGES, sorted(tops & NUMERICAL_AND_MODEL_PACKAGES)
+    assert not locked & NUMERICAL_AND_MODEL_PACKAGES, sorted(locked & NUMERICAL_AND_MODEL_PACKAGES)
+
+    matcher = {
+        str(one["name"])
+        for one in tomllib.loads((REPO / "matcher" / "uv.lock").read_text(encoding="utf-8"))[
+            "package"
+        ]
+    }
+    assert {"splink", "duckdb"} <= matcher, "the matcher's own lock has to hold what this excludes"

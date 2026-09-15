@@ -397,6 +397,26 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         wiring=Wiring.NONE,
         ready_when="the flow runner reports a worker and the egress proxy answers",
     ),
+    Component(
+        # The record matcher, `docs/needs-rupash.md` item 55: Splink and DuckDB in an image of
+        # their own, run as a job over an export. Costed as if resident, because a job holds
+        # its limit while it runs and a budget counting it at nought is wrong during the only
+        # hour it matters. `full` only: `standard` is already over on this host, and
+        # probabilistic matching is the part of M14 an install can do without.
+        #
+        # `Wiring.NONE` is the structural half of "it suggests and never merges": with no
+        # connection string to this system's database there is nothing it could merge into.
+        # See `brain.resolution.matcher.THE_MATCHER_SUGGESTS_AND_NEVER_MERGES`.
+        name="record-matcher",
+        memory_mib=1024,
+        profiles=frozenset({"full"}),
+        wiring=Wiring.NONE,
+        ready_when=(
+            "it is a job and never ready in the service sense: it has succeeded when it exits "
+            "0 having written a suggestions file for the export it was handed, and a run with "
+            "no export exits 3 rather than reporting success over nothing"
+        ),
+    ),
 )
 
 

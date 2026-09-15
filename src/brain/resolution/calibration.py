@@ -20,7 +20,7 @@ and a library would be faster to write, would be a dependency, and would then ha
 off the request path by a rule about packaging rather than by a rule about imports. Writing it
 out means the only thing this file needs is `math.log2`, so the assertion above stays a
 statement about the repository rather than about a virtualenv. What it costs is that nobody has
-checked this implementation against Splink's: see `THE_SPLINK_JOB_IS_NOT_BUILT_AND_THIS_SAYS_SO`
+checked this implementation against Splink's: see `THE_SPLINK_JOB_IS_NOT_COMPARED_WITH_THIS`
 and `OFFLINE_TOOLING`.
 
 **Two probabilities near nought are the failure mode, not the arithmetic (M14.4.2).** The
@@ -164,15 +164,14 @@ THE_ONLINE_WEIGHTS_ARE_A_VALUE_AND_NOT_A_ROW: Final = (
     "produced a link has the weight table's version on the link and nothing to join it to."
 )
 
-#: The half of M14.4 that is not built, kept as a constant so it has to be deleted.
-THE_SPLINK_JOB_IS_NOT_BUILT_AND_THIS_SAYS_SO: Final = (
-    "M14.4.1 asks for a Splink job against a DuckDB export. Neither package is a dependency of "
-    "this repository, neither is installed, and nothing here has been run against either. What "
-    "exists is the extract shape a DuckDB export would be built from, the arithmetic Splink "
-    "would perform, and the document the two would agree on, so the day somebody adds the "
-    "dependency there is something to compare against. Until then no row of OFFLINE_TOOLING "
-    "may claim verification, tooling_gaps refuses one that does, and M14.4.1 is not claimed by "
-    "any Task ids line in this repository."
+#: What the Splink job is, and the comparison with this module that nobody has made.
+THE_SPLINK_JOB_IS_NOT_COMPARED_WITH_THIS: Final = (
+    "M14.4.1 is brain.resolution.splink_job, a Splink job over a DuckDB export, and item 55 put "
+    "both packages in an image of their own, so neither is installed where this suite runs. It "
+    "has run once, in a throwaway environment, on a generated export. What has never been done "
+    "is the comparison this module was written to allow: train here and Splink's estimator run "
+    "over the same pairs, with the weights set side by side. So no row of OFFLINE_TOOLING may "
+    "claim verification, and tooling_gaps refuses one that does wherever the package is absent."
 )
 
 
@@ -747,15 +746,25 @@ OFFLINE_TOOLING: Final[tuple[ToolingStep, ...]] = (
         ),
     ),
     ToolingStep(
-        ours="the blocking pass",
+        ours="matcher.blocking_rules",
         theirs="blocking rules",
         package="splink",
-        built=False,
         note=(
-            "not built here at all. Which pairs are compared is candidate generation, cascade "
-            "answers about a pair it was handed, and nothing in this repository generates "
-            "candidates. This is the largest gap in M14.4 and it is not a detail: an unblocked "
-            "extract is every pair of records against every other"
+            "built for the offline job and only there (M14.4.1). The rules admit a pair sharing "
+            "an identifier, a postcode, a name key or a name prefix, and a pair none admits is "
+            "never compared. brain.resolution.query's online statement still has no blocking "
+            "pass of its own"
+        ),
+    ),
+    ToolingStep(
+        ours="splink_job.run",
+        theirs="a Linker over DuckDBAPI, trained and then predicting",
+        package="duckdb",
+        note=(
+            "built (M14.4.1) and run once, in a throwaway environment holding the matcher's "
+            "locked packages, on a generated export: every level Splink assigned equalled "
+            "cascade.compare on every blocked pair. Its trained weights have not been set "
+            "beside what train fits over the same pairs"
         ),
     ),
     ToolingStep(
@@ -803,7 +812,7 @@ def tooling_gaps(steps: Sequence[ToolingStep] | None = None) -> tuple[str, ...]:
     rows = OFFLINE_TOOLING if steps is None else tuple(steps)
     return tuple(
         f"{step.ours!r} claims to be verified against {step.package!r}, which is not installed "
-        f"in this environment. {THE_SPLINK_JOB_IS_NOT_BUILT_AND_THIS_SAYS_SO}"
+        f"in this environment. {THE_SPLINK_JOB_IS_NOT_COMPARED_WITH_THIS}"
         for step in rows
         if step.verified and not package_is_installed(step.package)
     )

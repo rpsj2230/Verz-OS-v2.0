@@ -1284,6 +1284,21 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
             "no connection string to this system's database by design"
         ),
     ),
+    FailureMode(
+        component="record-matcher",
+        fails="the matching job exits non-zero, or finds no export and exits 3",
+        presents_as=(
+            "nothing an asker sees. No new suggestions reach the review queue, which looks "
+            "exactly like an estate with no new duplicates in it"
+        ),
+        blocks=("new duplicate suggestions for review",),
+        retry=RetryClass.SAFE,
+        response=(
+            "run it again on the same export: it reads a read-only file and writes one file "
+            "named by that export's digest, and a run that already succeeded refuses to write "
+            "it twice. It merges nothing and holds no connection to this system's database"
+        ),
+    ),
 )
 
 

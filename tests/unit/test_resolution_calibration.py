@@ -523,9 +523,9 @@ def test_a_drift_report_is_written_in_the_bands_a_reviewer_reads_and_carries_no_
         assert not any(character.isdigit() for character in line), line
 
 
-# --------------------------------------------- the job that is not built (M14.4.1, not claimed)
+# ------------------------------------------- the job and what nobody has compared (M14.4.1)
 def test_no_step_of_the_offline_job_claims_to_have_been_verified_against_its_package() -> None:
-    """M14.4.1 asks for a Splink job against a DuckDB export and neither package is installed.
+    """M14.4.1 is a Splink job in its own image, so neither package is installed here.
 
     The register is what makes that absence checkable rather than remembered, and the check is
     the one `brain.ops.jobs.driver_mapping_gaps` makes about its own driver: a row claiming
@@ -558,17 +558,21 @@ def test_the_register_names_the_parts_of_the_job_this_repository_does_not_have()
     register exists rather than a paragraph.
 
     A register reads as a completed mapping, and a reader skimming it takes the presence of a
-    row for the presence of the thing. Two steps have no counterpart here: nothing decides
-    which pairs are compared, and nothing produces an extract of real pairs to fit. Those two
-    are why M14.4.1 is not claimed by any module in this repository.
+    row for the presence of the thing. One step had no counterpart until M14.4.1 and has one
+    now: the blocking pass, which the offline job carries. One still has none: nothing produces
+    an extract of real pairs to fit, so every fit and the one real Splink run were over figures
+    and records a person generated. The job's own row is asserted built beside it, so the set
+    shrinking is a change somebody made on purpose rather than a row that was deleted.
 
     A step that does not exist cannot have been verified against anything, which is asserted as
     a refusal at construction rather than left to `tooling_gaps`: the register would otherwise
     admit a row that is absent and checked at the same time.
 
-    Delete this and the register can lose the two rows that say what is missing, leaving a
-    mapping that looks complete."""
-    assert set(unbuilt_steps()) == {"the blocking pass", "the labelled sample"}
+    Delete this and the register can lose the row that says what is missing, leaving a mapping
+    that looks complete."""
+    assert set(unbuilt_steps()) == {"the labelled sample"}
+    built = {step.ours for step in OFFLINE_TOOLING if step.built}
+    assert {"splink_job.run", "matcher.blocking_rules"} <= built
 
     with pytest.raises(ResolutionError, match="does not exist"):
         ToolingStep(

@@ -25,7 +25,7 @@
 # `docker-compose.worker.yml` runs `python -m brain.ops.worker`, and it goes straight to
 # Postgres rather than through a session-mode pooler, which is what LISTEN needs and is why
 # no such pooler is deployed anywhere. Meanwhile `full` has come to mean something larger:
-# twelve components in `brain.ops.wiring`, deployed by eight compose files, nineteen
+# thirteen components in `brain.ops.wiring`, deployed by nine compose files, twenty
 # containers between them.
 #
 # **It is not the memory arithmetic, and that is worth saying because it was the previous
@@ -33,7 +33,7 @@
 # on one machine, and this repository is the product rather than that machine: a client with
 # a larger server runs `full`, which is what the profile is for. What the file would owe its
 # reader is the size of host it needs, and `brain.ops.compose.host_mib_for` computes that at
-# 12864 MiB, which is more than the measured machine holds in total.
+# 13888 MiB, which is more than the measured machine holds in total.
 #
 # Four things stopped the file being written, every one of them a fact about the product
 # rather than about anybody's server, every one computed by `brain.ops.compose` and pinned by

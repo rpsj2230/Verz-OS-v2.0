@@ -585,7 +585,7 @@ def test_the_licence_allowlist_is_actually_applied() -> None:
     # sweep to fail: that is the behaviour, and it is what survived a mutation removing the
     # comparison entirely.
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(mod, "_installed_licences", lambda: {"something": "AGPL-3.0-only"})
+    monkeypatch.setattr(mod, "installed_licences", lambda: {"something": "AGPL-3.0-only"})
     try:
         with pytest.raises(mod.SweepFailure) as caught:
             mod.sweep_dependencies()
@@ -595,13 +595,13 @@ def test_the_licence_allowlist_is_actually_applied() -> None:
 
     # And it passes on a set it should accept, so the check is not simply always failing.
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(mod, "_installed_licences", lambda: {"something": "MIT"})
+    monkeypatch.setattr(mod, "installed_licences", lambda: {"something": "MIT"})
     try:
         mod.sweep_dependencies()
     finally:
         monkeypatch.undo()
 
-    real = mod._installed_licences()
+    real = mod.installed_licences()
     assert len(real) > 20, "no distributions were inspected at all"
 
 

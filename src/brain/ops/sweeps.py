@@ -705,8 +705,12 @@ def licence_is_allowed(expression: str) -> bool:
     return allowed and position == len(tokens)
 
 
-def _installed_licences() -> dict[str, str]:
+def installed_licences() -> dict[str, str]:
     """Every installed distribution and the SPDX id it declares, empty where it declares none.
+
+    Public since M14.4.1, because the record matcher's image runs the same check over its own
+    environment: `brain.resolution.splink_job --check-licences` is a build step there, and the
+    matcher's set is larger than the application's, so it is the set that has to be checked.
 
     Read from the installed environment rather than from the lock, because the lock records
     versions and not licences: answering from it would need a network call per package, and
@@ -739,6 +743,23 @@ def _installed_licences() -> dict[str, str]:
     return found
 
 
+def licence_findings(licences: dict[str, str]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The refused licences and the packages declaring none, each in name order.
+
+    One rule for every environment this repository builds. It was a loop inside
+    `sweep_dependencies` until a second image needed it, and a copy of the loop in the matcher
+    would have been a second licence policy that agreed with this one on the day it was written.
+    A package declaring nothing is reported and not refused, for the reason the sweep gives.
+    """
+    refused = tuple(
+        f"{name} is under {licence!r}, which is not on the allowlist"
+        for name, licence in sorted(licences.items())
+        if licence and not licence_is_allowed(licence)
+    )
+    unknown = tuple(sorted(name for name, licence in licences.items() if not licence))
+    return refused, unknown
+
+
 # ------------------------------------------------------------ dependencies
 def sweep_dependencies() -> None:
     """Licence allowlist, release age, and whether the project is still alive.
@@ -757,19 +778,15 @@ def sweep_dependencies() -> None:
     # is not applying is worse than no sweep, and this is the third one in this tree found
     # doing it. It is now applied, against the installed distributions, which is what
     # actually ships.
-    findings: list[str] = []
-    unknown: list[str] = []
-    for name, licence in _installed_licences().items():
-        if not licence:
-            # Reported, not failed. Some distributions genuinely publish nothing, and
-            # failing on that would make the sweep unpassable for a reason nobody can fix.
-            unknown.append(name)
-        elif not licence_is_allowed(licence):
-            findings.append(f"{name} is under {licence!r}, which is not on the allowlist")
+    #
+    # A package declaring nothing is reported, not failed. Some distributions genuinely publish
+    # nothing, and failing on that would make the sweep unpassable for a reason nobody can fix.
+    licences = installed_licences()
+    findings, unknown = licence_findings(licences)
     if findings:
-        raise SweepFailure(findings)
+        raise SweepFailure(list(findings))
 
-    checked = len(_installed_licences())
+    checked = len(licences)
     print(f"ok: {len(set(names))} pinned package(s); {checked} installed licences checked")
     if unknown:
         print(f"note: {len(unknown)} publish no licence metadata: {', '.join(sorted(unknown)[:5])}")

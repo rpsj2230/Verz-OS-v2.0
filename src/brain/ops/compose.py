@@ -163,6 +163,7 @@ FULL_PROFILE_FILES: Final = (
     "docker-compose.langfuse.yml",
     "docker-compose.inference.yml",
     "docker-compose.automation.yml",
+    "docker-compose.matcher.yml",
 )
 
 #: The file whose services are the baseline `brain.ops.wiring.PRODUCTION_BASELINE_MIB`
@@ -177,8 +178,8 @@ BASELINE_FILE: Final = "docker-compose.yml"
 #: `tests/unit/test_compose.py` compares every figure here against what the files say, in the
 #: shape `wiring.A_SET_THAT_DOES_NOT_FIT_ALONE_NEVER_FITS_BESIDE_ANYTHING` is held to.
 THE_FULL_PROFILE_IS_NOT_ONE_FILE_YET: Final = (
-    "The full profile is 19 containers across 8 compose files, reserving 12096 MiB, and it "
-    "needs a host with 12864 MiB to spare once the component that has no service is deployed "
+    "The full profile is 20 containers across 9 compose files, reserving 13120 MiB, and it "
+    "needs a host with 13888 MiB to spare once the component that has no service is deployed "
     "too. One thing stops it being written as one file: presidio-analyzer is budgeted and has "
     "no service anywhere. The other three are closed. 0 services take something they need at "
     "startup from a bind mount that a stored compose resolves to nothing, seaweedfs is "

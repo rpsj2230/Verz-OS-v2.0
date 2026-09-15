@@ -110,6 +110,7 @@ somebody wrote, and it is the reason the table is worth reading.
 | `LANGFUSE_S3_ACCESS_KEY_ID` | full | you | none | The object store credential the trace ledger writes its payloads with. |
 | `LANGFUSE_S3_SECRET_ACCESS_KEY` | full | you | none | Its secret half. |
 | `LANGFUSE_SALT` | full | you | none | What the trace ledger salts its stored hashes with. |
+| `MATCHER_IMAGE` | full | you | none | The record matcher's image, built from `matcher/Dockerfile`. It is a job that matches an export of your records and writes suggestions for a person to confirm, and it merges nothing. No image is published for it, so `full` refuses to start until you name one. |
 | `POSTGRES_PASSWORD` | every profile | installer | none | The database superuser's password. It appears in no template on purpose, because a default password in a file people copy is the password the install runs with. |
 | `VALKEY_URL` | every profile | you | yes | Where the cache is. Absent means the cache is skipped, not that the application fails. |
 
