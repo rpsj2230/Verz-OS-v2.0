@@ -45,6 +45,15 @@ written by somebody who decided which guard they were attacking, because the val
 practice is the argument about what could go wrong rather than the arithmetic of a score. A
 generator produces a survival rate, and a survival rate is a number people optimise.
 
+**A mutant that hangs is bounded, and a hang is not a catch.** Until 2026-09-15 each run was
+an unbounded `subprocess.run`, so a mutation that removed the bound on a loop or an await made
+its test spin for ever, the whole run with it, and the log stayed empty because nothing was
+printed until the table. It cost an agent two hours. Every pytest run now has a timeout, the
+whole process tree is killed when it expires (uv wraps the interpreter, so killing the
+immediate child leaves the spinning one holding the worktree), the verdict says TIMED OUT, and
+a line is printed as each mutation finishes. See `A_HANG_IS_NOT_A_NAMED_FAILURE` for why a
+timeout is reported as not caught.
+
 It also does not judge a survivor. CLAUDE.md is explicit that a survivor means either a
 missing test or a genuinely equivalent mutation, and telling the two apart needs a reader.
 `Verdict` reports what happened and says nothing about what it means.
@@ -54,13 +63,16 @@ Task ids: M0.1.6
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
@@ -98,6 +110,30 @@ A_HARNESS_THAT_TAKES_A_DIRECTORY_IS_POINTED_AT_THE_REPOSITORY = (
     "line had survived a commit and wrote a test saying so. Both were behaving correctly. The "
     "fix is not a warning in a docstring: it is that there is no parameter to misuse."
 )
+
+#: Why a mutation whose tests time out is reported, and never counted as caught.
+A_HANG_IS_NOT_A_NAMED_FAILURE = (
+    "A mutant that makes a test hang has changed behaviour, but no test has named it, and a "
+    "timeout has a second cause a FAILED line does not: a bound too tight for the machine. "
+    "Counted as caught, a timeout set too low reports every mutation caught, which is the "
+    "perfect score of a harness that has stopped testing anything. So it is its own outcome, "
+    "TIMED OUT, listed among the survivors for a reader to judge, and never a named failure."
+)
+
+#: How long one pytest run may take before its process tree is killed, in seconds.
+#:
+#: Generous rather than tight, because a timeout that fires on a slow but honest run turns a
+#: catch into TIMED OUT. It exists to end a hang, not to measure speed: a guard audit runs one
+#: module's covering tests, which is minutes at most, and a hang is for ever.
+MUTATION_TIMEOUT_SECONDS: Final = 600.0
+
+#: Added to the timeout for the baseline run only, because that run is where `uv run` builds
+#: the fresh worktree's environment and no mutation run pays for that again.
+ENVIRONMENT_BUILD_ALLOWANCE_SECONDS: Final = 300.0
+
+#: How long to wait for the pipes to drain after the tree is killed. A grandchild that escaped
+#: the kill can hold them open, and waiting on it would be the hang this bound exists to end.
+KILL_GRACE_SECONDS: Final = 15.0
 
 #: Bytecode written by one run is imported by the next, so a file mutated and restored inside
 #: a second can be tested against a stale `.pyc`. It produces false survivals only, never
@@ -191,10 +227,22 @@ class Verdict:
     #: in a worktree that has already been removed. A caught or surviving mutation needs no
     #: output: the named tests are the answer in one case and the absence of them in the other.
     output: str = ""
+    #: Set when the tests did not finish inside the timeout and the process tree was killed.
+    #: Never caught as well: see `A_HANG_IS_NOT_A_NAMED_FAILURE`.
+    timed_out: bool = False
+    #: How long the mutated run took, in seconds.
+    seconds: float = 0.0
 
     def row(self, width: int = 0) -> str:
         """One line of the table, for a commit message."""
-        verdict = "caught" if self.caught else ("CRASHED" if self.crashed else "SURVIVED")
+        if self.caught:
+            verdict = "caught"
+        elif self.timed_out:
+            verdict = "TIMED OUT"
+        elif self.crashed:
+            verdict = "CRASHED"
+        else:
+            verdict = "SURVIVED"
         return f"{self.label:<{width}} | {verdict:<9} | {', '.join(self.by)}".rstrip()
 
 
@@ -247,8 +295,42 @@ _BASE_INTERPRETER: Final = str(
 )
 
 
-def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # noqa: S603  arguments come from a Mutation, which validates them
+@dataclass(frozen=True)
+class _Run:
+    """One pytest run, finished or killed."""
+
+    stdout: str
+    stderr: str
+    returncode: int
+    timed_out: bool
+    seconds: float
+
+
+def _kill_tree(process: subprocess.Popen[str]) -> None:
+    """Kill a process and everything it started.
+
+    The tree and not the process, because the immediate child is `uv`, and killing it leaves
+    the interpreter it started spinning, holding the worktree open so it cannot be removed.
+
+    `sys.platform` rather than `os.name`, against the house rule, because `os.killpg` and
+    `signal.SIGKILL` do not exist in the Windows stubs and mypy would refuse the POSIX branch
+    there. The two branches are the whole function, so no statement after them goes unchecked.
+    """
+    if sys.platform == "win32":
+        subprocess.run(  # noqa: S603  a literal command and a pid this module started
+            ["taskkill", "/F", "/T", "/PID", str(process.pid)],  # noqa: S607  a system tool
+            capture_output=True,
+            check=False,
+        )
+    else:
+        # Already gone is the outcome the kill wanted.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(process.pid, signal.SIGKILL)
+
+
+def _run_tests(tests: Sequence[str], *, cwd: Path, timeout: float) -> _Run:
+    started = time.monotonic()
+    process = subprocess.Popen(  # noqa: S603  arguments come from a Mutation, which validates them
         # `python -m pytest` rather than `pytest`, and the difference is not stylistic.
         #
         # **Measured on this machine on 2026-09-07.** `uv run pytest` spawns the `pytest.exe`
@@ -289,7 +371,10 @@ def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProces
             "--disable-warnings",
         ],
         cwd=cwd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        # Its own process group on POSIX, so `_kill_tree` can reach the interpreter uv starts.
+        start_new_session=True,
         # **Read as UTF-8 rather than at the platform encoding, and never allowed to raise.**
         # `text=True` alone decodes with `locale.getpreferredencoding()`, which on this machine
         # is a Windows code page. A module whose tests print anything outside it, which for
@@ -304,9 +389,24 @@ def _run_tests(tests: Sequence[str], *, cwd: Path) -> subprocess.CompletedProces
         # must not be able to lose a `FAILED` line that is plain ASCII either side of it.
         encoding="utf-8",
         errors="replace",
-        check=False,
         env={**process_environment(), **NO_BYTECODE},
     )
+    try:
+        stdout, stderr = process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(process)
+        try:
+            stdout, stderr = process.communicate(timeout=KILL_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = "", "the pipes stayed open after the process tree was killed"
+        return _Run(stdout, stderr, process.returncode or -1, True, time.monotonic() - started)
+    return _Run(stdout, stderr, process.returncode, False, time.monotonic() - started)
+
+
+def _progress(line: str) -> None:
+    """One line as each step finishes, flushed, so a long run's log is never empty."""
+    print(f"mutation: {line}", flush=True)
 
 
 def failures_in(output: str) -> tuple[str, ...]:
@@ -325,6 +425,7 @@ def verify(
     repo: Path,
     commit: str = "HEAD",
     carry: Iterable[str] = (),
+    timeout: float = MUTATION_TIMEOUT_SECONDS,
 ) -> Report:
     """Run every mutation in a throwaway worktree and report what caught each one.
 
@@ -333,9 +434,16 @@ def verify(
     carried automatically; name a file here only when it is needed and not mutated, which in
     practice means the test file.
 
+    `timeout` bounds each pytest run in seconds; a mutation that exceeds it is TIMED OUT and
+    not caught, see `A_HANG_IS_NOT_A_NAMED_FAILURE`. The baseline also gets
+    `ENVIRONMENT_BUILD_ALLOWANCE_SECONDS`, and a baseline that times out stops the run.
+
     There is no parameter for where the work happens. See
     `A_HARNESS_THAT_TAKES_A_DIRECTORY_IS_POINTED_AT_THE_REPOSITORY`.
     """
+    if not timeout > 0:
+        msg = f"a timeout of {timeout} seconds times out every run, so every row would be a hang"
+        raise MutationError(msg)
     planned = list(mutations)
     if not planned:
         return Report(verdicts=())
@@ -365,7 +473,17 @@ def verify(
         # mutation at once, because a test red for one mutation is red for all of them and
         # running them per mutation would pay for the same answer repeatedly.
         every_test = sorted({one for mutation in planned for one in mutation.tests})
-        clean = _run_tests(every_test, cwd=workspace)
+        _progress(f"{len(planned)} mutation(s) in {workspace}; running the unmutated tests")
+        clean = _run_tests(
+            every_test, cwd=workspace, timeout=timeout + ENVIRONMENT_BUILD_ALLOWANCE_SECONDS
+        )
+        if clean.timed_out:
+            msg = (
+                f"the unmutated tests did not finish in {clean.seconds:.0f} seconds, so a hang "
+                "in any mutation below would be indistinguishable from this one"
+            )
+            raise MutationError(msg)
+        _progress(f"unmutated tests clean in {clean.seconds:.1f}s")
         if failures_in(clean.stdout):
             msg = (
                 "these tests fail before any mutation, so every row in the table would be "
@@ -383,7 +501,7 @@ def verify(
             raise MutationError(msg)
 
         verdicts: list[Verdict] = []
-        for mutation in planned:
+        for index, mutation in enumerate(planned, start=1):
             target = workspace / mutation.path
             original = target.read_bytes()
             text = original.decode("utf-8")
@@ -397,26 +515,32 @@ def verify(
                 raise MutationError(msg)
 
             target.write_bytes(text.replace(mutation.before, mutation.after).encode("utf-8"))
-            run = _run_tests(mutation.tests, cwd=workspace)
-            target.write_bytes(original)
+            try:
+                run = _run_tests(mutation.tests, cwd=workspace, timeout=timeout)
+            finally:
+                target.write_bytes(original)
             if _digest(target) != baselines[mutation.path]:
                 msg = f"{mutation.path} did not come back byte-identical after {mutation.label!r}"
                 raise MutationError(msg)
 
-            caught = failures_in(run.stdout)
-            verdicts.append(
-                Verdict(
-                    label=mutation.label,
-                    caught=bool(caught),
-                    by=caught,
-                    crashed=not caught and run.returncode != 0,
-                    output=(
-                        ""
-                        if caught or run.returncode == 0
-                        else run.stdout[-1500:] + "\n" + run.stderr[-500:]
-                    ),
-                )
+            # A killed run's output is partial, so a FAILED line in it is not trusted either:
+            # the verdict of a hang is the hang. See `A_HANG_IS_NOT_A_NAMED_FAILURE`.
+            caught = () if run.timed_out else failures_in(run.stdout)
+            verdict = Verdict(
+                label=mutation.label,
+                caught=bool(caught),
+                by=caught,
+                crashed=not caught and not run.timed_out and run.returncode != 0,
+                output=(
+                    ""
+                    if caught or (run.returncode == 0 and not run.timed_out)
+                    else run.stdout[-1500:] + "\n" + run.stderr[-500:]
+                ),
+                timed_out=run.timed_out,
+                seconds=run.seconds,
             )
+            verdicts.append(verdict)
+            _progress(f"[{index}/{len(planned)}] {verdict.row()} ({run.seconds:.1f}s)")
         return Report(verdicts=tuple(verdicts), baselines=baselines)
     finally:
         # Forced, and pruned afterwards, because a worktree left behind by a failed run is a

@@ -18,6 +18,8 @@ import inspect
 import os
 import re
 import subprocess
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Final
@@ -26,6 +28,9 @@ import pytest
 
 from brain.ops.mutation import (
     A_CRASH_IS_NOT_A_CAUGHT_MUTATION,
+    A_HANG_IS_NOT_A_NAMED_FAILURE,
+    ENVIRONMENT_BUILD_ALLOWANCE_SECONDS,
+    MUTATION_TIMEOUT_SECONDS,
     NO_BYTECODE,
     Mutation,
     MutationError,
@@ -187,14 +192,22 @@ def test_a_verdict_prints_its_own_row_and_distinguishes_the_three_outcomes() -> 
     one that means "write a test". Collapsing crashed into survived sends somebody looking for
     a missing guard when the file does not import.
 
-    Delete this and the table has two words for three states."""
+    A timeout is the fourth, added on 2026-09-15, and it must never print as `caught`: a hang
+    names no test, and a bound too tight for the machine would otherwise read as a perfect
+    score. See `A_HANG_IS_NOT_A_NAMED_FAILURE`.
+
+    Delete this and the table has two words for four states."""
     caught = Verdict(label="a", caught=True, by=("test_x",))
     survived = Verdict(label="a", caught=False)
     crashed = Verdict(label="a", caught=False, crashed=True)
+    timed_out = Verdict(label="a", caught=False, timed_out=True)
 
     assert "caught" in caught.row() and "test_x" in caught.row()
     assert "SURVIVED" in survived.row()
     assert "CRASHED" in crashed.row()
+    assert "TIMED OUT" in timed_out.row()
+    assert "caught" not in timed_out.row() and "SURVIVED" not in timed_out.row()
+    assert "never a named failure" in A_HANG_IS_NOT_A_NAMED_FAILURE
 
 
 def test_a_report_names_its_survivors_rather_than_counting_them() -> None:
@@ -210,12 +223,14 @@ def test_a_report_names_its_survivors_rather_than_counting_them() -> None:
             Verdict(label="caught one", caught=True, by=("test_x",)),
             Verdict(label="survived one", caught=False),
             Verdict(label="crashed one", caught=False, crashed=True),
+            Verdict(label="hung one", caught=False, timed_out=True),
         )
     )
 
-    assert [one.label for one in report.survivors] == ["survived one", "crashed one"]
+    assert [one.label for one in report.survivors] == ["survived one", "crashed one", "hung one"]
     assert "survived one" in report.table()
     assert "crashed one" in report.table()
+    assert "hung one" in report.table()
 
 
 def test_an_empty_run_says_so_rather_than_printing_an_empty_table() -> None:
@@ -299,7 +314,12 @@ def probe() -> Iterator[None]:
         "def loud(value: int) -> int:\n"
         "    if value < 0:\n"
         '        raise ValueError("negative")\n'
-        "    return value\n",
+        "    return value\n\n\n"
+        "def bounded(limit: int) -> int:\n"
+        "    count = 0\n"
+        "    while count < limit:\n"
+        "        count += 1\n"
+        "    return count\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -310,7 +330,13 @@ def probe() -> Iterator[None]:
         "def test_a_negative_value_is_refused() -> None:\n"
         '    """Delete this and the probe has no guard, which is the point of the probe."""\n'
         '    with pytest.raises(ValueError, match="negative"):\n'
-        "        loud(-1)\n",
+        "        loud(-1)\n\n\n"
+        "def test_a_loop_reaches_its_limit() -> None:\n"
+        '    """Delete this and nothing runs the loop a mutant can make endless."""\n'
+        # Imported here rather than at the top, so the red-baseline test's probe, which has
+        # no `bounded`, fails this test by name instead of failing collection.
+        f"    from {PROBE_SOURCE.stem} import bounded\n\n"
+        "    assert bounded(3) == 3\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -466,6 +492,136 @@ def test_a_run_whose_tests_were_already_failing_is_refused_rather_than_reported(
         )
 
 
+#: The timeout the hang test hands `verify`. Long enough for an honest probe run on a loaded
+#: machine, which takes a few seconds, and short enough that the test ends in about a minute.
+PROBE_TIMEOUT_SECONDS: Final = 30.0
+
+#: How long the hang test waits for `verify` to come back at all: the baseline's allowance,
+#: then three runs at the timeout, then slack. Past this the harness is hanging with the mutant.
+HANG_BOUND_SECONDS: Final = ENVIRONMENT_BUILD_ALLOWANCE_SECONDS + 3 * PROBE_TIMEOUT_SECONDS + 60
+
+
+def test_a_timeout_that_is_not_positive_is_refused_before_anything_runs() -> None:
+    """A timeout of zero times out every run, so every row would read TIMED OUT and the table
+    would be evidence about the bound rather than about any guard.
+
+    Delete this and a slip in a caller's arithmetic produces a table of hangs that never
+    happened, after the cost of a worktree."""
+    with pytest.raises(MutationError, match="times out every run"):
+        verify([], repo=REPO, timeout=0)
+
+
+def test_the_default_timeout_is_the_named_constant_and_is_finite() -> None:
+    """**The defect this closes cost an agent two hours on 2026-09-15.** An unbounded run lets a
+    mutant that removes a loop's bound stall the whole table, silently. The default has to be a
+    real number of seconds, and it has to be the named one, so the figure in the docstring is
+    the figure a caller gets.
+
+    Delete this and the default can drift to `None` in a refactor, which is the hang back with
+    every test here still green, because each one passes its own timeout."""
+    default = inspect.signature(verify).parameters["timeout"].default
+
+    assert default == MUTATION_TIMEOUT_SECONDS
+    assert 0 < MUTATION_TIMEOUT_SECONDS < float("inf")
+    assert MUTATION_TIMEOUT_SECONDS > PROBE_TIMEOUT_SECONDS, "an honest run must fit inside it"
+
+
+@pytest.mark.slow
+@pytest.mark.usefixtures("probe")
+def test_a_hanging_mutant_is_timed_out_within_the_bound_and_nothing_else_changes(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """**A mutant that hangs is reported as TIMED OUT, inside the bound, and the worktree is
+    still removed.** Before 2026-09-15 this run would never have returned.
+
+    One worktree, three mutations, because each worktree costs the environment build: one the
+    named test catches, one no test notices, and one that makes the probe's loop endless. The
+    first two are asserted unchanged, because a timeout that swallowed a catch or a survivor
+    would be a new way for the table to lie.
+
+    `verify` runs in a daemon thread joined with a bound, so a harness that has lost its timeout
+    fails this test by name rather than hanging the suite it is part of. The worktree path is
+    read from the progress line, which also asserts that progress is printed as each mutation
+    finishes. Removal is the property that needs the whole process tree killed: on Windows a
+    spinning interpreter under a killed `uv` keeps the directory open.
+
+    Delete this and the timeout, the tree kill and the cleanup after a hang are all unwatched,
+    and the next hanging mutant costs somebody another afternoon with an empty log."""
+    source = str(PROBE_SOURCE).replace("\\", "/")
+    test = str(PROBE_TEST).replace("\\", "/")
+    outcome: list[Report] = []
+    failure: list[Exception] = []
+
+    def run() -> None:
+        try:
+            outcome.append(
+                verify(
+                    [
+                        Mutation(
+                            label="the probe stops refusing a negative value",
+                            path=source,
+                            before="    if value < 0:",
+                            after="    if False:",
+                            tests=(test,),
+                        ),
+                        Mutation(
+                            label="the refusal message gains a character",
+                            path=source,
+                            before='raise ValueError("negative")',
+                            after='raise ValueError("negative!")',
+                            tests=(test,),
+                        ),
+                        Mutation(
+                            label="the probe's loop never advances",
+                            path=source,
+                            before="        count += 1",
+                            after="        count += 0",
+                            tests=(test,),
+                        ),
+                    ],
+                    repo=REPO,
+                    carry=(test,),
+                    timeout=PROBE_TIMEOUT_SECONDS,
+                )
+            )
+        except Exception as error:  # handed to the test thread, which raises it
+            failure.append(error)
+
+    started = time.monotonic()
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    worker.join(HANG_BOUND_SECONDS)
+
+    assert not worker.is_alive(), f"verify did not return within {HANG_BOUND_SECONDS}s"
+    if failure:
+        raise failure[0]
+    assert time.monotonic() - started < HANG_BOUND_SECONDS
+    caught, survived, hung = outcome[0].verdicts
+
+    assert caught.caught and caught.by == ("test_a_negative_value_is_refused",)
+    assert not survived.caught and not survived.timed_out and not survived.crashed
+    assert hung.timed_out and not hung.caught and hung.by == ()
+    assert PROBE_TIMEOUT_SECONDS <= hung.seconds < PROBE_TIMEOUT_SECONDS + 30
+    assert [one.label for one in outcome[0].survivors] == [survived.label, hung.label]
+    assert "TIMED OUT" in outcome[0].table()
+    assert (REPO / PROBE_SOURCE).read_text(encoding="utf-8").count("count += 1") == 1
+
+    printed = capsys.readouterr().out
+    assert "[1/3]" in printed and "[3/3]" in printed
+    announced = re.search(r"mutation\(s\) in (?P<path>.+?); running", printed)
+    assert announced is not None, printed
+    workspace = announced.group("path")
+    listed = subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert not Path(workspace).exists(), f"{workspace} was left behind after a timeout"
+    assert Path(workspace).name not in listed.stdout
+
+
 def test_the_worked_example_in_claude_md_names_code_that_exists() -> None:
     """**Written because the first version of that example did not.** It named
     `src/brain/core/entitlement.py`, a line `if not scope.predicate:` and a
@@ -508,7 +664,7 @@ def test_the_harness_has_no_parameter_naming_where_the_work_happens() -> None:
     worktree by convention", which is what the leaf was written to rule out."""
     names = set(inspect.signature(verify).parameters)
 
-    assert names == {"mutations", "repo", "commit", "carry"}
+    assert names == {"mutations", "repo", "commit", "carry", "timeout"}
     assert not any(one in names for one in ("cwd", "workspace", "tree", "directory", "target"))
 
 
@@ -565,10 +721,10 @@ def test_a_test_that_prints_outside_the_platform_encoding_does_not_crash_the_rea
     calls = [
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and ast.unparse(node.func) == "subprocess.run"
+        if isinstance(node, ast.Call) and ast.unparse(node.func) == "subprocess.Popen"
     ]
 
-    assert len(calls) == 1, "the runner no longer makes exactly one subprocess call"
+    assert len(calls) == 1, "the runner no longer starts exactly one subprocess"
     passed = {one.arg: ast.unparse(one.value) for one in calls[0].keywords if one.arg}
 
     assert passed.get("encoding") == "'utf-8'"
