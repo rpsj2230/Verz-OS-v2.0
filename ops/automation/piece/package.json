@@ -5,9 +5,15 @@
   "type": "module",
   "description": "An automation step that names one tool and an argument bag, and nothing else.",
   "scripts": {
-    "test": "node --test test/"
+    "build": "node scripts/build.mjs",
+    "package": "npm pack ./dist --pack-destination dist",
+    "test": "node --test --test-reporter=tap test/call.test.ts test/load.test.ts"
   },
-  "peerDependencies": {
-    "@activepieces/pieces-framework": "0.7.x"
+  "dependencies": {
+    "@activepieces/pieces-framework": "0.7.42"
+  },
+  "devDependencies": {
+    "@types/node": "18.19.130",
+    "typescript": "5.8.3"
   }
 }

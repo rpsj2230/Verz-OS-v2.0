@@ -49,11 +49,10 @@
 # is a route out, and a second route out beside the proxy is the one thing this file exists
 # to deny.
 #
-# **Still not claimed: the TypeScript piece.** The Activepieces plugin format is a package
-# built and published by a toolchain this repository does not have, so a `.ts` file here
-# would be a seventh mechanism that nothing compiles and nothing type-checks. What it has
-# to contain is fully determined by `brain.ops.automation_piece`: a step naming a tool and
-# a bag of arguments, and no address.
+# **The TypeScript piece** is built by `ops/automation/piece` (strict tsc against
+# pieces-framework 0.7.42, loaded by its test/load.test.ts) and uploaded through the canvas
+# API; see that directory's README. What it contains is fully determined by
+# `brain.ops.automation_piece`: a step naming a tool and a bag of arguments, and no address.
 #
 # Task ids: M32.6.1.1
 

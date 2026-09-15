@@ -1063,6 +1063,41 @@ def test_the_house_style_sweep_raises_on_an_em_dash_rather_than_only_printing() 
     sweep_house_style()
 
 
+def test_the_house_style_sweep_skips_what_an_install_wrote_and_reads_what_sits_beside_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first install of the automation piece's toolchain turned this sweep red on em dashes
+    in TypeScript's translated compiler messages, under `ops/automation/piece/node_modules`.
+    Nobody here wrote them and nobody here can fix them, so the directory is skipped by name,
+    along with the build output beside it.
+
+    The sibling file is the positive half: a skip wide enough to cover the whole piece would
+    pass the first assertion too.
+
+    Delete this and the skip can be lost, and every tree that has built the piece fails house
+    style, or widened, and the piece's own README stops being checked."""
+    from brain.ops import sweeps
+
+    dash = chr(8212)
+    piece = tmp_path / "ops" / "automation" / "piece"
+    for where in ("node_modules/typescript/lib", "dist/lib"):
+        (piece / where).mkdir(parents=True)
+        (piece / where / "messages.json").write_text(
+            f'{{"x": "one {dash} two"}}\n', encoding="utf-8", newline="\n"
+        )
+    monkeypatch.setattr(sweeps, "REPO", tmp_path)
+
+    sweeps.sweep_house_style()
+
+    (piece / "README.md").write_text(f"# Piece\n\none {dash} two\n", encoding="utf-8", newline="\n")
+    with pytest.raises(sweeps.SweepFailure) as raised:
+        sweeps.sweep_house_style()
+
+    assert [one.split(" carries")[0] for one in raised.value.findings] == [
+        "ops/automation/piece/README.md:3"
+    ]
+
+
 def test_the_house_style_sweep_reads_the_documents_this_repository_serves() -> None:
     """**One hundred and forty nine em dashes were in `architecture.html` while `src` had
     zero**, because the sweep landed scoped to code and the documents are where the rule was

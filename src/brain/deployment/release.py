@@ -127,6 +127,7 @@ from brain.deployment.installer import (
 )
 from brain.deployment.requirements import files_for
 from brain.ops.compose import ComposeDoc, ComposeFiles
+from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 from brain.ops.tunnel import (
     OVERLAY,
     THE_ENVIRONMENT_FILE_RECORDS_THE_CHOICE,
@@ -386,9 +387,11 @@ INCLUDED: Final[tuple[Rule, ...]] = (
 #: include cannot ship one of these quietly; it fails the release build instead. The test that
 #: proves it widens an include and watches the refusal hold.
 #:
-#: `__pycache__` is deliberately not here. It is not a file of this repository at all, so it is
-#: skipped while walking rather than refused afterwards, which is the same distinction
-#: `brain.ops.independence._searched_files` makes when it reads an area.
+#: `__pycache__`, `node_modules` and `dist` are deliberately not here. They are not files of
+#: this repository at all, so they are skipped while walking rather than refused afterwards,
+#: from the one set `brain.ops.independence.NOT_OF_THIS_REPOSITORY` holds for every walker.
+#: Refusing them instead would make the deployment check red on every tree that has built the
+#: automation piece, and `ops/automation` is carried.
 EXCLUDED: Final[tuple[Rule, ...]] = (
     Rule(
         ".git",
@@ -479,10 +482,6 @@ def refused_by(path: str, excluded: Sequence[Rule] = EXCLUDED) -> str:
     return ""
 
 
-#: A directory of compiled bytecode, which is not a file of this repository. See `EXCLUDED`.
-NOT_OF_THIS_REPOSITORY: Final = "__pycache__"
-
-
 def carried_paths(tree: Path, included: Sequence[Rule] = INCLUDED) -> tuple[str, ...]:
     """Every path in this tree an include rule reaches, refusals not yet applied.
 
@@ -503,7 +502,7 @@ def carried_paths(tree: Path, included: Sequence[Rule] = INCLUDED) -> tuple[str,
         found.update(
             one.relative_to(tree).as_posix()
             for one in target.rglob("*")
-            if one.is_file() and NOT_OF_THIS_REPOSITORY not in one.parts
+            if one.is_file() and not NOT_OF_THIS_REPOSITORY.intersection(one.parts)
         )
     return tuple(sorted(found))
 

@@ -293,6 +293,35 @@ def test_compiled_bytecode_is_not_a_file_of_this_repository(tmp_path: Path) -> N
     )
 
 
+def test_the_automation_piece_is_carried_as_source_and_not_as_one_machines_build(
+    tmp_path: Path,
+) -> None:
+    """`ops/automation` is carried, and the piece inside it is installed and built wherever its
+    tests run: in CI, by the unit suite, before anything asks the archive a question. Its
+    `node_modules` and `dist` are the same kind of thing as bytecode, so they are skipped while
+    walking, and the source an owner builds from (the lock included) is still carried.
+
+    Delete this and the release carries fifteen hundred files of one machine's npm install, or
+    `test_the_archive_this_repository_would_publish_has_nothing_wrong_with_it` goes red on
+    every tree that has built the piece."""
+    piece = "ops/automation/piece"
+    tree = a_tree(
+        tmp_path,
+        {
+            f"{piece}/package.json": "{}\n",
+            f"{piece}/package-lock.json": "{}\n",
+            f"{piece}/lib/index.ts": "export {};\n",
+            f"{piece}/node_modules/typescript/package.json": "{}\n",
+            f"{piece}/dist/lib/index.js": "exports.x = 1;\n",
+        },
+    )
+    assert carried_paths(tree, (Rule("ops/automation", "the egress allowlist"),)) == (
+        f"{piece}/lib/index.ts",
+        f"{piece}/package-lock.json",
+        f"{piece}/package.json",
+    )
+
+
 # ==================================================== what the install expects to be there
 def test_the_template_and_the_four_settings_are_what_the_plan_reads_from_the_archive() -> None:
     """Read out of the plan rather than listed, so a step that starts reading a second file is

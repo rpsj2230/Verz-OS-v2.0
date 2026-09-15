@@ -1,18 +1,20 @@
 // The Activepieces piece: one action, "Call a tool", which sends what `call.ts` builds.
 //
-// **Not compiled, linted or run in this repository.** It imports
-// `@activepieces/pieces-framework`, which is not installed here, and building a piece for
-// Activepieces 0.39.5 is that project's toolchain. Everything this file decides is in
-// `call.ts`, which is tested; what is here is the framework's wrapper around it, and the
-// property names below follow the framework's documented shape without having been checked
-// against the version the sandbox runs.
+// **Compiled under strict settings against `@activepieces/pieces-framework` 0.7.42**, the
+// version the Activepieces 0.39.5 source tree declares for itself, and loaded by
+// `test/load.test.ts` the way that release's engine loads a piece: a CommonJS `require` of the
+// package, then the one export whose constructor is `Piece`. `package.json` and the README say
+// why that version and not a newer one.
 //
 // `fetch` rather than the framework's HTTP client, deliberately. The sandbox sets HTTP_PROXY
 // for every outbound request so the egress allowlist applies, and the application is reached
 // over the `tool-api` network rather than through the proxy, which would refuse it.
+//
+// No import attribute on the JSON import, unlike the tests. This file compiles to CommonJS,
+// where TypeScript refuses one, and it is never run by Node's type stripping directly.
 
 import { createAction, createPiece, PieceAuth, Property } from "@activepieces/pieces-framework";
-import contract from "../contract.json" with { type: "json" };
+import contract from "../contract.json";
 import { buildToolCall } from "./call.ts";
 
 export const brainAuth = PieceAuth.CustomAuth({

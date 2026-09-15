@@ -22,6 +22,7 @@ from pathlib import Path
 
 from brain.core.envelope import TOOL_NAME_PATTERN
 from brain.db import libpq_url
+from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 
 REPO = Path(__file__).resolve().parents[3]
 SRC = REPO / "src" / "brain"
@@ -966,7 +967,7 @@ def sweep_house_style() -> None:
         for path in sorted(root.rglob("*")):
             if not path.is_file() or path.suffix not in HOUSE_STYLE_SUFFIXES:
                 continue
-            if "__pycache__" in path.parts:
+            if NOT_OF_THIS_REPOSITORY.intersection(path.parts):
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
             for number, line in enumerate(text.splitlines(), 1):

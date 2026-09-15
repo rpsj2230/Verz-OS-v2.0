@@ -87,6 +87,19 @@ jobs:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
       - run: uv sync --locked
+      - uses: actions/setup-node@v4
+        with:
+          # The automation piece is compiled and loaded by a unit test,
+          # `test_automation_piece_package.py`, and its tests run on Node's own type
+          # stripping, which needs 22.18 or later. That test fails on a runner rather than
+          # skipping, so without these two steps this job goes red instead of quietly
+          # testing less.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ops/automation/piece/package-lock.json
+      - name: Install the automation piece's toolchain from its lockfile
+        working-directory: ops/automation/piece
+        run: npm ci --ignore-scripts
       - name: Tests with coverage floor
         run: uv run pytest --cov --cov-report=term-missing
 

@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 dist/
 build/
+node_modules/
 *.egg-info/
 
 # secrets never enter the repo; slots are defined in OpenBao and filled at go-live

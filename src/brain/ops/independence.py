@@ -116,6 +116,27 @@ READ_SUFFIXES: Final[frozenset[str]] = frozenset({".py", ".ts", ".tsx", ".html",
 #: it. Widening `READ_SUFFIXES` itself would have made that claim about every area at once.
 DOCS_SUFFIXES: Final[frozenset[str]] = READ_SUFFIXES | {".md"}
 
+#: Directories that are not files of this repository, skipped by every walk of its tree.
+#:
+#: **One set, read by the three walkers, because each had its own copy of the first entry.**
+#: This sweep, `brain.ops.sweeps.sweep_house_style` and `brain.deployment.release.carried_paths`
+#: each skipped `__pycache__` by name, and on 2026-09-15 the automation piece's toolchain was
+#: installed under `ops/automation/piece`. Both sweeps went red on npm's own files (a registry
+#: host in a lock file, em dashes in a compiler's Polish messages), and the release check would
+#: have gone red the same way. A fourth spelling in a fourth walker is how the next one is
+#: missed.
+#:
+#: See `A_SKIPPED_DIRECTORY_IS_ONE_GIT_ALREADY_REFUSES` for why skipping these hides nothing.
+NOT_OF_THIS_REPOSITORY: Final[frozenset[str]] = frozenset({"__pycache__", "node_modules", "dist"})
+
+#: Why a skip here cannot hide a committed value.
+A_SKIPPED_DIRECTORY_IS_ONE_GIT_ALREADY_REFUSES: Final = (
+    "Every name skipped while walking is ignored by .gitignore, so no file under one can be "
+    "committed and no clone or release checkout contains one. What is skipped is what a build "
+    "or an install wrote on one machine, and reading it would judge that machine rather than "
+    "this repository."
+)
+
 #: Read every file in the area, whatever it is called. See the header: an allowlist of
 #: suffixes is what let `ops` carry one deployment's host in four file types nobody had
 #: listed, and a check that is quiet about what it declined to read is the failure this
@@ -398,7 +419,7 @@ def _searched_files(repo: Path) -> Iterator[Path]:
             # `is_file` rather than trusting the suffix, and it is not decoration now that one
             # area reads everything: `rglob` yields directories too, and a directory named for
             # a suffix would be opened and read.
-            if not path.is_file() or "__pycache__" in path.parts:
+            if not path.is_file() or NOT_OF_THIS_REPOSITORY.intersection(path.parts):
                 continue
             if suffixes is None or path.suffix in suffixes:
                 yield path

@@ -16,6 +16,7 @@ Task ids: M41.1.1 M41.1.2 M41.1.3 M41.1.4 M41.1.5 M41.1.6 M41.1.7 M41.1.8 M41.1.
 from __future__ import annotations
 
 import ast
+import json
 from pathlib import Path
 
 import pytest
@@ -34,8 +35,10 @@ from brain.install import (
     value_of,
 )
 from brain.ops.independence import (
+    A_SKIPPED_DIRECTORY_IS_ONE_GIT_ALREADY_REFUSES,
     ALLOWED_HOSTS,
     DOCS_SUFFIXES,
+    NOT_OF_THIS_REPOSITORY,
     READ_SUFFIXES,
     SEARCHED,
     compose_services,
@@ -750,3 +753,48 @@ def test_a_private_range_is_allowed_and_a_private_address_is_not() -> None:
     assert not is_reserved_range("10.4.0.17/8"), "host bits set: that is an address and a mask"
     assert not is_reserved_range("203.0.113.9/32"), "one address is a host, not a range"
     assert not is_reserved_range("198.51.100.7/24"), "not a private range"
+
+
+def test_what_a_build_or_an_install_wrote_is_not_read_and_what_sits_beside_it_is(
+    tmp_path: Path,
+) -> None:
+    """The automation piece installs npm packages under `ops`, which this sweep reads file by
+    file, and on the day it was first installed the sweep failed on a registry host in npm's
+    own lock file. Skipping by directory name is the fix, and this plants the same client
+    host under each skipped name and beside them.
+
+    Delete this and the skip can be widened to the whole piece, so its `package.json` and its
+    source stop being read, or narrowed back to `__pycache__`, and every tree that has built
+    the piece fails the sweep over files nobody here wrote."""
+    piece = tmp_path / "ops" / "automation" / "piece"
+    planted = '{"resolved": "https://registry.first-client.invalid-tld/x.tgz"}\n'
+    for where in ("node_modules/typescript", "dist", "__pycache__", "."):
+        (piece / where).mkdir(parents=True, exist_ok=True)
+        (piece / where / "package.json").write_text(planted, encoding="utf-8", newline="\n")
+
+    read = [path.relative_to(tmp_path).as_posix() for path in searched_files(tmp_path)]
+
+    assert read == ["ops/automation/piece/package.json"]
+
+
+def test_every_directory_a_walk_skips_is_one_git_already_refuses() -> None:
+    """`A_SKIPPED_DIRECTORY_IS_ONE_GIT_ALREADY_REFUSES` is the whole argument that the skip
+    hides nothing, and it holds only while every skipped name is in `.gitignore`. Checked
+    against the piece's own build settings too, so the set is held to the directories the
+    toolchain really writes rather than to itself.
+
+    Delete this and a tracked name such as `docs` can join the set, and the sweep, the house
+    style check and the release walk all stop reading committed files, reporting nothing."""
+    repo = Path(__file__).resolve().parents[2]
+    ignored = {
+        line.strip().rstrip("/")
+        for line in (repo / ".gitignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    }
+    written = json.loads(
+        (repo / "ops" / "automation" / "piece" / "tsconfig.json").read_text(encoding="utf-8")
+    )["compilerOptions"]["outDir"]
+
+    assert ignored >= NOT_OF_THIS_REPOSITORY
+    assert {"__pycache__", "node_modules", written} <= NOT_OF_THIS_REPOSITORY
+    assert A_SKIPPED_DIRECTORY_IS_ONE_GIT_ALREADY_REFUSES

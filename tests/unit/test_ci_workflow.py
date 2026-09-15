@@ -375,6 +375,26 @@ def test_the_console_installs_from_its_lockfile() -> None:
     )
 
 
+def test_the_unit_suite_can_build_the_automation_piece_it_tests() -> None:
+    """`test_automation_piece_package.py` compiles the piece and loads it, and on a runner it
+    fails rather than skipping when it cannot. So the job that runs the unit suite sets up a
+    Node that strips types and installs the piece from its lockfile, before pytest runs.
+
+    Delete this and either step can go. The unit job then turns red, and the tempting repair is
+    to let that test skip in CI, which puts the piece back to never having been built with a
+    green tick over it."""
+    steps = _job("tests").get("steps", [])
+    node = [step for step in steps if str(step.get("uses", "")).startswith("actions/setup-node")]
+    installs = [step for step in steps if step.get("working-directory") == "ops/automation/piece"]
+    suite = next(i for i, step in enumerate(steps) if "pytest" in str(step.get("run", "")))
+
+    assert len(node) == 1
+    assert int(str(node[0]["with"]["node-version"]).split(".")[0]) >= 22
+    assert [step["run"] for step in installs] == ["npm ci --ignore-scripts"]
+    assert steps.index(node[0]) < steps.index(installs[0]) < suite
+    assert (REPO / "ops" / "automation" / "piece" / "package-lock.json").is_file()
+
+
 # ------------------------------------------------- install from empty, end to end (M41.2.5)
 INSTALL_JOB = "install"
 
