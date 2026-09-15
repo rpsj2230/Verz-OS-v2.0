@@ -856,3 +856,38 @@ code {
   white-space: nowrap;
   border: 0;
 }
+
+/* ------------------------------------------------------------------ first run */
+
+/*
+ * The first-run page, which sits outside the shell because nobody is signed in to a principal
+ * yet. One column at every width, so there is no wider layout to enhance into, and the form
+ * keeps the width `.form` already gives it.
+ */
+.first-run {
+  max-width: var(--form-max-width);
+  margin: 0 auto;
+  padding-block: var(--space-4);
+  padding-inline: var(--space-4);
+}
+
+.first-run__section {
+  margin-bottom: var(--space-4);
+}
+
+/*
+ * A problem the API named against one input. No colour, for the reason `.notice` has none: the
+ * words say what to change, and `aria-describedby` ties them to the input they belong to.
+ */
+.first-run__problem,
+.first-run__step-problems {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+}
+
+.first-run__names {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  padding-left: var(--space-4);
+  overflow-wrap: anywhere;
+}

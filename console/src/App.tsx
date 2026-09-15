@@ -46,7 +46,9 @@ import { configProblems } from "./config";
 import { Shell } from "./layout/Shell";
 import { Agents } from "./pages/Agents";
 import { NotFound } from "./pages/NotFound";
+import { FirstRun } from "./pages/FirstRun";
 import { Overview } from "./pages/Overview";
+import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
 
 /**
@@ -156,6 +158,11 @@ function ConfigurationProblems() {
 export const routes: RouteObject[] = [
   { path: CALLBACK_PATH, element: <CallbackRoute />, errorElement: <RouteError /> },
   { path: SIGNED_OUT_PATH, element: <SignedOutRoute />, errorElement: <RouteError /> },
+  // First run, outside the guard for the callback's reason and one of its own: the guard would
+  // sign the installer in and then load the overview, whose `/me` refuses a sign-in bound to
+  // nobody, which on a fresh install is every sign-in. The page signs in itself, first. See
+  // `pages/FirstRun.tsx`.
+  { path: FIRST_RUN_PATH, element: <FirstRun />, errorElement: <RouteError /> },
   {
     path: "/",
     element: (

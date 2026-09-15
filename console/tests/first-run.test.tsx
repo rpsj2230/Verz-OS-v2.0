@@ -1,0 +1,441 @@
+/**
+ * First run: signed in first, the setup code held in memory only, the wizard's answers posted
+ * once, every refusal drawn the way the server meant it, and the console home at the end.
+ *
+ * **The copies are checked against the originals.** The screens are read out of
+ * `brain.setup_wizard.WIZARD` and the sentences out of `brain.locale.MESSAGES`, and the two
+ * request bodies against the API document `npm run api:generate` wrote, so a renamed question
+ * or a route that moved fails here rather than posting answers the server drops.
+ *
+ * **The API and the identity provider are stand-ins, as everywhere in this suite.** Sign-in
+ * runs through the real `beginSignIn` and `completeSignIn` against `support/auth.ts`'s provider,
+ * and the two setup routes and `/api/v1/me` answer from the same stand-in, so what is asserted
+ * is what left the browser and what was drawn.
+ *
+ * Task ids: M42.5.14
+ */
+
+import { RouterProvider, createMemoryRouter } from "react-router-dom";
+import { fireEvent, render, waitFor } from "@testing-library/react";
+import { beforeAll, describe, expect, test, vi } from "vitest";
+import {
+  APPOINTMENT_PATH,
+  FINISH_PATH,
+  FINISH_TITLE,
+  FIRST_RUN_PATH,
+  MAX_ANSWER_CHARS,
+  MAX_KEY_CHARS,
+  MESSAGES,
+  REVIEW_TITLE,
+  SCREENS,
+  SETUP_REFUSED_MESSAGE,
+  appointmentBody,
+  finishBody,
+} from "../src/setup/wizard";
+import { CONSOLE_ORIGIN, everythingInStorage, fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import {
+  declaredPropertyNames,
+  declaredRequestBodySchema,
+  declaredResponseSchema,
+} from "./support/openapi";
+import { backendWizard, catalogueEnglish, catalogueKeys } from "./support/wizard";
+
+/** A code nothing else on the page could contain, so finding it anywhere is a leak. */
+const CODE = `CODE-SENTINEL-${"c".repeat(50)}`;
+const PRINCIPAL = "u_PRINCIPAL-SENTINEL";
+const COMPANY = "COMPANY-SENTINEL";
+const WEB = "https://brain.example.invalid";
+
+const A_CALLER = {
+  principal_id: PRINCIPAL,
+  display_name: "DISPLAY-SENTINEL",
+  primary_department: "DEPARTMENT-SENTINEL",
+  employment: "EMPLOYMENT-SENTINEL",
+  assurance: "ASSURANCE-SENTINEL",
+  channel: "CHANNEL-SENTINEL",
+  ent_hash: "ENTHASH-SENTINEL",
+};
+
+function json(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json", "x-trace-id": "TRACE-SENTINEL" },
+  });
+}
+
+interface Seen {
+  readonly path: string;
+  readonly body: unknown;
+  readonly authorization: string;
+}
+
+interface Stand {
+  readonly appointment: () => Response;
+  readonly signIn?: () => Response;
+}
+
+/** A stand-in API answering the two setup routes and `/me`, recording what reached it. */
+function standIn(answers: Stand) {
+  const seen: Seen[] = [];
+  const idp = fakeIdentityProvider({
+    api(url, init) {
+      const path = new URL(url, CONSOLE_ORIGIN).pathname;
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      const record = () =>
+        seen.push({
+          path,
+          body: init?.body === undefined ? null : JSON.parse(String(init.body)),
+          authorization: headers["authorization"] ?? "",
+        });
+      if (path === APPOINTMENT_PATH) {
+        record();
+        return answers.appointment();
+      }
+      if (path === FINISH_PATH) {
+        record();
+        return (answers.signIn ?? (() => json({ principal_id: PRINCIPAL, outcome: "bound" })))();
+      }
+      if (path === "/api/v1/me") {
+        record();
+        return json(A_CALLER);
+      }
+      return null;
+    },
+  });
+  return { idp, seen };
+}
+
+function headingOf(container: HTMLElement): string {
+  return container.querySelector("h1")?.textContent ?? "";
+}
+
+function control(container: HTMLElement, step: string, name: string): HTMLInputElement {
+  const found = container.querySelector(`#first-run-${step}-${name}`);
+  if (!found) {
+    throw new Error(`No control for ${step}.${name} on "${headingOf(container)}".`);
+  }
+  return found as HTMLInputElement;
+}
+
+function give(container: HTMLElement, step: string, name: string, value: string): void {
+  fireEvent.change(control(container, step, name), { target: { value } });
+}
+
+function press(container: HTMLElement, text: string): void {
+  const button = [...container.querySelectorAll("button")].find((one) => one.textContent === text);
+  if (!button) {
+    throw new Error(`No button "${text}" on "${headingOf(container)}".`);
+  }
+  if (button.type === "submit" && button.form) {
+    fireEvent.submit(button.form);
+    return;
+  }
+  fireEvent.click(button);
+}
+
+async function arriveAt(container: HTMLElement, title: string): Promise<void> {
+  await waitFor(() => expect(headingOf(container)).toBe(title));
+}
+
+/** Sign in through the real flow, returning to first run, and mount the route table there. */
+async function openFirstRun(idp: ReturnType<typeof fakeIdentityProvider>) {
+  const loaded = await loadConsole({ idp, path: FIRST_RUN_PATH });
+  const landed = await signIn(loaded, { returnTo: FIRST_RUN_PATH });
+  const { routes } = await import("../src/App");
+  const router = createMemoryRouter(routes, { initialEntries: [landed] });
+  const { container } = render(<RouterProvider router={router} />);
+  await arriveAt(container, "Enter the setup code");
+  return { loaded, router, container, landed };
+}
+
+/** Every screen answered, the data sources skipped, ending on the review. */
+async function answerEverything(container: HTMLElement): Promise<void> {
+  give(container, "setup_code", "setup_code", CODE);
+  press(container, "Continue");
+  await arriveAt(container, "Your company");
+  give(container, "company", "company_name", COMPANY);
+  give(container, "company", "web_address", WEB);
+  press(container, "Continue");
+  await arriveAt(container, "The first administrator");
+  give(container, "administrator", "full_name", "NAME-SENTINEL");
+  give(container, "administrator", "work_address", "first@example.invalid");
+  press(container, "Continue");
+  await arriveAt(container, "Your staff list");
+  give(container, "staff_source", "staff_source", "spreadsheet");
+  press(container, "Continue");
+  await arriveAt(container, "How questions are answered");
+  give(container, "model_provider", "model_profile", "local");
+  press(container, "Continue");
+  await arriveAt(container, "Data sources");
+  press(container, "Skip this screen");
+  await arriveAt(container, REVIEW_TITLE);
+}
+
+function callsTo(seen: readonly Seen[], path: string): Seen[] {
+  return seen.filter((one) => one.path === path);
+}
+
+beforeAll(async () => {
+  await import("../src/App");
+}, 60_000);
+
+describe("the console's copy of the wizard", () => {
+  test("the screens are the wizard's screens, in its order, asking its questions", () => {
+    // What breaks if this is deleted: a question renamed, added, made optional or given a new
+    // choice in `brain.setup_wizard` and not here. The console would post a field the route
+    // drops, or never ask for one it requires, and every install would stop on a 422 naming a
+    // field no screen draws.
+    const backend = backendWizard();
+    expect(backend.map((step) => step.key)).toEqual([
+      ...SCREENS.map((screen) => screen.key),
+      "review",
+      "finish",
+    ]);
+    for (const screen of SCREENS) {
+      const original = backend.find((step) => step.key === screen.key);
+      expect(original?.skippable, screen.key).toBe(screen.skippable);
+      expect(
+        screen.questions.map(({ name, required, secret, maxChars, choices }) => ({
+          name,
+          required,
+          secret,
+          maxChars,
+          choices,
+        })),
+        screen.key,
+      ).toEqual(original?.questions);
+    }
+    expect(new Set(backend.flatMap((step) => step.questions.map((one) => one.maxChars)))).toEqual(
+      new Set([MAX_ANSWER_CHARS, MAX_KEY_CHARS]),
+    );
+  });
+
+  test("every title, label and problem sentence is the catalogue's English", () => {
+    // What breaks if this is deleted: a sentence here that says something the catalogue does
+    // not, and a 422 drawn in words nobody reviewed. Both directions for the problems, so a key
+    // the wizard gains is a failure rather than "Check this answer" beside a box.
+    const backend = backendWizard();
+    for (const screen of SCREENS) {
+      const original = backend.find((step) => step.key === screen.key);
+      expect(screen.title).toBe(catalogueEnglish(original?.titleKey ?? ""));
+      for (const question of screen.questions) {
+        expect(question.label).toBe(catalogueEnglish(`field.${question.name}.label`));
+      }
+    }
+    expect(REVIEW_TITLE).toBe(catalogueEnglish("setup.step.review.title"));
+    expect(FINISH_TITLE).toBe(catalogueEnglish("setup.step.finish.title"));
+    const keys = [...catalogueKeys("setup.error."), ...catalogueKeys("setup.review.")].sort();
+    expect(Object.keys(MESSAGES).sort()).toEqual(keys);
+    for (const key of keys) {
+      expect(MESSAGES[key], key).toBe(catalogueEnglish(key));
+    }
+  });
+
+  test("both request bodies are the ones the API document says the routes take", () => {
+    // What breaks if this is deleted: a body key the route forbids. Both models set
+    // `extra="forbid"`, so a renamed key is a 422 carrying no problems on every install, drawn
+    // as the least useful sentence this console has.
+    expect(declaredPropertyNames(declaredRequestBodySchema(APPOINTMENT_PATH, "post"))).toEqual(
+      Object.keys(appointmentBody("x", {}, new Set())).sort(),
+    );
+    expect(declaredPropertyNames(declaredRequestBodySchema(FINISH_PATH, "post"))).toEqual(
+      Object.keys(finishBody("x", "y")).sort(),
+    );
+    expect(declaredPropertyNames(declaredResponseSchema(APPOINTMENT_PATH, "post"))).toContain(
+      "principal_id",
+    );
+    expect(declaredPropertyNames(declaredResponseSchema(APPOINTMENT_PATH, "post", "422"))).toEqual([
+      "problems",
+    ]);
+    expect(declaredPropertyNames(declaredResponseSchema(APPOINTMENT_PATH, "post", "409"))).toEqual([
+      "unkept",
+    ]);
+  });
+});
+
+describe("before anything is asked", () => {
+  test("a person with no session is sent to sign in and brought back to first run", async () => {
+    // What breaks if this is deleted: the order the setup code's safety depends on. A page that
+    // asked for the code first would lose it to the sign-in redirect, and one that carried it
+    // across would put it in a store or an address. The callback must also return here and not
+    // to the overview, whose `/me` refuses a sign-in bound to nobody.
+    const loaded = await loadConsole({ path: FIRST_RUN_PATH });
+    const { routes } = await import("../src/App");
+    const router = createMemoryRouter(routes, { initialEntries: [FIRST_RUN_PATH] });
+    const { container } = render(<RouterProvider router={router} />);
+
+    expect(headingOf(container)).toBe("Set up this system");
+    expect(container.querySelector("#first-run-setup_code-setup_code")).toBeNull();
+    press(container, "Sign in to begin");
+
+    await waitFor(() => expect(loaded.location.assign).toHaveBeenCalled());
+    const pending = JSON.parse(
+      sessionStorage.getItem(loaded.constants.PENDING_SIGN_IN_KEY) ?? "null",
+    ) as { returnTo: string };
+    expect(pending.returnTo).toBe(FIRST_RUN_PATH);
+    expect(loaded.location.lastAssigned().searchParams.get("response_type")).toBe("code");
+  });
+});
+
+describe("the whole of first run", () => {
+  test("the finished wizard appoints, signs in with the token, and lands on the console home", async () => {
+    // What breaks if this is deleted: M42.5.14 itself. The appointment's principal must reach
+    // the finishing screen with the same code and the held token as the bearer, in that order,
+    // and the person must end on the overview signed in rather than on a page asking them to
+    // do something else.
+    const { idp, seen } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH }),
+    });
+    const { container, router, landed } = await openFirstRun(idp);
+    expect(landed).toBe(FIRST_RUN_PATH);
+
+    await answerEverything(container);
+    press(container, "Set up this system");
+    await arriveAt(container, "Overview");
+
+    expect(seen.map((one) => one.path)).toEqual([APPOINTMENT_PATH, FINISH_PATH, "/api/v1/me"]);
+    expect(callsTo(seen, APPOINTMENT_PATH)[0]?.body).toEqual({
+      setup_code: CODE,
+      answers: {
+        company: { company_name: COMPANY, product_name: "", web_address: WEB, logo_url: "" },
+        administrator: { full_name: "NAME-SENTINEL", work_address: "first@example.invalid" },
+        staff_source: { staff_source: "spreadsheet" },
+        model_provider: { model_profile: "local", model_provider: "", provider_key: "" },
+      },
+      skipped: ["connections"],
+    });
+    const finishing = callsTo(seen, FINISH_PATH)[0];
+    expect(finishing?.body).toEqual({ setup_code: CODE, principal_id: PRINCIPAL });
+    expect(finishing?.authorization).toBe("Bearer ACCESS-TOKEN-1");
+    expect(router.state.location.pathname).toBe("/");
+  });
+
+  test("the setup code reaches no browser store and no address at any point", async () => {
+    // What breaks if this is deleted: the code in a store any script on the origin can read, or
+    // in an address that lands in history, a proxy's log and a referrer. It is the one value
+    // that makes whoever holds it the widest role on a fresh install, so it is looked for in
+    // every write to either store, in both stores at the end, and in every address the page
+    // held or was sent to.
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    const { idp } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH }),
+    });
+    const { container, router, loaded } = await openFirstRun(idp);
+    const addresses: string[] = [];
+    const stop = router.subscribe((state) => {
+      addresses.push(`${state.location.pathname}${state.location.search}${state.location.hash}`);
+    });
+
+    await answerEverything(container);
+    press(container, "Set up this system");
+    await arriveAt(container, "Overview");
+    stop();
+
+    for (const call of writes.mock.calls) {
+      expect(String(call[1])).not.toContain(CODE);
+    }
+    const stored = everythingInStorage();
+    expect([...stored.keys, ...stored.values].join("\n")).not.toContain(CODE);
+    expect(addresses.length).toBeGreaterThan(0);
+    expect(addresses.join("\n")).not.toContain(CODE);
+    expect(loaded.location.assign.mock.calls.map((call) => String(call[0])).join("\n")).not.toContain(
+      CODE,
+    );
+    expect(container.querySelector("form")).toBeNull();
+  });
+});
+
+describe("what a refusal is drawn as", () => {
+  test("problems with the answers are drawn beside the fields they name", async () => {
+    // What breaks if this is deleted: a 422 drawn as a banner, or against the wrong box. The
+    // route names a step and a field for each problem precisely so the sentence sits beside
+    // its input, and a person told "this is needed" at the top of a review of twenty answers
+    // has been told nothing they can act on.
+    const { idp, seen } = standIn({
+      appointment: () =>
+        json(
+          {
+            problems: [
+              { step: "company", field: "company_name", key: "setup.error.blank" },
+              { step: "company", field: "web_address", key: "setup.error.not_absolute" },
+              { step: "company", field: "", key: "setup.review.not_given" },
+            ],
+          },
+          422,
+        ),
+    });
+    const { container } = await openFirstRun(idp);
+    await answerEverything(container);
+    press(container, "Set up this system");
+    await arriveAt(container, "Your company");
+
+    const named = control(container, "company", "company_name");
+    expect(named.getAttribute("aria-invalid")).toBe("true");
+    const describedBy = named.getAttribute("aria-describedby") ?? "";
+    expect(container.querySelector(`#${describedBy}`)?.textContent).toBe(
+      catalogueEnglish("setup.error.blank"),
+    );
+    const web = control(container, "company", "web_address");
+    expect(container.querySelector(`#${web.getAttribute("aria-describedby") ?? ""}`)?.textContent).toBe(
+      catalogueEnglish("setup.error.not_absolute"),
+    );
+    // The sibling that proves the mapping is by field and not everything on the screen.
+    expect(control(container, "company", "product_name").getAttribute("aria-invalid")).not.toBe("true");
+    expect(container.querySelector(".first-run__step-problems")?.textContent).toBe(
+      catalogueEnglish("setup.review.not_given"),
+    );
+    expect(callsTo(seen, FINISH_PATH)).toEqual([]);
+  });
+
+  test("settings the install does not carry are named, and only named", async () => {
+    // What breaks if this is deleted: the one thing a person can do about a 409, which is set
+    // those names in the environment file. A console that dropped the list would say setup
+    // failed with no way forward, and one that echoed what was typed would put an answer
+    // beside a setting name as though it were the value to set.
+    const { idp, seen } = standIn({
+      appointment: () => json({ unkept: ["INSTALL_COMPANY_NAME", "INSTALL_OIDC_REDIRECT_URIS"] }, 409),
+    });
+    const { container } = await openFirstRun(idp);
+    await answerEverything(container);
+    press(container, "Set up this system");
+
+    await waitFor(() => expect(container.querySelector(".first-run__names")).not.toBeNull());
+    const notice = container.querySelector(".notice");
+    expect(notice?.querySelector(".notice__title")?.textContent).toBe("Set these in your environment");
+    expect([...(notice?.querySelectorAll(".first-run__names li") ?? [])].map((one) => one.textContent)).toEqual([
+      "INSTALL_COMPANY_NAME",
+      "INSTALL_OIDC_REDIRECT_URIS",
+    ]);
+    expect(notice?.textContent).not.toContain(COMPANY);
+    expect(notice?.textContent).not.toContain(WEB);
+    expect(headingOf(container)).toBe(REVIEW_TITLE);
+    expect(callsTo(seen, FINISH_PATH)).toEqual([]);
+  });
+
+  test("every refusal before the answers is one sentence that gives no reason", async () => {
+    // What breaks if this is deleted: the console turning one 404 back into several. The
+    // server makes a finished install, a wrong code and a lost race one answer so that whoever
+    // finds the address learns nothing, and a console that drew the body's words, or a
+    // helpful "check your code", would tell them which it was.
+    const drawn: string[] = [];
+    for (const message of ["REASON-ONE the code has expired", "REASON-TWO already administered"]) {
+      const { idp, seen } = standIn({
+        appointment: () => json({ message, trace_id: "T" }, 404),
+      });
+      const { container } = await openFirstRun(idp);
+      await answerEverything(container);
+      press(container, "Set up this system");
+      await waitFor(() => expect(container.querySelector(".notice")).not.toBeNull());
+
+      const body = container.querySelector(".notice .notice__body")?.textContent ?? "";
+      expect(body).toBe(SETUP_REFUSED_MESSAGE);
+      expect(container.textContent).not.toContain(message);
+      expect(container.querySelector(".notice__trace")).toBeNull();
+      expect(callsTo(seen, FINISH_PATH)).toEqual([]);
+      drawn.push(container.textContent ?? "");
+      document.body.innerHTML = "";
+    }
+    expect(drawn[0]).toBe(drawn[1]);
+    expect(SETUP_REFUSED_MESSAGE.toLowerCase()).not.toMatch(/code|expire|finish|administrator|already|wrong/);
+  });
+});

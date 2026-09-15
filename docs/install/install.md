@@ -107,11 +107,47 @@ The last step prints one value. **Until somebody enters it, the console has no a
 and whoever loads the address first becomes one.** A fresh server with an open wizard belongs
 to whoever finds it, and the window is however long it takes you to walk to your laptop.
 
-So: read the code off the terminal, open the console, and enter it on the first screen. It is
-required before any of the other screens can be reached, not only before the last one. The
-window it opens is measured from the instant the installer minted it, and nothing anywhere can
-reopen it: if it closes, reinstall rather than editing a date into the file, because a date
-typed now opens a window nobody minted.
+So: read the code off the terminal and open `/first-run` on your console's address, for example
+`https://brain.example.invalid/first-run`. Open that address, not the console's front page. The
+front page signs you in and then refuses you, because nobody is an administrator yet, and the
+console has deliberately no way to notice that the install is unfinished: a page that could
+tell would tell whoever found the address the same thing. Whatever serves the console has to
+send `/setup/` to the application exactly as it sends `/api/`, because the two requests first
+run makes are served there.
+
+First run is these screens, in this order.
+
+1. **Set up this system.** Sign in, with the identity provider account you will run the system
+   as. This comes before the code on purpose. The code is held in that browser tab's memory and
+   nowhere else, not in its storage and not in an address, and signing in is a trip to the
+   identity provider and back that would lose it. A sign-in that cannot work also fails here,
+   before anything is written.
+2. **Enter the setup code.** Paste the line the installer printed. It is not judged on this
+   screen: it is checked when you send the review, and before a word about your answers is.
+3. **Your company.**
+4. **The first administrator.**
+5. **Your staff list.**
+6. **How questions are answered.**
+7. **Data sources.** The only screen you may skip.
+8. **Check this before anything is written.** The review. Sending it appoints you as the first
+   administrator, signs that sign-in in, and lands you on the console's overview.
+
+When sending the review does not land you on the overview, you see one of three things.
+
+- **A sentence beside a box.** An answer has a problem, and you are taken back to the screen it
+  is on. Nobody has been appointed.
+- **Set these in your environment**, with a list of setting names. The system checks every
+  setting your answers imply against the environment the install is already running with, and
+  writes none of them. Set each named value in `/opt/brain/.env` to what you answered, restart,
+  and send the review again. Nobody has been appointed. The names are all it shows: never a
+  value.
+- **Setup did not continue**, with one sentence and no reason. That is every refusal of the
+  code: wrong, blank, expired, an install that already has an administrator. It is one sentence
+  for all of them on purpose, so it cannot tell somebody who found the address which it was.
+
+The window the code opens is measured from the instant the installer minted it, and nothing
+anywhere can reopen it: if it closes, reinstall rather than editing a date into the file,
+because a date typed now opens a window nobody minted.
 
 Re-running the installer prints the same code again. That is not a leak: anybody who can run
 the installer already has a shell on the server and could read the file directly.
@@ -123,9 +159,10 @@ approve the review screen**. A wizard that committed each screen as it went coul
 corrected, and the company name mistyped on screen two would be discovered on screen seven, by
 which time it is in the branding, in the realm and in the first notification you send.
 
-Closing the browser halfway does not start the install again. It continues where it stopped,
-except that a provider key is asked for a second time: the draft it resumes from deliberately
-does not keep one.
+**Closing or reloading the tab halfway starts the screens again, and what you typed is gone.**
+The code and the answers live in that one page and nowhere else. The system has a saved draft to
+resume from, and the console is not served it yet, so there is nothing to continue from. Nothing
+was written, so starting again is safe. Signing in again is part of starting again.
 
 The moment the first administrator exists, the wizard becomes unreachable. Not hidden:
 unreachable. Hiding it would leave an unauthenticated route to the widest role in the system

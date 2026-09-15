@@ -285,8 +285,12 @@ on a shared machine is not a sign-out at all.
 
 ## Routing and layout
 
-`createBrowserRouter` with three top-level routes: the callback, the signed-out page, and
-everything else behind `RequireSession` inside the shell.
+`createBrowserRouter` with four top-level routes: the callback, the signed-out page, first run at
+`/first-run`, and everything else behind `RequireSession` inside the shell. First run sits
+outside the guard and signs in before it asks for the setup code, because the code is held in
+memory only and the sign-in redirect would end that memory; `src/pages/FirstRun.tsx` argues it.
+The dev server proxies `/setup` beside `/api`, because the wizard's two routes are served
+outside the API prefix.
 
 Inside the shell there are three: the overview at `/`, the records screen at `/records` and
 `/records/{entity}`, and the console's own not-found page. The records screen is the only one

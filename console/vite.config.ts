@@ -57,6 +57,13 @@ export default defineConfig(({ mode }) => {
           target: apiTarget,
           changeOrigin: false,
         },
+        // The setup wizard's two routes, which the API serves outside its prefix because they
+        // take a setup code rather than a token. The console's own first-run page is at
+        // `/first-run`, so this prefix names nothing the console draws.
+        "/setup": {
+          target: apiTarget,
+          changeOrigin: false,
+        },
       },
     },
     build: {

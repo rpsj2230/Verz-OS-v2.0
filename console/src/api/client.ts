@@ -33,9 +33,15 @@ import { config } from "../config";
 import { accessToken, forgetSession } from "../auth/session";
 import { failureFrom, transportFailure, type ApiFailure } from "./errors";
 
+/**
+ * `body` on a failure is the parsed response, for the two routes whose refusal is a document
+ * rather than a sentence: the setup appointment's 422 carries problems by field and its 409
+ * carries setting names. It is never rendered by this module and never replaces `failure`,
+ * whose message stays the only text a caller may show without reading a schema.
+ */
 export type ApiResult<T> =
   | { readonly ok: true; readonly data: T }
-  | { readonly ok: false; readonly failure: ApiFailure };
+  | { readonly ok: false; readonly failure: ApiFailure; readonly body: unknown };
 
 export interface RequestOptions {
   /**
@@ -47,6 +53,14 @@ export interface RequestOptions {
   readonly method?: "GET" | "POST" | "PATCH";
   readonly body?: unknown;
   readonly signal?: AbortSignal;
+  /**
+   * The path is at the API's root rather than under its versioned base. True only for the
+   * setup wizard's two routes, `/setup/appointment` and `/setup/sign-in`, which
+   * `brain.setup_routes` serves outside the prefix because they take a setup code rather than
+   * a token. The root is the base's origin when the base is a whole URL, and this origin when
+   * it is a path, which is the same-origin shape the README describes.
+   */
+  readonly atRoot?: boolean;
 }
 
 /**
@@ -54,7 +68,10 @@ export interface RequestOptions {
  * Joined rather than concatenated blindly so that a base of `/api/v1` and a base of
  * `https://api.example.com/api/v1` behave the same way.
  */
-function urlFor(path: string): string {
+function urlFor(path: string, atRoot: boolean): string {
+  if (atRoot) {
+    return config.apiBaseUrl.startsWith("/") ? path : `${new URL(config.apiBaseUrl).origin}${path}`;
+  }
   const base = config.apiBaseUrl.endsWith("/")
     ? config.apiBaseUrl.slice(0, -1)
     : config.apiBaseUrl;
@@ -76,7 +93,7 @@ export async function request<T>(
 
   let response: Response;
   try {
-    response = await fetch(urlFor(path), {
+    response = await fetch(urlFor(path, options.atRoot === true), {
       method: options.method ?? "GET",
       headers,
       // The console authenticates with a bearer token and nothing else. Omitting ambient
@@ -87,7 +104,7 @@ export async function request<T>(
       ...(options.signal ? { signal: options.signal } : {}),
     });
   } catch (error) {
-    return { ok: false, failure: transportFailure(error) };
+    return { ok: false, failure: transportFailure(error), body: null };
   }
 
   if (response.status === 401) {
@@ -101,7 +118,7 @@ export async function request<T>(
 
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
-    return { ok: false, failure: failureFrom(response, payload) };
+    return { ok: false, failure: failureFrom(response, payload), body: payload };
   }
   // The one unchecked step, and it is the boundary this function exists to be: the shape
   // was described by the API's own document and the caller named the type from it. Nothing

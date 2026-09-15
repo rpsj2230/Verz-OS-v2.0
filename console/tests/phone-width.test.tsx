@@ -40,6 +40,7 @@ import { createMemoryRouter, RouterProvider, type RouteObject } from "react-rout
 import { render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../src/auth/constants";
+import { FIRST_RUN_PATH } from "../src/setup/wizard";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
   CONSOLE_SHEETS,
@@ -244,6 +245,7 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     answers: {},
   },
   [SIGNED_OUT_PATH]: { address: SIGNED_OUT_PATH, signedIn: false, drawsValues: false, answers: {} },
+  [FIRST_RUN_PATH]: { address: FIRST_RUN_PATH, signedIn: false, drawsValues: false, answers: {} },
 };
 
 const SHELL_PATTERNS = Object.keys(PAGES).filter((pattern) => PAGES[pattern]?.signedIn);
