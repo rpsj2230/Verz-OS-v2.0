@@ -2,40 +2,20 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**12 items are open: five actions of yours, and seven decisions, six of which unblock leaves.**
-You answered twenty items over 2026-09-09 and 2026-09-10 and every answer has been built,
-verified by mutation and pushed. The two decisions were found on 2026-09-14 while finishing
-waves 0 to 3, and each comes with a recommendation, so one letter each is enough.
+**6 items are open: three decisions, two short actions of yours, and one question about your
+server.** You answered seven items on 2026-09-16 (60, 59, 57, 56, 55, 51 and 32), and every answer
+that unblocks work is being built now.
 
-**Two are decisions.** Item 56: when an automation runs with nobody present, whose permissions
-it uses. I recommend it runs as its owner. Item 55: where the record matcher's two new packages
-live. I recommend an image of their own, as with the models.
+**Three are decisions, one letter each.** Item 61: whether the administrative consoles move behind
+an SSH tunnel. I recommend A. Item 58, rewritten in plain words: nine "plug-in points" in the plan.
+I recommend B. Item 42, now a decision: remove the GitHub deploy step that needs three secrets,
+because your server already deploys itself. I recommend A, and it needs nothing from you.
 
-**Four are one action each and all four are settings pages or a terminal.**
+**Two are actions.** Item 52: one repository variable in GitHub. Item 49: three lines to paste
+on your server, with exact copy-and-paste steps.
 
-Item 42: the three deploy secrets exist on the repository and arrive empty, so they were saved
-with empty values. Click **Update** on each of the three and re-paste. Two of the values are in
-the item; only the token needs finding.
-
-Item 49: the service identifier on your server holds the wrong value, because this page told
-you to copy it from an address bar that carries three of them. One command, and the corrected
-one reads the value off the server rather than having it typed in.
-
-Item 52: two workflow files carry your server's address. One repository variable and I remove
-them.
-
-Item 51: every container defaults to the `latest` image, so an install that pins nothing is not
-pinned. Three numbered steps and the first changes nothing about what runs.
-
-**One is two pieces of housekeeping inside your identity provider.** Item 32: Keycloak is up,
-healthy and signed into. A temporary account should be deleted and one password rotated. I hold
-no credentials for it and should not.
-
-**What the page looks like underneath.** Nineteen items have been answered and closed, and the
-answered section keeps each decision as it was made rather than as the code turned out, with a
-note appended where the facts have since moved. Two of them, 53 and 54, are the record of this
-machine's Application Control policy blocking four different things over three days, and of
-what fixes it, because the same policy will refuse the next unsigned binary anything installs.
+**One is a question about your server.** Item 62: Keycloak shows "Starting". Two read-only
+commands tell us why.
 
 # Open
 
@@ -71,185 +51,73 @@ somebody picks under time pressure.
 tunnel is one command for them. The cost of exposing them is the whole server. The installer would
 bind them to loopback by default and print the tunnel command at the end of setup.
 
-## 60. The backup ladder the plan asks for keeps copies for a year, and every erasure certificate promises 35 days
-
-**What you decide: one letter. I recommend Option A.**
-
-M30.3.5 asks for thirty daily, twelve weekly and twelve monthly backups. Kept that way, the oldest
-copy is 372 days old. But `BACKUP_RETENTION_DAYS` is 35, the backups bucket expires copies at 35
-days, and `brain.ops.erasure.backup_horizon` uses that number to tell a person when their deleted
-data is beyond backup reach. A 372-day ladder would make every one of those certificates false.
-`brain.ops.recovery` already refuses the ladder for this reason, and the selection that keeps the
-tiers is built with a guard: it refuses the full ladder unless a caller states a horizon of at
-least 372 days. Nothing prunes backups today except the bucket's own 35-day rule.
-
-**Option A (recommended): keep the 35-day promise, and change the ladder to fit inside it.**
-Thirty daily copies plus weekly copies to day 35. An erasure is honoured within five weeks, which is
-the promise a data protection reviewer will read, and a fault noticed at month end can still be
-restored from before it began, which was the reason for 35 days in the first place.
-
-**Option B: keep the full ladder, and change the promise to 372 days.** A year of recovery points,
-and every certificate then says a deletion reaches backups after a year. That is lawful if said
-plainly, and it is a harder answer to give a client whose staff asked to be forgotten.
-
-**Option C: keep both, by erasing from backups.** Rewrite retained copies when someone is erased.
-It is the most work by far, and it makes the backup a thing that changes after it was taken, which
-undermines what a backup is for.
-
-**Why A.** The 35 days is already a promise the product makes in writing; the ladder is a line in a
-plan. When the two disagree, the promise wins, and the plan's line is the one that should move.
-
-## 59. "Most expensive question shapes" needs one field that links a cost to the request it paid for
+## 58. Nine "plug-in points" in the plan: build empty sockets for them now, or mark them as not needed yet
 
 **What you decide: one letter. I recommend Option B.**
 
-M21.3.4 asks for the most expensive agents and question shapes. The agents half exists:
-`brain.console.spend_view.dearest` lists them. The question-shapes half cannot be built honestly,
-because nothing records a question's shape next to what it cost. Measured on 2026-09-15: the spend
-record `brain.ops.spend.Actual` has no such field, and the only table of spend rows,
-`ops.spend_actual`, mirrors it. The trace ledger's `tool_count` is never set, and a fan-out plan
-exists only while a request is being estimated. So there is no join from "this cost" to "a question
-that fanned out to five sources", and inventing a shape field without deciding what shape means
-would produce a report nobody could check.
+**In plain words.** The plan lists nine places where somebody could one day swap in their own
+part of the system: a different search engine, a different login provider, a different way of
+exporting data, and six more like them. Making a place "pluggable" means writing down the exact
+shape a replacement part must have, like the shape of a socket.
 
-**Option A: record the shape on every spend row.** Add fan-out and tool count to `Actual` and its
-table. It is the simplest join, and it copies facts the trace already owns into a second place,
-where they will drift.
+Nobody has built a replacement part for any of the nine. The code already has one list that
+decides which places are allowed to be plug-in points, and it answers these nine:
 
-**Option B (recommended): link each spend row to its trace, and read the shape from the trace.**
-Add one field, the trace id, to `Actual` and its table. The trace ledger then records the shape of
-the request that produced it, and the report joins the two. The shape stays in one place, and the
-same link answers other questions later, such as "what did this refused request cost".
+- **Six of them should not get a socket yet.** A socket that nothing plugs into makes the system
+  look more flexible than it is, and it still has to be kept working. The list says: write the
+  socket on the day a real replacement part exists, and use that part to test it.
+- **The other three are already handled as settings, not plug-ins.** For example, which login
+  provider you use is a choice made during setup. Calling it a plug-in would suggest an outside
+  developer can replace it with their own code, which is not true.
 
-**Option C: drop question shapes from the leaf.** The agents half is closed as it stands, and the
-report never ranks questions.
+**Option A: build all nine sockets now.** Nine tasks close on the tracker, and you own nine
+empty sockets that nothing uses and somebody has to maintain.
 
-**Why B.** One field, no copied facts, and a join that can be tested end to end. The cost is that the
-trace ledger has to start recording tool count and fan-out, which is small work once you choose it.
+**Option B (recommended): record the list's answer as the decision.** The nine tasks are marked
+"decided, not needed as written", the same way the 39 client tasks were taken out of the
+percentage, so they stop showing as unfinished work. A socket gets built the day a real
+replacement part needs one.
 
-## 58. Nine plugin interfaces: define contracts nothing implements yet, or record that these points are not plugins
+**Option C: leave all nine open** until a client asks for one. Nothing is built either way, but
+the nine stay on the tracker as unfinished for as long as nobody asks.
 
-**What you decide: one letter. I recommend Option B.**
+**Why B.** The answer already exists in the code, it avoids building things nobody uses, and the
+tracker then counts only real work.
 
-The work breakdown lists an interface for each of nine extension points: the retriever
-(M29.1.6), entity resolver (M29.1.8), verifier (M29.1.9), guard (M29.1.10), storage backend
-(M29.1.11), identity provider (M29.1.13), approver surface (M29.1.14), export format (M29.1.15)
-and scope pack (M29.1.16). The extension-point register in `brain.plugins.points` already answers
-for each point, and it disagrees with building them as they stand:
+## 42. Deploying from GitHub needs three secrets, but your server already deploys itself, so I recommend removing that step instead
 
-- **Six have no contract at all**, and the register refuses to add one. Its reason is recorded in
-  `A_PROTOCOL_NOTHING_IMPLEMENTS_MAKES_THE_REGISTER_COMPLETE_AND_WORSE`: a protocol nobody implements
-  makes the register look complete while nothing can plug in. Those six are the retriever, entity
-  resolver, verifier, guard, approver surface and export format.
-- **Three interfaces exist** (`StorageBackend`, `StaffSource` for the identity provider,
-  `CapabilityPack` for scope packs), but the register classes those points as configuration or
-  feature flags, not plugins. Claiming them would tell the tracker a third party can plug in there,
-  which the register says they cannot.
+**What you decide: one letter. I recommend Option A, and it needs nothing from you.**
 
-**Option A: define all nine as plugin contracts now.** The percentage moves by nine. You would own
-nine protocols with no implementation, and the register's own argument says that is worse than
-not having them.
+**In plain words.** New code reaches your server in two ways, and only one of them has ever
+worked:
 
-**Option B (recommended): record the register's answer as the decision.** Mark the nine leaves as
-decided, not buildable as written, the way the migration-week tasks were marked in item 50, so the
-tracker stops counting them as work. Each point then gets a contract the day a first real plugin
-for it exists, and that plugin is its test.
+- **Your server deploys itself.** A timer on the server checks for a newly built version every two
+  minutes and installs it. Every deploy so far has come this way.
+- **GitHub also tries to tell your deployment panel (Coolify) to deploy.** That step has never
+  worked. It needs three secrets that were saved empty, and the panel is not reachable from the
+  internet anyway, because its port is firewalled, which is correct (see item 61).
 
-**Option C: build contracts one at a time as clients ask.** The same as B in practice, except the
-nine leaves stay open on the tracker until each is asked for.
+You asked me to re-enter the three secrets myself. I am not able to type passwords, tokens or other
+secrets into GitHub on anyone's behalf, including with your permission, so that fix would have to
+be yours. There is a better fix that needs no secret at all.
 
-**Why B.** It keeps the one place that decides what may plug in honest, and it stops nine leaves from
-reading as unfinished work when the answer already exists in the code.
+**Option A (recommended): remove the GitHub step.** I delete it from the deploy workflow and
+record the server's own two-minute check as the way this system deploys. No secrets are stored in
+GitHub, the deployment panel stays private, and nothing changes about how deploys actually happen
+today. This is also what the plan asks for in M30.2.4, "pull-based deployment so the server needs
+no inbound access".
 
-## 57. The GitHub repository is public, and the work breakdown says it should be private
+**Option B: keep the GitHub step and make it work.** You would have to open the deployment panel
+to GitHub and re-enter the three secrets yourself:
 
-**What you decide: one letter. I recommend Option A.**
+1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
+2. Click **Update** beside `COOLIFY_URL` and paste your Coolify panel's address.
+3. Click **Update** beside `COOLIFY_SERVICE_UUID` and paste the identifier item 49 prints.
+4. Click **Update** beside `COOLIFY_TOKEN` and paste a Coolify API token (Coolify, your avatar,
+   **Keys & Tokens**, **API tokens**, create one with deploy permission, copy it when shown).
 
-Measured on 2026-09-14 with the GitHub API: `rpsj2230/Verz-OS-v2.0` reports `visibility: public`.
-Anybody on the internet can read the whole product, every commit message, and the history item 52
-describes, which carries your server's hostname in three older commits. M0.1.1, the first leaf
-of the work breakdown, says "private GitHub repo, branch protection, CODEOWNERS". CODEOWNERS is
-done. The other two are settings only the repository owner can change, and my token can read the
-repository but cannot administer it, so I cannot tell whether `main` has branch protection: that
-setting answers "not found" to anybody without admin rights. No rulesets are visible.
-
-**Option A (recommended): make it private and protect `main`.**
-1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings`.
-2. At the bottom, under **Danger Zone**, click **Change visibility**, choose **Make private**, and
-   confirm by typing the repository name.
-3. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/branches`, click **Add classic
-   branch protection rule**, type `main` as the branch name pattern, tick **Require status checks
-   to pass before merging** and choose the `CI` checks, then click **Create**.
-4. Tell me, and I check both from here and close M0.1.1 honestly.
-
-Private repositories on a free personal plan still run GitHub Actions, within a monthly minutes
-allowance, so CI and the deploy keep working. Step 3's status check does not block pushes made
-directly to `main` unless you also tick the setting that includes administrators; leave that
-unticked until you want it, because every change so far has been pushed straight to `main`.
-
-**Option B: keep it public on purpose.** Reasonable if the product is meant to be open. Then say
-so, and I reword M0.1.1 rather than leave a first leaf that is false.
-
-**Why A.** Nothing here was written to be published. Item 52 already argues that a client should
-never receive a copy of this repository, and a public repository is a copy anybody can take.
-
-## 56. When an automation runs with nobody present, it has to run as somebody, and nothing says who
-
-**What you decide: one letter. I recommend Option A.**
-
-An automation runs after its trigger fires: on a schedule, on a new record, sometimes long after
-the person who built it has gone home. Every rule in this system says what a person may do, so a
-step an automation takes has to be taken as somebody, and today nothing says who. That single
-gap is what stops M32.6.1.3, the piece that lets automation steps call this system's tools
-through the gate, from being built.
-
-**Option A (recommended): it runs as the person who owns it, narrowed by the automation's own
-limit.** It can never do more than its owner may do, and never more than the automation
-declares. When the owner leaves or loses a permission, the automation loses it at the same
-moment, because removing a permission here is deleting a grant and there is no second copy
-anywhere to forget. An automation whose owner has gone would stop and ask for a new owner
-rather than carry on. `brain.ops.automation.flow_reach` already computes exactly this
-narrowing: it takes the person as a parameter, and this decision is who that person is.
-
-**Option B: a credential issued to the trigger.** The automation carries its own key. It keeps
-working when people leave, which is the risk as much as the benefit: nobody's departure ever
-narrows it, and a copied key works without anybody behind it.
-
-**Option C: a service account with permissions of its own.** Tidy, and what most automation
-tools do. It is also a holder of permissions that is not a person, which this system is built
-not to have: an agent here is a lens over somebody's permissions and never a holder of its
-own, and a service account is exactly a holder nobody is responsible for.
-
-**Why A.** It is the only option where "who is responsible for what this automation did" has a
-person as its answer, and where removing a person's access removes everything acting for them
-without a list to remember. The cost is real and worth accepting: an automation stops when its
-owner leaves, and somebody has to adopt it. That is a failure you see. B and C fail in ways you
-do not.
-
-## 55. The record matcher needs two new packages, and I recommend they live in their own image
-
-**What you decide: one letter. I recommend Option A.**
-
-When two systems both hold the same client, this system has to decide whether the two records
-are one company. The rest of that work is built and tested in `brain.resolution`, including the
-arithmetic a probabilistic matcher performs. What M14.4.1 asks for is the matcher itself:
-Splink, run over an export held in DuckDB. Neither package is a dependency today, and adding
-them is the same kind of decision you made in item 31 about the model stack.
-
-**Option A (recommended): a separate offline image**, the way the models run beside the
-application rather than inside it. It would read an export and produce match suggestions for a
-person to confirm, and it would never run on the path that answers a question, so
-`tests/invariants/test_no_ml_on_the_request_path.py` stays true without anybody remembering it.
-
-**Option B: add both packages to the application image.** The least wiring, and every install
-then carries a matcher it may never use, inside the process that serves every request.
-
-**Option C: not yet.** Probabilistic matching earns its place when a client has enough
-duplicated records that exact rules miss them, and no install has that data yet. Nothing is
-lost by waiting, and A is still the shape when you want it.
-
-**Why A.** It keeps the line you drew in item 31: heavy analysis lives beside the application,
-never inside it. If you would rather see real duplicates first, C costs nothing today.
+**Why A.** It already works, it needs no secret, and it keeps the most powerful console on your
+server off the internet.
 
 ## 52. Two workflow files carry your server's address, and one repository variable removes them
 
@@ -296,8 +164,216 @@ published yet. Until it is, a copy of this repository is the only way the files 
 which is why your question had teeth. Publishing that archive is `M42.3.8` and it is being
 built now, with a check that fails if a client value ever reaches it.
 
+**Your answer, 2026-09-16:** go with the recommendation. The step above is yours, because my GitHub access can read this repository but cannot change its settings. Tell me when the variable exists and I remove the address from both workflow files.
 
-## 51. Every container defaults to `latest`, and the fix stops your automatic deploy until you set one value
+## 49. The service identifier on your server is written, and the value in it is the wrong one
+
+**What you do: paste three lines, in this order. It takes about a minute.**
+
+**Where to run it.** On your own computer, in PowerShell.
+
+1. Connect to your server. In PowerShell, paste this and press Enter:
+
+   ```
+   ssh verz-vps
+   ```
+
+   The prompt changes to your server's. Everything below runs there, not on your computer.
+
+2. Write the correct identifier. Paste this and press Enter:
+
+   ```
+   sudo docker ps --format '{{.Names}}' | sed -n 's/^app-//p' | head -1 | sudo tee /root/.coolify-service-uuid
+   ```
+
+   It prints one line of letters and numbers. That is the identifier, now saved.
+
+3. Check it. Paste this and press Enter:
+
+   ```
+   u=$(sudo cat /root/.coolify-service-uuid); echo "$u"; sudo test -d /data/coolify/services/"$u" && echo 'that service exists' || echo WRONG
+   ```
+
+   It should end with `that service exists`. If it says `WRONG`, stop and tell me what it printed.
+
+4. Type `exit` and press Enter to leave the server.
+
+Then tell me what step 3 printed.
+
+**What went wrong.** This item used to tell you to copy the identifier out of Coolify's address
+bar. That address holds several identifiers (the project, the environment and the service), and
+the one copied was not the service. The server's own container names carry the right one, which
+is what step 2 reads.
+
+**Why a wrong value is worse than an empty file.** `brain-deploy` builds its paths from this
+value. With a wrong one, every check it makes reads as "not running yet", so it looks like it is
+working when it is not. An empty file makes it refuse and say so.
+
+**Nothing is broken today.** The deploy scripts on the server were installed with the old value
+built in, so deploys keep working. The file only matters when those scripts are reinstalled.
+
+## 62. Keycloak shows "Starting" on your server, and two commands will tell us why
+
+**What you do: paste two lines and send me what they print.**
+
+You saw `quay.io/keycloak/keycloak:26.0` showing **Starting**. I am not allowed to connect to your
+live server from here, so this needs you. It is read-only: nothing below changes anything.
+
+**Where to run it.** On your own computer, in PowerShell.
+
+1. Connect to your server:
+
+   ```
+   ssh verz-vps
+   ```
+
+2. See the Keycloak containers and their status:
+
+   ```
+   sudo docker ps -a --filter name=keycloak --format '{{.Names}}  {{.Status}}'
+   ```
+
+3. See the last lines Keycloak wrote:
+
+   ```
+   sudo docker logs --tail 60 $(sudo docker ps -a --filter name=keycloak --format '{{.Names}}' | grep -v -i db | head -1)
+   ```
+
+4. Type `exit`, then paste what steps 2 and 3 printed into our conversation.
+
+**What I expect to find.** Keycloak can be running perfectly well and still be reported as
+"starting" for ever, if the check that asks "are you healthy?" uses a tool the Keycloak 26 image
+does not contain. If step 3 shows a line like `Keycloak 26.0 ... started in`, sign-in works and
+only that health check needs changing, which I can do in the repository. If it shows an error, the
+lines tell us what to fix.
+
+# Answered
+
+## 60. The backup ladder the plan asks for keeps copies for a year, and every erasure certificate promises 35 days - DECIDED: Option A, the backup ladder fits inside the 35-day promise
+
+**Your answer, 2026-09-16:** Option A. Being built now.
+
+**What you decide: one letter. I recommend Option A.**
+
+M30.3.5 asks for thirty daily, twelve weekly and twelve monthly backups. Kept that way, the oldest
+copy is 372 days old. But `BACKUP_RETENTION_DAYS` is 35, the backups bucket expires copies at 35
+days, and `brain.ops.erasure.backup_horizon` uses that number to tell a person when their deleted
+data is beyond backup reach. A 372-day ladder would make every one of those certificates false.
+`brain.ops.recovery` already refuses the ladder for this reason, and the selection that keeps the
+tiers is built with a guard: it refuses the full ladder unless a caller states a horizon of at
+least 372 days. Nothing prunes backups today except the bucket's own 35-day rule.
+
+**Option A (recommended): keep the 35-day promise, and change the ladder to fit inside it.**
+Thirty daily copies plus weekly copies to day 35. An erasure is honoured within five weeks, which is
+the promise a data protection reviewer will read, and a fault noticed at month end can still be
+restored from before it began, which was the reason for 35 days in the first place.
+
+**Option B: keep the full ladder, and change the promise to 372 days.** A year of recovery points,
+and every certificate then says a deletion reaches backups after a year. That is lawful if said
+plainly, and it is a harder answer to give a client whose staff asked to be forgotten.
+
+**Option C: keep both, by erasing from backups.** Rewrite retained copies when someone is erased.
+It is the most work by far, and it makes the backup a thing that changes after it was taken, which
+undermines what a backup is for.
+
+**Why A.** The 35 days is already a promise the product makes in writing; the ladder is a line in a
+plan. When the two disagree, the promise wins, and the plan's line is the one that should move.
+
+## 59. "Most expensive question shapes" needs one field that links a cost to the request it paid for - DECIDED: Option B, each cost links to the request it paid for
+
+**Your answer, 2026-09-16:** Option B. Being built now.
+
+**What you decide: one letter. I recommend Option B.**
+
+M21.3.4 asks for the most expensive agents and question shapes. The agents half exists:
+`brain.console.spend_view.dearest` lists them. The question-shapes half cannot be built honestly,
+because nothing records a question's shape next to what it cost. Measured on 2026-09-15: the spend
+record `brain.ops.spend.Actual` has no such field, and the only table of spend rows,
+`ops.spend_actual`, mirrors it. The trace ledger's `tool_count` is never set, and a fan-out plan
+exists only while a request is being estimated. So there is no join from "this cost" to "a question
+that fanned out to five sources", and inventing a shape field without deciding what shape means
+would produce a report nobody could check.
+
+**Option A: record the shape on every spend row.** Add fan-out and tool count to `Actual` and its
+table. It is the simplest join, and it copies facts the trace already owns into a second place,
+where they will drift.
+
+**Option B (recommended): link each spend row to its trace, and read the shape from the trace.**
+Add one field, the trace id, to `Actual` and its table. The trace ledger then records the shape of
+the request that produced it, and the report joins the two. The shape stays in one place, and the
+same link answers other questions later, such as "what did this refused request cost".
+
+**Option C: drop question shapes from the leaf.** The agents half is closed as it stands, and the
+report never ranks questions.
+
+**Why B.** One field, no copied facts, and a join that can be tested end to end. The cost is that the
+trace ledger has to start recording tool count and fan-out, which is small work once you choose it.
+
+## 56. When an automation runs with nobody present, it has to run as somebody, and nothing says who - DECIDED: Option A, an automation runs as the person who owns it
+
+**Your answer, 2026-09-16:** Option A. This unblocks M32.6.1.3, the piece that lets automation steps call this system's tools, which is queued to be built.
+
+**What you decide: one letter. I recommend Option A.**
+
+An automation runs after its trigger fires: on a schedule, on a new record, sometimes long after
+the person who built it has gone home. Every rule in this system says what a person may do, so a
+step an automation takes has to be taken as somebody, and today nothing says who. That single
+gap is what stops M32.6.1.3, the piece that lets automation steps call this system's tools
+through the gate, from being built.
+
+**Option A (recommended): it runs as the person who owns it, narrowed by the automation's own
+limit.** It can never do more than its owner may do, and never more than the automation
+declares. When the owner leaves or loses a permission, the automation loses it at the same
+moment, because removing a permission here is deleting a grant and there is no second copy
+anywhere to forget. An automation whose owner has gone would stop and ask for a new owner
+rather than carry on. `brain.ops.automation.flow_reach` already computes exactly this
+narrowing: it takes the person as a parameter, and this decision is who that person is.
+
+**Option B: a credential issued to the trigger.** The automation carries its own key. It keeps
+working when people leave, which is the risk as much as the benefit: nobody's departure ever
+narrows it, and a copied key works without anybody behind it.
+
+**Option C: a service account with permissions of its own.** Tidy, and what most automation
+tools do. It is also a holder of permissions that is not a person, which this system is built
+not to have: an agent here is a lens over somebody's permissions and never a holder of its
+own, and a service account is exactly a holder nobody is responsible for.
+
+**Why A.** It is the only option where "who is responsible for what this automation did" has a
+person as its answer, and where removing a person's access removes everything acting for them
+without a list to remember. The cost is real and worth accepting: an automation stops when its
+owner leaves, and somebody has to adopt it. That is a failure you see. B and C fail in ways you
+do not.
+
+## 55. The record matcher needs two new packages, and I recommend they live in their own image - DECIDED: Option A, the record matcher gets its own offline image
+
+**Your answer, 2026-09-16:** Option A. This unblocks M14.4.1, which is queued to be built.
+
+**What you decide: one letter. I recommend Option A.**
+
+When two systems both hold the same client, this system has to decide whether the two records
+are one company. The rest of that work is built and tested in `brain.resolution`, including the
+arithmetic a probabilistic matcher performs. What M14.4.1 asks for is the matcher itself:
+Splink, run over an export held in DuckDB. Neither package is a dependency today, and adding
+them is the same kind of decision you made in item 31 about the model stack.
+
+**Option A (recommended): a separate offline image**, the way the models run beside the
+application rather than inside it. It would read an export and produce match suggestions for a
+person to confirm, and it would never run on the path that answers a question, so
+`tests/invariants/test_no_ml_on_the_request_path.py` stays true without anybody remembering it.
+
+**Option B: add both packages to the application image.** The least wiring, and every install
+then carries a matcher it may never use, inside the process that serves every request.
+
+**Option C: not yet.** Probabilistic matching earns its place when a client has enough
+duplicated records that exact rules miss them, and no install has that data yet. Nothing is
+lost by waiting, and A is still the shape when you want it.
+
+**Why A.** It keeps the line you drew in item 31: heavy analysis lives beside the application,
+never inside it. If you would rather see real duplicates first, C costs nothing today.
+
+## 51. Every container defaults to `latest`, and the fix stops your automatic deploy until you set one value - DONE on your side: APP_IMAGE is already set
+
+**Your answer, 2026-09-16:** the value is already there. My step, making the compose files require the variable rather than default it, follows.
 
 **The decision.** Should an install that sets nothing run whatever `latest` points at, or should
 it refuse to start until somebody names a version? One of those is what you have today.
@@ -353,102 +429,43 @@ one install and you are the person publishing the images. It stops being fine at
 client, because "hold this client back on last month's release" is then a fork rather than a
 setting, which is the thing M42.1.4 exists to prevent.
 
-## 49. The service identifier on your server is written, and the value in it is the wrong one
+## 57. The GitHub repository is public, and the work breakdown says it should be private - CLOSED: you will make the repository private later
 
-**One command, and it corrects a value my own instructions sent you to the wrong place for.**
+**Your answer, 2026-09-16:** closed, and you will change the visibility later. M0.1.1 stays open on the tracker until the repository is actually private, because that is what the task says.
 
-```
-ssh <your server> "docker ps --format '{{.Names}}' | sed -n 's/^app-//p' \
-  | head -1 > /root/.coolify-service-uuid"
-```
+**What you decide: one letter. I recommend Option A.**
 
-Then, to see it took:
+Measured on 2026-09-14 with the GitHub API: `rpsj2230/Verz-OS-v2.0` reports `visibility: public`.
+Anybody on the internet can read the whole product, every commit message, and the history item 52
+describes, which carries your server's hostname in three older commits. M0.1.1, the first leaf
+of the work breakdown, says "private GitHub repo, branch protection, CODEOWNERS". CODEOWNERS is
+done. The other two are settings only the repository owner can change, and my token can read the
+repository but cannot administer it, so I cannot tell whether `main` has branch protection: that
+setting answers "not found" to anybody without admin rights. No rulesets are visible.
 
-```
-ssh <your server> "u=\$(cat /root/.coolify-service-uuid); echo \"\$u\"; \
-  test -d /data/coolify/services/\"\$u\" && echo 'that service exists' || echo WRONG"
-```
+**Option A (recommended): make it private and protect `main`.**
+1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings`.
+2. At the bottom, under **Danger Zone**, click **Change visibility**, choose **Make private**, and
+   confirm by typing the repository name.
+3. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/branches`, click **Add classic
+   branch protection rule**, type `main` as the branch name pattern, tick **Require status checks
+   to pass before merging** and choose the `CI` checks, then click **Create**.
+4. Tell me, and I check both from here and close M0.1.1 honestly.
 
-**What went wrong.** This item used to tell you to copy the identifier out of Coolify's address
-bar. That address holds several identifiers, one for the project, one for the environment and
-one for the service, and the one you copied was not the service. Measured on your own server
-on 2026-09-09: `/data/coolify/services/` holds two directories, the Brain stack and
-Keycloak, and the value in the file matched neither. `docker ps` names the application
-and database containers after the right one, with `app-` and `db-` in front, which is
-the same identifier a second way and is what the command above reads.
+Private repositories on a free personal plan still run GitHub Actions, within a monthly minutes
+allowance, so CI and the deploy keep working. Step 3's status check does not block pushes made
+directly to `main` unless you also tick the setting that includes administrators; leave that
+unticked until you want it, because every change so far has been pushed straight to `main`.
 
-**Why the wrong value is worse than an empty file.** `brain-deploy` builds
-`/data/coolify/services/$UUID` and `app-$UUID` from it. With a wrong identifier the directory
-does not exist and `docker inspect` prints nothing and exits non-zero, which every branch in
-that script reads as "not running yet". An empty file makes it refuse and say so; a wrong one
-makes it look like it is working.
+**Option B: keep it public on purpose.** Reasonable if the product is meant to be open. Then say
+so, and I reword M0.1.1 rather than leave a first leaf that is false.
 
-**Nothing is broken today.** The scripts running on the server are the copies installed in
-August with the old value compiled in, so deploys keep working exactly as they do now. The file
-only starts being read when somebody reinstalls them.
+**Why A.** Nothing here was written to be published. Item 52 already argues that a client should
+never receive a copy of this repository, and a public repository is a copy anybody can take.
 
-**And the instruction is fixed rather than only the value.** The reliable source is the server
-itself, not the browser: `ls /data/coolify/services` names the directories and
-`docker ps --format '{{.Names}}' | grep '^app-'` prints the same identifier with `app-` in
-front. Coolify's address bar is where I sent you and it is the one place that is ambiguous.
+## 32. Two pieces of Keycloak housekeeping, and nothing is blocked by either - CLOSED: the admin account stays
 
-**And the same value belongs in GitHub.** `COOLIFY_SERVICE_UUID` should be
-the same value; item 42 says where to paste it and this item says where to read it.
-
-## 42. The three deploy secrets were saved empty, and re-entering them is the whole fix
-
-**What you do, and it is three fields on one page.**
-
-1. Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`.
-2. Click **Update** beside `COOLIFY_URL` and paste your Coolify panel's address. It is
-   the one you open the panel with, port and all, and `docker ps` on the server prints
-   the same host if you would rather read it there than type it from memory.
-3. Click **Update** beside `COOLIFY_SERVICE_UUID` and paste your service identifier. Read
-   it off the server rather than out of Coolify's address bar, which carries three
-   different identifiers and is where this page used to send you: item 49 has the one
-   command that prints it, and the story of why the value you wrote first was wrong.
-4. Click **Update** beside `COOLIFY_TOKEN` and paste a Coolify API token. If you no longer have
-   the one from September, make a new one: in Coolify, your avatar, **Keys & Tokens**, **API
-   tokens**, create one with permission to deploy, and copy it when it is shown because it is
-   shown once. I do not create or hold tokens on your behalf.
-
-The next push then calls Coolify directly and the warning stops.
-
-**How this is known rather than guessed.** The run at 10:22 on 2026-09-09 printed, before
-deciding anything:
-
-```
-what this job can see:
-  secrets.COOLIFY_URL: empty
-  secrets.COOLIFY_TOKEN: empty
-  secrets.COOLIFY_SERVICE_UUID: empty
-  vars.COOLIFY_URL: empty
-  vars.COOLIFY_SERVICE_UUID: empty
-```
-
-All three exist on the repository, created 2026-09-04 at 12:12:44, :45 and :46, one second
-apart. They deliver empty strings, no repository variables exist to have caught the values
-instead, the repository is not a fork, it declares no deployment environments, and the workflow
-file that ran is the one on `main`. A secret that exists and is empty is the only reading left,
-and GitHub's API accepts an empty value without complaint even though the web form does not.
-Three timestamps a second apart look like a script that set them from environment variables
-that were not themselves set.
-
-**You were right to push back on this item.** It used to say the secrets were missing and ask
-you to create them. You had created them, five days earlier.
-
-**Nothing is broken while this is open.** The timer on your server checks for a new image every
-two minutes and picks up every build, which is why deploys have been working the whole time.
-
-**A second fault was hiding behind the first**, and it is fixed. The missing-secret check was
-three lines shaped `[ -z "$X" ] && missing="$missing X"`, and every `run:` block in GitHub
-Actions is `bash -eo pipefail`. A whole `&&` list is the command whose exit status `-e` reads,
-so the first line where the value was present would exit 1 and kill the step before it called
-Coolify. It never fired, because all three have always been empty. It would have fired on the
-first run after you fixed the secrets: a check that breaks at the moment it starts to matter,
-invisible for as long as the fault it sits behind is there.
-
-## 32. Two pieces of Keycloak housekeeping, and nothing is blocked by either
+**Your answer, 2026-09-16:** no need to delete anything, so this is closed. The password change goes with it.
 
 **Keycloak is up.** Measured on 2026-09-09: its own container and its own database
 container have both been healthy for two days. The three passwords
@@ -468,8 +485,6 @@ in if every administrator is ever lost. Change the value, keep the name.
 
 I cannot check either of these for you without administrator credentials for your identity
 provider, which I do not hold and should not.
-
-# Answered
 
 ## 34. The embedding model is 1024 dimensions and the corpus column is 1536 - DECIDED: narrowed, and the width is a setting now
 
