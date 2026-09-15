@@ -2,7 +2,9 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**3 items are open: one decision and two short actions of yours.**
+**4 items are open: one decision and three short actions of yours.**
+
+**Item 65: one line** to change in Coolify's copy of the compose file. Nothing breaks while it waits.
 
 **Item 64: one letter.** Whether three permissive licences numpy carries may be allowed, so the record
 matcher's image can be built. I recommend A.
@@ -14,6 +16,33 @@ None is urgent.
 of two workflow files.
 
 # Open
+
+## 65. One line to change in Coolify's copy of the compose file, whenever you have five minutes
+
+**What you do: one edit in Coolify. Nothing is broken while it waits.**
+
+**In plain words.** Your answer to item 51 is built: every container of the product now refuses to
+start unless it is told exactly which image to run, instead of quietly falling back to `latest`.
+Coolify keeps its own copy of the compose file, so your server still has the old line. Because
+`APP_IMAGE` is already set there, it keeps deploying exactly as it does today until you change it.
+
+1. Open Coolify through your SSH tunnel as usual, open the Company Brain service, and go to its
+   **Environment Variables**. Check that `APP_IMAGE` is set (it is the image address the service
+   already runs, ending in `:latest`). If it is empty, stop here and tell me.
+2. Go to the **Configuration** tab and click **Edit Compose File**.
+3. Find the `app:` service and its `image:` line. It currently ends in `:-` followed by an image
+   address. Replace the whole line with exactly:
+
+   ```
+       image: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+   ```
+
+   Keep the same indentation as the line you replaced.
+4. Click **Save**, then **Deploy**.
+5. Open `/health/ready` on your Brain address. It should answer and show the latest commit.
+
+**If the deploy fails**, Coolify may not accept the `:?` form. Put the old line back, save, deploy,
+and tell me; I will change the approach rather than ask you to experiment.
 
 ## 64. The record matcher needs three more permissive licences allowed before its image can be built
 
