@@ -49,6 +49,7 @@ from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.audit import AuditEntryRow
+from brain.tables.automation import AutomationOwnerRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
@@ -200,6 +201,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0042_suspension. Points at nothing: the principal and the agent are values, so what a
     # person was shown before something ran in somebody's name outlives both.
     "gate.suspension",
+    # 0044_automation_owner. Points at nothing: the owner is a value, so what an automation
+    # ran as outlives the person, and an automation whose owner has gone stays to be adopted.
+    "gate.automation_owner",
 )
 
 __all__ = [
@@ -207,6 +211,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentRow",
     "AuditEntryRow",
+    "AutomationOwnerRow",
     "BrowserEnvelopeRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",

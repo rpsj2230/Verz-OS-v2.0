@@ -35,6 +35,7 @@ from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.audit.ledger import TRACE_ID
 from brain.audit.record import LedgerWriter
+from brain.automation_routes import router as automation_router
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
@@ -278,6 +279,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.gate = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None
+    # The same, for an automation's registration and its owner's standing. Nothing constructs
+    # one, for the reason nothing constructs `gate`: see `brain.automation_routes`.
+    app.state.automation = None
 
     # Registered first, which makes it innermost: Starlette inserts each new middleware at
     # the front of the stack, so the last one registered runs outermost. Inside `trace`
@@ -437,6 +441,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # again: who is offered an approval is `pending_for` over the action's own row, and an
     # approval out of reach, decided, lapsed or missing is one answer. GET only; see the module.
     app.include_router(approval_router)
+    # The endpoint an automation step calls. A sixth router because the caller differs: it
+    # authenticates an automation's credential rather than a person's token, and runs as the
+    # automation's owner. It does not take `asking`, and `asking` does not take its credential.
+    app.include_router(automation_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

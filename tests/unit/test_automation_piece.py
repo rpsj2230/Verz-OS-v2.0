@@ -12,6 +12,7 @@ Task ids: M32.6.1.3
 from __future__ import annotations
 
 import ast
+import asyncio
 import inspect
 import re
 from datetime import UTC, datetime
@@ -173,6 +174,11 @@ class _Recorder:
             {"tool": tool, "arguments": arguments, "entitlement": entitlement, "now": now}
         )
         return self.result
+
+
+def _run_step(*args: Any, **kwargs: Any) -> ChannelPayload:
+    """`run_step` is awaitable; every test here drives it to completion on its own loop."""
+    return asyncio.run(run_step(*args, **kwargs))
 
 
 def _plan_reach() -> EntitlementSet:
@@ -556,7 +562,7 @@ def test_the_redactor_is_refused_a_reach_the_catalogue_was_not_projected_from() 
     recorder = _Recorder(_one_client_row())
 
     with pytest.raises(PieceRefusedError, match="projected from"):
-        run_step(
+        _run_step(
             PieceStep(tool="client.read_summary"),
             inv,
             reach=caller,
@@ -584,7 +590,7 @@ def test_a_step_receives_only_the_fields_its_narrowed_reach_admits() -> None:
     reach = caller.intersect(flow_ceiling)
     recorder = _Recorder(_one_client_row())
 
-    payload = run_step(
+    payload = _run_step(
         PieceStep(tool="client.read_summary", arguments={"limit": 1}),
         inv,
         reach=reach,
@@ -611,7 +617,7 @@ def test_the_tool_caller_is_handed_the_projected_definition_and_the_narrowed_rea
     reach = caller.intersect(flow_ceiling)
     recorder = _Recorder(_one_client_row())
 
-    run_step(
+    _run_step(
         PieceStep(tool="client.read_summary"),
         inv,
         reach=reach,
@@ -637,7 +643,7 @@ def test_what_leaves_a_step_has_nowhere_to_put_a_redaction_trace() -> None:
     inv = _plan()
     recorder = _Recorder(_one_client_row())
 
-    payload = run_step(
+    payload = _run_step(
         PieceStep(tool="client.read_summary"),
         inv,
         reach=_plan_reach(),
@@ -666,7 +672,7 @@ def test_the_canvas_never_receives_the_opaque_payload() -> None:
     reach = caller.intersect(caller)
     recorder = _Recorder(_one_client_row())
 
-    payload = run_step(
+    payload = _run_step(
         PieceStep(tool="client.read_summary"),
         inv,
         reach=reach,
@@ -692,7 +698,7 @@ def test_a_result_the_redactor_cannot_walk_never_reaches_the_canvas() -> None:
     recorder = _Recorder({"entity": "client", "id": "c_snm", "margin": "34%"})
 
     with pytest.raises(UntypedShapeError):
-        run_step(
+        _run_step(
             PieceStep(tool="client.read_summary"),
             inv,
             reach=_plan_reach(),

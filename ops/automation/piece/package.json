@@ -1,0 +1,13 @@
+{
+  "name": "piece-brain-tool-call",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An automation step that names one tool and an argument bag, and nothing else.",
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "peerDependencies": {
+    "@activepieces/pieces-framework": "0.7.x"
+  }
+}

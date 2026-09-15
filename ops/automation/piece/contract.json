@@ -1,0 +1,8 @@
+{
+  "method": "POST",
+  "path": "/api/v1/automation/tool-call",
+  "credential_header": "authorization",
+  "credential_scheme": "Bearer",
+  "credential_prefix": "bap",
+  "body_fields": ["arguments", "tool"]
+}

@@ -92,26 +92,25 @@ of the wiring that can be done from here, because the only frozen `ToolRegistry`
 application is the one `brain.tools.startup.build_registry` returns and `brain.app.lifespan`
 puts on `app.state`.
 
-**The undecided part is who a flow runs as, and it is a decision rather than an omission.**
-Everything in this module takes the caller's own `EntitlementSet` and reads the principal off
-the reach, precisely so a flow cannot act as somebody it names. A route would have to
-establish that reach from something the canvas holds, and the canvas holds no user's token: a
-flow runs after its trigger, sometimes on a schedule, sometimes long after the person who
-built it has gone home. Delegated credentials, a token bound to the trigger, and a service
-principal with an explicit ceiling are three answers with three different blast radiuses, and
-choosing between them is an owner's decision about how much a flow may do unattended rather
-than something to settle inside a commit about a piece.
+**Who a flow runs as is decided, and the route exists.** Item 56 of `docs/needs-rupash.md` was
+answered Option A on 2026-09-16: an automation runs as the person who owns it, narrowed by its
+own declared ceiling, and stops when that person goes. `brain.ops.automation_owner` records the
+owner and derives whether the automation may run; `brain.automation_routes` is the endpoint a
+step is sent to, and it hands this module the owner's reach as it is at the moment of the call.
+The two paragraphs above that call the piece unwritten and the route missing are history now,
+and are kept because the second of them already records what a stale blocker costs.
 
-M32.6.1.3 is what this serves and it is not closable today: there is no endpoint a step can
-be sent to, nothing says which principal a triggered flow runs as, and the TypeScript package
-above is unwritten. The commit trailer says Contributes to rather than Closes, and this line
-agrees with it rather than contradicting it.
+The TypeScript package is written, in `ops/automation/piece`, and only its request builder runs
+here. M32.6.1.3 is still not claimed on this line, for two reasons the route's own docstring
+states: a call is not recorded through `brain.gate.finish`, whose `Finished` has no outcome a
+tool call can be, and the piece has never been built or loaded by Activepieces.
 
 Task ids: none
 """
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping
 from datetime import datetime
 from typing import Any, Final, Protocol
@@ -439,7 +438,7 @@ def assert_same_reach(invocation: Invocation, reach: EntitlementSet) -> None:
         raise PieceRefusedError(msg)
 
 
-def run_step(
+async def run_step(
     step: PieceStep,
     invocation: Invocation,
     *,
@@ -475,8 +474,14 @@ def run_step(
         entitlement=reach,
         now=now,
     )
+    # Awaited through a check rather than a cast, for the reason `brain.api_routes.records`
+    # gives: the registry holds a row handler, which is awaitable, beside a skill handler,
+    # which is not, and a step can name either. Until 2026-09-15 this function was
+    # synchronous and a row handler's coroutine reached `require_typed_result` unawaited,
+    # which refused it, so no piece step could ever have read a row.
+    raw = await returned if inspect.isawaitable(returned) else returned
     # Called here as well as inside the redactor, and deliberately. It is what types the
     # value for everything below, and the redactor's own call is not something this module
     # should be relying on having happened.
-    result = require_typed_result(returned)
+    result = require_typed_result(raw)
     return serialise_for_channel(result, entitlement=reach, policy=policy, now=now)
