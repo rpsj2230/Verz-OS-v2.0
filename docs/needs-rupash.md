@@ -2,13 +2,58 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**1 item is open: one short action of yours in GitHub.** You answered twelve items on
-2026-09-16, Keycloak is running again, and every answer that unblocks work is being built.
+**2 items are open, and both are short actions of yours.** Every decision is answered, and every
+answer that unblocks work is built or being built.
+
+**Item 63: four tidy-ups** on GitHub and your server, now that deploys no longer come from GitHub.
+None is urgent.
 
 **Item 52: one repository variable** in GitHub, `BRAIN_URL`, so your server's address can come out
 of two workflow files.
 
 # Open
+
+## 63. Four short tidy-ups on GitHub and your server, now that deploys no longer come from GitHub
+
+**What you do: four steps, none urgent, and nothing is broken while they wait.**
+
+Your answers to items 42 and 61 are built. GitHub no longer tries to deploy to your server, and the
+administrative consoles' protection is written into the install guide. That leaves four things only
+you can do, because they are settings on GitHub and on your server, which I do not change.
+
+1. **Delete three GitHub secrets nothing uses any more.**
+   Go to `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`. For each of
+   `COOLIFY_URL`, `COOLIFY_SERVICE_UUID` and `COOLIFY_TOKEN`, click the bin icon beside it and
+   confirm. They were always empty, so nothing stops working.
+
+2. **Remove an old GitHub deploy key line from your server, if it is there.** In PowerShell:
+
+   ```
+   ssh verz-vps
+   ```
+
+   Then on the server, see whether any line mentions a forced command:
+
+   ```
+   grep -n "command=" /root/.ssh/authorized_keys
+   ```
+
+   If it prints nothing, you are done with this step. If it prints a line, send me what it
+   printed before removing anything, so we remove the right line and not your own login key.
+
+3. **Before the deployment panel template is ever copied onto a server, put a real address
+   range into its allowlist.** The template in `ops/vps/traefik-coolify-panel.yaml` now has an
+   `admin-allowlist` with a placeholder. Traefik refuses to serve the panel until the placeholder
+   is replaced, which is deliberate. Nothing on your server uses the template today, so there is
+   nothing to do until you choose to deploy it. When you do, the value is the address range you
+   administer from.
+
+4. **Switch on a second login factor in each administrative console you use:** the deployment
+   panel (Coolify), the Keycloak admin console, and Langfuse if you run it. This is a setting inside
+   each one, so I cannot check it from here. The install guide's "Administrative consoles" section
+   in `docs/install/network.md` says where each setting lives.
+
+Tell me when step 2 has been checked, and whether any of the others are done.
 
 ## 52. Two workflow files carry your server's address, and one repository variable removes them
 
