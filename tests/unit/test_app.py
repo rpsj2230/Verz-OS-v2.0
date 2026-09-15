@@ -5,9 +5,8 @@ M31.1.3.3, M31.1.3.4, M31.1.3.5, M31.2.2.1
 
 Deliberately not claimed here: M31.1.1.2 and M31.1.1.5, which ask for the lifespan to
 attach Valkey, OpenBao and the model registry and for readiness to gate on all three.
-Only the database is attached today. The cache client exists and is untested against a
-live server; nothing wires it. Claiming those two would mark as done the exact thing
-that makes a half-connected instance answer from whatever it can still reach.
+The database and, since 2026-09-15, a configured cache are attached and checked; OpenBao and
+the model registry are not. The gate's own construction is `tests/unit/test_app_wiring.py`.
 """
 
 from __future__ import annotations
@@ -43,7 +42,7 @@ def client(app: FastAPI) -> Iterator[TestClient]:
 def test_liveness_reports_the_running_commit(client: TestClient) -> None:
     r = client.get("/health/live")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "commit": "abc1234", "checks": {}}
+    assert r.json() == {"status": "ok", "commit": "abc1234", "checks": {}, "reported": {}}
 
 
 def test_the_running_commit_comes_from_the_image_when_the_environment_says_unknown(
@@ -106,8 +105,14 @@ def test_a_broken_manifest_does_not_stop_the_health_check_answering(
         assert c.get("/health/live").json()["commit"] == "unknown"
 
 
-def test_readiness_is_ok_when_nothing_has_registered_a_check(client: TestClient) -> None:
-    assert client.get("/health/ready").status_code == 200
+def test_readiness_is_ok_when_nothing_has_registered_a_check() -> None:
+    """Built with no database named, rather than with whatever the environment holds. CI sets
+    `DATABASE_URL`, and a process with a database registers checks (the role, sign-in), so the
+    fixture's app would test a different claim on the runner than on a machine without one.
+    Delete this and an empty readiness dict can start answering 503."""
+    app = create_app(Settings(env="development", commit_sha="abc1234", database_url=""))
+    with TestClient(app) as c:
+        assert c.get("/health/ready").status_code == 200
 
 
 def test_readiness_fails_when_any_dependency_is_unreachable(app: FastAPI) -> None:

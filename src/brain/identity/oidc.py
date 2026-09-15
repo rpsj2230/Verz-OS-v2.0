@@ -37,12 +37,14 @@ to an empty entitlement set and produces a confident "I could not find that". It
 `UnmappedSubject` instead, which is `brain.gate.ingress.Unrecognised` for a token: no
 entitlement to intersect, no id to cache under, and one instruction.
 
-**No network call is made anywhere in this module, and no dependency was added.** Validation
-is a pure function over a decoded token and a key set handed in. The signature check itself
-is an injected callback, because the standard library cannot verify RS256 and inventing a
-verifier here would be the worst thing in the repository. JWKS caching is a cache with a
-fetch callback, the shape `brain.gate.resolve` uses for the entitlement store. Nothing here
-has been run against a live Keycloak.
+**No network call is made anywhere in this module.** Validation is a pure function over a
+decoded token and a key set handed in. The signature check itself is an injected callback,
+because the standard library cannot verify RS256 and inventing a verifier here would be the
+worst thing in the repository. The verifier a deployed process holds is
+`brain.identity.keycloak_tokens.verify_rs256`, over the `cryptography` dependency 58fb80c
+added, and `brain.app.lifespan` builds the authority that carries it. JWKS caching is a cache
+with a fetch callback, the shape `brain.gate.resolve` uses for the entitlement store. Nothing
+here has been run against a live Keycloak.
 
 No SQLAlchemy model and no migration is written here. Where a leaf implies a table
 (`principal_identity`), this is the type and the rules only.
@@ -377,10 +379,10 @@ class RawToken:
 class SignatureVerifier(Protocol):
     """Checks one signature against one key. Injected, and deliberately not implemented here.
 
-    The standard library cannot verify RS256 or ES256, and this milestone adds no
-    dependency. Writing a verifier by hand would be worse than declaring the seam, so
-    whoever wires this up supplies one backed by a reviewed library, and every test here
-    supplies one it controls.
+    The standard library cannot verify RS256 or ES256, and writing a verifier by hand would be
+    worse than declaring the seam. `brain.identity.keycloak_tokens.verify_rs256` is the one
+    backed by a reviewed library, `cryptography`, and it is what a deployed process holds;
+    every test here supplies one it controls.
     """
 
     def __call__(self, *, signing_input: bytes, signature: bytes, key: SigningKey) -> bool: ...

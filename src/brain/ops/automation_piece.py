@@ -101,9 +101,10 @@ The two paragraphs above that call the piece unwritten and the route missing are
 and are kept because the second of them already records what a stale blocker costs.
 
 The TypeScript package is written, in `ops/automation/piece`, and only its request builder runs
-here. M32.6.1.3 is still not claimed on this line, for two reasons the route's own docstring
-states: the piece has never been built or loaded by Activepieces, and nothing constructs the
-route's wiring on a deployed process.
+here. M32.6.1.3 is still not claimed on this line. The route's wiring is constructed now, by
+`brain.app.lifespan` on a process with a database and an issuer, and the piece compiles and
+loads the way the engine loads it; what is missing is a flow in a running Activepieces calling
+this route on a deployed process, which is a live run and not a test.
 
 **A call is recorded, and `call_piece` is where.** That sentence used to give a third reason,
 that `brain.gate.finish.Finished` had no outcome a tool call could be. It has one now,

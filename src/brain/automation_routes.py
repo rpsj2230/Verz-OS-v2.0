@@ -65,13 +65,12 @@ the missing-entry rung. That rung is recorded on the invocation and decides noth
 with no side effect, which is every call this route can make: see
 `brain.ops.automation_owner.AN_AUTOMATION_READS_UNTIL_ITS_WRITES_CAN_BE_SUSPENDED`.
 
-*Nothing constructs the wiring.* `app.state.automation` is None on a deployed process, for the
-reason `app.state.gate` is. The stores exist: `brain.identity.principal_store.StoredPrincipals`
-over `auth.principal`, `brain.gate.entitlement_store.StoredEntitlements` over the resolver, and
-`brain.ops.automation_owner_store.StoredAutomations`. What is missing is a `TokenAuthority`,
-which `GateWiring` requires and which has no signature verifier to hold, and the lifespan code
-that builds the two wirings. So on the deployed instance this route refuses every credential,
-uniformly, which is what a missing authenticator has to mean.
+*The wiring is built by the lifespan, and not always.* `brain.app.wirings_for` builds
+`AutomationWiring` over `brain.ops.automation_owner_store.StoredAutomations` and
+`brain.identity.principal_store.StoredPrincipals`, beside `GateWiring`, whenever the process
+has a database and an issuer. A process without either has neither wiring, and this route then
+refuses every credential, uniformly, which is what a missing authenticator has to mean. No
+Activepieces flow has yet called this route on a deployed process.
 
 Task ids: none
 """

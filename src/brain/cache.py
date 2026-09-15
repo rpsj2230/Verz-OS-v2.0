@@ -104,6 +104,12 @@ design takes the whole fleet out of rotation at once, since every replica shares
 That trade-off belongs to whoever owns the deployment, not to the cache client, so it is
 stated here and left as a choice rather than made silently.
 
+`brain.app.lifespan` made it on 2026-09-15: a configured cache is a readiness check. Every
+compose file starts the application only once the cache container reports healthy, so a cache
+that does not answer at startup is far more often a wrong address or password than an outage,
+and a wrong address is a condition no request will ever cure. An install with no `valkey_url`
+has no check and no client, and resolves through `NoEntitlementCache`.
+
 **The four caches of M6.2 share one class and the reason is the self-key check.** See
 `ValkeyRecordCache`. What made two stores worth writing separately above is that they do
 different things on a hit; the plan, retrieval, embedding and freshness stores do the same
@@ -265,12 +271,23 @@ class AsyncValkeyClient(Protocol):
     async def ping(self) -> object: ...
 
 
+class OwnedAsyncValkeyClient(AsyncValkeyClient, Protocol):
+    """The awaited client as the one who built it holds it: the three commands, and closing it.
+
+    A second protocol rather than `aclose` on `AsyncValkeyClient`, because a cache is handed a
+    client it does not own and has no business closing. `brain.app.lifespan` builds this one and
+    closes it on shutdown; everything it hands the client to sees the narrower type.
+    """
+
+    async def aclose(self) -> None: ...
+
+
 def make_async_client(
     url: str,
     *,
     connect_timeout: float = CONNECT_TIMEOUT_SECONDS,
     operation_timeout: float = OPERATION_TIMEOUT_SECONDS,
-) -> AsyncValkeyClient:
+) -> OwnedAsyncValkeyClient:
     """`make_client` for the event loop, bounded identically. TLS is the URL's job.
 
     Every argument `make_client` passes is passed here, and the module docstring has the
@@ -280,7 +297,7 @@ def make_async_client(
     match buys nothing mypy can check.
     """
     return cast(
-        AsyncValkeyClient,
+        OwnedAsyncValkeyClient,
         AsyncRedis.from_url(
             url,
             socket_timeout=operation_timeout,
@@ -804,3 +821,29 @@ async def check_reachable_async(client: AsyncValkeyClient) -> bool:
         log.warning("cache unreachable", cache="valkey", op="ping", error=type(exc).__name__)
         return False
     return True
+
+
+#: Why an install with no cache gets a cache that holds nothing, and what nothing has to mean.
+AN_ABSENT_CACHE_IS_A_MISS_AND_NEVER_AN_ANSWER: Final = (
+    "GateWiring takes an EntitlementCache, and an install with no Valkey has none. The cache "
+    "that stands in for it answers every read with None, which resolve reads as not in hand "
+    "and answers by asking the store, and drops every write. It never returns a set of its "
+    "own: not an empty one, which is a confident nothing for somebody who holds grants, and "
+    "not a remembered one, which would serve a revoked grant for as long as the process lives "
+    "because nothing here reads the grants version. No cache means every request resolves."
+)
+
+
+class NoEntitlementCache:
+    """`brain.gate.resolve.EntitlementCache` for an install with no cache. Holds nothing.
+
+    See `AN_ABSENT_CACHE_IS_A_MISS_AND_NEVER_AN_ANSWER`. Here beside `ValkeyEntitlementCache`
+    rather than in `brain.gate.resolve`, which holds protocols and no implementation of one.
+    """
+
+    async def get(self, key: str) -> EntitlementSet | None:
+        del key
+        return None
+
+    async def set(self, key: str, value: EntitlementSet, ttl_seconds: int) -> None:
+        del key, value, ttl_seconds

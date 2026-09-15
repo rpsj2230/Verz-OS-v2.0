@@ -234,19 +234,33 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     different before: a `model` key that FastAPI did not recognise would produce an empty
     response object here and the test above would still pass.
 
+    **One route documents its own 409, and it is named here rather than let through by a rule.**
+    `brain.sign_in_routes` answers an administrator's refused binding with a `SignInView` saying
+    why, and names nobody else in it; the shape is what that route returns, so documenting it as
+    `ErrorBody` would be the document lying. It became visible on 2026-09-15, when `create_app`
+    first mounted that router. The exceptions are compared exactly, so a second one cannot arrive
+    without an edit here, and a stale one fails too.
+
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
+    from brain.sign_in_routes import SIGN_INS_PATH
+
     app: FastAPI = create_app(Settings(env="development"))
     doc = app.openapi()
     ref = "#/components/schemas/ErrorBody"
+    own_shape = {(SIGN_INS_PATH, "409"): "#/components/schemas/SignInView"}
 
     checked = 0
+    exceptions: dict[tuple[str, str], str] = {}
     for path, item in doc["paths"].items():
         if not path.startswith(API_PREFIX):
             continue
         for operation in item.values():
             for code in ("401", "404", "409", "503"):
                 schema = operation["responses"][code]["content"]["application/json"]["schema"]
-                assert schema.get("$ref") == ref, f"{path} documents {code} as {schema}"
+                if schema.get("$ref") != ref:
+                    exceptions[(path, code)] = str(schema.get("$ref"))
+                    continue
                 checked += 1
 
+    assert exceptions == own_shape, f"documented as something other than ErrorBody: {exceptions}"
     assert checked >= 8, f"only {checked} responses were checked; the loop found no operations"

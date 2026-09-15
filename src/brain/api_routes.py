@@ -288,8 +288,10 @@ class GateWiring:
     them means "is this application wired" is one question with one answer, and a half-wired
     process is unrepresentable rather than a combination somebody has to reason about.
 
-    Absent on a deployed instance today. `brain.identity.bearer` argues why the absence
-    refuses rather than waving requests through, and `brain.app` records what is missing.
+    Built by `brain.app.lifespan`, through `brain.app.wirings_for`, on a process with a database
+    and a usable `INSTALL_OIDC_ISSUER`, and absent on one without either. `brain.identity.bearer`
+    argues why the absence refuses rather than waving requests through, and `brain.app` says on
+    readiness which of the two is missing.
     """
 
     authority: TokenAuthority

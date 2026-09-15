@@ -66,7 +66,7 @@ from brain.console.read_replica import (
     Unreachable,
     route_read,
 )
-from brain.session import make_app_engine, make_session_factory
+from brain.session import make_app_engine, make_application_sessions
 
 log = structlog.get_logger()
 
@@ -180,4 +180,7 @@ def console_reads_for(
     if not url:
         return ConsoleReads(primary)
     engine = make_app_engine(url)
-    return ConsoleReads(primary, make_session_factory(engine), engine=engine)
+    # As the application role, as the primary's sessions are. A replica that read as the login
+    # would show a console page past the policies the same page is held to on the primary. See
+    # `brain.session.THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`.
+    return ConsoleReads(primary, make_application_sessions(engine), engine=engine)

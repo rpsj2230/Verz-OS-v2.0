@@ -13,7 +13,9 @@ one would put the credential store and the company records it protects in one bl
 
 **On `lite` there is no identity provider at all, and the system still refuses to start without
 one.** `lite` deploys the application, the pooler, the database and the cache, and nothing else.
-`INSTALL_OIDC_ISSUER` has no default and stops the boot when it is unset. So a `lite` install
+`INSTALL_OIDC_ISSUER` has no default, and without it nobody can sign in: every page behind sign-in
+refuses, and `/health/ready` names `sign_in` as not ready under `reported`. It stays 200, so the
+pages that need no sign-in keep serving while you set it. So a `lite` install
 points at an identity provider you already run, and everything on this page about
 `KEYCLOAK_ADMIN` and the realm belongs to the other two profiles.
 

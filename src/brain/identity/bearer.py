@@ -14,14 +14,14 @@ call it with the right arguments and to turn the two refusals it can produce int
 answer. A second opinion about any of those would be a second place for the wrong one to
 win, which is what `CLAUDE.md` says about the intersection and is just as true here.
 
-**An unconfigured authority accepts nothing, and that is the deployed state today.** The
-signature check is an injected callback because the standard library cannot verify RS256
-and `oidc` refuses to invent one. This install has no verifier wired, so
-`brain.app.create_app` attaches no authority and every request under the versioned prefix
-is refused. That is the correct behaviour and it is stated rather than left to be
-discovered: fail-closed is what a missing authenticator has to mean, and the alternative,
-letting a request through when nothing could check it, is the bug that this shape makes
-unrepresentable. See `AN_UNCONFIGURED_AUTHORITY_ACCEPTS_NOTHING`.
+**An unconfigured authority accepts nothing.** The signature check is an injected callback,
+and `brain.identity.keycloak_tokens.verify_rs256` is the one a deployed process holds:
+`brain.app.lifespan` builds the authority through `keycloak_authority` when there is a
+database and an issuer. A process with neither has no authority, and every request under the
+versioned prefix is refused. That is the correct behaviour and it is stated rather than left
+to be discovered: fail-closed is what a missing authenticator has to mean, and the
+alternative, letting a request through when nothing could check it, is the bug that this
+shape makes unrepresentable. See `AN_UNCONFIGURED_AUTHORITY_ACCEPTS_NOTHING`.
 
 **Every refusal says one sentence.** `oidc.SIGN_IN_PROMPT` already argues why: "unknown
 key" and "bad signature" and "wrong audience" tell somebody forging a token which part to
@@ -242,11 +242,11 @@ class TokenAuthority:
     configuration that accepts nothing and explains itself as a bad signature. Holding them
     together means the mismatch is visible where the thing is built.
 
-    `verify` is injected and there is no default. `oidc.SignatureVerifier` explains why at
-    length: the standard library cannot verify RS256, and a verifier written here would be
-    the worst thing in the repository. What this type adds is that the absence is now
-    load-bearing rather than theoretical, because a route asks for one of these and there is
-    nowhere else to get a caller from.
+    `verify` is injected and there is no default. `oidc.SignatureVerifier` explains why: the
+    standard library cannot verify RS256, and a verifier written here would be the worst thing
+    in the repository. `keycloak_tokens.verify_rs256`, over the `cryptography` library, is the
+    one `keycloak_authority` puts here, and `brain.app.lifespan` is what builds it. A route asks
+    for one of these and there is nowhere else to get a caller from.
     """
 
     issuer: str

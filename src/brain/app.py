@@ -7,6 +7,19 @@ the secret store must fail readiness, because a half-connected instance does not
 it answers from whatever it can still reach, which is how a permission-aware system
 quietly starts returning wrong answers.
 
+**The gate is built here, and three failures it can meet at startup are decided three ways.**
+With a database, the lifespan builds `GateWiring` and `AutomationWiring` over the application's
+own sessions. An install that cannot check a token at all, because `INSTALL_OIDC_ISSUER` is unset
+or names an issuer no key set may be read from, leaves both None and reports `sign_in` as not
+configured (`AN_INSTALL_THAT_CANNOT_CHECK_A_SIGN_IN_IS_UNREADY_RATHER_THAN_STOPPED`). An identity
+provider that does not answer yet leaves the wiring built, reports `sign_in` not ready, and asks
+again until it answers (`AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN`). `sign_in` is
+reported on readiness and never fails it (`SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`).
+And a login that could read past row-level security is not refused, because the sessions never
+use it: see
+`brain.session.THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`, whose answer readiness
+checks as `row_security`.
+
 Task ids: M31.1.1.1, M31.1.1.2, M31.1.1.4, M31.1.1.5
 Task ids: M31.1.3.1, M31.1.3.2, M31.1.3.3, M31.1.3.4, M31.1.3.5
 Task ids: M31.1.1.3, M31.2.2.5
@@ -15,13 +28,16 @@ Task ids: M31.1.1.3, M31.2.2.5
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import time
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, MutableMapping
 from contextlib import asynccontextmanager
-from typing import Literal
+from datetime import UTC, datetime
+from typing import Final, Literal
 
+import httpx
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,22 +47,41 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import router as agent_router
 from brain.api import ErrorBody, TimeoutMiddleware
+from brain.api_routes import GateWiring
 from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.audit.ledger import TRACE_ID
 from brain.audit.record import LedgerWriter
+from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
+from brain.cache import (
+    AsyncValkeyClient,
+    NoEntitlementCache,
+    OwnedAsyncValkeyClient,
+    PostgresVersionSource,
+    ValkeyEntitlementCache,
+    check_reachable_async,
+    make_async_client,
+)
 from brain.classification_routes import router as classification_router
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
+from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
+from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
-from brain.identity.bearer import log_refusal, refusal_headers
+from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
+from brain.identity.keycloak_tokens import http_get, keycloak_authority
 from brain.identity.oidc import SIGN_IN_PROMPT, TokenRefusedError
-from brain.install import installed_name
+from brain.identity.principal_directory import StoredDirectory
+from brain.identity.principal_store import StoredPrincipals
+from brain.identity.roles import IdentityError
+from brain.identity.sign_in_binding import sign_in_bindings
+from brain.install import InstallError, installed_name
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
+from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
@@ -54,9 +89,10 @@ from brain.ops.trace_sink import CountingTraceSink
 from brain.routing_routes import router as routing_router
 from brain.session import (
     check_reachable,
+    check_row_security,
     dispose,
     make_app_engine,
-    make_session_factory,
+    make_application_sessions,
 )
 
 # Re-exported, because tests, `console/scripts/export-openapi.py` and `brain.serve`'s history all
@@ -64,6 +100,7 @@ from brain.session import (
 # process that needs a setting and not the application imports that instead. See
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
+from brain.sign_in_routes import router as sign_in_router
 from brain.tools.startup import build_registry
 
 log = structlog.get_logger()
@@ -76,11 +113,67 @@ log = structlog.get_logger()
 #: close: a request whose audit entry cannot be written.
 TRACE_ID_RE = re.compile(TRACE_ID)
 
+#: The readiness check that says whether this process can turn a token into a caller.
+SIGN_IN_CHECK: Final = "sign_in"
+
+#: The readiness check that says whether requests run as a role row-level security binds.
+ROW_SECURITY_CHECK: Final = "row_security"
+
+#: The readiness check for a configured cache. Absent when no cache is configured.
+CACHE_CHECK: Final = "cache"
+
+#: The wait before asking an identity provider that did not answer at startup again, and the most
+#: that wait grows to. The ceiling is two of `oidc.JWKS_MIN_REFETCH`, so a realm that comes up is
+#: noticed inside a minute and a realm that stays down is asked once a minute, not once a second.
+KEY_PRIMING_FIRST_RETRY_SECONDS: Final = 2.0
+KEY_PRIMING_MAX_RETRY_SECONDS: Final = 60.0
+
+#: Why sign-in is named on readiness and never fails it.
+SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS: Final = (
+    "The compose health check, ops/deploy.sh and ops/watch-and-deploy.sh all treat anything but "
+    "200 from /health/ready as a failed release. Measured on 2026-09-15, a deployed app "
+    "container carried DATABASE_URL and VALKEY_URL and no INSTALL_OIDC_ISSUER, so a blocking "
+    "sign_in check would have made its next deploy unhealthy and taken down with it every page "
+    "that needs no sign-in: the build tracker, the status JSON, the owner's decision list and the "
+    "setup wizard that is how the issuer gets set. The same coupling would take the whole "
+    "application unhealthy whenever Keycloak restarts. So sign_in is under reported, which "
+    "/health/ready shows and never counts. Nothing fails open for it: with no issuer the gate "
+    "is not built and every route behind sign-in refuses, and with keys not yet fetched the key "
+    "cache refuses a token it cannot check. The database, the cache and row_security stay "
+    "blocking, because when they fail every read fails with them and the instance has nothing "
+    "correct to serve."
+)
+
+#: Why a missing or unusable issuer does not stop the process.
+AN_INSTALL_THAT_CANNOT_CHECK_A_SIGN_IN_IS_UNREADY_RATHER_THAN_STOPPED: Final = (
+    "An unset INSTALL_OIDC_ISSUER, or one keycloak_tokens refuses to read keys for, is a "
+    "configuration no retry cures. The process runs with no gate, so every route behind sign-in "
+    "refuses, /health/ready names sign_in as not configured under reported, and the log says "
+    "which setting. Stopping instead is the arrangement this lifespan already rejects for "
+    "migrations, a restart loop that discards the reason on every cycle, and it would also take "
+    "down liveness, the status page and the setup wizard, which are how an operator finds and "
+    "fixes the setting. See SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS for why the name "
+    "is reported and not counted."
+)
+
+#: Why an identity provider that does not answer at startup is retried rather than fatal.
+AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN: Final = (
+    "On standard and full the realm is a container started beside this one, and it takes longer "
+    "to import its realm than this process takes to boot, so a key set unreachable at startup is "
+    "usually a race and not a fault. Stopping would turn every cold start into a restart loop "
+    "timed against Keycloak. So the wiring is built anyway, sign_in is reported not ready while "
+    "the key set has never been fetched, and a background task asks again with a growing wait "
+    "until it answers, then reports sign_in ready. Until then a token is refused, because the "
+    "key cache has nothing to check it against."
+)
+
 
 class Health(BaseModel):
     status: Literal["ok", "degraded"]
     commit: str
     checks: dict[str, bool] = {}
+    #: Components named and never counted. See `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
+    reported: dict[str, bool] = {}
 
 
 @asynccontextmanager
@@ -91,6 +184,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # model registry. Readiness reads app.state.ready, so an unattached dependency shows
     # as not-ready rather than as a working instance.
     app.state.ready = {}
+    # Named on readiness and never counted. See SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS.
+    app.state.reported = {}
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -122,7 +217,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # The pool is attached after migrations, so a replica never serves against a
         # schema the migration is still changing.
         app.state.db_engine = make_app_engine(settings.database_url)
-        app.state.db_sessions = make_session_factory(app.state.db_engine)
+        # Every transaction as `brain_app`, whatever the URL logged in as. See
+        # `brain.session.THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`.
+        app.state.db_sessions = make_application_sessions(app.state.db_engine)
         app.state.ready["database"] = await check_reachable(app.state.db_engine)
     else:
         app.state.db_engine = None
@@ -204,16 +301,155 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         refreshes="on restart",
     )
 
+    # The gate and the automation route, built only over a database: every store in both reads
+    # it, and without one there is nothing a caller could be resolved against. The HTTP client
+    # the realm's keys come through and the cache client are owned here and closed below.
+    app.state.gate = None
+    app.state.automation = None
+    app.state.sign_in_bindings = None
+    app.state.key_client = None
+    app.state.valkey = None
+    priming: asyncio.Task[None] | None = None
+    if app.state.db_sessions is not None:
+        app.state.key_client = key_set_client()
+        if settings.valkey_url:
+            app.state.valkey = make_async_client(settings.valkey_url)
+            app.state.ready[CACHE_CHECK] = await check_reachable_async(app.state.valkey)
+        app.state.ready[ROW_SECURITY_CHECK] = await check_row_security(app.state.db_sessions)
+        wired = wirings_for(
+            app.state.db_sessions,
+            get=http_get(app.state.key_client),
+            cache=entitlement_cache_for(app.state.valkey),
+            clock=wall_clock,
+        )
+        # Reported, never counted. See SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS.
+        app.state.reported[SIGN_IN_CHECK] = False
+        if wired is not None:
+            app.state.gate, app.state.automation = wired
+            # `wirings_for` has already refused an unset or unusable issuer, so this cannot raise.
+            app.state.sign_in_bindings = sign_in_bindings(app.state.db_sessions)
+            if await prime_keys(wired[0].authority, wall_clock):
+                app.state.reported[SIGN_IN_CHECK] = True
+            else:
+                priming = asyncio.create_task(
+                    keep_priming(wired[0].authority, app.state.reported, wall_clock)
+                )
+
     try:
         yield
     finally:
         # Drain before the socket closes. Uvicorn stops accepting first, so in-flight
         # requests finish against a live pool rather than a disposed one.
         log.info("shutting down")
+        if priming is not None:
+            priming.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await priming
+        key_client: httpx.Client | None = getattr(app.state, "key_client", None)
+        if key_client is not None:
+            key_client.close()
+        valkey: OwnedAsyncValkeyClient | None = getattr(app.state, "valkey", None)
+        if valkey is not None:
+            await valkey.aclose()
         console_reads = getattr(app.state, "console_reads", None)
         if console_reads is not None:
             await console_reads.close()
         await dispose(getattr(app.state, "db_engine", None))
+
+
+def key_set_client() -> httpx.Client:
+    """The HTTP client the realm's key set is fetched through, owned by the lifespan.
+
+    A function so a test can hand the lifespan a client over a mock transport and still have the
+    lifespan be what closes it. Configured with nothing: `keycloak_tokens.http_get` passes the
+    timeout and refuses redirects on every request, so a setting here would be a second place
+    for either.
+    """
+    return httpx.Client()
+
+
+def wall_clock() -> datetime:
+    """The instant a key set is fetched at. The realm's keys are judged against real time."""
+    return datetime.now(UTC)
+
+
+def entitlement_cache_for(client: AsyncValkeyClient | None) -> EntitlementCache:
+    """The cache `resolve` reads: Valkey when one is configured, and one holding nothing when not.
+
+    See `brain.cache.AN_ABSENT_CACHE_IS_A_MISS_AND_NEVER_AN_ANSWER`.
+    """
+    if client is None:
+        return NoEntitlementCache()
+    return ValkeyEntitlementCache(client)
+
+
+def wirings_for(
+    sessions: async_sessionmaker[AsyncSession],
+    *,
+    get: Callable[[str], bytes],
+    cache: EntitlementCache,
+    clock: Callable[[], datetime],
+    env: Mapping[str, str] | None = None,
+) -> tuple[GateWiring, AutomationWiring] | None:
+    """Both wirings over one set of sessions, or None when no token could ever be checked.
+
+    Both or neither: `brain.automation_routes.calling_automation` reads the gate wiring as well
+    as its own, so an automation wiring beside a missing gate would be a route that refuses for
+    a reason nobody could see. None is logged with the reason, which names the setting and never
+    a secret. See `AN_INSTALL_THAT_CANNOT_CHECK_A_SIGN_IN_IS_UNREADY_RATHER_THAN_STOPPED`.
+
+    `env` is for tests. A deployed process passes nothing, and `brain.install` reads the issuer.
+    """
+    try:
+        authority = keycloak_authority(
+            directory=StoredDirectory(sessions), get=get, clock=clock, env=env
+        )
+    except (InstallError, IdentityError) as exc:
+        log.error("sign-in is not configured, so nothing behind it will answer", error=str(exc))
+        return None
+    gate = GateWiring(
+        authority=authority,
+        versions=PostgresVersionSource(sessions),
+        store=StoredEntitlements(sessions),
+        cache=cache,
+    )
+    automation = AutomationWiring(
+        registrations=StoredAutomations(sessions), principals=StoredPrincipals(sessions)
+    )
+    return gate, automation
+
+
+async def prime_keys(authority: TokenAuthority, clock: Callable[[], datetime]) -> bool:
+    """Fetch the realm's key set once, off the event loop. True when it was fetched.
+
+    On a worker thread, for the reason `bearer.A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP` gives: the
+    fetch blocks for up to its timeout, and the lifespan runs on the loop every request shares.
+    The log names the exception class only.
+    """
+    try:
+        await asyncio.to_thread(authority.keys.keys_for, authority.issuer, clock())
+    except Exception as exc:
+        log.warning("realm keys unavailable", issuer=authority.issuer, error=type(exc).__name__)
+        return False
+    log.info("realm keys fetched", issuer=authority.issuer)
+    return True
+
+
+async def keep_priming(
+    authority: TokenAuthority, ready: MutableMapping[str, bool], clock: Callable[[], datetime]
+) -> None:
+    """Ask for the key set again until it arrives, then mark sign-in ready.
+
+    See `AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN`. The waits are read from the module
+    on every pass, so a test can shorten them.
+    """
+    delay = KEY_PRIMING_FIRST_RETRY_SECONDS
+    while True:
+        await asyncio.sleep(delay)
+        if await prime_keys(authority, clock):
+            ready[SIGN_IN_CHECK] = True
+            return
+        delay = min(delay * 2, KEY_PRIMING_MAX_RETRY_SECONDS)
 
 
 def request_recorders_for(
@@ -276,19 +512,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.ready = {}
+    app.state.reported = {}
     # Set to None rather than left unset, so "this process has no gate wiring" is a value a
-    # route reads rather than an AttributeError it recovers from. Nothing constructs one
-    # today: `brain.identity.oidc.SignatureVerifier` is an injected callback because the
-    # standard library cannot verify RS256 and this repository has added no cryptography
-    # dependency, so there is no verifier to put in a `TokenAuthority`. The store beside it
-    # exists, `brain.gate.entitlement_store.StoredEntitlements`, and waits on the authority.
-    # Every route under `API_PREFIX` therefore refuses, which is what a missing authenticator
-    # has to mean.
+    # route reads rather than an AttributeError it recovers from. `lifespan` builds it through
+    # `wirings_for` when there is a database and an issuer: `keycloak_tokens.verify_rs256` is the
+    # verifier, `StoredDirectory` finds the principal, and the entitlement store, version source
+    # and cache sit beside them. Until then, and for good on a process with no database or no
+    # issuer, every route under `API_PREFIX` refuses, which is what a missing authenticator has to
+    # mean.
     app.state.gate = None
+    # The same, for the sign-in bindings store `brain.sign_in_routes` reads. Built beside `gate`
+    # in `lifespan`, because it writes at the issuer the gate validates against, and a process
+    # without it refuses both routes alike.
+    app.state.sign_in_bindings = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None
-    # The same, for an automation's registration and its owner's standing. Nothing constructs
-    # one, for the reason nothing constructs `gate`: see `brain.automation_routes`.
+    # The same, for an automation's registration and its owner's standing. Built beside `gate`
+    # and never without it: see `wirings_for`.
     app.state.automation = None
 
     # Registered first, which makes it innermost: Starlette inserts each new middleware at
@@ -453,6 +693,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # authenticates an automation's credential rather than a person's token, and runs as the
     # automation's owner. It does not take `asking`, and `asking` does not take its credential.
     app.include_router(automation_router)
+    # Binding a Keycloak subject to a principal. A seventh router because it has two callers:
+    # an administrator over everything under the prefix, through `asking`, and the setup
+    # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified
+    # token and no `asking`, and closes once anybody signs in. See `brain.sign_in_routes`.
+    app.include_router(sign_in_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
@@ -461,8 +706,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/health/ready", response_model=Health, tags=["health"])
     async def ready(response: Response) -> Health:
-        """Every dependency is reachable. Deployment gates on this, not on liveness."""
+        """Every dependency is reachable. Deployment gates on this, not on liveness.
+
+        `checks` decide the status; `reported` are named beside them and decide nothing. See
+        `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
+        """
         checks: dict[str, bool] = dict(app.state.ready)
+        reported: dict[str, bool] = dict(getattr(app.state, "reported", {}))
         ok = all(checks.values()) if checks else True
         if not ok:
             response.status_code = 503
@@ -470,6 +720,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status="ok" if ok else "degraded",
             commit=settings.resolved_commit(),
             checks=checks,
+            reported=reported,
         )
 
     return app

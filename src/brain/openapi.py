@@ -82,15 +82,16 @@ PUBLIC_BY_TAG_PRIVATE_BY_DEFAULT = (
 #: Every route under `API_PREFIX` takes `brain.api_routes.asking`, which validates the
 #: bearer token through `brain.identity.oidc.validate_token` and refuses without one, so the
 #: requirement described below is enforced on every operation this document marks as needing
-#: it. What is still ahead of the code is narrower and worth naming precisely: no signature
-#: verifier is wired into the deployed process, so today the enforcement is a refusal of
-#: everything rather than an acceptance of the right tokens.
+#: it. **This then said no signature verifier was wired into the deployed process, and that is
+#: no longer true either:** `brain.app.lifespan` builds the token authority, with
+#: `keycloak_tokens.verify_rs256`, whenever the process has a database and an issuer. What is
+#: still ahead of the code is narrower again: nothing here has checked a token a live realm minted.
 DOCUMENTED_BEFORE_IT_IS_ENFORCED = (
     "The security requirement here is enforced rather than described: every operation under "
     "the versioned prefix takes a dependency that validates the bearer token and refuses "
-    "the request without one. What is not yet wired is the signature verifier, which is an "
-    "injected callback because the standard library cannot check RS256, so a deployed "
-    "instance refuses every credential rather than accepting a wrong one. The document is "
+    "the request without one. The signature verifier is wired: a deployed instance with a "
+    "database and an issuer checks RS256 against the realm's published keys, and one without "
+    "either refuses every credential rather than accepting a wrong one. The document is "
     "deliberately explicit about that rather than silent, because the alternative is a "
     "client author guessing why nothing works."
 )
