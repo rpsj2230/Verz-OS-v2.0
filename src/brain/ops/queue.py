@@ -165,21 +165,26 @@ decides anything - `concurrency_gaps`, `queue_url_refusals`, `driver_rls_stateme
 `deploy_plan_gaps`, `driver_option_gaps` - still takes its inputs and opens nothing, and the
 functions that do hold a connection decide nothing: they call those.
 
-What is still not claimed: **nothing registers a task**. The queue is installed, drained and
-bounded, and `brain.ops.jobs` holds the job model against a driver integration that does not
-exist, so a worker started today drains queues nothing enqueues onto. That is M17.1.2 and
-M32.4.1.4 rather than this leaf, and `brain.ops.worker` prints it as an advisory on every
-start rather than leaving it to be discovered by the first job that fails with an unknown
-task.
+**A task is registered and a job is carried in, and both ends derive the queue.** Until
+2026-09-15 nothing registered a task, so a worker drained queues nothing enqueued onto.
+`register_task` puts a task of ours on the driver and `enqueue_job` carries a `Job` in, and
+neither lets a caller name a queue: see `A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERIVES`. The first
+task is a control run, registered by `brain.ops.worker` and enqueued by its `--run-control` mode,
+and a test enqueues one against a real database and watches a worker run it and record it.
 
-Task ids: M32.4.1.1, M32.4.1.3, M32.4.2.1, M32.4.2.2, M32.4.2.3
+`Job.redrive` is not handed to the driver, and that is deliberate for now: the driver's own
+retry re-runs a failed job, and a re-drive is the machine dying under a job that never reached
+a verdict, which is `queue_redrive`'s and is still not wired. Mapping one onto the other would
+be the conflation the crash recovery paragraph above refuses.
+
+Task ids: M32.4.1.1, M32.4.1.3, M32.4.2.1, M32.4.2.2, M32.4.2.3, M17.1.2
 """
 
 from __future__ import annotations
 
 import enum
 import re
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Final, Protocol
@@ -1424,6 +1429,74 @@ def queue_app(url: str, *, pool_max: int, schema: str = DRIVER_SCHEMA) -> App:
     # spelled as its signature; proving the structural match would mean restating the four keys
     # here, which is the duplication `driver_pool_settings` exists to remove.
     return App(connector=PsycopgConnector(**cast(dict[str, Any], settings)))
+
+
+#: Why a task is registered on the queue its class derives and enqueued only onto that one.
+A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERIVES: Final = (
+    "The queue a job lands on decides which container fetches it, and each container is sized "
+    "for one slot class. A task registered on one queue and deferred onto another is fetched by "
+    "whichever container drains the second, which is how a job gets a slot it was never sized "
+    "for. So the queue is derived from the traffic class and the slot class at both ends, never "
+    "passed by the caller, and an enqueue whose derived queue disagrees with the registration is "
+    "refused rather than routed."
+)
+
+
+def register_task(
+    app: App,
+    name: str,
+    run: Callable[..., Awaitable[object]],
+    *,
+    traffic_class: TrafficClass,
+    slot_class: SlotClass = SlotClass.STANDARD,
+) -> None:
+    """Put one of our tasks on the driver, on the queue its class derives.
+
+    Here rather than in the caller because the decorator is the driver's API, and this is the one
+    module permitted to name the driver. The caller hands over a coroutine function and a class
+    and never sees a queue name, which is `queue_name_for`'s rule held at the registration end.
+
+    Refuses a name the driver's own tasks use, so `tasks_of_ours` cannot be made to report a task
+    of ours as the driver's, and refuses a second registration of one name, which the driver
+    would otherwise let replace the first.
+    """
+    if not name.strip() or any(name.startswith(p) for p in DRIVER_BUILTIN_TASK_PREFIXES):
+        msg = f"{name!r} is not a name a task of ours may have"
+        raise QueueError(msg)
+    if name in app.tasks:
+        msg = f"a task named {name!r} is already registered, and a second would replace it"
+        raise QueueError(msg)
+    from typing import Any, cast
+
+    # A library boundary: the decorator's generic signature cannot be satisfied by a callable
+    # whose parameters are only known at run time, and proving it buys nothing here.
+    decorate = cast(Any, app.task)
+    decorate(name=name, queue=queue_name_for(traffic_class, slot_class))(run)
+
+
+async def enqueue_job(app: App, job: Job, *, slot_class: SlotClass = SlotClass.STANDARD) -> int:
+    """Carry a `Job` into the driver, and answer with the driver's job identifier.
+
+    `Job` is where the rules about what a job may carry are enforced, so this takes one rather
+    than a name and a dictionary: an enqueue that bypassed it would put content in a queue row.
+    The arguments are passed through as they are, and they are references by construction.
+
+    Refuses a task that is not registered with this app, because the driver defers an unknown
+    name happily and the failure arrives later as a job no worker can run. Refuses a derived queue
+    that disagrees with the registration; see `A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERIVES`.
+    """
+    if job.task not in tasks_of_ours(app.tasks):
+        msg = f"no task of ours named {job.task!r} is registered, so nothing could run this job"
+        raise QueueError(msg)
+    queue = queue_name_for(job.traffic_class, slot_class)
+    registered = app.tasks[job.task].queue
+    if registered != queue:
+        msg = (
+            f"{job.task!r} is registered on {registered!r} and this job derives {queue!r}. "
+            f"{A_TASK_RUNS_ON_THE_QUEUE_ITS_CLASS_DERIVES}"
+        )
+        raise QueueError(msg)
+    return await app.configure_task(job.task, queue=queue).defer_async(**dict(job.args))
 
 
 def _tables_in(connection: Connection[Any], schema: str) -> frozenset[str]:

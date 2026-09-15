@@ -32,7 +32,6 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 from sqlalchemy import Numeric, SmallInteger, Table
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -55,6 +54,7 @@ from brain.routing_routes import (
     live_rungs,
 )
 from brain.tables.routing import RoutingRungRow
+from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     Directory,
     Keys,

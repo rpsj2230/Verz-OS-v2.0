@@ -24,7 +24,6 @@ import psycopg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -39,6 +38,7 @@ from brain.gate.context import Channel
 from brain.gate.fast_lane import FastPathRule
 from brain.ops.question_store import QuestionRecorder, asked_between, record
 from brain.tools.startup import build_registry
+from tests.fixtures.http_client import Response
 from tests.fixtures.scratch_postgres import drop, engine, fresh, migrate, modelled, run, shape, sql
 from tests.unit.test_answer_route import HOURS as PRICE
 from tests.unit.test_answer_route import OneRow

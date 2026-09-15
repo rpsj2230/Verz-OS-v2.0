@@ -86,9 +86,10 @@ all, so `brain.ops.worker` exited 69 rather than looping on a queue it could not
 M32.4.1.1 made it one, and a worker now drains a real queue against a real PostgreSQL. What is
 still true, and is the only thing that was ever true of *this* module, is that nothing here has
 been written, fetched or run: these are the rows a table of our own would hold, and there is no
-such table. M17.1.2 names the same integration as M32.4.1.1 from the other end of the plan and
-is not claimed here, because the part it would close is the part that is built. What is written
-instead is the shape such a row
+such table. M17.1.2 is claimed in `brain.ops.queue`, where `enqueue_job` carries a `Job` into
+the driver and `register_task` puts a task of ours on it, and where a control run is enqueued
+and run against a real database by a test; it is not claimed here, because nothing in this
+module is what the driver stores. What is written instead is the shape such a row
 would take, with every part named against the driver's own concept in `DRIVER_MAPPING`, and
 the parts that have no counterpart at all marked as ours: those are exactly the columns a
 table of our own would need, which is the specification for a migration this file is not

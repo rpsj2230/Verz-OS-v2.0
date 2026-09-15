@@ -17,11 +17,17 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.db import SCHEMAS
 from brain.ops.checkpoints import (
+    BRANCH_CHANNEL_PREFIX,
     CHECKPOINT_SCHEMA,
+    ERROR_CHANNEL,
+    INTERRUPT_CHANNEL,
+    START_CHANNEL,
+    TASKS_CHANNEL,
     CheckpointerConfig,
     CheckpointerError,
     checkpoint_refusals,
     connection_refusals,
+    owner_of,
     search_path_option,
 )
 from brain.ops.queue import pooler_url_findings
@@ -211,6 +217,74 @@ def test_every_scalar_a_reference_is_made_of_is_still_admitted() -> None:
         )
         == ()
     )
+
+
+# --------------------------------------------------- the framework's own channels
+def test_the_reserved_channel_names_are_the_librarys_own() -> None:
+    """Asserted against the library's constants rather than against this module's, so a release
+    that renames one fails here. Delete this and a renamed channel falls through to the
+    allowlist, which refuses it, and every graph stops saving with a message about a channel
+    nobody declared."""
+    from langgraph._internal._constants import INTERRUPT
+    from langgraph.checkpoint.serde.types import ERROR, TASKS
+    from langgraph.constants import START
+
+    assert (START_CHANNEL, INTERRUPT_CHANNEL, ERROR_CHANNEL, TASKS_CHANNEL) == (
+        START,
+        INTERRUPT,
+        ERROR,
+        TASKS,
+    )
+
+
+def test_a_routing_marker_may_hold_nothing_and_only_nothing() -> None:
+    """A real graph writes `branch:to:<node>` with no value on every edge. Delete this and the
+    marker can become a place to put a value under a name the allowlist never sees."""
+    assert checkpoint_refusals({f"{BRANCH_CHANNEL_PREFIX}fetch": None}) == ()
+    assert checkpoint_refusals({f"{BRANCH_CHANNEL_PREFIX}fetch": "t_1"}) != ()
+
+
+def test_the_runs_input_is_judged_as_the_channel_writes_it_holds() -> None:
+    """The input is the one reserved channel that legitimately holds a mapping, so it is the one
+    most worth hiding a payload in. Its references pass; a list inside it, a reserved name inside
+    it, or an input that is not a mapping at all is refused.
+
+    Delete this and `__start__` can carry the retrieved passages into the very first save."""
+    assert checkpoint_refusals({START_CHANNEL: {"run_id": "r_1", "principal_id": "p_1"}}) == ()
+    assert checkpoint_refusals({START_CHANNEL: {"record_refs": ["t_1", "t_2"]}}) != ()
+    assert checkpoint_refusals({START_CHANNEL: {START_CHANNEL: {"run_id": "r_1"}}}) != ()
+    assert checkpoint_refusals({START_CHANNEL: "r_1"}) != ()
+
+
+def test_an_interrupt_may_ask_with_a_reference_and_nothing_else() -> None:
+    """What a paused run asked with is saved, so it is held to the same rule as any value. The
+    library writes interrupts as a tuple of objects carrying `value`.
+
+    Delete this and `interrupt({"passages": [...]})` saves the passages under a reserved name."""
+    from langgraph.types import Interrupt
+
+    assert checkpoint_refusals({INTERRUPT_CHANNEL: (Interrupt(value="approve t_1"),)}) == ()
+    assert checkpoint_refusals({INTERRUPT_CHANNEL: (Interrupt(value={"passages": ["a"]}),)}) != ()
+    assert checkpoint_refusals({INTERRUPT_CHANNEL: (Interrupt(value="x" * 500),)}) != ()
+
+
+def test_an_error_and_fanned_out_work_are_never_admitted() -> None:
+    """An exception's message is whatever the failing code put in it, and a `Send` carries an
+    argument of the author's choosing. Delete this and either can be admitted by name."""
+    assert checkpoint_refusals({ERROR_CHANNEL: RuntimeError("record t_1")}) != ()
+    assert checkpoint_refusals({TASKS_CHANNEL: "anything"}) != ()
+
+
+def test_a_runs_owner_is_read_from_its_state_or_from_its_input() -> None:
+    """The first save holds only the input, so the owner has to be read from there too, and a
+    state naming nobody answers empty rather than raising.
+
+    Delete this and the guarded saver cannot tell who owns the very first checkpoint of a run."""
+    assert owner_of({"principal_id": "p_1"}) == "p_1"
+    assert owner_of({START_CHANNEL: {"principal_id": "p_2"}}) == "p_2"
+    assert owner_of({"principal_id": "p_1", START_CHANNEL: {"principal_id": "p_2"}}) == "p_1"
+    assert owner_of({"run_id": "r_1"}) == ""
+    assert owner_of({"principal_id": 7}) == ""
 
 
 def test_a_safe_configuration_is_constructible_and_says_where_its_tables_go() -> None:

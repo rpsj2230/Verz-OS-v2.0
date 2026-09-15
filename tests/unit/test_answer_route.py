@@ -27,7 +27,6 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 
 from brain.api import API_PREFIX
 from brain.api_routes import (
@@ -44,6 +43,7 @@ from brain.gate.rule_store import load_rules, rule_ids
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import build_registry, classification_for
+from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     CANARY_COST,
     CANARY_MARGIN,

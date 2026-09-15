@@ -34,7 +34,6 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
@@ -79,6 +78,7 @@ from brain.models.routing import DEFAULT_TIER
 from brain.ops.jobs import hidden_count_fields
 from brain.tables.agent import AgentRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
+from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,

@@ -621,18 +621,68 @@ def test_the_licence_allowlist_is_actually_applied() -> None:
         # An OR needs only one allowed operand; an AND needs all of them.
         ("MIT OR GPL-3.0-only", True),
         ("MIT AND GPL-3.0-only", False),
-        # Refused rather than guessed at, because a wrong answer here is silent.
-        ("(MIT OR Apache-2.0) AND ISC", False),
+        # Brackets group. The first is `orjson`'s real declaration.
+        ("MPL-2.0 AND (Apache-2.0 OR MIT)", True),
+        ("(MIT OR Apache-2.0) AND ISC", True),
+        ("((MIT OR GPL-3.0-only) AND (ISC OR AGPL-3.0-only))", True),
+        ("MIT AND (Apache-2.0 AND (ISC OR GPL-3.0-only))", True),
+        # A bracket does not launder what is inside it.
+        ("MIT AND (GPL-3.0-only OR AGPL-3.0-only)", False),
+        ("MPL-2.0 AND (GPL-3.0-only)", False),
+        ("(MIT OR ISC) AND (GPL-3.0-only OR SSPL-1.0)", False),
+        # Unreadable is refused, because a wrong answer here is silent.
+        ("(MIT OR Apache-2.0", False),
+        ("MIT OR Apache-2.0)", False),
+        ("MIT AND (Apache-2.0 OR (ISC)", False),
+        ("()", False),
+        ("MIT AND", False),
+        ("OR MIT", False),
+        ("MIT Apache-2.0", False),
+        ("MIT and Apache-2.0", False),
+        ("MIT, Apache-2.0", False),
+        # A character no token accounts for, which a tokeniser alone would skip.
+        ("MIT;", False),
         ("Apache-2.0 WITH LLVM-exception", False),
-        ("MIT AND Apache-2.0 OR ISC", False),
+        ("(MIT OR Apache-2.0) WITH LLVM-exception", False),
         ("", False),
+        ("   ", False),
     ],
 )
 def test_an_spdx_expression_is_read_rather_than_matched_as_a_string(
     expression: str, allowed: bool
 ) -> None:
     """The two halves that matter: an OR is a choice, an AND is a conjunction. Getting them
-    the wrong way round admits a GPL dependency that declared `MIT AND GPL-3.0-only`."""
+    the wrong way round admits a GPL dependency that declared `MIT AND GPL-3.0-only`.
+
+    Delete this and the parser can go back to refusing every bracket, which blocks a real
+    dependency made of allowed licences, or can start reading an unbalanced one generously,
+    which is the direction nothing else would notice."""
+    from brain.ops.sweeps import licence_is_allowed
+
+    assert licence_is_allowed(expression) is allowed
+
+
+@pytest.mark.parametrize(
+    ("expression", "allowed"),
+    [
+        # (GPL AND MIT) OR ISC: ISC alone is a valid choice.
+        ("GPL-3.0-only AND MIT OR ISC", True),
+        # ISC OR (MIT AND GPL): the same answer from the other side.
+        ("ISC OR MIT AND GPL-3.0-only", True),
+        # (GPL AND MIT) OR (AGPL AND ISC): neither choice is clean.
+        ("GPL-3.0-only AND MIT OR AGPL-3.0-only AND ISC", False),
+    ],
+)
+def test_and_binds_tighter_than_or_as_the_specification_says(
+    expression: str, allowed: bool
+) -> None:
+    """See `SPDX_AND_BINDS_TIGHTER_THAN_OR`. The first two rows are the pair a left-to-right
+    reading gets wrong in opposite directions, so a parser with the precedence inverted fails
+    one of them whichever way round it is inverted, and the third row is the one where reading
+    the choice as available when it is not would admit a GPL dependency.
+
+    Delete this and swapping which operator binds first passes every row above, because none
+    of those mixes the two operators without brackets."""
     from brain.ops.sweeps import licence_is_allowed
 
     assert licence_is_allowed(expression) is allowed

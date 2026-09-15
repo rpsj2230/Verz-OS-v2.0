@@ -101,7 +101,6 @@ from typing import Any, Final
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 
 from brain import demo, seed
 from brain.api import API_PREFIX
@@ -116,6 +115,7 @@ from brain.gate.fast_lane import FastPathRule, rules_from_rows
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.rows import ID_KEY, RowQuery, row_scope_for
 from brain.tools.startup import build_registry, classification_for
+from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,

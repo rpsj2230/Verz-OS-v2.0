@@ -32,7 +32,6 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 
 from brain import approval_routes
 from brain.api import API_PREFIX
@@ -54,6 +53,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_artefact
 from brain.identity.bearer import TokenAuthority
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
+from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,

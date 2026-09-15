@@ -35,7 +35,6 @@ from typing import Any, cast
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
@@ -59,6 +58,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.admission import ASSURANCE_VERBS, CHANNEL_VERBS, Assurance
 from brain.gate.context import Channel
 from brain.knowledge.columns import PRICE_LIST, ColumnRule, TableClassification, project_row
+from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     Directory,
     Keys,

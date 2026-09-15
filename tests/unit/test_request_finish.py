@@ -24,7 +24,6 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.adoption import (
@@ -57,6 +56,7 @@ from brain.ops.question_store import QuestionRecorder
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.tables.adoption import QuestionAskedRow
 from brain.tools.startup import build_registry
+from tests.fixtures.http_client import Response
 from tests.unit.test_answer_lane import (
     ACME,
     CLIENT_TOOL,

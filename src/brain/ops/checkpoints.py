@@ -81,15 +81,14 @@ enable it on a table that does not exist yet. What the schema choice buys is tha
 tables land somewhere that check can see, and the gap becomes a red sweep instead of an
 absence. The default lands them in `public`, which that sweep does not enumerate.
 
-**What does not exist, and this is the part to read before believing anything above.**
-`langgraph` is not in `uv.lock` and nothing here builds a graph: `src/brain/agents/` is a
-docstring and no code. So no saver is constructed from this configuration, no checkpoint has
-ever been written, and M32.4.1.2 is not claimed. Two of the functions below have **no caller
-anywhere in this repository**: `checkpoint_refusals` and `may_resume` are the write boundary
-and the resume boundary of a saver that does not exist, and saying so is the point rather
-than a caveat on it. This repository's most common defect is a mechanism that is correct,
-tested, documented and invoked from nowhere, and the way it survives review is by being
-described in a sentence that sounds like it is wired.
+**What exists now, and what still does not.** Since 2026-09-15 the saver is a dependency and
+`brain.ops.checkpoint_store.GuardedSaver` calls `checkpoint_refusals` on every save and
+`may_resume` on every read, so both boundaries have a caller, and a test runs a real graph
+through them against PostgreSQL. What still does not exist is a graph under `src/brain`: the
+agent loop that compiles one is its own leaf, and until it lands the guarded saver is reached by
+its tests and the install by `python -m brain.ops.worker --install-checkpointer`. This
+repository's most common defect is a mechanism that is correct, tested and invoked from
+nowhere, so the sentence says which of those this still is.
 
 What is wired today: `brain.ops.worker.preflight` validates a checkpointer URL before the
 worker starts, so an install pointed at the pooler is refused at the door rather than
@@ -97,33 +96,21 @@ discovered by a resume that never resumes, and it now also asks `channel_policy_
 declared allowlist that has drifted into holding a content channel stops a container instead
 of being found by reading the constant.
 
-**Why the saver is still not a dependency, measured on 2026-09-15 rather than deferred.** The
-earlier reason was cost unmeasured, and it is now measured: `langgraph-checkpoint-postgres`
-3.1.2 resolves for Linux and adds seventeen packages to `uv.lock`, and importing it on top of
-`brain.ops.worker` and the queue driver adds 8.9 to 10.3 MiB of working set and 236 modules
-over three runs, with `langsmith` installed and not loaded. That is affordable inside the
-general worker's gap, and it would be paid only by a process that imports the saver. **What
-stops it is a gate, not a cost.** The package requires `orjson` directly, `orjson` declares
-`MPL-2.0 AND (Apache-2.0 OR MIT)`, and `brain.ops.sweeps.licence_is_allowed` refuses any
-expression with brackets by design so that a person looks, although every operand is already
-on `ALLOWED_LICENCES`. CI runs that sweep and CI gates Deploy, so adding the saver today leaves
-production on the previous commit with nothing saying why. The dependency waits for that
-parser to be taught one level of brackets, or for a person to admit the expression by name.
+**What the saver costs, measured on 2026-09-15.** `langgraph-checkpoint-postgres` 3.1.2 and
+`langgraph` 1.2.11 are dependencies. Importing the saver on top of `brain.ops.worker` and the
+queue driver added 8.9 to 10.3 MiB of working set and 236 modules over three runs, with
+`langsmith` installed and not loaded, and only a process that imports
+`brain.ops.checkpoint_store` pays it: this module imports nothing from the library, so the
+worker's preflight does not. It was held back for a day by the licence sweep, which refused any
+bracketed SPDX expression and so refused `orjson`'s `MPL-2.0 AND (Apache-2.0 OR MIT)`, every
+operand of which was already allowed; the parser was the fault and was fixed rather than the
+dependency named.
 
-Rejected in the same measurement: a second checkpoint store of our own on a migration. The
-library ships its own versioned schema and an idempotent `setup()` that records what it has
-applied, which is the property the queue driver's schema command lacked, so the install that
-waits is `brain.ops.queue.install_queue`'s shape (create the schema, run the library's setup,
-secure what the catalogue gained) and not a transcribed CREATE that forks at the next release.
-
-Two things the integration must not take from the library's defaults, both read off the
-installed source. `PostgresSaver.from_conn_string` opens its connection with
-`prepare_threshold=0`, which `CheckpointerConfig` refuses, so the saver has to be constructed
-on a connection or pool built from this configuration and never from a string. And the
-library writes its own reserved channels (`__error__`, `__interrupt__`, `__pregel_tasks`)
-through `put_writes`, and `PERSISTABLE_CHANNELS` refuses all three, so the first graph behind a
-guarded saver will fail on its first interrupt until somebody decides what each of those may
-hold. An interrupt's value is whatever the graph put in it, which is content.
+**The framework writes channels of its own, and each is decided here rather than admitted by
+name.** See `THE_FRAMEWORKS_CHANNELS_OBEY_THE_SAME_RULES`: the input is judged as the channel
+writes it holds, a routing marker holds nothing, an interrupt asks with a reference, an error
+is never saved, and fanned-out work is refused. What a real graph writes was read off one
+rather than assumed, and the test that pins the names reads them off the library's constants.
 
 Deliberately absent: a retention rule. It is a real requirement of a checkpoint store, it is
 its own WBS leaf, and writing it here without the thing it acts on would be a mechanism with
@@ -133,9 +120,9 @@ Carrying references means the state cannot be reconstituted without going back t
 gate, so the re-check is what a resume *is*, and the thing that had to be built was the
 refusal that keeps the state to references.
 
-What this serves is the leaf named in the paragraph above, and it is deliberately not
-claimed. The id is not repeated on the line below, because that line is parsed for ids and
-a sentence saying a leaf is not claimed reads to the parser exactly like claiming it.
+The leaves this serves are claimed in `brain.ops.checkpoint_store`, which is where a saver is
+built and where the test that saves and resumes a real graph lives. This module decides and
+opens nothing, so it claims nothing.
 
 Task ids: none
 """
@@ -362,6 +349,112 @@ A_CHECKPOINT_CANNOT_CARRY_A_REACH: Final = (
 #: `bytes` is absent on purpose: it is content with no length rule, and a reference is text.
 PERSISTABLE_SCALARS: Final[tuple[type, ...]] = (str, int, float, bool, type(None))
 
+# ------------------------------------------------------- the framework's own channels
+#: The graph's input, saved once as a mapping of the channel writes it will make.
+START_CHANNEL: Final = "__start__"
+#: What a paused node asked for. Written through `put_writes` as `Interrupt` objects.
+INTERRUPT_CHANNEL: Final = "__interrupt__"
+#: The exception a node raised. Written through `put_writes`; never saved. See below.
+ERROR_CHANNEL: Final = "__error__"
+#: Work fanned out with `Send`, each carrying an argument of the graph author's choosing.
+TASKS_CHANNEL: Final = "__pregel_tasks"
+#: A routing marker per node, written with no value when an edge is taken.
+BRANCH_CHANNEL_PREFIX: Final = "branch:to:"
+
+#: The reserved names this module decides about. Read against the library's own constants by a
+#: test, so a release that renames one fails there rather than sailing past the allowlist.
+RESERVED_CHANNELS: Final[frozenset[str]] = frozenset(
+    {START_CHANNEL, INTERRUPT_CHANNEL, ERROR_CHANNEL, TASKS_CHANNEL}
+)
+
+#: What each of the framework's channels may hold, and why none of them is a way round the rules.
+THE_FRAMEWORKS_CHANNELS_OBEY_THE_SAME_RULES: Final = (
+    "The graph library writes five kinds of channel of its own, and each is decided rather than "
+    "admitted by name, because a reserved name is exactly where a payload would hide. The input "
+    "is a mapping of the channel writes the run will make, so it is judged as those writes: "
+    "every key a declared channel, every value a scalar reference. A routing marker exists to "
+    "say an edge was taken and holds nothing, so it may hold only nothing. An interrupt carries "
+    "whatever the graph passed when it paused, which is content unless it is a scalar reference "
+    "within the length bound, so only that is admitted. An error is the exception a node raised, "
+    "and its message is whatever the failing code put in it, record identifiers and values "
+    "included; it is never saved, and a resume runs the failed task again, which is what the "
+    "library does with a saved error too, measured both ways on 2026-09-15. A fanned-out task "
+    "carries an argument of the author's choosing, no graph here fans out, and it is refused "
+    "until one does and somebody argues what that argument may be."
+)
+
+
+def owner_of(channels: Mapping[str, object]) -> str:
+    """The principal a saved run belongs to, read from its state, or empty when it names none.
+
+    From `principal_id` once the run has started, and from the input on the very first save,
+    where the library has not yet split the input into channels. Empty rather than raising, so
+    the caller's refusal is the one that names the fault: a run nobody owns is a run anybody
+    may resume, and `CheckpointHeader` says so in those words.
+    """
+    direct = channels.get("principal_id")
+    if isinstance(direct, str):
+        return direct
+    started = channels.get(START_CHANNEL)
+    if isinstance(started, Mapping):
+        nested = started.get("principal_id")
+        if isinstance(nested, str):
+            return nested
+    return ""
+
+
+def _is_reserved(name: str) -> bool:
+    return name in RESERVED_CHANNELS or name.startswith(BRANCH_CHANNEL_PREFIX)
+
+
+def _reserved_refusals(name: str, value: object) -> tuple[str, ...]:
+    """Every reason one of the framework's own channels may not hold this value.
+
+    See `THE_FRAMEWORKS_CHANNELS_OBEY_THE_SAME_RULES`. Only reached for a reserved name.
+    """
+    if name.startswith(BRANCH_CHANNEL_PREFIX):
+        if value is None:
+            return ()
+        return (
+            f"channel {name!r} is a routing marker and holds nothing, and it holds a "
+            f"{type(value).__name__}",
+        )
+    if name == START_CHANNEL:
+        if not isinstance(value, Mapping):
+            return (
+                f"channel {name!r} is the run's input and must be a mapping of channel writes, "
+                f"and it is a {type(value).__name__}",
+            )
+        nested = sorted(str(key) for key in value if _is_reserved(str(key)))
+        if nested:
+            return (
+                f"the run's input writes to the framework's own channels {nested}, which only "
+                "the framework writes",
+            )
+        return checkpoint_refusals({str(key): inner for key, inner in value.items()})
+    if name == INTERRUPT_CHANNEL:
+        paused = value if isinstance(value, (list, tuple)) else (value,)
+        found: list[str] = []
+        for interrupt in paused:
+            carried = getattr(interrupt, "value", interrupt)
+            too_long = isinstance(carried, str) and len(carried) > MAX_ARGUMENT_CHARS
+            if too_long or not isinstance(carried, PERSISTABLE_SCALARS):
+                found.append(
+                    f"an interrupt carries a {type(carried).__name__}"
+                    f"{' over the length bound' if too_long else ''}; a paused run may ask for "
+                    "a reference and nothing else, because what it asked with is saved"
+                )
+        return tuple(found)
+    if name == ERROR_CHANNEL:
+        return (
+            f"channel {name!r} holds an exception, whose message is whatever the failing code "
+            "put in it; errors are not saved and a resume runs the task again",
+        )
+    return (
+        f"channel {name!r} carries fanned-out work with an argument of the author's choosing, "
+        "and no graph here has argued what that argument may be",
+    )
+
 
 def checkpoint_refusals(channels: Mapping[str, object]) -> tuple[str, ...]:
     """Every reason this state may not be written to the checkpoint store.
@@ -370,10 +463,8 @@ def checkpoint_refusals(channels: Mapping[str, object]) -> tuple[str, ...]:
     `brain.config.check`: a graph author who has put three payloads in their state should
     learn that once rather than three times.
 
-    **This has no caller.** No saver is constructed anywhere in this repository, so nothing
-    passes state through here today. It is written now because the rule is what makes the
-    entitlement argument above true, and a boundary added after the first saver is a boundary
-    added after the first checkpoint has been written.
+    Called by `brain.ops.checkpoint_store.GuardedSaver` on every save and every write, before a
+    row is written, and the rule is what makes the entitlement argument above true.
 
     Order matters only in that the allowlist is asked first. A channel nobody declared is
     refused whatever its value, so a graph author who adds a working field gets the same
@@ -381,6 +472,9 @@ def checkpoint_refusals(channels: Mapping[str, object]) -> tuple[str, ...]:
     """
     findings: list[str] = []
     for name, value in channels.items():
+        if _is_reserved(name):
+            findings.extend(_reserved_refusals(name, value))
+            continue
         if name not in PERSISTABLE_CHANNELS:
             findings.append(
                 f"channel {name!r} is not one a checkpoint may hold, so it is refused "
@@ -476,7 +570,7 @@ def may_resume(header: CheckpointHeader, principal_id: str) -> bool:
     admitted anybody who could see the referenced records would let a manager resume a
     subordinate's half-finished run and receive an answer composed for somebody else.
 
-    **This has no caller**, for the same reason `checkpoint_refusals` has none: there is no
-    resume, because there is no graph.
+    Called by `brain.ops.checkpoint_store.GuardedSaver` on every read, so a run somebody else
+    owns reads as no run at all.
     """
     return bool(principal_id.strip()) and header.principal_id == principal_id

@@ -184,7 +184,9 @@ from brain.ops.queue import (
     FALLBACK_POLL_SECONDS,
     MIB_PER_SLOT,
     NO_DRIVER_IS_INSTALLED,
+    Job,
     QueueError,
+    Redrive,
     Shard,
     SlotClass,
     concurrency_gaps,
@@ -192,16 +194,19 @@ from brain.ops.queue import (
     driver_default_disagreements,
     driver_is_installed,
     driver_schema_gaps,
+    enqueue_job,
     install_queue,
     queue_app,
     queue_pool_gaps,
     queue_url_refusals,
+    register_task,
     run_shards,
     stale_after,
     tasks_of_ours,
     worker_shards,
 )
-from brain.ops.schedule_runner import due_now, next_tick, runner_for, start_control
+from brain.ops.schedule import report_only_now
+from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.wiring import WiringError, component
 from brain.session import make_app_engine, make_session_factory
@@ -1026,6 +1031,11 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
     except QueueError as exc:
         print(f"the queue driver will not be started: {exc}", file=sys.stderr)
         return EXIT_MISCONFIGURED
+    if database_url is not None:
+        # Only a worker that schedules registers the control run, for the reason it is the only
+        # one that ticks: a control reads the application's tables, and the parse worker has
+        # neither that connection nor the memory for a sweep.
+        register_tasks(app, database_url=database_url)
     shards = worker_shards(allocation, slot_class)
     # Asked of the tasks that are ours rather than of the registry, because the driver puts a
     # housekeeping task of its own on every app it builds. Asking the registry made this
@@ -1141,30 +1151,132 @@ async def tick_controls(
         if runner_for(owed.name).run is None:
             found.append(ControlTick(owed.name, Ticked.NOTHING_TO_RUN))
             continue
-        async with sessions() as session, session.begin():
-            if not await take_the_lock(session, owed.name):
-                found.append(ControlTick(owed.name, Ticked.LOCKED_ELSEWHERE))
-                continue
-            run_id = await record_start(session, owed.name, at=now, report_only=owed.report_only)
-            try:
-                detail = await asyncio.to_thread(
-                    _start, owed.name, owed.report_only, now, database_url
-                )
-            except Exception as exc:
-                reason = f"{type(exc).__name__}: {exc}"
-                await record_finish(
-                    session, run_id, at=clock(), outcome="failed", detail=reason[:DETAIL_CHARS]
-                )
-                found.append(ControlTick(owed.name, Ticked.FAILED, reason))
-                continue
-            outcome = "refused" if owed.report_only else "ok"
-            await record_finish(
-                session, run_id, at=clock(), outcome=outcome, detail=detail[:DETAIL_CHARS]
+        found.append(
+            await start_owed(
+                sessions,
+                owed.name,
+                report_only=owed.report_only,
+                now=now,
+                database_url=database_url,
+                clock=clock,
             )
-            found.append(
-                ControlTick(owed.name, Ticked.REFUSED if owed.report_only else Ticked.RAN, detail)
-            )
+        )
     return tuple(found)
+
+
+async def start_owed(
+    sessions: async_sessionmaker[AsyncSession],
+    name: str,
+    *,
+    report_only: bool,
+    now: datetime,
+    database_url: str,
+    clock: Callable[[], datetime] = _utc_now,
+) -> ControlTick:
+    """One control: take its lock, record its start, run it off the loop, record its finish.
+
+    The whole of what a run is, in one function, so the schedule and the queue cannot come to
+    disagree about it. `tick_controls` calls this for each control owed and `run_control_job`
+    calls it for one control a person asked for; see
+    `A_QUEUED_CONTROL_IS_THE_SCHEDULED_RUN_BY_ANOTHER_DOOR`. One transaction, because the lock
+    lives exactly as long as one, and a raise from the runner is the run's recorded failure
+    rather than an exception out of here.
+    """
+    async with sessions() as session, session.begin():
+        if not await take_the_lock(session, name):
+            return ControlTick(name, Ticked.LOCKED_ELSEWHERE)
+        run_id = await record_start(session, name, at=now, report_only=report_only)
+        try:
+            detail = await asyncio.to_thread(_start, name, report_only, now, database_url)
+        except Exception as exc:
+            reason = f"{type(exc).__name__}: {exc}"
+            await record_finish(
+                session, run_id, at=clock(), outcome="failed", detail=reason[:DETAIL_CHARS]
+            )
+            return ControlTick(name, Ticked.FAILED, reason)
+        outcome = "refused" if report_only else "ok"
+        await record_finish(
+            session, run_id, at=clock(), outcome=outcome, detail=detail[:DETAIL_CHARS]
+        )
+        return ControlTick(name, Ticked.REFUSED if report_only else Ticked.RAN, detail)
+
+
+# ------------------------------------------------------------- the first queued task (M17.1.2)
+#: The name a control run is registered and enqueued under.
+CONTROL_TASK: Final = "brain.controls.run"
+
+#: Why a control that arrives by the queue is not a second kind of run.
+A_QUEUED_CONTROL_IS_THE_SCHEDULED_RUN_BY_ANOTHER_DOOR: Final = (
+    "A control run somebody asks for through the queue takes the same advisory lock, writes the "
+    "same row in ops.control_run and is subject to the same report-only rule as the one the "
+    "schedule starts, because both call start_owed. A separate path would be a second answer to "
+    "whether a retention sweep may delete, and the second answer is the one nobody audits. The "
+    "job carries the control's name and nothing else: whether it may act is decided when it "
+    "runs, from brain.ops.schedule, and never read from a queue row somebody could have written."
+)
+
+
+class ControlRunError(Exception):
+    """A queued control ran and its runner raised. Raised so the queue's row says failed too."""
+
+
+def control_job(name: str) -> Job:
+    """The job that runs this control once. Refuses a control that has nothing to run.
+
+    `runner_for` refuses a name no runner has, and a runner with nothing to start is refused
+    here with the sentence saying what it still needs, so an operator asking for a control that
+    cannot run is told why at the door rather than by a failed job later.
+    """
+    runner = runner_for(name)
+    if runner.run is None:
+        msg = f"control {name!r} has nothing to run yet: it needs {runner.needs}"
+        raise RunnerError(msg)
+    return Job(
+        task=CONTROL_TASK,
+        traffic_class=TrafficClass.SYSTEM,
+        args={"name": name},
+        redrive=Redrive.UNSAFE,
+    )
+
+
+async def run_control_job(
+    name: str, *, database_url: str, clock: Callable[[], datetime] = _utc_now
+) -> str:
+    """What the registered task does: one control, through `start_owed`, on the application's
+    database. See `A_QUEUED_CONTROL_IS_THE_SCHEDULED_RUN_BY_ANOTHER_DOOR`."""
+    control_job(name)
+    engine = make_app_engine(database_url)
+    try:
+        ticked = await start_owed(
+            make_session_factory(engine),
+            name,
+            report_only=name in report_only_now(),
+            now=clock(),
+            database_url=database_url,
+            clock=clock,
+        )
+    finally:
+        await engine.dispose()
+    if ticked.ticked is Ticked.FAILED:
+        msg = f"control {name} failed: {ticked.detail}"
+        raise ControlRunError(msg)
+    return f"control {name}: {ticked.ticked.value}"
+
+
+def register_tasks(app: Any, *, database_url: str) -> None:
+    """Put this worker's tasks on the queue driver. Today that is the control run."""
+
+    async def run_control(name: str) -> str:
+        return await run_control_job(name, database_url=database_url)
+
+    register_task(app, CONTROL_TASK, run_control, traffic_class=TrafficClass.SYSTEM)
+
+
+async def enqueue_control(app: Any, name: str) -> int:
+    """Enqueue one run of this control, and answer with the queue's job identifier."""
+    job = control_job(name)
+    async with app.open_async():
+        return await enqueue_job(app, job)
 
 
 async def run_schedule(
@@ -1264,15 +1376,72 @@ def _loop_factory() -> Callable[[], asyncio.AbstractEventLoop] | None:
     return None
 
 
-def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
-    """`python -m brain.ops.worker [--check | --ready | --deploy-plan | --install-queue]`.
+def install_checkpointer_text(env: Mapping[str, str]) -> tuple[int, str]:
+    """Install the checkpointer's tables on this container's checkpointer connection, and say
+    what happened.
 
-    Five modes, and each one is used by something. `--check` is an operator asking whether a
+    The saver's module is imported here and nowhere else in this file, so its import cost, which
+    was measured at about ten MiB, is paid by the one mode that uses it and not by every worker
+    start.
+    """
+    from brain.ops.checkpoints import CheckpointerConfig, CheckpointerError
+
+    url = (env.get(CHECKPOINTER_URL_ENV) or "").strip()
+    if not url:
+        return (
+            EXIT_MISCONFIGURED,
+            f"{CHECKPOINTER_URL_ENV} is not set, so there is nothing to install",
+        )
+    try:
+        from brain.ops.checkpoint_store import install_checkpointer
+
+        done = install_checkpointer(CheckpointerConfig(url=url))
+    except CheckpointerError as exc:
+        return EXIT_MISCONFIGURED, f"the checkpointer was not installed: {exc}"
+    return 0, "\n".join(f"  - {line}" for line in done)
+
+
+def run_control_text(
+    env: Mapping[str, str], name: str, *, worker_component: str
+) -> tuple[int, str]:
+    """Enqueue one run of a control on this container's queue, and say what happened.
+
+    Refused unless this is the general worker with the application's database, because that is
+    the only worker that registers the control run; enqueueing from anywhere else would put a
+    job on a queue whose task this process could not even describe.
+    """
+    database_url = schedule_url(env) if schedules_here(worker_component) else None
+    if database_url is None:
+        return EXIT_MISCONFIGURED, (
+            "a control is enqueued from the general worker with the application's database: "
+            f"{A_WORKER_THAT_SCHEDULES_NEEDS_THE_APPLICATIONS_DATABASE_URL}"
+        )
+    share, split = queue_pool_max(env, worker_component=worker_component)
+    if share is None:
+        reason = "; ".join(split) if split else f"{POOL_MAX_ENV} is not set"
+        return EXIT_MISCONFIGURED, f"the control was not enqueued: {reason}"
+    try:
+        app = queue_app(
+            (env.get(QUEUE_URL_ENV) or "").strip(), pool_max=share, schema=DRIVER_SCHEMA
+        )
+        register_tasks(app, database_url=database_url)
+        job_id = asyncio.run(enqueue_control(app, name), loop_factory=_loop_factory())
+    except (QueueError, RunnerError) as exc:
+        return EXIT_MISCONFIGURED, f"the control was not enqueued: {exc}"
+    return 0, f"control {name} enqueued as job {job_id}"
+
+
+def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
+    """`python -m brain.ops.worker [--check | --ready | --deploy-plan | --install-queue |
+    --install-checkpointer | --run-control NAME]`.
+
+    Seven modes, and each one is used by something. `--check` is an operator asking whether a
     deployment would start; `--ready` is the container healthcheck; `--deploy-plan` is the
-    steps that install the queue and `--install-queue` is those steps run; no argument is the
-    container's command. The environment is a parameter defaulting to the real one so the modes
-    can be tested without one, which is the same reason `brain.ops.admission` takes `now`
-    rather than reading a clock.
+    steps that install the queue and `--install-queue` is those steps run;
+    `--install-checkpointer` installs the saver's tables; `--run-control` enqueues one control
+    run; no argument is the container's command. The environment is a parameter defaulting to
+    the real one so the modes can be tested without one, which is the same reason
+    `brain.ops.admission` takes `now` rather than reading a clock.
     """
     arguments = list(sys.argv[1:] if argv is None else argv)
     environment = process_environment() if env is None else env
@@ -1347,6 +1516,22 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         # the tables are right, the row-level security is on, and nothing will ever be
         # notified, which is the failure with no error in it.
         code, text = install_queue_text(environment, worker_component=worker_component)
+        print(text, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+
+    if "--install-checkpointer" in arguments:
+        # After the preflight for the same reason as the queue: `connection_refusals` has already
+        # been asked about the checkpointer URL, so the tables cannot be installed on the pooler.
+        code, text = install_checkpointer_text(environment)
+        print(text, file=sys.stdout if code == 0 else sys.stderr)
+        return code
+
+    if "--run-control" in arguments:
+        # No guard on a missing name: `control_job` refuses one no runner has, empty included,
+        # with the list of controls that exist, and every other flag is handled above this.
+        at = arguments.index("--run-control")
+        name = arguments[at + 1] if at + 1 < len(arguments) else ""
+        code, text = run_control_text(environment, name, worker_component=worker_component)
         print(text, file=sys.stdout if code == 0 else sys.stderr)
         return code
 

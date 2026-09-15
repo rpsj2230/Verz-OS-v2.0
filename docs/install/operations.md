@@ -88,6 +88,17 @@ optional at all. Every other row is required, and `tables` is the row where gett
 costs the most in both directions: skipping it leaves a worker that starts and drains nothing,
 and repeating it raises on a database that was already correct.
 
+The checkpointer's tables are installed the same way and for the same reason, by
+`python -m brain.ops.worker --install-checkpointer` on the connection `BRAIN_CHECKPOINTER_URL`
+names. It runs the graph library's own setup into the `agent` schema and then enables row-level
+security on every `checkpoint*` table it finds there. Unlike the queue's step it is safe to run on
+every deploy: the library records which of its migrations it has applied and applies only the
+rest.
+
+A control can be run once, on demand, through the queue rather than waiting for the schedule:
+`python -m brain.ops.worker --run-control <name>` enqueues it, and the general worker runs it
+under the same lock and records it in the same table as a scheduled run.
+
 
 ## Creating, migrating and seeding the database
 

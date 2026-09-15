@@ -594,30 +594,115 @@ _CLASSIFIER_TO_SPDX = {
 }
 
 
+#: Why the expression is parsed with precedence rather than split on its operators.
+SPDX_AND_BINDS_TIGHTER_THAN_OR = (
+    "The SPDX specification gives AND a higher precedence than OR, so 'GPL-3.0-only AND MIT "
+    "OR ISC' is a choice between ISC and the pair, and 'ISC OR MIT AND GPL-3.0-only' is a "
+    "choice between ISC and a pair that includes the GPL. Reading either left to right turns "
+    "one of them into the opposite answer. The first wrong reading refuses a dependency the "
+    "project may take; the second admits one it may not, silently, in a sweep whose only job "
+    "is to say no. So the grammar is the specification's, and a bracket is a group rather than "
+    "a reason to give up."
+)
+
+#: Why an expression this cannot read is refused rather than read generously.
+AN_EXPRESSION_THIS_CANNOT_READ_IS_REFUSED = (
+    "A licence check's wrong answers are silent: an admitted GPL dependency produces no "
+    "error anywhere until somebody reads the lock. So an unbalanced bracket, a dangling "
+    "operator, a lowercase operator, a WITH exception or any character outside an SPDX "
+    "identifier is a refusal, which makes a person look, and never a best guess at what the "
+    "author meant."
+)
+
+#: One SPDX token: a bracket, or a run of the characters an identifier or operator is made of.
+_SPDX_TOKEN_RE = re.compile(r"[()]|[A-Za-z0-9.+-]+")
+
+#: The whole expression, so a character no token accounts for is noticed rather than skipped.
+_SPDX_EXPRESSION_RE = re.compile(r"\s*(?:(?:[()]|[A-Za-z0-9.+-]+)\s*)+")
+
+
+class _UnreadableLicence(Exception):
+    """An expression the grammar below does not describe. Never escapes this module."""
+
+
 def licence_is_allowed(expression: str) -> bool:
     """Whether an SPDX expression is covered by the allowlist.
 
     Real metadata is not a bare id. `structlog` declares `MIT OR Apache-2.0`, `greenlet`
-    declares `MIT AND PSF-2.0`, and a plain set membership test refuses both - which is how
-    a working allowlist gets deleted for being wrong rather than fixed.
+    declares `MIT AND PSF-2.0`, and `orjson` declares `MPL-2.0 AND (Apache-2.0 OR MIT)`. A plain
+    set membership test refuses all three, which is how a working allowlist gets deleted for
+    being wrong rather than fixed.
 
-    `OR` is a choice, so one allowed operand is enough. `AND` is a conjunction, so every
-    operand must be allowed. Anything with brackets, a `WITH` exception, or both operators
-    mixed is refused rather than guessed at: this is a check whose wrong answers are silent,
-    and the honest response to an expression this cannot parse is to make a person look.
+    `OR` is a choice, so one allowed branch is enough. `AND` is a conjunction, so every term
+    must be allowed. Brackets group, and `AND` binds tighter than `OR`; see
+    `SPDX_AND_BINDS_TIGHTER_THAN_OR`. So an expression is allowed exactly when some choice of
+    its `OR` branches leaves every `AND` term on `ALLOWED_LICENCES`.
+
+    **Until 2026-09-15 any bracket was a refusal**, which was the honest response to a grammar
+    this could not read and became the wrong one the day a dependency declared a bracketed
+    expression made entirely of licences already on the list. The class of fault was the
+    parser, not the dependency, so there is no entry here naming a package.
+
+    Everything the grammar does not describe is still refused; see
+    `AN_EXPRESSION_THIS_CANNOT_READ_IS_REFUSED`. That includes `WITH`, which is a real SPDX
+    operator this project has no allowlisted exception for, so reading it would only ever add a
+    way to be wrong.
     """
-    text = expression.strip()
-    if not text:
+    if not _SPDX_EXPRESSION_RE.fullmatch(expression):
         return False
-    if "(" in text or ")" in text or " WITH " in text:
+    tokens = _SPDX_TOKEN_RE.findall(expression)
+    position = 0
+
+    def peek() -> str | None:
+        return tokens[position] if position < len(tokens) else None
+
+    def take() -> str:
+        nonlocal position
+        symbol = peek()
+        if symbol is None:
+            msg = "the expression ended where a licence or a bracket was expected"
+            raise _UnreadableLicence(msg)
+        position += 1
+        return symbol
+
+    def either() -> bool:
+        # Every branch is parsed before any is judged, so a malformed branch after an allowed
+        # one is still a refusal rather than being skipped by short-circuiting.
+        allowed = both()
+        while peek() == "OR":
+            take()
+            branch = both()
+            allowed = allowed or branch
+        return allowed
+
+    def both() -> bool:
+        allowed = term()
+        while peek() == "AND":
+            take()
+            other = term()
+            allowed = allowed and other
+        return allowed
+
+    def term() -> bool:
+        symbol = take()
+        if symbol == "(":
+            inner = either()
+            if take() != ")":
+                msg = "a bracket was opened and not closed"
+                raise _UnreadableLicence(msg)
+            return inner
+        if symbol in {")", "AND", "OR", "WITH"}:
+            msg = f"{symbol!r} stands where a licence was expected"
+            raise _UnreadableLicence(msg)
+        return symbol in ALLOWED_LICENCES
+
+    try:
+        allowed = either()
+    except _UnreadableLicence:
         return False
-    if " OR " in text and " AND " in text:
-        return False
-    if " OR " in text:
-        return any(part.strip() in ALLOWED_LICENCES for part in text.split(" OR "))
-    if " AND " in text:
-        return all(part.strip() in ALLOWED_LICENCES for part in text.split(" AND "))
-    return text in ALLOWED_LICENCES
+    # A token left over is a closing bracket nothing opened, a WITH, a lowercase operator or two
+    # identifiers side by side. Each of those is an expression this did not read.
+    return allowed and position == len(tokens)
 
 
 def _installed_licences() -> dict[str, str]:

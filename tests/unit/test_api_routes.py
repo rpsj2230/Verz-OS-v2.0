@@ -36,7 +36,6 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from httpx import Response
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
@@ -61,6 +60,7 @@ from brain.identity.bearer import SECOND_FACTOR_METHODS, TokenAuthority
 from brain.identity.oidc import SIGN_IN_PROMPT, KeySet, SigningKey
 from brain.knowledge.rows import ID_KEY, RowQuery
 from brain.tools.startup import build_registry
+from tests.fixtures.http_client import Response
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 ISSUER = "https://id.verz.example/realms/brain"
