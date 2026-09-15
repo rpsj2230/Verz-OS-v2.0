@@ -3,7 +3,7 @@
 Three leaves about what a browser run is allowed to start as, and one about whether it should
 have been a browser at all.
 
-Task ids: M19.6.1, M19.6.5, M19.6.7, M19.7.1
+Task ids: M19.6.1, M19.6.5, M19.6.7, M19.7.1, M19.7.2
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from brain.browsing.sessions import (
+    ACT_ON_SURFACE,
+    ACT_ON_SURFACE_CAPABILITY,
     BROWSE_SURFACE,
     BROWSING_CAPABILITIES,
     READ_SURFACE,
@@ -152,14 +154,15 @@ def test_a_halt_on_everything_refuses_a_new_browser_session() -> None:
 
 
 def test_browser_sessions_are_budgeted_once_globally_and_not_per_domain() -> None:
-    """M19.6.2 is not delivered, and this is the structural reason rather than an opinion.
+    """The global budget stays unkeyed, which is why the per-domain and per-agent limits live
+    beside it in `brain.browsing.concurrency` rather than inside admission.
 
     `BROWSER_SESSIONS` is not in `admission.PER_CONNECTOR`, so an `AdmissionRequest` naming a
-    domain raises. Asserted so that the gap is a fact about the code rather than a sentence in
-    a report.
+    domain raises. Asserted so that the reason for the second module is a fact about the code
+    rather than a sentence in a report.
 
-    Delete this and somebody closes M19.6.2 by adding a counter here, which is the second
-    counter this module exists not to be.
+    Delete this and somebody keys the global budget by domain, which turns the one global count
+    into a per-domain default and leaves nowhere for the agent.
     """
     from brain.core.lane import Lane
     from brain.gate.context import TrafficClass
@@ -176,35 +179,41 @@ def test_browser_sessions_are_budgeted_once_globally_and_not_per_domain() -> Non
             key="books.example",
         )
 
-    assert any("M19.6.2" in one for one in concurrency_gaps())
-    assert any("M19.6.3" in one for one in concurrency_gaps())
+    gaps = concurrency_gaps()
+    assert not any("M19.6.2" in one or "M19.6.3" in one for one in gaps)
+    assert any("M19.6.4" in one for one in gaps)
 
 
-# --------------------------------------------------------------------- read only first
+# --------------------------------------------------------------------- read, then one write
 
 
-def test_the_only_browsing_capability_that_ships_is_a_read() -> None:
-    """M19.7.1 is a claim about what does not exist, so this is the test that fails on the
-    day it starts existing.
+def test_browsing_ships_one_read_and_one_write_and_nothing_else() -> None:
+    """M19.7.1 and M19.7.2. The read is still side-effect free, and the write is the one tool
+    and the one capability envelope approval is attached to.
 
-    Delete this and a write capability can be added without anybody closing M19.7.2, which
-    asks for it to sit behind envelope approval that nothing here builds.
+    Delete this and a second write capability can ship beside the approved one without
+    anybody deciding it should.
     """
-    assert BROWSING_CAPABILITIES == (BROWSE_SURFACE,)
+    assert BROWSING_CAPABILITIES == (BROWSE_SURFACE, ACT_ON_SURFACE_CAPABILITY)
     assert BROWSE_SURFACE.verb == "read"
+    assert ACT_ON_SURFACE_CAPABILITY.verb == "write"
     assert READ_SURFACE.side_effect is SideEffect.NONE
+    assert ACT_ON_SURFACE.required_capability == ACT_ON_SURFACE_CAPABILITY.value
     assert capability_gaps() == ()
 
 
-def test_a_write_capability_would_be_reported() -> None:
-    """The positive case for the check: it has to be able to fail.
+def test_a_second_write_capability_or_write_tool_would_be_reported() -> None:
+    """The positive case for the check: it has to be able to fail, and it must not fail on the
+    write that is approved.
 
     Delete this and `capability_gaps` could return an empty tuple unconditionally, and the
     test above would pass for every capability list the package could ship.
     """
-    gaps = capability_gaps(capabilities=(WRITE,))
+    second = Capability(value="approve:browser_surface")
 
-    assert any("whose verb is 'write'" in one for one in gaps)
+    assert capability_gaps(capabilities=(ACT_ON_SURFACE_CAPABILITY,)) == ()
+    assert any("whose verb is 'approve'" in one for one in capability_gaps(capabilities=(second,)))
+    assert capability_gaps(definitions=(ACT_ON_SURFACE,)) == ()
 
     with_effect = ToolDefinition(
         name="browser.submit_form",

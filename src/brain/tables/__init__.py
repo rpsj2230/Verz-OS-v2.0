@@ -49,6 +49,7 @@ from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.audit import AuditEntryRow
+from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
@@ -192,6 +193,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0040_knowledge_item. Points at nothing: a chunk names its document by id and this row is
     # that document, and no key runs between them while neither of their writers exists.
     "know.item",
+    # 0041_browser_envelope. Points at nothing: the asker and the agent are values, so what a
+    # run was permitted outlives both.
+    "agent.browser_envelope",
 )
 
 __all__ = [
@@ -199,6 +203,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentRow",
     "AuditEntryRow",
+    "BrowserEnvelopeRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",
     "CapabilityGrantRow",

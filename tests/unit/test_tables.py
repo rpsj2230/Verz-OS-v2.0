@@ -94,6 +94,7 @@ MIGRATION_SPEND_REPORT = VERSIONS / "0035_materialised_spend_report.py"
 MIGRATION_QUESTIONS = VERSIONS / "0038_question_asked.py"
 MIGRATION_TELEMETRY = VERSIONS / "0039_request_telemetry.py"
 MIGRATION_KNOWLEDGE_ITEM = VERSIONS / "0040_knowledge_item.py"
+MIGRATION_BROWSER_ENVELOPE = VERSIONS / "0041_browser_envelope.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -224,6 +225,9 @@ TELEMETRY_TABLES: tuple[str, ...] = ("obs.request_telemetry",)
 #: And the one 0040 adds: a knowledge item's stewardship, without its text.
 KNOWLEDGE_ITEM_TABLES: tuple[str, ...] = ("know.item",)
 
+#: And the one 0041 adds: a sealed browser envelope and its approval's who and when.
+BROWSER_ENVELOPE_TABLES: tuple[str, ...] = ("agent.browser_envelope",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -247,6 +251,7 @@ ALL_TABLES = (
     + QUESTION_TABLES
     + TELEMETRY_TABLES
     + KNOWLEDGE_ITEM_TABLES
+    + BROWSER_ENVELOPE_TABLES
 )
 
 
@@ -948,6 +953,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     telemetry = migration_module(MIGRATION_TELEMETRY)
     knowledge_item = migration_module(MIGRATION_KNOWLEDGE_ITEM)
     assert knowledge_item.TABLES == KNOWLEDGE_ITEM_TABLES
+    browser_envelope = migration_module(MIGRATION_BROWSER_ENVELOPE)
+    assert browser_envelope.TABLES == BROWSER_ENVELOPE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -994,6 +1001,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(questions.TABLES)
         + tuple(telemetry.TABLES)
         + tuple(knowledge_item.TABLES)
+        + tuple(browser_envelope.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1021,6 +1029,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(questions.TABLES),
         set(telemetry.TABLES),
         set(knowledge_item.TABLES),
+        set(browser_envelope.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
