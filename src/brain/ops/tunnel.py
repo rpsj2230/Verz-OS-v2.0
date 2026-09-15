@@ -25,16 +25,23 @@ ingress list names the client's own addresses, which would be a client value in 
 repository ships. With a token the addresses live in the client's own Cloudflare account and
 the file carries nothing about them.
 
-**What the option does not do, stated so nobody reads it as done.**
+**Why sign-in is a second overlay.** The identity provider on `standard` and `full` joins its
+own internal network and the deployment panel's proxy network, never `default`, so the first
+overlay reaches the console and not the sign-in page. Joining the panel's network from the first
+file would stop `lite` starting, and redefining the identity provider there gives `lite` a
+service with no image. `docker-compose.tunnel.identity.yml` is composed only where the identity
+provider is, and puts it and the tunnel on a network holding the two of them alone. See
+`A_PROFILE_WITH_AN_IDENTITY_PROVIDER_COMPOSES_THE_SECOND_OVERLAY` and
+`THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE`. Rejected: routing
+sign-in through the application, which would make the application a proxy for the credential
+flow, a second implementation of what the identity provider already serves.
 
-- `brain.deployment.release.INCLUDED` carries only the compose files some profile composes, so
-  a release archive does not contain this overlay, and the update script composes the profile's
-  files without it. `THE_RELEASE_DOES_NOT_CARRY_THE_OVERLAY` is pinned by a test that fails
-  on the day that changes.
-- The identity provider on `standard` and `full` sits on the deployment panel's proxy network
-  and not on `default`, so this tunnel reaches the console and not the sign-in page. See
-  `THE_TUNNEL_REACHES_THE_CONSOLE_AND_NOT_THE_IDENTITY_PROVIDER`.
-- No tunnel has ever been started from this file.
+**How an install records the choice.** The token in the environment file is the record, and
+nothing beside it is. See `THE_ENVIRONMENT_FILE_RECORDS_THE_CHOICE`;
+`brain.deployment.release` carries both overlays in the archive and renders the update and
+rollback scripts to read that line.
+
+**What the option still has not done: no tunnel has ever been started from these files.**
 
 Task ids: M30.1.3
 """
@@ -42,11 +49,24 @@ Task ids: M30.1.3
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Final
 
 #: The overlay, by the name an operator passes with `-f`.
 OVERLAY: Final = "docker-compose.tunnel.yml"
+
+#: The second overlay, composed after the first onto a profile that runs the identity provider.
+IDENTITY_OVERLAY: Final = "docker-compose.tunnel.identity.yml"
+
+#: The compose file that declares the identity provider, and so decides the second overlay.
+IDENTITY_FILE: Final = "docker-compose.keycloak.yml"
+
+#: The identity provider's service, and the port its sign-in page answers on.
+IDENTITY_SERVICE: Final = "keycloak"
+IDENTITY_PORT: Final = 8080
+
+#: The network the second overlay creates for the tunnel and the identity provider alone.
+IDENTITY_NETWORK: Final = "tunnel-identity"
 
 #: The one service the overlay declares.
 SERVICE: Final = "cloudflared"
@@ -124,19 +144,30 @@ THE_EDGE_TERMINATES_TLS_AND_READS_EVERY_REQUEST: Final = (
     "does not do. That is a decision for the client, and the network guide says so first."
 )
 
-THE_RELEASE_DOES_NOT_CARRY_THE_OVERLAY: Final = (
-    "The release archive is derived from the compose files each profile composes, and no "
-    "profile composes the tunnel. An install from a release therefore has no overlay on disk, "
-    "and the update script brings the stack up without it. Until the archive includes it, the "
-    "file is copied onto the server by hand and the tunnel is started again after every update."
+THE_ENVIRONMENT_FILE_RECORDS_THE_CHOICE: Final = (
+    "An install chooses the tunnel by writing its token into the environment file, because the "
+    "overlay refuses to start without it there. That line is what the update and rollback "
+    "scripts read, and no second setting sits beside it. A flag saying tunnel while the token "
+    "is missing is a stack compose refuses to start; a token with the flag unset is an update "
+    "that brings the stack up without the tunnel after 80 and 443 were closed, which is a "
+    "console nobody can reach with every step reporting success. An argument to the scripts "
+    "was rejected for the same reason: it asks the person updating to remember a choice "
+    "somebody else made months before."
 )
 
-THE_TUNNEL_REACHES_THE_CONSOLE_AND_NOT_THE_IDENTITY_PROVIDER: Final = (
-    "On `standard` and `full` the identity provider joins the deployment panel's proxy network "
-    "and its own internal one, never `default`. The tunnel joins `default` only, because joining "
-    "an external network that exists only where the panel runs would stop `lite` starting at "
-    "all. So through this overlay the sign-in page is unreachable, and the option is complete "
-    "for `lite` alone."
+A_PROFILE_WITH_AN_IDENTITY_PROVIDER_COMPOSES_THE_SECOND_OVERLAY: Final = (
+    "The identity provider is never on `default`, so a tunnel composed without the second "
+    "overlay onto a profile that runs it serves a console whose sign-in page answers nothing. "
+    "A profile without it must not compose the second overlay either: that file redefines the "
+    "identity provider, and on a profile that has none it is a service with no image."
+)
+
+THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE: Final = (
+    "The second overlay only adds one network, to the tunnel and the identity provider, and "
+    "that network is internal and created by this stack under no fixed name. Any other key on "
+    "either service changes the base stack from a file nobody reviewing it would read; any "
+    "other member is a service a public hostname can point at or the identity provider can "
+    "reach; and an external or named network is one another stack can join."
 )
 
 
@@ -221,6 +252,61 @@ def overlay_gaps(document: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(found)
 
 
+def overlays_for(files: Sequence[str]) -> tuple[str, ...]:
+    """The overlays a tunnel on this profile composes, in `-f` order, from its compose files.
+
+    See `A_PROFILE_WITH_AN_IDENTITY_PROVIDER_COMPOSES_THE_SECOND_OVERLAY`. Decided by the file
+    name because that is what the update script's profile arm holds; a test holds the name to
+    the file that really declares the identity provider.
+    """
+    if IDENTITY_FILE in files:
+        return (OVERLAY, IDENTITY_OVERLAY)
+    return (OVERLAY,)
+
+
+def identity_overlay_gaps(document: Mapping[str, Any]) -> tuple[str, ...]:
+    """Every way the second overlay does more than put two services on one private network.
+
+    Empty for the file as written. See
+    `THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE`.
+    """
+    services = document.get("services")
+    if not isinstance(services, Mapping):
+        return (f"{IDENTITY_OVERLAY} declares no services, so it joins nothing to anything",)
+    found: list[str] = []
+    members = {SERVICE, IDENTITY_SERVICE}
+    if set(services) != members:
+        found.append(
+            f"{IDENTITY_OVERLAY} declares {sorted(str(one) for one in services)} rather than "
+            f"{sorted(members)}. "
+            f"{THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE}"
+        )
+    for name in sorted(members):
+        body = services.get(name)
+        if not isinstance(body, Mapping):
+            continue
+        if set(body) != {"networks"} or _names(body["networks"]) != {IDENTITY_NETWORK}:
+            found.append(
+                f"{name!r} in {IDENTITY_OVERLAY} does more than join {IDENTITY_NETWORK!r}. "
+                f"{THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE}"
+            )
+    networks = document.get("networks")
+    declared = networks.get(IDENTITY_NETWORK) if isinstance(networks, Mapping) else None
+    if (
+        not isinstance(networks, Mapping)
+        or set(networks) != {IDENTITY_NETWORK}
+        or not isinstance(declared, Mapping)
+        or declared.get("internal") is not True
+        or "external" in declared
+        or "name" in declared
+    ):
+        found.append(
+            f"{IDENTITY_OVERLAY} does not declare {IDENTITY_NETWORK!r} alone, internal and "
+            f"unnamed. {THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE}"
+        )
+    return tuple(found)
+
+
 def tunnel_section(page: str) -> str | None:
     """The text under the network guide's tunnel heading, up to the next level-two heading."""
     headings = list(LEVEL_TWO.finditer(page))
@@ -250,6 +336,8 @@ def page_gaps(page: str, *, variable: str | None) -> tuple[str, ...]:
         f"`{OVERLAY}`": "the file to compose",
         f"`{variable}`": "the variable the overlay refuses to start without",
         f"`{APPLICATION_SERVICE}:{APPLICATION_PORT}`": "where the public hostname points",
+        f"`{IDENTITY_OVERLAY}`": "the file that makes sign-in reachable where there is one",
+        f"`{IDENTITY_SERVICE}:{IDENTITY_PORT}`": "where the sign-in hostname points",
         "ss -tlnp": "how to confirm nothing is listening",
         str(EDGE_PORT): "the outbound port the tunnel needs",
     }

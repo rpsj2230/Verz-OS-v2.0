@@ -8,9 +8,12 @@ so a substring check over the file would be satisfied by the explanation.
 Each refusal has a positive sibling, and the first test is the sibling of all of them: the file
 as written is clean, so a checker that refused everything fails there.
 
-Two tests pin what is not done, and they are expected to fail on the day it is: the release
-archive does not carry the overlay, and the identity provider is not on the tunnel's network.
-That failure is the notification to change the page and the module with them.
+Until 2026-09-15 two tests here pinned what was not done: the release archive did not carry the
+overlay, and the identity provider was on no network the tunnel joins. Both are now positive
+tests, of the archive and of the second overlay composed onto the profiles that need it. The
+network half rests on compose merging a service's `networks` as a union by name, which the
+helper `networks_of` models and which was read from compose-go's merge rules rather than
+measured against a running stack.
 
 Task ids: M30.1.3
 """
@@ -19,13 +22,14 @@ from __future__ import annotations
 
 import copy
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
-from brain.deployment.release import INCLUDED
+from brain.deployment.release import archive_files, included_by, refused_by
 from brain.deployment.requirements import COMPOSE_FILES_FOR, files_for, published_ports
 from brain.ops.tunnel import (
     A_MOVING_TAG_IS_A_DIFFERENT_BINARY_HOLDING_THE_CREDENTIAL,
@@ -33,13 +37,21 @@ from brain.ops.tunnel import (
     A_TUNNEL_WITH_NO_CREDENTIAL_REFUSES_TO_START,
     APPLICATION_PORT,
     APPLICATION_SERVICE,
+    IDENTITY_FILE,
+    IDENTITY_NETWORK,
+    IDENTITY_OVERLAY,
+    IDENTITY_PORT,
+    IDENTITY_SERVICE,
     OVERLAY,
     SECTION_HEADING,
     SERVICE,
     THE_CREDENTIAL_IS_NOT_ON_THE_COMMAND_LINE,
+    THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE,
     THE_TUNNEL_STAYS_OFF_THE_CANVAS_NETWORK,
     THE_TUNNEL_WAITS_FOR_THE_APPLICATION,
+    identity_overlay_gaps,
     overlay_gaps,
+    overlays_for,
     page_gaps,
     token_variable,
     tunnel_section,
@@ -74,6 +86,56 @@ def only_finding(document: dict[str, Any]) -> str:
 
 def page() -> str:
     return PAGE.read_text(encoding="utf-8")
+
+
+def networks_of(files: Mapping[str, Any], service: str) -> set[str]:
+    """The networks one service joins across a set of compose files, merged as compose merges
+    them: a union by name, with no `networks` key in any file meaning `default`."""
+    joined: set[str] = set()
+    declared = False
+    for document in files.values():
+        body = (document.get("services") or {}).get(service)
+        if isinstance(body, Mapping) and "networks" in body:
+            declared = True
+            joined.update(str(one) for one in body["networks"])
+    if not declared and any(service in (one.get("services") or {}) for one in files.values()):
+        return {"default"}
+    return joined
+
+
+def composed(profile: str) -> dict[str, Any]:
+    """A profile's own files with the overlays a tunnel on it composes, in `-f` order."""
+    names = (*files_for(profile), *overlays_for(files_for(profile)))
+    return {name: load(name) for name in names}
+
+
+def identity_edited(change: str) -> dict[str, Any]:
+    """The second overlay with one named thing broken, each a way it could do too much."""
+    document = copy.deepcopy(load(IDENTITY_OVERLAY))
+    services, network = document["services"], document["networks"][IDENTITY_NETWORK]
+    if change == "another service":
+        services["app"] = {"networks": [IDENTITY_NETWORK]}
+    elif change == "a port on the identity provider":
+        services[IDENTITY_SERVICE]["ports"] = ["8080:8080"]
+    elif change == "the tunnel on default as well":
+        services[SERVICE]["networks"] = [IDENTITY_NETWORK, "default"]
+    elif change == "not internal":
+        network["internal"] = False
+    elif change == "external":
+        network["external"] = True
+    elif change == "a fixed name":
+        network["name"] = "shared"
+    elif change == "no network declared":
+        del document["networks"]
+    elif change == "a second network declared":
+        document["networks"]["other"] = {"internal": True}
+    elif change == "a scalar networks key":
+        document["networks"] = 5
+    elif change == "a bare network":
+        document["networks"][IDENTITY_NETWORK] = None
+    elif change == "no services":
+        del document["services"]
+    return document
 
 
 def with_section(text: str, change: tuple[str, str]) -> str:
@@ -338,6 +400,8 @@ def test_a_guide_with_no_section_is_a_finding() -> None:
         ("ss -tlnp", "a listening check"),
         ("`app:8000`", "the application"),
         ("7844", "the edge port"),
+        (f"`{IDENTITY_OVERLAY}`", "the second overlay"),
+        ("`keycloak:8080`", "the identity provider"),
     ],
 )
 def test_a_section_missing_a_value_is_a_finding_even_if_the_page_names_it_elsewhere(
@@ -356,35 +420,128 @@ def test_a_section_missing_a_value_is_a_finding_even_if_the_page_names_it_elsewh
     assert missing in found[0]
 
 
-# ================================================================== what is not done, pinned
-def test_the_release_archive_does_not_carry_the_overlay_yet() -> None:
-    """**Expected to fail on the day it is fixed, and that failure is the notification.**
+# ================================================================ what reaches a client's server
+@pytest.mark.parametrize("name", [OVERLAY, IDENTITY_OVERLAY])
+def test_the_release_archive_carries_both_overlays(name: str) -> None:
+    """The update and rollback scripts compose these onto an install whose environment file holds
+    the token, so an archive without them is an update that stops on exactly the installs that
+    chose the tunnel. This test asserted the opposite until 2026-09-15, and the guide told a
+    person to copy the file across by hand.
 
-    The archive is derived from the compose files each profile composes, and no profile composes
-    the tunnel, so an install from a release has no overlay on disk. The guide's step copying
-    the file by hand, `THE_RELEASE_DOES_NOT_CARRY_THE_OVERLAY` and the paragraph after an update
-    all describe this, and all three change when this test goes red.
-
-    Delete this and the archive can start carrying the file while the guide goes on telling
-    people to copy it by hand, or stop carrying it after somebody claims the leaf."""
-    patterns = {rule.pattern for rule in INCLUDED}
-
-    assert "docker-compose.lite.yml" in patterns
-    assert OVERLAY not in patterns
+    Delete this and the include can be dropped with the scripts still naming the files."""
+    assert included_by(name), name
+    assert not refused_by(name), name
+    assert name in archive_files(REPO)
 
 
-def test_the_identity_provider_is_not_on_the_network_the_tunnel_joins() -> None:
-    """**Expected to fail on the day it is fixed.** The identity provider joins the panel's proxy
-    network and its own, and the tunnel joins `default`, so on `standard` and `full` the sign-in
-    page is not reachable through the tunnel. The guide's "complete for `lite` only" rests on
-    this and on `lite` composing no identity provider at all.
+# ============================================================== sign-in, through the second file
+def test_the_second_overlay_as_written_adds_one_private_network_and_nothing_else() -> None:
+    """The file itself, parsed, and the positive sibling of every refusal below.
 
-    Delete this and the identity provider can join `default` while the guide still turns every
-    `standard` install away from the option."""
-    keycloak = load("docker-compose.keycloak.yml")["services"]["keycloak"]
-    tunnel = load(OVERLAY)["services"][SERVICE]
+    Delete this and the real file can gain a port on the identity provider with every
+    refusal still green."""
+    assert identity_overlay_gaps(load(IDENTITY_OVERLAY)) == ()
 
-    assert "default" not in set(keycloak["networks"])
-    assert not set(keycloak["networks"]) & set(tunnel["networks"])
-    assert "docker-compose.keycloak.yml" in files_for("standard")
-    assert "docker-compose.keycloak.yml" not in files_for("lite")
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "another service",
+        "a port on the identity provider",
+        "the tunnel on default as well",
+        "not internal",
+        "external",
+        "a fixed name",
+        "no network declared",
+        "a second network declared",
+        "a bare network",
+        "a scalar networks key",
+    ],
+)
+def test_a_second_overlay_that_does_more_than_join_two_services_is_a_finding(change: str) -> None:
+    """Each is a way the file changes the base stack or widens who can reach whom: a third member
+    is a service a public hostname can point at, a port is an inbound port, the tunnel on
+    `default` from here is a change nobody reviewing the first file sees, and an external or
+    named network is one another stack can join.
+
+    Delete this and the second overlay can grow into a second copy of the base stack."""
+    found = identity_overlay_gaps(identity_edited(change))
+
+    assert len(found) == 1, found
+    assert THE_IDENTITY_NETWORK_HOLDS_THE_TUNNEL_AND_THE_IDENTITY_PROVIDER_ALONE in found[0]
+
+
+def test_a_second_overlay_with_no_services_is_a_finding() -> None:
+    """The refusal for the whole shape. Delete this and a document with nothing in it reads as
+    clean, because every other check loops over services that are not there."""
+    found = identity_overlay_gaps(identity_edited("no services"))
+
+    assert found == (f"{IDENTITY_OVERLAY} declares no services, so it joins nothing to anything",)
+
+
+@pytest.mark.parametrize("profile", sorted(COMPOSE_FILES_FOR))
+def test_a_profile_composes_the_second_overlay_exactly_when_it_runs_the_identity_provider(
+    profile: str,
+) -> None:
+    """`overlays_for` decides by file name, which is what the update script's profile arm holds,
+    so this holds the name to the file that really declares the identity provider, read off the
+    parsed documents of every profile.
+
+    Delete this and the identity provider can move to another file, leaving every `standard`
+    install with a tunnel whose sign-in page answers nothing, or `lite` composing a file that
+    redefines a service it does not have."""
+    declaring = {
+        name
+        for name in files_for(profile)
+        if IDENTITY_SERVICE in (load(name).get("services") or {})
+    }
+
+    assert declaring <= {IDENTITY_FILE}
+    expected = (OVERLAY, IDENTITY_OVERLAY) if declaring else (OVERLAY,)
+    assert overlays_for(files_for(profile)) == expected
+
+
+def test_the_identity_port_is_the_one_the_identity_provider_exposes() -> None:
+    """The sign-in hostname points at `keycloak:8080`, and the compose file is where that port is
+    written down. Delete this and the guide can name a port the container does not listen on."""
+    keycloak = load(IDENTITY_FILE)["services"][IDENTITY_SERVICE]
+
+    assert str(IDENTITY_PORT) in [str(one) for one in keycloak["expose"]]
+
+
+def test_without_the_second_overlay_the_tunnel_shares_no_network_with_the_identity_provider() -> (
+    None
+):
+    """Why the second file exists at all: the identity provider is never on `default`, so the
+    first overlay alone reaches the console and not the sign-in page.
+
+    Delete this and the identity provider can join `default` in its own file, and the second
+    overlay goes on existing for a problem that has gone, with nobody told."""
+    files = {name: load(name) for name in (*files_for("standard"), OVERLAY)}
+
+    assert not networks_of(files, IDENTITY_SERVICE) & networks_of(files, SERVICE)
+
+
+@pytest.mark.parametrize("profile", sorted(COMPOSE_FILES_FOR))
+def test_on_every_profile_the_tunnel_reaches_the_application_and_any_sign_in_and_nothing_else(
+    profile: str,
+) -> None:
+    """The option's reach, over the files the update script composes for a tunnel on this
+    profile. The tunnel shares `default` with the application; where there is an identity
+    provider it shares exactly the private network with it; it never shares a network with the
+    identity provider's database or the automation canvas; and no port is published.
+
+    Delete this and the composed result can drift from what either file says on its own, which
+    is the only form in which the option runs."""
+    files = composed(profile)
+    tunnel = networks_of(files, SERVICE)
+
+    assert tunnel & networks_of(files, APPLICATION_SERVICE) == {"default"}
+    if IDENTITY_FILE in files:
+        assert tunnel & networks_of(files, IDENTITY_SERVICE) == {IDENTITY_NETWORK}
+        assert not tunnel & networks_of(files, "keycloak-db")
+        assert networks_of(files, IDENTITY_SERVICE) >= {"identity", "proxy", IDENTITY_NETWORK}
+    else:
+        assert IDENTITY_NETWORK not in tunnel
+    assert "tool-api" not in tunnel
+    assert published_ports(files) == ()

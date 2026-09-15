@@ -77,6 +77,12 @@ Both take the profile you installed, because nothing your install leaves on disk
 one it was. Both are safe to run twice: every step that writes something says when it has
 nothing left to do, and the count of steps and the reason for each is printed as they run.
 
+**If your install uses the Cloudflare Tunnel, neither script needs telling.** Both read
+`/opt/brain/.env`, and when it holds a value for `CLOUDFLARE_TUNNEL_TOKEN` they add
+`docker-compose.tunnel.yml` to every command they run, and on `standard` and `full`
+`docker-compose.tunnel.identity.yml` as well, and print a line saying so. The release carries
+both files. See [network.md](network.md).
+
 **The rollback takes no tag, and that is the design.** It goes back to the release recorded in
 `PREVIOUS_RELEASE` or it stops. What it could otherwise guess from is the tag it is already on
 or whatever the release host offers today, and both are guesses about your server. It is run at

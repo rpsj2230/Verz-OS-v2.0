@@ -1,0 +1,48 @@
+# The tunnel's second file: sign-in through the Cloudflare Tunnel, on a profile that runs the
+# identity provider.
+#
+# Composed after `docker-compose.tunnel.yml`, and only onto a profile that composes
+# `docker-compose.keycloak.yml`, which today is `standard` and `full`:
+#
+#   docker compose <the profile's -f files> -f /opt/brain/docker-compose.tunnel.yml \
+#     -f /opt/brain/docker-compose.tunnel.identity.yml up -d
+#
+# The update and rollback scripts compose it themselves on those profiles when the install's
+# environment file holds the tunnel token. The argument is in `brain.ops.tunnel`.
+#
+# **Why a second file and not one more network in the first.** The identity provider joins
+# its own internal network and the deployment panel's proxy network, never `default`, so the
+# tunnel on `default` cannot reach the sign-in page. Joining the panel's network from the first
+# file would stop `lite` starting, because that network is external and exists only where the
+# panel runs; and redefining `keycloak` there would give `lite`, which has no identity
+# provider, a service with no image. A file composed only where the identity provider exists
+# has neither problem.
+#
+# **Why a network of its own and not one of the three that already exist.** On `default` the
+# identity provider would sit beside the application's database and cache, which is the blast
+# radius `docker-compose.keycloak.yml` gives it a separate database to avoid. On the panel's
+# proxy network the tunnel would sit beside every service the panel proxies on this host,
+# including other projects', and a public hostname in the client's Cloudflare account could
+# then point at any of them. On `identity` the tunnel would reach the identity provider's
+# database. This network holds the tunnel and the identity provider and nothing else.
+#
+# Compose merges a service's `networks` across files as a union by name, so both services keep
+# every network they already join and gain this one. That was read from compose-go's merge
+# rules on 2026-09-15 (`mergeSpecials[prefix+".*.networks"] = mergeNetworks`, which merges as a
+# mapping), not measured against a running stack.
+#
+# Task ids: M30.1.3
+
+services:
+  cloudflared:
+    networks:
+      - tunnel-identity
+  keycloak:
+    networks:
+      - tunnel-identity
+
+networks:
+  tunnel-identity:
+    # Internal: nothing on it reaches anything outside it. The tunnel dials Cloudflare over
+    # `default`, and the identity provider keeps the route it already has.
+    internal: true

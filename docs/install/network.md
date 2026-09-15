@@ -201,17 +201,21 @@ this system gives passes through Cloudflare in the clear. With a reverse proxy o
 server, nothing outside that server does. If your company's data may not pass through a third
 party, use the reverse proxy described above instead.
 
-**It is complete for `lite` only.** On `standard` and `full` the identity provider sits on the
-deployment panel's proxy network, which the tunnel does not join, so the sign-in page is not
-reachable through it. Use the reverse proxy for those profiles.
+**On `standard` and `full` it takes a second file, and it does not close the panel's ports.**
+Those profiles run the identity provider, which is not on the network the tunnel joins, so
+`docker-compose.tunnel.identity.yml` is composed as well and puts the tunnel and the identity
+provider on a private network of their own. Those profiles also need the deployment panel,
+and if the panel runs its own proxy on this server, that proxy goes on publishing 80 and 443
+whatever the tunnel does. "No inbound port" is then true of this product's containers and not
+of the server.
 
-**The release archive does not carry the file yet.** The archive holds the compose files a
-profile composes, and no profile composes the tunnel, so step 5 below copies the file by hand
-and you start the tunnel again after every update.
+**Updates keep it.** The release carries both files, and the update and rollback scripts
+compose them in whenever `/opt/brain/.env` holds the tunnel token. See
+[update-and-rollback.md](update-and-rollback.md).
 
 ### What you need
 
-- The `lite` install finished, so `/opt/brain/.env` and the compose files are on the server.
+- The install finished, so `/opt/brain/.env` and the compose files are on the server.
 - A domain whose DNS Cloudflare manages. The console's address has to be a name in it.
 - A Cloudflare account that can create tunnels, which live in its Zero Trust dashboard.
 - SSH access to the server, so closing 80 and 443 does not close you out.
@@ -235,19 +239,30 @@ and you start the tunnel again after every update.
    which is the application service on the compose network and the port from the section above.
    Cloudflare creates the DNS record for that address itself, so delete any A or AAAA record
    you made for it earlier.
-5. **Put the overlay on the server.** Copy `docker-compose.tunnel.yml` from the same release of
-   this product into `/opt/brain/`, beside the other compose files. The same release, because
-   the file names that release's application service.
-6. **Start it.**
+5. **On `standard` and `full`, point the sign-in address at the identity provider.** Add a
+   second public hostname on the same tunnel. The subdomain and domain are the address
+   `KEYCLOAK_HOSTNAME` names in `/opt/brain/.env`, the service type is `HTTP` and the URL is
+   `keycloak:8080`. Skip this step on `lite`, which has no identity provider of its own.
+6. **Start it.** The release put `docker-compose.tunnel.yml` and
+   `docker-compose.tunnel.identity.yml` in `/opt/brain/` already, beside the other compose
+   files. On `lite`:
 
    ```
    docker compose -f /opt/brain/docker-compose.lite.yml -f /opt/brain/docker-compose.tunnel.yml up -d
    ```
 
-   If `CLOUDFLARE_TUNNEL_TOKEN` is not set, compose refuses to start and names it. The tunnel
-   container waits until the application reports ready.
+   On `standard`, the profile's own files, then both tunnel files:
+
+   ```
+   docker compose -f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml up -d
+   ```
+
+   On `full`, the same two tunnel files after the `full` profile's own files, which the line
+   beginning `full)` in `/opt/brain/ops/update/update.sh` lists. If `CLOUDFLARE_TUNNEL_TOKEN` is not set, compose
+   refuses to start and names it. The tunnel container waits until the application reports
+   ready.
 7. **Check it connected.** The tunnel's status in the dashboard reads healthy, and this shows
-   it registering its connections:
+   it registering its connections (on `standard` and `full`, with the same files as step 6):
 
    ```
    docker compose -f /opt/brain/docker-compose.lite.yml -f /opt/brain/docker-compose.tunnel.yml logs cloudflared
@@ -305,9 +320,15 @@ Three checks, in this order, because each one misses something the next one catc
 
 ### After an update or a rollback
 
-The update and rollback scripts compose the profile's own files, and the tunnel is not one of
-them. Run step 6 again after either, so the tunnel is brought up from the release you are now
-on.
+Nothing to do. Both scripts read `/opt/brain/.env`, and when it holds a value for
+`CLOUDFLARE_TUNNEL_TOKEN` they compose the tunnel's files onto every command they run, from the
+release they have just unpacked. Each prints a line saying so near its start; if that line is
+missing, the token line is missing or empty.
+
+To stop using the tunnel, remove its container first, with the files from step 6 and
+`rm -sf cloudflared` in place of `up -d`, and only then delete the token line. Deleted first,
+the scripts stop composing the tunnel and the container that already holds the token keeps
+running.
 
 ## What is checked and what is not
 
@@ -315,8 +336,10 @@ on.
 | --- | --- |
 | The tunnel overlay publishes nothing, runs a release tag, requires its token, keeps it off the command line, joins only `default` and waits for the application | `test_tunnel_option.py`, against `docker-compose.tunnel.yml` |
 | That every profile with the tunnel composed on top still publishes no port | the same test |
-| That the tunnel section names the overlay, its variable, the application's address, the outbound port and the listening check | the same test, reading the section alone |
-| That the release archive does not carry the overlay, and that the identity provider is not on the tunnel's network | the same test, which fails on the day either stops being true |
+| That the tunnel section names both overlays, the variable, the application's and the identity provider's addresses, the outbound port and the listening check | the same test, reading the section alone |
+| That the second overlay only puts the tunnel and the identity provider on one internal, unnamed network, is composed exactly on the profiles that run the identity provider, and that composed together the tunnel shares a network with the application and the identity provider and with nothing else | the same test, against `docker-compose.tunnel.identity.yml` and every profile's files |
+| That the release archive carries both overlays, and that the update and rollback scripts compose them exactly when the environment file holds a value for the token | the same test, and `test_deployment_release.py`, which runs the scripts' opening against an environment file |
+| **That compose merges a service's networks across files as a union** | **nobody here. Read from compose's own merge rules, never run.** |
 | **Whether the tunnel connects, and what its public hostname points at** | **nobody. Both are settings in the client's own Cloudflare account.** |
 | Every service that opens a port has a row, and no row names one that does not | `test_install_docs.py`, against the compose files |
 | The port numbers | the same test |
@@ -340,9 +363,11 @@ never been walked by anybody starting from a bare machine.
 `admin-allowlist` middleware was added to the panel's proxy template when the console decision
 was written down, and a template is not a route.
 
-**No tunnel has ever been started from `docker-compose.tunnel.yml`.** Its image tag and that
-image's entrypoint and user were read from the registry on 2026-09-15, and nothing else about
-the option has been run: not the token, not the public hostname, and not the three checks.
+**No tunnel has ever been started from `docker-compose.tunnel.yml`, and no sign-in has ever
+been carried through `docker-compose.tunnel.identity.yml`.** The image tag and that image's
+entrypoint and user were read from the registry on 2026-09-15, and nothing else about the
+option has been run: not the token, not either public hostname, not the three checks, and not
+whether the identity provider builds its addresses correctly from the headers Cloudflare sends.
 
 ## Task ids
 

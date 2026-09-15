@@ -87,10 +87,12 @@ from brain.deployment.release import (
     render_update,
     rollback_change,
     rollback_plan,
+    tunnel_token_variable,
     update_plan,
 )
 from brain.deployment.requirements import files_for
 from brain.ops.compose import relative_bind_mounts
+from brain.ops.tunnel import OVERLAY, overlays_for
 from brain.ops.wiring import PROFILES
 
 REPO = Path(__file__).resolve().parents[2]
@@ -99,6 +101,9 @@ SCRIPTS = REPO / "ops" / "update"
 
 #: The repository the compose files select, read once so every rendering below is the real one.
 REPOSITORY = image_repository(compose_documents())
+
+#: The variable the tunnel overlay requires, read off the file for the same reason.
+TOKEN = tunnel_token_variable()
 
 
 # ------------------------------------------------------------------ migration fixtures
@@ -995,7 +1000,8 @@ def test_the_update_writes_down_the_release_that_was_there_before_it(tmp_path: P
     file, or writes the target tag, or writes nothing at all."""
     home = an_install(tmp_path / "install", release="v1.0.0")
     script = through(
-        render_update(repository=REPOSITORY), "record the release this update replaces"
+        render_update(repository=REPOSITORY, tunnel_token=TOKEN),
+        "record the release this update replaces",
     )
 
     done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
@@ -1015,7 +1021,8 @@ def test_a_second_run_of_the_update_does_not_record_the_release_it_just_installe
     somewhere later destroys the only record of the release before it."""
     home = an_install(tmp_path / "install", release="v1.1.0", previous="v1.0.0")
     script = through(
-        render_update(repository=REPOSITORY), "record the release this update replaces"
+        render_update(repository=REPOSITORY, tunnel_token=TOKEN),
+        "record the release this update replaces",
     )
 
     done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
@@ -1036,7 +1043,8 @@ def test_a_rollback_with_nothing_recorded_refuses_rather_than_guessing(tmp_path:
     success and puts the install back on the release it was already running."""
     home = an_install(tmp_path / "install", release="v1.1.0")
     script = through(
-        render_rollback(repository=REPOSITORY), "refuse without a record of the release being left"
+        render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
+        "refuse without a record of the release being left",
     )
 
     done = run_script(script, home=home)
@@ -1055,7 +1063,8 @@ def test_a_rollback_with_a_record_reads_it_and_says_where_it_is_going(tmp_path: 
     rolls anything back."""
     home = an_install(tmp_path / "install", release="v1.1.0", previous="v1.0.0")
     script = through(
-        render_rollback(repository=REPOSITORY), "read the release this rollback goes back to"
+        render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
+        "read the release this rollback goes back to",
     )
 
     done = run_script(script, home=home, url="https://example.invalid/archive.tar.gz")
@@ -1076,7 +1085,8 @@ def test_a_rollback_that_knows_its_tag_and_not_where_to_fetch_it_says_which_tag(
     does not say which release the operator is being asked to find."""
     home = an_install(tmp_path / "install", release="v1.1.0", previous="v1.0.0")
     script = through(
-        render_rollback(repository=REPOSITORY), "read the release this rollback goes back to"
+        render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
+        "read the release this rollback goes back to",
     )
 
     done = run_script(script, home=home, url="")
@@ -1090,13 +1100,13 @@ def test_a_rollback_that_knows_its_tag_and_not_where_to_fetch_it_says_which_tag(
     ("rendered", "step", "args", "previous"),
     [
         (
-            render_update(repository=REPOSITORY),
+            render_update(repository=REPOSITORY, tunnel_token=TOKEN),
             "refuse a tag that pins nothing",
             ("lite", NOT_A_RELEASE_TAG),
             "",
         ),
         (
-            render_rollback(repository=REPOSITORY),
+            render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
             "read the release this rollback goes back to",
             ("lite",),
             NOT_A_RELEASE_TAG,
@@ -1134,7 +1144,9 @@ def test_an_update_names_a_real_tag_and_gets_past_the_refusal(tmp_path: Path) ->
 
     Delete this and the refusal can be widened to any tag at all and stay green."""
     home = an_install(tmp_path / "install", release="v1.0.0")
-    script = through(render_update(repository=REPOSITORY), "refuse a tag that pins nothing")
+    script = through(
+        render_update(repository=REPOSITORY, tunnel_token=TOKEN), "refuse a tag that pins nothing"
+    )
 
     done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
 
@@ -1154,7 +1166,10 @@ def test_a_directory_with_no_environment_file_is_refused_before_anything_rewrite
     home = tmp_path / "install"
     home.mkdir()
     home.joinpath("RELEASE").write_text("v1.0.0\n", encoding="utf-8", newline="\n")
-    script = through(render_update(repository=REPOSITORY), "check this directory holds an install")
+    script = through(
+        render_update(repository=REPOSITORY, tunnel_token=TOKEN),
+        "check this directory holds an install",
+    )
 
     done = run_script(script, home=home, args=("lite", "v1.1.0"), url="https://example.invalid/a")
 
@@ -1172,12 +1187,88 @@ def test_an_unknown_profile_is_refused_by_name_rather_than_composing_nothing(
 
     Delete this and a misspelled profile silently recreates part of an install."""
     home = an_install(tmp_path / "install")
-    preamble = render_update(repository=REPOSITORY).split("\n# step ")[0]
+    preamble = render_update(repository=REPOSITORY, tunnel_token=TOKEN).split("\n# step ")[0]
 
     done = run_script(preamble, home=home, args=("lightweight", "v1.1.0"), url="https://x.invalid")
 
     assert done.returncode == 1
     assert "unknown profile" in done.stderr
+
+
+@pytest.mark.parametrize("profile", PROFILES)
+@pytest.mark.parametrize(
+    ("line", "chosen"),
+    [
+        (f"{TOKEN}=a-token", True),
+        (f"{TOKEN}=", False),
+        (f"# {TOKEN}=a-token", False),
+        (f"OTHER_{TOKEN}=a-token", False),
+    ],
+    ids=["set", "empty", "commented", "a longer name"],
+)
+@pytest.mark.parametrize("script", ["update", "rollback"])
+def test_both_scripts_compose_the_tunnel_exactly_when_the_environment_file_holds_its_token(
+    tmp_path: Path, profile: str, line: str, *, chosen: bool, script: str
+) -> None:
+    """**The token line is the record of the choice**, because the overlay cannot start without
+    it and nothing else on the server says the tunnel was chosen. Until 2026-09-15 neither
+    script composed the tunnel at all, so an update brought the stack up without it and a
+    console whose ports had been closed was reachable from nowhere after every update.
+
+    Run, not read: the opening of each rendered script against a real environment file, and
+    the file list it ends with. The overlays come after the profile's own files, in the order
+    `overlays_for` gives, and the second one only where the identity provider runs.
+
+    Delete this and the choice can be read from a flag nobody sets, or dropped, and an update
+    silently takes the tunnel down on exactly the installs with no other way in."""
+    home = an_install(tmp_path / "install")
+    with home.joinpath(INSTALL_ENV_FILE).open("a", encoding="utf-8", newline="\n") as env:
+        env.write(f"{line}\n")
+    render = render_update if script == "update" else render_rollback
+    opening = render(repository=REPOSITORY, tunnel_token=TOKEN).split("\n# step ")[0]
+
+    done = run_script(
+        opening + '\nprintf "%s\\n" "$BRAIN_COMPOSE_FILES"\n',
+        home=home,
+        args=(profile, "v1.1.0"),
+        url="https://x.invalid",
+    )
+
+    assert done.returncode == 0, done.stderr
+    flags = done.stdout.strip().splitlines()[-1].split()
+    names = [one.rsplit("/", 1)[-1] for one in flags[1::2]]
+    tunnel = list(overlays_for(files_for(profile))) if chosen else []
+    assert names == [*files_for(profile), *tunnel]
+    assert set(flags[::2]) == {"-f"}
+    assert ("tunnel is composed in" in done.stdout) is chosen
+
+
+def test_the_token_variable_is_read_off_the_overlay_and_refused_when_it_requires_none(
+    tmp_path: Path,
+) -> None:
+    """The scripts grep the environment file for this name, and the overlay refuses to start
+    without it, so it is read off the file rather than spelled a second time. Renamed in the
+    file, it moves; required nowhere, the render refuses rather than writing a script that
+    decides every install has no tunnel.
+
+    Delete this and `tunnel_token_variable` can return a fixed name, which is right until the
+    day the overlay's variable is renamed."""
+    assert TOKEN == "CLOUDFLARE_TUNNEL_TOKEN"
+
+    tmp_path.joinpath(OVERLAY).write_text(
+        "services:\n  cloudflared:\n    environment:\n      TUNNEL_TOKEN: ${EDGE_TOKEN:?set it}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    assert tunnel_token_variable(tmp_path) == "EDGE_TOKEN"
+
+    tmp_path.joinpath(OVERLAY).write_text(
+        "services:\n  cloudflared:\n    environment:\n      TUNNEL_TOKEN: ${EDGE_TOKEN:-}\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    with pytest.raises(ReleaseError, match="requires no token variable"):
+        tunnel_token_variable(tmp_path)
 
 
 # ------------------------------------------------------- the database the rollback leaves
@@ -1278,7 +1369,7 @@ def test_a_rollback_forgets_the_record_it_acted_on(tmp_path: Path) -> None:
     home.joinpath(PREVIOUS_MARKER).unlink()
     done = run_script(
         through(
-            render_rollback(repository=REPOSITORY),
+            render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
             "refuse without a record of the release being left",
         ),
         home=home,
@@ -1295,7 +1386,9 @@ def test_the_image_an_update_pins_is_the_one_the_product_declares_and_the_files_
 
     Delete this and the scripts can pin a repository no compose file is shown to read."""
     assert image_repository(compose_documents()) == REPOSITORY == PRODUCT_IMAGE
-    assert f'BRAIN_REPOSITORY="{PRODUCT_IMAGE}"' in render_update(repository=REPOSITORY)
+    assert f'BRAIN_REPOSITORY="{PRODUCT_IMAGE}"' in render_update(
+        repository=REPOSITORY, tunnel_token=TOKEN
+    )
 
 
 def test_compose_files_reading_no_image_variable_or_defaulting_it_elsewhere_are_refused() -> None:
@@ -1343,7 +1436,10 @@ def test_a_refusal_the_shell_would_act_on_rather_than_print_is_refused() -> None
 
 @pytest.mark.parametrize(
     "rendered",
-    [render_update(repository=REPOSITORY), render_rollback(repository=REPOSITORY)],
+    [
+        render_update(repository=REPOSITORY, tunnel_token=TOKEN),
+        render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
+    ],
     ids=["update", "rollback"],
 )
 def test_each_rendered_script_is_valid_shell(rendered: str) -> None:
@@ -1372,7 +1468,9 @@ def test_the_committed_scripts_are_what_the_module_renders(name: str) -> None:
     one that runs."""
     render = render_update if name == "update.sh" else render_rollback
 
-    assert SCRIPTS.joinpath(name).read_text(encoding="utf-8") == render(repository=REPOSITORY)
+    assert SCRIPTS.joinpath(name).read_text(encoding="utf-8") == render(
+        repository=REPOSITORY, tunnel_token=TOKEN
+    )
 
 
 def test_the_archive_carries_the_two_scripts_and_the_install_does_not_read_them() -> None:
@@ -1397,7 +1495,10 @@ def test_each_profile_has_an_arm_naming_the_compose_files_that_profile_composes(
 
     Delete this and a profile added to the product has no arm, and an update against an install
     of it composes nothing."""
-    for rendered in (render_update(repository=REPOSITORY), render_rollback(repository=REPOSITORY)):
+    for rendered in (
+        render_update(repository=REPOSITORY, tunnel_token=TOKEN),
+        render_rollback(repository=REPOSITORY, tunnel_token=TOKEN),
+    ):
         arms = {
             line.strip().split(")", 1)[0]: line
             for line in rendered.splitlines()

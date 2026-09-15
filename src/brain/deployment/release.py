@@ -92,7 +92,13 @@ wrong in the direction that costs a client a week of exposure. Urgency is a pers
 so it is stated, and what is enforced is that it is stated at all and that a release breaking
 the schema cannot be called routine.
 
-Task ids: M42.3.6, M42.3.8, M30.2.7
+**The two tunnel overlays are carried although no profile composes them**, which is the one
+exception to deriving the includes from `files_for`, and it is derived too: from
+`brain.ops.tunnel.overlays_for`. The update and rollback scripts compose them onto an install
+whose environment file holds the tunnel token, so a release without them would be an update
+that stops on exactly the installs that chose the tunnel. See `_tunnel_rules`.
+
+Task ids: M42.3.6, M42.3.8, M30.2.7, M30.1.3
 """
 
 from __future__ import annotations
@@ -121,6 +127,12 @@ from brain.deployment.installer import (
 )
 from brain.deployment.requirements import files_for
 from brain.ops.compose import ComposeDoc, ComposeFiles
+from brain.ops.tunnel import (
+    OVERLAY,
+    THE_ENVIRONMENT_FILE_RECORDS_THE_CHOICE,
+    overlays_for,
+    token_variable,
+)
 from brain.ops.wiring import PROFILES
 
 REPO: Final = Path(__file__).resolve().parents[3]
@@ -274,6 +286,27 @@ def _compose_rules(profiles: Sequence[str] = PROFILES) -> tuple[Rule, ...]:
     )
 
 
+def _tunnel_rules(profiles: Sequence[str] = PROFILES) -> tuple[Rule, ...]:
+    """One include per tunnel overlay a profile would compose, read off `overlays_for`.
+
+    No profile composes these by default, so `_compose_rules` leaves them out, and until
+    2026-09-15 that was the whole of it: an install from a release had no tunnel file, and the
+    network guide told a person to copy it across by hand and to start it again after every
+    update. Derived rather than listed for the reason the compose rules are: a third overlay
+    that `overlays_for` starts naming is in the archive the same day.
+    """
+    names = sorted({name for profile in profiles for name in overlays_for(files_for(profile))})
+    return tuple(
+        Rule(
+            name,
+            "a tunnel overlay the update and rollback scripts compose onto a profile whose "
+            "environment file holds the tunnel token, so a release that did not carry it is "
+            "an update that stops on the one install that chose the tunnel",
+        )
+        for name in names
+    )
+
+
 #: What the archive carries, and nothing else is in it.
 #:
 #: Every entry is a path rather than a glob, and a directory carries everything under it. See
@@ -283,6 +316,7 @@ def _compose_rules(profiles: Sequence[str] = PROFILES) -> tuple[Rule, ...]:
 #: below would miss.
 INCLUDED: Final[tuple[Rule, ...]] = (
     *_compose_rules(),
+    *_tunnel_rules(),
     Rule(
         ".env.example",
         "the plan copies it to /opt/brain/.env and fills the values in there, so the template "
@@ -611,6 +645,27 @@ def compose_documents(tree: Path = REPO, profiles: Sequence[str] = PROFILES) -> 
             parsed = yaml.safe_load((tree / name).read_text(encoding="utf-8"))
             documents[name] = parsed if isinstance(parsed, dict) else {}
     return documents
+
+
+def tunnel_token_variable(tree: Path = REPO) -> str:
+    """The variable the tunnel overlay requires, read off the overlay the release carries.
+
+    Read rather than spelled here, because the update script greps the environment file for
+    this name and the overlay refuses to start without it: two spellings would agree until the
+    day somebody renamed one, and the script would then decide every install had no tunnel.
+    Refuses rather than defaulting, for the reason `release_marker` does.
+    """
+    import yaml
+
+    parsed = yaml.safe_load((tree / OVERLAY).read_text(encoding="utf-8"))
+    variable = token_variable(parsed if isinstance(parsed, dict) else {})
+    if variable is None:
+        msg = (
+            f"{OVERLAY} requires no token variable, so nothing in an install's environment file "
+            f"records the tunnel. {THE_ENVIRONMENT_FILE_RECORDS_THE_CHOICE}"
+        )
+        raise ReleaseError(msg)
+    return variable
 
 
 def _client_values(tree: Path = REPO) -> tuple[str, ...]:
@@ -1404,7 +1459,8 @@ def _profile_case(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
     the day it is declared rather than the day somebody remembers.
     """
     arms = [
-        f'  {profile}) BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}" ;;'
+        f'  {profile}) BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}"; '
+        f'BRAIN_TUNNEL_FILES="{_overlays_argument(profile)}" ;;'
         for profile in profiles
     ]
     names = " ".join(profiles)
@@ -1413,6 +1469,27 @@ def _profile_case(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
         *arms,
         f'  *) fail "unknown profile; one of: {names}" ;;',
         "esac",
+    )
+
+
+def _overlays_argument(profile: str) -> str:
+    """The tunnel's `-f` flags for this profile, absolute for the reason the profile's are."""
+    return " ".join(f"-f {INSTALL_HOME}/{name}" for name in overlays_for(files_for(profile)))
+
+
+def _tunnel_choice(variable: str) -> str:
+    """The one line that composes the tunnel in, when this install's environment file chose it.
+
+    See `THE_ENVIRONMENT_FILE_RECORDS_THE_CHOICE`. A value is required
+    after the `=`, so a line left empty from a template is not a choice; the overlay would
+    refuse that token anyway, and composing it in would stop an update over a tunnel nobody
+    set up. Read before the step that checks the file exists, so a missing file reads as no
+    tunnel here and is refused by name there.
+    """
+    return (
+        f'if grep -q "^{variable}=." "{INSTALL_HOME}/{INSTALL_ENV_FILE}" 2>/dev/null; then '
+        'BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES $BRAIN_TUNNEL_FILES"; '
+        'say "The environment file holds the tunnel token, so the tunnel is composed in."; fi'
     )
 
 
@@ -1471,13 +1548,18 @@ def _render(generator: str, preamble: Sequence[str], steps: Sequence[Step], done
 
 
 def render_update(
-    *, repository: str, plan: Sequence[Step] = PLAN, profiles: Sequence[str] = PROFILES
+    *,
+    repository: str,
+    tunnel_token: str,
+    plan: Sequence[Step] = PLAN,
+    profiles: Sequence[str] = PROFILES,
 ) -> str:
     """The update script, as the shell it is.
 
     `repository` is passed rather than read, for the reason `installer.render` takes its
     figures: rendering a script is not a good enough excuse to open a file, and a caller who
-    has the compose documents has it from `image_repository`.
+    has the compose documents has it from `image_repository`. `tunnel_token` is passed for the
+    same reason, from `tunnel_token_variable`.
     """
     variable, _ = release_marker(plan)
     usage = "usage: update.sh <profile> <release tag>"
@@ -1491,6 +1573,7 @@ def render_update(
         *_helpers(),
         "",
         *_profile_case(profiles),
+        _tunnel_choice(tunnel_token),
         "",
         f'say "Updating the $BRAIN_PROFILE profile in $BRAIN_HOME to ${variable}."',
     ]
@@ -1503,7 +1586,11 @@ def render_update(
 
 
 def render_rollback(
-    *, repository: str, plan: Sequence[Step] = PLAN, profiles: Sequence[str] = PROFILES
+    *,
+    repository: str,
+    tunnel_token: str,
+    plan: Sequence[Step] = PLAN,
+    profiles: Sequence[str] = PROFILES,
 ) -> str:
     """The rollback script, as the shell it is.
 
@@ -1524,6 +1611,7 @@ def render_rollback(
         *_helpers(),
         "",
         *_profile_case(profiles),
+        _tunnel_choice(tunnel_token),
         "",
         'say "Going back one release on the $BRAIN_PROFILE profile in $BRAIN_HOME."',
     ]
@@ -1576,7 +1664,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 0
     if command in {"update-script", "rollback-script"}:
         render = render_update if command == "update-script" else render_rollback
-        print(render(repository=image_repository(compose_documents())), end="")
+        print(
+            render(
+                repository=image_repository(compose_documents()),
+                tunnel_token=tunnel_token_variable(),
+            ),
+            end="",
+        )
         return 0
     if command == "notes" and len(rest) >= 2:
         tag, message = rest[0], Path(rest[1]).read_text(encoding="utf-8")
