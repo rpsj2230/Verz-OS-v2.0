@@ -40,6 +40,7 @@ from brain.install import InstallError
 from brain.session import make_session_factory
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_automation_owner_store import app_engine
+from tests.fixtures.retirable import retirable
 from tests.unit.test_entitlement_store import LONG_AGO, a_principal, resolver
 from tests.unit.test_keycloak_tokens import ISSUER, NOW, Clock, Idp, token
 
@@ -388,8 +389,9 @@ def test_a_held_subject_is_refused_for_another_principal_and_the_first_binding_s
 
 
 def retired_by_an_operator(url: str, principal_id: str) -> None:
-    """Retirement as a statement on the server's own login. See
-    `test_the_application_role_cannot_retire_a_sign_in_binding` for why it is not the store's."""
+    """Retirement as a statement on the server's own login, which bypasses the policy. Kept for
+    the tests that retire in order to bind; `test_the_store_retires_a_sign_in_binding_as_the_application_role`
+    is the store's own."""
     sql(
         url,
         "UPDATE auth.principal_identity SET deleted_at = now()"
@@ -430,36 +432,30 @@ def test_a_retired_subject_can_be_bound_to_somebody_new() -> None:
     assert (rebound, holder) == (Binding.BOUND, "u_joiner")
 
 
-def test_the_application_role_cannot_retire_a_sign_in_binding() -> None:
-    """See `THE_APPLICATION_ROLE_CANNOT_RETIRE_A_LIVE_ROW`. This pins a limitation, not a wish: it
-    goes red the day the policy is fixed, which is the day a retire belongs in the store. Delete
-    this and a retire can be added that passes every test retiring as the superuser and fails on
-    the first real offboarding. The bind beforehand, as the same role, proves the role writes."""
-    with resolver("brain_sib_no_retire") as url:
+def test_the_store_retires_a_sign_in_binding_as_the_application_role() -> None:
+    """This pinned the opposite until 0045 repaired the policy. Delete it and a retire can be
+    written that passes every test retiring as the superuser and fails on the first real
+    offboarding. The bind beforehand, as the same role, proves the role writes; the binding gone
+    from the directory afterwards is the retirement having landed."""
+    with retirable("brain_sib_retire") as url:
         a_principal(url, "u_leaver")
         bind(url, "s-leaver", "u_leaver")
-
-        async def go() -> str:
-            engine = app_engine(url)
-            try:
-                async with make_session_factory(engine)() as session, session.begin():
-                    await session.execute(
-                        text(
-                            "UPDATE auth.principal_identity SET deleted_at = now()"
-                            " WHERE principal_id = 'u_leaver' AND deleted_at IS NULL"
-                        )
-                    )
-            except ProgrammingError as refused:
-                return str(refused.orig)
-            finally:
-                await engine.dispose()
-            return ""
-
-        refusal_text = run(go)
+        retired = with_bindings(url, lambda writer: writer.retire("u_leaver", retired_by="u_admin"))
         holder = found(url, "s-leaver")
 
-    assert "row-level security" in refusal_text
-    assert holder == "u_leaver"
+    assert (retired, holder) == (True, None)
+
+
+def test_retiring_a_principal_with_no_sign_in_retires_nothing() -> None:
+    """The sibling. Delete this and a retire that reports success whatever it wrote passes the
+    test above."""
+    with retirable("brain_sib_retire_none") as url:
+        a_principal(url, "u_never_bound")
+        retired = with_bindings(
+            url, lambda writer: writer.retire("u_never_bound", retired_by="u_admin")
+        )
+
+    assert retired is False
 
 
 @pytest.mark.parametrize("gone", ["disabled_at", "deleted_at"])

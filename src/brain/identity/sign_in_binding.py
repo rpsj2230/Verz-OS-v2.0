@@ -44,14 +44,13 @@ a Keycloak account deleted and re-created, which gets a new `sub`; without it th
 additional way in that nobody retires, and the old account's subject keeps working if the old
 account comes back. See `A_BINDING_NEVER_MOVES`.
 
-**Retiring is not built here, because the application role cannot do it.** Measured, not
-assumed: `0002`'s `principal_identity_live` policy is `USING (deleted_at IS NULL) WITH CHECK
-(true)`, and PostgreSQL checks the new row of an UPDATE whose WHERE reads the table against the
-USING expression as well, so setting `deleted_at` as `brain_app` is refused as a row-level
-security violation whatever `WITH CHECK` says. `0003`'s comment believes the `WITH CHECK`
-clause avoids exactly that, and it does not. So a binding is retired today by an operator's
-statement, which fails closed: a principal refused a second subject stays refused until
-somebody with the database does it. See `THE_APPLICATION_ROLE_CANNOT_RETIRE_A_LIVE_ROW`.
+**Retiring was not built here until `0045`, because the application role could not do it.**
+`0002`'s `principal_identity_live` policy hid a retired row with a USING that PostgreSQL also
+checks against the new row of an UPDATE whose WHERE reads the table, so `brain_app` setting
+`deleted_at` was refused whatever `WITH CHECK` said. `0045` repaired it for every soft-deleted
+table, and `retire` is the store's half: it stamps the row with the retiring statement's own
+instant, which is the one retired row the repaired read policy admits. See
+`A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT`.
 
 **The issuer is not a parameter of the write.** `sign_in_bindings` reads `INSTALL_OIDC_ISSUER`
 through `brain.install.value_of`, the same reader `keycloak_tokens.keycloak_authority` uses,
@@ -94,7 +93,7 @@ from datetime import datetime
 from typing import Any, Final
 
 import structlog
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -142,13 +141,12 @@ THE_BINDING_IS_MADE_AT_THE_CONFIGURED_ISSUER_ONLY: Final = (
     "use the day somebody configures it."
 )
 
-#: Why this module writes bindings and does not retire them.
-THE_APPLICATION_ROLE_CANNOT_RETIRE_A_LIVE_ROW: Final = (
-    "The live policy hides a retired row with USING (deleted_at IS NULL), and PostgreSQL "
-    "applies that expression to the new row of an UPDATE that reads the table, so brain_app "
-    "setting deleted_at is refused. A retire written here would pass every test that retires "
-    "as the superuser and fail on the first real offboarding. The fix is a policy or a "
-    "definer function, and it belongs to every soft-deleted table rather than to this one."
+#: Why a retirement is stamped with `statement_timestamp()` and never `now()`.
+A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT: Final = (
+    "0045's read policy admits a retired row only when deleted_at equals the running "
+    "statement's start, which is how the retiring UPDATE passes the read check PostgreSQL "
+    "applies to its new row. now() is the transaction's start, and a retirement stamped with it "
+    "is refused as a row-level security violation."
 )
 
 #: Why a lost race is a refusal and not a fault or a second row.
@@ -307,6 +305,29 @@ class SignInBindings:
                     )
         log.info("sign_in.bound", principal=principal_id, bound_by=bound_by, outcome=outcome.value)
         return outcome
+
+    async def retire(self, principal_id: str, *, retired_by: str) -> bool:
+        """Retire this principal's sign-in binding, or return False when it has none.
+
+        Whoever retires it is logged and not refused: a retirement takes a way in away, so the
+        principal retiring their own is not the vouching `NOBODY_BINDS_THEIR_OWN_SIGN_IN` refuses.
+        See `A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT` for the stamp.
+        """
+        async with self.sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, principal_id))
+            written = await session.execute(
+                update(PrincipalIdentityRow)
+                .where(
+                    PrincipalIdentityRow.channel == SIGN_IN_CHANNEL.value,
+                    PrincipalIdentityRow.principal_id == principal_id,
+                    PrincipalIdentityRow.deleted_at.is_(None),
+                )
+                .values(deleted_at=func.statement_timestamp())
+                .returning(PrincipalIdentityRow.id)
+            )
+            retired = written.first() is not None
+        log.info("sign_in.retired", principal=principal_id, retired_by=retired_by, retired=retired)
+        return retired
 
 
 def sign_in_bindings(
