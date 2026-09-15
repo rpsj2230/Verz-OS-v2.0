@@ -100,8 +100,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked
+from brain.console.read_replica import StalenessBanner
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
+from brain.ops.replica_store import ConsoleReads
 from brain.tables.routing import RoutingRungRow
 
 log = structlog.get_logger()
@@ -274,6 +276,9 @@ class RungPage(Page[RungView]):
     #: Whether this caller may change what is on this page. Presentation only. See
     #: `AN_EDITABLE_FLAG_IS_PRESENTATION`.
     editable: bool = False
+    #: How far behind the copy this page was read from is, when it was a replica far enough
+    #: behind to say so. Null when the primary answered. See `brain.console.read_replica`.
+    staleness: StalenessBanner | None = None
 
 
 class RungEdit(BaseModel):
@@ -406,6 +411,20 @@ def _require_sessions(request: Request) -> async_sessionmaker[AsyncSession]:
     return factory
 
 
+def _require_console_reads(request: Request) -> ConsoleReads:
+    """Where a page of the matrix is read from: `app.state.console_reads`, or the primary.
+
+    `brain.app` attaches a `ConsoleReads` holding the replica when `read_replica_url` is set.
+    A process that attached none reads the primary through the factory it does have, which is
+    what this route did before M36.1.2, and a process with neither is the same fault
+    `_require_sessions` reports.
+    """
+    found = getattr(request.app.state, "console_reads", None)
+    if isinstance(found, ConsoleReads):
+        return found
+    return ConsoleReads(_require_sessions(request))
+
+
 def _no_matrix_here() -> Absent:
     """The one refusal this router makes about the matrix.
 
@@ -442,15 +461,20 @@ async def rungs(
         log.info("routing matrix not answerable", principal=asked.caller.principal.id)
         raise _no_matrix_here()
 
-    factory = _require_sessions(request)
-    async with factory() as session:
-        found = (await session.execute(live_rungs(limit))).scalars().all()
+    reads = _require_console_reads(request)
+
+    async def live(session: AsyncSession) -> list[RoutingRungRow]:
+        return list((await session.execute(live_rungs(limit))).scalars().all())
+
+    served = await reads.read(live, now=asked.now)
+    found = served.value
 
     return RungPage(
         items=[view_of(row) for row in found],
         next_cursor=None,
         truncated=len(found) >= limit,
         editable=asked.reach.holds(MATRIX_WRITE, asked.now),
+        staleness=served.banner,
     )
 
 

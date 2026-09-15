@@ -37,9 +37,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.console.read_replica import LagReading
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
+from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import (
     DEFAULT_RUNGS_PER_PAGE,
     MATRIX_READ,
@@ -330,6 +332,80 @@ def test_a_caller_with_no_grant_cannot_tell_whether_this_process_has_a_database(
     guard clause."""
     assert read(unwired, "u_none").status_code == 404
     assert read(unwired, "u_narrow").status_code == 500
+
+
+# ------------------------------------------------------- read from a replica (M36.1.2)
+class ReplicaLag:
+    """A lag measurement answering a fixed replay age, counting how often it was asked."""
+
+    def __init__(self, seconds: float) -> None:
+        self.seconds = seconds
+        self.asked = 0
+
+    async def __call__(self, session: AsyncSession) -> LagReading:
+        from datetime import timedelta
+
+        self.asked += 1
+        return LagReading(
+            in_recovery=True, replay_age=timedelta(seconds=self.seconds), caught_up=False
+        )
+
+
+def _behind(c: TestClient, seconds: float) -> ReplicaLag:
+    """Attach console reads whose replica is this far behind. Both factories are the stub."""
+    lag = ReplicaLag(seconds)
+    factory: async_sessionmaker[AsyncSession] = async_sessionmaker(class_=StubSession)
+    cast(FastAPI, c.app).state.console_reads = ConsoleReads(factory, factory, measure=lag)
+    return lag
+
+
+def test_a_page_read_from_a_lagging_replica_carries_a_staleness_banner(client: TestClient) -> None:
+    """M36.1.2.3 on the page itself: the banner is a field of the response, in whole seconds.
+
+    Delete this and the route can drop `served.banner` on the floor, and every page read from a
+    replica a minute behind is served as though it were current."""
+    _behind(client, 60)
+
+    body = read(client, "u_narrow").json()
+
+    assert [item["position"] for item in body["items"]] == [0, 1]
+    assert body["staleness"]["behind_seconds"] == 60
+    assert "60 seconds behind" in body["staleness"]["message"]
+
+
+def test_a_page_read_from_a_current_replica_or_the_primary_carries_no_banner(
+    client: TestClient,
+) -> None:
+    """The sibling: no banner when there is nothing to say, on a replica and without one.
+
+    Delete this and the route can attach a banner to every page, which passes the test above and
+    teaches every reader that the banner means nothing."""
+    assert read(client, "u_narrow").json()["staleness"] is None
+
+    _behind(client, 1)
+
+    assert read(client, "u_narrow").json()["staleness"] is None
+
+
+def test_a_caller_with_no_grant_cannot_tell_whether_this_install_has_a_replica(
+    client: TestClient,
+) -> None:
+    """The capability is checked before the replica is even measured.
+
+    The refusal is byte-identical with and without a lagging replica attached, and the replica
+    is never asked. Delete this and the measurement can move above the capability check, where
+    an unentitled caller's response time, or a banner on a refusal, says a replica exists."""
+    without = read(client, "u_none")
+    lag = _behind(client, 60)
+    with_one = read(client, "u_none")
+
+    assert (without.status_code, with_one.status_code) == (404, 404)
+    # The trace id is minted per request, so it differs between any two responses by design.
+    assert {k: v for k, v in without.json().items() if k != "trace_id"} == {
+        k: v for k, v in with_one.json().items() if k != "trace_id"
+    }
+    assert "staleness" not in with_one.text
+    assert lag.asked == 0
 
 
 def test_every_reader_of_the_matrix_is_answered_every_live_rung(client: TestClient) -> None:

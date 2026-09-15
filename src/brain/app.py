@@ -48,6 +48,7 @@ from brain.install import installed_name
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.question_store import QuestionRecorder
+from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.routing_routes import router as routing_router
@@ -126,6 +127,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     else:
         app.state.db_engine = None
         app.state.db_sessions = None
+    # Console pages that only display, read from `read_replica_url` when one is set and from
+    # the primary otherwise. None without a primary. See `brain.ops.replica_store`.
+    app.state.console_reads = console_reads_for(app.state.db_sessions, settings.read_replica_url)
 
     # Built and frozen here, and this is the first process that has ever built one. Every
     # rule in `brain.tools.registry` runs at registration and `freeze` runs the ones that
@@ -206,6 +210,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Drain before the socket closes. Uvicorn stops accepting first, so in-flight
         # requests finish against a live pool rather than a disposed one.
         log.info("shutting down")
+        console_reads = getattr(app.state, "console_reads", None)
+        if console_reads is not None:
+            await console_reads.close()
         await dispose(getattr(app.state, "db_engine", None))
 
 

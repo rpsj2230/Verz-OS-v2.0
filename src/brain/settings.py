@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     valkey_url: str = Field(
         default="", validation_alias=AliasChoices("BRAIN_VALKEY_URL", "VALKEY_URL")
     )
+    #: A streaming replica of `database_url`, for console pages that only display. Empty, the
+    #: default, means every console read is answered by the primary exactly as before. Under
+    #: the prefixed name only: unlike the two above, no other tool has a universal name for
+    #: it, and a second accepted name is a second place a stale value can win from. What is
+    #: read from it, and when a page falls back to the primary, is `brain.console.read_replica`.
+    read_replica_url: str = ""
     #: The password of the database role the application connects as, checked by
     #: `brain.config` against the values people leave in place. Under its existing name only,
     #: because operators and three compose files already set `APP_ROLE_PASSWORD` and a second

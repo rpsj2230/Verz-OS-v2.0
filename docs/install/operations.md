@@ -274,10 +274,47 @@ follows the deploy and something an operator can see and disable without a relea
 **Which mechanisms do you switch on first?** The backup one, then the drill that proves it,
 before anything else on the list.
 
+## A read replica for the console, if you add one
+
+This is optional, and nothing in this repository creates the replica for you. Setting up
+PostgreSQL streaming replication is your database administrator's job. What the application does
+once you have one is described here.
+
+Set `BRAIN_READ_REPLICA_URL` to the replica's address. Leave it empty, which is the default, and
+every console page is read from the main database exactly as before.
+
+When it is set:
+
+- **Console pages that only display are read from the replica.** Today that is the routing
+  matrix page. Anything that decides who may do what, and anything that writes, is always read
+  from the main database, however healthy the replica is. A permission removed a second ago may
+  not have reached the replica yet.
+- **The application measures how far behind the replica is**, at most once every two seconds,
+  and gives up on a measurement after one second.
+- **Up to 10 seconds behind:** the page is read from the replica and says nothing.
+- **More than 10 seconds and up to 5 minutes behind:** the page is read from the replica and its
+  response carries a `staleness` field stating how many seconds behind it is. The console shows
+  that as a banner.
+- **More than 5 minutes behind, unreachable, or not a replica at all:** the page is read from the
+  main database, with no banner. "Not a replica" includes a replica that has been promoted after a
+  failover, which is a separate database and is never read.
+
+**Falling back to the main database is deliberate.** Replicas fall furthest behind when the main
+database is busiest, so a console page may add load to the main database at exactly that moment.
+The alternative is showing numbers that are minutes old, which this system does not do.
+
+**One limit to know about.** If the network between the two databases fails silently, the replica
+can look up to date for as long as PostgreSQL's `wal_receiver_timeout` (sixty seconds by default)
+before PostgreSQL notices. Lower that setting on the replica if sixty seconds is too long for you.
+
+The replica's database role only needs to read. The application runs every console read with
+`SET TRANSACTION READ ONLY` on both databases, so a read-only role is enough.
+
 ## What is checked and what is not
 
 | Claim | Held by |
 | --- | --- |
+| Which database a console page is read from, and when it carries a staleness banner | `test_read_replica.py` and `test_replica_store.py`; the lag query itself against a real server that is a primary, never against a real replica |
 | The backup schedule and its intervals | `test_recovery.py`, against the schedule |
 | The recovery figures per profile | `test_reliability.py` |
 | That a service level statement is refused when the arithmetic does not support it | `test_launch.py` |
