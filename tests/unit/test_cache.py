@@ -47,10 +47,11 @@ from brain.gate.resolve import (
     CACHE_TTL_SECONDS,
     EntitlementCache,
     ResolutionFailedError,
+    Resolved,
     VersionSource,
     cache_key,
-    resolve,
 )
+from brain.gate.resolve import resolve as resolve_awaited
 
 NOW = datetime(2026, 9, 5, 9, 0, tzinfo=UTC)
 
@@ -230,12 +231,17 @@ def test_resolve_works_end_to_end_over_the_real_cache_class() -> None:
     assert cache_key("u_weiling", 7) in client.data
 
 
+def resolve(principal_id: str, **seams: Any) -> Resolved:
+    """`brain.gate.resolve.resolve`, run to completion. It awaits the store."""
+    return asyncio.run(resolve_awaited(principal_id, **seams))
+
+
 class _Store:
     def __init__(self, sets: dict[str, EntitlementSet]) -> None:
         self.sets = sets
         self.loads = 0
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         self.loads += 1
         return self.sets[principal_id]
 

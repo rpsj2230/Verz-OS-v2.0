@@ -24,6 +24,7 @@ Task ids: M35.3.1.2
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 
@@ -104,7 +105,7 @@ class Directory:
 class Store:
     """A `brain.gate.resolve.EntitlementStore` over `GRANTS`."""
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=GRANTS[principal_id])
 
 
@@ -286,7 +287,7 @@ def test_the_queue_is_bounded_after_the_reach_filter_and_says_only_that_there_is
 
     Delete this and the bound can move in front of the filter, where a short queue says that
     approvals were withheld."""
-    reach = Store().load("u_narrow")
+    reach = asyncio.run(Store().load("u_narrow", datetime.now(UTC)))
     now = datetime.now(UTC)
     hidden = [a_suspension(f"f_{n:04}", department=FINANCE) for n in range(MAX_QUEUE_CARDS)]
     visible = [a_suspension(f"m_{n:04}") for n in range(MAX_QUEUE_CARDS)]
@@ -306,7 +307,7 @@ def test_the_queue_lapses_soonest_first_whatever_order_the_store_holds() -> None
 
     Delete this and a phone's first card is whatever the store returned first, and the one
     about to lapse is below the fold."""
-    reach = Store().load("u_narrow")
+    reach = asyncio.run(Store().load("u_narrow", datetime.now(UTC)))
     later = a_suspension("a_later", window=timedelta(hours=6))
     soon_b = a_suspension("b_soon", window=timedelta(hours=2))
     soon_a = soon_b.model_copy(update={"id": "a_soon"})

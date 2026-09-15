@@ -81,7 +81,7 @@ class Records:
     def __init__(self, *live: Principal) -> None:
         self.live = {one.id: one for one in live}
 
-    def live_principal(self, principal_id: str) -> Principal | None:
+    async def live_principal(self, principal_id: str) -> Principal | None:
         return self.live.get(principal_id)
 
 

@@ -24,6 +24,7 @@ Task ids: M1.4.5
 from __future__ import annotations
 
 import ast
+import asyncio
 import pickle
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
@@ -56,9 +57,10 @@ from brain.gate.cache_key import CachedAnswer, key_for
 from brain.gate.resolve import (
     CACHE_TTL_SECONDS,
     ResolutionFailedError,
+    Resolved,
     cache_key,
-    resolve,
 )
+from brain.gate.resolve import resolve as resolve_awaited
 
 pytestmark = pytest.mark.invariant
 
@@ -115,18 +117,23 @@ class RawSocketValkey:
         raise OSError(104, "Connection reset by peer")
 
 
+def resolve(principal_id: str, **seams: Any) -> Resolved:
+    """`brain.gate.resolve.resolve`, run to completion. It awaits the store."""
+    return asyncio.run(resolve_awaited(principal_id, **seams))
+
+
 class GoodStore:
     def __init__(self, sets: dict[str, EntitlementSet]) -> None:
         self.sets = sets
         self.loads = 0
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         self.loads += 1
         return self.sets[principal_id]
 
 
 class BrokenStore:
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         raise RuntimeError(f"database is unreachable, asked for {principal_id}")
 
 

@@ -20,14 +20,24 @@ that" for someone who should have seen the record. A resolution that failed must
 **The set is checked against the principal who asked for it.** A store returning the wrong
 row is the catastrophic failure, and it is one comparison to rule out.
 
+**The store is awaited, for the reason `brain.knowledge.rows.RowSource` is.** The only pool the
+application holds is an `AsyncEngine`, and a synchronous `load` could be implemented against it
+only by a second pool or a thread per request. `brain.gate.entitlement_store` is the
+implementation, over `gate.resolve_entitlements`. The version source and the cache stay
+synchronous here: neither was in the way of that store, and changing them is a separate piece.
+
+**The store is told the caller's instant.** `gate.resolve_entitlements` drops a grant whose own
+`not_after` has passed, and the grant type carries no expiry, so that judgement is made when the
+set is loaded and nowhere afterwards. See `THE_STORE_IS_ASKED_AT_THE_CALLERS_INSTANT`.
+
 Task ids: M3.3.1, M3.3.2
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Protocol
+from datetime import UTC, datetime
+from typing import Final, Protocol
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import BrainError, Outcome
@@ -36,6 +46,16 @@ from brain.core.errors import BrainError, Outcome
 #: version bump is measured in seconds, long enough to matter across a burst of requests
 #: from one person. It is a backstop: correctness comes from the version in the key.
 CACHE_TTL_SECONDS = 60
+
+#: Why `load` takes a time, and whose.
+THE_STORE_IS_ASKED_AT_THE_CALLERS_INSTANT: Final = (
+    "A grant's own expiry is decided when the set is loaded, because a Grant carries no date "
+    "to decide it by later. Loading at the database's clock or the process's would judge it at "
+    "an instant the caller never asked about, so the store is handed the caller's now, the "
+    "same instant the cached set's expiry is judged at. A set cached before a grant lapses can "
+    "still serve that grant until the entry's TTL runs out, since nothing bumps the version "
+    "when a date passes; that bound is CACHE_TTL_SECONDS."
+)
 
 
 class ResolutionFailedError(BrainError):
@@ -62,9 +82,13 @@ class VersionSource(Protocol):
 
 
 class EntitlementStore(Protocol):
-    """The authority. Slow, correct, and consulted only on a miss."""
+    """The authority. Slow, correct, and consulted only on a miss.
 
-    def load(self, principal_id: str) -> EntitlementSet: ...
+    Awaitable, and handed the instant the caller is asking at. See the module docstring and
+    `THE_STORE_IS_ASKED_AT_THE_CALLERS_INSTANT`. A stand-in in a test is `async def load`.
+    """
+
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet: ...
 
 
 class EntitlementCache(Protocol):
@@ -103,7 +127,7 @@ class Resolved:
     from_cache: bool
 
 
-def resolve(
+async def resolve(
     principal_id: str,
     *,
     versions: VersionSource,
@@ -117,7 +141,11 @@ def resolve(
     the store. A stored hash is a second copy of a fact, and the two copies disagree the
     first time anyone edits grants without recomputing it, at which point the cache is
     keyed on one reach while the answer uses another.
+
+    The instant is read once, and a caller who has one should pass it: the cached set's
+    expiry and the store's load are both judged at it.
     """
+    instant = now if now is not None else datetime.now(UTC)
     try:
         version = versions.grants_version(principal_id)
     except Exception as exc:
@@ -135,7 +163,7 @@ def resolve(
     key = cache_key(principal_id, version)
 
     cached = cache.get(key)
-    if cached is not None and _usable(cached, principal_id, now):
+    if cached is not None and _usable(cached, principal_id, instant):
         return Resolved(
             entitlements=cached,
             ent_hash=cached.ent_hash(),
@@ -144,7 +172,7 @@ def resolve(
         )
 
     try:
-        loaded = store.load(principal_id)
+        loaded = await store.load(principal_id, instant)
     except Exception as exc:
         # Broad on purpose. Whatever the driver raises, a caller of this function must see
         # a failure it can distinguish from holding nothing, not a psycopg error leaking
@@ -171,7 +199,7 @@ def resolve(
     )
 
 
-def _usable(cached: EntitlementSet, principal_id: str, now: datetime | None) -> bool:
+def _usable(cached: EntitlementSet, principal_id: str, now: datetime) -> bool:
     """Whether a cache hit may be served.
 
     A cache is a shared, mutable store that other processes write to, so a value coming out

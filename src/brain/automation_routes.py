@@ -66,9 +66,12 @@ with no side effect, which is every call this route can make: see
 `brain.ops.automation_owner.AN_AUTOMATION_READS_UNTIL_ITS_WRITES_CAN_BE_SUSPENDED`.
 
 *Nothing constructs the wiring.* `app.state.automation` is None on a deployed process, for the
-reason `app.state.gate` is: there is no `PrincipalRecords` implementation over `auth.principal`,
-as there is no `EntitlementStore` over the grant tables. So on the deployed instance this route
-refuses every credential, uniformly, which is what a missing authenticator has to mean.
+reason `app.state.gate` is. The stores exist: `brain.identity.principal_store.StoredPrincipals`
+over `auth.principal`, `brain.gate.entitlement_store.StoredEntitlements` over the resolver, and
+`brain.ops.automation_owner_store.StoredAutomations`. What is missing is a `TokenAuthority`,
+which `GateWiring` requires and which has no signature verifier to hold, and the lifespan code
+that builds the two wirings. So on the deployed instance this route refuses every credential,
+uniformly, which is what a missing authenticator has to mean.
 
 Task ids: none
 """
@@ -256,14 +259,14 @@ async def calling_automation(request: Request) -> CallingAutomation:
             # apart by anything the caller sees and only the log says which.
             raise AutomationRefusedError(AutomationRefusal.UNKNOWN_AUTOMATION, automation_id)
         registration = verify(presented, found)
-        owner = owner_of(registration, principals=automation.principals, now=now)
+        owner = await owner_of(registration, principals=automation.principals, now=now)
     except AutomationRefusedError as exc:
         raise _refused(exc, presented) from exc
 
     return CallingAutomation(
         registration=registration,
         owner=owner,
-        caller=owner_reach(
+        caller=await owner_reach(
             owner, versions=gate.versions, store=gate.store, cache=gate.cache, now=now
         ),
         now=now,

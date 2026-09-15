@@ -9,7 +9,9 @@ Task ids: M3.3.1, M3.3.2
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -19,9 +21,10 @@ from brain.core.scope import Scope
 from brain.gate.resolve import (
     CACHE_TTL_SECONDS,
     ResolutionFailedError,
+    Resolved,
     cache_key,
-    resolve,
 )
+from brain.gate.resolve import resolve as resolve_awaited
 
 pytestmark = pytest.mark.invariant
 
@@ -34,6 +37,11 @@ def _ents(principal: str, *caps: str, not_after: datetime | None = None) -> Enti
         grants=tuple(Grant(capability=Capability(value=c), scope=Scope()) for c in caps),
         not_after=not_after,
     )
+
+
+def resolve(principal_id: str, **seams: Any) -> Resolved:
+    """`brain.gate.resolve.resolve`, run to completion. It awaits the store."""
+    return asyncio.run(resolve_awaited(principal_id, **seams))
 
 
 class FakeVersions:
@@ -52,7 +60,7 @@ class FakeStore:
         self.sets = sets
         self.loads = 0
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         self.loads += 1
         return self.sets[principal_id]
 
@@ -71,12 +79,12 @@ class FakeCache:
 
 
 class BrokenStore:
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         raise RuntimeError(f"database is unreachable, asked for {principal_id}")
 
 
 class WrongStore:
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         del principal_id
         return _ents("p_somebody_else", "read:client.contract_value")
 
@@ -296,3 +304,41 @@ def test_the_ttl_is_a_backstop_and_not_the_correctness_mechanism() -> None:
     resolve("p", versions=versions, store=store, cache=cache)
     assert cache.ttls[cache_key("p", 1)] == CACHE_TTL_SECONDS
     assert CACHE_TTL_SECONDS == 60
+
+
+# ------------------------------------------------------------------- the instant
+class InstantStore:
+    """A store that records the instant it was asked at, and holds one grant for anybody."""
+
+    def __init__(self) -> None:
+        self.asked_at: list[datetime] = []
+
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
+        self.asked_at.append(now)
+        return _ents(principal_id, "read:client.name")
+
+
+def test_the_store_is_asked_at_the_callers_instant() -> None:
+    """`gate.resolve_entitlements` drops a grant whose own expiry has passed, and a grant carries
+    no date to judge later, so the instant the store is handed is the instant that grant's expiry
+    is decided at. Delete this and the store can be asked at the process clock while the cached
+    set is judged at the caller's, which is the defect `EntitlementSet.intersect` carried until
+    2026-09-08 in another place."""
+    store = InstantStore()
+
+    resolve("p", versions=FakeVersions(1), store=store, cache=FakeCache(), now=NOW)
+
+    assert store.asked_at == [NOW]
+
+
+def test_a_caller_with_no_instant_has_the_store_asked_at_a_real_one() -> None:
+    """The positive sibling for a caller passing no `now`. The resolver compares a grant's expiry
+    with the instant it is handed, and a null there makes every dated grant vanish without an
+    error. Delete this and a missing instant can reach the database as nothing at all."""
+    store = InstantStore()
+    before = datetime.now(UTC)
+
+    resolve("p", versions=FakeVersions(1), store=store, cache=FakeCache())
+
+    [asked] = store.asked_at
+    assert before <= asked <= datetime.now(UTC)

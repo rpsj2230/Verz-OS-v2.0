@@ -356,9 +356,14 @@ class PrincipalRecords(Protocol):
     disabled principal is not returned as a `Principal` with a flag, for the reason
     `brain.identity.oidc.principal_for` returns `UnmappedSubject` for a leaver: a real
     principal object on a code path is one somebody computes a reach for.
+
+    A principal whose engagement has ended is returned, with its `not_after`, and `standing_of`
+    judges it at the call's instant. Awaitable, for the reason `brain.gate.resolve`'s store is:
+    `brain.identity.principal_store.StoredPrincipals` reads `auth.principal` on the
+    application's async pool.
     """
 
-    def live_principal(self, principal_id: str) -> Principal | None: ...
+    async def live_principal(self, principal_id: str) -> Principal | None: ...
 
 
 def standing_of(registration: Registration, owner: Principal | None, now: datetime) -> Standing:
@@ -381,7 +386,7 @@ def standing_of(registration: Registration, owner: Principal | None, now: dateti
     return Standing.RUNNING
 
 
-def awaiting_owner(
+async def awaiting_owner(
     registrations: Iterable[Registration], *, principals: PrincipalRecords, now: datetime
 ) -> tuple[str, ...]:
     """Every automation here that has stopped and is asking for a new owner, sorted.
@@ -390,17 +395,15 @@ def awaiting_owner(
     `brain.identity.lifecycle.automations_to_stop` gives: an automation owned by a leaver that
     still reaches something and one that reaches nothing are both stopped.
     """
-    return tuple(
-        sorted(
-            one.automation_id
-            for one in registrations
-            if standing_of(one, principals.live_principal(one.owner_principal_id), now)
-            is Standing.AWAITING_OWNER
-        )
-    )
+    stopped: list[str] = []
+    for one in registrations:
+        owner = await principals.live_principal(one.owner_principal_id)
+        if standing_of(one, owner, now) is Standing.AWAITING_OWNER:
+            stopped.append(one.automation_id)
+    return tuple(sorted(stopped))
 
 
-def owner_of(
+async def owner_of(
     registration: Registration, *, principals: PrincipalRecords, now: datetime
 ) -> Principal:
     """The live owner this automation runs as, or the one refusal.
@@ -408,7 +411,7 @@ def owner_of(
     Asked of `principals` on every call and never cached here. See
     `AN_AUTOMATION_HOLDS_NOTHING_OF_ITS_OWNER_BETWEEN_CALLS`.
     """
-    owner = principals.live_principal(registration.owner_principal_id)
+    owner = await principals.live_principal(registration.owner_principal_id)
     if owner is None or standing_of(registration, owner, now) is not Standing.RUNNING:
         raise AutomationRefusedError(
             AutomationRefusal.OWNER_GONE,
@@ -417,7 +420,7 @@ def owner_of(
     return owner
 
 
-def owner_reach(
+async def owner_reach(
     owner: Principal,
     *,
     versions: VersionSource,
@@ -433,7 +436,7 @@ def owner_reach(
     not lend either to a flow. What this returns is the left-hand side of `flow_reach`; the
     automation's ceiling is applied there and nowhere here.
     """
-    resolved = resolve(owner.id, versions=versions, store=store, cache=cache, now=now)
+    resolved = await resolve(owner.id, versions=versions, store=store, cache=cache, now=now)
     return admit(resolved.entitlements, AUTOMATION_CHANNEL, AUTOMATION_ASSURANCE)
 
 

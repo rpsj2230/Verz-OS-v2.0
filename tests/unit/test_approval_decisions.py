@@ -20,6 +20,7 @@ Task ids: M35.3.1.1
 from __future__ import annotations
 
 import ast
+import asyncio
 import inspect
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import asynccontextmanager
@@ -103,7 +104,7 @@ class Directory:
 class Store:
     """A `brain.gate.resolve.EntitlementStore` over `GRANTS`."""
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=GRANTS.get(principal_id, ()))
 
 
@@ -287,7 +288,7 @@ def test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it(
     assert entry.action is AuditAction.APPROVAL
     assert entry.subject == "leash:m_1"
     assert entry.actor_id == "u_narrow"
-    assert entry.ent_hash == Store().load("u_narrow").ent_hash()
+    assert entry.ent_hash == asyncio.run(Store().load("u_narrow", datetime.now(UTC))).ent_hash()
     assert entry.trace_id == response.headers["x-trace-id"]
     assert entry.details == {"verdict": "approved", "action_digest": held.action_digest}
     assert store.held_as == ["u_narrow"]

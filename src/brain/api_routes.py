@@ -341,7 +341,7 @@ class Asking:
     now: datetime
 
 
-def asking(request: Request) -> Asking:
+async def asking(request: Request) -> Asking:
     """Authenticate, resolve, narrow. One dependency, in that order, for every route.
 
     Named as a dependency at each route rather than installed as middleware. Middleware reads
@@ -375,7 +375,7 @@ def asking(request: Request) -> Asking:
         # caller with no reach computed, which would then be an empty set that looks resolved.
         raise Failed("no gate wiring on this process")
 
-    resolved = resolve(
+    resolved = await resolve(
         caller.principal_id,
         versions=wiring.versions,
         store=wiring.store,

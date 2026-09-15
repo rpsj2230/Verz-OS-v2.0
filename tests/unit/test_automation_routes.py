@@ -126,7 +126,7 @@ class Grants:
         self.version = 1
         self.loads = 0
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         self.loads += 1
         return EntitlementSet(principal_id=principal_id, grants=self.held.get(principal_id, ()))
 
@@ -157,7 +157,7 @@ class Records:
     def __init__(self, *live: Principal) -> None:
         self.live = {one.id: one for one in live}
 
-    def live_principal(self, principal_id: str) -> Principal | None:
+    async def live_principal(self, principal_id: str) -> Principal | None:
         return self.live.get(principal_id)
 
 

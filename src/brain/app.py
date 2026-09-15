@@ -280,9 +280,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # route reads rather than an AttributeError it recovers from. Nothing constructs one
     # today: `brain.identity.oidc.SignatureVerifier` is an injected callback because the
     # standard library cannot verify RS256 and this repository has added no cryptography
-    # dependency, so there is no verifier to put in a `TokenAuthority` and no
-    # `EntitlementStore` implementation to put beside it. Every route under `API_PREFIX`
-    # therefore refuses, which is what a missing authenticator has to mean.
+    # dependency, so there is no verifier to put in a `TokenAuthority`. The store beside it
+    # exists, `brain.gate.entitlement_store.StoredEntitlements`, and waits on the authority.
+    # Every route under `API_PREFIX` therefore refuses, which is what a missing authenticator
+    # has to mean.
     app.state.gate = None
     # The same, for where approvals are read from and decided. See `suspension_store_for`.
     app.state.suspensions = None

@@ -164,7 +164,7 @@ class Directory:
 class Store:
     """A `brain.gate.resolve.EntitlementStore` over `GRANTS`."""
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=GRANTS[principal_id])
 
 

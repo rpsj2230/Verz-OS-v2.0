@@ -167,7 +167,7 @@ class StoredAutomations:
             found = registration_from(dict(row))
             adopted = adopt(
                 found,
-                current_owner=principals.live_principal(found.owner_principal_id),
+                current_owner=await principals.live_principal(found.owner_principal_id),
                 new_owner=new_owner,
                 now=now,
             )

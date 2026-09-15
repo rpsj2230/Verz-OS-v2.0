@@ -13,8 +13,10 @@ Task ids: none
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -34,13 +36,19 @@ from brain.ops.automation_owner import (
     Standing,
     adopt,
     automation_id_of,
-    awaiting_owner,
     loggable,
-    owner_of,
-    owner_reach,
     register,
     standing_of,
     verify,
+)
+from brain.ops.automation_owner import (
+    awaiting_owner as awaiting_owner_awaited,
+)
+from brain.ops.automation_owner import (
+    owner_of as owner_of_awaited,
+)
+from brain.ops.automation_owner import (
+    owner_reach as owner_reach_awaited,
 )
 
 NOW = datetime(2999, 6, 1, 9, 0, tzinfo=UTC)
@@ -83,13 +91,28 @@ def issued(
     return made.registration, made.credential
 
 
+def owner_of(registration: Registration, **given: Any) -> Principal:
+    """`brain.ops.automation_owner.owner_of`, run to completion. It awaits its records."""
+    return asyncio.run(owner_of_awaited(registration, **given))
+
+
+def awaiting_owner(registrations: list[Registration], **given: Any) -> tuple[str, ...]:
+    """`brain.ops.automation_owner.awaiting_owner`, run to completion."""
+    return asyncio.run(awaiting_owner_awaited(registrations, **given))
+
+
+def owner_reach(owner: Principal, **given: Any) -> EntitlementSet:
+    """`brain.ops.automation_owner.owner_reach`, run to completion. It awaits the store."""
+    return asyncio.run(owner_reach_awaited(owner, **given))
+
+
 class Records:
     """A `PrincipalRecords`: the live principals, and nobody else."""
 
     def __init__(self, *live: Principal) -> None:
         self.live = {one.id: one for one in live}
 
-    def live_principal(self, principal_id: str) -> Principal | None:
+    async def live_principal(self, principal_id: str) -> Principal | None:
         return self.live.get(principal_id)
 
 
@@ -257,7 +280,7 @@ def test_an_automation_whose_owner_has_gone_stops_and_waits(records: Records) ->
     their grants still describe."""
     registration, _ = issued()
 
-    assert standing_of(registration, records.live_principal("u_owner"), NOW) is (
+    assert standing_of(registration, asyncio.run(records.live_principal("u_owner")), NOW) is (
         Standing.AWAITING_OWNER
     )
     with pytest.raises(AutomationRefusedError) as refused:
@@ -300,7 +323,7 @@ class Store:
         self.held = held
         self.loads = 0
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         self.loads += 1
         return EntitlementSet(principal_id=principal_id, grants=self.held)
 

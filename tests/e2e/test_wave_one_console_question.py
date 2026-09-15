@@ -322,7 +322,7 @@ class SeededStore:
 
     seeded: Seeded
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return self.seeded.reach(principal_id)
 
 

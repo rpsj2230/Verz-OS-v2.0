@@ -30,6 +30,7 @@ Task ids: M7.5.3
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
+from datetime import datetime
 from typing import Any, cast
 
 import pytest
@@ -133,7 +134,7 @@ COST_AS_IT_STANDS = ColumnEdit(
 class Store:
     """A `brain.gate.resolve.EntitlementStore` over `GRANTS`."""
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=GRANTS[principal_id])
 
 

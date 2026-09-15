@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator, Mapping, Sequence
+from datetime import datetime
 from typing import Any, cast
 
 import pytest
@@ -106,7 +107,7 @@ SECOND_FACTOR: Mapping[str, object] = {"amr": ["otp"]}
 class MatrixStore:
     """A `brain.gate.resolve.EntitlementStore` over `MATRIX_GRANTS`."""
 
-    def load(self, principal_id: str) -> EntitlementSet:
+    async def load(self, principal_id: str, now: datetime) -> EntitlementSet:
         return EntitlementSet(principal_id=principal_id, grants=MATRIX_GRANTS[principal_id])
 
 
