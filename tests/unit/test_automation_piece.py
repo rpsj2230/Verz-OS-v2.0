@@ -55,6 +55,7 @@ from brain.tools.registry import ToolRegistry
 REPO = Path(__file__).resolve().parents[2]
 MODULE = REPO / "src" / "brain" / "ops" / "automation_piece.py"
 COMPOSE = REPO / "docker-compose.automation.yml"
+APP_COMPOSE = REPO / "docker-compose.yml"
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 FLOW = "flow_nightly_reminder"
@@ -535,22 +536,35 @@ def test_this_module_opens_no_socket_and_holds_no_address() -> None:
 
 def test_the_sandbox_is_pointed_at_the_proxy_for_everything_that_is_not_its_own() -> None:
     """The configuration half, and the one line nothing else checks. `NO_PROXY` is the list
-    of hosts the canvas contacts directly, so a name added to it is a route that skips the
-    allowlist entirely. Today it holds the sandbox's own two services and loopback; an
-    application hostname appearing there would be a flow reaching us without the gate, which
-    is the failure this leaf exists to prevent.
+    of hosts the canvas contacts without the proxy, so a name added to it skips the
+    allowlist. It may hold the sandbox's own services, loopback, and the application's members
+    of `tool-api`, and nothing else.
 
-    Delete this and `NO_PROXY: ...,app` is a one-word change that no test notices."""
+    **Exempting `app` is not a route around the gate, it is the route to it.** `NO_PROXY`
+    grants no reachability; the network does. `tool-api` is internal and carries the
+    application alone, so the only thing `app` answers the canvas with is the tool-call route
+    and its credential check. Without the exemption, a client that honours the proxy
+    variables (the framework's axios) sends the tool call to the proxy, which refuses it.
+
+    Delete this and `NO_PROXY: ...,api.example.com` is a one-word change that no test
+    notices, and that host is reached from the sandbox without the allowlist."""
     compose = yaml.safe_load(COMPOSE.read_text(encoding="utf-8"))
+    app_compose = yaml.safe_load(APP_COMPOSE.read_text(encoding="utf-8"))
     services = set(compose["services"])
+    our_route = {
+        name
+        for name, body in app_compose["services"].items()
+        if "tool-api" in (body.get("networks") or [])
+    }
 
     exempt = {
         entry.strip()
         for entry in str(compose["services"]["activepieces"]["environment"]["NO_PROXY"]).split(",")
     }
 
-    assert exempt <= services | {"localhost", "127.0.0.1"}, (
-        f"these are contacted without passing the egress proxy: {sorted(exempt - services)}"
+    allowed = services | our_route | {"localhost", "127.0.0.1"}
+    assert exempt <= allowed, (
+        f"these are contacted without passing the egress proxy: {sorted(exempt - allowed)}"
     )
 
 

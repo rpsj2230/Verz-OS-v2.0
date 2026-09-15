@@ -226,8 +226,21 @@ networks:
   #
   # Nothing else in this file joins it, and that is the whole boundary: a service added
   # to this network is a service the canvas can reach.
+  #
+  # **Internal, because the canvas is the other member.** Until 2026-09-15 it was not, and
+  # Docker gives every non-internal bridge network a gateway, so the canvas had a direct
+  # route to the internet beside the egress proxy. `HTTP_PROXY` did not close that: Node's
+  # built-in `fetch` ignores it, so a flow using `fetch` went straight out past the
+  # allowlist. On an internal network there is no gateway to go out through. The
+  # application keeps its own route out on `default`, because an internal network is never
+  # chosen as a container's default route.
+  #
+  # Declared identically in `docker-compose.automation.yml` and `docker-compose.lite.yml`.
+  # `tests/unit/test_compose_networks.py` holds all three equal and holds the rule this is
+  # one case of.
   tool-api:
     name: brain-tool-api
+    internal: true
 
 volumes:
   brain-db:

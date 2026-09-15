@@ -45,7 +45,9 @@
 # The `tool-api` network below is that decision. It carries the application and this
 # service, so `db` and `cache` have no name on it to resolve, and the second defence the
 # docstring above argues for is intact: this is not the application's `default` network
-# with a friendlier name.
+# with a friendlier name. It is internal as well, since 2026-09-15: a non-internal network
+# is a route out, and a second route out beside the proxy is the one thing this file exists
+# to deny.
 #
 # **Still not claimed: the TypeScript piece.** The Activepieces plugin format is a package
 # built and published by a toolchain this repository does not have, so a `.ts` file here
@@ -97,7 +99,11 @@ services:
       # flow that unsets them reaches nothing rather than reaching everything.
       HTTP_PROXY: http://automation-egress:3128
       HTTPS_PROXY: http://automation-egress:3128
-      NO_PROXY: automation-db,automation-egress,localhost,127.0.0.1
+      # `app` is the application on `tool-api`. Without it a client that honours these
+      # variables, which the framework's axios-based HTTP client does, sends the tool call to
+      # the proxy, and the proxy refuses it because the application is not an allowlisted
+      # host. A client that ignores them, which Node's `fetch` does, reaches `app` directly.
+      NO_PROXY: app,automation-db,automation-egress,localhost,127.0.0.1
       AP_TELEMETRY_ENABLED: "false"
     expose:
       - "80"
@@ -179,16 +185,21 @@ networks:
     internal: true
   # The proxy alone sits on both. This is the only service in the file that can reach out.
   egress:
-  # The application's, joined by name rather than created here, so this file cannot bring
-  # it into being with different settings if it is composed first. `docker-compose.yml`
-  # declares it and puts one service on it.
+  # The application's network, declared here exactly as `docker-compose.yml` declares it.
   #
-  # `internal` is deliberately not set on our side: this network is the application's to
-  # define, and restating a property of somebody else's declaration is how two files come
-  # to disagree about one network.
+  # **Not `external`, and that was a defect rather than a style.** This file is never
+  # composed on its own: `full` composes it after `docker-compose.yml` into one project, and
+  # Compose merges a top-level network key across `-f` files with the later file winning.
+  # `external: true` here therefore turned the application's declaration into a reference
+  # to a network nothing in the project creates, so `full` on a clean host could not start.
+  # Compose also rejects any attribute beside `name` on an external network, so the
+  # `internal: true` the application's side now carries could not have been merged with it.
+  #
+  # Restating the declaration is safe only while the copies agree, so
+  # `tests/unit/test_compose_networks.py` holds every declaration of one network name equal.
   tool-api:
-    external: true
     name: brain-tool-api
+    internal: true
 
 volumes:
   automation-db:

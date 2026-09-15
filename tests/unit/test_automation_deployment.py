@@ -207,25 +207,32 @@ def test_the_application_keeps_its_own_network_while_joining_the_shared_one() ->
     assert set(app["networks"]) == {"default", TOOL_API}
 
 
-def test_the_shared_network_is_declared_once_and_joined_by_name() -> None:
+def test_the_shared_network_is_declared_identically_internal_and_never_external() -> None:
     """Two compose files describing one network is two chances to describe it differently:
     an `internal: true` on one side and not the other, or two `name:` values, and the
     symptom is a canvas that cannot reach the application for a reason neither file shows.
 
-    The application's file owns the declaration and the sandbox marks it external, so there
-    is one definition and one reference to it.
+    **Until 2026-09-15 the sandbox marked it `external`, and that was wrong.** `full` composes
+    this file after `docker-compose.yml` into one project, Compose merges a top-level network
+    with the later file winning, so the merged network was external and nothing created it.
+    Compose also refuses any attribute but `name` beside `external`, so it could not have
+    carried `internal: true` either. Both files now declare the same body.
 
-    Delete this and the sandbox can create its own network with the same key and a different
-    name, which succeeds, and the two stacks then sit on separate networks that are both
-    called `tool-api`."""
+    **And internal, because a network with a gateway is a route out.** The canvas on a
+    non-internal `tool-api` could reach the internet past the egress proxy, and a flow using
+    Node's `fetch` would, because `fetch` ignores `HTTP_PROXY`.
+
+    Delete this and either side can drop `internal: true` or reintroduce `external`, and the
+    canvas regains a second route out or `full` stops starting on a clean host."""
     app_network = _app_compose()["networks"][TOOL_API]
     sandbox_network = _compose()["networks"][TOOL_API]
 
-    assert sandbox_network["external"] is True, "the sandbox declares its own copy"
-    assert app_network["name"] == sandbox_network["name"], (
-        f"the application calls it {app_network['name']} and the sandbox joins "
-        f"{sandbox_network['name']}; they are two networks"
+    assert "external" not in sandbox_network, "the sandbox turns the merged network external"
+    assert app_network == sandbox_network, (
+        f"the application declares {app_network} and the sandbox {sandbox_network}; merged in "
+        "one project the later file wins and the result is neither"
     )
+    assert app_network["internal"] is True, f"{TOOL_API} has a gateway, so it is a route out"
 
 
 # --------------------------------------------------------------- no credentials of ours
@@ -266,6 +273,41 @@ def test_every_outbound_request_is_pointed_at_the_proxy() -> None:
 
     assert environment["HTTP_PROXY"] == "http://automation-egress:3128"
     assert environment["HTTPS_PROXY"] == "http://automation-egress:3128"
+
+
+def test_the_proxy_the_canvas_is_pointed_at_is_on_an_internal_network_they_share() -> None:
+    """With `tool-api` internal as well, the proxy is the canvas's only route to anything off
+    this host, so it has to be reachable. Read from the proxy address itself rather than from
+    a service name spelt again here.
+
+    Delete this and the proxy can be moved to `egress` alone, and every flow that calls an
+    allowlisted source fails with a name that does not resolve, which reads as the source
+    being down."""
+    environment = _service("activepieces")["environment"]
+    host = str(environment["HTTPS_PROXY"]).split("://", 1)[1].split(":", 1)[0]
+    compose = _compose()
+    shared = set(_service("activepieces")["networks"]) & set(_service(host)["networks"])
+
+    assert shared, f"the canvas shares no network with its proxy {host}"
+    assert all(compose["networks"][one].get("internal") is True for one in shared)
+
+
+def test_the_application_on_the_tool_network_is_exempt_from_the_proxy() -> None:
+    """**The canvas reaches the application directly, and a client that honours the proxy
+    variables would not.** The framework's HTTP client is axios, which reads `HTTP_PROXY` and
+    `NO_PROXY`; a tool call to `app:8000` without `app` in `NO_PROXY` goes to the proxy, which
+    refuses it because the application is not an allowlisted host, and the step fails.
+
+    Every member of `tool-api` other than the canvas is read from the application's compose
+    file, so a second service added there has to be exempted here too.
+
+    Delete this and `app` can be dropped from `NO_PROXY` as tidying, and every piece step that
+    uses the framework's client stops reaching the gate."""
+    exempt = set(str(_service("activepieces")["environment"]["NO_PROXY"]).split(","))
+    on_the_route = _on(_app_compose(), TOOL_API)
+
+    assert on_the_route, f"nothing of ours is on {TOOL_API}, so there is nothing to exempt"
+    assert on_the_route <= exempt, f"{sorted(on_the_route - exempt)} would be sent to the proxy"
 
 
 # --------------------------------------------------------------- sizing
