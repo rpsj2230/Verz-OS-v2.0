@@ -2,9 +2,11 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**3 items are open, all short actions of yours, and none is urgent.**
+**4 items are open, all short actions of yours, and none breaks anything while it waits.**
 
-**Item 65: one line** to replace in Coolify's compose text box. Nothing breaks while it waits.
+**Item 66: one setting** in Coolify, so the Brain can check Keycloak sign-ins.
+
+**Item 65: one line** to replace in Coolify's compose text box.
 
 **Item 63: two tidy-ups** on GitHub and in the consoles. The server checks are done.
 
@@ -12,6 +14,27 @@ Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 of two workflow files.
 
 # Open
+
+## 66. One setting in Coolify so the Brain can check Keycloak sign-ins
+
+**What you do: add one environment variable in Coolify. Nothing is broken while it waits, but nobody
+can sign in to the Brain until it exists.**
+
+**In plain words.** The Brain now checks every sign-in against Keycloak for real. To do that it has
+to know which Keycloak realm to trust, and your Brain service in Coolify does not have that setting
+yet. Without it the site keeps working exactly as today, and every sign-in is refused.
+
+1. Open Coolify the way you normally do, and open the **Company Brain** service.
+2. Go to **Environment Variables**.
+3. Add a new variable. Name: `INSTALL_OIDC_ISSUER`. Value: the address of your Keycloak realm, which
+   is your Keycloak address followed by `/realms/brain`, starting with `https://` and with no slash at
+   the end. I give you the exact value in chat, so your server's address stays out of these files.
+4. Click **Save**, then **Deploy**.
+5. Tell me when it has deployed. I then check, read-only, that the Brain reports sign-in as ready.
+
+**Why it is safe to do now.** The Brain only reads this value. If it is wrong, the site still stays
+up and sign-in simply stays refused, and the readiness page names sign-in as the part that is not
+ready.
 
 ## 65. One line to change in Coolify's copy of the compose file, whenever you have five minutes
 
