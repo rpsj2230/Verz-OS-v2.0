@@ -924,6 +924,61 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: MODELS_AND_HEALTH,
   },
+  // Questions and gaps. Nothing connected, so the one-row table is drawn. The sentence every asker
+  // receives arrives unbroken twice: inside the table, whose parent scrolls, and in the note that
+  // quotes the not-found sentence outside it, which has to be able to break.
+  "/questions": {
+    address: "/questions",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/report/questions": {
+        nothing_connected: true,
+        answered_when_nothing_connected: UNBROKEN,
+        answered_when_nothing_found: UNBROKEN,
+        unanswered_are_recorded: false,
+      },
+    },
+  },
+  // Usage and cost. A department and a person are both identifiers with no break in them, one in
+  // each table, and every measure is named as not measured so every card on the page is drawn.
+  "/usage": {
+    address: "/usage",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/report/usage": {
+        start: "2019-02-26T09:00:00Z",
+        end: "2019-03-05T09:00:00Z",
+        departments: [{ department: UNBROKEN, questions: 3, people: 1 }],
+        people: [{ person: UNBROKEN, questions: 3 }],
+        questions: 3,
+        machine_included: false,
+        not_measured: ["tokens", "model", "agent"],
+      },
+    },
+  },
+  // Quality and canaries. A run state the console has no words for is drawn as the API sent it,
+  // so an unbroken one reaches the figures list outside any table, which is the `.fields__row`
+  // shape that once took a page to 911 pixels.
+  "/quality": {
+    address: "/quality",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/report/quality": {
+        last_canary_run: {
+          started_at: "2019-03-05T06:00:00Z",
+          finished_at: "2019-03-05T06:02:00Z",
+          state: UNBROKEN,
+        },
+        canaries_started: false,
+        canary_interval_seconds: 43200,
+        findings_are_recorded: false,
+        evaluation_runs_are_recorded: false,
+      },
+    },
+  },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {
     address: `${CALLBACK_PATH}?code=X&state=Y`,

@@ -979,16 +979,20 @@ class DepartmentAdoption:
             raise AdoptionError(msg)
 
 
-def adoption_by_department(
+def questions_in_reach(
     asked: Sequence[Asked],
     reachable: frozenset[str],
     *,
     start: datetime,
     end: datetime,
-) -> tuple[DepartmentAdoption, ...]:
-    """Questions people asked, per department in the reader's reach, over `[start, end)`.
+) -> tuple[Asked, ...]:
+    """The questions people asked in the reader's reach over `[start, end)`, one per trace.
 
-    In three steps and the order is the argument.
+    The population every figure about asking is counted over, and the first two steps of
+    `adoption_by_department` with the third step's filter, lifted out so a second screen can
+    group the same questions another way without a second copy of how they were chosen.
+    `brain.console.usage_screen` groups them by person beside the department lines below, and
+    the two tables agree on their totals because they were drawn from this one tuple.
 
     First every trace is checked and dated, over every record handed in. One trace is one
     question, dated by its earliest record because a delegated child finishes after the run
@@ -997,14 +1001,11 @@ def adoption_by_department(
     This happens before the reach is applied so that the refusal is the same for every
     reader, and a reader cannot learn anything by getting one.
 
-    Then machine traces are removed, once, before either figure is counted, so questions and
-    people are drawn from one population.
+    Then machine traces are removed, once, and so are questions outside the reach or the
+    window, so every figure built on the answer is drawn from one population.
 
-    Then each reachable department gets a line, sorted by name, zero included, and nothing
-    outside the reach is counted or mentioned. The reach arrives already narrowed, as it does
-    for `coverage_report`, and should be the same usage grant
-    `brain.console.spend_view.may_read_spend` answers, so this screen and the usage screen
-    cannot disagree about who may know how much a department asked.
+    Ordered by instant and then by trace, so two readings of one window list the same
+    questions in the same order.
     """
     if start.tzinfo is None or end.tzinfo is None:
         msg = "a window with a naive edge moves by the server's offset"
@@ -1031,16 +1032,64 @@ def adoption_by_department(
             raise AdoptionError(msg)
         if one.at < seen.at:
             first[one.trace_id] = one
-    questions = dict.fromkeys(reachable, 0)
-    people: dict[str, set[str]] = {department: set() for department in reachable}
+    kept: list[Asked] = []
     for question in first.values():
         if question.machine or question.department not in reachable:
             continue
         if not start <= question.at < end:
             continue
-        questions[question.department] += 1
+        kept.append(question)
+    return tuple(sorted(kept, key=lambda one: (one.at, one.trace_id)))
+
+
+def adoption_by_department(
+    asked: Sequence[Asked],
+    reachable: frozenset[str],
+    *,
+    start: datetime,
+    end: datetime,
+) -> tuple[DepartmentAdoption, ...]:
+    """Questions people asked, per department in the reader's reach, over `[start, end)`.
+
+    In three steps and the order is the argument. The first two, and the filter of the third,
+    are `questions_in_reach`, whose docstring holds them: every trace checked and dated over
+    every record handed in, before the reach is applied, so a refusal is the same for every
+    reader; then machine traces removed once, so questions and people are drawn from one
+    population.
+
+    Then each reachable department gets a line, sorted by name, zero included, and nothing
+    outside the reach is counted or mentioned, which is `department_lines`. The reach arrives
+    already narrowed, as it does for `coverage_report`, and should be the same usage grant
+    `brain.console.spend_view.may_read_spend` answers, so this screen and the usage screen
+    cannot disagree about who may know how much a department asked.
+    """
+    return department_lines(questions_in_reach(asked, reachable, start=start, end=end), reachable)
+
+
+def department_lines(
+    questions: Sequence[Asked], reachable: frozenset[str]
+) -> tuple[DepartmentAdoption, ...]:
+    """One line per reachable department over questions already chosen, zero included.
+
+    The third step of `adoption_by_department`, taken on its own so a screen that groups the
+    same chosen questions by person as well draws both tables from one tuple. It chooses
+    nothing: the questions arrive from `questions_in_reach`, and a question from outside the
+    reach is refused rather than counted or skipped, because either would make this table's
+    total disagree with a table grouped from the same tuple another way, and the disagreement
+    is a count of what the reader may not see.
+    """
+    counted = dict.fromkeys(reachable, 0)
+    people: dict[str, set[str]] = {department: set() for department in reachable}
+    for question in questions:
+        if question.department not in reachable:
+            msg = (
+                f"trace {question.trace_id!r} is from a department outside the reach it is "
+                "being counted under, so it was not chosen by questions_in_reach"
+            )
+            raise AdoptionError(msg)
+        counted[question.department] += 1
         people[question.department].add(question.principal_id)
     return tuple(
-        DepartmentAdoption(department, questions[department], len(people[department]))
+        DepartmentAdoption(department, counted[department], len(people[department]))
         for department in sorted(reachable)
     )

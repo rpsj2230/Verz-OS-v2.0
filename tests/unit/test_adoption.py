@@ -46,9 +46,11 @@ from brain.adoption import (
     correction_gaps,
     coverage_gaps,
     coverage_report,
+    department_lines,
     first_connector,
     posture_gaps,
     privacy_posture,
+    questions_in_reach,
     shopping_list,
     starter_questions,
     verification_targets,
@@ -867,3 +869,54 @@ def test_a_window_that_holds_no_instant_or_moves_with_the_server_is_refused(
     Delete this and a caller swapping the two edges gets a page of zeroes."""
     with pytest.raises(AdoptionError):
         adoption_by_department([asked("t1")], frozenset({"alpha"}), start=start, end=end)
+
+
+def test_the_chosen_questions_are_one_per_trace_inside_the_reach_and_the_window_in_order() -> None:
+    """`questions_in_reach` is the population both the adoption lines and the usage screen's
+    person table are counted over, so what it keeps is asserted directly as well as through the
+    lines: the earliest record of a trace, from a person, in a reachable department, inside the
+    window, ordered by instant and then by trace.
+
+    Delete this and the person table on the usage screen can be grouped over a population the
+    department lines never saw, with every adoption test still green."""
+    kept = [
+        asked("late", at=MIDWEEK + timedelta(hours=2)),
+        asked("early", at=MIDWEEK + timedelta(hours=1, minutes=5)),
+        asked("early", at=MIDWEEK + timedelta(hours=1)),
+        asked("tie-b", at=MIDWEEK),
+        asked("tie-a", at=MIDWEEK),
+    ]
+    dropped = [
+        asked("machine", channel=Channel.SCHEDULER),
+        asked("elsewhere", department="beta"),
+        asked("before", at=START - timedelta(seconds=1)),
+    ]
+
+    chosen = questions_in_reach([*kept, *dropped], frozenset({"alpha"}), start=START, end=END)
+
+    assert [(one.trace_id, one.at) for one in chosen] == [
+        ("tie-a", MIDWEEK),
+        ("tie-b", MIDWEEK),
+        ("early", MIDWEEK + timedelta(hours=1)),
+        ("late", MIDWEEK + timedelta(hours=2)),
+    ]
+
+
+def test_department_lines_refuse_a_question_that_was_not_chosen_for_the_reach() -> None:
+    """The lines count questions `questions_in_reach` chose and choose nothing themselves, so a
+    question from outside the reach is refused rather than counted or skipped. Either would
+    make the department table's total disagree with a person table grouped from the same
+    questions, and the disagreement is a count of what the reader may not see. The sibling
+    counts a chosen set, zero lines included.
+
+    Delete this and a caller handing unchosen questions to the lines gets a table that silently
+    drops them while the person table beside it does not."""
+    with pytest.raises(AdoptionError, match="outside the reach"):
+        department_lines([asked("t1", department="beta")], frozenset({"alpha"}))
+
+    assert department_lines(
+        [asked("t1"), asked("t2", principal="p_two")], frozenset({"alpha", "gamma"})
+    ) == (
+        DepartmentAdoption("alpha", questions=2, people=2),
+        DepartmentAdoption("gamma", questions=0, people=0),
+    )

@@ -126,6 +126,9 @@ const GROUPS: readonly NavGroup[] = [
   {
     heading: "Report",
     sections: [
+      { to: "/questions", label: "Questions and gaps" },
+      { to: "/usage", label: "Usage and cost" },
+      { to: "/quality", label: "Quality and canaries" },
       { to: "/service-levels", label: "Service levels" },
       { to: "/spend", label: "Spend" },
       { to: "/adoption", label: "Adoption" },

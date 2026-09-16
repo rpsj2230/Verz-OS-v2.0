@@ -1,10 +1,18 @@
-"""The three Report screens over HTTP: service levels, spend, and adoption.
+"""The Report screens over HTTP: service levels, spend, adoption, usage, questions and quality.
 
 `brain.console.service_level_view`, `brain.console.spend_report_view` and
 `brain.console.adoption_view` each decide what one reader may be shown, and each says in its
 own docstring that nothing renders it. `brain.ops.console_screens` counts that as a screen
 nobody has: the tracker closed the leaf on the day the decision was written rather than on the
 day somebody could open it. This is the half that makes them reachable, and it decides nothing.
+
+The second three arrived on 2026-09-16 and are the design's own Report section: `docs/screens.html`
+draws Questions and gaps, Usage and cost, and Quality and canaries under Report on the company
+overview. `brain.console.usage_screen`, `brain.console.questions_view` and
+`brain.console.quality_view` decide them, and each of those says in its own docstring how much of
+the design an install can support today, which for all three is less than the design draws. The
+routes carry what they decide and nothing more; see
+`A_SCREEN_THAT_CANNOT_SHOW_A_FIGURE_SAYS_SO_ON_THE_RESPONSE` for the flags that carry the rest.
 
 **Every figure on these responses is the read module's, and this module computes none of
 them.** No total is summed here, no line is dropped here, no department is looked up here and
@@ -56,20 +64,27 @@ a department's own two figures and the answer holds no sum over them. So `Adopti
 `RungPage`'s shape exactly, `truncated` is the page having come back full, and there is no
 `total` populated and no count of departments beyond it.
 
-**One router for three screens rather than three routers.** `brain.app` argues a second router
-by the refusals differing, and these three do not differ: every one of them is a read with no
-write verb, narrowed by a scope over the same usage grant, answering an empty figure rather than
-an error. Three routers would be three copies of the same two sentences of wiring and one more
-line in `create_app` each. The alternative that was rejected outright is mounting these on
-`brain.api_routes`, for the reason `routing_routes` rejects it: that module's rules are about
-entities and enumeration, and a report is neither.
+**One router for the Report section rather than one per screen.** `brain.app` argues a second
+router by the refusals differing, and these do not differ: every one of them is a read with no
+write verb, decided row by row or fact by fact in a module under `brain.console`, answering an
+empty figure rather than an error. Usage is read under the same usage grant as the first three.
+Questions and quality are read under their own screens' grants, `read:question` and
+`read:evaluation`, and the refusal is still the same shape: a reader who may not be told is
+answered as an install with nothing to tell, and nothing on the response says which. So the
+section is one router, and a second one would be the same two sentences of wiring again. The
+alternative that was rejected outright is mounting these on `brain.api_routes`, for the reason
+`routing_routes` rejects it: that module's rules are about entities and enumeration, and a report
+is neither.
 
-**What has never run.** This repository has no PostgreSQL, so none of the three SELECTs below
-has been executed. What is tested is the statement `live_departments` compiles to, the read
-modules' own decisions over rows built in memory, and the shape of every response. The store
-reads are unverified against a server and are the first thing to exercise against one.
+**What has never run.** This repository has no PostgreSQL, so none of the SELECTs below has been
+executed. What is tested is the statements `live_departments` and `last_canary_run` compile to,
+the read modules' own decisions over rows built in memory, and the shape of every response. The
+store reads are unverified against a server and are the first thing to exercise against one.
 
-Task ids: M27.7.15, M27.7.16, M27.7.17
+Of the second three, M27.7.14, M27.7.18 and M27.7.19 are claimed here for what the screens can
+show and are closed by none of them, for the reasons each read module gives.
+
+Task ids: M27.7.14, M27.7.15, M27.7.16, M27.7.17, M27.7.18, M27.7.19
 """
 
 from __future__ import annotations
@@ -85,16 +100,34 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.adoption import DepartmentAdoption
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
-from brain.api_routes import Asked
+from brain.api_routes import Asked, row_readers
 from brain.console.adoption_view import adoption_for_reader
+from brain.console.quality_view import (
+    CANARY_CONTROL,
+    EVALUATION_RUNS_ARE_RECORDED,
+    FINDINGS_ARE_RECORDED,
+    CanaryRun,
+    QualityScreen,
+    canary_run_of,
+    quality_for_reader,
+)
+from brain.console.questions_view import (
+    UNANSWERED_QUESTIONS_ARE_RECORDED,
+    QuestionsScreen,
+    questions_for_reader,
+)
 from brain.console.service_level_view import service_levels_for_reader
 from brain.console.spend_report_view import MaterialisedReport, spend_report_from_view
+from brain.console.usage_screen import AUTOMATION_IS_COUNTED, UsageScreen, usage_for_reader
 from brain.core.errors import Failed
 from brain.ops.question_store import asked_between
+from brain.ops.schedule_runner import runner_for
 from brain.ops.service_levels import LaneReading, ServiceLevels
 from brain.ops.spend import Dimension
 from brain.ops.spend_store import read_spend_daily
 from brain.tables.gate import DepartmentRow
+from brain.tables.schedule import ControlRunRow
+from brain.tools.registry import ToolRegistry
 
 log = structlog.get_logger()
 
@@ -142,6 +175,16 @@ A_WINDOW_BOUND_IS_A_RESOURCE_LIMIT_AND_NEVER_A_PERMISSION: Final = (
     "for."
 )
 
+#: Why the second three responses carry flags about what is not recorded.
+A_SCREEN_THAT_CANNOT_SHOW_A_FIGURE_SAYS_SO_ON_THE_RESPONSE: Final = (
+    "The design draws tokens, unanswered questions and a green canary light, and no ledger on an "
+    "install holds any of them. A response that simply left them out would render as a screen "
+    "saying there were none, which is a figure and a false one. So each response carries what "
+    "its read module says is not measured or not recorded, copied from that module's constant "
+    "or its answer, and the page says it in words. The flags are the product's facts and are "
+    "the same for every reader, so they say nothing about what any reader was withheld."
+)
+
 
 # ------------------------------------------------------------------------ the bounds
 
@@ -169,6 +212,14 @@ MAX_ADOPTION_LINES: Final = 500
 #: What a caller gets when they do not say. Above any plausible department list, so
 #: `truncated` is false in practice.
 DEFAULT_ADOPTION_LINES: Final = 200
+
+#: The longest usage window one request may ask for, in days. A year, for adoption's reason:
+#: the question somebody brings to a usage screen is often who stopped asking.
+MAX_USAGE_DAYS: Final = 366
+
+#: What a usage window covers when nobody says. A week, which is the window the design's own
+#: overview draws beside its figures.
+DEFAULT_USAGE_DAYS: Final = 7
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -293,6 +344,150 @@ class AdoptionPage(Page[AdoptionLineView]):
     truncated: bool = False
 
 
+class DepartmentUsageView(BaseModel):
+    """One department's questions and askers on the usage screen, field for field.
+
+    `brain.adoption.DepartmentAdoption`, the same line adoption draws, because the usage
+    screen's department table is that measure over the same chosen questions.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str
+    questions: int
+    people: int
+
+
+class PersonUsageView(BaseModel):
+    """One person's questions on the usage screen. `brain.console.usage_screen.PersonLine`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    person: str
+    questions: int
+
+
+class UsageView(BaseModel):
+    """The usage screen for one reader over one window.
+
+    Not a `Page`: `questions` is asserted by `brain.console.usage_screen.UsageScreen` to be the
+    sum of every table under it, so the lines are carried whole, which is
+    `A_BREAKDOWN_CANNOT_BE_PAGED_WHILE_ITS_TOTAL_IS_ON_IT` again. The window bounds how many.
+
+    `departments`, `people` and `questions` are null exactly when the read module offered this
+    reader no axis. `not_measured` names what the screen is asked for and no ledger fills, in
+    the read module's words; see `A_SCREEN_THAT_CANNOT_SHOW_A_FIGURE_SAYS_SO_ON_THE_RESPONSE`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    start: datetime
+    end: datetime
+    departments: list[DepartmentUsageView] | None
+    people: list[PersonUsageView] | None
+    questions: int | None
+    machine_included: bool
+    not_measured: list[str]
+
+
+class QuestionsView(BaseModel):
+    """The questions screen for one reader. `brain.console.questions_view.QuestionsScreen`.
+
+    `nothing_connected` is false both on an install with a source connected and for a reader who
+    may not be told, and there is no field saying which. The two sentences are the answer lane's
+    own, carried so the page quotes what askers receive rather than a copy of it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    nothing_connected: bool
+    answered_when_nothing_connected: str
+    answered_when_nothing_found: str
+    unanswered_are_recorded: bool
+
+
+class CanaryRunView(BaseModel):
+    """One attempt to run the canaries. `brain.console.quality_view.CanaryRun`, field for field.
+
+    `state` is finished, failed, declined or unfinished, and never passed: see
+    `brain.console.quality_view.A_FINISHED_RUN_IS_NOT_A_GREEN_ONE`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    started_at: datetime
+    finished_at: datetime | None
+    state: str
+
+
+class QualityView(BaseModel):
+    """The quality screen for one reader. `brain.console.quality_view.QualityScreen`.
+
+    `last_canary_run` is null both when no run is recorded and when this reader may not see one,
+    and nothing else on the response differs between the two.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    last_canary_run: CanaryRunView | None
+    canaries_started: bool
+    canary_interval_seconds: int
+    findings_are_recorded: bool
+    evaluation_runs_are_recorded: bool
+
+
+def usage_screen_view_of(screen: UsageScreen) -> UsageView:
+    """The usage screen, copied field by field, with the absent axes carried as null."""
+    return UsageView(
+        start=screen.start,
+        end=screen.end,
+        departments=None
+        if screen.departments is None
+        else [
+            DepartmentUsageView(
+                department=one.department, questions=one.questions, people=one.people
+            )
+            for one in screen.departments
+        ],
+        people=None
+        if screen.people is None
+        else [PersonUsageView(person=one.person, questions=one.questions) for one in screen.people],
+        questions=screen.questions,
+        machine_included=AUTOMATION_IS_COUNTED,
+        not_measured=[one.value for one in screen.not_measured],
+    )
+
+
+def questions_view_of(screen: QuestionsScreen) -> QuestionsView:
+    """The questions screen, copied field by field."""
+    return QuestionsView(
+        nothing_connected=screen.nothing_connected,
+        answered_when_nothing_connected=screen.answered_when_nothing_connected,
+        answered_when_nothing_found=screen.answered_when_nothing_found,
+        unanswered_are_recorded=UNANSWERED_QUESTIONS_ARE_RECORDED,
+    )
+
+
+def canary_run_view_of(run: CanaryRun) -> CanaryRunView:
+    """One canary run, copied field by field."""
+    return CanaryRunView(
+        started_at=run.started_at, finished_at=run.finished_at, state=run.state.value
+    )
+
+
+def quality_view_of(screen: QualityScreen) -> QualityView:
+    """The quality screen, copied field by field."""
+    return QualityView(
+        last_canary_run=None
+        if screen.last_canary_run is None
+        else canary_run_view_of(screen.last_canary_run),
+        canaries_started=screen.canaries_started,
+        canary_interval_seconds=screen.canary_interval_seconds,
+        findings_are_recorded=FINDINGS_ARE_RECORDED,
+        evaluation_runs_are_recorded=EVALUATION_RUNS_ARE_RECORDED,
+    )
+
+
 def lane_view_of(reading: LaneReading) -> LaneReadingView:
     """One lane's reading, copied field by field.
 
@@ -384,6 +579,26 @@ def live_departments() -> Select[tuple[str]]:
         select(DepartmentRow.slug)
         .where(DepartmentRow.deleted_at.is_(None))
         .order_by(DepartmentRow.slug)
+    )
+
+
+def last_canary_run() -> Select[tuple[datetime, datetime | None, str | None]]:
+    """The newest attempt to run the canaries: when it started, when it ended, and how.
+
+    Three columns and not the row. `ops.control_run.detail` is a sentence for an operator, and a
+    canary run's sentence is where a finding would be written the day a runner writes one; a
+    field name there is the content `brain.console.operate.findings_in_reach` exists to filter,
+    so it is never selected rather than selected and dropped.
+
+    Newest by start rather than by finish, so a run that started and never returned is the
+    answer when it is the latest thing that happened, which is `unfinished` on the screen rather
+    than an older finished run standing in for it.
+    """
+    return (
+        select(ControlRunRow.started_at, ControlRunRow.finished_at, ControlRunRow.outcome)
+        .where(ControlRunRow.name == CANARY_CONTROL)
+        .order_by(ControlRunRow.started_at.desc())
+        .limit(1)
     )
 
 
@@ -531,3 +746,74 @@ async def adoption(
         next_cursor=None,
         truncated=len(shown) >= limit,
     )
+
+
+@router.get("/report/usage", response_model=UsageView, responses=COMMON_RESPONSES)
+async def usage(
+    request: Request,
+    asked: Asked,
+    days: Annotated[int, Query(ge=1, le=MAX_USAGE_DAYS)] = DEFAULT_USAGE_DAYS,
+) -> UsageView:
+    """Questions by department and by person over the last `days`, as this reader may see them.
+
+    The same two reads as adoption, in the same order, and for the same reason: the directory's
+    departments, then the questions. `brain.console.usage_screen.usage_for_reader` chooses the
+    questions once and groups them twice, decides which axes this reader is offered, and names
+    what is not measured. Nothing is filtered, summed or named here.
+    """
+    factory = _require_sessions(request)
+    start = asked.now - timedelta(days=days)
+    async with factory() as session:
+        departments = list((await session.execute(live_departments())).scalars().all())
+        questions = await asked_between(session, start=start, end=asked.now)
+    screen = usage_for_reader(
+        questions, departments, asked.reach, start=start, end=asked.now, now=asked.now
+    )
+    return usage_screen_view_of(screen)
+
+
+@router.get("/report/questions", response_model=QuestionsView, responses=COMMON_RESPONSES)
+async def questions(request: Request, asked: Asked) -> QuestionsView:
+    """Whether every question on this install is being answered with nothing connected.
+
+    Read from the tool registry this process holds, through `brain.api_routes.row_readers`, the
+    function that builds what the answer lane is given. No database is read: nothing on one
+    records how a question ended, which `brain.console.questions_view` argues and the response
+    carries.
+
+    A process with no registry is a fault identical for every caller, answered as the answer
+    route answers it, and it is checked whoever is asking.
+    """
+    registry = getattr(request.app.state, "tools", None)
+    if not isinstance(registry, ToolRegistry):
+        raise Failed("no tool registry on this process")
+    screen = questions_for_reader(
+        connected=bool(row_readers(registry)), entitlement=asked.reach, now=asked.now
+    )
+    return questions_view_of(screen)
+
+
+@router.get("/report/quality", response_model=QualityView, responses=COMMON_RESPONSES)
+async def quality(request: Request, asked: Asked) -> QualityView:
+    """When the permission canaries last ran and how that run ended, if this reader may know.
+
+    The newest attempt is read whoever is asking, and `brain.console.quality_view` decides
+    whether this reader is shown it, last. Whether anything starts the canaries is read off
+    `brain.ops.schedule_runner.runner_for`, which is the lookup the worker itself makes before
+    it starts a control.
+    """
+    factory = _require_sessions(request)
+    async with factory() as session:
+        found = (await session.execute(last_canary_run())).first()
+    run = (
+        None
+        if found is None
+        else canary_run_of(started_at=found[0], finished_at=found[1], outcome=found[2])
+    )
+    screen = quality_for_reader(
+        run,
+        asked.reach,
+        now=asked.now,
+        started=runner_for(CANARY_CONTROL).run is not None,
+    )
+    return quality_view_of(screen)

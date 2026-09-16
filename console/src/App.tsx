@@ -54,6 +54,9 @@ import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
+import { Quality } from "./pages/Quality";
+import { Questions } from "./pages/Questions";
+import { Usage } from "./pages/Usage";
 import { LiveRuns } from "./pages/LiveRuns";
 import { Models } from "./pages/Models";
 import { Audit } from "./pages/Audit";
@@ -279,6 +282,15 @@ export const routes: RouteObject[] = [
       { path: "recovery", element: <Recovery /> },
       { path: "limits", element: <Limits /> },
       { path: "connections", element: <Capacity /> },
+      // The design's own Report section, SCREEN 1 of `docs/screens.html`: Questions and gaps,
+      // Usage and cost, and Quality and canaries, in that order. Each path is the screen's key in
+      // `brain.console.screens`, which `brain.ops.console_screens.routed_screen_keys` matches the
+      // registry against. One path each and no parameter: the usage window is a control on the
+      // page, and the other two have nothing on them a person opens. Eager rather than split, for
+      // `Roles`' reason: none mounts a heavy library or a stylesheet of its own.
+      { path: "questions", element: <Questions /> },
+      { path: "usage", element: <Usage /> },
+      { path: "quality", element: <Quality /> },
       // The three Report screens. One path each and no parameter on any of them: each is a
       // reading of a window, the window is the request rather than the address, and there is
       // nothing on these pages a person could open. Eager rather than split, because none of

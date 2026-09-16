@@ -50,6 +50,19 @@ THE_DEPARTMENTS_ARE_THE_DIRECTORYS_AND_NOT_WHATEVER_WAS_RECORDED: Final = (
 )
 
 
+def reachable_departments(
+    departments: Iterable[str], entitlement: EntitlementSet, *, now: datetime
+) -> frozenset[str]:
+    """The directory's departments this reader's usage grant admits.
+
+    One statement of it, shared with `brain.console.usage_screen`, which groups the same
+    questions by person beside these department lines. Two copies of this line would be two
+    answers to which departments a reader may know the asking of, and the pair of tables built
+    on them would then subtract into the difference.
+    """
+    return frozenset(one for one in departments if may_read_spend(one, entitlement, now=now))
+
+
 def adoption_for_reader(
     asked: Sequence[Asked],
     departments: Iterable[str],
@@ -66,5 +79,5 @@ def adoption_for_reader(
     usage grant is shown no lines, as an empty answer rather than a refusal, for the reason
     `may_read_spend` gives.
     """
-    reachable = frozenset(one for one in departments if may_read_spend(one, entitlement, now=now))
+    reachable = reachable_departments(departments, entitlement, now=now)
     return adoption_by_department(asked, reachable, start=start, end=end)
