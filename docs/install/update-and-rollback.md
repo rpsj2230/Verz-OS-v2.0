@@ -151,50 +151,81 @@ that window is the system working as designed.
 
 ## Being told that a newer release exists
 
-Nothing reminds a client IT team to update except something that looks. This product can look,
-and it does not until you tell it where.
+Nothing reminds a client IT team to update except something that looks. The **Version and
+updates** screen in the console shows two things: which release this install is running, and
+whether a newer one has been published.
 
-Set `BRAIN_RELEASE_FEED_URL` to the address of a release list, in the environment the
-application runs in. It has no default. Unset, the install asks nothing outside your network,
-and the version panel says that nobody has told it which release is newest, which is not the
-same as saying it is up to date. The list is the JSON a repository's releases endpoint returns,
-an array of entries each carrying `tag_name`, `draft` and `prerelease`, and it can be a copy you
-serve inside your own network, which is the way to have the reminder without the request leaving.
+### Which release is running
+
+The screen names the release from the image your containers were started from. The compose
+files hand `APP_IMAGE` to the application as well as using it to choose the image, so the
+application reads the same value that selected it, and the two cannot disagree. The commit the
+image was built from is shown beside it, under its own label. A release tag cannot be written into
+the image itself: an image is built and signed for a commit before any release exists, and a
+release is that same image given a second name.
+
+What the screen says instead of a release, and what to do:
+
+| It says | Why | What to do |
+| --- | --- | --- |
+| a release, such as `v1.4.0` | `APP_IMAGE` ends in a release tag | nothing |
+| this install pins no release | `APP_IMAGE` ends in `latest` or in no tag | run `update.sh` with the release you mean to run |
+| nothing handed this application the image reference | the compose file your deployment ran predates this, or a deployment tool keeps its own stored copy of it | an install made by `install.sh` gets the line with its next update; a stored copy needs the `APP_IMAGE` line added to the application's `environment` block by hand |
+
+`/opt/brain/RELEASE` is not read by the screen, on purpose. An update writes it before it
+restarts anything, so during an update, and after one that stopped part-way, it names a release
+no container is running yet.
+
+### Whether a newer release exists
+
+This product can look, and it does not until you switch it on.
+
+Set `BRAIN_RELEASE_CHECK=true` in the environment the application runs in. It defaults to
+`false`, and while it is off the install asks nothing outside your network and the screen says
+the check is switched off, which is not the same as saying you are up to date. Switched on, the
+server asks the product's published list of releases. It asks only when somebody opens the
+screen, at most once every six hours for a list that answered and every fifteen minutes for one
+that did not, and it sends nothing about your install beyond the request itself.
+
+**No page waits for the answer.** The look runs in the background. The first time the screen is
+opened after the application starts it says the check has not finished yet; open it again a
+minute later and it says what the list said.
+
+To keep the request inside your network, serve a copy of the list and set
+`BRAIN_RELEASE_FEED_URL` to its https address. It is read only while `BRAIN_RELEASE_CHECK` is
+`true`. The list is the JSON a repository's releases endpoint returns: an array of entries each
+carrying `tag_name`, `draft`, `prerelease` and `html_url`.
 
 What the install does with the answer, in the order it decides:
 
 1. An address that is not `https` is not asked. An answer anybody on the path could rewrite is
-   not one the panel will call up to date.
+   not one the screen will call up to date.
 2. A list it cannot reach, an answer that is not a list of releases, or a list naming no
-   published release it can order, is shown as "cannot ask" with the reason. **None of these is
+   published release it can order, is shown as "check failed" with the reason. **None of these is
    ever shown as up to date.**
 3. Drafts, prereleases and tags that are not releases, including `latest`, are never taken as the
    newest release. Tags are ordered by their numbers, so `v1.10.0` is newer than `v1.9.0`.
-4. Only then is the running release compared with the newest one the list names.
+4. Only then is the running release compared with the newest one the list names. A newer one is
+   shown by its tag, with a link to its notes when the list gives an https address for them.
 
-**What is true today, and it is less than the paragraph above.** No release has been published,
-so there is no list with anything on it. The application container cannot read which release
-it is running, because neither the release marker nor the image pin reaches it, so the panel
-answers that it cannot say what is running before it gets as far as asking about anything newer.
-And no console screen draws the panel yet: it is registered and its tool is not built.
+**What is true today, and it is less than the paragraphs above.** No release has been published,
+so the product's list is empty and a switched-on install would show the check as failed, with the
+reason that the list names no release. No install has read a published release from it.
 
 ## What would make this rehearsed
 
-Two things, and neither exists.
-
-**A running version indicator in the console that a person can open**, showing what is running
-and whether a newer release exists. The comparison and the asking are built; the screen and a
-route for the running release into the application container are not.
+One thing, and it does not exist.
 
 **A drill.** Everything above run start to finish on a throwaway server, including the rollback,
 including a database that has moved, by somebody following only this page. That is what
 "rehearsed" means and it is the only thing that would turn these paragraphs into a procedure.
 
-Two of the four things this section used to list have since been built. The release notes now
+Three of the things this section used to list have since been built. The release notes now
 state whether a release changes the database and what going back would mean, and both are read
 out of the release rather than typed into it. The update and rollback scripts now exist, are
-generated from a plan with tests against it, and are carried in the archive. **Neither has been
-run on a server**, which is why the list above still has a drill in it.
+generated from a plan with tests against it, and are carried in the archive. The console shows
+the running release and whether a newer one exists. **None of it has been run on a server**,
+which is why the drill is still here.
 
 ## What is checked and what is not
 
@@ -212,6 +243,8 @@ run on a server**, which is why the list above still has a drill in it.
 | That every migration carries a reverse | the migration files themselves |
 | That the script table names every script in `ops/update`, no other, and the command that runs it | `test_install_docs.py`, against the scripts the release carries |
 | That an unset, unreachable, unreadable or non-https release list is never shown as up to date | `test_release_feed.py`, with the transport handed in |
+| That the check asks nothing while switched off, and that no page waits for a look | `test_release_feed.py` and `test_install_routes.py`, the second with a list that does not answer until the page has |
+| That the application is handed the image variable the compose files select it by | `test_version_view.py`, against the compose files the release carries |
 | That tags are ordered by their numbers, and drafts, prereleases and `latest` are never the newest | `test_release_feed.py` and `test_version_view.py` |
 | **That a published release list has ever been read by an install** | **nobody. No release has been published.** |
 | **The procedure on this page** | **nobody. It has never been run on a server.** |

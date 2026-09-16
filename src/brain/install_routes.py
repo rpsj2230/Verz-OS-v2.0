@@ -95,12 +95,19 @@ would be in front of the capacity figures, which need nothing but arithmetic. It
 caller holding one of the five capabilities an answer assembled from the other four or a refusal
 that depends on which they hold, and both are worse than five addresses each with one refusal.
 
-Rejected: reading the release feed on a timer into a cache. It is the right shape eventually and
-it is a second place where the answer's age is decided, and the age is the whole of what
-`brain.console.version_view.TELLING_GOES_OFF_AFTER_DAYS` is about. Asked per request, the
-frequency of the outbound check is the frequency somebody opens the screen, which is already the
-first item on `WHAT_A_RELEASE_CHECK_WOULD_SEND`, so the cache would add a disclosure nobody had
-agreed to in order to save a request nobody makes often.
+**The release list is never awaited here, and until 2026-09-16 it was.** The updates route
+asked the list in a thread and waited, so a slow or silent list put its whole timeout in front of
+the screen on every load. It now reads `brain.deployment.release_feed.ReleaseWatch`, which answers
+from the last look that finished and starts the next one beside the request when one is due. The
+watch is one per application object, attached the first time the screen is opened rather than
+built with the application, so a process whose screen nobody opens holds nothing and asks
+nothing. See `release_feed.A_PAGE_NEVER_WAITS_FOR_THE_RELEASE_LIST`.
+
+Rejected: reading the release feed on a timer into a cache. A timer asks on a server nobody is
+looking at, and the second item on `WHAT_A_RELEASE_CHECK_WOULD_SEND` is exactly that record of
+when a server is up. A look started by opening the screen, and no more often than
+`release_feed.LOOK_AGAIN_AFTER`, has a reader for every request that leaves. See
+`release_feed.A_LOOK_IS_STARTED_BY_A_READER_AND_NOT_BY_A_TIMER`.
 
 Rejected: a write anywhere in this module. M30.3.9 asks for a one-click drill and
 `brain.console.recovery_view` declines to claim it in those words: the drill is a write, no
@@ -110,12 +117,11 @@ would be this module deciding that, from the side that renders.
 Scope: five read-only routes. Nothing here writes, and the only session anything here would need
 is the one it deliberately does not open.
 
-Task ids: M27.7.25, M27.7.27
+Task ids: M27.7.25, M27.7.27, M42.3.9
 """
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Final, Protocol, cast
@@ -146,7 +152,7 @@ from brain.console.version_view import Running, Told, Unanswered, running_releas
 from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
-from brain.deployment.release_feed import check as ask_release_feed
+from brain.deployment.release_feed import ReleaseWatch, feed_address
 from brain.ops.admission import Ceiling
 from brain.ops.backup_manifest import read_drills, read_manifests
 from brain.ops.install_from_empty import read_plan
@@ -317,6 +323,23 @@ def throttle_source_of(request: Request) -> ThrottleSource | None:
     return cast(ThrottleSource, found) if callable(found) else None
 
 
+def release_watch_of(request: Request) -> ReleaseWatch:
+    """This application's watch on the release list, attached the first time anybody asks.
+
+    Attached here rather than in `brain.app.create_app`, because the only thing that reads it is
+    this screen and a watch is state: a process whose updates screen is never opened holds
+    none and starts nothing. Replaced when the attribute holds anything else, for the reason
+    `backup_objects_of` treats a wrong shape as none: a test or a process that attached a value
+    of the wrong kind gets a working watch rather than an `AttributeError` reaching a caller.
+    """
+    found = getattr(request.app.state, "release_watch", None)
+    if isinstance(found, ReleaseWatch):
+        return found
+    made = ReleaseWatch()
+    request.app.state.release_watch = made
+    return made
+
+
 def settings_of(request: Request) -> Settings:
     """The settings this application was created with, or a process-level fault.
 
@@ -400,6 +423,8 @@ class RunningView(BaseModel):
     tag: str
     facts: list[FactView]
     cannot_say: str
+    #: The commit the running image was built from. Drawn under its own label, never as `tag`.
+    commit: str
 
 
 class ToldView(BaseModel):
@@ -408,6 +433,9 @@ class ToldView(BaseModel):
     `by` is not decoration. `brain.console.version_view.Told` refuses a telling with nobody
     named, because an administrator who read the release notes this morning and a value typed
     once during setup are worth very different amounts and render identically without it.
+
+    `notes` is an https address or empty, refused by `Told` before it reaches this model, so
+    what a console draws as a link has had its scheme decided once, on the server.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -415,6 +443,7 @@ class ToldView(BaseModel):
     tag: str
     at: str
     by: str
+    notes: str
 
 
 class UnansweredView(BaseModel):
@@ -437,7 +466,7 @@ class UpdatesView(BaseModel):
 
     `says` and `what_to_do` are `brain.console.version_view.ANSWERS`, sent rather than derived
     in a browser. A console mapping a standing to a sentence would be a second vocabulary for
-    a closed set of eight, out of step with this one within a release, and the one screen where
+    a closed set of nine, out of step with this one within a release, and the one screen where
     that matters most is the one a client reads before deciding they are patched.
 
     `told` and `unanswered` are never both set. The panel holds one value of a union and
@@ -669,6 +698,7 @@ def running_view(one: Running) -> RunningView:
         tag=one.tag,
         facts=[fact_view(fact) for fact in one.facts],
         cannot_say=one.cannot_say,
+        commit=one.commit,
     )
 
 
@@ -677,7 +707,9 @@ def updates_view(one: UpdatesPanel) -> UpdatesView:
     return UpdatesView(
         running=running_view(one.running),
         told=(
-            ToldView(tag=one.told.tag, at=one.told.at.isoformat(), by=one.told.by)
+            ToldView(
+                tag=one.told.tag, at=one.told.at.isoformat(), by=one.told.by, notes=one.told.notes
+            )
             if isinstance(one.told, Told)
             else None
         ),
@@ -828,30 +860,34 @@ async def install(request: Request, asked: Asked) -> InstallView:
 
 @router.get("/install/updates", response_model=UpdatesView, responses=COMMON_RESPONSES)
 async def updates(request: Request, asked: Asked) -> UpdatesView:
-    """Which release this install is on, and whether anything newer has been recorded (M42.3.9).
+    """Which release this install is on, and whether a newer one has been published (M42.3.9).
 
-    **Neither statement that would name a release reaches this process, and the panel says so
-    rather than substituting the one that does.** The release marker and the image pin are
-    files in the install directory on the host, which no compose file mounts into this
-    container, and `brain.console.version_view.facts_the_container_cannot_read` is the check
-    that reports both. So `running_release` is given the built commit and nothing else, it
-    names no release, and `standing_of` answers that there is nothing to compare. That is the
-    honest state of M42.3.9 on every install today: the panel is served, and the two statements
-    it most needs have no route into the process that draws it.
+    **The release comes from the image reference this container was started with, and the
+    commit from the image itself.** `Settings.app_image` is the `APP_IMAGE` the compose files
+    hand the application, the same value its `image:` line selected it by, and the manifest is
+    the file CI wrote into the image. The release marker is not handed in, on purpose; see
+    `brain.console.version_view.A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD`. A deployment
+    whose compose file predates the line hands in no reference, and the panel says so and names
+    the commit instead of a release.
 
-    The release list is asked through `brain.deployment.release_feed`, in a thread because its
-    fetch is blocking and this route is not. An install that names no list is answered
-    `NO_SOURCE` without anything leaving the network, which is the built-in state. What the
-    other state costs, and why it is the operator's to switch on rather than this module's, is
-    `brain.console.version_view.WHAT_A_RELEASE_CHECK_WOULD_SEND` item by item.
+    **Nothing here waits for the release list.** `release_watch_of` answers from the last look
+    that finished and starts the next one beside this request when it is due, so the page is as
+    fast with a silent list as with none. The capability is checked first, so a caller who may
+    not open this screen cannot make this server ask anything outside its network either.
     """
     _permitted(asked.reach, "updates", asked.now)
     settings = settings_of(request)
     manifest = read_manifest()
-    told = await asyncio.to_thread(ask_release_feed, now=asked.now, url=settings.release_feed_url)
+    told = release_watch_of(request).answer(
+        feed_address(switched_on=settings.release_check, url=settings.release_feed_url),
+        now=asked.now,
+    )
     return updates_view(
         updates_panel(
-            running_release(built_commit="" if manifest is None else manifest.commit),
+            running_release(
+                pinned_image=settings.app_image,
+                built_commit="" if manifest is None else manifest.commit,
+            ),
             told,
             now=asked.now,
         )

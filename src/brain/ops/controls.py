@@ -255,6 +255,12 @@ NOT_A_SCHEDULE: Final[Mapping[str, str]] = MappingProxyType(
             "is the same arithmetic as the deployment check and is evaluated when somebody "
             "is deciding where to run this, not on a schedule"
         ),
+        "brain.deployment.release_feed:look_is_due": (
+            "whether a load of the updates screen should look at the release list again. It is "
+            "started by somebody opening that screen, never by a scheduler, and a timer running "
+            "it would be the outbound request with nobody to read the answer that the check was "
+            "built to avoid. Nothing stops being true when nobody asks it"
+        ),
         "brain.ops.schedule_runner:due_now": (
             "the scheduler asking which of the controls below are owed a run, which is this "
             "registry's own question rather than a mechanism that guards anything. "

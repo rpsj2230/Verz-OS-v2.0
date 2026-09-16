@@ -2,24 +2,32 @@
 
 An install holds three statements about its own version and **no two of them answer the same
 question**, which is why this is a module rather than a field. The release marker at
-`INSTALL_HOME` says which tag was unpacked; `APP_IMAGE` in the install's environment file says
-which image the compose command was told to select; and the manifest inside the image says
-which commit the running code was built from. The first two are host files the application
-container mounts nothing of, the third is the only one this process can measure, and the third
-is a commit rather than a release. See `THREE_STATEMENTS_AND_ONLY_ONE_OF_THEM_IS_MEASURED`.
+`INSTALL_HOME` says which tag was unpacked; `APP_IMAGE` says which image the containers were
+selected by; and the manifest inside the image says which commit the running code was built
+from. Only the third is measured by this process, and the third is a commit rather than a
+release. See `THREE_STATEMENTS_AND_ONLY_ONE_OF_THEM_IS_MEASURED`.
 
-**Two of them can disagree from the first day of an install and neither is wrong.** A fresh
-install writes the marker and writes nothing that selects an image, so every container falls
-back to the compose default, which ends in `latest`. `docs/install/update-and-rollback.md` says
-so in those words. A screen picking one of the two would therefore be reporting a version that
-is true of a file and not of the containers, on every install that has never run the update
-script, which is every install today. So this **names no release at all** when the two
-statements do not agree, and says which two they are and what each one means. See
-`SHOWING_ONE_OF_TWO_VERSION_FACTS_THAT_DISAGREE_IS_A_SCREEN_THAT_LIES_QUIETLY`.
+**The release cannot be baked into the image, so it arrives the way the image was chosen.**
+The deploy pipeline builds and signs one image per commit, and a release is that digest given a
+second name later, so nothing inside an image can say which release it became. What does name
+it is the reference the compose command selected the container by, and since 2026-09-16 the
+compose files hand that same variable to the application's environment, where
+`brain.settings.Settings.app_image` reads it. One compose evaluation sets both, so it is a
+statement about this container rather than about a file beside the install. The marker is
+deliberately not handed over: an update writes it before it recreates the containers, so it is
+the one statement that is wrong about a running container while an update is part-way through.
+See `A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD`.
 
-**Nothing here asks anything outside this install whether a newer release exists, and that is
-a decision rather than an omission.** The honest options were a check that phones a vendor,
-somebody telling the install, or admitting it cannot know. This product is single-tenant,
+**Two of them can disagree and neither is wrong.** An update writes the marker before it
+recreates anything, so for as long as that takes, and for ever if it stops part-way, the marker
+names one release and the containers run another. A screen picking one of the two would be
+reporting a version that is true of a file and not of the containers, on exactly the install
+somebody is looking at because an update went wrong. So this **names no release at all** when
+two statements it was handed do not agree, and says which two they are and what each one means.
+See `SHOWING_ONE_OF_TWO_VERSION_FACTS_THAT_DISAGREE_IS_A_SCREEN_THAT_LIES_QUIETLY`.
+
+**Nothing here asks anything outside this install whether a newer release exists, and the
+asking is switched off until an install switches it on.** This product is single-tenant,
 installed on a client's own server and owned outright, and a check that runs by default is an
 outbound connection nobody agreed to: it discloses that this product is installed at that
 address, when that server is up, how often somebody administers it, and, if the check sends the
@@ -27,24 +35,18 @@ running version so the answer can be narrower, which installs are behind. That l
 list of who is unpatched, held by somebody who does not operate the install.
 `WHAT_A_RELEASE_CHECK_WOULD_SEND` is that cost written down item by item, and
 `release_check_cost` is it as a check rather than as a sentence in a commit message nobody
-re-reads, which is the construction `brain.console.installation.recovery_gaps` uses for the
-screen it declines to build.
+re-reads: it is what an install agrees to by switching the check on.
 
-So the half that can be built is built: **the comparison, and the age of the answer it is
-comparing against**. `Told` is what somebody has said the newest release is, carrying who said
-so and when.
-
-**Since 2026-09-15 an install can be set to ask, and it asks nothing until somebody sets it.**
-`brain.deployment.release_feed` reads a release list at an address the install's own
-configuration names, which can be a copy on the client's own network, and produces either a
-`Told` or an `Unanswered`. The asking lives there and not here, so everything above about this
-module reaching nothing is still true of this module. What changed is what this module has to
-be able to say: a list that was configured and did not answer is `CANNOT_ASK`, and it is kept
-apart from `NOBODY_HAS_SAID` because the remedy differs. Neither is a tick. See
+`brain.deployment.release_feed` does the asking, in the background of whichever request opens
+the screen, and produces either a `Told` or an `Unanswered`. The asking lives there and not
+here, so this module still reaches nothing. What this module has to be able to say is every way
+of not having an answer: switched off, switched on and not finished looking yet, and looked and
+failed. They are three standings rather than one because the remedy differs, and none of them
+is a tick. See
 `A_RELEASE_LIST_THAT_DID_NOT_ANSWER_IS_NOT_A_RELEASE_LIST_WITH_NOTHING_NEWER_ON_IT`.
 
 **"Up to date" and "cannot tell" must not be renderable alike, so the renderer is not trusted
-with the difference.** `Standing` has eight members and `ANSWERS` gives each of them the two
+with the difference.** `Standing` has nine members and `ANSWERS` gives each of them the two
 sentences a client reads, so the words are this module's rather than a template's. `SETTLED`
 holds the one member a tick may be drawn beside, and `Panel` refuses to be built claiming it
 without a known running release and a telling that has not gone off. That is item 44's argument
@@ -60,11 +62,17 @@ equal, and a running release newer than the newest anybody named is its own answ
 being folded into "up to date". See
 `A_TAG_COMPARISON_THAT_GUESSES_FAILS_IN_THE_REASSURING_DIRECTION`.
 
-Rejected: reading the marker and the pin here. They are host files and this module would then
-be untestable for the case that matters, which is the install where one of them is missing.
-They are parameters, exactly as `brain.console.installation.install_facts` takes its manifest,
-and `facts_the_container_cannot_read` is the finding that nothing inside the application
-container can supply either of them today.
+Rejected: reading the marker and the pin here. This module would then be untestable for the
+case that matters, which is the install where one of them is missing. They are parameters,
+exactly as `brain.console.installation.install_facts` takes its manifest, and
+`facts_the_container_cannot_read` is the check that says which of them the application
+container is handed.
+
+Rejected: mounting the marker into the application container so all three statements reach
+it. A bind mount of a file that does not exist makes docker create a directory in its place, on
+the host, owned by root, and the next install on that host then fails to write its marker at
+all. And what the mount would add is the statement that is wrong about the running container
+during a failed update, which the pin already gets right.
 
 Rejected: a `Source` and a `Fact` of this module's own. `brain.console.installation` already
 distinguishes measured from declared from unknown for the install group, and a second
@@ -111,31 +119,44 @@ class VersionError(Exception):
 # ------------------------------------------------------------------ written-down reasons
 #: Why an install's own version is three statements rather than one field.
 THREE_STATEMENTS_AND_ONLY_ONE_OF_THEM_IS_MEASURED: Final = (
-    "An install holds a marker file naming the tag it unpacked, an image variable in its "
-    "environment file naming what the compose command was told to select, and a manifest "
-    "inside the image naming the commit the code was built from. The first two are files on "
-    "the host and the application container mounts nothing of either, so the only one this "
-    "process can measure is the third, and the third is a commit rather than a release. A "
-    "single version field on a screen is therefore one of three answers with the label of a "
-    "fourth."
+    "An install holds a marker file naming the tag it unpacked, an image variable naming what "
+    "the compose command selected its containers by, and a manifest inside the image naming "
+    "the commit the code was built from. The marker is a file on the host that nothing hands "
+    "the application, the image variable reaches the application through the environment the "
+    "same compose command gave it, and only the manifest is measured by this process, which "
+    "is a commit rather than a release. A single version field on a screen is therefore one of "
+    "three answers with the label of a fourth."
+)
+
+#: Why the running release is not baked into the image, and where it comes from instead.
+A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD: Final = (
+    "The deploy pipeline builds, signs and publishes one image per commit, and a release is "
+    "made afterwards by putting the release tag on that same digest as a second name. Building "
+    "again at release time to bake the tag in would publish a second digest from the same "
+    "source, unsigned and untested, so a build argument can carry the commit and never the "
+    "release. What names the release is the image reference the containers were selected by, "
+    "and the compose files hand that same variable to the application's environment in the "
+    "same evaluation that selects its image, so it is a statement about the running container "
+    "rather than about a file beside the install."
 )
 
 #: Why the panel names no release when two statements about it disagree.
 SHOWING_ONE_OF_TWO_VERSION_FACTS_THAT_DISAGREE_IS_A_SCREEN_THAT_LIES_QUIETLY: Final = (
-    "A fresh install writes the marker and writes nothing that selects an image, so every "
-    "container falls back to the compose default, which ends in latest. The marker and the "
-    "running containers therefore disagree from the first day and neither statement is wrong: "
-    "one records what was downloaded and the other records what is running. A screen showing "
-    "either one under a heading reading version is right about a file and wrong about the "
-    "install, and it is read by somebody deciding whether they are patched. So it names "
-    "neither, names both statements, and says what each of them is."
+    "An update writes the marker before it recreates the containers, so for as long as that "
+    "takes, and for ever if the update stops part-way, the marker names one release and the "
+    "running containers another, and neither statement is wrong: one records what was "
+    "downloaded and the other records what is running. A screen showing either one under a "
+    "heading reading version is right about a file and wrong about the install, and it is read "
+    "by somebody deciding whether they are patched. So it names neither, names both "
+    "statements, and says what each of them is."
 )
 
 #: Why the reassuring answer carries the most conditions.
 A_TICK_WITH_NOTHING_BEHIND_IT_IS_THE_FIELD_SOMEBODY_CHECKS_BEFORE_DECIDING_NOT_TO_WORRY: Final = (
     "Up to date and cannot tell are read the same way when they are drawn the same way, and "
-    "the second is the common one: nothing outside this install has ever said which release "
-    "is newest. A tick there is worse than no indicator at all, because an indicator is what "
+    "the second is the default one: an install that has not switched the check on has never "
+    "been told which release is newest. A tick there is worse than no indicator at all, because "
+    "an indicator is what "
     "somebody looks at before deciding to stop looking. So the reassuring answer needs a "
     "known running release, a telling, and a telling that has not gone off, and the words for "
     "every other answer belong to this module rather than to whatever draws it."
@@ -149,27 +170,27 @@ AN_INSTALL_THAT_ASKS_A_VENDOR_WHETHER_IT_IS_BEHIND_HAS_TOLD_THE_VENDOR_IT_EXISTS
     "says this product is installed at that address, when that server is up and how often "
     "somebody administers it, and a check that sends the running release so the answer can be "
     "narrower turns the collection into a list of which installs are unpatched. So the check "
-    "is built switched off: an install asks only once its own configuration names a release "
-    "list, and the list can be a copy on the client's own network."
+    "is built switched off: an install asks only once its own configuration switches it on, "
+    "and the list it asks can be a copy on the client's own network."
 )
 
 #: Why a list that did not answer is its own standing.
 A_RELEASE_LIST_THAT_DID_NOT_ANSWER_IS_NOT_A_RELEASE_LIST_WITH_NOTHING_NEWER_ON_IT: Final = (
-    "An install set to read a release list that times out, refuses, or answers with something "
-    "that is not a list of releases has learned nothing about whether it is behind. Drawn as up "
-    "to date it is a firewall change silently turning into reassurance; drawn as nobody having "
-    "said, it sends the reader to configure a thing that is already configured. So it is its own "
-    "answer, it carries the reason, and it is not in SETTLED."
+    "An install switched on to read a release list that times out, refuses, or answers with "
+    "something that is not a list of releases has learned nothing about whether it is behind. "
+    "Drawn as up to date it is a firewall change silently turning into reassurance; drawn as "
+    "switched off, it sends the reader to switch on a thing that is already on. So it is its "
+    "own answer, it carries the reason, and it is not in SETTLED."
 )
 
 #: Why the measured statement is not the one shown as the version.
 A_COMMIT_IS_NOT_A_RELEASE_A_CLIENT_CAN_LOOK_UP: Final = (
     "The commit the image was built from is the only statement this process can measure, and "
     "it is the wrong answer to which release am I on. A client cannot look a commit up in a "
-    "list of releases, ask for its notes, or hand it to the update script, and no image is "
-    "published carrying a release tag at all, so the commit cannot even be matched back to "
-    "one. It is shown, labelled as the commit, and never under the heading a client reads as "
-    "their version."
+    "list of releases, ask for its notes, or hand it to the update script, and a release tag "
+    "is a name given to an image after it was built, so nothing inside the image can match "
+    "the commit back to one. It is shown, labelled as the commit, and never under the heading "
+    "a client reads as their version."
 )
 
 #: Why only one shape of tag is ordered, and why the rest are reported as differing.
@@ -184,16 +205,19 @@ A_TAG_COMPARISON_THAT_GUESSES_FAILS_IN_THE_REASSURING_DIRECTION: Final = (
 
 #: Why a release this install is already past is its own answer.
 RUNNING_SOMETHING_NEWER_THAN_ANYBODY_NAMED_IS_NOT_BEING_BEHIND: Final = (
-    "The newest release anybody told this install about goes out of date the moment somebody "
-    "updates and does not say so, which is the ordinary case rather than the odd one. Folded "
-    "into up to date it hides that nothing has been said for a while; folded into behind it "
-    "sends somebody to install a release older than the one they are running. It is its own "
-    "answer and it asks for the one thing that fixes it, which is somebody saying what the "
-    "newest release is now."
+    "The newest release on a copy of the release list goes out of date the moment somebody "
+    "installs from the published list and nobody refreshes the copy, which is the ordinary case "
+    "for a mirror rather than the odd one. Folded into up to date it hides that the list has "
+    "stopped moving; folded into behind it sends somebody to install a release older than the "
+    "one they are running. It is its own answer and it asks for the one thing that fixes it, "
+    "which is the list being brought up to date."
 )
 
 
 # ------------------------------------------------------------------ what somebody was told
+#: The only way a link to a release's notes may begin. See `Told`.
+NOTES_ARE_READ_OVER: Final = "https://"
+
 #: How long an answer about which release is newest is worth anything, in days.
 #:
 #: **Taken from the drill interval rather than chosen, because the two answer one question:**
@@ -219,9 +243,15 @@ class Told:
     during setup and never touched again. A renderer showing the tag without the source invites
     the reader to treat the second as the first.
 
-    `brain.deployment.release_feed.ask` produces one when an install is set to read a release
-    list, and nothing produces one otherwise. See
+    `brain.deployment.release_feed.ask` produces one when an install is switched on to read a
+    release list, and nothing produces one otherwise. See
     `AN_INSTALL_THAT_ASKS_A_VENDOR_WHETHER_IT_IS_BEHIND_HAS_TOLD_THE_VENDOR_IT_EXISTS`.
+
+    **`notes` is an https address or nothing, refused here rather than escaped by whatever
+    draws it.** It comes from a list somebody else serves, a console turns it into a link, and
+    a link whose address is `javascript:` runs in the administrator's session on the one screen
+    they open to decide whether to update. A console that had to remember to check would be
+    the second place the rule lives.
     """
 
     #: The release tag somebody says is newest.
@@ -230,6 +260,8 @@ class Told:
     at: datetime
     #: Who said so, in words a reader can weigh.
     by: str
+    #: Where that release's notes are read, as an https address. Empty when nothing said.
+    notes: str = ""
 
     def __post_init__(self) -> None:
         if not self.tag.strip():
@@ -255,13 +287,19 @@ class Told:
                 "it is"
             )
             raise VersionError(msg)
+        if self.notes and not self.notes.startswith(NOTES_ARE_READ_OVER):
+            msg = (
+                f"{self.tag} was recorded with notes at {self.notes!r}, which is not an https "
+                "address, and a link to it is a link somebody else chose the scheme of"
+            )
+            raise VersionError(msg)
 
 
 class Unasked(enum.StrEnum):
     """Why an install that could have been told which release is newest was not."""
 
-    #: The install is not set to read a release list, so it asked nobody.
-    NO_SOURCE = "no release list is configured"
+    #: The install is not switched on to look, so it asked nobody.
+    SWITCHED_OFF = "the release check is switched off"
     #: It asked, and the list could not be reached.
     UNREACHABLE = "the release list could not be reached"
     #: It asked, and the answer was not a list naming a release this install can order.
@@ -319,6 +357,12 @@ class Running:
     Exactly one of `tag` and `cannot_say` is set, refused in the constructor rather than left
     to a renderer. A `Running` carrying both would be drawn as a version with a caveat beside
     it, and a caveat beside a number is read as a number.
+
+    `commit` travels beside both and is never a substitute for `tag`. A screen with no release
+    to name still owes the reader what is running, and the commit is the measured answer to
+    that; carried as its own field, it is drawn under its own label rather than picked out of
+    `facts` by name, which is a console deciding which row is the version. See
+    `A_COMMIT_IS_NOT_A_RELEASE_A_CLIENT_CAN_LOOK_UP`.
     """
 
     #: The release this install is on, when the statements agree it is one. Empty otherwise.
@@ -327,6 +371,8 @@ class Running:
     facts: tuple[Fact, ...]
     #: Why no release is named. Required when `tag` is empty, and empty when it is not.
     cannot_say: str = ""
+    #: The commit the running image was built from, measured. Empty when nothing reported one.
+    commit: str = ""
 
     def __post_init__(self) -> None:
         if not self.facts:
@@ -350,20 +396,22 @@ class Running:
 def running_release(*, marker: str = "", pinned_image: str = "", built_commit: str = "") -> Running:
     """What this install is running, from the three places that can say (M42.3.9).
 
-    Every argument is what somebody else read off the server, for the reason
-    `brain.console.installation.install_facts` takes its manifest: these are host files and a
-    function that opened them could not be tested for the install where one is missing, which
-    is every install that has never been updated.
+    Every argument is what somebody else read, for the reason
+    `brain.console.installation.install_facts` takes its manifest: a function that opened them
+    could not be tested for the install where one is missing.
 
-    `marker` is the content of the release marker, `pinned_image` the whole value of the image
-    variable from the install's environment file, and `built_commit` the commit the running
-    image reports. Each produces a labelled statement whether or not it was supplied, because
-    an absent statement is a thing the reader has to know about rather than a row to leave out.
+    `marker` is the content of the release marker, `pinned_image` the whole image reference the
+    containers were selected by, and `built_commit` the commit the running image reports. Inside
+    the application `brain.install_routes` hands in the last two, from
+    `brain.settings.Settings.app_image` and the image's own manifest, and never the marker. See
+    `A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD`. Each produces a labelled statement whether
+    or not it was supplied, because an absent statement is a thing the reader has to know about
+    rather than a row to leave out.
 
-    **An install with no image pin is not pinned, and the marker cannot describe its
-    containers.** That is the case on every install that has never run the update script, so it
-    is the common answer rather than the odd one, and it is named as such rather than reported
-    as the marker's tag. See
+    **An install with no release in its image reference is not pinned, and the marker cannot
+    describe its containers.** A reference ending in `latest`, or in no tag at all, runs
+    whatever was newest when it was pulled, so it is named as unpinned rather than reported as
+    the marker's tag. See
     `SHOWING_ONE_OF_TWO_VERSION_FACTS_THAT_DISAGREE_IS_A_SCREEN_THAT_LIES_QUIETLY`.
     """
     named = marker.strip()
@@ -378,27 +426,32 @@ def running_release(*, marker: str = "", pinned_image: str = "", built_commit: s
         return Running(
             tag="",
             facts=facts,
+            commit=commit,
             cannot_say=(
-                "nothing here reports the release this install unpacked or the image its "
-                "containers were told to run, so no statement about a version has been read "
-                "at all"
+                "nothing handed this application the image reference it was started from, "
+                "and no release marker either, so no statement about a version has been read "
+                "at all. An install's own compose files hand the reference over; a deployment "
+                "tool that keeps its own copy of the compose file does so once that copy "
+                "carries the line"
             ),
         )
     if pinned == NOT_A_RELEASE_TAG:
         return Running(
             tag="",
             facts=facts,
+            commit=commit,
             cannot_say=(
-                "this install pins no release, so its containers run whatever the image "
-                "default pointed at when they were last pulled. The marker records what was "
-                "downloaded and cannot describe what is running. Running the update script "
-                "once writes the pin and makes these one fact"
+                "this install pins no release: nothing selects a release tag for its "
+                "containers, so they run whatever was newest when they were last pulled. A "
+                "marker, when there is one, records what was downloaded and cannot describe "
+                "what is running. Running the update script with a release tag pins one"
             ),
         )
     if named and named != pinned:
         return Running(
             tag="",
             facts=facts,
+            commit=commit,
             cannot_say=(
                 f"the release marker says {named} and the containers are pinned to {pinned}, "
                 "so these two disagree about the same install. One of them is a record of what "
@@ -406,7 +459,7 @@ def running_release(*, marker: str = "", pinned_image: str = "", built_commit: s
                 "version would be right about one and wrong about the other"
             ),
         )
-    return Running(tag=named or pinned, facts=facts)
+    return Running(tag=named or pinned, facts=facts, commit=commit)
 
 
 def _marker_fact(named: str) -> Fact:
@@ -416,8 +469,10 @@ def _marker_fact(named: str) -> Fact:
             name=MARKER_FACT,
             source=Source.UNKNOWN,
             because=(
-                "the release marker is a file on the server beside the install and nothing "
-                "handed its contents to this screen"
+                "the release marker is a file beside the install on the server, and it is not "
+                "handed to the application on purpose: an update writes it before it restarts "
+                "anything, so it can name a release no container is running yet. The pinned "
+                "image below is the statement about what is running"
             ),
         )
     return Fact(
@@ -426,8 +481,8 @@ def _marker_fact(named: str) -> Fact:
         value=named,
         because=(
             "the tag this install downloaded and unpacked. It records what was fetched rather "
-            "than what the containers are running, and until the first update those are two "
-            "different facts"
+            "than what the containers are running, and while an update is part-way through "
+            "those are two different facts"
         ),
     )
 
@@ -439,9 +494,10 @@ def _pinned_fact(pin: str, pinned: str) -> Fact:
             name=PINNED_FACT,
             source=Source.UNKNOWN,
             because=(
-                f"nothing in this install's environment file selects an image, so every "
-                f"container falls back to the default in the compose file, which ends in "
-                f"{NOT_A_RELEASE_TAG}. There is no version here to read"
+                "nothing handed this application the image reference its container was "
+                "started from, so there is no version here to read. The compose files an "
+                "install runs pass it in; a deployment tool with its own stored copy of a "
+                "compose file passes it once that copy is brought up to date"
             ),
         )
     if pinned == NOT_A_RELEASE_TAG:
@@ -460,9 +516,9 @@ def _pinned_fact(pin: str, pinned: str) -> Fact:
         source=Source.DECLARED,
         value=pin,
         because=(
-            "the image every container of this install is selected by. It says what they were "
-            "told to run rather than what each of them is running, which is the same "
-            "distinction the update script makes when it checks nothing stayed behind"
+            "the image reference this application's container was started from, handed to it "
+            "by the same command that selected the image. It names the release that was asked "
+            "for; the built commit below is the measured half"
         ),
     )
 
@@ -490,13 +546,18 @@ def _commit_fact(commit: str) -> Fact:
 class Standing(enum.StrEnum):
     """Where this install stands against the newest release anybody has named.
 
-    Eight answers rather than two, because the two-answer version of this screen is a tick and
+    Nine answers rather than two, because the two-answer version of this screen is a tick and
     the absence of one, and the absence of a tick is read as a tick that has not loaded. Every
     member has a producer in `standing_of` and a sentence in `ANSWERS`.
+
+    **Three of them are ways of having no answer, and the difference is what to do next.**
+    Switched off sends the reader to a setting, not looked yet sends them back in a minute, and
+    failed sends them to the network. One word for all three would send two of those readers to
+    the wrong place, and would make the most common one, switched off, look like a fault.
     """
 
     #: A newer release is known to exist.
-    BEHIND = "behind"
+    BEHIND = "newer release available"
     #: Running the newest release anybody named, recently enough for that to mean something.
     CURRENT = "current"
     #: Running the newest release anybody named, and nobody has named one for a long time.
@@ -505,10 +566,12 @@ class Standing(enum.StrEnum):
     AHEAD = "ahead"
     #: Not on the release last named, and the two tags cannot be put in an order.
     DIFFERS = "differs"
-    #: Nothing has ever told this install which release is newest.
-    NOBODY_HAS_SAID = "nobody has said"
-    #: This install is set to read a release list, and the list did not answer this time.
-    CANNOT_ASK = "cannot ask"
+    #: This install is not switched on to look for newer releases, so nothing has said.
+    SWITCHED_OFF = "check switched off"
+    #: Switched on, and no look has finished in this process yet.
+    NOT_LOOKED_YET = "not checked yet"
+    #: Switched on, and the last look at the release list did not get an answer.
+    CHECK_FAILED = "check failed"
     #: Nothing here can say which release is running, so there is nothing to compare.
     UNKNOWN_RUNNING = "unknown running"
 
@@ -546,8 +609,9 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
     {
         Standing.BEHIND: Answer(
             says=(
-                "A newer release than the one this install is running has been published. How "
-                "urgent it is, and whether it changes your database, are in its notes."
+                "A newer release than the one this install is running has been published. "
+                "Which one it is, and where its notes are, is shown below. How urgent it is, "
+                "and whether it changes your database, are in those notes."
             ),
             what_to_do=(
                 "Read that release's notes, then run the update script with its tag. Take a "
@@ -556,81 +620,88 @@ ANSWERS: Final[Mapping[Standing, Answer]] = MappingProxyType(
         ),
         Standing.CURRENT: Answer(
             says=(
-                "This install is running the newest release it was told about or read from the "
-                "release list it is set to read, and that answer is recent. That is as strong as "
-                "this screen gets: it is a statement about that record or that list, and not "
-                "about everything that has been published anywhere."
+                "This install is running the newest release on the release list it read, and "
+                "it read that list recently. That is as strong as this screen gets: it is a "
+                "statement about that list, and not about everything published anywhere."
             ),
             what_to_do=(
-                "Nothing today. Keep the recorded release up to date, because everything on "
-                "this panel is measured against it."
+                "Nothing today. This install reads the list again by itself when this page is "
+                "opened, so the answer is never older than the date shown below."
             ),
         ),
         Standing.STALE: Answer(
             says=(
-                "This install is running the newest release anybody told it about, and nobody "
-                "has told it anything for a long time. A release published since then would "
-                "look exactly like this."
+                "This install is running the newest release it knows of, and it learned that a "
+                "long time ago. A release published since then would look exactly like this."
             ),
             what_to_do=(
-                "Check what the newest release is and record it here. Until somebody does, "
-                "this panel cannot tell being up to date from not having looked."
+                "Open this page again in a minute, because opening it starts a fresh look. If "
+                "it still says this, check the published list of releases by hand."
             ),
         ),
         Standing.AHEAD: Answer(
             says=(
-                "This install is running a release newer than the newest one anybody recorded "
-                "here, so the recorded answer is out of date rather than this install."
+                "This install is running a release newer than the newest one on the release "
+                "list it read, so that list is out of date rather than this install."
             ),
             what_to_do=(
-                "Record the release this install is now on as the newest one you know of. "
-                "Until then nothing on this panel can tell you whether something newer exists."
+                "If this install reads a copy of the release list, bring the copy up to date. "
+                "Until then nothing on this page can tell you whether something newer exists."
             ),
         ),
         Standing.DIFFERS: Answer(
             says=(
-                "This install is not running the release last recorded as the newest one, and "
-                "the two cannot be put in an order, so nothing here can say which of them is "
-                "the later."
+                "This install is not running the newest release on the list it read, and the "
+                "two cannot be put in an order, so nothing here can say which of them is the "
+                "later."
             ),
             what_to_do=(
-                "Compare the two by hand against the published list of releases, and record "
-                "the newest one. A pair that cannot be ordered is usually one of them being "
-                "something other than a release."
+                "Compare the two by hand against the published list of releases. A pair that "
+                "cannot be ordered is usually one of them being something other than a release."
             ),
         ),
-        Standing.NOBODY_HAS_SAID: Answer(
+        Standing.SWITCHED_OFF: Answer(
             says=(
-                "Nothing has ever told this install which release is the newest, and it is not "
-                "set to read a release list, so it cannot tell you whether it is behind. This "
-                "is not the same as being up to date, and it is the ordinary state: this product "
-                "asks nothing outside your network unless you set it to."
+                "This install does not look for newer releases, so it cannot tell you whether "
+                "it is behind. This is not the same as being up to date. It is the default, "
+                "because this product asks nothing outside your network unless you switch it on."
             ),
             what_to_do=(
-                "Check the published list of releases and record the newest one here, or set "
-                "this install to read that list itself. Do it again whenever you install one."
+                "Check the published list of releases by hand, or set BRAIN_RELEASE_CHECK to "
+                "true so this install looks for itself whenever this page is opened."
             ),
         ),
-        Standing.CANNOT_ASK: Answer(
+        Standing.NOT_LOOKED_YET: Answer(
             says=(
-                "This install is set to read a release list and did not get an answer from it "
-                "this time, so it cannot tell you whether a newer release exists. This is not "
-                "the same as being up to date. The reason is shown beside it."
+                "This install is switched on to look for newer releases and has not finished "
+                "looking since it started. This is not the same as being up to date."
             ),
             what_to_do=(
-                "Check that the server can reach the address it is set to read, or check the "
-                "published list of releases by hand. Until it answers, treat this install as "
-                "possibly behind."
+                "Open this page again in a minute. Opening it is what started the look, and "
+                "nothing on this page waits for the answer."
+            ),
+        ),
+        Standing.CHECK_FAILED: Answer(
+            says=(
+                "This install looked for newer releases and did not get an answer, so it cannot "
+                "tell you whether a newer release exists. This is not the same as being up to "
+                "date. The reason is shown below."
+            ),
+            what_to_do=(
+                "Check that the server can reach the address it asks, or check the published "
+                "list of releases by hand. Until it answers, treat this install as possibly "
+                "behind."
             ),
         ),
         Standing.UNKNOWN_RUNNING: Answer(
             says=(
                 "Nothing here can say which release this install is running, so there is "
-                "nothing to compare a newer one against. The reason is on the panel above."
+                "nothing to compare a newer one against. The reason is shown below."
             ),
             what_to_do=(
-                "Fix the statement above first. Until this install can say which release it "
-                "is on, no answer about whether it is behind is worth anything."
+                "Run the update script with the release tag you mean to run, which pins it. "
+                "Until this install can say which release it is on, no answer about whether it "
+                "is behind is worth anything."
             ),
         ),
     }
@@ -686,6 +757,9 @@ def standing_of(
 ) -> Standing:
     """Where this install stands, in one word, with every way of not knowing kept apart.
 
+    `told` is `None` when a look is switched on and none has finished, which is a different
+    thing from an `Unanswered` saying the check is off: see `Standing`.
+
     The order of the questions is the argument. An unknown running release is asked first,
     because every answer after it would be a comparison against nothing. A telling that has
     gone off only changes the reassuring answer: a newer release that was published a year ago
@@ -708,11 +782,11 @@ def standing_of(
     if not running.tag:
         return Standing.UNKNOWN_RUNNING
     if told is None:
-        return Standing.NOBODY_HAS_SAID
+        return Standing.NOT_LOOKED_YET
     if isinstance(told, Unanswered):
-        if told.why is Unasked.NO_SOURCE:
-            return Standing.NOBODY_HAS_SAID
-        return Standing.CANNOT_ASK
+        if told.why is Unasked.SWITCHED_OFF:
+            return Standing.SWITCHED_OFF
+        return Standing.CHECK_FAILED
     if told.at > now:
         msg = (
             f"{told.tag} was recorded later than the moment being asked about, so the two "
@@ -806,6 +880,10 @@ def panel(
 #: reader can tell which items an eventual design actually removed, which a paragraph makes
 #: surprisingly hard. Every one of them is true of the smallest possible version of the check,
 #: which is a plain fetch of a static file.
+#:
+#: The check `brain.deployment.release_feed` makes is that plain fetch and sends nothing of the
+#: install's own, so the third item is the one its design removes; pointed at a copy inside the
+#: client's network, it removes every item but the last.
 WHAT_A_RELEASE_CHECK_WOULD_SEND: Final[tuple[str, ...]] = (
     "the address the client's server leaves its network by, which is enough on its own to "
     "say that this product is installed there",
@@ -826,8 +904,8 @@ def release_check_cost() -> tuple[str, ...]:
     Non-empty by construction and expected to stay that way, which is why it is kept apart
     from anything that has to be green, exactly as
     `brain.console.installation.recovery_gaps` is. It is not a defect list. It is the record
-    that the decision was made rather than missed, and it is what an owner would be agreeing
-    to on the day they decide an install may ask. See
+    that the decision was made rather than missed, and it is what an install agrees to by
+    switching the check on. See
     `AN_INSTALL_THAT_ASKS_A_VENDOR_WHETHER_IT_IS_BEHIND_HAS_TOLD_THE_VENDOR_IT_EXISTS`.
     """
     return tuple(
@@ -852,16 +930,19 @@ def facts_the_container_cannot_read(
 ) -> tuple[str, ...]:
     """Which statements on this panel nothing inside the application container can obtain.
 
-    **This is the finding, and it is why every input above is a parameter.** The marker and
-    the image pin are files in the install directory on the host. Both findings are read out
-    of the compose documents rather than asserted: the first is true while no service of this
-    name mounts anything from the install directory, and the second while the image variable
-    is in no environment entry of that service. Either one stops being reported on the day
-    somebody wires it, which is what makes this a check rather than a comment.
+    Both findings are read out of the compose documents rather than asserted: the first is true
+    while no service of this name mounts anything from the install directory, and the second
+    while the image variable is in no environment entry of that service. Either one stops being
+    reported on the day somebody wires it, which is what makes this a check rather than a
+    comment.
 
-    Non-empty against this repository's compose files today, both findings, which is the
-    honest state of the leaf: the panel is built and the two statements it most needs have no
-    route into the process that would draw it.
+    **Against this repository's compose files it reports the marker alone, and that one is
+    kept on purpose.** Until 2026-09-16 it reported both, which was the state in which the
+    panel named no release on any install. The image variable is now in the application's
+    environment in both compose files that run it, so the second finding is gone and a compose
+    file that drops the line brings it back. The first is the decision recorded under
+    "Rejected: mounting the marker" in this module's header, kept as a finding for the reason
+    `release_check_cost` is: it is the record that the choice was made rather than missed.
     """
     _, marker = release_marker()
     findings: list[str] = []

@@ -710,8 +710,9 @@ SCREENS: Final[tuple[Screen, ...]] = (
         "console.updates",
         "read:release",
         Plane.CONFIGURATION,
-        "Which release this install is on, whether anything newer has been recorded, and how "
-        "old that answer is. Nothing here asks anywhere outside this network.",
+        "Which release this install is on, whether a newer one has been published, and how "
+        "old that answer is. Nothing here asks anywhere outside this network unless the "
+        "install switches the check on.",
     ),
     _screen(
         "recovery",

@@ -3,15 +3,16 @@
 Three things are being pinned here and they fail in three different ways.
 
 **Which release is running.** An install holds a marker file, an image pin and a built commit,
-and the first two can disagree from the day it was installed. Every test about `running_release`
-asks the same question: does the panel name a release it cannot stand behind. It must not, and
-the case that matters is the ordinary one, an install that has never run the update script and
-therefore pins nothing at all.
+and the first two disagree while an update is part-way through. Every test about
+`running_release` asks the same question: does the panel name a release it cannot stand behind.
+It must not. Inside the application only the pin and the commit are handed over, and the compose
+files are held here to handing the pin over at all.
 
-**Whether anything newer exists.** Nothing in this repository asks anywhere outside the
-install, so the common answer is that nobody has said, and that answer must be distinguishable
-from being current. The reassuring answer is the only one with refusals on it, and three tests
-try to build a panel claiming it without the things that make it true.
+**Whether anything newer exists.** Nothing asks anywhere outside the install until the install
+switches the check on, so the default answer is that the check is off, and that answer must be
+distinguishable from being current. So must a look that has not finished and a look that failed.
+The reassuring answer is the only one with refusals on it, and three tests try to build a panel
+claiming it without the things that make it true.
 
 **The ordering.** `v1.9.0` sorts after `v1.10.0` as text, and every wrong answer a loose
 comparison gives is wrong towards reassurance. One test is that comparison, written so it
@@ -91,11 +92,10 @@ def named(one: Running, name: str) -> Fact:
 
 # --------------------------------------------------------------- which release is running
 def test_an_install_that_pins_no_image_names_no_release_however_confident_its_marker_is():
-    """**This is the ordinary install and it is the one a version screen gets wrong.** A fresh
-    install writes the marker and writes nothing that selects an image, so every container
-    falls back to the compose default, which ends in `latest`. A panel reporting the marker's
-    tag as the running version would therefore be right about a file and wrong about the
-    containers on every install that has never been updated, which is every install today.
+    """**An install with no release in its image reference is the one a version screen gets
+    wrong.** An install made before the pin existed has a marker and no image variable, and its
+    containers run whatever `latest` was when they were pulled. A panel reporting the marker's
+    tag as the running version would be right about a file and wrong about the containers.
 
     Delete this and the panel becomes the confident version number this whole module exists to
     refuse, and it becomes it silently: the value shown is a real tag read from a real file."""
@@ -160,6 +160,26 @@ def test_an_install_that_reports_neither_statement_says_so_rather_than_reporting
     assert one.tag == ""
     assert "pins no release" not in one.cannot_say
     assert "no statement about a version has been read" in one.cannot_say
+
+
+def test_a_pin_handed_to_the_application_names_the_release_with_the_commit_beside_it():
+    """**What a real install shows.** The application is handed the image reference and the
+    image's own commit and nothing else, and that is enough to name the release. The commit
+    travels beside it under its own field, and beside the refusal when no release is named,
+    because a screen with no release still owes the reader what is running.
+
+    Delete this and the route's two inputs can stop producing a release, or the commit can stop
+    reaching the screen in exactly the state where it is the only thing to show."""
+    pinned = running_release(pinned_image=PINNED, built_commit="724cf3f")
+    unpinned = running_release(pinned_image="ghcr.io/example/brain:latest", built_commit="724cf3f")
+    unhanded = running_release(built_commit="724cf3f")
+
+    assert (pinned.tag, pinned.commit) == ("v1.4.0", "724cf3f")
+    assert named(pinned, MARKER_FACT).source is Source.UNKNOWN
+    assert named(pinned, PINNED_FACT).source is Source.DECLARED
+    assert (unpinned.tag, unpinned.commit) == ("", "724cf3f")
+    assert "pins no release" in unpinned.cannot_say
+    assert (unhanded.tag, unhanded.commit) == ("", "724cf3f")
 
 
 def test_the_commit_is_measured_and_is_never_the_release_the_panel_names():
@@ -233,17 +253,25 @@ def test_a_registry_port_is_not_read_as_the_release_this_install_is_running():
 
 
 # ------------------------------------------------------- whether anything newer exists
-def test_nobody_having_said_anything_is_not_the_same_answer_as_being_up_to_date():
-    """The common state of every install of this product is that nothing has ever told it
-    which release is newest, because nothing here asks. That state must be its own answer and
-    it must not be one a tick can be drawn beside.
+def test_three_ways_of_having_no_answer_are_three_answers_and_none_is_up_to_date():
+    """The default state of every install is that the check is off, the first load after a start
+    with it on is that no look has finished, and a list that did not answer is a failed look.
+    Each is its own answer because each sends the reader somewhere different, and none of them
+    may be one a tick is drawn beside.
 
-    Delete this and the absence of a telling collapses into the reassuring answer, which is
-    the exact field somebody checks before deciding not to worry."""
-    where = standing_of(on("v1.4.0"), None, now=NOW)
+    Delete this and the absence of a telling collapses into one word, or into the reassuring
+    answer, which is the exact field somebody checks before deciding not to worry."""
+    running = on("v1.4.0")
+    off = standing_of(running, Unanswered(Unasked.SWITCHED_OFF, "off", NOW), now=NOW)
+    waiting = standing_of(running, None, now=NOW)
+    failed = standing_of(running, Unanswered(Unasked.UNREACHABLE, "timed out", NOW), now=NOW)
 
-    assert where is Standing.NOBODY_HAS_SAID
-    assert where not in SETTLED
+    assert (off, waiting, failed) == (
+        Standing.SWITCHED_OFF,
+        Standing.NOT_LOOKED_YET,
+        Standing.CHECK_FAILED,
+    )
+    assert {off, waiting, failed}.isdisjoint(SETTLED)
 
 
 def test_a_telling_stops_being_reassuring_the_moment_the_window_closes():
@@ -392,7 +420,7 @@ def test_the_only_reassuring_answer_is_the_one_with_every_condition_behind_it():
         standing_of(running, said("v1.4.0", days_ago=TELLING_GOES_OFF_AFTER_DAYS + 1), now=NOW),
         standing_of(running_release(marker="v1.4.0"), said("v1.5.0"), now=NOW),
         standing_of(running, Unanswered(Unasked.UNREACHABLE, "timed out", NOW), now=NOW),
-        standing_of(running, Unanswered(Unasked.NO_SOURCE, "unset", NOW), now=NOW),
+        standing_of(running, Unanswered(Unasked.SWITCHED_OFF, "off", NOW), now=NOW),
     }
 
     assert settled == set(SETTLED)
@@ -519,6 +547,22 @@ def test_a_recorded_answer_says_who_gave_it_and_when():
         Told(tag="  ", at=NOW, by="the administrator")
 
 
+def test_notes_that_are_not_an_https_address_are_refused_where_the_telling_is_built():
+    """**The link on the screen has its scheme decided here, once.** A telling carrying notes at
+    `javascript:` or plain http is refused; one carrying https or nothing is built. The console
+    draws whatever arrives as a link, so this is the only place the rule lives.
+
+    Delete this and the refusal can go, and a copy of the release list somebody else serves can
+    put a script link on the screen an administrator opens to decide whether to update."""
+    for bad in ("javascript:alert(1)", "http://releases.example.invalid/v1.5.0", "HTTPS"):
+        with pytest.raises(VersionError, match="not an https address"):
+            Told(tag="v1.5.0", at=NOW, by="the list", notes=bad)
+
+    assert Told(tag="v1.5.0", at=NOW, by="the list").notes == ""
+    linked = Told(tag="v1.5.0", at=NOW, by="the list", notes="https://example.invalid/v1.5.0")
+    assert linked.notes == "https://example.invalid/v1.5.0"
+
+
 def test_the_tag_that_is_not_a_release_cannot_be_recorded_as_the_newest_one():
     """`latest` is what the update script refuses in both directions, and recording it here
     would give this install a target it can never be on: the comparison would report
@@ -543,21 +587,42 @@ def test_the_window_an_answer_goes_off_after_is_the_one_a_drill_is_re_proven_on(
 
 
 # ------------------------------------------------------------------------ the diagnostics
-def test_neither_host_statement_can_be_read_from_inside_the_application_container():
-    """**This is the finding rather than a passing check.** The marker and the image pin are
-    the two statements the panel most needs, and today no compose file mounts anything from
-    the install directory into the application service and the image variable is in no
-    environment entry of it. So the panel is built and its inputs have no route into the
-    process that would draw it, which is worth a red line on a screen rather than a sentence
-    in a commit message.
+def test_the_application_is_handed_the_image_and_not_the_marker():
+    """**The half of M42.3.9 that was missing until 2026-09-16.** Against the compose files every
+    profile runs, the image variable reaches the application and the marker does not. The first
+    is what lets the panel name a release on a real install; the second is the decision recorded
+    in the module header, kept as a finding so a mount added later is a visible change.
 
-    Delete this and the day somebody wires one of the two, nothing records that the other is
-    still missing, and a half-wired panel reads as a working one."""
+    Delete this and the environment line can be dropped from a compose file, after which every
+    install on that profile is back to a panel that names no release, with every other test in
+    this file still green."""
     found = facts_the_container_cannot_read(compose_documents())
 
-    assert len(found) == 2
-    assert any(INSTALL_HOME in one and "unpacked" in one for one in found)
-    assert any("APP_IMAGE" in one for one in found)
+    assert len(found) == 1
+    assert INSTALL_HOME in found[0] and "unpacked" in found[0]
+    assert not any("APP_IMAGE" in one for one in found)
+
+
+def test_every_compose_file_running_the_application_hands_it_the_variable_that_selected_it():
+    """The environment entry is the image line's own expression, character for character, in
+    every compose file that declares the application. Equal expressions resolve in one
+    evaluation to one value, so the release the application reports is the reference its
+    container was started from, and an install missing the variable refuses in both places with
+    one message.
+
+    Delete this and one profile's file can hand over a different variable, or a default, and
+    the screen names a release the containers were never selected by."""
+    documents = compose_documents()
+    runs_it = {
+        name: body["services"][THE_APPLICATION_SERVICE]
+        for name, body in documents.items()
+        if THE_APPLICATION_SERVICE in (body.get("services") or {})
+    }
+
+    assert set(runs_it) == {"docker-compose.yml", "docker-compose.lite.yml"}
+    for name, service in runs_it.items():
+        assert "${APP_IMAGE" in service["image"], name
+        assert service["environment"]["APP_IMAGE"] == service["image"], name
 
 
 def test_mounting_the_install_directory_into_the_application_answers_the_first_finding():

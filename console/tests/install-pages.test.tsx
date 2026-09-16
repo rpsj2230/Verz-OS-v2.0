@@ -22,7 +22,7 @@
  * `.grid__scroll`, which is what stops a row of identifiers taking the navigation off the side
  * of a phone.
  *
- * Task ids: M27.7.25, M27.7.27
+ * Task ids: M27.7.25, M27.7.27, M42.3.9
  *
  * M27.7.26 is the recovery screen and is deliberately not claimed here or in the commit:
  * the screen is built and openable, and what it shows on every install today is the
@@ -39,6 +39,7 @@ import {
   INSTALL_SECTIONS,
   THROTTLE_COLUMNS,
 } from "../src/pages/installQuery";
+import { NO_RELEASE_NAMED, READ_ITS_NOTES } from "../src/pages/Updates";
 import { STATE_TONES } from "../src/ui/Status";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { backendEnumMembers, backendModelFields } from "./support/python";
@@ -139,6 +140,20 @@ describe("what these pages agree with the API about", () => {
     expect([...CONNECTION_COLUMNS].sort()).toEqual(
       backendModelFields(ROUTES, "ConnectionView").sort(),
     );
+  });
+
+  test("every field of what is running and of the newest release is one the version page draws", () => {
+    // What breaks if this is deleted: a field is added to either model, for instance a second
+    // address beside `notes`, and reaches the browser without anybody deciding how it is drawn
+    // or whether it may be a link. The names come out of the Python source, and the list here is
+    // the list the tests below draw with a sentinel each.
+    expect(backendModelFields(ROUTES, "RunningView").sort()).toEqual([
+      "cannot_say",
+      "commit",
+      "facts",
+      "tag",
+    ]);
+    expect(backendModelFields(ROUTES, "ToldView").sort()).toEqual(["at", "by", "notes", "tag"]);
   });
 
   test("no verdict on these screens can choose a colour", () => {
@@ -252,10 +267,11 @@ describe("version and updates", () => {
         },
       ],
       cannot_say: sentinel("cannot-say"),
+      commit: sentinel("commit"),
     },
     told: null,
     unanswered: {
-      why: "no release list is configured",
+      why: "the release check is switched off",
       detail: sentinel("detail"),
       at: "2019-03-04T09:00:00Z",
     },
@@ -296,7 +312,7 @@ describe("version and updates", () => {
     // that showed the tag alone would undo it.
     const told = {
       ...PANEL,
-      told: { tag: "v1.4.0", at: "2019-03-04T09:00:00Z", by: sentinel("who-said-so") },
+      told: { tag: "v1.4.0", at: "2019-03-04T09:00:00Z", by: sentinel("who-said-so"), notes: "" },
       unanswered: null,
       standing: "current",
       told_days_ago: 1,
@@ -305,6 +321,131 @@ describe("version and updates", () => {
 
     expect(valueBeside(container, "newest release")).toBe("v1.4.0");
     expect(valueBeside(container, "said by")).toBe(sentinel("who-said-so"));
+  });
+
+  test("a named release is what is running, with the commit beside it under its own label", async () => {
+    // What breaks if this is deleted: the page goes back to showing the tag alone, or shows the
+    // commit under the release label, which is the column a client reads as their version
+    // filled with something they cannot look up.
+    const named = {
+      ...PANEL,
+      running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", named);
+
+    expect(valueBeside(container, "release")).toBe("v1.4.0");
+    expect(valueBeside(container, "commit")).toBe(sentinel("commit"));
+    expect(container.textContent).not.toContain(NO_RELEASE_NAMED);
+  });
+
+  test("with no release named, the reason is where the release would be and the commit still shows", async () => {
+    // What breaks if this is deleted: an install whose containers run `latest` shows an empty
+    // release row, or loses the commit, which is the only statement about what is running that
+    // the page has in that state.
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", PANEL);
+
+    expect(valueBeside(container, "release")).toBe(
+      `${NO_RELEASE_NAMED}${PANEL.running.cannot_say}`,
+    );
+    expect(valueBeside(container, "commit")).toBe(sentinel("commit"));
+  });
+
+  test("an image that reported no commit draws no commit row rather than an empty one", async () => {
+    // What breaks if this is deleted: a checkout or an image built without its manifest shows a
+    // commit label with nothing beside it, which is the blank `Facts` refuses one card lower, and
+    // the sentence saying why the commit is unknown is already in those facts.
+    const uncommitted = { ...PANEL, running: { ...PANEL.running, commit: "" } };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", uncommitted);
+
+    expect(valueBeside(container, "commit")).toBeNull();
+    expect(valueBeside(container, "release")).toContain(NO_RELEASE_NAMED);
+  });
+
+  test("a newer release is named with a link to its notes that tells the release host nothing", async () => {
+    // What breaks if this is deleted: the reminder this screen exists for loses the one thing a
+    // client acts on, which release and where its notes are, or the link starts sending the
+    // console's own address to the host of the release list.
+    const notes = "https://releases.example.invalid/v1.5.0";
+    const behind = {
+      ...PANEL,
+      running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
+      told: { tag: "v1.5.0", at: "2019-03-04T09:00:00Z", by: sentinel("the-list"), notes },
+      unanswered: null,
+      standing: "newer release available",
+      told_days_ago: 0,
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", behind);
+
+    expect(container.textContent).toContain("newer release available");
+    expect(valueBeside(container, "newest release")).toBe("v1.5.0");
+    const link = [...container.querySelectorAll("a")].find(
+      (one) => one.textContent === READ_ITS_NOTES,
+    );
+    expect(link?.getAttribute("href")).toBe(notes);
+    expect(link?.getAttribute("rel")).toContain("noreferrer");
+  });
+
+  test("a release the list gave no notes address for draws no link at all", async () => {
+    // What breaks if this is deleted: the notes row is drawn with an empty href, which a browser
+    // resolves to this page, so the link a client clicks to read the notes reloads the screen.
+    const unlinked = {
+      ...PANEL,
+      running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
+      told: { tag: "v1.5.0", at: "2019-03-04T09:00:00Z", by: sentinel("the-list"), notes: "" },
+      unanswered: null,
+      standing: "newer release available",
+      told_days_ago: 0,
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", unlinked);
+
+    expect(valueBeside(container, "newest release")).toBe("v1.5.0");
+    expect(valueBeside(container, "notes")).toBeNull();
+    expect(container.textContent).not.toContain(READ_ITS_NOTES);
+  });
+
+  test("a look that has not finished shows the API's instruction and neither a release nor a failure", async () => {
+    // What breaks if this is deleted: the first load after a start, which is the load everybody
+    // sees, draws an empty card or a stale answer where the page should say to come back in a
+    // minute, and that sentence is the API's rather than one this console composes.
+    const waiting = {
+      ...PANEL,
+      running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
+      told: null,
+      unanswered: null,
+      standing: "not checked yet",
+      what_to_do: sentinel("come-back-in-a-minute"),
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", waiting);
+    const card = [...container.querySelectorAll("section.card")].find(
+      (one) => one.querySelector("h2")?.textContent === "The newest published release",
+    );
+
+    expect(container.textContent).toContain("not checked yet");
+    expect(card?.textContent).toBe(
+      `The newest published release${sentinel("come-back-in-a-minute")}`,
+    );
+    expect(valueBeside(container, "newest release")).toBeNull();
+  });
+
+  test("a check that failed shows the reason it failed, in the API's words", async () => {
+    // What breaks if this is deleted: a failed look is drawn like a look that has not happened,
+    // and somebody whose firewall is blocking the list is told to come back in a minute for ever.
+    const failed = {
+      ...PANEL,
+      running: { ...PANEL.running, tag: "v1.4.0", cannot_say: "" },
+      unanswered: {
+        why: "the release list could not be reached",
+        detail: sentinel("timed-out"),
+        at: "2019-03-04T09:00:00Z",
+      },
+      standing: "check failed",
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", failed);
+
+    expect(container.textContent).toContain("check failed");
+    expect(container.textContent).toContain("the release list could not be reached");
+    expect(container.textContent).toContain(sentinel("timed-out"));
+    expect(valueBeside(container, "newest release")).toBeNull();
   });
 });
 

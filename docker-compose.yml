@@ -32,6 +32,13 @@ services:
       # the deployment happens to know - which, in Coolify's case, is the literal
       # string "unknown" resolved once at save time and never updated again.
       APP_ROLE_PASSWORD: ${APP_ROLE_PASSWORD:-}
+      # The image reference this container was selected by, so the application can name the
+      # release it is running. Unlike BRAIN_COMMIT_SHA above there is no baked value for it
+      # to override: a release tag is put on an image after it is built, so the image cannot
+      # carry one. It is the variable the image line reads, resolved in the same evaluation,
+      # so it describes this container even after the environment file is edited.
+      # See brain.console.version_view.A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD.
+      APP_IMAGE: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
     deploy:
       resources:
         limits:

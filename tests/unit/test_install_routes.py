@@ -32,6 +32,9 @@ Task ids: M27.7.25, M27.7.27
 
 from __future__ import annotations
 
+import json
+import threading
+import time
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -47,10 +50,19 @@ from brain.console.installation import Fact as InstallationFact
 from brain.console.installation import Source
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import NOT_AT_DEPARTMENT_SCOPE, for_department, navigation, screen
-from brain.console.version_view import Running, Standing, Told, Unanswered, Unasked
+from brain.console.version_view import (
+    COMMIT_FACT,
+    PINNED_FACT,
+    Running,
+    Standing,
+    Told,
+    Unanswered,
+    Unasked,
+)
 from brain.console.version_view import panel as updates_panel
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
+from brain.deployment.release_feed import CHECK_VARIABLE, FEED_VARIABLE, ReleaseWatch
 from brain.install_routes import (
     CAPACITY_READ,
     INSTALL_READ,
@@ -68,6 +80,7 @@ from brain.install_routes import (
 from brain.ops.limits import Limit, LimiterState, LimitScope
 from brain.ops.recovery import Coverage
 from brain.ops.release_manifest import ReleaseManifest
+from brain.settings import settings_from
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
     Directory,
@@ -190,6 +203,60 @@ def client() -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         yield c
+
+
+#: A list address no install has, for the tests that switch the check on.
+A_LIST = "https://releases.example.invalid/brain/releases"
+
+
+def _app_with(variables: Mapping[str, str]) -> FastAPI:
+    """The real application, built from exactly these variables and nothing on this machine.
+
+    `settings_from` rather than `Settings(...)`, because the fields under test are read under
+    names pydantic populates from the environment, and a test that set them as keyword
+    arguments would not be testing the names an install sets.
+    """
+    return create_app(settings_from({"BRAIN_ENV": "development", **variables}))
+
+
+class HeldList:
+    """A release list that does not answer until the test lets it.
+
+    `answered` is filled only when the fetch returns, so a response that arrives while it is
+    still empty is a response the route gave without waiting for the list.
+    """
+
+    def __init__(self, *tags: str) -> None:
+        self.body = json.dumps(
+            [
+                {
+                    "tag_name": tag,
+                    "draft": False,
+                    "prerelease": False,
+                    "html_url": f"https://releases.example.invalid/{tag}",
+                }
+                for tag in tags
+            ]
+        ).encode()
+        self.gate = threading.Event()
+        self.asked: list[str] = []
+        self.answered: list[str] = []
+
+    def __call__(self, url: str) -> bytes:
+        self.asked.append(url)
+        self.gate.wait(timeout=5)
+        self.answered.append(url)
+        return self.body
+
+
+def looked(watch: ReleaseWatch) -> None:
+    """Wait, from the test's own thread, for the look a request started to finish."""
+    for _ in range(500):
+        if watch.last is not None and not watch.looking:
+            return
+        time.sleep(0.01)
+    msg = "the look never finished"
+    raise AssertionError(msg)
 
 
 def get(c: TestClient, pid: str, path: str) -> Response:
@@ -941,7 +1008,12 @@ def test_a_telling_and_an_unanswered_question_reach_a_console_as_two_different_s
         tag="v1.2.0",
         facts=(InstallationFact(name="release marker", source=Source.DECLARED, value="v1.2.0"),),
     )
-    told = Told(tag="v1.2.0", at=LONG_AGO, by="an administrator, once")
+    told = Told(
+        tag="v1.2.0",
+        at=LONG_AGO,
+        by="an administrator, once",
+        notes="https://releases.example.invalid/v1.2.0",
+    )
     unanswered = Unanswered(
         why=Unasked.UNREACHABLE,
         detail="the release list could not be reached",
@@ -953,6 +1025,7 @@ def test_a_telling_and_an_unanswered_question_reach_a_console_as_two_different_s
 
     assert said.told is not None
     assert said.told.by == "an administrator, once"
+    assert said.told.notes == "https://releases.example.invalid/v1.2.0"
     assert said.unanswered is None
 
     assert silent.told is None
@@ -986,6 +1059,7 @@ def test_a_built_image_reports_its_own_commit_and_a_checkout_reports_that_it_has
     commit_fact = next(one for one in absent["running"]["facts"] if one["name"] == "built commit")
     assert commit_fact["source"] == Source.UNKNOWN.value
     assert commit_fact["value"] == ""
+    assert absent["running"]["commit"] == ""
 
     a_commit = "c0ffee" * 6 + "abcd"
     monkeypatch.setattr(
@@ -997,6 +1071,7 @@ def test_a_built_image_reports_its_own_commit_and_a_checkout_reports_that_it_has
 
     assert facts["built commit"]["source"] == Source.MEASURED.value
     assert facts["built commit"]["value"] == a_commit
+    assert built["running"]["commit"] == a_commit
     # Still no release named, which is the point: the one measured statement is the wrong
     # answer to the question the heading asks.
     assert built["running"]["tag"] == ""
@@ -1004,3 +1079,128 @@ def test_a_built_image_reports_its_own_commit_and_a_checkout_reports_that_it_has
 
     on_the_install = get(client, "u_admin", INSTALL_PATH).json()
     assert facts_of(on_the_install)["release"]["source"] == Source.MEASURED.value
+
+
+# --- the running release and the release list (M42.3.9) ----------------------------------------
+
+
+def test_the_running_release_is_the_image_reference_the_application_was_started_with() -> None:
+    """**The version marker, end to end.** The compose files hand the application `APP_IMAGE`,
+    `Settings` reads it, and the screen names the release in it with the built commit beside it.
+    With the check left off, the standing says so rather than anything about being current.
+
+    Delete this and the route can go back to handing `running_release` the commit alone, which
+    is the panel that named no release on every install."""
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:v1.4.0"})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        body = get(c, "u_admin", UPDATES_PATH).json()
+
+    facts = {one["name"]: one for one in body["running"]["facts"]}
+    assert body["running"]["tag"] == "v1.4.0"
+    assert body["running"]["cannot_say"] == ""
+    assert facts[PINNED_FACT]["source"] == Source.DECLARED.value
+    assert facts[PINNED_FACT]["value"] == "ghcr.io/example/brain:v1.4.0"
+    assert COMMIT_FACT in facts
+    assert body["standing"] == Standing.SWITCHED_OFF.value
+    assert body["unanswered"]["why"] == Unasked.SWITCHED_OFF.value
+    assert CHECK_VARIABLE in body["unanswered"]["detail"]
+
+
+def test_an_image_reference_that_is_not_a_release_names_none_and_says_why() -> None:
+    """The sibling: the same route handed `latest` names no release, because that tag runs
+    whatever was newest when it was pulled.
+
+    Delete this and the route could pass any tag through as a release, which the positive test
+    above is satisfied by."""
+    app = _app_with({"APP_IMAGE": "ghcr.io/example/brain:latest"})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        body = get(c, "u_admin", UPDATES_PATH).json()
+
+    assert body["running"]["tag"] == ""
+    assert "pins no release" in body["running"]["cannot_say"]
+    assert body["standing"] == Standing.UNKNOWN_RUNNING.value
+
+
+def test_the_updates_screen_answers_before_the_release_list_does() -> None:
+    """**The page never waits for the list, through the real route.** The list is held until the
+    first response has arrived, so the first response saying no look has finished, with the
+    list still unanswered, is the route not having waited. Then the list answers, and the next
+    load is told a newer release exists, which one, and where its notes are.
+
+    Delete this and the route can await the look again, which passes every other test in this
+    file and puts somebody else's server in front of the screen on every load."""
+    held = HeldList("v1.5.0")
+    watch = ReleaseWatch(fetch=held)
+    app = _app_with(
+        {
+            "APP_IMAGE": "ghcr.io/example/brain:v1.4.0",
+            CHECK_VARIABLE: "true",
+            FEED_VARIABLE: A_LIST,
+        }
+    )
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = watch
+        try:
+            first = get(c, "u_admin", UPDATES_PATH)
+            assert held.answered == []
+        finally:
+            held.gate.set()
+        looked(watch)
+        second = get(c, "u_admin", UPDATES_PATH)
+
+    assert first.status_code == 200
+    assert first.json()["standing"] == Standing.NOT_LOOKED_YET.value
+    assert first.json()["told"] is None
+    assert first.json()["unanswered"] is None
+    assert held.asked == [A_LIST]
+
+    body = second.json()
+    assert body["standing"] == Standing.BEHIND.value
+    assert body["told"]["tag"] == "v1.5.0"
+    assert body["told"]["notes"] == "https://releases.example.invalid/v1.5.0"
+    assert A_LIST in body["told"]["by"]
+
+
+def test_a_caller_who_may_not_open_the_screen_makes_the_server_ask_nothing() -> None:
+    """The capability is checked before the watch is touched, so somebody who can reach the
+    port and holds nothing cannot make this server send a request outside its network, however
+    often they ask. The sibling is the test above, where a reader who may open it does.
+
+    Delete this and the look can be started before the refusal, which turns the updates address
+    into a way for anybody to make a client's server call out on demand."""
+    held = HeldList("v1.5.0")
+    held.gate.set()
+    watch = ReleaseWatch(fetch=held)
+    app = _app_with({CHECK_VARIABLE: "true", FEED_VARIABLE: A_LIST})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = watch
+        refused = [get(c, "u_none", UPDATES_PATH) for _ in range(3)]
+        time.sleep(0.2)
+
+    assert [one.status_code for one in refused] == [404, 404, 404]
+    assert held.asked == []
+    assert watch.last is None
+
+
+def test_the_screen_attaches_one_watch_and_keeps_it() -> None:
+    """A process builds its watch the first time the screen is opened and reuses it, so the last
+    look is remembered between loads. Something of the wrong kind in its place is replaced rather
+    than called.
+
+    Delete this and a watch can be built per request, which starts a look on every load and
+    never has a last look to answer from, so the screen says not looked yet for ever."""
+    app = _app_with({})
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.release_watch = "not a watch"
+        get(c, "u_admin", UPDATES_PATH)
+        first = app.state.release_watch
+        get(c, "u_admin", UPDATES_PATH)
+        second = app.state.release_watch
+
+    assert isinstance(first, ReleaseWatch)
+    assert second is first

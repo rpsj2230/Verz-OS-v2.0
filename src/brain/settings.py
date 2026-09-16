@@ -123,6 +123,17 @@ class Settings(BaseSettings):
     #: accepted name is a second place a stale value can win from. Kept out of `repr`, because
     #: this object is rendered whole into a log line and into any traceback that carries it.
     app_role_password: str = Field(default="", validation_alias="APP_ROLE_PASSWORD", repr=False)
+    #: The image reference this container was started from, repository and tag, which is how
+    #: the application learns the release it is running. Under its existing name only, for the
+    #: reason `app_role_password` is: the installer, the update script and every compose file
+    #: already spell it `APP_IMAGE`, and the compose files hand the application the same value
+    #: its `image:` line selects it by, so the two cannot disagree about one container.
+    #:
+    #: **Not baked into the image, because the image cannot know it.** The deploy pipeline
+    #: builds and signs an image per commit, and a release tag is put on that digest afterwards
+    #: as a second name, so a build argument can only ever carry the commit. See
+    #: `brain.console.version_view.A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD`.
+    app_image: str = Field(default="", validation_alias="APP_IMAGE")
     #: Which set of wave-2 components this install runs. See `brain.ops.wiring`.
     #:
     #: The default comes from `wiring.DEFAULT_PROFILE` rather than being spelled again
@@ -141,9 +152,13 @@ class Settings(BaseSettings):
     #: request and this address receives the text of the document itself. See
     #: `brain.ops.inference.inference_config_conflicts`.
     inference_url: str = ""
-    #: Where a client's own release list is, for the updates panel. No default, so an install
-    #: asks nobody outside its network unless it names one. Read here and handed to
-    #: `brain.deployment.release_feed.check`, which reads no environment of its own; see
+    #: Whether this install looks for a newer release at all. Off unless an install switches it
+    #: on, because a look is a request leaving the client's network; see
+    #: `brain.deployment.release_feed.A_CHECK_NOBODY_SWITCHED_ON_IS_A_DISCLOSURE_NOBODY_AGREED_TO`.
+    release_check: bool = False
+    #: A copy of the release list to ask instead of the product's own, such as a mirror inside
+    #: the client's network. Read only while `release_check` is on. Handed to
+    #: `brain.deployment.release_feed.feed_address`, which reads no environment of its own; see
     #: `release_feed.CONFIGURATION_IS_READ_IN_ONE_PLACE`.
     release_feed_url: str = ""
     #: Which system the built-in row tools read from, and therefore the first half of every
