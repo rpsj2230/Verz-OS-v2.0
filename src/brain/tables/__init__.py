@@ -87,6 +87,7 @@ from brain.tables.resolution import (
     EntityLinkRow,
 )
 from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
+from brain.tables.review import ReviewDecisionRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
@@ -215,6 +216,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0051_operation_ledger. Points at nothing: the principal is a value and the key is a digest
     # of the intent, so a record of an effect outlives everything it was about.
     "ops.operation",
+    # 0052_review_decision. Last, because it points at both grant tables. A decision is never
+    # retired, so the record of who reviewed a grant outlives the grant being removed.
+    "gate.review_decision",
 )
 
 __all__ = [
@@ -260,6 +264,7 @@ __all__ = [
     "RequestTelemetryRow",
     "RetentionReleaseRow",
     "RetentionReportRow",
+    "ReviewDecisionRow",
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",

@@ -282,6 +282,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   record_read: "read a record about",
   sign_in: "changed the sign-in link of",
   session_end: "ended a session of",
+  certification: "reviewed",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */

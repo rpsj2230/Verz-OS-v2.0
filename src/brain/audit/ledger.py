@@ -217,6 +217,21 @@ class AuditAction(enum.StrEnum):
     was can read that it was ended, and the reason rides in the details as a closed word. The
     session id is not in the entry, because it is not a field name and would be stored as the
     marker. Eleven characters.
+
+    CERTIFICATION was added on 2026-09-16, and it is the thirteenth. M27.7.9 puts an access review
+    on a screen, and a lead deciding that a grant stands had nothing to be recorded under: a kept
+    grant changes no row the grant trigger watches, so "who looked at this and kept it, and when"
+    was a question the ledger could not answer. **Recorded by the database, from a trigger on
+    `gate.review_decision`**, the way SIGN_IN and SESSION_END are, so a decision inserted by an
+    operator's statement is recorded as well as one pressed in the console.
+
+    Every existing member was tried. GRANT answers "what did this person gain" and a kept grant
+    gains nothing; REVOKE is a grant taken away, and a removal already writes one from the grant
+    trigger, so recording the decision under it as well would be two revokes for one lost
+    capability; APPROVAL is a suspended action decided and a grant under review is not suspended.
+    One member for both decisions, keep and remove, with the decision in the details, for the
+    reason APPROVAL carries its verdict there. The subject is the grant, as the grant trigger
+    writes it for a direct row and a pack assignment alike. Thirteen characters.
     """
 
     GRANT = "grant"
@@ -243,6 +258,9 @@ class AuditAction(enum.StrEnum):
     #: A sign-in session was ended before it lapsed: from the console, by a disable or by a
     #: retirement. Why is in the details. Written by `0050`'s trigger on `auth.session`.
     SESSION_END = "session_end"
+    #: A grant under access review was kept or removed by somebody other than its holder. Which
+    #: of the two is in the details. Written by `0052`'s trigger on `gate.review_decision`.
+    CERTIFICATION = "certification"
 
 
 # --------------------------------------------------------------------- redaction

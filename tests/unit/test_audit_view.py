@@ -67,6 +67,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.injection import AutonomyTier
 from brain.identity.roles import BreakGlassReason
 from brain.tables.identity import SessionEndReason
+from brain.tables.review import ReviewDecision
 from tests.fixtures.company import CANARIES, NOW, person
 
 ENT = person("u_weiling").entitlement().ent_hash()
@@ -373,6 +374,11 @@ CALLS: dict[str, dict[str, object]] = {
     },
     "sign_in": {"principal_id": "u_weiling", "change": SignInChange.BOUND},
     "session_end": {"principal_id": "u_weiling", "reason": SessionEndReason.ENDED_FROM_CONSOLE},
+    "certification": {
+        "grant_id": "1f0e6a4c-2b8d-4f7a-9c1e-5d3b2a7f8e90",
+        "decision": ReviewDecision.KEEP,
+        "capability": "read:client.name",
+    },
 }
 
 

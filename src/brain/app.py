@@ -76,6 +76,7 @@ from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
+from brain.govern_people_routes import router as govern_people_router
 from brain.govern_routes import router as govern_router
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
 from brain.identity.first_administrator import FirstAdministrators
@@ -822,6 +823,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # live runs narrows row by row and refuses nobody, and the models answer is whole-install and
     # refuses a reader who could not see everybody's. See `brain.operate_routes`.
     app.include_router(operate_router)
+    # Departments and teams, Elevation, Access review and Subscribers, beside People in Govern. A
+    # router of its own because one of its four is the only write that records a review decision,
+    # and two of its screens say what the install does not store rather than drawing an empty
+    # list. See `brain.govern_people_routes`.
+    app.include_router(govern_people_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

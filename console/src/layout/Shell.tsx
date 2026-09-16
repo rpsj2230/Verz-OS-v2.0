@@ -102,8 +102,13 @@ const GROUPS: readonly NavGroup[] = [
     heading: "Govern",
     sections: [
       { to: "/people", label: "People and grants" },
+      // SCREEN 10 draws the organisation as a card on People and grants, so its full-width screen
+      // sits directly beneath that row.
+      { to: "/departments", label: "Departments and teams" },
       { to: "/sessions", label: "Sessions" },
       { to: "/sign-in-links", label: "Sign-in links" },
+      { to: "/access_review", label: "Access review" },
+      { to: "/elevation", label: "Elevation requests" },
       { to: "/staff_sources", label: "Staff sources" },
       { to: "/roles", label: "Roles" },
       { to: "/capabilities", label: "Capabilities" },
@@ -120,6 +125,7 @@ const GROUPS: readonly NavGroup[] = [
       // design's own Govern entries rather than inventing a place. See `pages/Memory.tsx`.
       { to: "/memory", label: "Memory" },
       { to: "/audit", label: "Audit" },
+      { to: "/subscribers", label: "Subscribers and notifications" },
       { to: "/classification", label: "Classification" },
     ],
   },

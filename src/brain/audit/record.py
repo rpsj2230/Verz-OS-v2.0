@@ -55,14 +55,15 @@ from brain.core.entitlement import Capability
 
 if TYPE_CHECKING:
     # Type-only, on purpose. A runtime import would put the audit package above the gate and
+    # gets updated is whichever the person was looking at.
+    # here as local strings, which is two definitions of one vocabulary, and the one that
+    # rather than about audit. Rejected alternative: restating the rung and reason names
     # the identity layer, which are the things that will import this module; the cycle would
     # then arrive on the day somebody wired the recorder in, in a traceback about imports
-    # rather than about audit. Rejected alternative: restating the rung and reason names
-    # here as local strings, which is two definitions of one vocabulary, and the one that
-    # gets updated is whichever the person was looking at.
     from brain.gate.injection import AutonomyTier
     from brain.identity.roles import BreakGlassReason
     from brain.tables.identity import SessionEndReason
+    from brain.tables.review import ReviewDecision
 
 
 class DenyReason(enum.StrEnum):
@@ -156,6 +157,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "record_read": AuditAction.RECORD_READ,
         "sign_in": AuditAction.SIGN_IN,
         "session_end": AuditAction.SESSION_END,
+        "certification": AuditAction.CERTIFICATION,
     }
 )
 
@@ -592,3 +594,37 @@ class AuditRecorder:
         return self._write(
             AuditAction.SESSION_END, subject("principal", principal_id), {"reason": reason.value}
         )
+
+    def certification(
+        self,
+        *,
+        grant_id: str,
+        decision: ReviewDecision,
+        capability: str = "",
+        pack: str = "",
+    ) -> AuditEntry:
+        """Record that a grant under access review was kept or removed (M27.7.9).
+
+        The entry a deployed database keeps is written by `0052`'s trigger on
+        `gate.review_decision`, for the reason `session_end` gives about `0050`, and a test holds
+        these details to the trigger's. The subject is the grant, `grant:<id>`, which is what
+        `0003`'s trigger writes for a direct grant and a pack assignment alike, so everything that
+        happened to one grant is one subject.
+
+        Exactly one of `capability` and `pack`, because a decision is about exactly one row and the
+        row is one or the other; the table's `one_row_is_decided` refuses the same thing. A removal
+        is recorded here and, separately, as the revoke the grant trigger writes when the row is
+        retired: the first is the decision and the second is the reach lost.
+        """
+        if bool(capability) == bool(pack):
+            msg = (
+                "a review decision is about a direct grant or a pack assignment, exactly one, and "
+                f"this names capability={capability!r} and pack={pack!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"decision": decision.value}
+        if capability:
+            details["capability"] = capability
+        else:
+            details["pack"] = pack
+        return self._write(AuditAction.CERTIFICATION, subject("grant", grant_id), details)

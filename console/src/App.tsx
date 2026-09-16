@@ -54,6 +54,10 @@ import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
+import { AccessReview } from "./pages/AccessReview";
+import { Departments } from "./pages/Departments";
+import { Elevation } from "./pages/Elevation";
+import { Subscribers } from "./pages/Subscribers";
 import { Quality } from "./pages/Quality";
 import { Questions } from "./pages/Questions";
 import { Usage } from "./pages/Usage";
@@ -305,6 +309,20 @@ export const routes: RouteObject[] = [
       // nothing on them a person opens: a role, a capability and a scope are each shown whole.
       { path: "people", element: <People /> },
       { path: "people/:subject", element: <People /> },
+      // Departments and teams, the Organisation card of SCREEN 10 at full width. One path: a
+      // department is shown whole, and a person's row links to their page under `people/`. Eager,
+      // for `Roles`' reason. See `pages/Departments.tsx`.
+      { path: "departments", element: <Departments /> },
+      // Access review, at the screen's own key in `brain.console.screens`, so
+      // `brain.ops.console_screens.routed_screen_keys` matches this address. One path: a decision
+      // is a confirmed control on a row, not a page. Eager. See `pages/AccessReview.tsx`.
+      { path: "access_review", element: <AccessReview /> },
+      // Elevation requests: the break-glass landing and the rules, and a sentence where the list
+      // would be, because no install stores a session yet. Eager. See `pages/Elevation.tsx`.
+      { path: "elevation", element: <Elevation /> },
+      // Subscribers and notifications: who is told what, and how one stops. Eager. See
+      // `pages/Subscribers.tsx`.
+      { path: "subscribers", element: <Subscribers /> },
       // Staff sources, at the screen's own key so `brain.ops.console_screens.routed_screen_keys`
       // matches this address against the registry. One path and no parameter: a source is shown
       // whole, and the trial is a request this page makes rather than a thing somebody opens.

@@ -360,6 +360,79 @@ const MODELS_AND_HEALTH = {
   },
 };
 
+const DEPARTMENTS = {
+  departments: [
+    {
+      slug: UNBROKEN,
+      name: UNBROKEN,
+      teams: [{ slug: UNBROKEN, name: UNBROKEN }],
+      members: [{ principal_id: UNBROKEN, display_name: UNBROKEN, disabled: true }],
+    },
+  ],
+  unplaced: [{ principal_id: `${UNBROKEN}0`, display_name: UNBROKEN, disabled: false, department: UNBROKEN }],
+  truncated: true,
+  staleness: null,
+  teams: UNBROKEN,
+  leads: UNBROKEN,
+  counted: UNBROKEN,
+};
+
+const ELEVATION = {
+  prompt: UNBROKEN,
+  holds_nothing_standing: false,
+  may_authorise: true,
+  reasons: [UNBROKEN],
+  longest_hours: 4,
+  what: UNBROKEN,
+  recorded: UNBROKEN,
+  authorising: UNBROKEN,
+};
+
+const ACCESS_REVIEW = {
+  items: [
+    {
+      kind: "pack",
+      row_id: UNBROKEN,
+      principal_id: UNBROKEN,
+      display_name: UNBROKEN,
+      department: UNBROKEN,
+      capabilities: [UNBROKEN],
+      pack: UNBROKEN,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+      granted_by: UNBROKEN,
+      reason: UNBROKEN,
+      granted_at: "2019-03-04T09:00:00Z",
+      lapses_at: null,
+      last_decision: "keep",
+      last_decided_by: UNBROKEN,
+      last_decided_at: "2019-04-01T09:00:00Z",
+    },
+  ],
+  truncated: true,
+  shows: UNBROKEN,
+  keeping: UNBROKEN,
+  removing: UNBROKEN,
+};
+
+const SUBSCRIBERS = {
+  items: [
+    {
+      subscriber_id: UNBROKEN,
+      endpoint: UNBROKEN,
+      kinds: [UNBROKEN],
+      active: false,
+      created_by: UNBROKEN,
+      last_delivered_at: null,
+    },
+  ],
+  findings: [UNBROKEN],
+  kinds: [UNBROKEN],
+  staleness: null,
+  stopping: UNBROKEN,
+  scope: UNBROKEN,
+  told: UNBROKEN,
+};
+
 const SKILLS = {
   items: [
     {
@@ -978,6 +1051,34 @@ const PAGES: Readonly<Record<string, PageCase>> = {
         evaluation_runs_are_recorded: false,
       },
     },
+  },
+  // Departments and teams, Access review, Elevation and Subscribers. The review and the
+  // subscribers are tables, which scroll; the organisation, the landing, the filter options and
+  // every served sentence are outside a table, where they must wrap. No control is pressed here:
+  // the confirmation panel is held to the same rules in `tests/govern-people-pages.test.tsx`.
+  "/departments": {
+    address: "/departments",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/departments": DEPARTMENTS },
+  },
+  "/access_review": {
+    address: "/access_review",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/access-review": ACCESS_REVIEW },
+  },
+  "/elevation": {
+    address: "/elevation",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/elevation": ELEVATION },
+  },
+  "/subscribers": {
+    address: "/subscribers",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/subscribers": SUBSCRIBERS },
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {
