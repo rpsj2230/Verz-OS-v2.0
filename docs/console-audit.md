@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 58 tables, from `brain.db.Base.metadata`.
+- 61 tables, from `brain.db.Base.metadata`.
 - 21 installation values, from `brain.install.INSTALLATION`.
-- 85 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 88 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 63 console addresses, from the route table in `console/src/App.tsx`.
-- 22 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 27 routes.
-- 31 gaps recorded, and 3 routes no screen calls.
+- 25 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 30 routes.
+- 33 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
 
@@ -116,14 +116,19 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Skills and tools
 
 - **Screens:** `/skills`, `/skills/:name`
-- **Tables:** none
+- **Tables:** `agent.skill`, `agent.skill_review`, `agent.skill_assignment`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/skills` | `/skills`, `/skills/:name` |
+| `POST /api/v1/skills` | `/skills`, `/skills/:name` |
+| `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` |
+| `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` |
 
-- **Gap.** A skill cannot be added, reviewed or assigned to an agent. Open leaf `M42.6.4`.
+- **Gap.** A skill cannot be fetched from a repository or a link, only pasted or uploaded. Recorded: brain.tools.fetch can fetch and check a source, and agent.skill admits only an upload; nothing on an install is given the network reach a fetch needs.
+- **Gap.** A skill cannot be removed from an agent from the console, only replaced by another version of it. Recorded: brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.
+- **Gap.** A skill that declares scripts cannot be added. Recorded: brain.tools.skills.Skill.digest covers a script's name and not its bytes, so an approval would not cover the code, and brain.tools.run_skill has no runner; brain.console.skill_library refuses one at the door.
 
 ### Workflows and automations
 
@@ -375,7 +380,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 12 of 27 write routes have all three proved or not applicable, 2 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 15 of 30 write routes have all three proved or not applicable, 2 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -401,6 +406,9 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_resuming_is_not_behind_the_feature_so_a_switch_turned_off_traps_nothing` in `tests/unit/test_jobs_routes.py` | **None.** ops.setting has no audit trigger, which migration 0004 records as a gap: the ledger has no subject kind for a setting, so the switch is attributed on its own row and nowhere else. | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_running_now_writes_the_instant_the_request_was_admitted` in `tests/unit/test_jobs_routes.py` | **None.** ops.setting has no audit trigger, which migration 0004 records as a gap: the ledger has no subject kind for a setting, so the switch is attributed on its own row and nowhere else. | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/sign-ins` | `/sign-in-links` | `test_binding_the_same_subject_twice_writes_one_row` in `tests/unit/test_sign_in_binding.py` (database, in CI) | `test_an_administrators_binding_is_in_the_ledger_naming_them_their_reach_and_the_request` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_valid_token_is_refused_until_its_subject_is_bound_and_accepted_after` in `tests/unit/test_sign_in_binding.py` (database, in CI) |
+| `POST /api/v1/skills` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` | `test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobody_approved` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
+| `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/webhooks/subscribers` | `/webhooks` | `test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept` in `tests/unit/test_webhook_routes.py` | **None.** A webhook change is attributed in ops.webhook_change and not chained into the ledger: brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED. | **None.** Nothing on an install delivers a webhook yet, so no behaviour follows from a subscriber or its secret. |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` | `test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused` in `tests/unit/test_webhook_routes.py` | **None.** A webhook change is attributed in ops.webhook_change and not chained into the ledger: brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED. | **None.** Nothing on an install delivers a webhook yet, so no behaviour follows from a subscriber or its secret. |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` | `test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused` in `tests/unit/test_webhook_routes.py` | **None.** A webhook change is attributed in ops.webhook_change and not chained into the ledger: brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED. | `test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out` in `tests/unit/test_webhook_store.py` (database, in CI) |

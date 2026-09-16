@@ -93,6 +93,7 @@ from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionR
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
+from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
@@ -233,6 +234,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0055_agent_automation. Points at nothing: the agent and the principal are values, so the
     # record of what ran in a person's name outlives both.
     "agent.automation",
+    # 0056_skill_library. A decision points at the skill it decides and an assignment at the
+    # decision and the skill, so they follow it; the people are values.
+    "agent.skill",
+    "agent.skill_review",
+    "agent.skill_assignment",
 )
 
 __all__ = [
@@ -288,6 +294,9 @@ __all__ = [
     "SessionRow",
     "SettingRow",
     "SettingType",
+    "SkillAssignmentRow",
+    "SkillReviewRow",
+    "SkillRow",
     "SpendActualRow",
     "SuspensionRow",
     "TeamRow",

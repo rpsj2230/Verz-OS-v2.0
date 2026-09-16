@@ -116,6 +116,8 @@ SUBJECT_KINDS = frozenset(
         # LEGAL_HOLD below.
         "retention",
         "legal_hold",
+        # A skill in the library, since 2026-09-17. See SKILL below.
+        "skill",
     }
 )
 
@@ -293,6 +295,26 @@ class AuditAction(enum.StrEnum):
     for a hold, placed and then lifted, so everything that happened to one is one subject. A hold's
     id is an identifier its placer chose and `obs.legal_hold` keeps for as long as the chain, so
     the subject discloses nothing the hold's own row does not.
+
+    SKILL was added on 2026-09-17, and it is the seventeenth. `brain.skill_routes` adds a skill
+    to the library from an uploaded or pasted package, and a second person approves or rejects
+    it, and until then nothing stored an imported skill at all. "Who put this procedure in front
+    of our agents, and who read it before it could run" is the question asked after an agent
+    does something nobody expected, and it had no tamper-evident answer. **Recorded by the
+    database, from triggers on `agent.skill` and `agent.skill_review`**, the way CERTIFICATION
+    is, so a row an operator inserts by hand is recorded as well as one the console writes.
+
+    Every existing member was tried. COMPOSE_CHANGE is what one agent carries, and a skill in
+    the library is attached to nobody until it is assigned, which is recorded under
+    COMPOSE_CHANGE by `0056`'s third trigger; CERTIFICATION is a grant reviewed, and a skill
+    confers no grant, which is the whole of `brain.tools.skills`; APPROVAL is a suspended
+    action decided, and an imported skill is not an action; PUBLISH is an artefact an agent
+    produced. One member for its three changes, imported, approved and rejected, with the
+    change in the details, for the reason APPROVAL carries its verdict there. The subject is
+    the skill's name, so every version of one procedure is one subject, and the digest of the
+    bytes the change was about rides in the details: a skill's digest is over its whole text,
+    which is not an enumerable input, so it is recordable for `_is_recordable`'s reason about a
+    digest rather than refused as a value. Five characters.
     """
 
     GRANT = "grant"
@@ -332,6 +354,10 @@ class AuditAction(enum.StrEnum):
     #: A legal hold was placed or lifted. Which is in the details, and never whom it names.
     #: Written by `0054`'s trigger on `obs.legal_hold`.
     LEGAL_HOLD = "legal_hold"
+    #: A skill was added to the library, or approved or rejected by somebody other than whoever
+    #: added it. Which is in the details, with the digest of the bytes it was about. Written by
+    #: `0056`'s triggers on `agent.skill` and `agent.skill_review`.
+    SKILL = "skill"
 
 
 # --------------------------------------------------------------------- redaction

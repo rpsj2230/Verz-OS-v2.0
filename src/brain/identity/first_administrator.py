@@ -259,6 +259,8 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:schedule",
     "admin:session",
     "admin:sign_in",
+    "admin:skill",
+    "admin:skill_review",
     "admin:storage",
     "admin:webhook_subscriber",
 )
@@ -282,6 +284,7 @@ OVERSIGHT: Final[tuple[str, ...]] = (
     "read:audit.principal",
     "read:audit.retention",
     "read:audit.session",
+    "read:audit.skill",
     "read:backup",
     "read:budget",
     "read:capability",

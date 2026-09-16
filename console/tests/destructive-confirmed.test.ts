@@ -60,6 +60,10 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/People.tsx GRANTS_API_PATH":
     "Writes a new grant. Entitlements are additive only, a grant replaces nothing, and taking one " +
     "back is the removal beside it, which is confirmed.",
+  "src/pages/Skills.tsx SKILLS_API_PATH":
+    "Adds a skill to the library undecided. A second import of the same bytes is refused by the " +
+    "table's key rather than written over, so nothing existing is replaced, and the skill reaches no " +
+    "agent until somebody else approves it and an administrator assigns it, both of which are confirmed.",
   "src/pages/SignInLinks.tsx LINK_API_PATH":
     "Binds a sign-in to a person. A subject already bound elsewhere is refused with a 409 rather " +
     "than re-pointed, so nothing existing is replaced; unlinking is the destructive act and it is " +

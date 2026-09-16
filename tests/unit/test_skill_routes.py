@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 
 from brain import skill_routes
+from brain.agent_routes import record_of
 from brain.agents.model import AgentAudience
 from brain.agents.template import (
     ManifestIdentity,
@@ -54,20 +55,36 @@ from brain.app import Settings, create_app
 from brain.console.govern import Placed
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
+from brain.console.skill_library import (
+    NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED,
+    REVIEW_AUTHORITY,
+    SKILL_AUTHORITY,
+    Assignment,
+    LibrarySkill,
+    added,
+    decided,
+    read_package,
+)
 from brain.console.workspace import intersections_in
-from brain.core.entitlement import EntitlementSet, Grant
+from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
 from brain.ops.jobs import hidden_count_fields
+from brain.prompt_routes import installed
 from brain.skill_routes import (
     MAX_AGENTS_CONSIDERED,
+    AgentChoiceView,
+    AssignedView,
+    FoundAgent,
+    LibrarySkillView,
     QueueEntryView,
     SkillPinView,
     SkillQueueView,
     SkillRow,
     SkillsPage,
+    ToolReachView,
     bounded_agents,
     catalogue,
     installs_of,
@@ -99,6 +116,7 @@ from tests.unit.test_api_routes import (
     token_for,
     verifier,
 )
+from tests.unit.test_skill_library import SKILL_MD, a_registry, text_with
 
 SKILLS = f"{API_PREFIX}/skills"
 
@@ -118,6 +136,7 @@ DIGEST_TWO = "b" * 64
 SKILL_READ = screen("skills").read.requires
 CONFIGURATION = plane_capability(Plane.CONFIGURATION)
 EXISTENCE = plane_capability(Plane.EXISTENCE)
+CLIENT_NAMES = Capability(value="read:client.name")
 
 #: Who sits where. `u_narrow` is in web, `u_wide` in sales, and both may open the screen; the
 #: difference between them is the audience, which is the point of the narrow-reader test.
@@ -135,6 +154,12 @@ DEPARTMENTS: Mapping[str, str | None] = {
 #: `u_prefix` holds the capability and only the existence plane, which is the reader a bare
 #: capability check would let in. `u_none` holds nothing. `u_elsewhere` holds the screen at a
 #: scope that admits finance rows and no other, which is what narrows the queue.
+#:
+#: Of the writes: `u_admin` adds, reviews and assigns skills over everything, as a first
+#: administrator does, and reads client names, so a skill naming the client tool reaches it through
+#: an agent allowed it and a skill they added is one they may not decide; `u_wide` reviews over
+#: everything and adds nothing; `u_elsewhere` assigns in finance and nowhere else; `u_narrow`
+#: reads the screen and may do none of the three.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_narrow": (
         Grant(capability=SKILL_READ, scope=Scope.unrestricted()),
@@ -143,6 +168,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_wide": (
         Grant(capability=SKILL_READ, scope=Scope.unrestricted()),
         Grant(capability=CONFIGURATION, scope=Scope.unrestricted()),
+        Grant(capability=REVIEW_AUTHORITY, scope=Scope.unrestricted()),
     ),
     "u_prefix": (
         Grant(capability=SKILL_READ, scope=Scope.unrestricted()),
@@ -152,10 +178,15 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_admin": (
         Grant(capability=SKILL_READ, scope=Scope.unrestricted()),
         Grant(capability=CONFIGURATION, scope=Scope.unrestricted()),
+        Grant(capability=SKILL_AUTHORITY, scope=Scope.unrestricted()),
+        Grant(capability=REVIEW_AUTHORITY, scope=Scope.unrestricted()),
+        Grant(capability=CLIENT_NAMES, scope=Scope.unrestricted()),
     ),
     "u_elsewhere": (
         Grant(capability=SKILL_READ, scope=Scope.department("finance")),
         Grant(capability=CONFIGURATION, scope=Scope.unrestricted()),
+        Grant(capability=SKILL_AUTHORITY, scope=Scope.department("finance")),
+        Grant(capability=CLIENT_NAMES, scope=Scope.unrestricted()),
     ),
 }
 
@@ -250,6 +281,78 @@ class Stored:
         self.agents: dict[str, AgentRow] = {}
         self.installs: dict[str, tuple[TemplateInstanceRow, TemplateVersionRow]] = {}
         self.statements: list[Any] = []
+        self.library = Library(self)
+
+
+class Library:
+    """A `brain.skill_routes.SkillLibrary` over a dictionary, keyed and refusing as the tables do.
+
+    A second import of one digest and a second decision about one are refused, as the keys refuse
+    them. An assignment writes the install into the stub rows the catalogue reads, so a test can
+    follow an assignment to the pin the Skills screen lists afterwards, and refuses when the hash it
+    was handed is not the stored one, as the store does under its lock. Every call is noted.
+    """
+
+    def __init__(self, stored: Stored) -> None:
+        self.stored = stored
+        self.skills: dict[str, LibrarySkill] = {}
+        self.calls: list[str] = []
+        self.assigned: list[Assignment] = []
+
+    async def library(self, limit: int = 500) -> tuple[LibrarySkill, ...]:
+        self.calls.append("library")
+        return tuple(self.skills.values())[:limit]
+
+    async def skill(self, digest: str) -> LibrarySkill | None:
+        self.calls.append("skill")
+        return self.skills.get(digest)
+
+    async def add(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
+        self.calls.append("add")
+        if one.digest in self.skills:
+            return False
+        self.skills[one.digest] = one
+        return True
+
+    async def decide(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
+        self.calls.append("decide")
+        if self.skills[one.digest].imported.reviewer:
+            return False
+        self.skills[one.digest] = one
+        return True
+
+    async def assign(
+        self, made: Assignment, *, expected_hash: str, ent_hash: str, trace_id: str
+    ) -> bool:
+        self.calls.append("assign")
+        instance_row, _ = self.stored.installs[made.agent_id]
+        if instance_row.effective_hash != expected_hash:
+            return False
+        instance_row.overlay = dict(made.instance.overlay)
+        instance_row.field_owners = {
+            path: owner.model_dump(mode="json")
+            for path, owner in made.instance.overlay_owners.items()
+        }
+        instance_row.effective_document = dict(made.effective_document)
+        instance_row.effective_hash = made.effective_hash
+        self.assigned.append(made)
+        return True
+
+
+class Installs:
+    """A `brain.skill_routes.AgentInstalls` over the stub rows the catalogue reads."""
+
+    async def agent(self, agent_id: str) -> FoundAgent | None:
+        row = _STORED.agents.get(agent_id)
+        record = None if row is None else record_of(row)
+        if record is None:
+            return None
+        pair = _STORED.installs.get(agent_id)
+        return FoundAgent(
+            record=record,
+            install=None if pair is None else installed(*pair),
+            effective_hash=None if pair is None else pair[0].effective_hash,
+        )
 
 
 _STORED = Stored()
@@ -315,11 +418,20 @@ def client(stored: Stored) -> Iterator[TestClient]:
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         app.state.db_sessions = async_sessionmaker(class_=StubSession)
+        app.state.skill_library = stored.library
+        app.state.agent_installs = Installs()
+        app.state.tools = a_registry()
         yield c
 
 
+#: A session signed in with a second factor. `brain.gate.admission` withholds every `admin:`
+#: capability from a password-only session, so without this no write here is ever reached.
+SECOND_FACTOR: Mapping[str, object] = {"amr": ["otp"]}
+
+
 def get(c: TestClient, pid: str, path: str = SKILLS) -> Response:
-    response: Response = c.get(path, headers={"authorization": f"Bearer {token_for(pid)}"})
+    token = token_for(pid, claims=SECOND_FACTOR)
+    response: Response = c.get(path, headers={"authorization": f"Bearer {token}"})
     return response
 
 
@@ -713,64 +825,70 @@ def test_staleness_on_a_queue_entry_is_the_review_modules_own_line() -> None:
     assert fresh.entries[0].stale is False
 
 
-def test_nothing_this_install_records_is_waiting_for_a_reviewer() -> None:
-    """`submitted` is empty, and the reason is that no table holds an `ImportedSkill`.
+def test_every_undecided_skill_in_the_library_is_submitted_for_review() -> None:
+    """`submitted` is the library's undecided skills, placed where the queue narrows them, and a
+    decided one is not among them.
 
-    Delete this and the day a store exists nothing notices that this function was never
-    pointed at it, so the queue stays empty on a screen whose whole job is to show what is
-    waiting."""
-    assert submitted() == ()
+    Delete this and the queue can go on listing nothing now that a store exists, which is the day
+    the function was kept a function for."""
+    waiting = added(read_package("SKILL.md", SKILL_MD.encode("utf-8")), by="u_admin", at=NOW)
+    decided_one = decided(
+        added(
+            read_package(
+                "SKILL.md",
+                text_with(name="quote-format", description="Formats a quote").encode("utf-8"),
+            ),
+            by="u_admin",
+            at=NOW,
+        ),
+        reviewer="u_wide",
+        approve=True,
+        at=NOW,
+    )
+
+    entries = submitted((waiting, decided_one), NOW)
+
+    assert [one.record.skill.skill.name for one in entries] == ["hosting-expiry"]
+    assert queue_view(entries, reader("u_admin"), NOW).waiting == 1
+    assert queue_view(entries, reader("u_elsewhere"), NOW).waiting == 0
 
 
 def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
-    """`QueueEntryView` has four fields and none of them can hold the instructions or the name
-    of whoever decided.
+    """`QueueEntryView` has five fields and none of them can hold the instructions or the name of
+    whoever decided.
 
-    Delete this and a listing hands over the procedure of a skill nobody has approved, which
-    is exactly what `brain.tools.skills.body_of` refuses to do."""
-    assert set(QueueEntryView.model_fields) == {"name", "waiting_since", "changed", "stale"}
+    Delete this and a queue listing hands over the procedure of a skill nobody has approved to
+    every reader of the queue, where the library row discloses it only to a reader who may add or
+    review skills."""
+    assert set(QueueEntryView.model_fields) == {
+        "name",
+        "digest",
+        "waiting_since",
+        "changed",
+        "stale",
+    }
 
 
 # --------------------------------------------------------------- what it will not say
 
 
-def test_this_router_offers_no_write_at_all(client: TestClient) -> None:
-    """No path under `/skills` declares any method but GET, read off the application's own
-    document.
+def test_the_writes_are_three_posts_and_no_read_answers_one_skill_by_name(
+    client: TestClient,
+) -> None:
+    """Under `/skills` there is one GET, which takes no path parameter, and three POSTs: add a
+    skill, decide about one, and assign one. Read off the application's own document.
 
-    Delete this and an assignment control can be added without anybody arguing that a name and
-    a digest typed into a browser are an approval whoever typed them granted themselves."""
+    Delete this and a fourth write, an approval folded into an import say, or a GET answering one
+    skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
 
-    assert mine == {SKILLS: {"get"}}
-
-
-def test_no_route_answers_one_skill_by_name(client: TestClient) -> None:
-    """There is one path under `/skills` and it takes no path parameter.
-
-    Delete this and a deep link gets a route of its own, which answers anybody able to type a
-    name whether that skill exists in an install whose agents they cannot see."""
-    paths = [path for path in client.app.openapi()["paths"] if path.startswith(SKILLS)]  # type: ignore[attr-defined]
-
-    assert paths == [SKILLS]
-    assert "{" not in paths[0]
-
-
-def test_the_page_says_the_two_things_it_cannot_do(client: TestClient, stored: Stored) -> None:
-    """Both fields come back true, on a page with rows on it.
-
-    Delete this and the screen stops saying that no review is recorded and that no assignment
-    can be written, and a reader takes an empty State column for a fact about the skills."""
-    stored.agents["company_desk"] = agent_row("company_desk")
-    stored.installs["company_desk"] = skilled_rows(
-        "company_desk", skills=(SkillRef(name="hosting-expiry", digest=DIGEST_ONE),)
-    )
-
-    body = get(client, "u_admin").json()
-
-    assert body["review_is_not_recorded"] is True
-    assert body["assignment_is_not_writable"] is True
+    assert mine == {
+        SKILLS: {"get", "post"},
+        f"{SKILLS}/{{digest}}/review": {"post"},
+        f"{SKILLS}/{{digest}}/assignments": {"post"},
+    }
+    assert [path for path, methods in mine.items() if "get" in methods and "{" in path] == []
 
 
 def test_no_row_here_carries_a_state_a_source_or_a_reviewer(client: TestClient) -> None:
@@ -802,7 +920,17 @@ def test_no_answer_carries_a_count_of_what_the_reader_was_not_shown(
 
     body = get(client, "u_narrow").json()
 
-    assert hidden_count_fields((SkillRow, SkillPinView, SkillsPage, SkillQueueView)) == ()
+    views = (
+        SkillRow,
+        SkillPinView,
+        SkillsPage,
+        SkillQueueView,
+        LibrarySkillView,
+        ToolReachView,
+        AgentChoiceView,
+        AssignedView,
+    )
+    assert hidden_count_fields(views) == ()
     assert body["total"] is None
     assert body["next_cursor"] is None
 
@@ -942,3 +1070,308 @@ def test_the_refusal_names_the_screen_and_never_the_caller_or_the_capability(
 
     assert "u_none" not in text
     assert SKILL_READ.value not in text
+
+
+# ------------------------------------------------------------------ the three writes
+
+
+def post(
+    c: TestClient, pid: str, path: str, body: Mapping[str, Any], *, strong: bool = True
+) -> Response:
+    token = token_for(pid, claims=SECOND_FACTOR if strong else {})
+    response: Response = c.post(path, json=dict(body), headers={"authorization": f"Bearer {token}"})
+    return response
+
+
+def screen_refusal(c: TestClient) -> str:
+    """The message a caller holding nothing is given, which every refusal to act must match."""
+    return str(get(c, "u_none").json()["message"])
+
+
+def a_package(text: str = SKILL_MD) -> dict[str, str]:
+    return {"file_name": "SKILL.md", "content": text, "encoding": "text"}
+
+
+def an_assignable_agent(stored: Stored, agent_id: str = "company_desk", **row: Any) -> None:
+    """An agent whose ceiling reads client names through the client tool, with an install."""
+    stored.agents[agent_id] = agent_row(
+        agent_id,
+        allowed_tools=("crm.read_client",),
+        capabilities=(CLIENT_NAMES,),
+        **row,
+    )
+    stored.installs[agent_id] = skilled_rows(agent_id, skills=())
+
+
+def test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent(
+    client: TestClient, stored: Stored
+) -> None:
+    """**M42.6.4 end to end, through the application.** An administrator adds a skill from a
+    pasted `SKILL.md` and is answered with what it is trusted to reach, read off the registry; the
+    library lists it undecided and the queue lists it waiting; the same administrator is refused
+    the decision in words saying why; a second person approves it; the administrator assigns it to
+    an agent and is answered with what it reaches through that agent for them, which is the one
+    tool the agent is allowed; and the Skills screen then lists the agent pinned to exactly the
+    approved bytes.
+
+    Delete this and add, reach and assign can each be proved on their own while the three never
+    meet: a skill added that the queue does not list, an approval the assignment does not see, or
+    an assignment that writes an install the screen does not read."""
+    an_assignable_agent(stored)
+
+    added_skill = post(client, "u_admin", SKILLS, a_package())
+    assert added_skill.status_code == 201, added_skill.text
+    row = added_skill.json()
+    digest = row["digest"]
+    assert row["review"] == "pending"
+    assert row["tools"] == [
+        {"name": "crm.read_client", "capability": "read:client.name"},
+        {"name": "desk.read_ticket", "capability": "read:ticket.status"},
+    ]
+    assert row["capabilities"] == ["read:client.name", "read:ticket.status"]
+    assert row["reviewable"] is False
+
+    page = get(client, "u_admin").json()
+    assert [one["name"] for one in page["library"]] == ["hosting-expiry"]
+    assert [one["digest"] for one in page["queue"]["entries"]] == [digest]
+    assert page["may_add"] is True
+    assert page["agents"] == [{"agent_id": "company_desk", "display_name": "Company Desk"}]
+
+    own = post(client, "u_admin", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    assert own.status_code == 404
+    assert NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED in own.json()["message"]
+    early = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"})
+    assert early.status_code == 404
+    assert stored.library.assigned == []
+
+    reviewed = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    assert reviewed.status_code == 200, reviewed.text
+    assert (reviewed.json()["review"], reviewed.json()["reviewer"]) == ("approved", "u_wide")
+
+    assigned = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+    assert assigned.status_code == 201, assigned.text
+    assert assigned.json()["reach"] == ["crm.read_client"]
+    assert assigned.json()["digest"] == digest
+    assert assigned.json()["replaced_digest"] is None
+
+    after = get(client, "u_admin").json()
+    assert after["items"] == [
+        {
+            "name": "hosting-expiry",
+            "pinned_by": [{"agent_id": "company_desk", "digest": digest}],
+            "versions_differ": False,
+        }
+    ]
+    assert after["queue"]["entries"] == []
+    assert [one["review"] for one in after["library"]] == ["approved"]
+
+
+def test_a_caller_without_the_authority_is_refused_every_write_before_anything_is_read(
+    client: TestClient, stored: Stored
+) -> None:
+    """`u_narrow` may open the screen and holds neither authority: adding, deciding and assigning
+    are each the screen's one refusal, and the library is never asked.
+
+    Delete this and the screen's read becomes enough to write, or the refusal comes after a lookup
+    and a digest typed by anybody answers whether that skill exists."""
+    an_assignable_agent(stored)
+    digest = "d" * 64
+
+    refusals = [
+        post(client, "u_narrow", SKILLS, a_package()),
+        post(client, "u_narrow", f"{SKILLS}/{digest}/review", {"decision": "approve"}),
+        post(client, "u_narrow", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}),
+        post(client, "u_wide", SKILLS, a_package()),
+    ]
+
+    assert [one.status_code for one in refusals] == [404, 404, 404, 404]
+    assert {one.json()["message"] for one in refusals} == {screen_refusal(client)}
+    assert stored.library.calls == []
+
+
+def test_a_password_only_session_holds_no_authority_to_add_a_skill(
+    client: TestClient, stored: Stored
+) -> None:
+    """The administrator signed in without a second factor is refused the write they are granted.
+
+    Delete this and the authority to put a procedure in front of every agent is exercised from a
+    session one stolen password opened, which is what `brain.gate.admission` withholds `admin:`
+    for."""
+    weak = post(client, "u_admin", SKILLS, a_package(), strong=False)
+    strong = post(client, "u_admin", SKILLS, a_package())
+
+    assert weak.status_code == 404
+    assert weak.json()["message"] == screen_refusal(client)
+    assert strong.status_code == 201
+
+
+def test_the_reviewer_approves_and_a_reader_who_only_adds_is_refused_the_decision(
+    client: TestClient, stored: Stored
+) -> None:
+    """The review authority decides; the skill authority does not, whoever added the skill.
+
+    Delete this and the authority to add a skill is an authority to approve one, and the queue is
+    reviewed by the people filling it."""
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+
+    refused = post(client, "u_elsewhere", f"{SKILLS}/{digest}/review", {"decision": "reject"})
+    rejected = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "reject"})
+    twice = post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+
+    assert refused.status_code == 404
+    assert rejected.status_code == 200
+    assert rejected.json()["review"] == "rejected"
+    assert twice.status_code == 404
+    assert "already rejected" in twice.json()["message"]
+
+
+def test_a_rejected_skill_is_refused_assignment_and_nothing_is_written(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and a skill a named person read and refused reaches an agent anyway."""
+    an_assignable_agent(stored)
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "reject"})
+    before = stored.installs["company_desk"][0].effective_hash
+
+    refused = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+
+    assert refused.status_code == 404
+    assert "cannot be pinned" in refused.json()["message"]
+    assert stored.library.assigned == []
+    assert stored.installs["company_desk"][0].effective_hash == before
+
+
+def test_an_agent_outside_the_audience_or_the_authority_is_refused_as_one_that_does_not_exist(
+    client: TestClient, stored: Stored
+) -> None:
+    """`u_elsewhere` assigns in finance: a finance agent is assigned, a web agent they cannot see
+    and a company agent outside their authority are each the screen's one refusal, and so is an
+    agent that does not exist.
+
+    Delete this and a department's administrator assigns skills to every department's agents, or
+    learns which agents exist by trying."""
+    an_assignable_agent(stored, "finance_desk", level=Visibility.DEPARTMENT, department="finance")
+    an_assignable_agent(stored, "web_desk", level=Visibility.DEPARTMENT, department="web")
+    an_assignable_agent(stored, "company_desk")
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+
+    def assign(agent_id: str) -> Response:
+        return post(client, "u_elsewhere", f"{SKILLS}/{digest}/assignments", {"agent_id": agent_id})
+
+    finance = assign("finance_desk")
+    hidden, outside, missing = assign("web_desk"), assign("company_desk"), assign("nobody_desk")
+
+    assert finance.status_code == 201, finance.text
+    assert finance.json()["reach"] == ["crm.read_client"]
+    assert [one.status_code for one in (hidden, outside, missing)] == [404, 404, 404]
+    assert {one.json()["message"] for one in (hidden, outside, missing)} == {screen_refusal(client)}
+
+
+def test_an_agent_the_authority_covers_and_the_audience_does_not_is_refused_as_absent(
+    client: TestClient, stored: Stored
+) -> None:
+    """`u_admin` holds the skill authority over everything and sits in web: a sales department's
+    agent is inside their authority and outside their audience, and is refused as absent, while a
+    company agent is assigned.
+
+    Delete this and the audience check can be dropped from the assignment, because every other
+    refusal above is also outside the caller's authority, and an administrator learns of, and
+    configures, an agent the roster never listed to them."""
+    an_assignable_agent(stored, "sales_desk", level=Visibility.DEPARTMENT, department="sales")
+    an_assignable_agent(stored, "company_desk")
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+
+    hidden = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "sales_desk"})
+    seen = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"})
+
+    assert hidden.status_code == 404
+    assert hidden.json()["message"] == screen_refusal(client)
+    assert seen.status_code == 201
+    assert [one.agent_id for one in stored.library.assigned] == ["company_desk"]
+
+
+def test_the_instructions_are_disclosed_only_to_a_reader_who_may_add_or_review(
+    client: TestClient, stored: Stored
+) -> None:
+    """The body travels to the administrator and the reviewer, and not to a reader of the screen.
+
+    Delete this and every reader of the Skills screen reads the procedure of a skill nobody has
+    approved, which `brain.tools.skills.body_of` refuses to an agent for the reason that reading a
+    procedure is most of running it."""
+    post(client, "u_admin", SKILLS, a_package())
+
+    bodies = {pid: get(client, pid).json()["library"][0]["body"] for pid in ("u_admin", "u_wide")}
+    reader_row = get(client, "u_narrow").json()["library"][0]
+
+    assert bodies == dict.fromkeys(bodies, "Look up the domain, then open a ticket.")
+    assert reader_row["body"] is None
+    assert reader_row["reviewable"] is False
+    assert get(client, "u_wide").json()["library"][0]["reviewable"] is True
+
+
+def test_a_package_that_does_not_parse_or_repeats_a_skill_is_refused_saying_why(
+    client: TestClient, stored: Stored
+) -> None:
+    """A skill declaring a reach, the same bytes twice, and the same name spelt another way, each
+    refused with a sentence, and none of them written.
+
+    Delete this and the reason a person's package was refused is the screen's generic sentence, or a
+    second spelling of a skill shares every ledger entry with the first."""
+    reach_declared = post(
+        client, "u_admin", SKILLS, a_package(text_with(capabilities="[write:client.name]"))
+    )
+    first = post(client, "u_admin", SKILLS, a_package())
+    again = post(client, "u_admin", SKILLS, a_package())
+    spelt = post(
+        client,
+        "u_admin",
+        SKILLS,
+        a_package(text_with(name="hosting_expiry", description="Checks domains a second way")),
+    )
+    not_base64 = post(
+        client,
+        "u_admin",
+        SKILLS,
+        {"file_name": "skill.zip", "content": "not base64!", "encoding": "base64"},
+    )
+
+    assert first.status_code == 201
+    assert reach_declared.status_code == again.status_code == spelt.status_code == 404
+    assert "declares no reach of its own" in reach_declared.json()["message"]
+    assert "already in the library" in again.json()["message"]
+    assert "same name spelt differently" in spelt.json()["message"]
+    assert "could not be read" in not_base64.json()["message"]
+    assert [one.name for one in stored.library.skills.values()] == ["hosting-expiry"]
+
+
+def test_an_install_changed_since_it_was_read_is_refused_and_the_change_is_kept(
+    client: TestClient, stored: Stored
+) -> None:
+    """The store is handed the hash the route read, and a store that finds another refuses.
+
+    Delete this and an assignment overwrites an instruction edit made while it was being decided."""
+    an_assignable_agent(stored)
+    digest = post(client, "u_admin", SKILLS, a_package()).json()["digest"]
+    post(client, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+
+    class Moving(Installs):
+        async def agent(self, agent_id: str) -> FoundAgent | None:
+            found = await super().agent(agent_id)
+            assert found is not None
+            return FoundAgent(record=found.record, install=found.install, effective_hash="0" * 64)
+
+    client.app.state.agent_installs = Moving()  # type: ignore[attr-defined]
+    refused = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+
+    assert refused.status_code == 404
+    assert "changed this agent after you opened it" in refused.json()["message"]
+    assert stored.library.assigned == []

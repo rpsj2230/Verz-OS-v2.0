@@ -417,8 +417,11 @@ const SKILLS = {
   total: null,
   truncated: false,
   queue: { entries: [], waiting: 0, edits: 0, stale: 0 },
-  review_is_not_recorded: true,
-  assignment_is_not_writable: true,
+  library: [],
+  library_truncated: false,
+  agents: [],
+  may_add: false,
+  registry_is_absent: false,
 };
 
 /** Every registered route pattern, and what to mount for it. */

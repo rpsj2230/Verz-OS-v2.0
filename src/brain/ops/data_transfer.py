@@ -199,8 +199,9 @@ CATALOGUE: Final[tuple[DataSet, ...]] = (
         carries="A skill from a repository, a link or an upload, held for review before any use.",
         runs=False,
         told=(
-            "Not available yet. A skill can be fetched, unpacked and checked, and nothing on this "
-            "install stores an imported skill for somebody to review."
+            "Not available here yet. A SKILL.md pasted or uploaded on the Skills screen is stored "
+            "for somebody else to review before it can be assigned, and nothing on this install "
+            "fetches a skill from a repository or a link."
         ),
     ),
     DataSet(

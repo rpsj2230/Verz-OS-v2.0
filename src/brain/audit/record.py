@@ -161,6 +161,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "credential": AuditAction.CREDENTIAL,
         "retention": AuditAction.RETENTION,
         "legal_hold": AuditAction.LEGAL_HOLD,
+        "skill": AuditAction.SKILL,
     }
 )
 
@@ -238,6 +239,14 @@ class LegalHoldChange(enum.StrEnum):
 
     PLACED = "placed"
     LIFTED = "lifted"
+
+
+class SkillChange(enum.StrEnum):
+    """What happened to a skill in the library. The three values `0056`'s triggers write."""
+
+    IMPORTED = "imported"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -724,4 +733,26 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.LEGAL_HOLD, subject("legal_hold", hold_id), {"change": change.value}
+        )
+
+    def skill(self, *, name: str, digest: str, change: SkillChange) -> AuditEntry:
+        """Record that a skill was added to the library, or approved or rejected.
+
+        Written in a deployed database by `0056`'s triggers, on an insert into `agent.skill` for
+        an import and into `agent.skill_review` for a decision, and held to this method's details
+        by a test. The subject is the skill's name, so every version of one procedure is one
+        subject; the digest names the bytes the change was about, which is what an approval is an
+        approval of. The actor is whoever the row names: the importer, or the reviewer.
+
+        `digest` is refused unless it is a sha256, because the ledger admits a digest by its
+        shape and anything else in that field would be stored as the marker, which is an entry
+        that no longer says which version was approved.
+        """
+        if not re.fullmatch(DIGEST, digest):
+            msg = f"{digest!r} is not the sha256 of a skill; the entry would not say which bytes"
+            raise ValueError(msg)
+        return self._write(
+            AuditAction.SKILL,
+            subject("skill", name),
+            {"change": change.value, "digest": digest},
         )

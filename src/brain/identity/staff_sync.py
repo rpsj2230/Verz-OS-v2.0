@@ -397,7 +397,7 @@ class AuditKindDecision:
             raise ValueError(msg)
 
 
-#: All eleven audit subject kinds, each with the sentence that puts it in or out.
+#: Every audit subject kind, each with the sentence that puts it in or out.
 #:
 #: This is the list item 48 asked for, and it is deliberately a mapping over the whole
 #: vocabulary rather than the chosen subset: a twelfth subject kind added to
@@ -534,6 +534,20 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "that a dispute exists, and its identifier is chosen by whoever placed it, so "
                     "a standing reach over these entries would tell a head which matters are under "
                     "hold when none of their governing acts produced one."
+                ),
+            ),
+            AuditKindDecision(
+                kind="skill",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason as "
+                    "credential, since the kind was added on 2026-09-17, after item 48. A skill is "
+                    "added only by somebody holding admin:skill over everything and decided only "
+                    "by somebody holding admin:skill_review over everything, which "
+                    "brain.console.skill_library argues: the library is offered to every agent, so "
+                    "none of a head's governing acts produces one of these entries. Assigning a "
+                    "skill to their department's agent is recorded under the agent, which a head "
+                    "already reads."
                 ),
             ),
         )

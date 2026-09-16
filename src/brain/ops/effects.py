@@ -160,6 +160,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.automation_gallery_routes:AutomationInstalls.install": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The skill library: reads, and inserts into this system's own tables, where a second
+        # import or decision is refused by the key and appends nothing, and an assignment writes
+        # only when the install is the one it was decided about.
+        "brain.skill_routes:SkillLibrary.library": Repeat.READS,
+        "brain.skill_routes:SkillLibrary.skill": Repeat.READS,
+        "brain.skill_routes:SkillLibrary.add": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillLibrary.decide": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:SkillLibrary.assign": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
         # Approvals: reads and writes of this system's own suspension rows.
         "brain.approval_routes:SuspensionSource.open_suspensions": Repeat.READS,
         "brain.approval_routes:SuspensionSource.suspension": Repeat.READS,

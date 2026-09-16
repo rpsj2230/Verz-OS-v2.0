@@ -862,10 +862,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `brain.console.scoped_authority` and `brain.console.govern`. See `brain.govern_routes`.
     app.include_router(govern_router)
     # The Skills screen, SCREEN 6 of `docs/screens.html`. A router of its own because what it
-    # answers about is neither a grant nor an agent: it is the catalogue of procedures the
-    # agents a reader may see are pinned to, assembled from their installs. It carries no
-    # write at all, and `brain.skill_routes` argues at length why an assignment control cannot
-    # be built until something stores an imported skill. See `brain.skill_routes`.
+    # answers about is neither a grant nor an agent: it is the skill library, its review queue and
+    # the procedures the agents a reader may see are pinned to. Its three writes add a skill,
+    # decide about one as somebody other than who added it, and assign an approved one through
+    # `attach_skill`, each asking its `admin:` authority first. See `brain.skill_routes`.
     app.include_router(skill_router)
     # The connectors screen. A router of its own because what it answers about is which outside
     # systems this company reads, where the name itself is the disclosure: the list is narrowed

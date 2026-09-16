@@ -36,6 +36,7 @@ import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pa
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath } from "../../src/pages/auditQuery";
 import { reviewApiPath } from "../../src/pages/classificationQuery";
+import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
 import { REVIEW_DECISION_API_PATH } from "../../src/pages/governPeopleQuery";
@@ -257,10 +258,23 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Skills and tools": {
     screens: ["/skills", "/skills/:name"],
-    routes: ["/api/v1/skills"],
-    tables: [],
+    routes: ["/api/v1/skills", "/api/v1/skills/{digest}/review", "/api/v1/skills/{digest}/assignments"],
+    tables: ["agent.skill", "agent.skill_review", "agent.skill_assignment"],
     installation: [],
-    gaps: [{ what: "A skill cannot be added, reviewed or assigned to an agent.", leaf: "M42.6.4" }],
+    gaps: [
+      {
+        what: "A skill cannot be fetched from a repository or a link, only pasted or uploaded.",
+        because: "brain.tools.fetch can fetch and check a source, and agent.skill admits only an upload; nothing on an install is given the network reach a fetch needs.",
+      },
+      {
+        what: "A skill cannot be removed from an agent from the console, only replaced by another version of it.",
+        because: "brain.console.agent_tabs.detach decides a removal and no route performs one; brain.skill_routes assigns and replaces.",
+      },
+      {
+        what: "A skill that declares scripts cannot be added.",
+        because: "brain.tools.skills.Skill.digest covers a script's name and not its bytes, so an approval would not cover the code, and brain.tools.run_skill has no runner; brain.console.skill_library refuses one at the door.",
+      },
+    ],
   },
   "Workflows and automations": {
     screens: ["/agents/:agentId/:tab"],
@@ -532,6 +546,13 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Webhooks.tsx switchOffApiPath(asked.id)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off", "switchOffApiPath", switchOffApiPath("billing_bridge")),
   ],
+  "src/pages/Skills.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
+  "src/pages/Skills.tsx reviewPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/review", "reviewPath", reviewPath("d".repeat(64))),
+  ],
+  "src/pages/Skills.tsx assignPath(one.digest)": [
+    at("POST /api/v1/skills/{digest}/assignments", "assignPath", assignPath("d".repeat(64))),
+  ],
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
@@ -709,6 +730,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_webhook_routes", "test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused"),
     audit: WEBHOOK_LEDGER,
     behaviour: t("test_webhook_store", "test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out", true),
+  },
+  "POST /api/v1/skills": {
+    row: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),
+    audit: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),
+    behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+  },
+  "POST /api/v1/skills/{digest}/review": {
+    row: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),
+    audit: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),
+    behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+  },
+  "POST /api/v1/skills/{digest}/assignments": {
+    row: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
+    audit: t("test_skill_store", "test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobody_approved", true),
+    behaviour: t("test_skill_routes", "test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent"),
   },
   "POST /api/v1/agents/{agent_id}/automations": {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),

@@ -43,6 +43,7 @@ from brain.audit.record import (
     LegalHoldChange,
     RetentionChange,
     SignInChange,
+    SkillChange,
     subject,
 )
 from brain.audit.verify import (
@@ -387,6 +388,7 @@ CALLS: dict[str, dict[str, object]] = {
         "change": RetentionChange.RELEASED,
     },
     "legal_hold": {"hold_id": "h_dispute", "change": LegalHoldChange.PLACED},
+    "skill": {"name": "hosting-expiry", "digest": "d" * 64, "change": SkillChange.APPROVED},
 }
 
 

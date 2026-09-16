@@ -71,6 +71,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/Skills.tsx":
+    "Neither form is drawn with the page's usual answers, which offer no add and no approved skill. " +
+    "The add form's submit is disabled until packageProblem accepts a package, which " +
+    "tests/skills-page.test.tsx holds for an empty paste and an oversized one. The assign form's " +
+    "select holds only agents the API listed and its button is disabled without one.",
   "src/pages/Ask.tsx":
     "The question form cannot be sent blank by a person: its only submit button is disabled until " +
     "askBody accepts the text, and the field's maxLength stops a question longer than the route " +
