@@ -406,3 +406,26 @@ def test_every_registered_address_agrees_with_the_paths_the_console_uses() -> No
         assert entry.endswith(SIGNED_OUT_PATH), (
             f"{entry} is not where the console goes after signing out"
         )
+
+
+def test_every_required_action_names_the_provider_that_implements_it() -> None:
+    """**The realm imported and every sign-in to it failed.** Keycloak reads `providerId` to
+    find the factory for a required action and falls back to nothing when the key is absent, so
+    an entry carrying only `alias` imports as a required action whose provider is null. The
+    server then answers every authentication with "Unexpected error when handling authentication
+    request to identity provider" and logs `Unable to find factory for Required Action 'null'`.
+    Measured on a real install on 2026-09-16: the realm was healthy, the client was right, and
+    nobody could sign in.
+
+    The alias is checked against the provider deliberately: Keycloak's built-in actions use the
+    same string for both, so a mismatch is a typo in one of them, and a required action nobody
+    can build is indistinguishable from one nobody configured.
+
+    Delete this and the key can go missing again, with every test about roles, groups and
+    clients still green, because none of them asks whether the realm can authenticate."""
+    actions = _realm()["requiredActions"]
+
+    assert actions, "a realm with no required action asks nobody for a second factor"
+    for action in actions:
+        assert action.get("providerId"), action.get("alias")
+        assert action["providerId"] == action["alias"], action
