@@ -3295,7 +3295,13 @@
     "M42.5.12",
     "M42.5.13",
     "M42.5.14",
-    "M42.5.15"
+    "M42.5.15",
+    "M42.6.1",
+    "M42.6.2",
+    "M42.6.3",
+    "M42.6.4",
+    "M42.6.5",
+    "M42.6.6"
    ],
    "leaf_texts": [
     "Per-client variables in a separate private repository, one file per install, documented field by field",
@@ -3343,7 +3349,13 @@
     "A resumable install: closing the browser halfway continues where it stopped rather than starting the server again",
     "Every step validates before it advances and says what is wrong in words the person can act on",
     "A finishing screen that hands the person straight into the console already signed in, with nothing further to configure before the system answers a question",
-    "Installer output legible to a person: what it is doing, how far through it is, and what to do if a step fails"
+    "Installer output legible to a person: what it is doing, how far through it is, and what to do if a step fails",
+    "The administrative console is built by the release and served by the install, so an administrator has an address to open rather than a repository to build",
+    "The setup wizard writes what it collects, so a first install needs no hand-edited environment file for the values it asks for",
+    "A question can be asked and its answer read in the console, so an install proves itself end to end before any channel is connected",
+    "Console screens for skills: add a skill, see what it is trusted to reach, and assign it to an agent",
+    "Console screens for connectors: connect one, hold its credential in the vault, and see what it is trusted to read",
+    "A helper for a person who does not use a terminal: it asks for the server address and runs the one install command there"
    ],
    "leaf_waves": {
     "M42.4.1": 6,
