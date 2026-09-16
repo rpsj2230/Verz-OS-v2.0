@@ -63,6 +63,8 @@ export type Updates = components["schemas"]["UpdatesView"];
 /** The backup panel, or the admission that nothing looked. */
 export type Recovery = components["schemas"]["RecoveryView"];
 export type RecoveryPanel = components["schemas"]["RecoveryPanelView"];
+/** How a rehearsal is done here and the figures it is judged against. Sent on both shapes. */
+export type Rehearsal = components["schemas"]["RehearsalView"];
 
 /** The ceilings, and the throttling list when there is one. */
 export type Limits = components["schemas"]["LimitsView"];

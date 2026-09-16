@@ -39,6 +39,7 @@ from brain.console_static import (
     file_in_bundle,
     runtime_config,
 )
+from brain.docs_routes import COMING
 from tests.fixtures.http_client import Response
 
 REPO = Path(__file__).resolve().parents[2]
@@ -111,6 +112,22 @@ def test_a_console_sub_path_reloads_rather_than_404ing(served: TestClient) -> No
 
     Delete this and sign-in completes at the identity provider and lands on a missing page."""
     for path in ("/agents", "/records/invoice", "/approvals/s_1", "/auth/callback", "/deep/er"):
+        got: Response = served.get(path)
+        assert got.status_code == 200, path
+        assert ENTRY_MARK in got.text, path
+
+
+def test_an_address_the_tracker_reserved_reloads_as_the_console_once_there_is_one(
+    served: TestClient,
+) -> None:
+    """`brain.docs_routes` reserves `/ask` and `/me` with a "not built yet" page and promises the
+    link will not move. The console now serves both, and a route registered by that router is a
+    real route, so the fallback never sees a reload of either: the person who bookmarked their
+    workspace reloads it and is told it is not built.
+
+    Delete this and every reserved address shadows the console page that replaced it, which is
+    invisible from inside the console because a click inside it never asks the server."""
+    for path in COMING:
         got: Response = served.get(path)
         assert got.status_code == 200, path
         assert ENTRY_MARK in got.text, path

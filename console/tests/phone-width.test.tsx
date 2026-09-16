@@ -758,6 +758,14 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: {
       "/api/v1/install/recovery": {
+        rehearsal: {
+          every_days: 7,
+          copies_kept_days: 35,
+          promised_recovery_seconds: 7200,
+          manifest_ends: ".manifest.json",
+          record_ends: ".drill.json",
+          no_control_here: UNBROKEN,
+        },
         panel: {
           profile: "standard",
           copies: [
@@ -1079,6 +1087,132 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/govern/subscribers": SUBSCRIBERS },
+  },
+  // Artifacts. The identifiers are in the table, which scrolls; the kept rule and the hint are
+  // sentences outside it and must wrap. The unread state is a sentence too and is held in
+  // `tests/artifacts-page.test.tsx`.
+  "/artifacts": {
+    address: "/artifacts",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/artifacts": {
+        artifacts: [
+          {
+            artifact_id: UNBROKEN,
+            kind: "report",
+            agent_id: UNBROKEN,
+            produced_for: UNBROKEN,
+            produced_at: "2019-03-04T09:00:00Z",
+            state: "current",
+            superseded_by: "",
+            run_id: UNBROKEN,
+            agent_version: "3",
+            kept_as: "payload",
+            kept_until: "2019-04-03T09:00:00Z",
+            kept_because: UNBROKEN,
+          },
+        ],
+        unread: "",
+        kept_rule: UNBROKEN,
+      },
+    },
+  },
+  // Retention and erasure. A store name and a queue reason sit in the table; the served sentences,
+  // a cited hold and a finding sit outside it and must wrap. No control is pressed here: the
+  // confirmations are held in `tests/retention-page.test.tsx`.
+  "/retention": {
+    address: "/retention",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/retention": {
+        report: {
+          report_id: RUNG_ID,
+          at: "2019-03-04T09:00:00Z",
+          report_only: true,
+          complete: true,
+          failure: null,
+          released: false,
+          removed: 0,
+          removed_by_class: [],
+          held_by_class: [],
+          queued_by_class: [],
+          stores: [
+            {
+              store: UNBROKEN,
+              data_class: "metadata_ledger",
+              lifetime: "fixed_window",
+              days: 1825,
+              reached: true,
+              beyond_horizon: 1,
+              held: 0,
+              due: 1,
+              removed: 0,
+              queued: 0,
+              queued_because: UNBROKEN,
+              unreached_because: "",
+              oldest_days: 2000,
+            },
+          ],
+          holds: [{ hold_id: UNBROKEN, reason_code: "litigation", company_wide: false }],
+          findings: [UNBROKEN],
+        },
+      },
+      "/api/v1/govern/retention/controls": {
+        may_release: true,
+        may_hold: true,
+        releasing: UNBROKEN,
+        withdrawing: UNBROKEN,
+        holding: UNBROKEN,
+        lifting: UNBROKEN,
+        exports: UNBROKEN,
+        erasures: UNBROKEN,
+        kept: [{ data_class: UNBROKEN, lifetime: "fixed_window", days: 30, because: UNBROKEN }],
+      },
+    },
+  },
+  // My workspace. An agent id and an item id sit in tables that scroll; a memory statement, the
+  // disclosure line and every served sentence sit outside them and must wrap.
+  "/me": {
+    address: "/me",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/me/workspace": {
+        principal_id: UNBROKEN,
+        display_name: UNBROKEN,
+        asked: { since: "2019-03-01T00:00:00Z", questions: 3, corrections: UNBROKEN },
+        agents: [{ agent_id: UNBROKEN, provision: "provided", channels: [UNBROKEN], uses: 2 }],
+        agents_used_since: "2019-02-05T00:00:00Z",
+        budget: [
+          {
+            period: "month",
+            ceiling_minor: 4000,
+            spent_minor: 1000,
+            headroom_minor: 3000,
+            alerts_crossed: [],
+          },
+        ],
+        budget_unread: "",
+        knowledge: [{ item_id: UNBROKEN, level: "department", department: UNBROKEN }],
+        knowledge_truncated: false,
+        knowledge_not_shown: UNBROKEN,
+        learned: [
+          {
+            memory_id: "m_1",
+            statement: UNBROKEN,
+            stated: true,
+            confidence: 1,
+            formed_at: "2019-02-28T00:00:00Z",
+          },
+        ],
+        learned_undo: UNBROKEN,
+        can_ask_about: UNBROKEN,
+        accounts: UNBROKEN,
+        staleness: null,
+      },
+    },
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {

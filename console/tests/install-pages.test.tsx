@@ -538,6 +538,32 @@ describe("backup and recovery", () => {
     expect(valueBeside(container, "the last verified restore took")).toBeNull();
     expect(valueBeside(container, "a rehearsal is owed")).toBe("true");
   });
+
+  test("how to rehearse is drawn when nothing looked, and no control claims to run one", async () => {
+    // What breaks if this is deleted: the rehearsal card drops off the unread shape, which is the
+    // shape every install has today, and a reader of that state loses the one thing they can act
+    // on; or a button appears beside it, which is a drill control that runs nothing. M30.3.9 asks
+    // for one-click, and `brain.install_routes.NO_CONTROL_HERE_RUNS_A_REHEARSAL` is why it is not.
+    const container = await pageAnswering("Recovery", "Recovery", "/install/recovery", {
+      panel: null,
+      unread: sentinel("nobody-looked"),
+      rehearsal: {
+        every_days: 7,
+        copies_kept_days: 35,
+        promised_recovery_seconds: 7200,
+        manifest_ends: ".manifest.json",
+        record_ends: ".drill.json",
+        no_control_here: sentinel("no-control"),
+      },
+    });
+
+    expect(container.textContent).toContain(sentinel("nobody-looked"));
+    expect(container.textContent).toContain(sentinel("no-control"));
+    expect(valueBeside(container, "a rehearsal is owed every")).toBe("7 days");
+    expect(valueBeside(container, "the recovery time this profile promises")).toBe("7200s");
+    expect(valueBeside(container, "a rehearsal's record is named ending")).toBe(".drill.json");
+    expect(container.querySelectorAll("button, form")).toHaveLength(0);
+  });
 });
 
 // --- rate limits ------------------------------------------------------------------------------

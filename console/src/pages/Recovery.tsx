@@ -32,6 +32,14 @@
  * performs one, and `brain.console.recovery_view` declines that leaf in those words; a button
  * here would be this console deciding it from the side that renders.
  *
+ * **What the screen has instead is the rehearsal card, on both shapes of the answer.** How often
+ * a rehearsal is owed, how long a copy is kept, the recovery time this profile promises, what the
+ * two records are called, and `brain.install_routes.NO_CONTROL_HERE_RUNS_A_REHEARSAL` saying why
+ * nothing here runs one and where the procedure is. SCREEN 1 of `docs/screens.html` reports a
+ * drill as a measured time against a target; the target is on this card and the measured time is
+ * on the panel above it. It is drawn when nothing looked as well, because how to rehearse is the
+ * one thing a reader of that state can act on.
+ *
  * M27.7.26 is this screen and is deliberately not claimed, here or in the commit that adds
  * it. The leaf asks for the backup, the last verified restore and the drill, and on every
  * install today the page shows none of the three: nothing on the process that answers it
@@ -45,7 +53,13 @@ import { useResource } from "../api/useResource";
 import { Facts } from "../components/Facts";
 import { Chip } from "../ui/Chip";
 import { Notice } from "../ui/Notice";
-import { RECOVERY_API_PATH, readRecovery, wasRead, type Recovery as RecoveryBody } from "./installQuery";
+import {
+  RECOVERY_API_PATH,
+  readRecovery,
+  wasRead,
+  type Recovery as RecoveryBody,
+  type Rehearsal,
+} from "./installQuery";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
 export const SOMETHING_DID_NOT_WORK = "That did not work";
@@ -55,6 +69,45 @@ export const NOTHING_LOOKED = "Nothing here has looked at your copies";
 
 /** The heading over the records in the bucket that could not be read. */
 export const RECORDS_THAT_COULD_NOT_BE_READ = "Records that could not be read";
+
+/** The heading over how a rehearsal is done here. */
+export const REHEARSING_A_RESTORE = "Rehearsing a restore";
+
+/** The rehearsal card: figures read off the modules that decide them, and why there is no button. */
+function RehearsalCard({ rehearsal }: { readonly rehearsal: Rehearsal }) {
+  return (
+    <section className="card">
+      <h2>{REHEARSING_A_RESTORE}</h2>
+      <p>{rehearsal.no_control_here}</p>
+      <dl className="fields" aria-label={REHEARSING_A_RESTORE}>
+        <div className="fields__row">
+          <dt>a rehearsal is owed every</dt>
+          <dd>{`${String(rehearsal.every_days)} days`}</dd>
+        </div>
+        <div className="fields__row">
+          <dt>the recovery time this profile promises</dt>
+          <dd>{`${String(rehearsal.promised_recovery_seconds)}s`}</dd>
+        </div>
+        <div className="fields__row">
+          <dt>a copy is kept for</dt>
+          <dd>{`${String(rehearsal.copies_kept_days)} days`}</dd>
+        </div>
+        <div className="fields__row">
+          <dt>a copy's record is named ending</dt>
+          <dd>
+            <code>{rehearsal.manifest_ends}</code>
+          </dd>
+        </div>
+        <div className="fields__row">
+          <dt>a rehearsal's record is named ending</dt>
+          <dd>
+            <code>{rehearsal.record_ends}</code>
+          </dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
 
 export function Recovery() {
   const answer = useResource<RecoveryBody>(RECOVERY_API_PATH);
@@ -162,6 +215,10 @@ export function Recovery() {
           ))}
         </>
       ) : null}
+
+      {answer.data?.rehearsal === null || answer.data?.rehearsal === undefined ? null : (
+        <RehearsalCard rehearsal={answer.data.rehearsal} />
+      )}
     </article>
   );
 }

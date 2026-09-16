@@ -154,10 +154,13 @@ from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.deployment.release_feed import ReleaseWatch, feed_address
 from brain.ops.admission import Ceiling
-from brain.ops.backup_manifest import read_drills, read_manifests
+from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
 from brain.ops.install_from_empty import read_plan
 from brain.ops.limits import Limit, LimiterState, ceilings
+from brain.ops.recovery import DRILL_INTERVAL_DAYS
 from brain.ops.release_manifest import read_manifest
+from brain.ops.reliability import recovery_objective
+from brain.ops.retention import BACKUP_RETENTION_DAYS
 from brain.settings import Settings
 
 log = structlog.get_logger()
@@ -264,6 +267,25 @@ NOTHING_HERE_ENUMERATES_THE_LIVE_WINDOWS: Final = (
     "right now cannot be read here: the store that holds the counting windows answers about a "
     "window it is handed and offers no way to ask which windows exist. An empty list would "
     "read as nobody being throttled, so there is none."
+)
+
+
+#: Why the recovery screen has no control that runs a rehearsal, as the screen says it.
+#:
+#: M30.3.9 asks for a one-click drill. A rehearsal loads a copy into a scratch database beside the
+#: containers and asks the restored copy its checks, and nothing this process runs can start a
+#: container: a button here would render and reach nothing, which `docs/admin-console.md` calls
+#: worse than no control. So the screen says how a rehearsal is done and what it reads afterwards,
+#: and the leaf stays open. `tests/unit/test_install_drill_page.py` goes red on the day a tool
+#: whose name carries "drill" is registered, which is the day this sentence has to change.
+NO_CONTROL_HERE_RUNS_A_REHEARSAL: Final = (
+    "There is no control on this screen that runs a rehearsal, because nothing this system runs "
+    "can do one: a rehearsal loads your newest copy into a scratch database beside your "
+    "containers, checks the schema is complete, asks it a question you know the answer to and "
+    "checks it still refuses what it should. It is done on the server by hand, following the "
+    "restore drill page in the install documentation that came with this release. Its record is "
+    "written beside the copy it read, and that record is what this screen reads once this system "
+    "can read where your copies are kept."
 )
 
 
@@ -541,6 +563,40 @@ class RecoveryPanelView(BaseModel):
     unreadable: list[UnreadableView]
 
 
+class RehearsalView(BaseModel):
+    """How a rehearsal is done here and the figures it is judged against, for the screen's
+    "rehearsal" card.
+
+    Every figure is read off the module that decides it: the interval `brain.ops.recovery` owes a
+    rehearsal on, the days `brain.ops.retention` keeps a copy, the recovery time the profile
+    promises and the two record names `brain.ops.backup_manifest` reads. Declared values, the same
+    whether or not anything has been copied, so this travels on both shapes of `RecoveryView`.
+    SCREEN 1 of `docs/screens.html` reports a drill as a measured time "against a 2 hour target";
+    `promised_recovery_seconds` is that target.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    every_days: int
+    copies_kept_days: int
+    promised_recovery_seconds: int
+    manifest_ends: str
+    record_ends: str
+    no_control_here: str
+
+
+def rehearsal_view(profile: str) -> RehearsalView:
+    """The rehearsal card for one profile. Refuses a profile nothing promises an objective for."""
+    return RehearsalView(
+        every_days=DRILL_INTERVAL_DAYS,
+        copies_kept_days=BACKUP_RETENTION_DAYS,
+        promised_recovery_seconds=recovery_objective(profile).rto_seconds,
+        manifest_ends=MANIFEST_SUFFIX,
+        record_ends=DRILL_SUFFIX,
+        no_control_here=NO_CONTROL_HERE_RUNS_A_REHEARSAL,
+    )
+
+
 class RecoveryView(BaseModel):
     """The recovery panel, or the admission that nothing here looked.
 
@@ -555,6 +611,8 @@ class RecoveryView(BaseModel):
     panel: RecoveryPanelView | None = None
     #: Why there is no panel. Required when there is none, and empty when there is one.
     unread: str = ""
+    #: How a rehearsal is done and what it is judged against. Set by the route on both shapes.
+    rehearsal: RehearsalView | None = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> RecoveryView:
@@ -910,12 +968,17 @@ async def recovery(request: Request, asked: Asked) -> RecoveryView:
     produce a panel confident about rehearsals and cautious about copies.
 
     There is no drill control here. M30.3.9 asks for one, it is a write, and
-    `brain.console.recovery_view` declines the leaf in those words.
+    `brain.console.recovery_view` declines the leaf in those words. What the screen gets instead
+    is `rehearsal`, on both shapes: how a rehearsal is done by hand and the figures it is judged
+    against. See `NO_CONTROL_HERE_RUNS_A_REHEARSAL`.
     """
     _permitted(asked.reach, "recovery", asked.now)
+    rehearsal = rehearsal_view(settings_of(request).profile)
     objects = backup_objects_of(request)
     if objects is None:
-        return RecoveryView(panel=None, unread=NOTHING_HERE_READS_THE_BACKUP_BUCKET)
+        return RecoveryView(
+            panel=None, unread=NOTHING_HERE_READS_THE_BACKUP_BUCKET, rehearsal=rehearsal
+        )
     # Read twice rather than once into a list, because the two readers filter the bucket by
     # different suffixes and a caller holding one listing would have to know that. Both halves
     # are handed to the panel together for the reason `recovery_panel` gives about its own
@@ -932,7 +995,8 @@ async def recovery(request: Request, asked: Asked) -> RecoveryView:
                 now=asked.now,
                 unreadable=(*bad_manifests, *bad_drills),
             )
-        )
+        ),
+        rehearsal=rehearsal,
     )
 
 

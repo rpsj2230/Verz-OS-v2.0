@@ -54,6 +54,9 @@ import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
+import { Artifacts } from "./pages/Artifacts";
+import { MyWorkspace } from "./pages/MyWorkspace";
+import { Retention } from "./pages/Retention";
 import { AccessReview } from "./pages/AccessReview";
 import { Departments } from "./pages/Departments";
 import { Elevation } from "./pages/Elevation";
@@ -233,6 +236,10 @@ export const routes: RouteObject[] = [
       // one and no history entry that could keep one. Eager rather than split, because the
       // page mounts neither heavy library and imports no stylesheet of its own.
       { path: "ask", element: <Ask /> },
+      // My workspace, SCREEN 12, at the address the design draws for it. One path and no
+      // parameter, because the page is about the person asking and `brain.mine_routes` takes
+      // nothing that could name anybody else. See `pages/MyWorkspace.tsx`.
+      { path: "me", element: <MyWorkspace /> },
       // Two paths and one component. The entity is a path segment rather than a query
       // parameter because it is what the screen is about, and the same screen with none
       // named is where somebody arrives from the menu: it has the form and no grid, because
@@ -359,6 +366,14 @@ export const routes: RouteObject[] = [
       // tab inside an agent, although SCREEN 13 draws it there: see `pages/Memory.tsx`.
       { path: "memory", element: <Memory /> },
       { path: "memory/:subject", element: <Memory /> },
+      // Artifacts, at the screen's key in `brain.console.screens` so
+      // `brain.ops.console_screens.routed_screen_keys` matches this address. One path: an artifact
+      // has no page of its own, and on every install today the screen is a sentence saying nothing
+      // records one. See `pages/Artifacts.tsx`. Eager, for `Roles`' reason.
+      { path: "artifacts", element: <Artifacts /> },
+      // Retention and erasure, at the screen's key. One path: the report, the release, the legal
+      // holds, the windows and the two unrecorded lists are one page. See `pages/Retention.tsx`.
+      { path: "retention", element: <Retention /> },
       { path: "capabilities", element: <Capabilities /> },
       { path: "scopes", element: <Scopes /> },
       { path: "*", element: <NotFound /> },

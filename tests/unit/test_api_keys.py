@@ -380,6 +380,7 @@ def test_no_rest_api_is_served_and_the_module_says_so() -> None:
 
     Delete this and the tracker keeps saying a REST API was delivered."""
     from brain.app import Settings, create_app
+    from brain.docs_routes import COMING
 
     app = create_app(Settings(env="development", run_migrations=False))
     served = {path for route in app.routes if (path := getattr(route, "path", None)) is not None}
@@ -401,6 +402,10 @@ def test_no_rest_api_is_served_and_the_module_says_so() -> None:
     # tuple above. Neither is a REST API: one serves the built console's entry document and the
     # other serves the installation's issuer and client id to it. See `brain.console_static`.
     console_exactly = {"/", "/api/console.js"}
+    # And, when this tree carries a built bundle, every address the build tracker reserved, each
+    # answered with the console's entry document rather than a "not built yet" page. Pages, not an
+    # API. See `brain.console_static.A_RESERVED_ADDRESS_YIELDS_TO_THE_CONSOLE_THAT_REPLACED_IT`.
+    console_exactly |= set(COMING)
     unexpected = sorted(
         p for p in served if p not in console_exactly and not p.startswith(expected_prefixes)
     )

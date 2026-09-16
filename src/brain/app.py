@@ -50,6 +50,7 @@ from brain.api import ErrorBody, TimeoutMiddleware
 from brain.api_routes import GateWiring
 from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
+from brain.artifact_routes import router as artifact_router
 from brain.audit.ledger import TRACE_ID
 from brain.audit.record import LedgerWriter
 from brain.audit_routes import router as audit_router
@@ -70,6 +71,7 @@ from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
 from brain.docs_routes import router as docs_router
+from brain.erasure_routes import router as erasure_router
 from brain.estate_routes import router as estate_router
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
@@ -90,6 +92,7 @@ from brain.install import InstallError, installed_name
 from brain.install_routes import router as install_router
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
+from brain.mine_routes import router as mine_router
 from brain.operate_routes import router as operate_router
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credentials import credentials_at_start
@@ -780,6 +783,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # every write needs its authority over everything, and the report is shown whole to a
     # company-wide reader and to nobody else. See `brain.retention_routes`.
     app.include_router(retention_router)
+    # What the Retention screen needs beside the report: who may act, what each act does in the
+    # words a confirmation shows, and the export log and deletion queue this install does not
+    # record. Read-only; the writes are `brain.retention_routes`'. See `brain.erasure_routes`.
+    app.include_router(erasure_router)
+    # The Artifacts screen. A list only when something attached records what an agent produced,
+    # and a sentence saying nothing does until then. See `brain.artifact_routes`.
+    app.include_router(artifact_router)
+    # My workspace, the member screen `home`: what the person asking has asked, kept and been
+    # given, gated on the member grant and on nothing administrative. See `brain.mine_routes`.
+    app.include_router(mine_router)
     # The four Govern screens, and the two writes over a grant. A router of its own because
     # what it answers about is the permission system itself: whether a screen opens is
     # `brain.console.reads.permitted` rather than a bare capability, so an existence-only

@@ -124,6 +124,8 @@ const GROUPS: readonly NavGroup[] = [
       // under Govern in `brain.console.screens` and is read per person, so it sits under the
       // design's own Govern entries rather than inventing a place. See `pages/Memory.tsx`.
       { to: "/memory", label: "Memory" },
+      { to: "/artifacts", label: "Artifacts" },
+      { to: "/retention", label: "Retention and erasure" },
       { to: "/audit", label: "Audit" },
       { to: "/subscribers", label: "Subscribers and notifications" },
       { to: "/classification", label: "Classification" },
@@ -144,6 +146,7 @@ const GROUPS: readonly NavGroup[] = [
     heading: "Use",
     sections: [
       { to: "/ask", label: "Ask" },
+      { to: "/me", label: "My workspace" },
       { to: "/approvals", label: "Approvals" },
       { to: "/records", label: "Records" },
     ],

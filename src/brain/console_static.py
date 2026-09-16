@@ -79,6 +79,7 @@ from fastapi.responses import FileResponse, Response
 from starlette.types import Receive, Scope, Send
 
 from brain.api import API_PREFIX
+from brain.docs_routes import COMING
 from brain.install import InstallError, value_of
 
 #: Where the built console lives, relative to the installed package.
@@ -102,6 +103,16 @@ CONSOLE_CONFIG_PATH: Final = "/api/console.js"
 
 #: The global the document assigns and `console/src/config.ts` reads.
 CONSOLE_CONFIG_GLOBAL: Final = "__BRAIN_CONFIG__"
+
+#: Why an install carrying a console answers the tracker's reserved addresses with the console.
+A_RESERVED_ADDRESS_YIELDS_TO_THE_CONSOLE_THAT_REPLACED_IT: Final = (
+    "brain.docs_routes answers /ask and /me with a page saying the screen is not built and "
+    "promising the link will not move. Once the image carries a console, that page is a real "
+    "route in front of the console's own: a click inside the console never asks the server, so "
+    "nobody notices until they reload the page, and then the screen they were using says it "
+    "does not exist. An install with no bundle keeps the reserved pages, because there the "
+    "promise is still the truth."
+)
 
 #: The methods a browser asks a page for, and the only ones the fallback answers.
 #:
@@ -259,6 +270,18 @@ def mount_console_entry(app: FastAPI) -> None:
     @app.get("/", include_in_schema=False)
     async def console_root() -> Response:
         return _entry_response(entry)
+
+    # Every address the build tracker reserved with a "not built yet" page, claimed for the same
+    # reason as `/` and in the same place. `brain.docs_routes` registers each as a real route, so
+    # the fallback below never sees a reload of `/ask` or `/me` and the person reloading their own
+    # workspace was told it is not built. Read off `COMING` rather than listed, so an address
+    # reserved there later yields to the console here without anybody remembering this file. See
+    # `A_RESERVED_ADDRESS_YIELDS_TO_THE_CONSOLE_THAT_REPLACED_IT`.
+    async def console_page() -> Response:
+        return _entry_response(entry)
+
+    for reserved in COMING:
+        app.add_api_route(reserved, console_page, methods=["GET"], include_in_schema=False)
 
 
 def mount_console_fallback(app: FastAPI) -> None:

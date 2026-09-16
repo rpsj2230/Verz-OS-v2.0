@@ -77,9 +77,11 @@ from brain.install_routes import (
     RecoveryView,
     updates_view,
 )
+from brain.ops.install_docs import drill_figures
 from brain.ops.limits import Limit, LimiterState, LimitScope
 from brain.ops.recovery import Coverage
 from brain.ops.release_manifest import ReleaseManifest
+from brain.ops.reliability import recovery_objective
 from brain.settings import settings_from
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
@@ -1204,3 +1206,60 @@ def test_the_screen_attaches_one_watch_and_keeps_it() -> None:
 
     assert isinstance(first, ReleaseWatch)
     assert second is first
+
+
+# --- the rehearsal card, and the control that is not there -------------------------------------
+def test_the_recovery_screen_says_how_a_rehearsal_is_done_whether_or_not_anything_looked(
+    client: TestClient,
+) -> None:
+    """M30.3.9 asks for a one-click drill and nothing this process runs can perform one, so the
+    screen gets the figures a rehearsal is judged against and the sentence saying why there is no
+    control, on both shapes of the answer.
+
+    The figures are held against `brain.ops.install_docs.drill_figures`, which the restore drill
+    page is itself held against, and the recovery time against the profile's own objective, so the
+    screen, the page an administrator follows and the promise cannot say three different things.
+
+    Delete this and the card can drop off the unread shape, which is the shape every install has,
+    or state an interval the drill page does not."""
+    unread = get(client, "u_wide", RECOVERY_PATH).json()
+    app = _app()
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.backup_objects = bucket_holding(
+            manifest_object(coverage=Coverage.DATABASE, at=LONG_AGO)
+        )
+        read = get(c, "u_wide", RECOVERY_PATH).json()
+
+    figures = dict(drill_figures())
+    for body in (unread, read):
+        card = body["rehearsal"]
+        assert card is not None
+        assert str(card["every_days"]) == figures["Days between rehearsals"]
+        assert str(card["copies_kept_days"]) == figures["Days a copy is kept"]
+        assert card["manifest_ends"] == figures["A copy's manifest name ends"]
+        assert card["record_ends"] == figures["A drill record's name ends"]
+        assert (
+            card["promised_recovery_seconds"]
+            == recovery_objective(Settings(env="development").profile).rto_seconds
+        )
+        assert "no control" in card["no_control_here"]
+
+
+def test_the_recovery_screen_accepts_no_write_and_no_route_offers_a_drill() -> None:
+    """A drill button that cannot run a drill must not exist, and the API half of that is that the
+    recovery address takes only a read and no address anywhere offers a rehearsal to press.
+
+    Held over the application's own OpenAPI document rather than this router, so a drill route
+    added by another module is caught as well. Delete this and a POST that starts nothing could
+    be added beside the recovery panel, and a console would draw it as a control that works."""
+    paths = _app().openapi()["paths"]
+
+    assert set(paths[RECOVERY_PATH]) == {"get"}
+    offered = [
+        path
+        for path, operations in paths.items()
+        if set(operations) - {"get"}
+        and any(word in path for word in ("drill", "rehears", "restore"))
+    ]
+    assert offered == []
