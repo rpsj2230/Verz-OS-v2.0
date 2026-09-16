@@ -724,6 +724,10 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         # These seven are not registry entries and never will be, so they are counted here and
         # excluded from the comparison below rather than left to make the registry look short.
         "M27.7": 29,  # screens in the browser, one leaf per screen
+        # The standard the console is held to, set by the owner on 2026-09-16 and written
+        # into docs/admin-console.md: the audit, the house rules every screen follows, the
+        # areas nothing manages yet, and the proof that a control reaches the system.
+        "M27.8": 17,  # one console an administrator runs the company from
     }
 
     every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}
