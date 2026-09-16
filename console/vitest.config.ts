@@ -41,6 +41,12 @@ export default defineConfig({
     globals: false,
     include: ["tests/**/*.test.ts", "tests/**/*.test.tsx"],
     setupFiles: ["tests/setup.ts"],
+    // Vitest's default is five seconds per test. The suite passed a thousand tests on
+    // 2026-09-17 and runs its files in parallel, and on that day two tests that pass alone in
+    // under a second (the navigation-resolves loop and skip-to-answer) ran past five seconds on
+    // a loaded machine. A ceiling that fails a passing test under load is a red build with no
+    // defect behind it, and on this repository a red CI holds the deploy.
+    testTimeout: 20_000,
     restoreMocks: true,
     unstubGlobals: true,
     unstubEnvs: true,
