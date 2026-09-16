@@ -92,6 +92,7 @@ from brain.identity.lifecycle import (
     entitlement_keys,
     knowledge_reach_after,
     old_answers_are_unreachable,
+    placements_ending,
     plan_for,
     provision,
     reach_changed,
@@ -102,6 +103,7 @@ from brain.identity.lifecycle import (
     welcome_questions,
 )
 from brain.identity.oidc import MappedIdentity
+from brain.identity.organisation_sync import HeldLead, HeldMembership
 from brain.identity.packs import SubjectGrant, resolve_entitlement, subtractive_state
 from brain.identity.roles import (
     ROLE_SPECS,
@@ -1633,6 +1635,44 @@ def test_every_transition_rewrites_the_audit_reach_of_a_head_who_was_no_part_of_
             plan.reason_at(Surface.HEAD_AUDIT_REACH)
             == lifecycle.A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW
         ), transition
+
+
+def test_every_transition_reaches_where_somebody_sits_and_a_move_keeps_the_new_department() -> None:
+    """M27.7.4 through the lifecycle. A join writes the placements a source asserts, a move replaces
+    them, a departure ends them, and `placements_ending` says which rows: none for a join, every one
+    for a departure, and for a move every team membership and lead outside the department moved to.
+
+    Delete this and `Surface.ORGANISATION` can be dropped from a plan's decisions with a reason that
+    sounds right, and a leaver goes on being listed in a team on the page an access review is read
+    against; or a move within a department takes somebody out of their own team.
+    """
+    for transition, action in (
+        (Transition.JOIN, Action.WRITE),
+        (Transition.MOVE, Action.REPLACE),
+        (Transition.LEAVE, Action.DELETE),
+    ):
+        plan = plan_for(transition)
+        assert plan.action_at(Surface.ORGANISATION) is action, transition
+        assert (
+            plan.reason_at(Surface.ORGANISATION)
+            == lifecycle.WHERE_SOMEBODY_SITS_FOLLOWS_THE_JOB_THEY_SIT_THERE_FOR
+        )
+
+    held = (
+        HeldMembership(team="web.design", principal_id="u_1", added_by="u_admin"),
+        HeldMembership(team="sales.accounts", principal_id="u_1", added_by="roster.lark"),
+    )
+    led = (
+        HeldLead(department="web", principal_id="u_1", appointed_by="u_admin"),
+        HeldLead(department="sales", principal_id="u_1", appointed_by="u_admin"),
+    )
+
+    def ending(transition: Transition) -> tuple[object, object]:
+        return placements_ending(transition, department_after="sales", memberships=held, leads=led)
+
+    assert ending(Transition.JOIN) == ((), ())
+    assert ending(Transition.LEAVE) == (held, led)
+    assert ending(Transition.MOVE) == ((held[0],), (led[0],))
 
 
 # ==================================================== the package invariants

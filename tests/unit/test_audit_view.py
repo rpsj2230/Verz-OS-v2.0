@@ -41,10 +41,12 @@ from brain.audit.record import (
     AuditRecorder,
     ConnectorChange,
     DenyReason,
+    ElevationChange,
     ErasureChange,
     InstructionsChange,
     LegalHoldChange,
     MemoryChange,
+    OrganisationChange,
     RetentionChange,
     RoutingChange,
     SettingChange,
@@ -411,6 +413,17 @@ CALLS: dict[str, dict[str, object]] = {
     "webhook": {"subscriber_id": "billing_bridge", "change": WebhookChange.SECRET_REPLACED},
     "erasure": {"request_id": "r-1", "change": ErasureChange.INCOMPLETE},
     "memory": {"memory_id": "m_learnt", "change": MemoryChange.SUPERSEDED},
+    "organisation": {
+        "principal_id": "u_weiling",
+        "change": OrganisationChange.JOINED,
+        "team": "web.design",
+    },
+    "elevation": {
+        "principal_id": "u_weiling",
+        "change": ElevationChange.REQUESTED,
+        "capability": cap("read:client.name"),
+        "reason": "incident_response",
+    },
 }
 
 

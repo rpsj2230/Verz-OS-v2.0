@@ -37,7 +37,7 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21
+Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8
 """
 
 from __future__ import annotations
@@ -170,6 +170,8 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "webhook": AuditAction.WEBHOOK,
         "erasure": AuditAction.ERASURE,
         "memory": AuditAction.MEMORY,
+        "organisation": AuditAction.ORGANISATION,
+        "elevation": AuditAction.ELEVATION,
     }
 )
 
@@ -322,6 +324,34 @@ class MemoryChange(enum.StrEnum):
 
     SUPERSEDED = "superseded"
     DEMOTED = "demoted"
+
+
+class OrganisationChange(enum.StrEnum):
+    """What happened to where somebody sits. The four values `0062`'s triggers write."""
+
+    JOINED = "joined"
+    LEFT = "left"
+    APPOINTED = "appointed"
+    STOOD_DOWN = "stood_down"
+
+
+#: Which of the four changes are about a team, and which about leading a department. Two sets
+#: rather than a property on the enum, so `organisation` can refuse a team change naming a
+#: department and the reverse, which is the pair of details `0062`'s two triggers never mix.
+TEAM_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
+    {OrganisationChange.JOINED, OrganisationChange.LEFT}
+)
+LEAD_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
+    {OrganisationChange.APPOINTED, OrganisationChange.STOOD_DOWN}
+)
+
+
+class ElevationChange(enum.StrEnum):
+    """What happened to an elevation request. The three values `0062`'s trigger writes."""
+
+    REQUESTED = "requested"
+    APPROVED = "approved"
+    DENIED = "denied"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -952,4 +982,68 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.MEMORY, subject("memory", memory_id), {"change": change.value}
+        )
+
+    def organisation(
+        self,
+        *,
+        principal_id: str,
+        change: OrganisationChange,
+        team: str = "",
+        department: str = "",
+    ) -> AuditEntry:
+        """Record that somebody was placed in a team or taken out, or made a lead or stood down.
+
+        Written in a deployed database by `0062`'s triggers on `gate.team_membership` and
+        `gate.department_lead`, on the insert and on the update that ends the row, and held to this
+        method's details by a test. The subject is the person, so every change to where somebody
+        sits is on their own subject. `team` is the team's path, `<department>.<team>`, which is a
+        field name to the ledger and survives redaction; `department` is a department's slug.
+
+        Exactly one of the two, and the one the change is about: a join or a departure names a
+        team, an appointment or a standing down names a department. The triggers never mix them,
+        and an entry that did would say somebody left a department they were never a member of.
+        """
+        about_team = change in TEAM_CHANGES
+        if about_team != bool(team) or about_team == bool(department):
+            msg = (
+                f"a {change.value} change names a {'team' if about_team else 'department'} and "
+                f"only that, and this names team={team!r} and department={department!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        if about_team:
+            details["team"] = team
+        else:
+            details["department"] = department
+        return self._write(AuditAction.ORGANISATION, subject("principal", principal_id), details)
+
+    def elevation(
+        self,
+        *,
+        principal_id: str,
+        change: ElevationChange,
+        capability: Capability,
+        reason: str,
+    ) -> AuditEntry:
+        """Record that somebody asked for more than they hold, or that it was approved or denied.
+
+        Written in a deployed database by `0062`'s trigger on `gate.elevation_request`, on the
+        insert and on the one update that decides it, and held to this method's details by a
+        test. The subject is the person who asked, whoever the actor is: the requester for a
+        request, and the decider for an approval or a denial, which the table refuses to be the
+        same person. The capability is recordable by name for `_is_recordable`'s reason about a
+        capability, and the reason is a code from `brain.identity.roles.BreakGlassReason`, never
+        the sentence the requester typed, which stays on the row.
+
+        An approval is recorded here and, separately, as the GRANT `0003`'s trigger writes for the
+        grant row the approval inserts: the first is the decision and the second is the reach.
+        """
+        if not _REASON_CODE_RE.match(reason):
+            msg = f"{reason!r} is not a reason code, and the ledger would keep the marker instead"
+            raise ValueError(msg)
+        return self._write(
+            AuditAction.ELEVATION,
+            subject("principal", principal_id),
+            {"change": change.value, "capability": capability.value, "reason": reason},
         )

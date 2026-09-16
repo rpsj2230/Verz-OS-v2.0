@@ -42,8 +42,10 @@ UPDATE and the version moves. A hard `DELETE FROM gate.capability_grant` would r
 without bumping anything, and `brain.gate.resolve` would go on serving the pre-revocation set
 for the length of `CACHE_TTL_SECONDS`. The second way it fails is a grant-bearing table with no
 trigger on it: `resolve_entitlement` reaches a person through `TeamMembership` as well as
-through their own rows, and there is no `team_membership` table yet, so whoever builds it has
-to put a bump trigger on it or a mover's team change will not invalidate anything.
+through their own rows. `gate.team_membership` exists since `0062` and carries no bump trigger,
+because `gate.resolve_entitlements` does not read it and no grant table has a team subject yet:
+the day one does, the bump belongs on the membership table in the same migration, or a mover's
+team change will not invalidate anything.
 
 **Delegations are suspended and never narrowed, and the difference is consent.** Somebody
 delegated a specific thing. Narrowing it when their delegator moves would leave them doing a
@@ -117,6 +119,7 @@ names the module rather than picking it up from a package import.
 
 Task ids: M26.1.1, M26.1.2, M26.1.3, M26.1.4, M26.2.1, M26.2.2, M26.2.3
 Task ids: M26.2.4, M26.2.5, M26.2.6, M26.3.1, M26.3.2, M26.3.3, M26.3.4, M26.3.5
+Task ids: M27.7.4
 """
 
 from __future__ import annotations
@@ -140,6 +143,7 @@ from brain.core.scope_sql import scope_narrows
 from brain.gate.cache_key import key_for as answer_cache_key
 from brain.gate.resolve import cache_key as entitlement_cache_key
 from brain.identity.oidc import MappedIdentity
+from brain.identity.organisation_sync import HeldLead, HeldMembership
 from brain.identity.packs import (
     CapabilityPack,
     PackAssignment,
@@ -317,6 +321,10 @@ class Surface(enum.StrEnum):
     #: not part of the transition. Nothing in the enum covered that, which is why it is a
     #: member rather than a line inside `GRANTS`.
     HEAD_AUDIT_REACH = "head_audit_reach"
+    #: The teams somebody is in and the department they lead: `gate.team_membership` and
+    #: `gate.department_lead`. Where they sit, which confers nothing and still has to follow them,
+    #: because it is the directory everybody else's access is reviewed against.
+    ORGANISATION = "organisation"
 
 
 class Action(enum.StrEnum):
@@ -555,6 +563,17 @@ A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW: Final = 
     "how stale on the page."
 )
 
+#: Why a transition reaches where somebody sits, although nothing there confers anything (M27.7.4).
+WHERE_SOMEBODY_SITS_FOLLOWS_THE_JOB_THEY_SIT_THERE_FOR: Final = (
+    "A team membership and a department's lead confer nothing, so leaving one stale revokes "
+    "nothing. It still misleads, and in the worst place: the Departments and teams screen is the "
+    "directory an access review is read against, and a leaver still listed in a team, or a mover "
+    "still leading the department they left, is a reviewer reading the wrong org chart. So a join "
+    "writes the placements the source asserts, a move ends every placement outside the department "
+    "moved to and writes the new ones, and a departure ends all of them. placements_ending decides "
+    "which, and brain.identity.organisation_sync writes them where a source is trusted to say."
+)
+
 #: The arguments that may stand behind `Action.NOTHING`. A step claiming a transition need
 #: not reach a surface has to name one of these, so the claim comes with its reason attached
 #: in the module rather than in a commit message somebody has to find.
@@ -697,6 +716,11 @@ JOIN_PLAN: Final = Plan(
             Action.REPLACE,
             A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW,
         ),
+        Step(
+            Surface.ORGANISATION,
+            Action.WRITE,
+            WHERE_SOMEBODY_SITS_FOLLOWS_THE_JOB_THEY_SIT_THERE_FOR,
+        ),
     ),
 )
 
@@ -736,6 +760,11 @@ MOVE_PLAN: Final = Plan(
             Action.REPLACE,
             A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW,
         ),
+        Step(
+            Surface.ORGANISATION,
+            Action.REPLACE,
+            WHERE_SOMEBODY_SITS_FOLLOWS_THE_JOB_THEY_SIT_THERE_FOR,
+        ),
     ),
 )
 
@@ -765,8 +794,48 @@ LEAVE_PLAN: Final = Plan(
             Action.REPLACE,
             A_HEADS_AUDIT_REACH_NAMES_PEOPLE_SO_A_MOVE_REWRITES_SOMEBODY_ELSES_ROW,
         ),
+        Step(
+            Surface.ORGANISATION,
+            Action.DELETE,
+            WHERE_SOMEBODY_SITS_FOLLOWS_THE_JOB_THEY_SIT_THERE_FOR,
+        ),
     ),
 )
+
+
+def placements_ending(
+    transition: Transition,
+    *,
+    department_after: str | None,
+    memberships: Iterable[HeldMembership],
+    leads: Iterable[HeldLead],
+) -> tuple[tuple[HeldMembership, ...], tuple[HeldLead, ...]]:
+    """The team memberships and leads one person's transition ends (M27.7.4).
+
+    Handed that person's live placements. A join ends nothing: somebody joining holds none, and a
+    returner's were ended when they left. A departure ends every one. A move ends every membership
+    of a team outside `department_after`, read off the team's own path, and every lead of a
+    department that is not `department_after`, and keeps the rest, because moving within a
+    department is not leaving its teams. Whoever made a placement, the console or a sync, it ends:
+    the transition is about the person, which is where
+    `brain.identity.organisation_sync.THE_SYNC_ENDS_ONLY_THE_PLACEMENTS_IT_MADE` stops applying.
+
+    See `WHERE_SOMEBODY_SITS_FOLLOWS_THE_JOB_THEY_SIT_THERE_FOR`.
+    """
+    held = tuple(memberships)
+    led = tuple(leads)
+    match transition:
+        case Transition.JOIN:
+            return (), ()
+        case Transition.LEAVE:
+            return held, led
+        case Transition.MOVE:
+            return (
+                tuple(one for one in held if one.team.partition(".")[0] != department_after),
+                tuple(one for one in led if one.department != department_after),
+            )
+        case _:  # pragma: no cover - unreachable while Transition is exhaustive
+            assert_never(transition)
 
 
 def plan_for(transition: Transition) -> Plan:

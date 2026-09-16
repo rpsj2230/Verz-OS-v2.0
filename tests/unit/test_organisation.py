@@ -14,14 +14,21 @@ from datetime import UTC, datetime
 
 from brain.console.organisation import (
     ORGANISATION_ROWS,
+    ORGANISING_AUTHORITY,
     Department,
+    Lead,
     Member,
+    Membership,
     Organisation,
     Team,
+    may_appoint,
+    may_organise,
+    may_place,
     organisation,
     organisation_gaps,
 )
 from brain.console.reads import Plane, plane_capability
+from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 
@@ -163,3 +170,78 @@ def test_no_row_on_the_page_can_carry_a_count() -> None:
         hidden_count: int
 
     assert organisation_gaps(rows=(*ORGANISATION_ROWS, Counted)) != ()
+
+
+# ---------------------------------------------------------------- members, leads, writes
+
+MEMBERSHIPS = (
+    Membership(department="web", team="design", principal_id="u_2"),
+    Membership(department="web", team="design", principal_id="u_3"),
+    Membership(department="web", team="projects", principal_id="u_9"),
+)
+LEADS = (Lead(department="web", principal_id="u_3"), Lead(department="finance", principal_id="u_3"))
+
+
+def placed_page(entitlement: EntitlementSet) -> Organisation:
+    return organisation(
+        DEPARTMENTS, TEAMS, MEMBERS, entitlement, NOW, memberships=MEMBERSHIPS, leads=LEADS
+    )
+
+
+def test_a_teams_members_and_a_lead_are_listed_for_a_reader_who_may_name_them() -> None:
+    """M27.7.4, who belongs to each. Delete this and a team lists nobody when its members are
+    recorded, a membership naming somebody no row carries puts an id on the page, or a lead is
+    dropped for the reader who may see them."""
+    page = placed_page(EVERYTHING)
+    web = page.departments[1]
+
+    assert [(team.slug, [one.principal_id for one in team.members]) for team in web.teams] == [
+        ("design", ["u_3", "u_2"]),
+        ("projects", []),
+    ]
+    assert web.lead is not None and web.lead.principal_id == "u_3"
+    assert page.departments[0].lead is not None
+
+
+def test_a_member_or_lead_the_reader_may_not_name_reads_as_nobody() -> None:
+    """The People screen's decision wherever a person appears. Delete this and a web reader sees
+    Grace from finance in web's design team, or as web's lead, which names somebody the People
+    screen withholds from them; and the page would differ between a withheld person and none."""
+    web = placed_page(WEB_ONLY).departments[0]
+    headings = placed_page(HEADINGS_ONLY).departments[1]
+
+    assert [one.principal_id for one in web.teams[0].members] == ["u_2"]
+    assert web.lead is None
+    assert headings.teams[0].members == () and headings.lead is None
+
+
+def test_organising_takes_the_grant_authority_over_the_department_and_the_person() -> None:
+    """`may_organise`, both rows. Delete this and a web organiser places somebody from finance, one
+    holding the authority only in finance places anybody in web, or somebody in no department is
+    placed by anybody short of company-wide."""
+    web_organiser = reader(grant("approve:grant", WEB))
+    everywhere = reader(grant("approve:grant"))
+    wei, grace, nobody = MEMBERS[0], MEMBERS[2], MEMBERS[3]
+
+    assert may_organise(web_organiser, department="web", person=wei, now=NOW) is True
+    assert may_organise(web_organiser, department="web", person=grace, now=NOW) is False
+    assert may_organise(web_organiser, department="finance", person=wei, now=NOW) is False
+    assert may_organise(web_organiser, department="web", person=nobody, now=NOW) is False
+    assert may_organise(everywhere, department="web", person=nobody, now=NOW) is True
+    assert may_organise(reader(grant("read:grant")), department="web", person=wei) is False
+    assert screen("access_review").read.requires == ORGANISING_AUTHORITY
+
+
+def test_nobody_places_a_disabled_person_or_appoints_themselves() -> None:
+    """`may_place` and `may_appoint`. Delete this and a disabled account is listed as somebody at
+    work, or somebody chooses who reviews their own access; and the positive half proves neither
+    refuses everybody."""
+    everywhere = EntitlementSet(principal_id="u_2", grants=(grant("approve:grant"),))
+    aaron, wei = MEMBERS[1], MEMBERS[0]
+    other = Member(principal_id="u_7", display_name="Seven", department="web", disabled=False)
+
+    assert may_place(everywhere, department="web", person=aaron, now=NOW) is False
+    assert may_place(everywhere, department="web", person=wei, now=NOW) is True
+    assert may_appoint(everywhere, department="web", person=wei, now=NOW) is False
+    assert may_appoint(everywhere, department="web", person=other, now=NOW) is True
+    assert may_appoint(everywhere, department="web", person=aaron, now=NOW) is False

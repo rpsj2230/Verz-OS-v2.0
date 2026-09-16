@@ -242,6 +242,12 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     triggers on `agent.skill` and `agent.skill_review`. A skill confers no capability, which is why
     it is not GRANT, and assigning one to an agent is COMPOSE_CHANGE, which `0056` writes too.
 
+    `organisation` records a person placed in a team or taken out, or appointed to lead a
+    department or stood down, written by `0062`'s triggers under the person's own subject; none of
+    it confers anything, which is why it is not a grant. `elevation` records a request for a
+    capability and the approval or denial somebody else made, written by `0062`'s trigger on
+    `gate.elevation_request`; an approval also writes a grant, recorded as `grant`.
+
     `connector` records a source connected from the console or disconnected, written by `0057`'s
     trigger on `ops.connector_connection`. Connecting a source writes its key as well, which is a
     `credential` entry of its own; a disconnect writes no key, which is why the two are not one
@@ -291,6 +297,8 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "webhook subscriber registered, rotated or switched off": AuditAction.WEBHOOK,
         "erasure requested, then erased, held or left incomplete": AuditAction.ERASURE,
         "memory superseded or demoted by a correction": AuditAction.MEMORY,
+        "placed in a team or appointed a lead, or ended": AuditAction.ORGANISATION,
+        "elevation requested, approved or denied": AuditAction.ELEVATION,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -318,6 +326,8 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "webhook",
         "erasure",
         "memory",
+        "organisation",
+        "elevation",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

@@ -59,6 +59,7 @@ from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
+from brain.tables.elevation import ElevationRequestRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
@@ -84,6 +85,7 @@ from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.operation import OperationRow
+from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow
@@ -257,6 +259,12 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # refuse the other. The person who recorded a correction is a value, as every actor is.
     "mem.learning",
     "mem.correction",
+    # 0062_organisation_and_elevation. A membership follows the team and the person it places, a
+    # lead the department and the person, and a request the grant an approval wrote; the actors
+    # are values, so who placed or approved somebody outlives them.
+    "gate.team_membership",
+    "gate.department_lead",
+    "gate.elevation_request",
 )
 
 __all__ = [
@@ -280,8 +288,10 @@ __all__ = [
     "CorrectionRow",
     "CredentialWriteRow",
     "DataExportRow",
+    "DepartmentLeadRow",
     "DepartmentRow",
     "DirectoryRoleGrantRow",
+    "ElevationRequestRow",
     "EntityAliasRow",
     "EntityIdentifierRow",
     "EntityLinkRow",
@@ -323,6 +333,7 @@ __all__ = [
     "SkillRow",
     "SpendActualRow",
     "SuspensionRow",
+    "TeamMembershipRow",
     "TeamRow",
     "TemplateInstanceRow",
     "TemplateVersionRow",

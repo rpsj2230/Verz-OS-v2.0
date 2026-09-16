@@ -75,7 +75,12 @@ declaration a source makes about whether its answer is the whole list, and a sou
 cannot promise that can add and can never remove. `brain.identity.directory.reconcile` does
 the removing and is handed only what a complete source produced.
 
-Task ids: M1.6.1, M1.6.2, M1.6.3, M1.6.7, M1.6.9, M1.6.10
+**A team and a lead are read under the department's trust.** A source trusted to say which
+department somebody is in may say which team of it they are in and whether they lead it, and one
+that is not may say neither: `teams_from` and `leads_from`, and
+`A_TEAM_AND_A_LEAD_ARE_WHERE_SOMEBODY_SITS_ONE_LEVEL_DOWN`.
+
+Task ids: M1.6.1, M1.6.2, M1.6.3, M1.6.7, M1.6.9, M1.6.10, M27.7.4
 """
 
 from __future__ import annotations
@@ -214,6 +219,11 @@ class StaffRecord:
     groups: tuple[str, ...] = ()
     #: False when the source says this person has left. Distinct from being absent entirely.
     active: bool = True
+    #: The teams inside `department` the source places them in, by the team's slug. Read only
+    #: where the source is trusted to say where somebody sits; see `teams_from`.
+    teams: tuple[str, ...] = ()
+    #: True when the source names this person as the lead of `department`. See `leads_from`.
+    leads: bool = False
 
     def __post_init__(self) -> None:
         if "@" not in self.work_address or not self.work_address.strip():
@@ -224,6 +234,13 @@ class StaffRecord:
             raise ValueError(msg)
         if not self.display_name.strip():
             msg = f"{self.work_address} has no display name, so no screen can name them"
+            raise ValueError(msg)
+        if (self.teams or self.leads) and not self.department.strip():
+            msg = (
+                f"{self.work_address} is placed in a team or as a lead and in no department. A "
+                "team is a part of one department and a lead leads one, so either would be read "
+                "against whichever department happened to be nearest"
+            )
             raise ValueError(msg)
 
 
@@ -611,6 +628,50 @@ def departments_from(roster: Roster) -> dict[str, str]:
     if Asserts.DEPARTMENT not in roster.asserts:
         return {}
     return {one.work_address.casefold(): one.department for one in roster.people if one.department}
+
+
+#: Why a team and a lead are trusted exactly as far as a department is, and no further.
+A_TEAM_AND_A_LEAD_ARE_WHERE_SOMEBODY_SITS_ONE_LEVEL_DOWN: Final = (
+    "Which team somebody is in and who leads a department are the same kind of fact as which "
+    "department somebody is in: where they sit, kept in the same admin console, changed by the "
+    "same people. Neither confers a capability, so neither needs ROLE's trust, and a sheet anybody "
+    "can edit is not trusted with either, because a wrong team is the org chart a department's "
+    "access is reviewed against. So both are read under DEPARTMENT and there is no fourth member "
+    "of Asserts for them, which is the fourth member that enum refuses to grow."
+)
+
+
+def teams_from(roster: Roster) -> dict[str, tuple[str, ...]]:
+    """Work address to the team paths the source places that person in, for a trusted source.
+
+    `<department>.<team>`, the path `brain.identity.teams.Team.path` spells, built from the
+    person's own department so a team slug can never be read against somebody else's. Empty for a
+    source not trusted with departments, for `departments_from`'s reason, and a person the source
+    says has left is placed nowhere. See `A_TEAM_AND_A_LEAD_ARE_WHERE_SOMEBODY_SITS_ONE_LEVEL_DOWN`.
+    """
+    if Asserts.DEPARTMENT not in roster.asserts:
+        return {}
+    return {
+        one.work_address.casefold(): tuple(sorted({f"{one.department}.{t}" for t in one.teams}))
+        for one in roster.people
+        if one.active and one.teams
+    }
+
+
+def leads_from(roster: Roster) -> dict[str, tuple[str, ...]]:
+    """Department to the work addresses the source names as its lead, for a trusted source.
+
+    Every claimant rather than the first, sorted, so a department two rows both claim to lead
+    reaches the caller as two names rather than as whichever row came first:
+    `brain.identity.organisation_sync` refuses to appoint either. Empty for an untrusted source.
+    """
+    if Asserts.DEPARTMENT not in roster.asserts:
+        return {}
+    found: dict[str, set[str]] = {}
+    for one in roster.people:
+        if one.active and one.leads:
+            found.setdefault(one.department, set()).add(one.work_address.casefold())
+    return {department: tuple(sorted(people)) for department, people in found.items()}
 
 
 def source_gaps(rosters: Iterable[Roster]) -> tuple[str, ...]:

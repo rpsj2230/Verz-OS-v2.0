@@ -27,8 +27,10 @@ import type { components } from "../api/schema";
 export type OrganisationBody = components["schemas"]["OrganisationPage"];
 export type DepartmentRow = components["schemas"]["DepartmentView"];
 export type MemberRow = components["schemas"]["MemberView"];
+export type TeamRow = components["schemas"]["TeamView"];
 export type UnplacedRow = components["schemas"]["UnplacedView"];
 export type ElevationBody = components["schemas"]["ElevationPage"];
+export type ElevationRequestRow = components["schemas"]["ElevationRequestView"];
 export type ReviewRow = components["schemas"]["ReviewRowView"];
 export type SubscriberRow = components["schemas"]["SubscriberView"];
 
@@ -40,7 +42,10 @@ export const A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE =
 
 /** Where the API keeps each screen and the one control. */
 export const DEPARTMENTS_API_PATH = "/govern/departments";
+export const MEMBERSHIP_API_PATH = "/govern/departments/membership";
+export const LEAD_API_PATH = "/govern/departments/lead";
 export const ELEVATION_API_PATH = "/govern/elevation";
+export const ELEVATION_REQUESTS_API_PATH = "/govern/elevation/requests";
 export const REVIEW_API_PATH = "/govern/access-review";
 export const REVIEW_DECISION_API_PATH = "/govern/access-review/decision";
 export const SUBSCRIBERS_API_PATH = "/govern/subscribers";
@@ -61,6 +66,15 @@ export function departmentsApiPath(): string {
   return `${DEPARTMENTS_API_PATH}?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`;
 }
 
+export function elevationApiPath(): string {
+  return `${ELEVATION_API_PATH}?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`;
+}
+
+/** Where one request's decision is sent. The id is the API's, encoded as a path segment. */
+export function elevationDecisionApiPath(requestId: string): string {
+  return `${ELEVATION_REQUESTS_API_PATH}/${encodeURIComponent(requestId)}/decision`;
+}
+
 export function reviewApiPath(): string {
   return `${REVIEW_API_PATH}?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`;
 }
@@ -79,19 +93,24 @@ export interface Organisation {
   readonly departments: readonly DepartmentRow[];
   readonly unplaced: readonly UnplacedRow[];
   readonly truncated: boolean;
-  /** The three sentences about what the install does not record, in the API's words. */
+  /** Whether this reader holds the authority to place anybody. Presentation only. */
+  readonly mayOrganise: boolean;
+  /** The sentences about what the page shows and who may change it, in the API's words. */
   readonly teams: string;
   readonly leads: string;
   readonly counted: string;
+  readonly organising: string;
 }
 
 const NO_ORGANISATION: Organisation = Object.freeze({
   departments: [],
   unplaced: [],
   truncated: false,
+  mayOrganise: false,
   teams: "",
   leads: "",
   counted: "",
+  organising: "",
 });
 
 /** Read `brain.govern_people_routes.OrganisationPage` out of a response body. */
@@ -103,10 +122,66 @@ export function readOrganisation(payload: unknown): Organisation {
     departments: payload.departments as DepartmentRow[],
     unplaced: Array.isArray(payload.unplaced) ? (payload.unplaced as UnplacedRow[]) : [],
     truncated: payload.truncated === true,
+    mayOrganise: payload.may_organise === true,
     teams: text(payload.teams),
     leads: text(payload.leads),
     counted: text(payload.counted),
+    organising: text(payload.organising),
   };
+}
+
+/** The body of a placement, as `MembershipChange` declares it. Four keys and no fifth. */
+export interface MembershipBody {
+  readonly department: string;
+  readonly team: string;
+  readonly principal_id: string;
+  readonly change: "join" | "leave";
+}
+
+export function membershipBody(
+  department: string,
+  team: string,
+  principalId: string,
+  change: MembershipBody["change"],
+): MembershipBody {
+  return { department, team, principal_id: principalId, change };
+}
+
+/** The body of a lead change, as `LeadChange` declares it: a person to appoint, or nobody. */
+export type LeadBody =
+  | { readonly department: string; readonly change: "appoint"; readonly principal_id: string }
+  | { readonly department: string; readonly change: "stand_down" };
+
+export function appointBody(department: string, principalId: string): LeadBody {
+  return { department, change: "appoint", principal_id: principalId };
+}
+
+export function standDownBody(department: string): LeadBody {
+  return { department, change: "stand_down" };
+}
+
+/** The question a placement's confirmation asks, naming the person and the team. */
+export function membershipQuestion(teamName: string, person: string, change: MembershipBody["change"]): string {
+  return change === "join" ? `Add ${person} to ${teamName}?` : `Take ${person} out of ${teamName}?`;
+}
+
+/** The question a lead change's confirmation asks, naming the person and the department. */
+export function leadQuestion(departmentName: string, person: string, change: LeadBody["change"]): string {
+  return change === "appoint"
+    ? `Appoint ${person} to lead ${departmentName}?`
+    : `Stand ${person} down as lead of ${departmentName}?`;
+}
+
+/** The people of a department who are not already in a team, by name, for the add control. */
+export function teamCandidates(department: DepartmentRow, team: TeamRow): readonly MemberRow[] {
+  const inside = new Set((team.members ?? []).map((one) => one.principal_id));
+  return department.members.filter((one) => !one.disabled && !inside.has(one.principal_id));
+}
+
+/** The people of a department who could be appointed its lead: live, and not the lead already. */
+export function leadCandidates(department: DepartmentRow): readonly MemberRow[] {
+  const current = department.lead?.principal_id;
+  return department.members.filter((one) => !one.disabled && one.principal_id !== current);
 }
 
 /**
@@ -157,6 +232,56 @@ export function readElevation(payload: unknown): ElevationBody | null {
 /** A reason code as a person reads it: `incident_response` becomes "incident response". */
 export function reasonWords(reason: string): string {
   return reason.replaceAll("_", " ");
+}
+
+/** What a request asks for, as `ElevationAsked` declares it. Five keys and no sixth. */
+export interface ElevationAsk {
+  readonly capability: string;
+  readonly scope_slug: string;
+  readonly reason: string;
+  readonly explanation: string;
+  readonly hours: number;
+}
+
+/** The sentences a blank request is answered with, before anything is sent, by field. */
+export const ASK_BLANKS: Readonly<Record<"capability" | "scope_slug" | "reason" | "explanation", string>> =
+  Object.freeze({
+    capability: "Name the capability you need, such as read:client.name.",
+    scope_slug: "Name the scope you need it over, as the Scopes screen spells it.",
+    reason: "Choose why you need it.",
+    explanation: "Say what you need it for, so whoever decides can judge it.",
+  });
+
+/** The fields of a request left blank, in the form's order. Shape is the API's to judge. */
+export function askBlanks(ask: ElevationAsk): readonly (keyof typeof ASK_BLANKS)[] {
+  return (["capability", "scope_slug", "reason", "explanation"] as const).filter(
+    (field) => ask[field].trim() === "",
+  );
+}
+
+/** The two decisions, as `ElevationDecision` declares them. */
+export const ELEVATION_DECISIONS = ["approved", "denied"] as const;
+export type ElevationDecisionWord = (typeof ELEVATION_DECISIONS)[number];
+
+/** What each state is called on the page. */
+export const STATE_WORDS: Readonly<Record<ElevationRequestRow["state"], string>> = Object.freeze({
+  pending: "Waiting for a decision",
+  denied: "Denied",
+  live: "Given, until it lapses",
+  lapsed: "Lapsed",
+  ended: "Ended before it lapsed",
+});
+
+/** The question a decision's confirmation asks, naming the person, the capability and the hours. */
+export function elevationQuestion(row: ElevationRequestRow, decision: ElevationDecisionWord): string {
+  const who = row.display_name ?? row.principal_id;
+  const verb = decision === "approved" ? "Give" : "Refuse";
+  return `${verb} ${who} ${row.capability} over ${row.scope_slug} for ${String(row.hours)} hours?`;
+}
+
+/** The question the request's confirmation asks. */
+export function askQuestion(ask: ElevationAsk): string {
+  return `Ask for ${ask.capability} over ${ask.scope_slug} for ${String(ask.hours)} hours?`;
 }
 
 // ------------------------------------------------------------------ access review

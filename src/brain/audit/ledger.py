@@ -435,6 +435,42 @@ class AuditAction(enum.StrEnum):
     that did not make it. The details are the kind of correction and nothing else: never the
     statement, which is `brain.memory.correction`'s refusal to keep a transcript in a correction
     log, and never the memory that replaced it, which the row keeps. Six characters.
+
+    ORGANISATION was added on 2026-09-17, and it is the twenty-fifth. The Departments and teams
+    screen places a person in a team and takes them out, and appoints a department's lead and
+    stands one down (M27.7.4), and the staff directory sync does both where its source is trusted
+    to say where somebody sits. "Who put her in the design team" and "who made him lead of sales"
+    had no answer anywhere, because until then no table held either fact. **Recorded by the
+    database, from triggers on `gate.team_membership` and `gate.department_lead`**, the way
+    CONNECTOR is, on the insert and on the one update that ends a row.
+
+    Every existing member was tried. GRANT and REVOKE are capabilities, and a membership and a lead
+    confer none, which is `brain.console.organisation`'s whole argument about both: filing a
+    placement under GRANT would put a row that widens nobody into every answer to "who gave her
+    access". CERTIFICATION is a grant reviewed. SIGN_IN is an identity bound. One member for the
+    four changes, joined, left, appointed and stood down, with the team's path or the department's
+    slug in the details, because both are where somebody sits and an auditor asking one question
+    asks the other. **The subject is the person, `principal:<id>`**, rather than a new kind for a
+    team, so everything that happened to somebody's place in the organisation is on their own
+    subject, and `brain.identity.staff_sync.AUDIT_KIND_DECISIONS` already decides who reads it.
+    Twelve characters.
+
+    ELEVATION was added on 2026-09-17, and it is the twenty-sixth. The Elevation requests screen
+    lets somebody ask for a capability they do not hold, for a stated reason and a few hours, and
+    lets somebody else approve or deny it (M27.7.8). "Who asked for more, and who let them have
+    it" is the question after an incident, and it had no answer. **Recorded by the database, from
+    a trigger on `gate.elevation_request`**, on the insert and on the one update that decides it.
+    An approval also writes a grant row, whose own GRANT entry `0003`'s trigger appends as it does
+    for every grant.
+
+    Every existing member was tried, and BREAK_GLASS was the near miss. It is an authorisation,
+    and `brain.console.elevation.chain_findings` holds that a BREAK_GLASS entry in the main chain
+    is the separate chain collapsed into a name: the database has one ledger, so a trigger writing
+    BREAK_GLASS into it is that finding by construction. GRANT is the reach given, which the grant
+    row already records, and a request or a denial gives nothing; APPROVAL is a suspended action
+    decided, and a request for more access is not an agent's action. One member for the three
+    changes, requested, approved and denied, with the capability and the reason code in the
+    details, and the requester as the subject. Nine characters.
     """
 
     GRANT = "grant"
@@ -501,6 +537,14 @@ class AuditAction(enum.StrEnum):
     #: A memory was marked by a correction: superseded by another, or demoted. Which is in the
     #: details, and never what either memory says. Written by `0061`'s trigger on `mem.correction`.
     MEMORY = "memory"
+    #: A person was placed in a team or taken out of one, or appointed to lead a department or
+    #: stood down. Which is in the details, with the team's path or the department's slug. Written
+    #: by `0062`'s triggers on `gate.team_membership` and `gate.department_lead`.
+    ORGANISATION = "organisation"
+    #: Somebody asked for a capability they do not hold, or somebody else approved or denied the
+    #: request. Which is in the details, with the capability and the reason code. Written by
+    #: `0062`'s trigger on `gate.elevation_request`.
+    ELEVATION = "elevation"
 
 
 # --------------------------------------------------------------------- redaction

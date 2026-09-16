@@ -338,16 +338,28 @@ const DEPARTMENTS = {
     {
       slug: UNBROKEN,
       name: UNBROKEN,
-      teams: [{ slug: UNBROKEN, name: UNBROKEN }],
-      members: [{ principal_id: UNBROKEN, display_name: UNBROKEN, disabled: true }],
+      teams: [
+        {
+          slug: UNBROKEN,
+          name: UNBROKEN,
+          members: [{ principal_id: `${UNBROKEN}1`, display_name: UNBROKEN, disabled: false }],
+        },
+      ],
+      members: [
+        { principal_id: UNBROKEN, display_name: UNBROKEN, disabled: true },
+        { principal_id: `${UNBROKEN}2`, display_name: UNBROKEN, disabled: false },
+      ],
+      lead: { principal_id: `${UNBROKEN}1`, display_name: UNBROKEN, disabled: false },
     },
   ],
   unplaced: [{ principal_id: `${UNBROKEN}0`, display_name: UNBROKEN, disabled: false, department: UNBROKEN }],
   truncated: true,
+  may_organise: true,
   staleness: null,
   teams: UNBROKEN,
   leads: UNBROKEN,
   counted: UNBROKEN,
+  organising: UNBROKEN,
 };
 
 const ELEVATION = {
@@ -356,8 +368,29 @@ const ELEVATION = {
   may_authorise: true,
   reasons: [UNBROKEN],
   longest_hours: 4,
+  requests: [
+    {
+      request_id: UNBROKEN,
+      principal_id: UNBROKEN,
+      display_name: UNBROKEN,
+      department: UNBROKEN,
+      capability: UNBROKEN,
+      scope_slug: UNBROKEN,
+      reason: UNBROKEN,
+      explanation: UNBROKEN,
+      hours: 2,
+      requested_at: "2019-03-04T09:00:00Z",
+      state: "pending",
+      decided_by: null,
+      decided_at: null,
+      lapses_at: null,
+      decidable: true,
+    },
+  ],
+  truncated: true,
   what: UNBROKEN,
   recorded: UNBROKEN,
+  notified: UNBROKEN,
   authorising: UNBROKEN,
 };
 

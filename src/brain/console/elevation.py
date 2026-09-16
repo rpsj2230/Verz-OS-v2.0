@@ -76,17 +76,46 @@ the reach afterwards is `roles.reach_during` unchanged. A revocation that could 
 forward would be an extension wearing the word revoke, which is why the guard is on both
 sides. See `REVOCATION_SHORTENS_THE_WINDOW_AND_HAS_NOWHERE_TO_LENGTHEN_IT`.
 
+**A stored elevation is a grant with a lapse, and it adds where a session replaces.** M27.7.8 puts
+requests on a screen: somebody asks for one capability at a named scope, for a reason from
+`BreakGlassReason` and at most `BREAK_GLASS_MAX`, and somebody else approves or denies it. The
+approval writes an ordinary `gate.capability_grant` row whose `not_after` is the end of the window,
+so the resolver every request already goes through widens the requester at once and stops at the
+lapse with nobody acting, and nothing on the request path consults a session because there is no
+session state to consult. That is additive and `reach_during` is not: an in-memory break-glass
+session replaces what its holder has, which is right for a partner holding nothing and wrong for an
+employee asking for one more thing. So the request screen tells somebody with standing access that
+what they ask for is added, `requester_prompt`, and the landing's own sentences stay true of the
+session they describe. See `A_STORED_ELEVATION_ADDS_AND_A_BREAK_GLASS_SESSION_REPLACES`.
+
+**Approving asks four questions, three of them already answered elsewhere.** Not the requester,
+which `BreakGlassSession` refuses of a session and `gate.elevation_request` refuses of a row.
+`may_authorise`, over the requester's row. `scoped_authority.may_grant`, over the grant the approval
+would write, which is the People screen's own rule that nobody grants wider than they hold, and
+the elevation's lapse inside the approver's own. And the one that is new: **the requester does not
+already hold anything covering the capability**, because `EntitlementSet.scope_for` intersects
+every grant covering one, so a second grant of what somebody holds narrows them, and approving it
+would take reach away while the ledger said it gave some. See
+`AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT`. Nobody is notified: `client_recipients`
+computes recipients from role grants and no table holds one (M1.3.2), so the ledger entries are the
+record and the screen says so rather than claiming a notice.
+
+**Who is shown a request is the requester and whoever may decide it.** `requests_shown` answers it
+with `may_authorise` over the requester's row, the same question the decision asks, so a request
+somebody could not decide is not on their page, and nothing counts the ones that are not.
+
 Scope: domain logic. Nothing here opens a connection, renders anything or reads a clock; `now`
 and `at` are parameters, for the reason `brain.ops.limits` gives about policy that owns a
-client being untestable at the boundary that matters. No console screen exists behind any of
-this, exactly as `brain.console.screens` says of its own registry; what is claimed below is
-the disclosure decision in each leaf, which is the whole content of four of the five.
+client being untestable at the boundary that matters. What is claimed below is the disclosure
+decision in each M33.7 leaf, which is the whole content of four of the five, and the request,
+approval and listing rules the Elevation requests screen asks.
 
-Task ids: M33.7.1.1, M33.7.1.2, M33.7.1.3, M33.7.1.4, M33.7.1.5
+Task ids: M33.7.1.1, M33.7.1.2, M33.7.1.3, M33.7.1.4, M33.7.1.5, M27.7.8
 """
 
 from __future__ import annotations
 
+import enum
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -95,9 +124,12 @@ from typing import Final
 from brain.audit.anchor import Anchor
 from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
 from brain.audit.record import AuditRecorder, LedgerWriter
+from brain.console.govern import NOWHERE
+from brain.console.scoped_authority import may_grant
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.principal import Principal
+from brain.identity.packs import SubjectGrant
 from brain.identity.roles import (
     BREAK_GLASS_CHAIN,
     BREAK_GLASS_MAX,
@@ -111,8 +143,10 @@ from brain.identity.roles import (
     standing_entitlement,
     standing_super_admins,
 )
+from brain.identity.teams import PrincipalSubject
 from brain.ops.halt import MINIMUM_REASON
 from brain.ops.jobs import hidden_count_fields
+from brain.tables.elevation import ElevationDecision
 
 # ------------------------------------------------------------------ written-down reasons
 #: The answer to "does a Super Admin hold standing entitlement today".
@@ -661,3 +695,168 @@ def elevation_gaps(
         )
 
     return tuple(gaps)
+
+
+# --------------------------------------------------------- stored requests (M27.7.8)
+#: Why a stored elevation is additive, and why the request screen says so in its own words.
+A_STORED_ELEVATION_ADDS_AND_A_BREAK_GLASS_SESSION_REPLACES: Final = (
+    "An approved request writes one grant row with a lapse, and the resolver adds it to "
+    "everything the requester already holds until the lapse, when it stops with nobody acting. A "
+    "break-glass session replaces its holder's reach for the window, which is right for a partner "
+    "holding nothing and would take an employee's own access away while they work an incident. "
+    "The two are different mechanisms, so the request screen says the first and the landing "
+    "keeps saying the second."
+)
+
+#: Why a request for something already held is refused.
+AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT: Final = (
+    "EntitlementSet.scope_for intersects the scope of every grant covering a capability, because "
+    "holding something twice must never be wider than holding it once. A second grant of a "
+    "capability somebody already holds, or holds through a wildcard or a pack, therefore narrows "
+    "them to where both grants reach. Approving one would take reach away from the person who "
+    "asked for more, with a grant entry in the ledger saying the opposite."
+)
+
+#: Why nobody approves or denies their own request.
+NOBODY_DECIDES_THEIR_OWN_ELEVATION: Final = (
+    "A request its requester could approve is a grant somebody wrote for themselves with a form in "
+    "front of it. BreakGlassSession refuses a self-authorised session and gate.elevation_request "
+    "refuses the row; this is the same refusal where the console asks it. Denying your own is "
+    "refused too, because a request withdrawn is not a decision anybody made about it."
+)
+
+#: What the request screen tells somebody who holds standing access of their own.
+REQUEST_ADDS_PROMPT: Final = (
+    "This account holds standing access of its own. An elevation approved here adds one capability "
+    "to it, at the scope named, for the hours asked, and it lapses on its own."
+)
+
+
+@dataclass(frozen=True)
+class ElevationRequest:
+    """One stored request, as loaded, with where its requester sits. Decides nothing."""
+
+    request_id: str
+    principal_id: str
+    #: The requester's principal row's department, or None, which reaches only a company-wide
+    #: authoriser.
+    department: str | None
+    capability: Capability
+
+
+class ElevationState(enum.StrEnum):
+    """Where a request stands, as the screen lists it. Five, and each is read off the row."""
+
+    PENDING = "pending"
+    DENIED = "denied"
+    #: Approved, its grant still a live row, and its lapse not yet reached.
+    LIVE = "live"
+    #: Approved, and its lapse has passed. The grant confers nothing, whatever its row says.
+    LAPSED = "lapsed"
+    #: Approved, and its grant is no longer a live row: removed before its lapse, or retired by a
+    #: later elevation of the same capability after it lapsed.
+    ENDED = "ended"
+
+
+def state_of(
+    *,
+    decision: ElevationDecision | None,
+    lapses_at: datetime | None,
+    grant_live: bool,
+    now: datetime,
+) -> ElevationState:
+    """Where one request stands at `now`.
+
+    **A lapse is read before the grant row, so a lapsed elevation never reads as live.** The
+    resolver stops returning a grant at its `not_after` whatever the row says, and the screen says
+    what the resolver does. An approval whose grant row has gone reads as ended rather than live
+    even before its lapse, because a removed grant confers nothing either.
+    """
+    if decision is None:
+        return ElevationState.PENDING
+    if decision is not ElevationDecision.APPROVED:
+        return ElevationState.DENIED
+    if lapses_at is None or lapses_at <= now:
+        return ElevationState.LAPSED
+    if not grant_live:
+        return ElevationState.ENDED
+    return ElevationState.LIVE
+
+
+def requester_prompt(shown: ElevationLanding) -> str:
+    """What the request screen says about standing: the partner's sentence, or that a request adds.
+
+    See `A_STORED_ELEVATION_ADDS_AND_A_BREAK_GLASS_SESSION_REPLACES`. The landing is asked rather
+    than the principal again, so the two sentences are chosen by one decision.
+    """
+    return shown.prompt if shown.holds_nothing_standing else REQUEST_ADDS_PROMPT
+
+
+def where_of(request: ElevationRequest) -> Mapping[str, str]:
+    """The row the requester sits in, or nowhere."""
+    return NOWHERE if request.department is None else {"department": request.department}
+
+
+def would_widen(requester: EntitlementSet, capability: Capability, now: datetime) -> bool:
+    """Whether a grant of `capability` would add to what `requester` holds rather than narrow it.
+
+    See `AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT`. `scope_for` is asked rather than
+    the grant list read, so a wildcard and an expired principal are its answer and not a copy.
+    """
+    return requester.scope_for(capability, now) is None
+
+
+def may_decide(
+    decider: EntitlementSet, request: ElevationRequest, now: datetime | None = None
+) -> bool:
+    """Whether `decider` may approve or deny this request at all: not theirs, and in reach.
+
+    See `NOBODY_DECIDES_THEIR_OWN_ELEVATION`.
+    """
+    if decider.principal_id == request.principal_id:
+        return False
+    return may_authorise(decider, where_of(request), now)
+
+
+def may_approve(
+    approver: EntitlementSet,
+    request: ElevationRequest,
+    *,
+    grant: SubjectGrant,
+    requester: EntitlementSet,
+    now: datetime,
+) -> bool:
+    """Whether `approver` may approve this request by writing `grant` (M27.7.8).
+
+    `may_decide`, then the grant the approval writes: for this request's capability and requester
+    and nobody else's, `scoped_authority.may_grant` for the People screen's rule, and `would_widen`
+    against the requester's reach as the resolver answers it now. The caller builds the grant, with
+    the lapse the request asked for; this refuses one that does not match.
+    """
+    if not may_decide(approver, request, now):
+        return False
+    if grant.capability != request.capability:
+        return False
+    if grant.subject != PrincipalSubject(principal_id=request.principal_id):
+        return False
+    if not may_grant(grant, approver, now):
+        return False
+    return would_widen(requester, request.capability, now)
+
+
+def requests_shown(
+    requests: Sequence[ElevationRequest],
+    reader: EntitlementSet,
+    now: datetime | None = None,
+) -> tuple[ElevationRequest, ...]:
+    """The requests this reader is shown: their own, and those they may decide. In the given order.
+
+    `may_authorise` over the requester's row rather than `may_decide`, so an authoriser sees their
+    own requests beside everybody else's; the decision refuses their own, and the listing shows it
+    with no control. Nothing counts what was left out.
+    """
+    return tuple(
+        one
+        for one in requests
+        if one.principal_id == reader.principal_id or may_authorise(reader, where_of(one), now)
+    )

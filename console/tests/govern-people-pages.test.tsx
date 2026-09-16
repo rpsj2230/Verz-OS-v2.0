@@ -28,18 +28,35 @@ import {
   THE_BRAIN_COULD_NOT_BE_REACHED,
 } from "../src/pages/AccessReview";
 import {
+  ADD_LABEL,
+  APPOINT_LABEL,
+  CANCEL_LABEL as KEEP_ORGANISATION,
+  CHOOSE_SOMEBODY_FIRST,
   DISABLED,
   Departments,
+  NOBODY_IN_TEAM,
   NOBODY_LISTED,
   NONE_MATCH as NO_DEPARTMENT_MATCHES,
   NO_DEPARTMENTS_HERE,
+  NO_LEAD,
   READING_DEPARTMENTS,
+  REMOVE_LABEL,
   SEARCH_LABEL,
+  STAND_DOWN_LABEL,
   UNPLACED_HEADING,
 } from "../src/pages/Departments";
-import { Elevation, NOT_A_LANDING, READING_ELEVATION, YOU_HOLD_THE_AUTHORITY } from "../src/pages/Elevation";
+import {
+  ASK_LABEL,
+  DECISION_LABELS as ELEVATION_LABELS,
+  Elevation,
+  NOT_A_LANDING,
+  NO_REQUESTS,
+  READING_ELEVATION,
+  YOU_HOLD_THE_AUTHORITY,
+} from "../src/pages/Elevation";
 import {
   GOVERN_PEOPLE_PAGE_SIZE,
+  ASK_BLANKS,
   departmentsApiPath,
   narrowedReview,
   readOrganisation,
@@ -49,6 +66,7 @@ import {
   reviewDepartments,
   searchedOrganisation,
   type DepartmentRow,
+  type ElevationRequestRow,
   type ReviewRow,
 } from "../src/pages/governPeopleQuery";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
@@ -72,8 +90,12 @@ const REVIEW_OPERATION = "/api/v1/govern/access-review";
 const DECISION_OPERATION = "/api/v1/govern/access-review/decision";
 const SUBSCRIBERS_OPERATION = "/api/v1/govern/subscribers";
 
-const TEAMS = "Who is in each team is not recorded on this install.";
-const LEADS = "Nothing on this install records who leads a department.";
+const TEAMS = "A team lists the people in it you may see.";
+const LEADS = "A department's lead is who leads it, recorded with who appointed them.";
+const ORGANISING = "Placing somebody or appointing a lead takes the authority the Access review screen asks for.";
+const MEMBERSHIP_OPERATION = "/api/v1/govern/departments/membership";
+const LEAD_OPERATION = "/api/v1/govern/departments/lead";
+const REQUESTS_OPERATION = "/api/v1/govern/elevation/requests";
 const COUNTED = "No headcount is shown.";
 const KEEPING = "Keeping a grant records that you reviewed it and it stands.";
 const REMOVING = "Removing a grant takes it away from the next request the person makes.";
@@ -134,27 +156,29 @@ function sentQuery(idp: FakeIdp, operation: string): string[] {
 
 // ------------------------------------------------------------------ departments
 
-function organisation(departments: DepartmentRow[], truncated = false): unknown {
+function organisation(departments: DepartmentRow[], truncated = false, mayOrganise = false): unknown {
   return {
     departments,
     unplaced: [{ principal_id: "u_9", display_name: "Nowhere Person", disabled: false, department: null }],
     truncated,
+    may_organise: mayOrganise,
     teams: TEAMS,
     leads: LEADS,
     counted: COUNTED,
+    organising: ORGANISING,
   };
 }
 
+const WEI = { principal_id: "u_1", display_name: "Wei Ling Tan", disabled: false };
+const SITI = { principal_id: "u_3", display_name: "Siti Rahman", disabled: false };
 const WEB: DepartmentRow = {
   slug: "web",
   name: "Web",
-  teams: [{ slug: "design", name: "Design" }],
-  members: [
-    { principal_id: "u_1", display_name: "Wei Ling Tan", disabled: false },
-    { principal_id: "u_2", display_name: "Aaron Lim", disabled: true },
-  ],
+  teams: [{ slug: "design", name: "Design", members: [WEI] }],
+  members: [WEI, { principal_id: "u_2", display_name: "Aaron Lim", disabled: true }, SITI],
+  lead: WEI,
 };
-const FINANCE: DepartmentRow = { slug: "finance", name: "Finance", teams: [], members: [] };
+const FINANCE: DepartmentRow = { slug: "finance", name: "Finance", teams: [], members: [], lead: null };
 
 describe("the departments and teams screen", () => {
   test("it asks only what the route declares, at a size the route answers", async () => {
@@ -187,10 +211,124 @@ describe("the departments and teams screen", () => {
     expect(container.querySelector('[aria-label="Teams in Web"]')?.textContent).toContain("web.design");
     expect(container.textContent).toContain(NOBODY_LISTED);
     expect(container.textContent).toContain(UNPLACED_HEADING);
+    expect(container.querySelector('[aria-label="Members of Design"]')?.textContent).toContain("Wei Ling Tan");
+    expect(container.querySelector('[aria-label="Lead of Web"]')?.textContent).toContain("Wei Ling Tan");
+    expect(container.textContent).toContain(NO_LEAD);
     for (const sentence of [TEAMS, LEADS, COUNTED]) {
       expect(container.textContent).toContain(sentence);
     }
+    // A reader who may not organise is offered no control and not told who may.
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent).not.toContain(ORGANISING);
     expect(container.textContent).not.toMatch(/\b\d+\s+(people|members|departments|teams)\b/i);
+  });
+
+  test("an organiser adds and removes a member, appoints and stands down a lead, each confirmed in the API's words", async () => {
+    // What breaks if this is deleted: a placement is sent without a confirmation, the confirmation
+    // paraphrases what happens, a body key the route forbids is sent, or somebody already in the
+    // team, or disabled, is offered.
+    const sent: { path: string; body: unknown }[] = [];
+    const { container, idp } = await mount("/departments", (url, init) => {
+      if (url.pathname === DEPARTMENTS_OPERATION) {
+        return json(organisation([WEB], false, true));
+      }
+      if (init?.method === "POST" && (url.pathname === MEMBERSHIP_OPERATION || url.pathname === LEAD_OPERATION)) {
+        sent.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
+        return json({ department: "web", team: null, principal_id: null, change: "join", at: "2019-03-04T09:00:00Z" });
+      }
+      return null;
+    });
+    const buttonNamed = (label: string) =>
+      [...container.querySelectorAll("button")].find((one) => one.textContent === label) as HTMLButtonElement;
+    const choose = (label: string, value: string) => {
+      const select = [...container.querySelectorAll("select")].find((one) =>
+        one.closest("label")?.textContent?.startsWith(label),
+      ) as HTMLSelectElement;
+      expect([...select.options].map((one) => one.value)).not.toContain("u_2");
+      fireEvent.change(select, { target: { value } });
+    };
+
+    expect(container.textContent).toContain(ORGANISING);
+    fireEvent.click(buttonNamed(ADD_LABEL));
+    expect(container.textContent).toContain(CHOOSE_SOMEBODY_FIRST);
+    expect(container.querySelector(".confirm")).toBeNull();
+    choose("Add to Design", "u_3");
+    expect([...container.querySelectorAll("select")][1]?.textContent).not.toContain("Wei Ling Tan");
+    fireEvent.click(buttonNamed(ADD_LABEL));
+    expect(container.textContent).toContain("Add Siti Rahman to Design?");
+    expect(container.textContent).toContain(TEAMS);
+    expect(posts(idp)).toEqual([]);
+    fireEvent.click(buttonNamed(KEEP_ORGANISATION));
+    fireEvent.click(buttonNamed(ADD_LABEL));
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(sent[0]).toEqual({
+      path: MEMBERSHIP_OPERATION,
+      body: { department: "web", team: "design", principal_id: "u_3", change: "join" },
+    });
+    expect(Object.keys(sent[0]?.body as object).sort()).toEqual(
+      Object.keys(declaredRequestBodySchema(MEMBERSHIP_OPERATION, "post")["properties"] as object).sort(),
+    );
+
+    await waitFor(() => {
+      expect(buttonNamed(REMOVE_LABEL)).toBeDefined();
+    });
+    fireEvent.click(buttonNamed(REMOVE_LABEL));
+    expect(container.textContent).toContain("Take Wei Ling Tan out of Design?");
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(2);
+    });
+    expect(sent[1]?.body).toEqual({ department: "web", team: "design", principal_id: "u_1", change: "leave" });
+
+    await waitFor(() => {
+      expect(buttonNamed(STAND_DOWN_LABEL)).toBeDefined();
+    });
+    fireEvent.click(buttonNamed(STAND_DOWN_LABEL));
+    expect(container.textContent).toContain("Stand Wei Ling Tan down as lead of Web?");
+    expect(container.textContent).toContain(LEADS);
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(3);
+    });
+    expect(sent[2]).toEqual({ path: LEAD_OPERATION, body: { department: "web", change: "stand_down" } });
+
+    await waitFor(() => {
+      expect(buttonNamed(APPOINT_LABEL)).toBeDefined();
+    });
+    choose("Lead of Web", "u_3");
+    fireEvent.click(buttonNamed(APPOINT_LABEL));
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(4);
+    });
+    expect(sent[3]?.body).toEqual({ department: "web", change: "appoint", principal_id: "u_3" });
+  });
+
+  test("a refused placement is the API's sentence and the team still reads as the API sent it", async () => {
+    // What breaks if this is deleted: a refusal is swallowed and the page says the person was added,
+    // or an empty team is drawn as a fact about the team rather than about this reader.
+    const { container } = await mount("/departments", (url, init) => {
+      if (url.pathname === DEPARTMENTS_OPERATION) {
+        return json(organisation([{ ...WEB, teams: [{ slug: "design", name: "Design", members: [] }] }], false, true));
+      }
+      if (init?.method === "POST") {
+        return json({ message: "that change to the organisation is not writable by this caller", trace_id: "t" }, 404);
+      }
+      return null;
+    });
+    expect(container.textContent).toContain(NOBODY_IN_TEAM);
+    const select = [...container.querySelectorAll("select")].find((one) =>
+      one.closest("label")?.textContent?.startsWith("Add to Design"),
+    ) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "u_1" } });
+    fireEvent.click([...container.querySelectorAll("button")].find((one) => one.textContent === ADD_LABEL) as HTMLButtonElement);
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(container.textContent).toContain("that change to the organisation is not writable by this caller");
+    });
   });
 
   test("the search narrows the page it was given and asks the API nothing", async () => {
@@ -236,6 +374,8 @@ describe("the departments and teams screen", () => {
       "counted",
       "departments",
       "leads",
+      "mayOrganise",
+      "organising",
       "teams",
       "truncated",
       "unplaced",
@@ -245,32 +385,139 @@ describe("the departments and teams screen", () => {
 
 // ------------------------------------------------------------------ elevation
 
+function aRequest(overrides: Partial<ElevationRequestRow> & { request_id: string }): ElevationRequestRow {
+  return {
+    principal_id: "u_1",
+    display_name: "Wei Ling Tan",
+    department: "web",
+    capability: "read:client.name",
+    scope_slug: "web_all",
+    reason: "incident_response",
+    explanation: "the portal is down",
+    hours: 2,
+    requested_at: "2019-03-04T09:00:00Z",
+    state: "pending",
+    decided_by: null,
+    decided_at: null,
+    lapses_at: null,
+    decidable: false,
+    ...overrides,
+  };
+}
+
 const LANDING = {
   prompt: "This account holds standing access of its own.",
   holds_nothing_standing: false,
   may_authorise: true,
   reasons: ["install", "incident_response"],
   longest_hours: 4,
-  what: "An elevation is a break-glass session.",
-  recorded: "Nothing on this install stores an elevation or opens one.",
-  authorising: "Authorising an elevation takes the same authority the Access review screen asks for.",
+  requests: [] as ElevationRequestRow[],
+  truncated: false,
+  what: "An elevation is one capability, at a named scope, for one person.",
+  recorded: "Every request is kept with who asked, for what and why.",
+  notified: "Nobody is sent a notice when somebody asks or is approved.",
+  authorising: "Approving or denying an elevation takes the same authority the Access review screen asks for.",
 };
 
 describe("the elevation screen", () => {
-  test("it shows the reader's standing, the rules, and in the API's words that nothing is recorded", async () => {
-    // What breaks if this is deleted: the page draws an empty table of requests, which reads as
-    // an install where nobody has elevated rather than one that records no elevation at all.
+  test("it shows the reader's standing, the rules, what is recorded and who is not told, and an empty list says so", async () => {
+    // What breaks if this is deleted: the page draws an empty table of requests, the sentence
+    // saying nobody is notified drops off, or the rules a request is held to disappear.
     const { container } = await mount("/elevation", (url) =>
       url.pathname === ELEVATION_OPERATION ? json(LANDING) : null,
     );
 
     expect(container.textContent).toContain(LANDING.prompt);
     expect(container.textContent).toContain(LANDING.recorded);
+    expect(container.textContent).toContain(LANDING.notified);
     expect(container.textContent).toContain("incident response");
     expect(container.textContent).toContain("4 hours");
     expect(container.textContent).toContain(YOU_HOLD_THE_AUTHORITY);
+    expect(container.textContent).toContain(NO_REQUESTS);
     expect(container.querySelector("table")).toBeNull();
-    expect(container.querySelector("button")).toBeNull();
+  });
+
+  test("a request is asked for through a confirmation, and a blank one is answered before anything is sent", async () => {
+    // What breaks if this is deleted: an empty request reaches the API, a request is sent without a
+    // confirmation naming the capability, the scope and the hours, or a body key the route forbids
+    // is sent.
+    const sent: unknown[] = [];
+    const { container } = await mount("/elevation", (url, init) => {
+      if (url.pathname === ELEVATION_OPERATION) {
+        return json(LANDING);
+      }
+      if (url.pathname === REQUESTS_OPERATION && init?.method === "POST") {
+        sent.push(JSON.parse(String(init.body)));
+        return json({ request_id: "r_1", requested_at: "2019-03-04T09:00:00Z" }, 201);
+      }
+      return null;
+    });
+    const form = container.querySelector('form[aria-label="Ask for an elevation"]') as HTMLFormElement;
+    fireEvent.submit(form);
+    expect(container.textContent).toContain(ASK_BLANKS.capability);
+    expect(container.textContent).toContain(ASK_BLANKS.explanation);
+    expect(sent).toEqual([]);
+
+    const inputs = form.querySelectorAll("input");
+    fireEvent.change(inputs[0] as HTMLInputElement, { target: { value: " read:client.name " } });
+    fireEvent.change(inputs[1] as HTMLInputElement, { target: { value: "web_all" } });
+    const [reason, hours] = [...form.querySelectorAll("select")];
+    fireEvent.change(reason as HTMLSelectElement, { target: { value: "incident_response" } });
+    fireEvent.change(hours as HTMLSelectElement, { target: { value: "2" } });
+    fireEvent.change(form.querySelector("textarea") as HTMLTextAreaElement, { target: { value: "the portal is down" } });
+    fireEvent.submit(form);
+    expect(container.textContent).toContain("Ask for read:client.name over web_all for 2 hours?");
+    expect(container.textContent).toContain(LANDING.what);
+    expect(sent).toEqual([]);
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(sent).toHaveLength(1);
+    });
+    expect(sent[0]).toEqual({
+      capability: "read:client.name",
+      scope_slug: "web_all",
+      reason: "incident_response",
+      explanation: "the portal is down",
+      hours: 2,
+    });
+    expect(Object.keys(sent[0] as object).sort()).toEqual(
+      Object.keys(declaredRequestBodySchema(REQUESTS_OPERATION, "post")["properties"] as object).sort(),
+    );
+    expect(ASK_LABEL).toBe("Ask for this");
+  });
+
+  test("a decidable request is approved or denied through a confirmation, and one that is not offers nothing", async () => {
+    // What breaks if this is deleted: a decision is sent without a confirmation, a request the API
+    // said this reader may not decide is offered buttons, or the decision word is not the route's.
+    const decisions: { path: string; body: unknown }[] = [];
+    const rows = [
+      aRequest({ request_id: "r_open", decidable: true }),
+      aRequest({ request_id: "r_live", state: "live", lapses_at: "2019-03-04T11:00:00Z", decided_by: "u_9" }),
+    ];
+    const { container } = await mount("/elevation", (url, init) => {
+      if (url.pathname === ELEVATION_OPERATION) {
+        return json({ ...LANDING, requests: rows });
+      }
+      if (init?.method === "POST" && url.pathname.startsWith(REQUESTS_OPERATION)) {
+        decisions.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
+        return json({ request_id: "r_open", principal_id: "u_1", decision: "denied", decided_at: "2019-03-04T09:00:00Z", lapses_at: null });
+      }
+      return null;
+    });
+    const table = container.querySelector('table[aria-label="Elevation requests"]') as HTMLTableElement;
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(table.querySelectorAll("tbody tr")[1]?.querySelector("button")).toBeNull();
+    expect(table.textContent).toContain("Given, until it lapses");
+
+    fireEvent.click(table.querySelector(`button[aria-label^="${ELEVATION_LABELS.denied}"]`) as HTMLButtonElement);
+    expect(container.textContent).toContain("Refuse Wei Ling Tan read:client.name over web_all for 2 hours?");
+    expect(container.textContent).toContain(LANDING.recorded);
+    expect(decisions).toEqual([]);
+    fireEvent.click([...container.querySelectorAll(".confirm button")][1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(decisions).toHaveLength(1);
+    });
+    expect(decisions[0]).toEqual({ path: `${REQUESTS_OPERATION}/r_open/decision`, body: { decision: "denied" } });
   });
 
   test("a reader without the authority is told nothing about it, and an unreadable body is its own sentence", async () => {

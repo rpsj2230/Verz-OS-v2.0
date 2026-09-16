@@ -89,7 +89,8 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/sessions": { page: NO_CURSOR, search: NARROWED_BY_CHOICE, bulk: ONE_ROW_AT_A_TIME },
   "/sign-in-links": { page: NO_CURSOR, filter: NO_NARROWING, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
   "/audit": { search: LEDGER_FILTERS, bulk: READ_ONLY },
-  "/departments": { page: NO_CURSOR, filter: NO_NARROWING, sort: NO_ORDER, bulk: READ_ONLY },
+  "/departments": { page: NO_CURSOR, filter: NO_NARROWING, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
+  "/elevation": { page: NO_CURSOR, search: NO_NARROWING, filter: NO_NARROWING, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
   "/access_review": { page: NO_CURSOR, search: NARROWED_BY_CHOICE, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
 };
 

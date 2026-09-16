@@ -29,14 +29,32 @@ reviewer's reach digest and the request. The behaviour: a removed grant is no lo
 resolver returns for its holder, and a kept one is listed as decided, by whom and when. The database
 half is `tests/unit/test_review_store.py`, which skips without a server and runs in CI.
 
-**Two of the four say more about what is missing than about what is there, and that is the design
-rather than an apology.** Nothing on an install stores a break-glass session or opens one, so the
-Elevation screen is the landing `brain.console.elevation` decides and the rules a session would be
-held to, with no list and no control. And switching a webhook subscriber off has no ledger member to
-be recorded under and no audit subject a subscriber id fits, so the Subscribers screen lists who is
-told what and says how that stops, without a button whose press nobody could later attribute. Both
+**Placing somebody in a team and appointing a lead are confirmed writes, proved to reach the system
+in three places.** The row: `gate.team_membership` or `gate.department_lead`, naming who did it,
+with an appointment ending the current lead in the same transaction. The ledger: `0062`'s triggers
+append `organisation` entries on the insert and on the ending, under the person's own subject. The
+behaviour: the Departments and teams page lists the person under the team, or as the lead, for a
+reader who may name them and for nobody else. `brain.identity.organisation_store` holds the SQL and
+`brain.console.organisation` the two questions, `may_place` and `may_appoint`, asked under the
+transaction about the rows as they stand. `tests/unit/test_organisation_store.py` is the database
+half.
+
+**An elevation request is filed, approved or denied, and an approval is a grant with a lapse.** The
+request is a `gate.elevation_request` row by the caller for themselves; a decision is somebody
+else's, asked through `brain.console.elevation.may_approve` or `may_decide` inside
+`brain.gate.elevation_store`'s transaction with the requester's reach as the resolver answers it
+then. An approval writes a `gate.capability_grant` row whose `not_after` ends the window, so the
+requester resolves to more at once and to no more after the lapse, with nothing on this module's
+side ending it. The listing is `requests_shown`: a requester's own and those the reader may decide.
+`tests/unit/test_elevation_store.py` is the database half, and it asks the resolver on both sides of
+the lapse.
+
+**One of the four still says more about what is missing than about what is there, and that is the
+design rather than an apology.** Switching a webhook subscriber off has no ledger member to be
+recorded under and no audit subject a subscriber id fits, so the Subscribers screen lists who is
+told what and says how that stops, without a button whose press nobody could later attribute. Its
 sentences travel on the response, for `brain.skill_routes`' reason: the day a fact changes, the
-sentence changes in the same commit.
+sentence changes in the same commit, which is what happened to the Elevation screen's.
 
 **No count of anything, anywhere.** Every listing is filtered per caller, and `truncated` says a
 load came back full, computed against what was loaded rather than what survived.
@@ -50,34 +68,58 @@ import enum
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Annotated, Any, Final
+from datetime import datetime, timedelta
+from typing import Annotated, Any, Final, Literal, Self
 
 import structlog
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
-from brain.console.elevation import ELEVATION_CONTROL, landing
+from brain.console.elevation import (
+    ELEVATION_CONTROL,
+    ElevationRequest,
+    ElevationState,
+    landing,
+    may_approve,
+    may_decide,
+    requester_prompt,
+    requests_shown,
+    state_of,
+    would_widen,
+)
 from brain.console.govern import Decision, GovernError, Placed, certify, recertifiable
 from brain.console.organisation import (
     DEPARTMENTS_SCREEN,
+    ORGANISING_AUTHORITY,
     Department,
+    Lead,
     Member,
+    Membership,
     Organisation,
     Team,
+    may_appoint,
+    may_organise,
+    may_place,
     organisation,
 )
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.subscribers import findings, subscriber_lines
-from brain.core.entitlement import EntitlementSet
+from brain.core.department import ScopeRecord
+from brain.core.entitlement import CAPABILITY_RE, Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.core.scope_sql import PredicateRefusedError
+from brain.gate.elevation_store import (
+    ElevationRecords,
+    PendingRequest,
+    StoredElevations,
+    StoredRequest,
+)
 from brain.gate.review_store import (
     Decided,
     GrantHolding,
@@ -87,12 +129,25 @@ from brain.gate.review_store import (
     StoredReview,
 )
 from brain.govern_routes import placed_assignment, placed_grant
+from brain.identity.organisation_store import (
+    OrganisationRecords,
+    Person,
+    StoredOrganisation,
+    live_leads,
+    live_memberships,
+)
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason
+from brain.identity.teams import PrincipalSubject
 from brain.ops.outbox import EventKind, Subscriber, may_manage
 from brain.ops.outbox_store import last_delivered, subscribers
 from brain.ops.replica_store import ConsoleReads, Served
 from brain.routing_routes import sessions_of
+from brain.tables.elevation import (
+    EXPLANATION_CHARS,
+    LONGEST_HOURS,
+    ElevationDecision,
+)
 from brain.tables.gate import DepartmentRow, TeamRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.review import ReviewDecision
@@ -101,37 +156,47 @@ log = structlog.get_logger()
 
 # ------------------------------------------------------------ written-down reasons
 
-#: What the organisation screen cannot show, served beside it.
-WHO_IS_IN_A_TEAM_IS_NOT_RECORDED: Final = (
-    "Who is in each team is not recorded on this install. A team exists as a named part of its "
-    "department, and nothing yet stores its members, so a team is listed here with nobody under it."
+#: What the organisation screen says about its teams and leads, served beside it.
+A_TEAM_LISTS_WHO_YOU_MAY_SEE_IN_IT: Final = (
+    "A team lists the people in it you may see. Placing somebody in a team, or taking them out, "
+    "changes nobody's access: a team is where somebody sits, and what they may see is still only "
+    "what their grants say."
 )
-NO_DEPARTMENT_LEAD_IS_RECORDED: Final = (
-    "Nothing on this install records who leads a department. Whoever may review a department's "
-    "access holds that authority as a grant, which the People and grants screen shows."
+A_LEAD_CONFERS_NOTHING: Final = (
+    "A department's lead is who leads it, recorded with who appointed them. Appointing a lead "
+    "gives them no access; whoever may review a department's access holds that authority as a "
+    "grant, which the People and grants screen shows. Nobody may appoint themselves."
 )
 NOTHING_HERE_IS_COUNTED: Final = (
     "No headcount is shown. Every list here is narrowed to what you may see, so a number beside "
     "it would say how much you were not shown."
 )
+ORGANISING_IS_THE_GRANT_AUTHORITY: Final = (
+    "Placing somebody or appointing a lead takes the authority the Access review screen asks for, "
+    "held over the department and over the department the person sits in."
+)
 
 #: What an elevation is, served on the Elevation screen.
 AN_ELEVATION_IS_A_GRANT_WITH_A_CLOCK_ON_IT: Final = (
-    "An elevation is a break-glass session: grants named one by one, for one person, for a reason "
-    "from a fixed list, for a few hours at most, authorised by somebody other than that person, "
-    "told to the standing Super Admins other than those two, and recorded in an audit chain of "
-    "its own. While it is open it replaces what the person holds rather than adding to it."
+    "An elevation is one capability, at a named scope, for one person, for a reason from a fixed "
+    "list and a few hours at most, approved by somebody other than that person. It is added to "
+    "what they already hold, and it lapses on its own at the end of the hours asked, with nobody "
+    "needing to end it."
 )
-NOTHING_STORES_AN_ELEVATION_YET: Final = (
-    "Nothing on this install stores an elevation or opens one. The rules above are enforced "
-    "where a session is built, and no request consults a session yet, so there is no request "
-    "here to approve or deny, no list of who was given what, and no control to end one early. "
-    "When sessions are stored, they are listed here with who asked, who authorised, what was "
-    "given and when it lapses."
+WHAT_IS_RECORDED_ABOUT_AN_ELEVATION: Final = (
+    "Every request is kept with who asked, for what and why, who approved or denied it and when, "
+    "and when an approved one lapses. Asking, approving and denying are each recorded in the audit "
+    "ledger, and an approval is recorded again as the grant it wrote."
+)
+NOBODY_IS_TOLD_YET: Final = (
+    "Nobody is sent a notice when somebody asks or is approved. The people who should be told are "
+    "the standing Super Admins, and this install does not record who holds a role, so the audit "
+    "ledger is the record."
 )
 AUTHORISING_IS_THE_ACCESS_REVIEW_AUTHORITY: Final = (
-    "Authorising an elevation takes the same authority the Access review screen asks for, held "
-    "over the department the person sits in."
+    "Approving or denying an elevation takes the same authority the Access review screen asks for, "
+    "held over the department the person sits in, and approving it also takes the capability "
+    "itself, held over the scope named."
 )
 
 #: What a review decision does, served on the Access review screen.
@@ -199,14 +264,17 @@ class UnplacedView(MemberView):
 
 
 class TeamView(BaseModel):
+    """One team, and the people in it this reader may be shown. No figure."""
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     slug: str
     name: str
+    members: list[MemberView] = Field(default_factory=list)
 
 
 class DepartmentView(BaseModel):
-    """One offered department, its teams and the people in it this reader may be shown."""
+    """One offered department, its teams, its lead and the people in it this reader may be shown."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -214,10 +282,12 @@ class DepartmentView(BaseModel):
     name: str
     teams: list[TeamView]
     members: list[MemberView]
+    #: Null when none is recorded and when this reader may not name the one who is.
+    lead: MemberView | None = None
 
 
 class OrganisationPage(BaseModel):
-    """The organisation, and the three sentences about what it cannot show."""
+    """The organisation, and the sentences about what it shows and who may change it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -225,32 +295,145 @@ class OrganisationPage(BaseModel):
     unplaced: list[UnplacedView]
     #: A load came back full. Never how much more there is.
     truncated: bool
+    #: Whether this reader holds the authority to place anybody anywhere. Presentation only: the
+    #: writes ask `may_place` and `may_appoint` about the rows, whatever this said.
+    may_organise: bool = False
     staleness: StalenessBanner | None = None
-    teams: str = WHO_IS_IN_A_TEAM_IS_NOT_RECORDED
-    leads: str = NO_DEPARTMENT_LEAD_IS_RECORDED
+    teams: str = A_TEAM_LISTS_WHO_YOU_MAY_SEE_IN_IT
+    leads: str = A_LEAD_CONFERS_NOTHING
     counted: str = NOTHING_HERE_IS_COUNTED
+    organising: str = ORGANISING_IS_THE_GRANT_AUTHORITY
+
+
+class MembershipChange(BaseModel):
+    """Which team, whose, and in or out. Nothing that could say who did it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str = Field(min_length=2, max_length=60)
+    team: str = Field(min_length=2, max_length=60)
+    principal_id: str = Field(min_length=1, max_length=128)
+    change: Literal["join", "leave"]
+
+
+class LeadChange(BaseModel):
+    """Which department, and whom to appoint, or that its lead stands down.
+
+    An appointment names somebody and a standing down names nobody, because it is the current
+    lead who stands down; a body naming a person to stand down could name the wrong one.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str = Field(min_length=2, max_length=60)
+    change: Literal["appoint", "stand_down"]
+    principal_id: str | None = Field(default=None, min_length=1, max_length=128)
+
+    @model_validator(mode="after")
+    def _names_somebody_exactly_when_appointing(self) -> Self:
+        if (self.change == "appoint") != (self.principal_id is not None):
+            msg = "an appointment names the person appointed and a standing down names nobody"
+            raise ValueError(msg)
+        return self
+
+
+class OrganisationChanged(BaseModel):
+    """What a placement or a lead change recorded, and the database's instant."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str
+    team: str | None
+    principal_id: str | None
+    change: str
+    at: datetime
+
+
+class ElevationRequestView(BaseModel):
+    """One request this reader is shown: who asked, for what and why, and where it stands."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    request_id: str
+    principal_id: str
+    display_name: str | None
+    department: str | None
+    capability: str
+    scope_slug: str
+    reason: str
+    explanation: str
+    hours: int
+    requested_at: datetime
+    state: ElevationState
+    decided_by: str | None
+    decided_at: datetime | None
+    lapses_at: datetime | None
+    #: Whether this reader may decide it now. Presentation only: the decision asks again.
+    decidable: bool
 
 
 class ElevationPage(BaseModel):
-    """The break-glass landing for this reader, and the rules a session would be held to.
+    """The request screen for this reader: their standing, the requests they are shown, the rules.
 
-    Three fields are `brain.console.elevation.ElevationLanding`'s, and nothing here lists what a
-    session could confer: `A_LANDING_THAT_LISTS_WHAT_YOU_COULD_ELEVATE_TO_IS_THE_CATALOGUE`.
+    Nothing here lists what an elevation could confer:
+    `A_LANDING_THAT_LISTS_WHAT_YOU_COULD_ELEVATE_TO_IS_THE_CATALOGUE`. A requester types the
+    capability they need.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     prompt: str
     holds_nothing_standing: bool
-    #: Whether this reader holds the authority to authorise one anywhere. Presentation only.
+    #: Whether this reader holds the authority to decide one anywhere. Presentation only.
     may_authorise: bool
-    #: The closed list of reasons a session may be opened for. The product's, not the company's.
+    #: The closed list of reasons an elevation may be asked for. The product's, not the company's.
     reasons: list[str]
-    #: The longest a session may run, in hours.
+    #: The longest an elevation may run, in hours.
     longest_hours: int
+    requests: list[ElevationRequestView] = Field(default_factory=list)
+    #: A load came back full. Never how much more there is.
+    truncated: bool = False
     what: str = AN_ELEVATION_IS_A_GRANT_WITH_A_CLOCK_ON_IT
-    recorded: str = NOTHING_STORES_AN_ELEVATION_YET
+    recorded: str = WHAT_IS_RECORDED_ABOUT_AN_ELEVATION
+    notified: str = NOBODY_IS_TOLD_YET
     authorising: str = AUTHORISING_IS_THE_ACCESS_REVIEW_AUTHORITY
+
+
+class ElevationAsked(BaseModel):
+    """What somebody asks for, for themselves. Nothing that could say who, or decide it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    capability: str = Field(pattern=CAPABILITY_RE.pattern, max_length=200)
+    scope_slug: str = Field(min_length=2, max_length=60)
+    reason: BreakGlassReason
+    explanation: str = Field(min_length=1, max_length=EXPLANATION_CHARS)
+    hours: int = Field(ge=1, le=LONGEST_HOURS)
+
+
+class ElevationFiled(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    request_id: str
+    requested_at: datetime
+
+
+class ElevationDecisionAsked(BaseModel):
+    """Approved or denied. Nothing that could say who, and no third word."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    decision: ElevationDecision
+
+
+class ElevationDecided(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    request_id: str
+    principal_id: str
+    decision: ElevationDecision
+    decided_at: datetime
+    lapses_at: datetime | None
 
 
 class HoldingKind(enum.StrEnum):
@@ -390,11 +573,13 @@ class LoadedOrganisation:
     teams: tuple[Team, ...]
     members: tuple[Member, ...]
     full: bool
+    memberships: tuple[Membership, ...] = ()
+    leads: tuple[Lead, ...] = ()
 
 
 @dataclass(frozen=True)
 class OrganisationSource:
-    """`gate.department`, `gate.team` and `auth.principal`, read for display. Decides nothing."""
+    """The departments, teams, people, memberships and leads, read for display. Decides nothing."""
 
     reads: ConsoleReads
 
@@ -403,6 +588,8 @@ class OrganisationSource:
             departments = (await session.execute(live_departments(limit))).all()
             teams = (await session.execute(live_teams(limit))).all()
             people = (await session.execute(live_people(limit))).all()
+            memberships = (await session.execute(live_memberships(limit))).all()
+            leads = (await session.execute(live_leads(limit))).all()
             return LoadedOrganisation(
                 departments=tuple(Department(slug=slug, name=name) for slug, name in departments),
                 teams=tuple(
@@ -418,7 +605,15 @@ class OrganisationSource:
                     )
                     for pid, name, department, disabled_at in people
                 ),
-                full=max(len(departments), len(teams), len(people)) >= limit,
+                memberships=tuple(
+                    Membership(department=department, team=team, principal_id=pid)
+                    for department, team, pid in memberships
+                ),
+                leads=tuple(
+                    Lead(department=department, principal_id=pid) for department, pid in leads
+                ),
+                full=max(len(departments), len(teams), len(people), len(memberships), len(leads))
+                >= limit,
             )
 
         return await self.reads.read(work, now=now)
@@ -466,6 +661,28 @@ def subscriber_source_of(request: Request) -> SubscriberSource:
     return SubscriberSource(_console_reads(request))
 
 
+def organisation_records_of(request: Request) -> OrganisationRecords:
+    """`app.state.organisation_records` when something put one there, and the database otherwise."""
+    found = getattr(request.app.state, "organisation_records", None)
+    if isinstance(found, OrganisationRecords):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredOrganisation(factory)
+
+
+def elevation_records_of(request: Request) -> ElevationRecords:
+    """`app.state.elevation_records` when something put one there, and the database otherwise."""
+    found = getattr(request.app.state, "elevation_records", None)
+    if isinstance(found, ElevationRecords):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredElevations(factory)
+
+
 def review_store_of(request: Request) -> StoredReview:
     """`app.state.review_store` when something put one there, and the database otherwise.
 
@@ -483,26 +700,34 @@ def review_store_of(request: Request) -> StoredReview:
 # ---------------------------------------------------------------- the projections
 
 
+def member_view(one: Member) -> MemberView:
+    return MemberView(
+        principal_id=one.principal_id, display_name=one.display_name, disabled=one.disabled
+    )
+
+
 def organisation_page(
-    shown: Organisation, *, full: bool, banner: StalenessBanner | None
+    shown: Organisation, *, full: bool, banner: StalenessBanner | None, may_organise: bool = False
 ) -> OrganisationPage:
     return OrganisationPage(
         departments=[
             DepartmentView(
                 slug=line.slug,
                 name=line.name,
-                teams=[TeamView(slug=one.slug, name=one.name) for one in line.teams],
-                members=[
-                    MemberView(
-                        principal_id=one.principal_id,
-                        display_name=one.display_name,
-                        disabled=one.disabled,
+                teams=[
+                    TeamView(
+                        slug=one.slug,
+                        name=one.name,
+                        members=[member_view(member) for member in one.members],
                     )
-                    for one in line.members
+                    for one in line.teams
                 ],
+                members=[member_view(one) for one in line.members],
+                lead=None if line.lead is None else member_view(line.lead),
             )
             for line in shown.departments
         ],
+        may_organise=may_organise,
         unplaced=[
             UnplacedView(
                 principal_id=one.principal_id,
@@ -611,27 +836,345 @@ async def departments_page(
         raise _not_answerable("departments")
     served = await organisation_source_of(request).load(limit=limit, now=asked.now)
     loaded = served.value
-    shown = organisation(loaded.departments, loaded.teams, loaded.members, asked.reach, asked.now)
-    return organisation_page(shown, full=loaded.full, banner=served.banner)
+    shown = organisation(
+        loaded.departments,
+        loaded.teams,
+        loaded.members,
+        asked.reach,
+        asked.now,
+        memberships=loaded.memberships,
+        leads=loaded.leads,
+    )
+    return organisation_page(
+        shown,
+        full=loaded.full,
+        banner=served.banner,
+        may_organise=asked.reach.scope_for(ORGANISING_AUTHORITY, asked.now) is not None,
+    )
+
+
+def member_of(person: Person) -> Member:
+    """A person a write read, as `brain.console.organisation` asks about one."""
+    return Member(
+        principal_id=person.principal_id,
+        display_name=person.display_name,
+        department=person.department,
+        disabled=person.disabled,
+    )
+
+
+def _not_organisable_here() -> Absent:
+    """The one refusal a placement or a lead change makes, whatever refused it."""
+    return Absent("that change to the organisation is not writable by this caller")
+
+
+@router.post(
+    "/govern/departments/membership",
+    response_model=OrganisationChanged,
+    responses=COMMON_RESPONSES,
+)
+async def change_membership(
+    request: Request, body: MembershipChange, asked: Asked
+) -> OrganisationChanged:
+    """Place a person in a team or take them out. A row, a ledger entry, and the team's listing.
+
+    The authority is asked cheaply before a store is reached for, on the ordering argument every
+    route here shares; then the store asks `may_place` or `may_organise` about the team and the
+    person as the database holds them. A team that is not there, a person who is not there, a
+    person already in the team, one not in it, and a caller out of reach are one refusal.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(ORGANISING_AUTHORITY, now) is None:
+        log.info("membership change refused", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+    store = organisation_records_of(request)
+    decide = may_place if body.change == "join" else may_organise
+
+    def may(person: Person) -> bool:
+        return decide(reach, department=body.department, person=member_of(person), now=now)
+
+    write = store.place if body.change == "join" else store.unplace
+    at = await write(
+        department=body.department,
+        team=body.team,
+        principal_id=body.principal_id,
+        actor=asked.caller.principal.id,
+        ent_hash=reach.ent_hash(),
+        trace_id=_trace_id(),
+        may=may,
+    )
+    if at is None:
+        log.info("membership change not recorded", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+    return OrganisationChanged(
+        department=body.department,
+        team=body.team,
+        principal_id=body.principal_id,
+        change=body.change,
+        at=at,
+    )
+
+
+@router.post(
+    "/govern/departments/lead",
+    response_model=OrganisationChanged,
+    responses=COMMON_RESPONSES,
+)
+async def change_lead(request: Request, body: LeadChange, asked: Asked) -> OrganisationChanged:
+    """Appoint a department's lead, ending the current one, or stand the current one down.
+
+    An appointment asks `may_appoint` about the person and `may_organise` about the lead it ends;
+    a standing down asks `may_organise` about the lead. Every refusal is one refusal.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(ORGANISING_AUTHORITY, now) is None:
+        log.info("lead change refused", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+    store = organisation_records_of(request)
+    department = body.department
+    actor = asked.caller.principal.id
+
+    if body.principal_id is None:
+
+        def may_end(lead: Person) -> bool:
+            return may_organise(reach, department=department, person=member_of(lead), now=now)
+
+        at = await store.stand_down(
+            department=department,
+            actor=actor,
+            ent_hash=reach.ent_hash(),
+            trace_id=_trace_id(),
+            may=may_end,
+        )
+    else:
+
+        def may_replace(person: Person, incumbent: Person | None) -> bool:
+            if not may_appoint(reach, department=department, person=member_of(person), now=now):
+                return False
+            return incumbent is None or may_organise(
+                reach, department=department, person=member_of(incumbent), now=now
+            )
+
+        at = await store.appoint(
+            department=department,
+            principal_id=body.principal_id,
+            actor=actor,
+            ent_hash=reach.ent_hash(),
+            trace_id=_trace_id(),
+            may=may_replace,
+        )
+    if at is None:
+        log.info("lead change not recorded", principal=actor)
+        raise _not_organisable_here()
+    return OrganisationChanged(
+        department=department,
+        team=None,
+        principal_id=body.principal_id,
+        change=body.change,
+        at=at,
+    )
 
 
 # ------------------------------------------------------------------ elevation
 
 
-@router.get("/govern/elevation", response_model=ElevationPage, responses=COMMON_RESPONSES)
-async def elevation_page(asked: Asked) -> ElevationPage:
-    """The break-glass landing for this reader. No database: nothing stores a session to read.
+def elevation_request(stored: StoredRequest) -> ElevationRequest:
+    """A stored request as `brain.console.elevation` asks about one."""
+    return ElevationRequest(
+        request_id=str(stored.request_id),
+        principal_id=stored.principal_id,
+        department=stored.department,
+        capability=Capability(value=stored.capability),
+    )
 
-    Open to every signed-in caller, because the one reader the landing is designed for is
-    somebody holding nothing, and a landing that required a grant would be unreachable for them.
+
+def request_view(
+    stored: StoredRequest, reach: EntitlementSet, now: datetime
+) -> ElevationRequestView:
+    state = state_of(
+        decision=stored.decision, lapses_at=stored.lapses_at, grant_live=stored.grant_live, now=now
+    )
+    return ElevationRequestView(
+        request_id=str(stored.request_id),
+        principal_id=stored.principal_id,
+        display_name=stored.display_name,
+        department=stored.department,
+        capability=stored.capability,
+        scope_slug=stored.scope_slug,
+        reason=stored.reason,
+        explanation=stored.explanation,
+        hours=stored.hours,
+        requested_at=stored.requested_at,
+        state=state,
+        decided_by=stored.decided_by,
+        decided_at=stored.decided_at,
+        lapses_at=stored.lapses_at,
+        decidable=state is ElevationState.PENDING
+        and may_decide(reach, elevation_request(stored), now),
+    )
+
+
+def approval_grant(
+    pending: PendingRequest, *, approver: EntitlementSet, requester: EntitlementSet, at: datetime
+) -> SubjectGrant | None:
+    """The grant approving this request writes, if `may_approve` says so, or None.
+
+    Built at the database's instant, lapsing the hours the request asked for later, at the scope
+    the request names as that scope's row stands now. A slug no live scope carries, a predicate
+    `ScopeRecord` refuses and a grant `SubjectGrant` refuses are all None, the same as a refusal.
+    """
+    stored = pending.request
+    if pending.scope is None:
+        return None
+    try:
+        record = ScopeRecord.from_predicate(
+            pending.scope.slug,
+            pending.scope.predicate,
+            is_department=pending.scope.is_department,
+            label=pending.scope.label,
+        )
+        grant = SubjectGrant(
+            subject=PrincipalSubject(principal_id=stored.principal_id),
+            capability=Capability(value=stored.capability),
+            scope=record.scope,
+            granted_by=approver.principal_id,
+            reason=f"elevation {stored.request_id}: {stored.reason}",
+            granted_at=at,
+            not_after=at + timedelta(hours=stored.hours),
+        )
+    except (ValueError, PredicateRefusedError):
+        return None
+    if not may_approve(
+        approver, elevation_request(stored), grant=grant, requester=requester, now=at
+    ):
+        return None
+    return grant
+
+
+def _not_elevatable_here() -> Absent:
+    """The one refusal a request or a decision makes, whatever refused it."""
+    return Absent("that elevation is not writable by this caller")
+
+
+@router.get("/govern/elevation", response_model=ElevationPage, responses=COMMON_RESPONSES)
+async def elevation_page(
+    request: Request,
+    asked: Asked,
+    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = DEFAULT_ROWS,
+) -> ElevationPage:
+    """The request screen for this reader: their standing, the requests they are shown, the rules.
+
+    Open to every signed-in caller, because everybody may ask for more and see their own
+    requests, and the one reader the landing is designed for is somebody holding nothing. So the
+    store is read for every caller alike, and a process with no database answers every caller
+    alike. `requests_shown` decides the rows.
     """
     shown = landing(asked.caller.principal, grants=asked.reach.grants)
+    stored, full = await elevation_records_of(request).requests(limit=limit)
+    by_id = {str(one.request_id): one for one in stored}
+    visible = requests_shown([elevation_request(one) for one in stored], asked.reach, asked.now)
     return ElevationPage(
-        prompt=shown.prompt,
+        prompt=requester_prompt(shown),
         holds_nothing_standing=shown.holds_nothing_standing,
         may_authorise=asked.reach.scope_for(ELEVATION_CONTROL, asked.now) is not None,
         reasons=[one.value for one in BreakGlassReason],
         longest_hours=int(BREAK_GLASS_MAX.total_seconds() // 3600),
+        requests=[request_view(by_id[one.request_id], asked.reach, asked.now) for one in visible],
+        truncated=full,
+    )
+
+
+@router.post(
+    "/govern/elevation/requests",
+    response_model=ElevationFiled,
+    responses=COMMON_RESPONSES,
+    status_code=201,
+)
+async def file_elevation(request: Request, body: ElevationAsked, asked: Asked) -> ElevationFiled:
+    """Ask for one capability, for yourself. A pending row and a ledger entry.
+
+    Refused when the caller already holds anything covering the capability, before a store is
+    reached for: `would_widen`, and `AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT`. The
+    scope slug is not looked up, so filing says nothing about which scopes exist; whoever decides
+    it resolves the slug.
+    """
+    capability = Capability(value=body.capability)
+    if not would_widen(asked.reach, capability, asked.now):
+        log.info("elevation not filed", principal=asked.caller.principal.id)
+        raise _not_elevatable_here()
+    filed = await elevation_records_of(request).file(
+        principal_id=asked.caller.principal.id,
+        capability=capability.value,
+        scope_slug=body.scope_slug,
+        reason=body.reason.value,
+        explanation=body.explanation,
+        hours=body.hours,
+        ent_hash=asked.reach.ent_hash(),
+        trace_id=_trace_id(),
+    )
+    if filed is None:
+        log.info("elevation not recorded", principal=asked.caller.principal.id)
+        raise _not_elevatable_here()
+    return ElevationFiled(request_id=str(filed.request_id), requested_at=filed.requested_at)
+
+
+@router.post(
+    "/govern/elevation/requests/{request_id}/decision",
+    response_model=ElevationDecided,
+    responses=COMMON_RESPONSES,
+)
+async def decide_elevation(
+    request: Request, request_id: uuid.UUID, body: ElevationDecisionAsked, asked: Asked
+) -> ElevationDecided:
+    """Approve a request into a grant with a lapse, or deny it. Never your own.
+
+    The authority is asked cheaply before a store is reached for; then the store asks
+    `approval_grant` or `may_decide` about the request as it stands under its lock, with the
+    requester's reach as the resolver answers it at the database's instant. A request that is not
+    there, one already decided, the caller's own, one out of reach and one that would narrow its
+    requester are one refusal.
+    """
+    reach = asked.reach
+    if reach.scope_for(ELEVATION_CONTROL, asked.now) is None:
+        log.info("elevation decision refused", principal=asked.caller.principal.id)
+        raise _not_elevatable_here()
+    store = elevation_records_of(request)
+    decider = asked.caller.principal.id
+    if body.decision is ElevationDecision.APPROVED:
+
+        def grant_for(
+            pending: PendingRequest, requester: EntitlementSet, at: datetime
+        ) -> SubjectGrant | None:
+            return approval_grant(pending, approver=reach, requester=requester, at=at)
+
+        decided = await store.approve(
+            request_id,
+            approver_id=decider,
+            ent_hash=reach.ent_hash(),
+            trace_id=_trace_id(),
+            grant_for=grant_for,
+        )
+    else:
+
+        def may(pending: PendingRequest) -> bool:
+            return may_decide(reach, elevation_request(pending.request), asked.now)
+
+        decided = await store.deny(
+            request_id,
+            decider_id=decider,
+            ent_hash=reach.ent_hash(),
+            trace_id=_trace_id(),
+            may=may,
+        )
+    if decided is None:
+        log.info("elevation decision not recorded", principal=decider)
+        raise _not_elevatable_here()
+    return ElevationDecided(
+        request_id=str(decided.request_id),
+        principal_id=decided.principal_id,
+        decision=decided.decision,
+        decided_at=decided.decided_at,
+        lapses_at=decided.lapses_at,
     )
 
 

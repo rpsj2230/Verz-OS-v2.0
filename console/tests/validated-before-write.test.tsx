@@ -50,6 +50,12 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
     { pattern: "/classification/:entity/:column", index: 1, writes: true },
   ],
   "src/pages/DataTransfer.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
+  "src/pages/Departments.tsx": [
+    { pattern: "/departments", index: 0, writes: false },
+    { pattern: "/departments", index: 1, writes: true },
+    { pattern: "/departments", index: 2, writes: true },
+  ],
+  "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 0, writes: true }],
   "src/pages/People.tsx": [{ pattern: "/people/:subject", index: 0, writes: true }],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],

@@ -24,6 +24,7 @@ Task ids: M33.7.1.1, M33.7.1.2, M33.7.1.3, M33.7.1.4, M33.7.1.5
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 
@@ -35,8 +36,11 @@ from brain.console.elevation import (
     ELEVATION_CHAIN,
     ELEVATION_CONTROL,
     NAMES_THAT_WOULD_LIST_THE_VOCABULARY,
+    REQUEST_ADDS_PROMPT,
     ElevationError,
     ElevationLanding,
+    ElevationRequest,
+    ElevationState,
     Revocation,
     anchor_findings,
     chain_findings,
@@ -46,16 +50,24 @@ from brain.console.elevation import (
     expired_by,
     holds_nothing_standing,
     landing,
+    may_approve,
     may_authorise,
+    may_decide,
     record_elevation,
     request_elevation,
+    requester_prompt,
+    requests_shown,
     revoke,
+    state_of,
+    where_of,
+    would_widen,
 )
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
+from brain.identity.packs import SubjectGrant
 from brain.identity.roles import (
     BREAK_GLASS_CHAIN,
     BREAK_GLASS_MAX,
@@ -68,7 +80,9 @@ from brain.identity.roles import (
     reach_during,
     standing_entitlement,
 )
+from brain.identity.teams import PrincipalSubject
 from brain.ops.halt import MINIMUM_REASON
+from brain.tables.elevation import ElevationDecision
 
 #: A fixed moment, so an expiry test cannot pass because the machine's clock happened to sit
 #: on the convenient side of a boundary. Everything below is built relative to it.
@@ -649,3 +663,177 @@ def test_a_revocation_by_nobody_is_refused_like_the_other_two_things_it_refuses(
             Revocation(session_id="bg_1", by=nobody, at=NOW, reason=long_enough)
 
     assert Revocation(session_id="bg_1", by="u_other", at=NOW, reason=long_enough).by == "u_other"
+
+
+# ------------------------------------------------------------------ stored requests (M27.7.8)
+ASKED = "read:client.name"
+
+
+def a_request(principal_id: str = "u_asker", department: str | None = MAINTENANCE) -> Any:
+    return ElevationRequest(
+        request_id="r_1",
+        principal_id=principal_id,
+        department=department,
+        capability=Capability(value=ASKED),
+    )
+
+
+def the_grant(
+    *,
+    principal_id: str = "u_asker",
+    capability: str = ASKED,
+    scope: Scope | None = None,
+    hours: int = 2,
+    granted_by: str = "u_admin",
+) -> SubjectGrant:
+    return SubjectGrant(
+        subject=PrincipalSubject(principal_id=principal_id),
+        capability=Capability(value=capability),
+        scope=scope or Scope.department(MAINTENANCE),
+        granted_by=granted_by,
+        reason="elevation r_1: incident_response",
+        granted_at=NOW,
+        not_after=NOW + timedelta(hours=hours),
+    )
+
+
+NOBODY = EntitlementSet(principal_id="u_asker", grants=())
+
+
+def test_an_approver_in_reach_holding_the_capability_approves_a_request_that_widens() -> None:
+    """M27.7.8, the positive case every refusal below needs. Delete this and each of them is
+    satisfied by a `may_approve` that refuses everything, and nothing could ever be approved."""
+    approver = holding("approve:grant", ASKED)
+
+    assert may_approve(approver, a_request(), grant=the_grant(), requester=NOBODY, now=NOW) is True
+
+
+def test_an_approval_is_refused_for_each_of_its_reasons() -> None:
+    """`may_approve`'s questions, one at a time. Delete this and somebody approves their own
+    request, an authoriser in maintenance approves a finance request, an approver without the
+    capability grants it, a grant for another capability, person or wider scope rides on the
+    approval, or a second grant of something the requester holds narrows them while the ledger
+    says it gave."""
+    approver = holding("approve:grant", ASKED)
+    own = holding("approve:grant", ASKED, principal_id="u_asker")
+    without = holding("approve:grant")
+    holds_it = EntitlementSet(
+        principal_id="u_asker",
+        grants=(Grant(capability=Capability(value="read:client.*"), scope=Scope.unrestricted()),),
+    )
+    finance = a_request(department=FINANCE)
+    # Holds every client field, so only the capability check can refuse a grant of another one.
+    wide = holding("approve:grant", "read:client.*")
+
+    refused = [
+        may_approve(own, a_request(), grant=the_grant(), requester=NOBODY, now=NOW),
+        may_approve(approver, finance, grant=the_grant(), requester=NOBODY, now=NOW),
+        may_approve(without, a_request(), grant=the_grant(), requester=NOBODY, now=NOW),
+        may_approve(
+            wide,
+            a_request(),
+            grant=the_grant(capability="read:client.email"),
+            requester=NOBODY,
+            now=NOW,
+        ),
+        may_approve(
+            approver,
+            a_request(),
+            grant=the_grant(principal_id="u_else"),
+            requester=NOBODY,
+            now=NOW,
+        ),
+        may_approve(
+            approver,
+            a_request(),
+            grant=the_grant(scope=Scope.unrestricted()),
+            requester=NOBODY,
+            now=NOW,
+        ),
+        may_approve(approver, a_request(), grant=the_grant(), requester=holds_it, now=NOW),
+    ]
+
+    assert refused == [False] * 7
+
+
+def test_a_request_widens_only_what_its_requester_does_not_already_hold() -> None:
+    """`would_widen`, including through a wildcard. Delete this and a request for something held
+    through `read:client.*` is filed and approved, narrowing its requester to where both grants
+    reach, which is `AN_ELEVATION_OF_WHAT_IS_ALREADY_HELD_WOULD_NARROW_IT`."""
+    wide = EntitlementSet(
+        principal_id="u_asker",
+        grants=(Grant(capability=Capability(value="read:client.*"), scope=Scope.unrestricted()),),
+    )
+    wanted = Capability(value=ASKED)
+
+    assert would_widen(NOBODY, wanted, NOW) is True
+    assert would_widen(wide, wanted, NOW) is False
+    assert would_widen(wide, Capability(value="read:invoice.total"), NOW) is True
+
+
+def test_a_decision_is_never_your_own_and_needs_the_authority_over_the_requesters_row() -> None:
+    """`may_decide`, which a denial asks alone. Delete this and somebody denies their own request to
+    clear it off an authoriser's page, a maintenance authoriser denies a finance request, or a
+    requester in no department is decided by anybody short of company-wide."""
+    approver = holding("approve:grant")
+
+    assert may_decide(approver, a_request(), NOW) is True
+    assert may_decide(holding("approve:grant", principal_id="u_asker"), a_request(), NOW) is False
+    assert may_decide(approver, a_request(department=FINANCE), NOW) is False
+    assert may_decide(approver, a_request(department=None), NOW) is False
+    assert where_of(a_request(department=None)) == {}
+
+
+def test_a_reader_is_shown_their_own_requests_and_those_they_may_decide_and_no_other() -> None:
+    """`requests_shown`. Delete this and a maintenance authoriser reads what somebody in finance
+    asked for and why, or a requester reads everybody's, or an authoriser loses their own."""
+    requests = (
+        a_request("u_asker"),
+        a_request("u_finance", department=FINANCE),
+        a_request("u_admin", department=FINANCE),
+    )
+    authoriser = holding("approve:grant")
+
+    assert [one.principal_id for one in requests_shown(requests, authoriser, NOW)] == [
+        "u_asker",
+        "u_admin",
+    ]
+    assert [one.principal_id for one in requests_shown(requests, NOBODY, NOW)] == ["u_asker"]
+
+
+def test_a_requests_state_is_read_off_its_row_and_a_lapse_is_never_live() -> None:
+    """`state_of`. Delete this and an approved elevation whose lapse has passed reads as live on the
+    screen while the resolver has stopped returning it, a removed grant reads as live, or a denial
+    reads as an approval."""
+    later = NOW + timedelta(hours=1)
+    approved = ElevationDecision.APPROVED
+    denied = ElevationDecision.DENIED
+
+    states = [
+        state_of(decision=None, lapses_at=None, grant_live=False, now=NOW),
+        state_of(decision=denied, lapses_at=None, grant_live=False, now=NOW),
+        state_of(decision=approved, lapses_at=later, grant_live=True, now=NOW),
+        state_of(decision=approved, lapses_at=later, grant_live=False, now=NOW),
+        state_of(decision=approved, lapses_at=NOW, grant_live=True, now=NOW),
+        state_of(decision=approved, lapses_at=None, grant_live=True, now=NOW),
+    ]
+
+    assert states == [
+        ElevationState.PENDING,
+        ElevationState.DENIED,
+        ElevationState.LIVE,
+        ElevationState.ENDED,
+        ElevationState.LAPSED,
+        ElevationState.LAPSED,
+    ]
+
+
+def test_the_request_screen_tells_staff_an_elevation_adds_and_a_partner_what_they_hold() -> None:
+    """`requester_prompt`. Delete this and an employee is told a session replaces what they hold,
+    which is false of a stored elevation, or a partner is told they hold standing access."""
+    partner = landing(a_principal())
+    staff = landing(a_principal("u_staff", employment=Employment.STAFF))
+
+    assert requester_prompt(partner) == PARTNER_PROMPT
+    assert requester_prompt(staff) == REQUEST_ADDS_PROMPT
+    assert requester_prompt(staff) != staff.prompt

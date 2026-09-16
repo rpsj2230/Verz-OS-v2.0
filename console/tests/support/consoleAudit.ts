@@ -40,7 +40,13 @@ import { reviewApiPath } from "../../src/pages/classificationQuery";
 import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
-import { REVIEW_DECISION_API_PATH } from "../../src/pages/governPeopleQuery";
+import {
+  ELEVATION_REQUESTS_API_PATH,
+  LEAD_API_PATH,
+  MEMBERSHIP_API_PATH,
+  REVIEW_DECISION_API_PATH,
+  elevationDecisionApiPath,
+} from "../../src/pages/governPeopleQuery";
 import { GRANTS_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
@@ -156,7 +162,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/scopes",
       "/api/v1/govern/grants*",
       "/api/v1/govern/access-review*",
-      "/api/v1/govern/elevation",
+      "/api/v1/govern/elevation*",
       "/api/v1/govern/sessions*",
       "/api/v1/govern/sign-ins*",
       "/api/v1/sign-ins",
@@ -175,6 +181,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "gate.grants_version",
       "gate.policy_epoch",
       "gate.review_decision",
+      "gate.elevation_request",
     ],
     installation: [
       "INSTALL_OIDC_ISSUER",
@@ -200,21 +207,26 @@ export const AREAS: Readonly<Record<string, Area>> = {
         because: "No route writes gate.scope or the role and capability registries; they are declared by the product and by migrations.",
       },
       {
-        what: "Nobody can raise or grant an elevation.",
-        because: "No install stores an elevation yet, and the Elevation requests screen says so where the list would be.",
+        what: "Nobody is sent a notice when somebody asks for an elevation or is given one.",
+        because:
+          "The people to tell are the standing Super Admins, and no table records who holds a role (M1.3.2), so brain.console.elevation.client_recipients has nobody to compute; the audit ledger is the record, and the Elevation requests screen says so.",
       },
       { what: "The identity provider and the staff source cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
     ],
   },
   "Departments, teams and client configuration": {
     screens: ["/departments", "/department"],
-    routes: ["/api/v1/govern/departments"],
-    tables: ["gate.department", "gate.team"],
+    routes: ["/api/v1/govern/departments*"],
+    tables: ["gate.department", "gate.team", "gate.team_membership", "gate.department_lead"],
     installation: ["INSTALL_COMPANY_NAME", "INSTALL_PRODUCT_NAME", "INSTALL_LOGO_URL", "INSTALL_ACCENT_COLOUR"],
     gaps: [
       {
-        what: "A department or a team cannot be created, renamed or removed, and nobody can be placed in one.",
-        because: "No route and no module under src/brain writes gate.department or gate.team, so the screen reads what is there and there is no writer to call.",
+        what: "A department or a team cannot be created, renamed or removed.",
+        because: "No route and no module under src/brain writes gate.department or gate.team, so the screen places people in the teams that are there and leads the departments that are there, and there is no writer to call for the rest.",
+      },
+      {
+        what: "Nothing applies the staff list's teams and leads on a schedule.",
+        because: "brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either, which is true of the whole staff sync: dry_run is read by the Staff sources screen and nothing applies a roster.",
       },
       { what: "The company's name, product name, logo and accent cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
     ],
@@ -550,6 +562,20 @@ function at(route: string, spelled: string, built: string, versioned = true): Wr
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Learning.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
+  "src/pages/Departments.tsx asked.path": [
+    at("POST /api/v1/govern/departments/membership", "MEMBERSHIP_API_PATH", MEMBERSHIP_API_PATH),
+    at("POST /api/v1/govern/departments/lead", "LEAD_API_PATH", LEAD_API_PATH),
+  ],
+  "src/pages/Elevation.tsx ELEVATION_REQUESTS_API_PATH": [
+    at("POST /api/v1/govern/elevation/requests", "ELEVATION_REQUESTS_API_PATH", ELEVATION_REQUESTS_API_PATH),
+  ],
+  "src/pages/Elevation.tsx elevationDecisionApiPath(chosen.row.request_id)": [
+    at(
+      "POST /api/v1/govern/elevation/requests/{request_id}/decision",
+      "elevationDecisionApiPath",
+      elevationDecisionApiPath("11111111-2222-3333-4444-555555555555"),
+    ),
+  ],
   "src/pages/AccessReview.tsx REVIEW_DECISION_API_PATH": [
     at("POST /api/v1/govern/access-review/decision", "REVIEW_DECISION_API_PATH", REVIEW_DECISION_API_PATH),
   ],
@@ -661,6 +687,16 @@ const UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL = t(
   "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next",
   true,
 );
+const PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE = t(
+  "test_organisation_store",
+  "test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page",
+  true,
+);
+const ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER = t(
+  "test_elevation_store",
+  "test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not",
+  true,
+);
 
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
@@ -671,6 +707,26 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
       "test_estate_routes",
       "test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning",
     ),
+  },
+  "POST /api/v1/govern/departments/membership": {
+    row: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+    audit: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+    behaviour: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+  },
+  "POST /api/v1/govern/departments/lead": {
+    row: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+    audit: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+    behaviour: PLACEMENT_REACHES_THE_ROW_THE_LEDGER_AND_THE_PAGE,
+  },
+  "POST /api/v1/govern/elevation/requests": {
+    row: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,
+    audit: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,
+    behaviour: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,
+  },
+  "POST /api/v1/govern/elevation/requests/{request_id}/decision": {
+    row: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,
+    audit: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,
+    behaviour: ELEVATION_REACHES_THE_ROW_THE_LEDGER_AND_THE_RESOLVER,
   },
   "POST /api/v1/connectors": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,

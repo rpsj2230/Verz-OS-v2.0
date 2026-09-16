@@ -20,7 +20,7 @@ import uuid
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 from fastapi import FastAPI
@@ -30,11 +30,20 @@ from brain import govern_people_routes as routes
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
-from brain.console.elevation import ALREADY_HOLDS_PROMPT
-from brain.console.organisation import Department, Member, Team
+from brain.console.elevation import REQUEST_ADDS_PROMPT, ElevationState
+from brain.console.organisation import Department, Lead, Member, Membership, Team
 from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
+from brain.gate.elevation_store import (
+    Decided as ElevationDecided,
+)
+from brain.gate.elevation_store import (
+    ElevationRecords,
+    NamedScope,
+    PendingRequest,
+    StoredRequest,
+)
 from brain.gate.review_store import (
     Decided,
     GrantHolding,
@@ -44,11 +53,15 @@ from brain.gate.review_store import (
     StoredReview,
 )
 from brain.identity.bearer import TokenAuthority
+from brain.identity.organisation_store import OrganisationRecords, Person
+from brain.identity.packs import SubjectGrant
 from brain.identity.roles import BreakGlassReason
+from brain.identity.teams import PrincipalSubject
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.ops.outbox import EventKind, Subscriber
 from brain.ops.replica_store import Served
 from brain.ops.secrets import SecretRef, VaultRole
+from brain.tables.elevation import ElevationDecision
 from brain.tables.gate import CapabilityGrantRow, CapabilityPackAssignmentRow, CapabilityPackRow
 from brain.tables.review import ReviewDecision
 from tests.fixtures.http_client import Response
@@ -64,7 +77,10 @@ from tests.unit.test_api_routes import (
 )
 
 DEPARTMENTS = f"{API_PREFIX}/govern/departments"
+MEMBERSHIP = f"{API_PREFIX}/govern/departments/membership"
+LEAD = f"{API_PREFIX}/govern/departments/lead"
 ELEVATION = f"{API_PREFIX}/govern/elevation"
+ELEVATION_REQUESTS = f"{API_PREFIX}/govern/elevation/requests"
 REVIEW = f"{API_PREFIX}/govern/access-review"
 DECISION = f"{API_PREFIX}/govern/access-review/decision"
 SUBSCRIBERS = f"{API_PREFIX}/govern/subscribers"
@@ -163,6 +179,14 @@ class Organisation(routes.OrganisationSource):
                     ),
                 ),
                 full=False,
+                memberships=(
+                    Membership(department="web", team="design", principal_id="u_2"),
+                    Membership(department="web", team="design", principal_id="u_3"),
+                ),
+                leads=(
+                    Lead(department="web", principal_id="u_2"),
+                    Lead(department="finance", principal_id="u_3"),
+                ),
             ),
         )
 
@@ -181,6 +205,234 @@ class Subscribers(routes.SubscriberSource):
     ) -> Served[tuple[tuple[Subscriber, ...], dict[str, datetime]]]:
         self.calls.append(now)  # type: ignore[attr-defined]
         return Served(value=(self.registered, {"hook_a": LONG_AGO}), banner=None)  # type: ignore[attr-defined]
+
+
+class Placements(OrganisationRecords):
+    """`OrganisationRecords` in memory. Each write asks `may` about the person as the store would.
+
+    People sit where `PEOPLE` says; `u_admin` is in web so a self-appointment can be posted.
+    """
+
+    PEOPLE: ClassVar[dict[str, Person]] = {
+        "u_2": Person(principal_id="u_2", display_name="Wei", department="web", disabled=False),
+        "u_3": Person(
+            principal_id="u_3", display_name="Grace", department="finance", disabled=False
+        ),
+        "u_gone": Person(
+            principal_id="u_gone", display_name="Gone", department="web", disabled=True
+        ),
+        "u_admin": Person(
+            principal_id="u_admin", display_name="Admin", department="web", disabled=False
+        ),
+    }
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.written: list[tuple[str, str, str | None, str]] = []
+        self.members: set[tuple[str, str, str]] = set()
+        self.leads: dict[str, str] = {}
+
+    async def place(
+        self,
+        *,
+        department: str,
+        team: str,
+        principal_id: str,
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
+        may: Callable[[Person], bool],
+    ) -> datetime | None:
+        self.calls.append("place")
+        person = self.PEOPLE.get(principal_id)
+        key = (department, team, principal_id)
+        if person is None or key in self.members or not may(person):
+            return None
+        self.members.add(key)
+        self.written.append(("joined", department, principal_id, actor))
+        return LONG_AGO
+
+    async def unplace(
+        self,
+        *,
+        department: str,
+        team: str,
+        principal_id: str,
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
+        may: Callable[[Person], bool],
+    ) -> datetime | None:
+        self.calls.append("unplace")
+        key = (department, team, principal_id)
+        if key not in self.members or not may(self.PEOPLE[principal_id]):
+            return None
+        self.members.discard(key)
+        self.written.append(("left", department, principal_id, actor))
+        return LONG_AGO
+
+    async def appoint(
+        self,
+        *,
+        department: str,
+        principal_id: str,
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
+        may: Callable[[Person, Person | None], bool],
+    ) -> datetime | None:
+        self.calls.append("appoint")
+        person = self.PEOPLE.get(principal_id)
+        current = self.leads.get(department)
+        incumbent = None if current is None else self.PEOPLE[current]
+        if person is None or current == principal_id or not may(person, incumbent):
+            return None
+        self.leads[department] = principal_id
+        self.written.append(("appointed", department, principal_id, actor))
+        return LONG_AGO
+
+    async def stand_down(
+        self,
+        *,
+        department: str,
+        actor: str,
+        ent_hash: str,
+        trace_id: str,
+        may: Callable[[Person], bool],
+    ) -> datetime | None:
+        self.calls.append("stand_down")
+        current = self.leads.get(department)
+        if current is None or not may(self.PEOPLE[current]):
+            return None
+        del self.leads[department]
+        self.written.append(("stood_down", department, current, actor))
+        return LONG_AGO
+
+
+def a_request(
+    principal_id: str,
+    department: str | None,
+    *,
+    capability: str = "read:client.name",
+    decision: ElevationDecision | None = None,
+    lapses_at: datetime | None = None,
+    grant_live: bool = False,
+) -> StoredRequest:
+    return StoredRequest(
+        request_id=uuid.uuid5(uuid.NAMESPACE_URL, f"{principal_id}/{capability}/{decision}"),
+        principal_id=principal_id,
+        display_name=f"Person {principal_id}",
+        department=department,
+        capability=capability,
+        scope_slug="web_all",
+        reason="incident_response",
+        explanation="the portal is down",
+        hours=2,
+        requested_at=LONG_AGO,
+        decision=decision,
+        decided_by=None if decision is None else "u_other",
+        decided_at=None if decision is None else LONG_AGO,
+        lapses_at=lapses_at,
+        grant_live=grant_live,
+    )
+
+
+class Elevations(ElevationRecords):
+    """`ElevationRecords` in memory. A decision asks the route's callable about the pending row,
+    with the requester holding what `REACHES` says, as the store asks with the resolver's answer."""
+
+    REACHES: ClassVar[dict[str, tuple[Grant, ...]]] = {
+        "u_2": (),
+        "u_3": (),
+        "u_admin": GRANTS["u_admin"],
+    }
+
+    def __init__(self) -> None:
+        self.stored: list[StoredRequest] = []
+        self.calls: list[str] = []
+        self.granted: list[SubjectGrant] = []
+        self.denied: list[tuple[uuid.UUID, str]] = []
+        self.scope: NamedScope | None = NamedScope(
+            slug="web_all", predicate={"department": "web"}, is_department=False, label=""
+        )
+
+    async def requests(self, *, limit: int) -> tuple[tuple[StoredRequest, ...], bool]:
+        self.calls.append("requests")
+        return tuple(self.stored), False
+
+    async def file(
+        self,
+        *,
+        principal_id: str,
+        capability: str,
+        scope_slug: str,
+        reason: str,
+        explanation: str,
+        hours: int,
+        ent_hash: str,
+        trace_id: str,
+    ) -> StoredRequest | None:
+        self.calls.append("file")
+        filed = a_request(principal_id, None, capability=capability)
+        self.stored.append(filed)
+        return filed
+
+    def _pending(self, request_id: uuid.UUID) -> StoredRequest | None:
+        for one in self.stored:
+            if one.request_id == request_id and one.decision is None:
+                return one
+        return None
+
+    async def approve(
+        self,
+        request_id: uuid.UUID,
+        *,
+        approver_id: str,
+        ent_hash: str,
+        trace_id: str,
+        grant_for: Callable[[PendingRequest, EntitlementSet, datetime], SubjectGrant | None],
+    ) -> ElevationDecided | None:
+        self.calls.append("approve")
+        one = self._pending(request_id)
+        if one is None:
+            return None
+        requester = EntitlementSet(
+            principal_id=one.principal_id, grants=self.REACHES.get(one.principal_id, ())
+        )
+        at = datetime.now(UTC)
+        grant = grant_for(PendingRequest(request=one, scope=self.scope), requester, at)
+        if grant is None:
+            return None
+        self.granted.append(grant)
+        return ElevationDecided(
+            request_id=request_id,
+            principal_id=one.principal_id,
+            decision=ElevationDecision.APPROVED,
+            decided_at=at,
+            lapses_at=grant.not_after,
+        )
+
+    async def deny(
+        self,
+        request_id: uuid.UUID,
+        *,
+        decider_id: str,
+        ent_hash: str,
+        trace_id: str,
+        may: Callable[[PendingRequest], bool],
+    ) -> ElevationDecided | None:
+        self.calls.append("deny")
+        one = self._pending(request_id)
+        if one is None or not may(PendingRequest(request=one, scope=self.scope)):
+            return None
+        self.denied.append((request_id, decider_id))
+        return ElevationDecided(
+            request_id=request_id,
+            principal_id=one.principal_id,
+            decision=ElevationDecision.DENIED,
+            decided_at=LONG_AGO,
+            lapses_at=None,
+        )
 
 
 def a_grant_row(principal_id: str, capability: str, *, lapsed: bool = False) -> CapabilityGrantRow:
@@ -281,6 +533,8 @@ class Wired:
     organisation: Organisation
     review: Review
     subscribers: Subscribers
+    placements: Placements
+    elevations: Elevations
 
 
 def a_subscriber(subscriber_id: str, endpoint: str, *, active: bool = True) -> Subscriber:
@@ -311,12 +565,16 @@ def wired() -> Iterator[Wired]:
             a_subscriber("hook_b", "https://hooks.example.test/a", active=False),
         )
     )
+    placements = Placements()
+    elevations = Elevations()
     with TestClient(app, raise_server_exceptions=False) as client:
         app.state.gate = _wiring()
         app.state.organisation_source = organisation
         app.state.review_store = review
         app.state.subscriber_source = subscribers
-        yield Wired(client, organisation, review, subscribers)
+        app.state.organisation_records = placements
+        app.state.elevation_records = elevations
+        yield Wired(client, organisation, review, subscribers, placements, elevations)
 
 
 def auth(pid: str) -> dict[str, str]:
@@ -351,13 +609,18 @@ def test_an_administrator_sees_departments_teams_and_people_and_the_three_senten
     assert answer.status_code == 200, answer.text
     body = answer.json()
     assert [one["slug"] for one in body["departments"]] == ["finance", "web"]
-    assert body["departments"][1]["teams"] == [{"slug": "design", "name": "Design"}]
-    assert body["departments"][1]["members"] == [
-        {"principal_id": "u_2", "display_name": "Wei", "disabled": False}
+    wei = {"principal_id": "u_2", "display_name": "Wei", "disabled": False}
+    grace = {"principal_id": "u_3", "display_name": "Grace", "disabled": True}
+    assert body["departments"][1]["teams"] == [
+        {"slug": "design", "name": "Design", "members": [grace, wei]}
     ]
+    assert body["departments"][1]["members"] == [wei]
+    assert body["departments"][1]["lead"] == wei
+    assert body["departments"][0]["lead"] == grace
     assert body["unplaced"][0]["principal_id"] == "u_4"
-    assert body["teams"] == routes.WHO_IS_IN_A_TEAM_IS_NOT_RECORDED
-    assert body["leads"] == routes.NO_DEPARTMENT_LEAD_IS_RECORDED
+    assert body["may_organise"] is True
+    assert body["teams"] == routes.A_TEAM_LISTS_WHO_YOU_MAY_SEE_IN_IT
+    assert body["leads"] == routes.A_LEAD_CONFERS_NOTHING
     assert body["counted"] == routes.NOTHING_HERE_IS_COUNTED
     assert not keys_in(body) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 
@@ -369,6 +632,9 @@ def test_a_department_reader_is_answered_their_department_and_nobody_elses(wired
 
     assert [one["slug"] for one in body["departments"]] == ["web"]
     assert body["unplaced"] == []
+    # Grace is in web's design team and sits in finance: the team lists nobody this reader may not
+    # name, and says nothing about the difference.
+    assert [one["principal_id"] for one in body["departments"][0]["teams"][0]["members"]] == ["u_2"]
 
 
 @pytest.mark.parametrize("pid", ["u_none", "u_prefix", "u_narrow"])
@@ -382,6 +648,114 @@ def test_the_departments_screen_needs_its_read_on_the_console_plane_before_any_l
 
     assert answer.status_code == 404
     assert wired.organisation.calls == []  # type: ignore[attr-defined]
+
+
+def post(wired: Wired, path: str, pid: str, body: dict[str, Any]) -> Response:
+    answer: Response = wired.client.post(path, headers=auth(pid), json=body)
+    return answer
+
+
+def test_an_organiser_places_and_removes_a_member_and_appoints_and_stands_down_a_lead(
+    wired: Wired,
+) -> None:
+    """M27.7.4, the writes. Delete this and every refusal below is satisfied by routes that record
+    nothing, or a join can be recorded as a departure, or an appointment written under the wrong
+    person, or the actor taken from somewhere other than the token."""
+    join = {"department": "web", "team": "design", "principal_id": "u_2", "change": "join"}
+
+    joined = post(wired, MEMBERSHIP, "u_admin", join)
+    left = post(wired, MEMBERSHIP, "u_admin", join | {"change": "leave"})
+    appointed = post(
+        wired,
+        LEAD,
+        "u_elsewhere",
+        {"department": "web", "principal_id": "u_2", "change": "appoint"},
+    )
+    stood_down = post(wired, LEAD, "u_admin", {"department": "web", "change": "stand_down"})
+
+    assert [one.status_code for one in (joined, left, appointed, stood_down)] == [200] * 4
+    assert joined.json()["change"] == "join"
+    assert stood_down.json()["principal_id"] is None
+    assert wired.placements.written == [
+        ("joined", "web", "u_2", "u_admin"),
+        ("left", "web", "u_2", "u_admin"),
+        ("appointed", "web", "u_2", "u_elsewhere"),
+        ("stood_down", "web", "u_2", "u_admin"),
+    ]
+
+
+def test_every_refused_change_to_the_organisation_is_one_refusal(wired: Wired) -> None:
+    """`may_place`, `may_appoint` and `may_organise` asked about the rows the store read. Delete
+    this and a web organiser places somebody from finance, a disabled person is placed, somebody
+    appoints themselves, or a lead from finance is replaced by a web organiser; and any two of
+    those answered differently tell a caller who sits where."""
+    wired.placements.leads["finance"] = "u_3"
+    answers = [
+        post(
+            wired,
+            MEMBERSHIP,
+            "u_elsewhere",
+            {"department": "web", "team": "design", "principal_id": "u_3", "change": "join"},
+        ),
+        post(
+            wired,
+            MEMBERSHIP,
+            "u_admin",
+            {"department": "web", "team": "design", "principal_id": "u_gone", "change": "join"},
+        ),
+        post(
+            wired,
+            LEAD,
+            "u_admin",
+            {"department": "web", "principal_id": "u_admin", "change": "appoint"},
+        ),
+        post(
+            wired,
+            LEAD,
+            "u_elsewhere",
+            {"department": "finance", "principal_id": "u_2", "change": "appoint"},
+        ),
+        post(wired, LEAD, "u_elsewhere", {"department": "finance", "change": "stand_down"}),
+    ]
+
+    assert [one.status_code for one in answers] == [404] * 5
+    assert len({one.json()["message"] for one in answers}) == 1
+    assert wired.placements.written == []
+
+
+def test_a_caller_without_the_authority_never_reaches_the_organisation_store(wired: Wired) -> None:
+    """Delete this and a caller holding nothing is refused only after the store is asked, which
+    answers a fault on a process with no database and a refusal on one with."""
+    join = {"department": "web", "team": "design", "principal_id": "u_2", "change": "join"}
+
+    answers = [
+        post(wired, MEMBERSHIP, "u_wide", join),
+        post(wired, LEAD, "u_wide", {"department": "web", "change": "stand_down"}),
+    ]
+
+    assert [one.status_code for one in answers] == [404, 404]
+    assert wired.placements.calls == []
+
+
+def test_a_change_body_carrying_an_actor_or_the_wrong_shape_is_refused(wired: Wired) -> None:
+    """Delete this and a body naming `actor` is accepted and ignored, an appointment of nobody
+    reaches the store, or a standing down names a person who may not be the lead."""
+    join = {"department": "web", "team": "design", "principal_id": "u_2", "change": "join"}
+
+    answers = [
+        post(wired, MEMBERSHIP, "u_admin", join | {"actor": "u_2"}),
+        post(wired, MEMBERSHIP, "u_admin", join | {"change": "move"}),
+        post(wired, LEAD, "u_admin", {"department": "web", "change": "appoint"}),
+        post(
+            wired,
+            LEAD,
+            "u_admin",
+            {"department": "web", "principal_id": "u_2", "change": "stand_down"},
+        ),
+    ]
+
+    assert [one.status_code for one in answers] == [422] * 4
+    assert wired.placements.calls == []
 
 
 # ------------------------------------------------------------------ elevation
@@ -398,14 +772,153 @@ def test_every_signed_in_caller_reaches_the_landing_and_nothing_on_it_lists_what
 
     assert nobody.status_code == 200, nobody.text
     body = nobody.json()
-    assert body["prompt"] == ALREADY_HOLDS_PROMPT
+    assert body["prompt"] == REQUEST_ADDS_PROMPT
     assert body["holds_nothing_standing"] is False
     assert body["may_authorise"] is False
     assert admin.json()["may_authorise"] is True
     assert body["reasons"] == [one.value for one in BreakGlassReason]
     assert body["longest_hours"] == 4
-    assert body["recorded"] == routes.NOTHING_STORES_AN_ELEVATION_YET
+    assert body["recorded"] == routes.WHAT_IS_RECORDED_ABOUT_AN_ELEVATION
+    assert body["requests"] == []
     assert not keys_in(body) & {"capabilities", "grants", "available", "offered", "catalogue"}
+
+
+def test_a_requester_sees_their_own_requests_and_an_authoriser_those_they_may_decide(
+    wired: Wired,
+) -> None:
+    """`requests_shown` and `state_of`, through the route. Delete this and a web authoriser reads
+    who in finance asked for what, a requester reads everybody's, a lapsed elevation reads as live,
+    or a request is offered for a decision to somebody who may not make it."""
+    soon = datetime.now(UTC) + timedelta(hours=1)
+    wired.elevations.stored = [
+        a_request("u_2", "web"),
+        a_request(
+            "u_3", "finance", decision=ElevationDecision.APPROVED, lapses_at=soon, grant_live=True
+        ),
+        a_request("u_elsewhere", "web", decision=ElevationDecision.APPROVED, lapses_at=LONG_AGO),
+    ]
+
+    admin = get(wired, ELEVATION, "u_admin").json()["requests"]
+    web = get(wired, ELEVATION, "u_elsewhere").json()["requests"]
+    nobody = get(wired, ELEVATION, "u_none").json()["requests"]
+
+    assert [(one["principal_id"], one["state"], one["decidable"]) for one in admin] == [
+        ("u_2", ElevationState.PENDING.value, True),
+        ("u_3", ElevationState.LIVE.value, False),
+        ("u_elsewhere", ElevationState.LAPSED.value, False),
+    ]
+    assert [(one["principal_id"], one["decidable"]) for one in web] == [
+        ("u_2", True),
+        ("u_elsewhere", False),
+    ]
+    assert nobody == []
+    assert not keys_in(admin) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
+
+
+def test_anybody_may_ask_for_what_they_do_not_hold_and_nobody_for_what_they_do(
+    wired: Wired,
+) -> None:
+    """`would_widen`, before the store. Delete this and somebody holding `read:client.name` asks for
+    it again, and an approval narrows them to where both grants reach; or somebody holding nothing
+    cannot ask for anything."""
+    body = {
+        "capability": "read:client.name",
+        "scope_slug": "web_all",
+        "reason": "incident_response",
+        "explanation": "the portal is down",
+        "hours": 2,
+    }
+
+    filed = post(wired, ELEVATION_REQUESTS, "u_none", body)
+    held = post(wired, ELEVATION_REQUESTS, "u_admin", body)
+    too_long = post(wired, ELEVATION_REQUESTS, "u_none", body | {"hours": 5})
+    forged = post(wired, ELEVATION_REQUESTS, "u_none", body | {"principal_id": "u_admin"})
+
+    assert filed.status_code == 201, filed.text
+    assert [one.principal_id for one in wired.elevations.stored] == ["u_none"]
+    assert held.status_code == 404
+    assert (too_long.status_code, forged.status_code) == (422, 422)
+    assert wired.elevations.calls == ["file"]
+
+
+def decide_request(wired: Wired, pid: str, request: StoredRequest, decision: str) -> Response:
+    return post(
+        wired,
+        f"{ELEVATION_REQUESTS}/{request.request_id}/decision",
+        pid,
+        {"decision": decision},
+    )
+
+
+def test_an_approval_writes_the_grant_the_request_asked_for_and_a_denial_is_recorded(
+    wired: Wired,
+) -> None:
+    """M27.7.8, the decisions. Delete this and an approval writes a grant for another capability,
+    at another scope, with no lapse or a longer one, or in the approver's name; or a denial is not
+    recorded against the request it was about."""
+    asked = a_request("u_2", "web")
+    other = a_request("u_2", "web", capability="read:invoice.total")
+    wired.elevations.stored = [asked, other]
+
+    approved = decide_request(wired, "u_admin", asked, "approved")
+    denied = decide_request(wired, "u_elsewhere", other, "denied")
+
+    assert approved.status_code == 200, approved.text
+    [grant] = wired.elevations.granted
+    assert grant.subject == PrincipalSubject(principal_id="u_2")
+    assert grant.capability == Capability(value="read:client.name")
+    assert grant.scope == Scope.department("web")
+    assert grant.granted_by == "u_admin"
+    assert grant.not_after == grant.granted_at + timedelta(hours=2)
+    assert approved.json()["lapses_at"] is not None
+    assert denied.status_code == 200, denied.text
+    assert wired.elevations.denied == [(other.request_id, "u_elsewhere")]
+
+
+def test_every_refused_decision_is_one_refusal(wired: Wired) -> None:
+    """`may_approve` and `may_decide` under the store's lock. Delete this and somebody approves
+    their own request, a web authoriser decides a finance request, an approver without the
+    capability grants it, or a scope nobody registered is granted as unrestricted; and any two of
+    those answered differently tell a caller which requests exist."""
+    own = a_request("u_admin", "web", capability="read:ticket.status")
+    finance = a_request("u_3", "finance")
+    uncapable = a_request("u_2", "web", capability="read:ticket.status")
+    wired.elevations.stored = [own, finance, uncapable]
+
+    answers = [
+        decide_request(wired, "u_admin", own, "approved"),
+        decide_request(wired, "u_admin", own, "denied"),
+        decide_request(wired, "u_elsewhere", finance, "approved"),
+        decide_request(wired, "u_elsewhere", finance, "denied"),
+        decide_request(wired, "u_admin", uncapable, "approved"),
+    ]
+    wired.elevations.scope = None
+    answers.append(decide_request(wired, "u_admin", finance, "approved"))
+
+    assert [one.status_code for one in answers] == [404] * 6
+    assert len({one.json()["message"] for one in answers}) == 1
+    assert wired.elevations.granted == [] and wired.elevations.denied == []
+
+
+def test_a_caller_without_the_authority_never_reaches_the_elevation_store(wired: Wired) -> None:
+    """Delete this and a caller holding nothing is refused only after the store is asked; and a
+    decision body with a third word or a decider is accepted."""
+    asked = a_request("u_2", "web")
+    wired.elevations.stored = [asked]
+
+    refused = decide_request(wired, "u_wide", asked, "approved")
+    wired.elevations.calls.clear()
+    maybe = decide_request(wired, "u_admin", asked, "maybe")
+    forged = post(
+        wired,
+        f"{ELEVATION_REQUESTS}/{asked.request_id}/decision",
+        "u_admin",
+        {"decision": "denied", "decided_by": "u_2"},
+    )
+
+    assert refused.status_code == 404
+    assert (maybe.status_code, forged.status_code) == (422, 422)
+    assert wired.elevations.calls == []
 
 
 # ------------------------------------------------------------------ access review
@@ -585,4 +1098,11 @@ def test_every_route_here_refuses_a_request_with_no_credential(wired: Wired) -> 
     """Delete this and a route can be mounted without `Asked`, answering anybody."""
     for path in (DEPARTMENTS, ELEVATION, REVIEW, SUBSCRIBERS):
         assert wired.client.get(path).status_code == 401, path
-    assert wired.client.post(DECISION, json={}).status_code == 401
+    for path in (
+        DECISION,
+        MEMBERSHIP,
+        LEAD,
+        ELEVATION_REQUESTS,
+        f"{ELEVATION_REQUESTS}/x/decision",
+    ):
+        assert wired.client.post(path, json={}).status_code == 401, path

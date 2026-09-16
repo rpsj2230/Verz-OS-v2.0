@@ -314,6 +314,28 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # and writes nothing, which is `brain.memory.digest.undo`'s own idempotency.
         "brain.ops.memory_store:MemoryRecords.undo": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.memory_store:MemoryRecords.edit": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The Departments and teams screen. Each is this system's own row in one transaction: a
+        # repeated placement or appointment meets the partial unique index and is refused, and a
+        # repeated ending finds nothing live to end.
+        "brain.identity.organisation_store:OrganisationRecords.place": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:OrganisationRecords.unplace": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:OrganisationRecords.appoint": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:OrganisationRecords.stand_down": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        # The Elevation requests screen. A request is a row, and a repeat is a second request the
+        # screen lists; a decision is one transaction on a pending row, and a repeat finds it
+        # decided.
+        "brain.gate.elevation_store:ElevationRecords.requests": Repeat.READS,
+        "brain.gate.elevation_store:ElevationRecords.file": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.gate.elevation_store:ElevationRecords.approve": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.gate.elevation_store:ElevationRecords.deny": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.erasure:Hold.is_active": Repeat.READS,
         "brain.ops.erasure:StoreEraser.count_for": Repeat.READS,
         "brain.ops.erasure:StoreEraser.erase": Repeat.SAME_RESULT_WHEN_REPEATED,
