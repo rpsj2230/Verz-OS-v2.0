@@ -84,7 +84,6 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.envelope import Entity, ToolDefinition, TypedResult
 from brain.core.field_policy import FieldPolicy
@@ -92,6 +91,7 @@ from brain.core.redaction import compute_mask
 from brain.core.scope import Scope
 from brain.gate.injection import AutonomyTier, RiskAssessment, autonomy_ceiling
 from brain.ops.idempotency import (
+    CallOutcome,
     Intent,
     Operation,
     OperationLedger,

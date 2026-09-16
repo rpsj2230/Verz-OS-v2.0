@@ -101,7 +101,11 @@ from types import MappingProxyType
 from typing import Final, Protocol
 
 from brain.connectors.manifest import DIGEST_CHARS, ConnectorManifest, ToolDeclaration
-from brain.connectors.throttle import CallOutcome
+
+# Re-exported, so a caller in `brain.gate` names an effect's outcome without importing a connector:
+# `tests/unit/test_repo_shape.py` holds the gate to never importing one, and the outcome of a call
+# is a fact about the door, which lives here.
+from brain.connectors.throttle import CallOutcome as CallOutcome
 from brain.core.envelope import SideEffect, ToolDefinition
 
 # ------------------------------------------------------------------ written-down reasons
