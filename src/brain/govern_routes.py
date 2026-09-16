@@ -145,7 +145,7 @@ from typing import Annotated, Any, Final
 import structlog
 from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Insert, Select, Update, insert, select, text, update
+from sqlalchemy import Insert, Select, Update, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -783,7 +783,7 @@ def add_grant(proposed: SubjectGrant, principal_id: str) -> Insert:
     )
 
 
-def retire_grant(principal_id: str, capability: str, at: datetime) -> Update:
+def retire_grant(principal_id: str, capability: str) -> Update:
     """The UPDATE that removes one grant. `deleted_at`, and nothing else.
 
     The same pair `one_live_grant` selects on and for its reasons, including the exact match on
@@ -797,6 +797,14 @@ def retire_grant(principal_id: str, capability: str, at: datetime) -> Update:
 
     `returning` the instant, so the answer is the row the database retired. Nothing else is
     returned: see `GrantRemoved`.
+
+    **Stamped `statement_timestamp()`, never an instant handed in.** This took the request's `now`
+    until 2026-09-17. `0045`'s policies admit a retired row as `brain_app` only when its stamp is
+    the retiring statement's own start, so every removal through this route would have been
+    refused as a row-level security violation. Nothing drove it against PostgreSQL;
+    `brain.gate.review_store.retire` shipped the same defect with `now()`, and CI's database is
+    where that one was caught. See
+    `brain.identity.sign_in_binding.A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT`.
     """
     return (
         update(CapabilityGrantRow)
@@ -805,7 +813,7 @@ def retire_grant(principal_id: str, capability: str, at: datetime) -> Update:
             CapabilityGrantRow.capability == capability,
             CapabilityGrantRow.deleted_at.is_(None),
         )
-        .values(deleted_at=at)
+        .values(deleted_at=func.statement_timestamp())
         .returning(CapabilityGrantRow.deleted_at)
     )
 
@@ -1292,7 +1300,7 @@ async def remove_grant(request: Request, body: GrantRemoval, asked: Asked) -> Gr
 
         await session.execute(actor_is(asked.caller.principal.id))
         retired = (
-            await session.execute(retire_grant(body.principal_id, body.capability, asked.now))
+            await session.execute(retire_grant(body.principal_id, body.capability))
         ).one_or_none()
         if retired is None:
             await session.rollback()

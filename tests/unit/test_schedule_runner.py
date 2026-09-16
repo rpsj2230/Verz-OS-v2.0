@@ -37,7 +37,14 @@ from brain.ops.schedule_runner import (
     stalled_runs,
     start_control,
 )
-from tests.fixtures.scratch_postgres import drop, fresh, migrate, sql
+from tests.fixtures.scratch_postgres import (
+    RETENTION_TABLES,
+    add_modelled,
+    drop,
+    fresh,
+    migrate,
+    sql,
+)
 
 NOW = datetime(2999, 6, 1, 12, 0, tzinfo=UTC)
 DAY = timedelta(days=1)
@@ -498,8 +505,14 @@ def test_the_retention_runner_sweeps_the_database_it_is_given_and_reports_every_
     """Started by name through the dispatch, in report-only mode: every store has a line.
 
     Delete this and the runner could open a connection somewhere other than the URL it was given,
-    or return before the report is built, with the loop's own tests still green."""
+    or return before the report is built, with the loop's own tests still green.
+
+    The sweep reads its holds and writes its report since `0049`, which this chain stops short of,
+    so those tables are built from their models as `tests/unit/test_control_task.py` builds them.
+    Without them the runner raised on `obs.legal_hold` in CI from the day it read holds, and was
+    green on every machine with no server, where this test skips."""
     with an_install("brain_schedule_runner_retention") as url:
+        add_modelled(url, RETENTION_TABLES)
         said = start_control("retention_sweep", now=NOW, report_only=True, database_url=url)
 
     lines = said.splitlines()

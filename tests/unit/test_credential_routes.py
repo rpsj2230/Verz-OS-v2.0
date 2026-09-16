@@ -50,6 +50,7 @@ from brain.ops.credentials import (
 )
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
 from tests.fixtures.http_client import Response
+from tests.fixtures.no_database import as_if_ci_had_a_database
 from tests.unit.test_api_routes import Directory, Keys, NoCache, Versions, token_for, verifier
 from tests.unit.test_credentials import AT, KEY, Recorded, Vault
 
@@ -517,7 +518,12 @@ def test_the_lifespan_builds_the_store_from_the_two_vault_settings(
     """The lifespan hands `credentials_at_start` exactly the two settings and attaches what comes
     back. Delete this and the store can be built from nothing, so every install answers "no vault"
     whatever its environment file says, and the wizard's 409 comes back on an install that has
-    one."""
+    one.
+
+    **With no database, named.** Where there is one the lifespan attaches
+    `built.recording_to(writes)`, which is a new store by `Credentials.recording_to`'s own design,
+    so `is` holds only without one. This read `DATABASE_URL` from the host until 2026-09-17 and
+    failed in CI alone; `tests/unit/test_credentials.py` holds what `recording_to` returns."""
     asked: list[tuple[str, str]] = []
     built = Credentials(Vault())
 
@@ -526,10 +532,17 @@ def test_the_lifespan_builds_the_store_from_the_two_vault_settings(
         return built
 
     monkeypatch.setattr("brain.app.credentials_at_start", at_start)
+    as_if_ci_had_a_database(monkeypatch)
     app = create_app(
-        Settings(env="development", vault_address="http://vault:8200", vault_token="a-token")
+        Settings(
+            env="development",
+            database_url="",
+            vault_address="http://vault:8200",
+            vault_token="a-token",
+        )
     )
     with TestClient(app):
+        assert app.state.db_sessions is None
         attached = app.state.credentials
 
     assert asked == [("http://vault:8200", "a-token")]

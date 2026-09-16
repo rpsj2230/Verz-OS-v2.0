@@ -968,7 +968,12 @@ def test_the_holds_a_run_reads_are_those_placed_by_its_instant_and_not_yet_lifte
     reads the first and the third.
 
     Delete this and a hold lifted last year could still suspend deletion, or one placed tomorrow
-    could be honoured today, which a reader of the report could never explain."""
+    could be honoured today, which a reader of the report could never explain.
+
+    The order is the query's `ORDER BY placed_at, id`, which `active_holds` promises so a report
+    cites its holds the same way every run. Both holds read were placed at `OLD`, so the identifier
+    decides and `h_lifted_later` sorts before `h_live`. This expected the order they were inserted
+    in until 2026-09-17, which the query's own ORDER BY contradicts; only CI's database ran it."""
     _hold(server, "h_live", subjects=["u_one"], placed=OLD, lifted=None)
     _hold(server, "h_lifted", subjects=["u_one"], placed=OLD, lifted=NOW - timedelta(days=1))
     _hold(server, "h_lifted_later", subjects=["u_two"], placed=OLD, lifted=NOW + timedelta(days=1))
@@ -976,8 +981,11 @@ def test_the_holds_a_run_reads_are_those_placed_by_its_instant_and_not_yet_lifte
     with psycopg.connect(server) as conn:
         read = active_holds(conn, NOW)
 
-    assert [hold.id for hold in read] == ["h_live", "h_lifted_later"]
-    assert read[0].subjects == frozenset({"u_one"})
+    assert [hold.id for hold in read] == ["h_lifted_later", "h_live"]
+    assert {hold.id: hold.subjects for hold in read} == {
+        "h_lifted_later": frozenset({"u_two"}),
+        "h_live": frozenset({"u_one"}),
+    }
 
 
 def test_a_scheduled_run_writes_its_report_and_the_report_reads_back(server: str) -> None:

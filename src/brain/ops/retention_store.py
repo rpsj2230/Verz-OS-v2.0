@@ -501,6 +501,9 @@ def _identifier(table: str) -> sql.Identifier:
 def active_holds(conn: psycopg.Connection[Any], now: datetime) -> tuple[LegalHold, ...]:
     """Every hold placed by `now` and not lifted by then, as `brain.audit.ledger.LegalHold`.
 
+    In the order they were placed, the identifier breaking a tie, so two runs under the same holds
+    cite them in the same order and a report compares equal to the one before it.
+
     Built through the model rather than handed on as rows, so a row the model refuses is a
     raised run rather than a hold quietly read as something else. The activity test is the
     model's own `is_active` as well as the query's, and the two agree by construction: the query

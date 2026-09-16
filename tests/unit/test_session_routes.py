@@ -47,6 +47,7 @@ from brain.identity.session_store import EndedSession, StoredSession
 from brain.identity.sign_in_binding import SignInLink, Unlinked, decide_unlink
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from tests.fixtures.http_client import Response
+from tests.fixtures.no_database import as_if_ci_had_a_database
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,
@@ -261,8 +262,14 @@ def an_app() -> FastAPI:
     Included here as well, which is `tests/unit/test_sign_in_routes.py`' arrangement: a route
     registered twice answers from the first registration, which is the same function, and this
     file then tests the router whether or not the line in `brain.app` is in the tree it runs in.
+
+    **With no database, named rather than inherited.** `Settings` reads `DATABASE_URL`, and CI's
+    unit job sets it, so an app built from the environment has a session factory there and none
+    here. `session_routes.session_store_of` falls back to that factory, which made the no-store
+    test below answer 200 in CI and 500 on every laptop. The store in memory is what stands where
+    the database is in this file, so the database is switched off here and not left to the host.
     """
-    app = create_app(Settings(env="development"))
+    app = create_app(Settings(env="development", database_url=""))
     app.include_router(session_routes.router)
     return app
 
@@ -626,12 +633,20 @@ def test_an_unlink_by_somebody_without_the_authority_and_of_nobody_linked_are_on
 
 
 def test_a_process_with_no_store_refuses_a_permitted_caller_and_nobody_else_differently(
-    sessions: Sessions,
+    sessions: Sessions, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Delete this and a caller with no grant learns whether this process has a database: the
-    screen's question must come before the store is reached for."""
+    screen's question must come before the store is reached for.
+
+    `DATABASE_URL` is set to an address nothing listens on, which is CI's environment without
+    CI's server, and the premise is asserted before anything is asked. Until 2026-09-17 this
+    read the host's environment, so in CI the process had a database and the permitted caller
+    was answered 200; asserting the premise is what makes that fail here as well as there."""
+    as_if_ci_had_a_database(monkeypatch)
     app = an_app()
     with TestClient(app, raise_server_exceptions=False) as c:
+        assert app.state.db_sessions is None
+        assert getattr(app.state, "session_store", None) is None
         app.state.gate = _wiring()
         stranger = c.get(SESSIONS, headers=auth("u_none"))
         permitted_caller = c.get(SESSIONS, headers=auth("u_wide"))

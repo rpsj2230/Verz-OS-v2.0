@@ -1486,18 +1486,22 @@ def test_the_removal_touches_only_the_deleted_at_column(client: TestClient) -> N
     second removal write nothing and answer identically to a first one against an unknown id.
 
     Delete this and the update can grow a `reason` or a `not_after`, which is an edit to a
-    grant wearing a removal's name, and the audit entry still says revoke."""
-    statement = retire_grant("u_1", GRANTED, FAR_OFF)
+    grant wearing a removal's name, and the audit entry still says revoke.
+
+    And the stamp is the statement's own. This asserted a bound `deleted_at` until 2026-09-17,
+    which was the request's instant, and `0045`'s policies refuse that as `brain_app`: the test
+    held the defect in place."""
+    statement = retire_grant("u_1", GRANTED)
     sql = str(statement.compile(compile_kwargs={"literal_binds": True}))
 
-    assert set(statement.compile().binds) >= {"deleted_at"}
+    assert "deleted_at" not in statement.compile().binds
     # The SET list read off the compiled statement rather than described: `deleted_at`, and the
     # `updated_at` `TimestampMixin` maintains on every update. A third column here would be an
     # edit to a grant wearing a removal's name, with the audit entry still reading revoke.
     assigned = sql.split("SET")[1].split("WHERE")[0]
-    assert sorted(one.split("=")[0].strip() for one in assigned.split(",")) == [
-        "deleted_at",
-        "updated_at",
+    assert sorted(one.strip() for one in assigned.split(",")) == [
+        "deleted_at=statement_timestamp()",
+        "updated_at=now()",
     ]
     assert "deleted_at IS NULL" in sql
 

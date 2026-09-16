@@ -21,11 +21,19 @@ its new row against the USING of every SELECT and ALL policy. So a read or ALL p
 retirement, and an update policy whose check does not carry that same admission either refuses it
 or lets it be stamped at any instant.
 
+**The writers are held to the stamp as well, because the policies being right did not stop two
+of them being wrong.** Until 2026-09-17 `brain.gate.review_store.retire` wrote `deleted_at` as
+`now()` and `brain.govern_routes.retire_grant` as the request's instant. The policies above refuse
+both as `brain_app`, the unit tests of each compared the SET list with the defect, and only CI's
+database ran one of them. So the last section reads every `deleted_at` written under `src/brain`
+off the syntax tree, which fails here, with no database, on the commit that writes the next one.
+
 Task ids: none
 """
 
 from __future__ import annotations
 
+import ast
 import functools
 import importlib.util
 import re
@@ -38,6 +46,7 @@ import brain.tables  # noqa: F401 - registers every table on the metadata
 from brain.db import metadata
 
 VERSIONS = Path(__file__).resolve().parents[2] / "migrations" / "versions"
+SOURCE = Path(__file__).resolve().parents[2] / "src" / "brain"
 APP_ROLE = "brain_app"
 LIVE = "deleted_at IS NULL"
 #: What every read and every update check on a retirable table must carry, whole.
@@ -337,3 +346,116 @@ def test_the_repairs_follow_the_migration_before_them() -> None:
     assert (retirable_migration().revision, retirable_migration().down_revision) == ("0045", "0044")
     chunks = _module(VERSIONS / "0046_retirable_chunks.py")
     assert (chunks.revision, chunks.down_revision) == ("0046", "0045")
+
+
+# ------------------------------------------------------------------------- the writers
+
+#: The stamp a retirement may carry, as SQLAlchemy spells it and as SQL text spells it.
+STAMPED_BY_ITS_STATEMENT: frozenset[str] = frozenset(
+    {"func.statement_timestamp()", "statement_timestamp()"}
+)
+
+#: A SET list naming `deleted_at`, up to the WHERE clause. Case-sensitive, because SQL here is
+#: written in capitals and prose that says "sets" is not a statement.
+_SETS_DELETED_AT = re.compile(r"\bSET\b(?:(?!\bWHERE\b).)*?\bdeleted_at\s*=\s*([^,\s]+)", re.DOTALL)
+
+
+def writes_of_deleted_at(source: str, name: str) -> list[tuple[str, str]]:
+    """(`name:line`, the expression) for every `deleted_at` this source writes.
+
+    Three shapes: `deleted_at` handed to a `.values(...)` call, as a keyword or a dictionary key;
+    an assignment to an attribute called `deleted_at`, which is an ORM update; and a SQL string
+    whose SET list names it. An insert with `deleted_at` in its values is named too, which is
+    deliberate: a row created retired is a retirement no statement stamped.
+    """
+    found: list[tuple[str, str]] = []
+    for node in ast.walk(ast.parse(source)):
+        where = f"{name}:{getattr(node, 'lineno', 0)}"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            if node.func.attr != "values":
+                continue
+            found.extend(
+                (where, ast.unparse(one.value)) for one in node.keywords if one.arg == "deleted_at"
+            )
+            found.extend(
+                (where, ast.unparse(value))
+                for mapping in node.args
+                if isinstance(mapping, ast.Dict)
+                for key, value in zip(mapping.keys, mapping.values, strict=True)
+                if isinstance(key, ast.Constant) and key.value == "deleted_at"
+            )
+        elif isinstance(node, ast.Assign | ast.AnnAssign) and node.value is not None:
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            found.extend(
+                (where, ast.unparse(node.value))
+                for target in targets
+                if isinstance(target, ast.Attribute) and target.attr == "deleted_at"
+            )
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            found.extend((where, one.group(1)) for one in _SETS_DELETED_AT.finditer(node.value))
+    # In line order, because `ast.walk` is breadth first and a report out of order is misread.
+    return sorted(found, key=lambda one: int(one[0].rsplit(":", 1)[1]))
+
+
+def application_writes_of_deleted_at() -> list[tuple[str, str]]:
+    root = SOURCE.parents[1]
+    return [
+        found
+        for path in sorted(SOURCE.rglob("*.py"))
+        for found in writes_of_deleted_at(
+            path.read_text(encoding="utf-8"), path.relative_to(root).as_posix()
+        )
+    ]
+
+
+def not_stamped_by_their_statement(writes: list[tuple[str, str]]) -> list[str]:
+    return [
+        f"{where} writes deleted_at as {expression}"
+        for where, expression in writes
+        if expression not in STAMPED_BY_ITS_STATEMENT
+    ]
+
+
+def test_every_retirement_the_application_writes_is_stamped_by_its_own_statement() -> None:
+    """The writer's half of `test_every_retirement_is_admitted_and_stamped_by_its_own_statement`.
+
+    Delete this and a store can retire a row with `now()` or an instant it was handed, which reads
+    correctly, passes every test that compiles the statement, and is refused by PostgreSQL as
+    `brain_app` on the first removal anybody makes. `review_store.retire` did exactly that and was
+    found by CI's database; `govern_routes.retire_grant` did it and was found by nothing."""
+    assert not_stamped_by_their_statement(application_writes_of_deleted_at()) == []
+
+
+def test_the_writer_scan_finds_the_retirements_the_application_makes() -> None:
+    """The positive case. Delete this and a scan that walks nothing, or reads the wrong directory,
+    satisfies the rule above, because no writes break no rule about writes."""
+    modules = {where.split(":")[0] for where, _ in application_writes_of_deleted_at()}
+
+    assert {
+        "src/brain/gate/review_store.py",
+        "src/brain/govern_routes.py",
+        "src/brain/identity/sign_in_binding.py",
+    } <= modules
+
+
+def test_the_writer_scan_names_every_other_stamp_in_every_shape_it_reads() -> None:
+    """A rule asserted only against code that obeys it is satisfied by a rule that finds nothing.
+    Delete this and any of the three shapes can stop being read, with the two tests above green."""
+    source = "\n".join(
+        (
+            "update(t).values(deleted_at=func.now())",
+            "update(t).values({'deleted_at': at})",
+            "row.deleted_at = datetime.now(UTC)",
+            "SQL = 'UPDATE t SET updated_at = now(), deleted_at = %s WHERE id = %s'",
+            "update(t).values(deleted_at=func.statement_timestamp())",
+            "SQL = 'UPDATE t SET deleted_at = statement_timestamp() WHERE deleted_at IS NULL'",
+            "update(t).where(t.deleted_at.is_(None)).values(reason='x')",
+        )
+    )
+
+    assert not_stamped_by_their_statement(writes_of_deleted_at(source, "m")) == [
+        "m:1 writes deleted_at as func.now()",
+        "m:2 writes deleted_at as at",
+        "m:3 writes deleted_at as datetime.now(UTC)",
+        "m:4 writes deleted_at as %s",
+    ]

@@ -84,6 +84,7 @@ from brain.staff_source_routes import (
     sources_offered,
 )
 from tests.fixtures.http_client import Response
+from tests.fixtures.no_database import as_if_ci_had_a_database
 from tests.unit.test_api_routes import (
     Directory,
     Keys,
@@ -270,16 +271,25 @@ def held() -> Iterator[None]:
 
 
 @pytest.fixture
-def client(held: None) -> Iterator[TestClient]:
+def client(held: None, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """The real application, with no session factory, which is every deployment today.
 
     `create_app` produced the router registration under test: a test that mounted the router
     itself would prove the routes work and not that they are served.
+
+    **No database is named in the settings, and the premise is asserted rather than assigned.**
+    Until 2026-09-17 this built `Settings` from the host's environment and set `db_sessions` to
+    None once the application had started. In CI, where `DATABASE_URL` is set, the lifespan had
+    already run `brain.ops.install_settings.refresh` by then, which holds the saved rows (none) in
+    place of everything `held` had held, so four tests read the source as unset and the location
+    as the default. `DATABASE_URL` is set here to an address nothing listens on, so dropping the
+    pin fails the assertion below on a laptop too, before any test reads a setting.
     """
-    app: FastAPI = create_app(Settings(env="development"))
+    as_if_ci_had_a_database(monkeypatch)
+    app: FastAPI = create_app(Settings(env="development", database_url=""))
     with TestClient(app, raise_server_exceptions=False) as c:
+        assert app.state.db_sessions is None
         app.state.gate = _wiring()
-        app.state.db_sessions = None
         app.state.console_reads = None
         yield c
 

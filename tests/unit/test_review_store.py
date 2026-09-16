@@ -161,7 +161,11 @@ def test_a_decision_row_names_exactly_the_table_its_holding_came_from() -> None:
 
 def test_retiring_touches_only_deleted_at_on_a_row_still_live() -> None:
     """Delete this and a removal can rewrite a grant's scope or reason, or retire a row somebody
-    already retired and move the instant the ledger's revoke was stamped at."""
+    already retired and move the instant the ledger's revoke was stamped at.
+
+    The stamp is `statement_timestamp()` because `0045`'s policies refuse any other as
+    `brain_app`. This line asserted `deleted_at=now()` until 2026-09-17, which is the defect written
+    down as the expectation: green here and refused by every database the removal reached."""
     for holding, table in (
         (a_grant_holding(), "gate.capability_grant"),
         (a_pack_holding(), "gate.capability_pack_assignment"),
@@ -169,7 +173,7 @@ def test_retiring_touches_only_deleted_at_on_a_row_still_live() -> None:
         sql_text = compiled(retire(holding))
         assigned = sql_text.split(" WHERE ")[0].split(" SET ")[1]
         assert sql_text.split(" SET ")[0] == " ".join(("UPDATE", table))
-        assert assigned == "updated_at=now(), deleted_at=now()"
+        assert assigned == "updated_at=now(), deleted_at=statement_timestamp()"
         assert table + ".deleted_at IS NULL" in sql_text
         assert sql_text.endswith("RETURNING " + table + ".deleted_at")
 

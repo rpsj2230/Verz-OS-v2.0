@@ -212,7 +212,7 @@ def upgrade() -> None:
             "agent_id",
             "template_id",
             "runs_as_id",
-            name="one_install_per_agent_template_and_person",
+            name="uq_automation_agent_template_person",
         ),
         schema="agent",
     )

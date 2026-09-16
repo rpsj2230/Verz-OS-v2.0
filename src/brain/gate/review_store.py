@@ -250,12 +250,19 @@ def retire(holding: Holding) -> ReturningUpdate[tuple[datetime | None]]:
     `deleted_at IS NULL` in the WHERE clause, so a row somebody else retired first is updated
     nowhere and the decision is rolled back rather than recorded over a removal it did not make.
     The database's clock, for `brain.db.TimestampMixin`'s reason.
+
+    **`statement_timestamp()` and never `now()`.** This was `now()` until 2026-09-17, and as
+    `brain_app` every removal was refused with "new row violates row-level security policy":
+    `0045`'s policies admit a retired row only when its stamp is the retiring statement's own
+    start, and `now()` is the transaction's, which began before the lock and the decision row. The
+    stubbed tests compared the SET list with the defect; only CI's database ran it. See
+    `brain.identity.sign_in_binding.A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT`.
     """
     table = CapabilityGrantRow if isinstance(holding, GrantHolding) else CapabilityPackAssignmentRow
     return (
         update(table)
         .where(table.id == holding.row.id, table.deleted_at.is_(None))
-        .values(deleted_at=func.now())
+        .values(deleted_at=func.statement_timestamp())
         .returning(table.deleted_at)
     )
 

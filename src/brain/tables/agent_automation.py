@@ -103,11 +103,14 @@ class AgentAutomationRow(TimestampMixin, Base):
         ),
         CheckConstraint(f"template_id ~ '{TEMPLATE_ID_PATTERN}'", name="template_id_shape"),
         CheckConstraint("template_version >= 1", name="template_version_from_one"),
+        # `uq_`, because `brain.db.NAMING_CONVENTION` has no `constraint_name` token for a unique
+        # constraint, so a name given here is used verbatim and has to carry the prefix itself.
+        # `tests/unit/test_db.py` refused `one_install_per_agent_template_and_person`.
         UniqueConstraint(
             "agent_id",
             "template_id",
             "runs_as_id",
-            name="one_install_per_agent_template_and_person",
+            name="uq_automation_agent_template_person",
         ),
         {"schema": "agent"},
     )

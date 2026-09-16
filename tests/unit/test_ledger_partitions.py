@@ -418,11 +418,21 @@ def test_rows_either_side_of_a_month_boundary_land_in_their_own_partitions() -> 
         assert partition_of(url, ahead) == f"obs.{Month(3000, 2).name}"
         assert dict(done.moved) == {Month(2999, 10): 1, Month(2999, 11): 1}
         assert rows_in(url, DEFAULT_PARTITION) == 0
-        assert sql(
-            url,
-            "SELECT bool_and(relrowsecurity) FROM pg_class WHERE relname LIKE %s",
-            "request_telemetry_p%",
-        ) == [(True,)]
+        # The ledger's partitions read off `pg_inherits`, each with its row-level security. This
+        # was `bool_and(relrowsecurity) FROM pg_class WHERE relname LIKE 'request_telemetry_p%'`
+        # until 2026-09-17, which also matched every partition's primary key and indexes. An
+        # index never has row-level security, so it was False on a correct schema.
+        secured = dict(
+            sql(
+                url,
+                "SELECT c.relname, c.relrowsecurity FROM pg_inherits AS i "
+                "JOIN pg_class AS c ON c.oid = i.inhrelid WHERE i.inhparent = %s::regclass",
+                LEDGER,
+            )
+        )
+        made = {one.name for one in done.created} | {one.name for one, _ in done.moved}
+        assert {Month(2999, 10).name, Month(2999, 11).name, Month(3000, 2).name} <= made
+        assert secured == dict.fromkeys((*made, DEFAULT_PARTITION.partition(".")[2]), True)
 
 
 def test_a_second_run_at_the_same_instant_changes_nothing() -> None:
