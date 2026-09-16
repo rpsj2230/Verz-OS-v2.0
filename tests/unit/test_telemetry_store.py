@@ -21,6 +21,7 @@ import enum
 import os
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -44,6 +45,7 @@ from brain.ops.service_levels import Observation
 from brain.ops.telemetry import (
     AN_ABSTENTION_IS_RECORDED_WITHOUT_ITS_REASON,
     UNFILLABLE_TODAY,
+    MeteredRequest,
     RequestStatus,
     RequestTelemetry,
     TelemetryError,
@@ -52,6 +54,7 @@ from brain.ops.telemetry import (
 )
 from brain.ops.telemetry_store import (
     TelemetryRecorder,
+    metered_between,
     observed_between,
     record,
     service_levels_between,
@@ -612,6 +615,44 @@ def test_two_requests_under_one_trace_id_are_two_rows(empty: str) -> None:
     assert sql(
         empty, "SELECT trace_id, duration_ms FROM obs.request_telemetry ORDER BY duration_ms"
     ) == [("t-reused", 5.0), ("t-reused", 900.0)]
+
+
+def test_model_usage_is_read_back_by_window_and_only_from_rows_whose_tokens_were_counted(
+    empty: str,
+) -> None:
+    """The usage screen's read, as the application role, against the migrated ledger: a metered
+    row inside the window comes back with its model and tokens, a row that called no model does
+    not, and neither does a metered row outside the window.
+
+    Delete this and `metered_rows` is only ever compiled, so a column it names wrongly or a filter
+    the partitioned table refuses is found on an install, as the usage screen failing."""
+    metered = replace(a_row("t-metered", at=LATER), model="kimi-k2", tokens_in=120, tokens_out=9)
+    write_as_app(
+        empty,
+        metered,
+        a_row("t-plain", at=LATER + timedelta(minutes=1)),
+        replace(a_row("t-late", at=LATER + timedelta(days=2)), tokens_in=5, tokens_out=1),
+    )
+
+    async def go() -> tuple[MeteredRequest, ...]:
+        bound = engine(empty)
+        try:
+            async with async_sessionmaker(bound)() as session:
+                await session.execute(text("SET ROLE brain_app"))
+                return await metered_between(session, start=LATER, end=LATER + timedelta(days=1))
+        finally:
+            await bound.dispose()
+
+    assert run(go) == (
+        MeteredRequest(
+            trace_id="t-metered",
+            principal="u_one",
+            model="kimi-k2",
+            agent_version=None,
+            tokens_in=120,
+            tokens_out=9,
+        ),
+    )
 
 
 def test_a_window_holds_its_start_and_not_its_end_and_reads_back_as_observations(

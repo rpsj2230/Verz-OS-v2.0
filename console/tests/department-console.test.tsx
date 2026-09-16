@@ -266,6 +266,7 @@ describe("the Department page", () => {
     questions: 926,
     machine_included: false,
     not_measured: [],
+    tokens: [],
   };
 
   test("each card draws its own route's answer and links to the screen it came from", async () => {

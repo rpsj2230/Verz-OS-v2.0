@@ -16,14 +16,26 @@
  * headcount is not drawn: a headcount beside the askers is a denominator, and `brain.adoption`
  * refuses one.
  *
- * **Tokens, the model and the agent are named as not measured, never drawn empty.** The API sends
- * `not_measured` from the request ledger's own record of the fields nothing fills, and the page
- * says one sentence for each. See `A_MEASURE_NOTHING_FILLS_IS_A_SENTENCE_AND_NEVER_A_ZERO`.
+ * **Tokens are drawn by every axis the API sends, and an axis it does not send is not mentioned.**
+ * Since the executor `brain.models.calls` started calling models, every call is metered onto its
+ * request's ledger row, and `brain.console.usage_screen` joins those rows to the questions this
+ * reader's tables already count, so `tokens` is one breakdown per axis the reader may have, person,
+ * department, model and agent, in that order. An axis withheld is absent from the list rather than
+ * empty, and the page draws what is there and says nothing about what is not: a heading saying an
+ * axis is hidden is the count of hidden axes in words. `runs` is how many requests with a model call
+ * fell in a bucket and is never called questions, which is
+ * `RUNS_ARE_REQUESTS_WITH_A_MODEL_CALL_AND_NOT_QUESTIONS`.
  *
- * **The total is the API's and is never added up here**, which is `spendQuery.ts`'
- * `A_TOTAL_IS_READ_AND_NEVER_ADDED_UP_HERE` and the read module's own assertion. The person table
- * is paged in the browser over every line the API sent, so the total above it is always the total
- * of the whole list and a page is never a list the total fails to describe.
+ * **A measure the ledger cannot fill is still a sentence, never a zero.** The API goes on naming a
+ * measure in `not_measured` for as long as its fields are empty, and the page says one sentence for
+ * each. Today it names none. See `A_MEASURE_NOTHING_FILLS_IS_A_SENTENCE_AND_NEVER_A_ZERO`.
+ *
+ * **Every total is the API's and is never added up here**, which is `spendQuery.ts`'
+ * `A_TOTAL_IS_READ_AND_NEVER_ADDED_UP_HERE` and the read module's own assertion. The questions total
+ * is `questions`, and each token table's totals row is that breakdown's `total_runs`,
+ * `total_tokens_in` and `total_tokens_out`. The person table is paged in the browser over every line
+ * the API sent, so the total above it is always the total of the whole list and a page is never a
+ * list the total fails to describe.
  *
  * **No count of what a reader was not shown.** No "of", no "others", no number of automated
  * questions. The page counts pages of lines the reader holds and nothing else.
@@ -39,14 +51,25 @@ export type UsageBody = components["schemas"]["UsageView"];
 export type DepartmentUsageRow = components["schemas"]["DepartmentUsageView"];
 /** One person's line. */
 export type PersonUsageRow = components["schemas"]["PersonUsageView"];
+/** Tokens by one axis, `brain.report_routes.TokenBreakdownView`. */
+export type TokenBreakdown = components["schemas"]["TokenBreakdownView"];
+/** One bucket of one token breakdown. */
+export type TokenLine = components["schemas"]["TokenLineView"];
 
 /** Written down because a column of zeros is the obvious way to draw a missing measure. */
 export const A_MEASURE_NOTHING_FILLS_IS_A_SENTENCE_AND_NEVER_A_ZERO =
-  "The design asks for tokens by person, department, model and agent, and the request ledger " +
-  "leaves the token, model and agent fields empty on every row because nothing calls a model. " +
-  "A token column of zeros would say nobody used any tokens, which is a figure and a false " +
-  "one, so the page says in words which measures are not taken, and the API stops sending " +
-  "the words on the day the ledger fills the field.";
+  "The design asks for tokens by person, department, model and agent. Where the request ledger " +
+  "leaves a measure's fields empty, a column of zeros would say nobody used any tokens, which is " +
+  "a figure and a false one, so the page says in words which measures are not taken, and the API " +
+  "stops sending the words on the day the ledger fills the field. It fills all three now, and the " +
+  "token tables are drawn in their place.";
+
+/** Written down because "runs" is one rename away from "questions" and the two are different figures. */
+export const RUNS_ARE_REQUESTS_WITH_A_MODEL_CALL_AND_NOT_QUESTIONS =
+  "A token breakdown's runs are the requests in a bucket that called a model, which is the figure " +
+  "its tokens are over. A question answered from a fast-path rule calls none and is not a run, so " +
+  "calling the column questions would put a second, smaller question count beside the real one, " +
+  "and the difference between the two would read as questions somebody was not shown.";
 
 /** Where the API keeps this screen. */
 export const USAGE_API_PATH = "/report/usage";
@@ -95,6 +118,7 @@ export function readUsage(payload: unknown): UsageBody | null {
     questions?: unknown;
     not_measured?: unknown;
     machine_included?: unknown;
+    tokens?: unknown;
   };
   const tableOrNull = (value: unknown): boolean => value === null || Array.isArray(value);
   if (!tableOrNull(body.departments) || !tableOrNull(body.people)) {
@@ -106,25 +130,91 @@ export function readUsage(payload: unknown): UsageBody | null {
   if (!Array.isArray(body.not_measured) || typeof body.machine_included !== "boolean") {
     return null;
   }
+  if (!Array.isArray(body.tokens) || !body.tokens.every(isBreakdown)) {
+    return null;
+  }
   return payload as UsageBody;
+}
+
+/** Whether one entry of `tokens` has the lines a table is drawn from and the totals under them. */
+function isBreakdown(value: unknown): boolean {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+  const one = value as {
+    axis?: unknown;
+    lines?: unknown;
+    total_runs?: unknown;
+    total_tokens_in?: unknown;
+    total_tokens_out?: unknown;
+  };
+  return (
+    typeof one.axis === "string" &&
+    Array.isArray(one.lines) &&
+    typeof one.total_runs === "number" &&
+    typeof one.total_tokens_in === "number" &&
+    typeof one.total_tokens_out === "number"
+  );
 }
 
 /** The sentence said for each measure the API names as not measured. */
 export const NOT_MEASURED_SENTENCES: Readonly<Record<string, string>> = Object.freeze({
   tokens:
-    "Tokens are not measured on this install. Nothing calls a model yet, so no request has a " +
-    "token count to record.",
+    "Tokens are not measured on this install: the request ledger does not record a token " +
+    "count, so no token table is drawn.",
   model:
-    "Which model answered is not measured on this install. No request has been answered by a " +
-    "model yet.",
+    "Which model answered is not measured on this install: the request ledger does not record " +
+    "it, so no table by model is drawn.",
   agent:
-    "Which agent answered is not measured on this install. No agent runs on the path questions " +
-    "are answered on yet.",
+    "Which agent answered is not measured on this install: the request ledger does not record " +
+    "it, so no table by agent is drawn.",
 });
 
 /** One sentence for a measure, including one this console has no sentence for yet. */
 export function notMeasuredSentence(measure: string): string {
   return NOT_MEASURED_SENTENCES[measure] ?? `${measure} is not measured on this install.`;
+}
+
+/** The heading and caption of one token table, by the axis the API names. */
+export function tokensHeading(axis: string): string {
+  return `Tokens by ${axis}`;
+}
+
+/** The column heading over a token table's keys, by axis. An axis this console has no word for is named as sent. */
+export function tokensKeyHeading(axis: string): string {
+  const words: Readonly<Record<string, string>> = {
+    person: "Person",
+    department: "Department",
+    model: "Model",
+    agent: "Agent",
+  };
+  return words[axis] ?? axis;
+}
+
+/** The column over `runs`. See `RUNS_ARE_REQUESTS_WITH_A_MODEL_CALL_AND_NOT_QUESTIONS`. */
+export const RUNS_HEADING = "Requests with a model call";
+
+/** A breakdown with no lines, which is a period in which no question this reader holds called a model. */
+export const NO_MODEL_CALL = "No question in this period called a model.";
+
+/**
+ * The at-a-glance tokens, from the first breakdown the API sent, or null when it sent none.
+ *
+ * The first rather than any sum: every breakdown is one grouping of one row set, so their totals
+ * are equal by construction on the API, and adding them up would count each token once per axis.
+ */
+export function glanceTokens(
+  tokens: readonly TokenBreakdown[],
+): { readonly tokensIn: number; readonly tokensOut: number } | null {
+  const first = tokens[0];
+  return first === undefined
+    ? null
+    : { tokensIn: first.total_tokens_in, tokensOut: first.total_tokens_out };
+}
+
+/** The at-a-glance tokens in words. */
+export function glanceTokensLine(tokensIn: number, tokensOut: number): string {
+  return `${String(tokensIn)} in, ${String(tokensOut)} out`;
 }
 
 /** How the person table is narrowed, ordered and paged. Nothing here reaches the API. */

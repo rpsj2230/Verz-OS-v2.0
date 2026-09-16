@@ -4,12 +4,11 @@
 usage down by and which rows the usage grant admits, and it decides both over `UsageRow`, a row
 carrying a model and a token count. Measured on 2026-09-16, no ledger on any install holds one.
 `ops.spend_actual` is written by nothing: `brain.ops.spend_store.record` has no caller. And
-`obs.request_telemetry`, which is written for every request the answer lane finishes, leaves
-`tokens_in`, `tokens_out`, `model` and `agent_version` empty on every row, because no model is
-called anywhere in this repository and no agent runs on the one live request path;
-`brain.ops.telemetry.UNFILLABLE_TODAY` names each of those fields and says why. So the screen
-M27.4.2 describes has one real figure behind it today, and this module is where that figure and
-the three missing ones are decided for a reader.
+`obs.request_telemetry`, which is written for every request that finishes, left `tokens_in`,
+`tokens_out`, `model` and `agent_version` empty on every row until 2026-09-17, because nothing
+called a model. `brain.models.calls.ModelCalls` does now, and every call it makes is metered onto
+its request's row (`brain.models.metering`). So this screen has two measures: questions, and the
+tokens those questions' model calls consumed, broken down by the same four axes.
 
 **The figure that exists is questions, by person and by department.** `ops.question_asked` holds
 one row per question with the asker and the department the directory gave them when they asked,
@@ -18,6 +17,24 @@ is `usage_view.THE_DEPARTMENT_TRAVELS_WITH_THE_ROW_AND_IS_NEVER_LOOKED_UP_HERE` 
 ledger that already exists rather than by a join. No join is made here and none is needed: the
 person and the department are both on the question row. See
 `QUESTIONS_ARE_THE_ONE_USAGE_FIGURE_A_LEDGER_HOLDS_TODAY`.
+
+**Tokens are the request ledger's, joined to the question on the trace and the person, and only
+for questions this reader's question tables already count.** One copy of the tokens exists, on
+`obs.request_telemetry`; the department is not on it and is on the question row the same request
+left, written where the lane finished with the department the directory gave the asker then. So
+a token row is built from a chosen question and the ledger rows sharing its trace and its person,
+and never from a ledger row alone: a model call that was not a question, such as an
+administrator's provider check, has no department and is not usage by one. Building from the
+chosen questions rather than filtering the ledger separately is what keeps the token tables inside
+the question tables' population, so no subtraction between the two measures counts anything the
+reader was not shown. The four token tables themselves are `brain.console.usage_view.breakdowns`
+over one `admit`, which is that module's own argument for why four axes of one row set subtract
+into nothing. See `TOKENS_ARE_JOINED_TO_THE_QUESTIONS_THIS_READER_IS_ALREADY_SHOWN`.
+
+**A request whose calls named no single model is grouped under `NO_SINGLE_MODEL`**, because
+`usage_view.UsageRow` refuses a blank model and dropping the row would make the model table
+smaller than the other three, which is the cross-table subtraction arriving by another route. See
+`brain.models.metering.A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE`.
 
 **Both tables are drawn from one tuple, and that is the whole of the disclosure argument.**
 `brain.adoption.questions_in_reach` chooses the questions once, under the directory's
@@ -34,12 +51,12 @@ person and department axes are read behind the usage grant for the reasons `usag
 out; an axis a reader may not have is absent rather than empty, and so is the total, which has
 nothing under it to reconcile against when neither table is offered.
 
-**A measure no ledger fills is a sentence, never a column of zeros.** Tokens, the model and the
-agent are named in `not_measured` when the reader may be offered them and the ledger cannot fill
-them, read off `UNFILLABLE_TODAY` rather than written here, so the day a model call fills the
-token columns this module stops saying so without anybody editing it. `usage_screen_gaps` then
-reports the screen as having nowhere to show the figure, which is the failure that would
-otherwise arrive as a screen quietly dropping a sentence. See
+**A measure no ledger fills is a sentence, never a column of zeros.** A measure is named in
+`not_measured` when the reader may be offered it and its fields are in `UNFILLABLE_TODAY`, read
+from there rather than written here. Since 2026-09-17 none of the three is, so the list is empty
+and the token tables are drawn instead; `usage_screen_gaps` reports a measure the ledger fills
+that this screen has no table for, which is the failure that would otherwise arrive as a screen
+quietly dropping a sentence and drawing nothing in its place. See
 `A_MEASURE_NOTHING_FILLS_IS_A_SENTENCE_AND_NEVER_A_ZERO`.
 
 **Cost is the spend screen's, and this screen names it rather than repeating it.**
@@ -52,10 +69,9 @@ What was rejected.
 under one model key that names nothing, and `usage_view.UsageRow` refuses a blank model for
 exactly that reason.
 
-*Joining `obs.request_telemetry` to `ops.question_asked` on the trace to carry tokens by
-department.* Every token column on that ledger is empty today, so the join would produce figures
-that look measured and are None, and choosing how tokens reach a department is a decision that
-becomes real on the day a model is called rather than one to take against an empty table.
+*A second copy of the tokens on the question row, or on a usage table of their own.* It is the
+join made when writing instead of when reading, and it is two places a token count can disagree.
+The ledger row is the one copy; the question row is where the department already is.
 
 *A count of automated questions beside the figure.* The design's overview draws one. It is a
 count of what was excluded, which `usage_view.COUNTING_NAMES` refuses by name, so the screen says
@@ -63,9 +79,6 @@ in words that automation is not counted and says no number.
 
 Scope: domain logic. Nothing here opens a connection, reads a clock or renders anything; the
 rows, the departments and `now` are parameters. Nothing here writes.
-
-The screen this serves does not yet show tokens, a model or an agent, so M27.7.14 is claimed here
-for the half it can show and is not closed by it.
 
 Task ids: M27.7.14
 """
@@ -81,9 +94,17 @@ from typing import Final
 
 from brain.adoption import Asked, DepartmentAdoption, department_lines, questions_in_reach
 from brain.console.adoption_view import reachable_departments
-from brain.console.usage_view import Axis, may_break_down_by
+from brain.console.usage_view import (
+    Axis,
+    UsageReport,
+    UsageRow,
+    admit,
+    breakdowns,
+    may_break_down_by,
+)
 from brain.core.entitlement import EntitlementSet
-from brain.ops.telemetry import REQUEST_FIELDS, UNFILLABLE_TODAY
+from brain.gate.context import traffic_class_for
+from brain.ops.telemetry import REQUEST_FIELDS, UNFILLABLE_TODAY, MeteredRequest
 
 
 class UsageScreenError(Exception):
@@ -117,6 +138,20 @@ A_MEASURE_NOTHING_FILLS_IS_A_SENTENCE_AND_NEVER_A_ZERO: Final = (
     "that record and says the measure is not taken, and it stops saying so on the day the "
     "ledger fills the field."
 )
+
+#: Why a token row is built from a chosen question and never from a ledger row alone.
+TOKENS_ARE_JOINED_TO_THE_QUESTIONS_THIS_READER_IS_ALREADY_SHOWN: Final = (
+    "The tokens are on the request's ledger row and the department is on its question row. A "
+    "token row is made from a question this reader's tables already count and the ledger rows "
+    "sharing its trace and person, so the token tables measure the same population as the "
+    "question tables, and a model call that was not a question, which has no department, is not "
+    "usage by one. Filtering the ledger on its own would be a second answer to which requests "
+    "this reader may know about, and the difference between two such answers is a count of what "
+    "one of them withheld."
+)
+
+#: The model key a request is grouped under when its calls named no single model.
+NO_SINGLE_MODEL: Final = "no single model"
 
 #: Why automation is not counted and no count of it is shown.
 AUTOMATION_IS_REMOVED_BEFORE_ANYTHING_IS_COUNTED: Final = (
@@ -157,6 +192,11 @@ MEASURED_BY: Final[Mapping[Measure, tuple[str, ...]]] = MappingProxyType(
         Measure.AGENT: ("agent_version",),
     }
 )
+
+#: The measures this screen has a table for once the ledger fills them. All three: the token
+#: tables are grouped by person, department, model and agent, which is where the model and the
+#: agent are shown. `usage_screen_gaps` reports a filled measure missing from here.
+SHOWN_WHEN_MEASURED: Final[frozenset[Measure]] = frozenset(Measure)
 
 #: The axis whose grant each measure would be read behind.
 #:
@@ -234,6 +274,36 @@ def person_lines(questions: Sequence[Asked]) -> tuple[PersonLine, ...]:
     )
 
 
+def token_rows(chosen: Sequence[Asked], metered: Iterable[MeteredRequest]) -> tuple[UsageRow, ...]:
+    """One usage row per ledger row that shares a chosen question's trace and person.
+
+    Takes questions `questions_in_reach` has already chosen and chooses nothing itself, for
+    `TOKENS_ARE_JOINED_TO_THE_QUESTIONS_THIS_READER_IS_ALREADY_SHOWN`. A ledger row whose pair
+    matches no chosen question contributes nothing, whatever it holds. Ordered as the questions
+    are, then as the ledger rows were given.
+    """
+    by_request: dict[tuple[str, str], list[MeteredRequest]] = {}
+    for one in metered:
+        by_request.setdefault((one.trace_id, one.principal), []).append(one)
+    rows: list[UsageRow] = []
+    for question in chosen:
+        for used in by_request.get((question.trace_id, question.principal_id), ()):
+            rows.append(
+                UsageRow(
+                    principal_id=question.principal_id,
+                    principal_kind=question.principal_kind,
+                    traffic=traffic_class_for(question.channel),
+                    department=question.department,
+                    model=used.model or NO_SINGLE_MODEL,
+                    agent_id=used.agent_version,
+                    tokens_in=used.tokens_in,
+                    tokens_out=used.tokens_out,
+                    at=question.at,
+                )
+            )
+    return tuple(rows)
+
+
 # ---------------------------------------------------------------------------- the screen
 @dataclass(frozen=True)
 class UsageScreen:
@@ -243,6 +313,9 @@ class UsageScreen:
     `questions` is None when neither is offered: a total with no table under it is a figure
     nobody can reconcile. Where a table is offered its lines sum to `questions`, asserted here,
     so there is no version of this object whose total says more than its lines.
+
+    `tokens` is one `usage_view.UsageReport` per axis this reader may break usage down by, in
+    `Axis` order, each asserting its own total by construction; an axis withheld is absent.
     """
 
     start: datetime
@@ -251,6 +324,7 @@ class UsageScreen:
     people: tuple[PersonLine, ...] | None
     questions: int | None
     not_measured: tuple[Measure, ...]
+    tokens: tuple[UsageReport, ...] = ()
 
     def __post_init__(self) -> None:
         offered = self.departments is not None or self.people is not None
@@ -282,6 +356,7 @@ def usage_for_reader(
     start: datetime,
     end: datetime,
     now: datetime,
+    metered: Iterable[MeteredRequest] = (),
 ) -> UsageScreen:
     """The usage screen for one reader over `[start, end)` (M27.7.14, the questions half).
 
@@ -289,6 +364,9 @@ def usage_for_reader(
     `asked` is every question recorded in the window. The questions are chosen before either
     axis is decided, so a reader offered nothing does the same work and a malformed window is
     refused for everybody alike.
+
+    `metered` is every ledger row in the window whose tokens were counted, and only the rows
+    sharing a chosen question's trace and person reach the token tables; see `token_rows`.
     """
     reachable = reachable_departments(departments, entitlement, now=now)
     chosen = questions_in_reach(asked, reachable, start=start, end=end)
@@ -308,6 +386,9 @@ def usage_for_reader(
         people=by_person,
         questions=len(chosen) if offered else None,
         not_measured=not_measured(entitlement, now=now),
+        tokens=breakdowns(
+            admit(token_rows(chosen, metered), entitlement, now=now), entitlement, now=now
+        ),
     )
 
 
@@ -317,6 +398,7 @@ def usage_screen_gaps(
     measured_by: Mapping[Measure, tuple[str, ...]] = MEASURED_BY,
     read_behind: Mapping[Measure, Axis] = READ_BEHIND,
     ledger_fields: Iterable[str] = REQUEST_FIELDS,
+    shown: frozenset[Measure] = SHOWN_WHEN_MEASURED,
 ) -> tuple[str, ...]:
     """Everything that would let this screen say something untrue about what is measured.
 
@@ -340,7 +422,7 @@ def usage_screen_gaps(
                     f"{measure.value} is read from {field}, which the request ledger does not "
                     "have, so saying it is not measured is a claim about nothing"
                 )
-        if not any(field in unfillable for field in fields):
+        if not any(field in unfillable for field in fields) and measure not in shown:
             gaps.append(
                 f"the request ledger now fills {', '.join(fields)}, so {measure.value} is "
                 "measured and this screen has nowhere to show it; it will simply stop saying "

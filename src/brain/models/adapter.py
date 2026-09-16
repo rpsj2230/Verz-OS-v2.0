@@ -1,9 +1,10 @@
 """The concrete driver: the one place in this system that actually speaks to a provider.
 
 `driver.py` drew the seam and stopped there on purpose. It holds the protocol, the
-per-lane call policy and the per-pool router, and `CONCRETE_ADAPTER_NOT_BUILT` says
+per-lane call policy and the per-pool router, and `CONCRETE_ADAPTERS_ARE_ONE_FILE` says
 plainly that nothing in it imports an SDK or performs I/O. This module is the other side
-of that seam, and it is the only file in the codebase that may.
+of that seam. `litellm_transport` is one transport and it needs an optional extra no install
+carries; `brain.models.wire` holds the ones that run, over `httpx`, and fits the same `Transport`.
 
 Five decisions live here. Each one prevents a failure that is silent, which is to say a
 failure whose first symptom is a bill, a leaked key, or an answer nobody knows is wrong.

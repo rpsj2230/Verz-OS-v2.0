@@ -4,7 +4,8 @@
  *
  * All three stand on ledgers that hold less than `docs/screens.html` draws, so the failures worth
  * testing are the ones that look like the design working. A token column of zeros looks like the
- * usage the design asks for and says nobody used any tokens; a gaps table with question shapes
+ * usage the design asks for and says nobody used any tokens, and a token total added up in the
+ * browser looks like the API's and is a figure nobody can reconcile; a gaps table with question shapes
  * blank looks like the design's card and says every question was answered; a green canary line
  * looks like the design's card and says a run passed that nothing checked. Each is asserted
  * against over the rendered page.
@@ -58,6 +59,7 @@ import {
   NOBODY_ASKED,
   NOTHING_TO_SHOW,
   NO_PERSON_MATCHES,
+  TOKENS_ARE_OVER_MODEL_CALLS,
   USAGE_HEADING,
   Usage,
   WITHOUT_AUTOMATION,
@@ -65,12 +67,18 @@ import {
 } from "../src/pages/Usage";
 import {
   EVERYBODY,
+  NOT_MEASURED_SENTENCES,
+  NO_MODEL_CALL,
   PEOPLE_PER_PAGE,
   PERIODS,
+  RUNS_HEADING,
   USAGE_API_PATH,
+  glanceTokens,
+  glanceTokensLine,
   notMeasuredSentence,
   peoplePage,
   readUsage,
+  tokensHeading,
   usageApiPath,
   type PersonUsageRow,
 } from "../src/pages/usageQuery";
@@ -84,6 +92,40 @@ const API = "/api/v1";
 /** A value that appears nowhere else, so a dropped one cannot be covered by another. */
 function sentinel(name: string): string {
   return `${name.toUpperCase()}-SENTINEL`;
+}
+
+/**
+ * One token breakdown in the shape `brain.report_routes.TokenBreakdownView` serialises.
+ *
+ * The totals disagree with the lines on purpose, which no real response can: a page that adds the
+ * lines up draws 3 runs, 1100 in and 180 out where the API said 7, 1250 and 380.
+ */
+function breakdown(
+  axis: string,
+  keys: readonly [string, string],
+  over: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    axis,
+    lines: [
+      { key: keys[0], runs: 2, tokens_in: 600, tokens_out: 100 },
+      { key: keys[1], runs: 1, tokens_in: 500, tokens_out: 80 },
+    ],
+    total_runs: 7,
+    total_tokens_in: 1250,
+    total_tokens_out: 380,
+    ...over,
+  };
+}
+
+/** One breakdown per axis, in the order the API sends them. */
+function everyAxis(): Record<string, unknown>[] {
+  return [
+    breakdown("person", [sentinel("ana"), sentinel("ben")]),
+    breakdown("department", [sentinel("support"), sentinel("web")]),
+    breakdown("model", [sentinel("sonnet"), "no single model"]),
+    breakdown("agent", [sentinel("quote-helper"), "no agent"]),
+  ];
 }
 
 function usageBody(over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -101,7 +143,8 @@ function usageBody(over: Record<string, unknown> = {}): Record<string, unknown> 
     ],
     questions: 4,
     machine_included: false,
-    not_measured: ["tokens", "model", "agent"],
+    not_measured: [],
+    tokens: everyAxis(),
     ...over,
   };
 }
@@ -207,6 +250,17 @@ function field(container: HTMLElement, label: string): string {
   return term.nextElementSibling?.textContent ?? "";
 }
 
+/** The totals row of one captioned table, cell by cell. */
+function totals(container: HTMLElement, caption: string): string[] {
+  const table = [...container.querySelectorAll("table")].find(
+    (one) => one.querySelector("caption")?.textContent === caption,
+  );
+  if (!table) {
+    throw new Error(`No table captioned ${caption}.`);
+  }
+  return [...table.querySelectorAll("tfoot tr th, tfoot tr td")].map((cell) => cell.textContent ?? "");
+}
+
 /** Every cell of one captioned table, row by row. */
 function cells(container: HTMLElement, caption: string): string[][] {
   const table = [...container.querySelectorAll("table")].find(
@@ -305,14 +359,20 @@ describe("the Usage and cost screen", () => {
     // What breaks if this is deleted: a field added to the usage response arrives and is dropped by
     // `readUsage`, or the page reads a field the route no longer sends and draws nothing silently.
     expect(backendModelFields(ROUTES, "UsageView").sort()).toEqual(
-      ["start", "end", "departments", "people", "questions", "machine_included", "not_measured"].sort(),
+      ["start", "end", "departments", "people", "questions", "machine_included", "not_measured", "tokens"].sort(),
     );
+    expect(Object.keys(usageBody()).sort()).toEqual(backendModelFields(ROUTES, "UsageView").sort());
     expect(backendModelFields(ROUTES, "DepartmentUsageView")).toEqual([
       "department",
       "questions",
       "people",
     ]);
     expect(backendModelFields(ROUTES, "PersonUsageView")).toEqual(["person", "questions"]);
+    const [first] = everyAxis();
+    expect(Object.keys(first ?? {}).sort()).toEqual(backendModelFields(ROUTES, "TokenBreakdownView").sort());
+    expect(Object.keys((first?.["lines"] as Record<string, unknown>[])[0] ?? {}).sort()).toEqual(
+      backendModelFields(ROUTES, "TokenLineView").sort(),
+    );
   });
 
   test("every period offered is inside the window the route admits", () => {
@@ -351,10 +411,13 @@ describe("the Usage and cost screen", () => {
     expect(glance?.textContent).not.toContain("4");
   });
 
-  test("tokens, the model and the agent are sentences, and no column or zero is drawn for them", async () => {
+  test("a measure the API still names as not measured is a sentence, and no column or zero is drawn for it", async () => {
     // What breaks if this is deleted: a token column of zeros, which says nobody used any tokens,
-    // on an install where nothing counts them.
-    const container = await mount("/usage", answering(USAGE_API_PATH, usageBody()));
+    // on the day the ledger stops filling a field and the API names it again.
+    const container = await mount(
+      "/usage",
+      answering(USAGE_API_PATH, usageBody({ not_measured: ["tokens", "model", "agent"], tokens: [] })),
+    );
 
     for (const measure of ["tokens", "model", "agent"]) {
       expect(text(container)).toContain(notMeasuredSentence(measure));
@@ -363,18 +426,102 @@ describe("the Usage and cost screen", () => {
     expect(headers).toEqual(["Department", "Questions", "People", "Person", "Questions"]);
   });
 
-  test("a measure the API does not name is not mentioned, including a withheld agent axis", async () => {
-    // What breaks if this is deleted: the page draws a By agent card for a reader the API did not
-    // offer the agent axis, which tells them there is one.
+  test("no not-measured sentence says that nothing calls a model", () => {
+    // What breaks if this is deleted: the sentences going on telling an administrator no model is
+    // called on an install whose ledger meters every call, which is what they said until the
+    // executor started calling one.
+    for (const sentence of Object.values(NOT_MEASURED_SENTENCES)) {
+      expect(sentence).not.toMatch(/nothing calls a model|no request has been answered by a model|yet\b/i);
+    }
+  });
+
+  test("a measure the API does not name is not mentioned, and a withheld axis has no token card", async () => {
+    // What breaks if this is deleted: the page draws a By agent or Tokens by agent card for a reader
+    // the API did not offer the agent axis, which tells them there is one.
     const container = await mount(
       "/usage",
-      answering(USAGE_API_PATH, usageBody({ not_measured: ["tokens", "model"] })),
+      answering(
+        USAGE_API_PATH,
+        usageBody({ not_measured: ["model"], tokens: everyAxis().filter((one) => one["axis"] !== "agent") }),
+      ),
     );
 
+    const headings = [...container.querySelectorAll("h2")].map((one) => one.textContent);
     expect(text(container)).not.toContain(notMeasuredSentence("agent"));
-    expect([...container.querySelectorAll("h2")].map((one) => one.textContent)).not.toContain(
-      "By agent",
+    expect(headings).not.toContain("By agent");
+    expect(headings).not.toContain(tokensHeading("agent"));
+    expect(headings).toContain(tokensHeading("model"));
+    expect(text(container)).not.toMatch(/withheld|hidden|not shown/i);
+  });
+
+  test("each token breakdown is a table of the lines sent, with the API's totals and never a sum made here", async () => {
+    // What breaks if this is deleted: a line dropped, the runs column called questions, or a totals
+    // row added up from the lines, which is a figure nobody can reconcile. The body's totals
+    // disagree with its lines on purpose.
+    const container = await mount("/usage", answering(USAGE_API_PATH, usageBody()));
+
+    expect([...container.querySelectorAll("h2")].map((one) => one.textContent)).toEqual([
+      "At a glance",
+      "By department",
+      "By person",
+      tokensHeading("person"),
+      tokensHeading("department"),
+      tokensHeading("model"),
+      tokensHeading("agent"),
+    ]);
+    expect(cells(container, tokensHeading("model"))).toEqual([
+      [sentinel("sonnet"), "2", "600", "100"],
+      ["no single model", "1", "500", "80"],
+    ]);
+    expect(cells(container, tokensHeading("agent"))[1]).toEqual(["no agent", "1", "500", "80"]);
+    for (const axis of ["person", "department", "model", "agent"]) {
+      expect(totals(container, tokensHeading(axis))).toEqual(["Total", "7", "1250", "380"]);
+    }
+    const table = [...container.querySelectorAll("table")].find(
+      (one) => one.querySelector("caption")?.textContent === tokensHeading("person"),
     );
+    expect([...(table?.querySelectorAll("th[scope=col]") ?? [])].map((one) => one.textContent)).toEqual([
+      "Person",
+      RUNS_HEADING,
+      "Tokens in",
+      "Tokens out",
+    ]);
+    expect(text(container)).not.toMatch(/1100|180\b/);
+  });
+
+  test("a breakdown with no lines says no question called a model, and draws no table of zeros", async () => {
+    // What breaks if this is deleted: an empty token breakdown drawn as a table whose only row is a
+    // total of zeros, or as a heading over nothing, which reads as a table somebody hid.
+    const container = await mount(
+      "/usage",
+      answering(
+        USAGE_API_PATH,
+        usageBody({
+          tokens: [breakdown("person", ["a", "b"], { lines: [], total_runs: 0, total_tokens_in: 0, total_tokens_out: 0 })],
+        }),
+      ),
+    );
+
+    const section = [...container.querySelectorAll("section")].find(
+      (one) => one.querySelector("h2")?.textContent === tokensHeading("person"),
+    );
+    expect(section?.textContent).toBe(`${tokensHeading("person")}${NO_MODEL_CALL}`);
+    expect(section?.querySelector("table")).toBeNull();
+  });
+
+  test("the at-a-glance tokens are the first breakdown's totals, and absent when there is no breakdown", async () => {
+    // What breaks if this is deleted: the glance adding every breakdown's totals together, which
+    // counts each token once per axis, or a tokens row of zeros for a reader offered no breakdown.
+    const firstDiffers = [
+      breakdown("department", ["d", "e"], { total_tokens_in: 3210, total_tokens_out: 765 }),
+      ...everyAxis().slice(2),
+    ];
+    const container = await mount("/usage", answering(USAGE_API_PATH, usageBody({ tokens: firstDiffers })));
+    expect(field(container, "Tokens")).toBe(`${glanceTokensLine(3210, 765)}${TOKENS_ARE_OVER_MODEL_CALLS}`);
+    expect(glanceTokens([])).toBeNull();
+
+    const none = await mount("/usage", answering(USAGE_API_PATH, usageBody({ tokens: [] })));
+    expect([...none.querySelectorAll("dt")].map((one) => one.textContent)).not.toContain("Tokens");
   });
 
   test("whether automation was counted is drawn from the response", async () => {
@@ -398,7 +545,7 @@ describe("the Usage and cost screen", () => {
       "/usage",
       answering(
         USAGE_API_PATH,
-        usageBody({ departments: null, people: null, questions: null, not_measured: [] }),
+        usageBody({ departments: null, people: null, questions: null, not_measured: [], tokens: [] }),
       ),
     );
     const leaky = await mount(
@@ -410,6 +557,7 @@ describe("the Usage and cost screen", () => {
           people: null,
           questions: null,
           not_measured: [],
+          tokens: [],
           hidden: 41,
           withheld_departments: [sentinel("elsewhere")],
         }),
@@ -420,6 +568,22 @@ describe("the Usage and cost screen", () => {
     expect(page(bare).querySelectorAll("section")).toHaveLength(0);
     expect(page(leaky).innerHTML).toBe(page(bare).innerHTML);
     expect(text(leaky)).not.toMatch(/41|ELSEWHERE/);
+  });
+
+  test("a reader offered a token axis and no question table sees that table and no question figure", async () => {
+    // What breaks if this is deleted: a reader the API gave only the model axis told there is
+    // nothing to show, or shown "Questions 0" for a count the API withheld from them.
+    const container = await mount(
+      "/usage",
+      answering(
+        USAGE_API_PATH,
+        usageBody({ departments: null, people: null, questions: null, tokens: [everyAxis()[2]] }),
+      ),
+    );
+
+    expect(text(container)).not.toContain(NOTHING_TO_SHOW);
+    expect([...container.querySelectorAll("dt")].map((one) => one.textContent)).toEqual(["Tokens", "Cost"]);
+    expect(totals(container, tokensHeading("model"))).toEqual(["Total", "7", "1250", "380"]);
   });
 
   test("a period in which nobody asked draws zero lines and says nobody asked", async () => {
@@ -532,6 +696,10 @@ describe("the Usage and cost screen", () => {
     expect(readUsage(usageBody({ departments: "support" }))).toBeNull();
     expect(readUsage(usageBody({ questions: "4" }))).toBeNull();
     expect(readUsage(usageBody({ not_measured: null }))).toBeNull();
+    expect(readUsage(usageBody({ tokens: undefined }))).toBeNull();
+    expect(readUsage(usageBody({ tokens: null }))).toBeNull();
+    expect(readUsage(usageBody({ tokens: [breakdown("person", ["a", "b"], { lines: null })] }))).toBeNull();
+    expect(readUsage(usageBody({ tokens: [] }))).not.toBeNull();
     expect(readUsage(usageBody())).not.toBeNull();
   });
 });

@@ -9,9 +9,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 69 tables, from `brain.db.Base.metadata`.
 - 22 installation values, from `brain.install.INSTALLATION`.
-- 106 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 109 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 65 console addresses, from the route table in `console/src/App.tsx`.
-- 37 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 44 routes.
+- 39 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 46 routes.
 - 35 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
@@ -95,11 +95,14 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/models/providers` | `/models` |
 | `GET /api/v1/operate/models` | `/models` |
 | `GET /api/v1/routing/rungs` | `/models`, `/routing`, `/routing/:rungId` |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` |
+| `POST /api/v1/models/providers/{provider}/check` | `/models` |
+| `PUT /api/v1/models/providers/{provider}` | `/models` |
 
-- **Gap.** Saving a routing rung changes its row and no answer: nothing on the answer path reads ops.routing_rung, and every question runs through brain.models.routing.seed_chain. Open leaf `M27.8.8`.
+- **Gap.** Saving a routing rung changes the chain the next model call walks and no answer: the answer lane still answers from fast-path rules and calls no model, so today only a provider check from Models and health reaches a saved rung. Open leaf `M27.8.8`.
 - **Gap.** A provider key cannot be written or replaced from a screen after setup. Open leaf `M27.8.8`.
 - **Gap.** The model profile and endpoint cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 
@@ -338,7 +341,7 @@ No gap recorded.
 - **Tables:** none
 - **Installation values:** none
 
-- **Gap.** The state of each service the install runs on, and each provider's circuit breaker, is not shown. Recorded: The Models and health screen says breaker_state_is_not_recorded, and /health/ready answers the orchestrator outside /api/v1 with no screen reading it.
+- **Gap.** The state of each service the install runs on is not shown. Recorded: /health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.
 
 ### Backup and recovery
 
@@ -401,11 +404,11 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 37 of 44 write routes have all three proved or not applicable, 5 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 39 of 46 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
-| `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | **None.** Nothing on the answer path reads ops.routing_rung, so a saved rung changes no answer. Leaf `M27.8.8`. |
+| `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks` in `tests/unit/test_provider_routes.py` (database, in CI) |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` | `test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither` in `tests/unit/test_agent_automation_store.py` (database, in CI) | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` |
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it` in `tests/unit/test_approval_decisions.py` | `test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it` in `tests/unit/test_approval_decisions.py` | **None.** In-process the decision leaves the queue (test_approval_decisions.py::test_a_decided_approval_leaves_the_queue_and_its_card_no_longer_opens), but on a running install brain.app.suspension_store_for builds no store, so the decision a person presses is refused and changes nothing. |
@@ -434,6 +437,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
+| `POST /api/v1/models/providers/{provider}/check` | `/models` | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` | Not applicable: A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit. | `test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question` in `tests/unit/test_provider_routes.py` |
 | `POST /api/v1/notifications/notices/{kind}` | `/notifications` | `test_switching_a_notice_off_writes_its_row_with_the_writer_and_the_next_read_sees_it` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switched_off_a_re_verification_run_records_nothing_and_switched_on_it_does` in `tests/unit/test_notices.py` (database, in CI) |
 | `POST /api/v1/notifications/relay` | `/notifications` | `test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
 | `POST /api/v1/notifications/relay/password` | `/notifications` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
@@ -449,6 +453,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | Not applicable: A read of a staff list writes nothing: nobody is added, and the client secret it signs in with is not kept. | Not applicable: A read changes nothing an administrator manages, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
+| `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 
 ## The rules every screen is held to
 

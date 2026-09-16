@@ -32,9 +32,10 @@ field for the reply, its length, or anyone's opinion of it. That is the same clo
 cannot widen it: the only route from a failed call to a fallback decision runs through
 `DriverFailure.trigger`, which calls `trigger_for` and nothing else.
 
-Nothing here imports a provider SDK, opens a socket, or reads a credential. The concrete
-adapter is not built (see `CONCRETE_ADAPTER_NOT_BUILT`); this module is the shape it will
-have to fit, so that building it is one file and swapping it is the same file.
+Nothing here imports a provider SDK, opens a socket, or reads a credential. This module is
+the shape a concrete adapter has to fit, so that building one is one file and swapping it is the
+same file, and that is how it went: `brain.models.adapter.SdkDriver` over the HTTP transports in
+`brain.models.wire`, driven by `brain.models.calls`. See `CONCRETE_ADAPTERS_ARE_ONE_FILE`.
 
 Task ids: M5.1.1, M5.1.3, M5.1.4
 """
@@ -80,15 +81,16 @@ TAG_FILTERING_IS_INOPERATIVE_IN_SDK_MODE = (
     "One Router per pool makes that unrepresentable rather than merely discouraged."
 )
 
-#: Stated plainly so nobody reads this module as finished. What exists is the seam: the
-#: protocol our code depends on, the per-lane call policy, and the per-pool router. What
-#: does not exist is a class that actually speaks to Anthropic. Building it is one new
-#: file implementing `ModelDriver`; nothing else in the codebase should need to change,
-#: and if it does, this seam was drawn in the wrong place.
-CONCRETE_ADAPTER_NOT_BUILT = (
-    "No concrete provider adapter exists yet. This module defines the protocol, the "
-    "per-lane call policy and the per-pool router only. Nothing here imports a provider "
-    "SDK or performs I/O."
+#: Stated plainly so nobody reads this module as the place a provider is called. It holds the
+#: seam: the protocol our code depends on, the per-lane call policy, and the per-pool router.
+#: Until 2026-09-17 nothing implemented it, and this constant said so. The adapters that speak
+#: to a provider are one file, `brain.models.wire`, driven through `brain.models.adapter.SdkDriver`
+#: by the one executor, `brain.models.calls.ModelCalls`, and nothing in this module changed when
+#: they arrived, which is the test of where the seam was drawn.
+CONCRETE_ADAPTERS_ARE_ONE_FILE = (
+    "This module defines the protocol, the per-lane call policy and the per-pool router only, "
+    "and nothing here imports a provider SDK or performs I/O. The concrete provider adapters "
+    "live in brain.models.wire and are called only through brain.models.calls."
 )
 
 

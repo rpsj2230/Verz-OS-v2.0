@@ -35,7 +35,14 @@ decides nothing about who may see a shape: the rows it returns carry no departme
 `brain.console.spend_view.shape_report` reads a shape only through a cost the reader's usage
 grant already admits.
 
-Task ids: M30.5.2, M21.3.4
+**Model usage is read by window, not by trace id (M27.7.14).** `metered_between` returns the rows
+in `[start, end)` whose tokens were counted, on the partition key, because the usage screen's
+window can be a year and a list of a year's trace ids in an `IN` clause is a statement nobody
+should send. The join to the question a row belongs to is made in the read module on the trace
+and the person, which is `A_TRACE_THAT_NAMES_TWO_SHAPES_NAMES_NONE`'s pairing, and a question
+and its ledger row share the instant the gate judged the request at, so one window holds both.
+
+Task ids: M30.5.2, M21.3.4, M27.7.14
 """
 
 from __future__ import annotations
@@ -44,7 +51,7 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
 
 import structlog
-from sqlalchemy import insert, select
+from sqlalchemy import Select, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.lane import Lane
@@ -55,6 +62,7 @@ from brain.ops.question_store import (
 from brain.ops.reliability import LaneObjective
 from brain.ops.service_levels import Observation, ServiceLevels, against_target
 from brain.ops.telemetry import (
+    MeteredRequest,
     QuestionShape,
     RequestStatus,
     RequestTelemetry,
@@ -68,6 +76,7 @@ log = structlog.get_logger(__name__)
 __all__ = [
     "A_MEASUREMENT_THAT_CANNOT_BE_WRITTEN_DOES_NOT_TAKE_THE_ANSWER_WITH_IT",
     "TelemetryRecorder",
+    "metered_between",
     "observed_between",
     "record",
     "service_levels_between",
@@ -147,6 +156,50 @@ async def shapes_for(
     return shapes_by_request(
         (trace_id, principal, lane, tool_count)
         for trace_id, principal, lane, tool_count in found.all()
+    )
+
+
+def metered_rows(
+    start: datetime, end: datetime
+) -> Select[tuple[str, str, str | None, str | None, int | None, int | None]]:
+    """Every row in `[start, end)` whose tokens were counted, oldest first.
+
+    Six columns and not the row, so nothing about the request beyond who, which model, which
+    agent and how many tokens can reach a figure built from it.
+    """
+    return (
+        select(
+            RequestTelemetryRow.trace_id,
+            RequestTelemetryRow.principal,
+            RequestTelemetryRow.model,
+            RequestTelemetryRow.agent_version,
+            RequestTelemetryRow.tokens_in,
+            RequestTelemetryRow.tokens_out,
+        )
+        .where(RequestTelemetryRow.received_at >= start, RequestTelemetryRow.received_at < end)
+        .where(RequestTelemetryRow.tokens_in.is_not(None))
+        .where(RequestTelemetryRow.tokens_out.is_not(None))
+        .order_by(RequestTelemetryRow.received_at)
+    )
+
+
+async def metered_between(
+    session: AsyncSession, *, start: datetime, end: datetime
+) -> tuple[MeteredRequest, ...]:
+    """The model usage recorded in `[start, end)`, for the usage screen's join."""
+    found = await session.execute(metered_rows(start, end))
+    return tuple(
+        MeteredRequest(
+            trace_id=trace_id,
+            principal=principal,
+            model=model,
+            agent_version=agent,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+        )
+        for trace_id, principal, model, agent, tokens_in, tokens_out in found.all()
+        # Both are tested in the statement; the columns are nullable, so the types are.
+        if tokens_in is not None and tokens_out is not None
     )
 
 

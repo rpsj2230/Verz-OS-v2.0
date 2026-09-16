@@ -1,6 +1,6 @@
 /**
- * Usage and cost: how many questions were asked, by department and by person, and where the cost
- * of them is shown.
+ * Usage and cost: how many questions were asked, by department and by person, the tokens their
+ * model calls consumed by every axis the reader may have, and where the cost of them is shown.
  *
  * `docs/screens.html` names this screen under Report on the company overview, as "Usage & cost",
  * and on the department console as "Usage". It draws no mockup of the screen itself, so the
@@ -10,10 +10,13 @@
  * install can support.
  *
  * **What is drawn and what is not.** Questions by department with the people who asked, and
- * questions by person, are drawn. Tokens, the model and the agent are sentences, because the API
- * names them as not measured. Cost is a link to the Spend screen, which already draws it from the
- * same grant. The overview's count of automated questions is not drawn, because it is a count of
- * what was excluded; the page says automation is not counted instead.
+ * questions by person, are drawn. Tokens are one table per breakdown the API sends, by person,
+ * department, model or agent, each with a totals row that is the API's and never a sum made here,
+ * and the at-a-glance figure is the first breakdown's totals, because every breakdown groups one
+ * row set and a sum across them would count each token once per axis. A measure the API still
+ * names as not measured is a sentence instead. Cost is a link to the Spend screen, which already
+ * draws it from the same grant. The overview's count of automated questions is not drawn, because
+ * it is a count of what was excluded; the page says automation is not counted instead.
  *
  * **The person table is searched, ordered and paged in the browser**, over every line the API
  * sent. The total above it is the API's, and it is the total of the whole list whatever page is
@@ -38,14 +41,21 @@ import { useResource } from "../api/useResource";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
   EVERYBODY,
+  NO_MODEL_CALL,
   PERIODS,
+  RUNS_HEADING,
+  glanceTokens,
+  glanceTokensLine,
   notMeasuredSentence,
   peoplePage,
   periodLabel,
   readUsage,
+  tokensHeading,
+  tokensKeyHeading,
   usageApiPath,
   type Period,
   type PeopleView,
+  type TokenBreakdown,
   type UsageBody,
 } from "./usageQuery";
 
@@ -80,27 +90,43 @@ export const NARROWS_THIS_LIST = "Search, order and pages work on the people lis
 export const DEPARTMENTS_CAPTION = "Questions by department";
 export const PEOPLE_CAPTION = "Questions by person";
 
+/** Under the at-a-glance tokens, saying which requests they are over. */
+export const TOKENS_ARE_OVER_MODEL_CALLS = "consumed by the questions above that called a model";
+
 function Glance({ body }: { readonly body: UsageBody }) {
-  const tokens = body.not_measured.includes("tokens");
+  const unmeasured = body.not_measured.includes("tokens");
+  const tokens = glanceTokens(body.tokens);
   return (
     <section className="card">
       <h2>At a glance</h2>
       <dl className="fields" aria-label="Usage at a glance">
-        <div className="fields__row">
-          <dt>Questions</dt>
-          <dd>
-            <span>{String(body.questions ?? 0)}</span>
-            <p className="note">{body.machine_included ? WITH_AUTOMATION : WITHOUT_AUTOMATION}</p>
-          </dd>
-        </div>
-        <div className="fields__row">
-          <dt>People</dt>
-          <dd>
-            <span>{String(body.people?.length ?? 0)}</span>
-            <p className="note">who asked at least one question</p>
-          </dd>
-        </div>
-        {tokens ? (
+        {body.questions === null ? null : (
+          <>
+            <div className="fields__row">
+              <dt>Questions</dt>
+              <dd>
+                <span>{String(body.questions)}</span>
+                <p className="note">{body.machine_included ? WITH_AUTOMATION : WITHOUT_AUTOMATION}</p>
+              </dd>
+            </div>
+            <div className="fields__row">
+              <dt>People</dt>
+              <dd>
+                <span>{String(body.people?.length ?? 0)}</span>
+                <p className="note">who asked at least one question</p>
+              </dd>
+            </div>
+          </>
+        )}
+        {tokens !== null ? (
+          <div className="fields__row">
+            <dt>Tokens</dt>
+            <dd>
+              <span>{glanceTokensLine(tokens.tokensIn, tokens.tokensOut)}</span>
+              <p className="note">{TOKENS_ARE_OVER_MODEL_CALLS}</p>
+            </dd>
+          </div>
+        ) : unmeasured ? (
           <div className="fields__row">
             <dt>Tokens</dt>
             <dd>
@@ -218,6 +244,58 @@ function People({ lines }: { readonly lines: NonNullable<UsageBody["people"]> })
   );
 }
 
+/**
+ * One token breakdown as a table, with the API's totals under its lines.
+ *
+ * Every line is drawn, unpaged, for the reason the department table is: the totals row describes
+ * the whole list, so a page of it would be a list its own totals fail to describe.
+ */
+function Tokens({ breakdown }: { readonly breakdown: TokenBreakdown }) {
+  const heading = tokensHeading(breakdown.axis);
+  return (
+    <section className="card">
+      <h2>{heading}</h2>
+      {breakdown.lines.length === 0 ? (
+        <p className="note">{NO_MODEL_CALL}</p>
+      ) : (
+        <div className="grid__scroll">
+          <table className="grid__table">
+            <caption className="grid__caption">{heading}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{tokensKeyHeading(breakdown.axis)}</th>
+                <th scope="col">{RUNS_HEADING}</th>
+                <th scope="col">Tokens in</th>
+                <th scope="col">Tokens out</th>
+              </tr>
+            </thead>
+            <tbody>
+              {breakdown.lines.map((line) => (
+                <tr key={line.key}>
+                  <th scope="row">
+                    <code>{line.key}</code>
+                  </th>
+                  <td>{String(line.runs)}</td>
+                  <td>{String(line.tokens_in)}</td>
+                  <td>{String(line.tokens_out)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td>{String(breakdown.total_runs)}</td>
+                <td>{String(breakdown.total_tokens_in)}</td>
+                <td>{String(breakdown.total_tokens_out)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function UsageAnswerView({ period }: { readonly period: Period }) {
   const answer = useResource<unknown>(usageApiPath(period));
 
@@ -232,7 +310,7 @@ function UsageAnswerView({ period }: { readonly period: Period }) {
     );
   }
   const body = readUsage(answer.data);
-  if (body === null || (body.departments === null && body.people === null)) {
+  if (body === null || (body.departments === null && body.people === null && body.tokens.length === 0)) {
     return <p className="note">{NOTHING_TO_SHOW}</p>;
   }
 
@@ -278,6 +356,10 @@ function UsageAnswerView({ period }: { readonly period: Period }) {
           <People key={period} lines={body.people} />
         </section>
       )}
+
+      {body.tokens.map((breakdown) => (
+        <Tokens key={breakdown.axis} breakdown={breakdown} />
+      ))}
 
       {body.not_measured.includes("model") ? (
         <section className="card">

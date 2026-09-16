@@ -37,6 +37,7 @@ from brain.ops.telemetry import (
     _FLAG_FIELDS,
     _NAME_FIELDS,
     COMPLETION_FIELDS,
+    FILLED_BY_A_MODEL_CALL,
     LEDGER_DATA_CLASS,
     LEDGER_RETENTION_DAYS,
     REQUEST_FIELDS,
@@ -409,16 +410,29 @@ def test_every_declared_field_is_a_name_a_count_a_duration_or_a_flag() -> None:
 
 
 def test_the_fields_nothing_can_fill_today_are_exactly_the_optional_ones() -> None:
-    """`UNFILLABLE_TODAY` is a claim about what this system cannot measure yet, and a claim in
-    a mapping is only worth having if it has to match the code. Every field it names defaults
-    to None; every field it does not name is required. Delete this and the mapping becomes a
-    paragraph free to describe a record it no longer matches."""
+    """`UNFILLABLE_TODAY` is a claim about what this system cannot measure yet, and
+    `FILLED_BY_A_MODEL_CALL` a claim about what only a model call fills, and a claim in a
+    mapping is only worth having if it has to match the code. Every field either names defaults
+    to None, the two never share a field, and every field neither names is required. Delete this
+    and either mapping becomes a paragraph free to describe a record it no longer matches."""
     optional = {
         declared.name
         for declared in fields(RequestTelemetry)
         if declared.name != "ingress" and declared.default is None
     }
-    assert set(UNFILLABLE_TODAY) == optional
+    assert not set(UNFILLABLE_TODAY) & set(FILLED_BY_A_MODEL_CALL)
+    assert set(UNFILLABLE_TODAY) | set(FILLED_BY_A_MODEL_CALL) == optional
+    assert set(FILLED_BY_A_MODEL_CALL) == {
+        "agent_version",
+        "model",
+        "provider",
+        "tokens_in",
+        "tokens_out",
+        "fallback_count",
+        "retry_count",
+    }
+    for name, because in FILLED_BY_A_MODEL_CALL.items():
+        assert because.strip(), f"{name} says nothing about why it may be None"
     assert set(TELEMETRY_FIELDS) - optional == {
         "principal",
         "entitlement_hash",
@@ -551,7 +565,7 @@ def test_a_fillable_field_has_no_default_at_all() -> None:
     against `default is None` and passes with a `False` sitting there, which is how this got
     through the first time. Delete this and a required field can quietly acquire one."""
     for declared in fields(RequestTelemetry):
-        if declared.name in UNFILLABLE_TODAY:
+        if declared.name in UNFILLABLE_TODAY or declared.name in FILLED_BY_A_MODEL_CALL:
             assert declared.default is None, declared.name
         else:
             assert declared.default is MISSING, declared.name

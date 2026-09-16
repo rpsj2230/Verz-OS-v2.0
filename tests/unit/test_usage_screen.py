@@ -25,14 +25,17 @@ from brain.console.screens import screen
 from brain.console.usage_screen import (
     AUTOMATION_IS_COUNTED,
     MEASURED_BY,
+    NO_SINGLE_MODEL,
     READ_BEHIND,
     SCREEN_KEY,
+    SHOWN_WHEN_MEASURED,
     Measure,
     PersonLine,
     UsageScreen,
     UsageScreenError,
     not_measured,
     person_lines,
+    token_rows,
     usage_for_reader,
     usage_screen_gaps,
 )
@@ -41,7 +44,13 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.context import Channel
-from brain.ops.telemetry import REQUEST_FIELDS, UNFILLABLE_TODAY
+from brain.ops.spend import NO_AGENT
+from brain.ops.telemetry import (
+    FILLED_BY_A_MODEL_CALL,
+    REQUEST_FIELDS,
+    UNFILLABLE_TODAY,
+    MeteredRequest,
+)
 
 #: The grants, written out rather than read from the modules under test, so a capability moved
 #: in one place is a failing comparison rather than a constant agreeing with itself.
@@ -271,23 +280,27 @@ def test_a_malformed_window_is_refused_for_a_reader_offered_nothing_too() -> Non
 
 
 # ------------------------------------------------------------------ what is not measured
-def test_a_usage_reader_is_told_tokens_and_the_model_are_not_measured() -> None:
-    """The two measures behind the usage grant, read off the ledger's own record.
+def test_nothing_the_screen_is_asked_for_is_named_as_unmeasured_now_a_model_call_is_metered() -> (
+    None
+):
+    """The ledger fills tokens, the model and the agent, so no reader is told any is missing.
 
-    What breaks if this is deleted: the screen drops the sentence and a token column of nothing
-    reads as nobody having used any tokens.
+    What breaks if this is deleted: the screen goes on saying tokens are not measured beside the
+    token tables that measure them.
     """
-    assert not_measured(reader("support"), now=NOW) == (Measure.TOKENS, Measure.MODEL)
+    assert not_measured(reader(agents=True), now=NOW) == ()
 
 
-def test_the_agent_is_named_as_not_measured_only_to_a_reader_who_may_know_agents_exist() -> None:
+def test_a_measure_the_ledger_cannot_fill_is_named_only_to_a_reader_who_may_have_its_axis() -> None:
     """A withheld axis is not mentioned as unmeasured either.
 
     What breaks if this is deleted: a reader who may not learn which agents exist is told that
     which agent answered is not recorded, which still says there is an agent axis.
     """
-    assert Measure.AGENT not in not_measured(reader(), now=NOW)
-    assert not_measured(reader(agents=True), now=NOW) == (
+    unfilled = MappingProxyType({**UNFILLABLE_TODAY, **FILLED_BY_A_MODEL_CALL})
+
+    assert not_measured(reader(), now=NOW, unfillable=unfilled) == (Measure.TOKENS, Measure.MODEL)
+    assert not_measured(reader(agents=True), now=NOW, unfillable=unfilled) == (
         Measure.TOKENS,
         Measure.MODEL,
         Measure.AGENT,
@@ -297,31 +310,151 @@ def test_the_agent_is_named_as_not_measured_only_to_a_reader_who_may_know_agents
 def test_a_measure_the_ledger_fills_is_no_longer_named() -> None:
     """The sentence follows the ledger rather than this module.
 
-    What breaks if this is deleted: the screen goes on saying tokens are not measured on the day
-    a model call fills them, because the list was typed rather than read.
+    What breaks if this is deleted: the screen goes on saying a measure is missing on the day a
+    model call fills it, because the list was typed rather than read.
     """
     filled = MappingProxyType(
-        {k: v for k, v in UNFILLABLE_TODAY.items() if k not in ("tokens_in", "tokens_out")}
+        {k: v for k, v in FILLED_BY_A_MODEL_CALL.items() if k not in ("tokens_in", "tokens_out")}
     )
 
     assert not_measured(reader(), now=NOW, unfillable=filled) == (Measure.MODEL,)
 
 
-def test_every_measure_is_read_from_fields_the_ledger_has_and_leaves_empty_today() -> None:
-    """Held against the telemetry module's two lists, not against this module's own.
+def test_every_measure_is_read_from_fields_a_model_call_fills_on_the_ledger() -> None:
+    """Held against the telemetry module's lists, not against this module's own.
 
-    What breaks if this is deleted: `MEASURED_BY` pointing at a field the ledger fills, so a
-    measure is quietly never named, or at one it does not have, so it is named for ever.
+    What breaks if this is deleted: `MEASURED_BY` pointing at a field the ledger does not have, or
+    at one nothing fills, so a measure is drawn as a table of nothing.
     """
     for measure in Measure:
         for field in MEASURED_BY[measure]:
             assert field in REQUEST_FIELDS
-            assert field in UNFILLABLE_TODAY
+            assert field in FILLED_BY_A_MODEL_CALL
+            assert field not in UNFILLABLE_TODAY
     assert READ_BEHIND == {
         Measure.TOKENS: Axis.DEPARTMENT,
         Measure.MODEL: Axis.MODEL,
         Measure.AGENT: Axis.AGENT,
     }
+    assert frozenset(Measure) == SHOWN_WHEN_MEASURED
+
+
+# ---------------------------------------------------------------------------- the tokens
+def used(
+    trace: str, *, person: str = "u_ana", model: str | None = "claude-sonnet-5", tokens: int = 10
+) -> MeteredRequest:
+    return MeteredRequest(
+        trace_id=trace,
+        principal=person,
+        model=model,
+        agent_version=None,
+        tokens_in=tokens,
+        tokens_out=tokens // 10,
+    )
+
+
+def tokens_by(shown: UsageScreen) -> dict[str, dict[str, tuple[int, int, int]]]:
+    return {
+        report.axis.value: {
+            line.key: (line.runs, line.tokens_in, line.tokens_out) for line in report.lines
+        }
+        for report in shown.tokens
+    }
+
+
+def test_tokens_are_shown_by_person_department_and_model_for_the_questions_that_called_one() -> (
+    None
+):
+    """The positive case: two of Ana's questions and Cai's called a model, Ben's did not.
+
+    What breaks if this is deleted: a screen that never draws a token table passes every narrowing
+    test below, because an absent table is what a narrowed reader is shown.
+    """
+    shown = usage_for_reader(
+        questions(),
+        DIRECTORY,
+        reader(),
+        start=START,
+        end=NOW,
+        now=NOW,
+        metered=(used("t1", tokens=100), used("t2", tokens=50), used("t4", person="u_cai")),
+    )
+
+    assert tokens_by(shown) == {
+        "person": {"u_ana": (2, 150, 15), "u_cai": (1, 10, 1)},
+        "department": {"support": (2, 150, 15), "web": (1, 10, 1)},
+        "model": {"claude-sonnet-5": (3, 160, 16)},
+    }
+    assert {report.total_tokens_in for report in shown.tokens} == {160}
+
+
+def test_a_ledger_row_whose_question_this_reader_is_not_shown_contributes_nothing() -> None:
+    """Joined to the chosen questions, never filtered on its own: a support reader is not shown
+    web's tokens, a schedule's tokens, a ledger row naming another person under the same trace, or
+    a model call that was not a question at all.
+
+    What breaks if this is deleted: the token tables are a second answer to which requests this
+    reader may know about, and the difference between the two is a count of what one withheld.
+    """
+    shown = usage_for_reader(
+        questions(),
+        DIRECTORY,
+        reader("support"),
+        start=START,
+        end=NOW,
+        now=NOW,
+        metered=(
+            used("t1", tokens=100),
+            used("t4", person="u_cai", tokens=900),
+            used("t5", person="u_job", tokens=900),
+            used("t1", person="u_intruder", tokens=900),
+            used("check-trace", person="u_admin", tokens=900),
+        ),
+    )
+
+    assert tokens_by(shown) == {
+        "person": {"u_ana": (1, 100, 10)},
+        "department": {"support": (1, 100, 10)},
+        "model": {"claude-sonnet-5": (1, 100, 10)},
+    }
+
+
+def test_a_request_answered_by_no_single_model_is_grouped_under_its_own_key() -> None:
+    """Delete this and a request whose calls disagreed is dropped from the model table, which then
+    totals less than the other three."""
+    rows = token_rows((asked("t1", person="u_ana"),), (used("t1", model=None),))
+
+    assert [one.model for one in rows] == [NO_SINGLE_MODEL]
+
+
+def test_the_agent_table_is_shown_only_to_a_reader_who_may_know_agents_exist() -> None:
+    """Delete this and a reader without the Agents screen's grant is told which agents answered."""
+    metered = (used("t1"),)
+    plain = usage_for_reader(
+        questions(), DIRECTORY, reader(), start=START, end=NOW, now=NOW, metered=metered
+    )
+    agents = usage_for_reader(
+        questions(), DIRECTORY, reader(agents=True), start=START, end=NOW, now=NOW, metered=metered
+    )
+
+    assert [one.axis for one in plain.tokens] == [Axis.PERSON, Axis.DEPARTMENT, Axis.MODEL]
+    assert [one.axis for one in agents.tokens] == list(Axis)
+    assert tokens_by(agents)["agent"] == {NO_AGENT: (1, 10, 1)}
+
+
+def test_a_reader_holding_no_usage_grant_is_shown_no_token_table() -> None:
+    """Delete this and the token tables are the one part of the screen a grantless reader sees."""
+    shown = usage_for_reader(
+        questions(),
+        DIRECTORY,
+        reader(usage=False),
+        start=START,
+        end=NOW,
+        now=NOW,
+        metered=(used("t1"),),
+    )
+
+    assert shown.tokens == ()
 
 
 # ---------------------------------------------------------------------------- the shapes
@@ -436,12 +569,10 @@ def test_this_screen_reports_no_gaps_about_itself() -> None:
 def test_a_measure_the_ledger_now_fills_is_reported_as_a_screen_with_nowhere_to_show_it() -> None:
     """The failure that would otherwise arrive as a sentence quietly disappearing.
 
-    What breaks if this is deleted: a model call fills the token columns, the screen stops
-    saying they are not measured, and nothing says the screen never learnt to show them.
+    What breaks if this is deleted: the ledger fills a measure, the screen stops saying it is not
+    measured, and nothing says the screen never learnt to show it.
     """
-    filled = {k: v for k, v in UNFILLABLE_TODAY.items() if k != "model"}
-
-    found = usage_screen_gaps(unfillable=filled)
+    found = usage_screen_gaps(shown=SHOWN_WHEN_MEASURED - {Measure.MODEL})
 
     assert len(found) == 1
     assert "model is measured and this screen has nowhere to show it" in found[0]
@@ -455,7 +586,10 @@ def test_a_measure_read_from_a_field_the_ledger_does_not_have_is_reported() -> N
     """
     moved = {**MEASURED_BY, Measure.MODEL: ("model_name",)}
 
-    found = usage_screen_gaps(unfillable={**UNFILLABLE_TODAY, "model_name": "x"}, measured_by=moved)
+    found = usage_screen_gaps(
+        unfillable={**UNFILLABLE_TODAY, **FILLED_BY_A_MODEL_CALL, "model_name": "x"},
+        measured_by=moved,
+    )
 
     assert found == (
         "model is read from model_name, which the request ledger does not have, so saying it is "

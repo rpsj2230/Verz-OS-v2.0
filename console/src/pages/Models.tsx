@@ -1,19 +1,31 @@
 /**
  * Models and health: which model answers each tier, in what order the chain falls back, the
- * providers behind it, and what the install cannot yet measure about any of them.
+ * providers behind it with each rung's measured health, and the two things an administrator can do
+ * about a provider from here.
  *
  * `docs/screens.html` SCREEN 11 is the design of record and this page is its layout: the bar with
  * the window and Edit routing, four figures, the Priority and fallback table, and Provider health
  * beside Spend by department. `modelsQuery.ts` holds the arguments; the facts are in
- * `brain.operate_routes`, `brain.routing_routes`, `brain.report_routes` and
- * `brain.console.operate`, which decides whether this screen's own figures open at all.
+ * `brain.operate_routes`, `brain.provider_routes`, `brain.routing_routes`, `brain.report_routes`
+ * and `brain.console.operate`, which decides whether this screen's own figures open at all.
  *
- * **Where the design draws something with no source, the page draws the thing that is true and
- * says what is missing.** No model is called by this install, so Fallbacks fired is a sentence
- * rather than a number, Provider health lists the providers and says their health is not
- * recorded rather than drawing bars, and the table's Budget and p95 columns are absent with one
- * sentence saying why. Whether a provider's key is held is not served by any route this page
- * reads, and the card says it arrives with the vault work rather than guessing.
+ * **Provider health draws the plan the next call makes, and not a picture of one.** The card asks
+ * `GET /models/providers`, which is the executor's own plan: which rungs answer, the API's sentence
+ * for each one left out, and each breaker as the attempts left it. A rung nothing has called is
+ * drawn as not called yet and never as healthy, which is
+ * `modelsQuery.AN_UNCALLED_RUNG_IS_NOT_A_HEALTHY_ONE`, and a tier whose every rung is resting is a
+ * notice at the top of the card rather than a row somebody has to spot. The design's green bars
+ * are not drawn: a bar needs a rate over a window, and the route sends counts of recent calls,
+ * which are drawn as the counts they are.
+ *
+ * **Two controls per provider, both confirmed, both drawn only for somebody the API says may use
+ * them.** Switching a provider off changes where every department's questions go from the next
+ * call, and a check spends tokens under the presser's name, so each goes through
+ * `components/ConfirmAction.tsx` with a sentence saying what happens and to what. `editable` is
+ * presentation only: the route refuses both writes without the matrix's write grant over
+ * everything, whatever this page drew. A switch answers with the plan after it, and the card is
+ * redrawn from that answer rather than from what this page expected, so a provider switched off is
+ * seen leaving the chain in the same response.
  *
  * **Edit routing is a link, and it is the design's.** The chain's four operational numbers are
  * edited on the routing screen, behind the matrix's write grant, where the form checks them
@@ -22,7 +34,7 @@
  *
  * **Each card is loaded, failed or answered on its own.** A reader may hold the models screen and
  * not the usage grant, and the spend card then carries the API's refusal while the chain is
- * drawn; a single spinner or a single failure for the page would hide three answers behind the
+ * drawn; a single spinner or a single failure for the page would hide four answers behind the
  * one that did not come back. Loading, unreachable, refused and unreadable are different
  * sentences in every card.
  *
@@ -30,34 +42,67 @@
  * own. `matrixQuery.ts` is imported for its path and its reader, and its only imports of the form
  * library are types, which a build erases.
  *
- * Task ids: M27.2.3
+ * Task ids: M27.2.3, M27.8.8
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource, type Resource } from "../api/useResource";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
 import { Notice } from "../ui/Notice";
 import { matrixApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
 import {
   answerLatencyApiPath,
   answerReading,
+  answersWords,
+  CHECK,
+  checkConsequence,
+  checkHeading,
+  checkQuestion,
+  checkServedSentence,
+  checkStatusSentence,
   chainRows,
-  HEALTH_NOT_RECORDED,
-  KEY_STATUS_ARRIVES_WITH_THE_VAULT,
-  measureSentence,
+  credentialWords,
+  DO_NOT_CHECK,
+  exhaustedSentence,
+  healthWords,
+  KEEP_IT_AS_IT_IS,
+  KEY_HELD_IS_THIS_SERVER,
+  keyHeldWords,
   MODELS_LABEL,
   modelsApiPath,
-  NO_KEY_SLOT,
   NO_MODEL_TIER,
-  providerRows,
+  NO_PROVIDER,
+  NO_RUNG_ON_THE_LADDER,
+  profileSentence,
+  PROVIDERS_API_PATH,
+  providerCheckApiPath,
+  providerSwitchApiPath,
+  readCheck,
   readModels,
+  readProviders,
+  recentCalls,
+  SEND_THE_CHECK,
   spendShares,
   spendSinceApiPath,
+  SWITCH_OFF,
+  SWITCH_ON,
+  switchBody,
+  switchConsequence,
+  SWITCHED_OFF,
+  SWITCHED_ON,
+  switchedLine,
+  switchedSentence,
+  switchQuestion,
+  TIERS_CANNOT_ANSWER,
+  unmeasuredBecause,
   WINDOW_DAYS,
   withoutAModel,
   type ModelsBody,
+  type ProvidersBody,
 } from "./modelsQuery";
 import { milliseconds, readServiceLevels, SERVICE_LEVELS_API_PATH } from "./serviceLevelsQuery";
 import {
@@ -70,8 +115,8 @@ import {
 } from "./spendQuery";
 
 export const MODELS_LEDE =
-  "Which model answers each tier and what the chain falls back to, the providers behind it, and " +
-  "what this install measures about them.";
+  "Which model answers each tier and what the chain falls back to, the providers behind it with " +
+  "each rung's health, and what this install measures about them.";
 
 /** The window, in the design's words. */
 export const WINDOW_LABEL = `Last ${String(WINDOW_DAYS)} days`;
@@ -82,10 +127,18 @@ export const P95_ANSWER = "p95 answer";
 export const FALLBACKS_FIRED = "Fallbacks fired";
 export const COST = `Cost ${String(WINDOW_DAYS)}d`;
 
+/** Under the fallbacks figure, so the number is read as what it counts. */
+export const FALLBACKS_NOTE = "times a request moved to a later rung after a failure";
+
 export const PRIORITY_AND_FALLBACK = "Priority and fallback";
 export const PROVIDER_HEALTH = "Provider health";
 export const SPEND_BY_DEPARTMENT = "Spend by department";
 export const EDIT_ROUTING = "Edit routing";
+
+export const PROVIDERS_CAPTION =
+  "Every provider this install can call, whether it is switched on, and whether a key is held";
+export const RUNGS_CAPTION =
+  "Every rung on the routing ladder, whether it answers the next call, and its health";
 
 export const NO_REQUESTS = `No request finished in the last ${String(WINDOW_DAYS)} days.`;
 export const NO_ANSWER_LANE = "The service-level reading carries no answer lane.";
@@ -135,19 +188,24 @@ function Answered<T>({
     );
   }
   if (failure) {
-    return (
-      <Notice
-        title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-        traceId={failure.traceId}
-      >
-        <p>{failure.message}</p>
-      </Notice>
-    );
+    return <Failure failure={failure} />;
   }
   if (body === null) {
     return <p className="note">{UNREADABLE_ANSWER}</p>;
   }
   return <>{children(body)}</>;
+}
+
+/** A request that did not come back, with the heading that says which way it failed. */
+function Failure({ failure }: { readonly failure: ApiFailure }) {
+  return (
+    <Notice
+      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
+      traceId={failure.traceId}
+    >
+      <p>{failure.message}</p>
+    </Notice>
+  );
 }
 
 /** One rung in a table cell: the model, its provider, and whether it is in rotation. */
@@ -177,7 +235,9 @@ interface Borrowed {
 
 function Figures({ models, borrowed }: { readonly models: ModelsBody; readonly borrowed: Borrowed }) {
   const share = withoutAModel(models.lanes);
-  const fallbacks = models.unmeasured.find((one) => one.measure === "fallback_count");
+  // Named by the API only while the ledger cannot fill the count, and then the number beside it
+  // would be a zero nothing measured, so the sentence replaces the number rather than joining it.
+  const fallbacksUnmeasured = unmeasuredBecause(models, "fallback_count");
   const { latency, spend } = borrowed;
 
   return (
@@ -216,9 +276,16 @@ function Figures({ models, borrowed }: { readonly models: ModelsBody; readonly b
         <div className="fields__row">
           <dt>{FALLBACKS_FIRED}</dt>
           <dd>
-            <span>{NOT_MEASURED}</span>
-            {fallbacks === undefined ? null : (
-              <p className="note">{measureSentence(fallbacks.measure, fallbacks.because)}</p>
+            {fallbacksUnmeasured === null ? (
+              <>
+                <span>{String(models.fallbacks_fired)}</span>
+                <p className="note">{FALLBACKS_NOTE}</p>
+              </>
+            ) : (
+              <>
+                <span>{NOT_MEASURED}</span>
+                <p className="note">{fallbacksUnmeasured}</p>
+              </>
             )}
           </dd>
         </div>
@@ -255,7 +322,7 @@ function PriorityAndFallback({
   readonly models: ModelsBody;
   readonly matrix: Resource<unknown>;
 }) {
-  const noModel = models.unmeasured.find((one) => one.measure === "model");
+  const noModel = unmeasuredBecause(models, "model");
 
   return (
     <section className="card" aria-labelledby="models-chain">
@@ -327,62 +394,268 @@ function PriorityAndFallback({
         }}
       </Answered>
       <p className="note">{NO_BUDGET_OR_LATENCY_PER_TIER}</p>
-      {noModel === undefined ? null : (
-        <p className="note">{measureSentence(noModel.measure, noModel.because)}</p>
-      )}
+      {noModel === null ? null : <p className="note">{noModel}</p>}
     </section>
   );
 }
 
-function ProviderHealth({
-  models,
-  matrix,
-}: {
-  readonly models: ModelsBody;
-  readonly matrix: Resource<unknown>;
-}) {
-  const unmeasured = models.unmeasured.find((one) => one.measure === "provider");
-  // The chain's rungs when the matrix answered, and none when it did not: the providers are the
-  // models route's and are listed whatever the matrix said, and "In the chain" is then empty
-  // rather than the card waiting on a request that belongs to the card above.
-  const rows = providerRows(models.providers, readMatrixPage(matrix.data).rungs);
+/** A write this card is about to send, held while its confirmation is open. */
+type ProviderAsk =
+  | { readonly kind: "switch"; readonly provider: string; readonly on: boolean }
+  | { readonly kind: "check"; readonly provider: string };
 
+function ProvidersTable({
+  body,
+  busy,
+  onAsk,
+}: {
+  readonly body: ProvidersBody;
+  readonly busy: boolean;
+  readonly onAsk: (asked: ProviderAsk) => void;
+}) {
+  if (body.providers.length === 0) {
+    return <p className="note">{NO_PROVIDER}</p>;
+  }
+  // The vault's column is drawn only for a reader the API sent a credential to, which is a reader
+  // who may manage credentials; for anybody else there is no column rather than an empty one.
+  const vault = body.providers.some((one) => one.credential !== null);
   return (
-    <section className="card" aria-labelledby="models-providers">
-      <h2 id="models-providers">{PROVIDER_HEALTH}</h2>
+    <>
       <div className="grid__scroll">
         <table className="grid__table">
-          <caption className="grid__caption">
-            Every provider this system can hold a key for, and where the chain names it
-          </caption>
+          <caption className="grid__caption">{PROVIDERS_CAPTION}</caption>
           <thead>
             <tr>
               <th scope="col">Provider</th>
               <th scope="col">What it is for</th>
-              <th scope="col">In the chain</th>
-              <th scope="col">Health</th>
+              <th scope="col">Switched</th>
+              <th scope="col">Key held</th>
+              {vault ? <th scope="col">In the vault</th> : null}
+              {body.editable ? <th scope="col">Actions</th> : null}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.provider}>
-                <td>
-                  <code>{row.provider}</code>
-                </td>
-                <td>{row.description ?? NO_KEY_SLOT}</td>
-                <td>{row.inChain.length === 0 ? "-" : row.inChain.join(", ")}</td>
-                <td>{models.breaker_state_is_not_recorded ? HEALTH_NOT_RECORDED : "-"}</td>
-              </tr>
-            ))}
+            {body.providers.map((row) => {
+              const line = switchedLine(row);
+              return (
+                <tr key={row.provider}>
+                  <td>
+                    <code>{row.provider}</code>
+                  </td>
+                  <td>{row.description}</td>
+                  <td>
+                    {row.switched_on ? SWITCHED_ON : SWITCHED_OFF}
+                    {line === null ? null : <p className="note">{line}</p>}
+                  </td>
+                  <td>{keyHeldWords(row.key_held)}</td>
+                  {vault ? <td>{row.credential === null ? "-" : credentialWords(row.credential)}</td> : null}
+                  {body.editable ? (
+                    <td>
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={busy}
+                        aria-label={`${row.switched_on ? SWITCH_OFF : SWITCH_ON}: ${row.provider}`}
+                        onClick={() => {
+                          onAsk({ kind: "switch", provider: row.provider, on: !row.switched_on });
+                        }}
+                      >
+                        {row.switched_on ? SWITCH_OFF : SWITCH_ON}
+                      </button>{" "}
+                      <button
+                        type="button"
+                        className="button"
+                        disabled={busy}
+                        aria-label={`${CHECK}: ${row.provider}`}
+                        onClick={() => {
+                          onAsk({ kind: "check", provider: row.provider });
+                        }}
+                      >
+                        {CHECK}
+                      </button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
-      {unmeasured === undefined ? null : (
-        <p className="note">{measureSentence(unmeasured.measure, unmeasured.because)}</p>
-      )}
-      {models.key_status_is_not_served ? (
-        <p className="note">{KEY_STATUS_ARRIVES_WITH_THE_VAULT}</p>
+      <p className="note">{KEY_HELD_IS_THIS_SERVER}</p>
+      {body.vault_told === null ? null : <p className="note">{body.vault_told}</p>}
+    </>
+  );
+}
+
+function RungsTable({ body }: { readonly body: ProvidersBody }) {
+  if (body.rungs.length === 0) {
+    return <p className="note">{NO_RUNG_ON_THE_LADDER}</p>;
+  }
+  return (
+    <div className="grid__scroll">
+      <table className="grid__table">
+        <caption className="grid__caption">{RUNGS_CAPTION}</caption>
+        <thead>
+          <tr>
+            <th scope="col">Tier</th>
+            <th scope="col">Position</th>
+            <th scope="col">Model</th>
+            <th scope="col">Provider</th>
+            <th scope="col">Answers now</th>
+            <th scope="col">Health</th>
+            <th scope="col">Recent calls</th>
+          </tr>
+        </thead>
+        <tbody>
+          {body.rungs.map((rung) => (
+            <tr key={rung.rung_id}>
+              <td>
+                <code>{rung.tier}</code>
+              </td>
+              <td>{String(rung.position)}</td>
+              <td>
+                <code>{rung.model}</code>
+              </td>
+              <td>
+                <code>{rung.provider}</code>
+              </td>
+              <td>{answersWords(rung)}</td>
+              <td>{healthWords(rung)}</td>
+              <td>{recentCalls(rung)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** What a check came back with. The reply itself is never sent, so it is never drawn. */
+function CheckOutcome({ answer }: { readonly answer: unknown }) {
+  const check = readCheck(answer);
+  if (check === null) {
+    return <p className="note">{UNREADABLE_ANSWER}</p>;
+  }
+  return (
+    <div role="status" aria-label={checkHeading(check.provider)}>
+      <p>
+        <strong>{checkHeading(check.provider)}</strong>
+      </p>
+      <p>{check.told}</p>
+      {check.answered ? <p className="note">{checkServedSentence(check)}</p> : null}
+      {!check.answered && check.status !== null ? (
+        <p className="note">{checkStatusSentence(check.status)}</p>
       ) : null}
+      <p className="note">
+        Reference <code>{check.trace_id}</code>
+      </p>
+    </div>
+  );
+}
+
+function ProviderHealth({ models }: { readonly models: ModelsBody }) {
+  const answer = useResource<unknown>(PROVIDERS_API_PATH);
+  // The plan a switch answered with, which replaces the one this card first read.
+  const [written, setWritten] = useState<unknown>(null);
+  const [asked, setAsked] = useState<ProviderAsk | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [switched, setSwitched] = useState<string | null>(null);
+  const [checked, setChecked] = useState<unknown>(null);
+  const unmeasured = unmeasuredBecause(models, "provider");
+
+  const send = useCallback((pending: ProviderAsk) => {
+    setBusy(true);
+    void (async () => {
+      if (pending.kind === "switch") {
+        const result = await request<unknown>(providerSwitchApiPath(pending.provider), {
+          method: "PUT",
+          body: switchBody(pending.on),
+        });
+        setBusy(false);
+        setAsked(null);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        setWritten(result.data);
+        setSwitched(switchedSentence(pending.provider, pending.on));
+        return;
+      }
+      const result = await request<unknown>(providerCheckApiPath(pending.provider), { method: "POST" });
+      setBusy(false);
+      setAsked(null);
+      if (!result.ok) {
+        setFailure(result.failure);
+        return;
+      }
+      setFailure(null);
+      setChecked(result.data);
+    })();
+  }, []);
+
+  const drawn = written !== null ? readProviders(written) : answer.data === null ? null : readProviders(answer.data);
+
+  return (
+    <section className="card" aria-labelledby="models-providers">
+      <h2 id="models-providers">{PROVIDER_HEALTH}</h2>
+      <Answered busy={written === null && answer.busy} failure={written === null ? answer.failure : null} body={drawn}>
+        {(body) => (
+          <>
+            <p>{profileSentence(body.profile)}</p>
+            {body.exhausted_tiers.length === 0 ? null : (
+              // The notice's appearance without `Notice`'s `role="status"`: this is drawn with the
+              // answer rather than announced as a change to it, and a live region present from the
+              // first render reads to a screen reader, and to the phone-width harness, as a page
+              // still telling somebody something is in progress.
+              <div className="notice" aria-label={TIERS_CANNOT_ANSWER}>
+                <p className="notice__title">{TIERS_CANNOT_ANSWER}</p>
+                <div className="notice__body">
+                  {body.exhausted_tiers.map((tier) => (
+                    <p key={tier}>{exhaustedSentence(tier)}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+            {switched === null ? null : (
+              <p className="note" role="status">
+                {switched}
+              </p>
+            )}
+            {failure === null ? null : <Failure failure={failure} />}
+            {asked === null ? null : (
+              <ConfirmAction
+                question={asked.kind === "switch" ? switchQuestion(asked.provider, asked.on) : checkQuestion(asked.provider)}
+                consequence={
+                  asked.kind === "switch" ? switchConsequence(asked.provider, asked.on) : checkConsequence(asked.provider)
+                }
+                confirmLabel={asked.kind === "switch" ? (asked.on ? SWITCH_ON : SWITCH_OFF) : SEND_THE_CHECK}
+                cancelLabel={asked.kind === "switch" ? KEEP_IT_AS_IT_IS : DO_NOT_CHECK}
+                busy={busy}
+                onConfirm={() => {
+                  send(asked);
+                }}
+                onCancel={() => {
+                  setAsked(null);
+                }}
+              />
+            )}
+            {checked === null ? null : <CheckOutcome answer={checked} />}
+            <ProvidersTable
+              body={body}
+              busy={busy}
+              onAsk={(one) => {
+                setFailure(null);
+                setSwitched(null);
+                setAsked(one);
+              }}
+            />
+            <RungsTable body={body} />
+          </>
+        )}
+      </Answered>
+      {unmeasured === null ? null : <p className="note">{unmeasured}</p>}
     </section>
   );
 }
@@ -429,7 +702,7 @@ function SpendByDepartment({ spend }: { readonly spend: Resource<unknown> }) {
   );
 }
 
-/** The cards that need the models route's answer, and the three routes they borrow from. */
+/** The cards that need the models route's answer, and the four routes they borrow from. */
 function ModelsAnswer({ models }: { readonly models: ModelsBody }) {
   const matrix = useResource<unknown>(matrixApiPath());
   const latency = useResource<unknown>(answerLatencyApiPath(SERVICE_LEVELS_API_PATH));
@@ -441,7 +714,7 @@ function ModelsAnswer({ models }: { readonly models: ModelsBody }) {
     <>
       <Figures models={models} borrowed={{ matrix, latency, spend }} />
       <PriorityAndFallback models={models} matrix={matrix} />
-      <ProviderHealth models={models} matrix={matrix} />
+      <ProviderHealth models={models} />
       <SpendByDepartment spend={spend} />
     </>
   );

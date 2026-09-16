@@ -88,7 +88,21 @@ Rejected: a field naming the tool, the entity or the kind of refusal. Each is wh
 reaches for while debugging a flow, and each turns the metadata ledger, which a usage report
 reads, into a per-principal list of what was withheld and which tools exist to withhold.
 
-Task ids: M37.3.2.4, M30.5.2, M21.3.4
+**What a request's model calls consumed rides on `Finished`, and it is the only copy (M27.7.14).**
+`brain.models.metering.Meter` counts a request's calls as they are made and `model_usage` is its
+summary, None for a request that called no model. The metadata ledger's row reads it through
+`brain.ops.telemetry.request_telemetry_of`, so tokens, the model, the provider, the agent and the
+fallback and retry counts arrive on the one row that already carries the trace and the person,
+and nothing else holds a second copy that could disagree. See
+`brain.models.metering.A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE` for what the row names when a
+request's calls disagree.
+
+**A model call made for its own sake finishes here too.** `ModelCallOutcome` is how the Models
+screen's provider check ends: it answered or it did not, and nothing about why. A check is not a
+question, so it is handed to the ledger's recorder and not to the question count; see
+`brain.provider_routes`.
+
+Task ids: M37.3.2.4, M30.5.2, M21.3.4, M27.7.14
 """
 
 from __future__ import annotations
@@ -108,6 +122,10 @@ if TYPE_CHECKING:
     # Typing only: `brain.gate.answer` imports this module to call `finish`, so importing the
     # outcome type at run time would be a cycle, and the annotation is all that needs it.
     from brain.gate.answer import Answered
+
+    # Typing only as well: the gate learns nothing from the model layer at run time, which is
+    # `brain.core.lane`'s rule, and a dataclass field's annotation is not run.
+    from brain.models.metering import ModelUsage
 
 #: Why a finished request carries a principal rather than the facts about one.
 A_RECORD_OF_WHO_ASKED_IS_BUILT_FROM_WHO_THE_GATE_SAID_WAS_ASKING: Final = (
@@ -174,6 +192,18 @@ class ToolCallOutcome:
 
 
 @dataclass(frozen=True)
+class ModelCallOutcome:
+    """How a model call made for its own sake ended: it answered, or it did not.
+
+    One field, for `ToolCallOutcome`'s reason. What failed, which rung and what the provider said
+    are on the attempt rows, which only the Models screen reads; the ledger row a usage report
+    reads is told the outcome and nothing more.
+    """
+
+    answered: bool
+
+
+@dataclass(frozen=True)
 class Origin:
     """Who asked, from where, under which trace, as the gate established each of them.
 
@@ -211,7 +241,7 @@ class Finished:
     origin: Origin
     #: The instant the request was judged at, which the lane is given and never reads itself.
     at: datetime
-    outcome: Answered | ToolCallOutcome | None
+    outcome: Answered | ToolCallOutcome | ModelCallOutcome | None
     _: KW_ONLY
     #: The instant the lane finished, read once from the clock the caller handed it (M30.5.2).
     completed_at: datetime
@@ -223,6 +253,8 @@ class Finished:
     #: How many tool calls the lane started, counted by the lane as it made them (M21.3.4). A
     #: call that raised is still a call started. See `A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
     tool_calls: int
+    #: What this request's model calls consumed, from its meter, or None when it made none.
+    model_usage: ModelUsage | None = None
 
     def __post_init__(self) -> None:
         if self.at.tzinfo is None:

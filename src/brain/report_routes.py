@@ -125,6 +125,7 @@ from brain.ops.schedule_runner import runner_for
 from brain.ops.service_levels import LaneReading, ServiceLevels
 from brain.ops.spend import Dimension
 from brain.ops.spend_store import read_spend_daily
+from brain.ops.telemetry_store import metered_between
 from brain.tables.gate import DepartmentRow
 from brain.tables.schedule import ControlRunRow
 from brain.tools.registry import ToolRegistry
@@ -367,6 +368,33 @@ class PersonUsageView(BaseModel):
     questions: int
 
 
+class TokenLineView(BaseModel):
+    """One bucket of one token breakdown. `brain.console.usage_view.UsageLine`, field for field.
+
+    `runs` is how many requests with a model call fell in the bucket, which is the figure the
+    tokens are over; it is not a count of questions and the page does not call it one.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    key: str
+    runs: int
+    tokens_in: int
+    tokens_out: int
+
+
+class TokenBreakdownView(BaseModel):
+    """Tokens by one axis. `brain.console.usage_view.UsageReport`, whose totals are its lines'."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    axis: str
+    lines: list[TokenLineView]
+    total_runs: int
+    total_tokens_in: int
+    total_tokens_out: int
+
+
 class UsageView(BaseModel):
     """The usage screen for one reader over one window.
 
@@ -388,6 +416,9 @@ class UsageView(BaseModel):
     questions: int | None
     machine_included: bool
     not_measured: list[str]
+    #: Tokens by each axis this reader may break usage down by, in the leaf's order. An axis
+    #: withheld is absent, and nothing says so. See `brain.console.usage_screen`.
+    tokens: list[TokenBreakdownView]
 
 
 class QuestionsView(BaseModel):
@@ -455,6 +486,24 @@ def usage_screen_view_of(screen: UsageScreen) -> UsageView:
         questions=screen.questions,
         machine_included=AUTOMATION_IS_COUNTED,
         not_measured=[one.value for one in screen.not_measured],
+        tokens=[
+            TokenBreakdownView(
+                axis=report.axis.value,
+                lines=[
+                    TokenLineView(
+                        key=line.key,
+                        runs=line.runs,
+                        tokens_in=line.tokens_in,
+                        tokens_out=line.tokens_out,
+                    )
+                    for line in report.lines
+                ],
+                total_runs=report.total_runs,
+                total_tokens_in=report.total_tokens_in,
+                total_tokens_out=report.total_tokens_out,
+            )
+            for report in screen.tokens
+        ],
     )
 
 
@@ -754,20 +803,28 @@ async def usage(
     asked: Asked,
     days: Annotated[int, Query(ge=1, le=MAX_USAGE_DAYS)] = DEFAULT_USAGE_DAYS,
 ) -> UsageView:
-    """Questions by department and by person over the last `days`, as this reader may see them.
+    """Questions and tokens by person, department, model and agent over the last `days`.
 
     The same two reads as adoption, in the same order, and for the same reason: the directory's
-    departments, then the questions. `brain.console.usage_screen.usage_for_reader` chooses the
-    questions once and groups them twice, decides which axes this reader is offered, and names
-    what is not measured. Nothing is filtered, summed or named here.
+    departments, then the questions. Then the ledger rows in the window whose tokens were counted
+    (M27.7.14). `brain.console.usage_screen.usage_for_reader` chooses the questions once, groups
+    them twice, joins the tokens to the questions it chose, decides which axes this reader is
+    offered, and names what is not measured. Nothing is filtered, summed or named here.
     """
     factory = _require_sessions(request)
     start = asked.now - timedelta(days=days)
     async with factory() as session:
         departments = list((await session.execute(live_departments())).scalars().all())
         questions = await asked_between(session, start=start, end=asked.now)
+        metered = await metered_between(session, start=start, end=asked.now)
     screen = usage_for_reader(
-        questions, departments, asked.reach, start=start, end=asked.now, now=asked.now
+        questions,
+        departments,
+        asked.reach,
+        start=start,
+        end=asked.now,
+        now=asked.now,
+        metered=metered,
     )
     return usage_screen_view_of(screen)
 

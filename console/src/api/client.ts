@@ -57,10 +57,12 @@ export interface RequestOptions {
   /**
    * A closed set rather than `string`, so a call site cannot invent a verb. PATCH is here
    * because `PATCH /api/v1/routing/rungs/{rung_id}` is the first write this console makes;
-   * DELETE is deliberately absent, because nothing in this system hard-deletes and a verb
-   * with no route behind it is a verb somebody eventually points at one.
+   * PUT because `PUT /api/v1/models/providers/{provider}` sets a provider's switch to the
+   * value sent rather than toggling it. DELETE is deliberately absent, because nothing in
+   * this system hard-deletes and a verb with no route behind it is a verb somebody
+   * eventually points at one.
    */
-  readonly method?: "GET" | "POST" | "PATCH";
+  readonly method?: "GET" | "POST" | "PATCH" | "PUT";
   readonly body?: unknown;
   readonly signal?: AbortSignal;
   /**

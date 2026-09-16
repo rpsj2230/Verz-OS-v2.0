@@ -61,6 +61,7 @@ from brain.operate_routes import (
     RunningControlView,
     TierView,
     UnmeasuredView,
+    fallbacks_between,
     lane_traffic,
     newest_run_of_each_control,
     requests_by_lane,
@@ -72,7 +73,7 @@ from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
 from brain.ops.provider_keys import PROVIDER_SLOTS
 from brain.ops.queue import driver_rls_statements
 from brain.ops.schedule_runner import STALLED_AFTER
-from brain.ops.telemetry import UNFILLABLE_TODAY
+from brain.ops.telemetry import FILLED_BY_A_MODEL_CALL, UNFILLABLE_TODAY
 from tests.fixtures.http_client import Response
 from tests.unit.test_agent_routes import Directory
 from tests.unit.test_api_routes import (
@@ -174,6 +175,8 @@ class Stored:
         self.successes: dict[str, datetime] = {}
         #: Requests finished per lane in whatever window was asked.
         self.lanes: list[tuple[str, int]] = []
+        #: The ledger's sum of fallbacks in whatever window was asked, as the database returns it.
+        self.fallbacks: int | None = 0
         self.statements: list[Any] = []
 
 
@@ -186,6 +189,10 @@ class StubResult:
 
     def all(self) -> list[StubRow]:
         return list(self._rows)
+
+    def scalar_one(self) -> Any:
+        (row,) = self._rows
+        return row._tuple()[0]
 
 
 class StubSession(AsyncSession):
@@ -208,6 +215,8 @@ class StubSession(AsyncSession):
             )
         if columns == ["lane", "count"]:
             return StubResult([StubRow(lane=lane, count=n) for lane, n in _STORED.lanes])
+        if columns == ["fallbacks"]:
+            return StubResult([StubRow(fallbacks=_STORED.fallbacks)])
         msg = f"the stub does not answer a statement selecting {columns}"
         raise AssertionError(msg)
 
@@ -587,8 +596,31 @@ def test_the_providers_are_the_key_slots_and_no_answer_names_where_a_key_lives(
     ]
     for one in PROVIDER_SLOTS:
         assert one.env_var not in response.text
-    assert response.json()["key_status_is_not_served"] is True
-    assert response.json()["breaker_state_is_not_recorded"] is True
+    assert "key_status_is_not_served" not in response.json()
+    assert "breaker_state_is_not_recorded" not in response.json()
+
+
+def test_fallbacks_fired_is_the_ledgers_sum_over_the_window_and_zero_when_nothing_fell_back(
+    client: TestClient, stored: Stored
+) -> None:
+    """The figure is the database's coalesced sum over the same half-open window the lanes are
+    counted over, and a sum over no rows is a measured zero rather than a missing figure.
+
+    Delete this and "Fallbacks fired" can be drawn from a count the browser makes, or from a
+    window other than the one printed beside it."""
+    stored.fallbacks = 4
+    assert get(client, "u_admin", MODELS).json()["fallbacks_fired"] == 4
+    stored.fallbacks = None
+    assert get(client, "u_admin", MODELS).json()["fallbacks_fired"] == 0
+
+    start, end = datetime(2019, 3, 1, tzinfo=UTC), datetime(2019, 3, 8, tzinfo=UTC)
+    compiled = fallbacks_between(start, end).compile(dialect=DIALECT)
+    sql = str(compiled)
+    assert "coalesce(sum(obs.request_telemetry.fallback_count)" in sql
+    assert "obs.request_telemetry.received_at >=" in sql
+    assert "obs.request_telemetry.received_at <" in sql
+    assert start in compiled.params.values()
+    assert end in compiled.params.values()
 
 
 def test_every_tier_says_what_it_handles_in_the_order_the_chain_declares_it(
@@ -620,29 +652,39 @@ def test_an_unmeasured_sentence_is_the_ledgers_own_and_leaves_when_the_ledger_fi
         for one in MEASURES_THE_MODELS_SCREEN_DRAWS
         if one in UNFILLABLE_TODAY
     ]
-    assert [one["measure"] for one in body["unmeasured"]] == ["model", "provider", "fallback_count"]
+    assert body["unmeasured"] == []
 
-    filled = {key: value for key, value in UNFILLABLE_TODAY.items() if key != "provider"}
+    unfilled = {**UNFILLABLE_TODAY, **FILLED_BY_A_MODEL_CALL}
+    assert [one.measure for one in unmeasured(unfilled)] == ["model", "provider", "fallback_count"]
+    filled = {key: value for key, value in unfilled.items() if key != "provider"}
     assert [one.measure for one in unmeasured(filled)] == ["model", "fallback_count"]
 
 
 # ------------------------------------------------------ the claims the answers make
 
 
-def test_nothing_in_the_source_records_a_model_call_in_flight() -> None:
-    """No module under `src/brain` uses `ModelAttemptRow` but the package registering the table.
+def test_a_model_call_in_flight_is_written_by_the_executors_store_and_read_by_no_screen() -> None:
+    """`ModelAttemptRow` is named by the package registering it and by the model service that
+    writes and replays attempts, and by nothing this screen reads.
 
-    Delete this and `requests_in_flight_are_not_recorded` stays true on the day something starts
-    writing attempts, and the live runs page goes on saying it cannot show what it could."""
-    assert modules_using("ModelAttemptRow") == ["tables/__init__.py"]
+    Delete this and `requests_in_flight_are_not_recorded` stays true on the day the live runs
+    route starts reading attempts, and the page goes on saying it cannot show what it could."""
+    assert modules_using("ModelAttemptRow") == ["ops/model_service.py", "tables/__init__.py"]
+    assert "operate_routes.py" not in modules_using("ModelAttemptRow")
 
 
-def test_nothing_in_the_source_stores_a_providers_health() -> None:
-    """`ProviderHealth` is named by the module that defines it and the matrix that joins it, and
-    by nothing that could hold one between requests.
+def test_a_providers_health_is_replayed_from_attempts_and_stored_by_nothing() -> None:
+    """`ProviderHealth` is named by the module defining it, the matrix that joins it, the replay
+    that builds it from attempts and the executor walking with it, and by no store or table.
 
-    Delete this and `breaker_state_is_not_recorded` outlives the store that would make it false."""
-    assert modules_using("ProviderHealth") == ["console/model_matrix.py", "models/health.py"]
+    Delete this and a second, stored copy of a breaker can be added beside the replayed one, and
+    the screen and the executor can disagree about whether a provider is open."""
+    assert modules_using("ProviderHealth") == [
+        "console/model_matrix.py",
+        "models/calls.py",
+        "models/evidence.py",
+        "models/health.py",
+    ]
 
 
 def test_the_queue_drivers_tables_are_secured_with_no_policy_and_nothing_cancels_a_queued_job() -> (

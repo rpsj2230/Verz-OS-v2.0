@@ -113,6 +113,7 @@ from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start
 from brain.ops.install_settings import refresh as refresh_install_settings
+from brain.ops.model_service import ModelService, model_service_at_start
 from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
@@ -120,6 +121,7 @@ from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.prompt_routes import router as prompt_router
+from brain.provider_routes import router as provider_router
 from brain.report_routes import router as report_router
 from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
@@ -390,6 +392,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # rules, because a lane with no sink cannot compose at all.
     app.state.trace_sink = CountingTraceSink()
     app.state.request_recorders = request_recorders_for(app.state.db_sessions)
+    # The model driver, assembled once over this install's database: a driver per provider this
+    # product can reach, sharing one HTTP client this lifespan closes. Which rungs answer is read
+    # per call from the ladder, the provider switches and the keys this process holds, so a
+    # switch or a key saved from the console takes effect without a restart. See
+    # `brain.ops.model_service` and `brain.models.assembly`.
+    app.state.models = model_service_at_start(app.state.db_sessions)
     # No ledger writer survives a restart yet, so no store is built even with a database. See
     # `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions, ledger=None)
@@ -462,6 +470,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         key_client: httpx.Client | None = getattr(app.state, "key_client", None)
         if key_client is not None:
             key_client.close()
+        models: ModelService | None = getattr(app.state, "models", None)
+        if models is not None:
+            models.close()
         valkey: OwnedAsyncValkeyClient | None = getattr(app.state, "valkey", None)
         if valkey is not None:
             await valkey.aclose()
@@ -929,6 +940,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # live runs narrows row by row and refuses nobody, and the models answer is whole-install and
     # refuses a reader who could not see everybody's. See `brain.operate_routes`.
     app.include_router(operate_router)
+    # Models and providers: every provider this install can call, switched on and off behind
+    # `admin:routing_matrix` over everything, the ladder as the next call will walk it with each
+    # rung's measured health, and a metered check. See `brain.provider_routes`.
+    app.include_router(provider_router)
     # Departments and teams, Elevation, Access review and Subscribers, beside People in Govern. A
     # router of its own because one of its four is the only write that records a review decision,
     # and two of its screens say what the install does not store rather than drawing an empty

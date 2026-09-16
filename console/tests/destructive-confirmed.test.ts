@@ -129,14 +129,17 @@ describe("a destructive write is confirmed", () => {
     }
   }, 60_000);
 
-  test("the removal of a grant and the save of a routing rung are sent only from a confirmation", () => {
+  test("the removal of a grant, the save of a routing rung, and a provider's switch and check are sent only from a confirmation", () => {
     // What breaks if this is deleted: the positive half of the rule above. A reading that reported
-    // every write as unconfirmed would satisfy it with a longer allowlist, so the two writes this
-    // test was written for are named and must be found confirmed.
+    // every write as unconfirmed would satisfy it with a longer allowlist, so the writes this test
+    // was written for are named and must be found confirmed. A provider switched off moves every
+    // department's questions and a check spends tokens under the presser's name, so both are here.
     const confirmed = everyWrite().filter((write) => write.confirmed).map((write) => write.key);
     expect(confirmed).toContain("src/pages/People.tsx REMOVAL_API_PATH");
     expect(confirmed).toContain("src/pages/Matrix.tsx rungApiPath(rung.id)");
     expect(confirmed).toContain("src/pages/Sessions.tsx END_SESSION_API_PATH");
+    expect(confirmed).toContain("src/pages/Models.tsx providerSwitchApiPath(pending.provider)");
+    expect(confirmed).toContain("src/pages/Models.tsx providerCheckApiPath(pending.provider)");
   }, 60_000);
 
   test("every confirmation names what it asks about, says what will happen, and offers a way out", () => {

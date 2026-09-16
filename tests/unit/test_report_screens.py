@@ -107,6 +107,8 @@ class Stored:
         self.departments: tuple[str, ...] = ()
         self.questions: tuple[QuestionAskedRow, ...] = ()
         self.canary_runs: tuple[tuple[Any, ...], ...] = ()
+        #: Ledger rows whose tokens were counted: trace, principal, model, agent, in, out.
+        self.metered: tuple[tuple[Any, ...], ...] = ()
         self.statements: list[str] = []
 
 
@@ -139,6 +141,8 @@ class StubSession(AsyncSession):
             return StubResult(_STORED.departments)
         if "ops.question_asked" in text:
             return StubResult(_STORED.questions)
+        if "obs.request_telemetry" in text:
+            return StubResult(_STORED.metered)
         if "ops.control_run" in text:
             return StubResult(_STORED.canary_runs)
         msg = f"the stub session was asked something these routes do not read: {text}"
@@ -267,7 +271,8 @@ def test_a_company_wide_reader_is_shown_questions_by_department_and_by_person(
     ]
     assert body["questions"] == 4
     assert body["machine_included"] is False
-    assert body["not_measured"] == ["tokens", "model", "agent"]
+    assert body["not_measured"] == []
+    assert [one["axis"] for one in body["tokens"]] == ["person", "department", "model", "agent"]
 
 
 def test_a_department_scoped_reader_is_shown_that_department_on_both_tables(
@@ -285,7 +290,8 @@ def test_a_department_scoped_reader_is_shown_that_department_on_both_tables(
     assert body["departments"] == [{"department": "support", "questions": 3, "people": 2}]
     assert [one["person"] for one in body["people"]] == ["u_ana", "u_ben"]
     assert body["questions"] == 3
-    assert body["not_measured"] == ["tokens", "model"]
+    assert body["not_measured"] == []
+    assert [one["axis"] for one in body["tokens"]] == ["person", "department", "model"]
 
 
 @pytest.mark.parametrize("pid", ["u_none", "u_prefix"])
@@ -305,6 +311,7 @@ def test_a_reader_holding_no_usage_grant_is_shown_no_table_and_never_a_refusal(
     body = response.json()
     assert (body["departments"], body["people"], body["questions"]) == (None, None, None)
     assert body["not_measured"] == []
+    assert body["tokens"] == []
 
 
 def test_the_usage_response_carries_no_field_a_hidden_count_could_arrive_in(
@@ -327,6 +334,7 @@ def test_the_usage_response_carries_no_field_a_hidden_count_could_arrive_in(
             "questions",
             "machine_included",
             "not_measured",
+            "tokens",
         }
 
 
@@ -366,8 +374,39 @@ def test_usage_reads_the_directory_and_then_the_questions_for_every_reader(
     for pid in ("u_wide", "u_none"):
         stored.statements.clear()
         get(client, USAGE_PATH, pid)
-        assert ["gate.department" in one for one in stored.statements] == [True, False]
+        assert ["gate.department" in one for one in stored.statements] == [True, False, False]
         assert "ops.question_asked" in stored.statements[1]
+        assert "obs.request_telemetry" in stored.statements[2]
+
+
+def test_tokens_are_joined_to_the_questions_the_reader_is_shown_and_totalled_by_the_api(
+    client: TestClient, stored: Stored
+) -> None:
+    """The ledger's token rows reach the tables only through a question the reader's tables count,
+    on the trace and the person, and every total is the sum of the lines sent beside it.
+
+    What breaks if this is deleted: the route reads the ledger and draws its tokens whatever the
+    question tables were narrowed to, so a department admin reads another department's model use.
+    """
+    seed_questions(stored)
+    stored.metered = (
+        ("t1", "u_ana", "claude-sonnet-5", None, 100, 10),
+        ("t4", "u_cai", "kimi-k2", None, 40, 4),
+        ("t5", "u_job", "kimi-k2", None, 900, 90),
+    )
+
+    wide = {one["axis"]: one for one in get(client, USAGE_PATH, "u_wide").json()["tokens"]}
+    narrow = {one["axis"]: one for one in get(client, USAGE_PATH, "u_narrow").json()["tokens"]}
+
+    assert wide["department"]["lines"] == [
+        {"key": "support", "runs": 1, "tokens_in": 100, "tokens_out": 10},
+        {"key": "web", "runs": 1, "tokens_in": 40, "tokens_out": 4},
+    ]
+    assert (wide["model"]["total_runs"], wide["model"]["total_tokens_in"]) == (2, 140)
+    assert narrow["model"]["lines"] == [
+        {"key": "claude-sonnet-5", "runs": 1, "tokens_in": 100, "tokens_out": 10}
+    ]
+    assert narrow["person"]["total_tokens_out"] == 10
 
 
 # ------------------------------------------------------------------------------- questions

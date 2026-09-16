@@ -12,8 +12,9 @@ in an install today.
 records.** `brain.ops.jobs.JobRecord` is the shape of a job and no table holds one; the queue
 driver's own tables are refused to the application role on purpose (see
 `THE_QUEUE_IS_NOT_THE_APPLICATIONS_TO_READ`); and a question being answered leaves its row in
-`obs.request_telemetry` when it finishes and not before, while `ops.model_attempt`, which would
-hold a model call in flight, is written by nothing. `ops.control_run` is written when a control
+`obs.request_telemetry` when it finishes and not before. `ops.model_attempt` has held a model call
+in flight since 2026-09-17 (`brain.models.calls`), and this screen does not read it yet.
+`ops.control_run` is written when a control
 starts and finished when it returns, so its newest unfinished row per control is exactly a run in
 progress or a process that died holding one. That is what the screen shows, and the three things
 it cannot show are fields on the response rather than empty tables. See
@@ -44,18 +45,17 @@ providers this system holds a key slot for, what each tier is for, and the measu
 not exist, each in the sentence `brain.ops.telemetry.UNFILLABLE_TODAY` already wrote for it. See
 `A_FIGURE_ANOTHER_ROUTE_SERVES_IS_READ_THERE`.
 
-**No provider health is shown, and the screen says so rather than drawing a green bar.**
-`brain.models.health.ProviderHealth` is the evidence and nothing stores one; the telemetry row's
-`provider` is never filled because no model is called. `brain.console.model_matrix` would show
-every rung closed, which is the router's own default, and on an install whose router has never
-run that default is a claim with no evidence behind it. So that module is not served here, and
-`breaker_state_is_not_recorded` says why. Whether a provider's key is held is the vault work's to
-answer and is not in this tree; `key_status_is_not_served` says so until it is.
+**Provider health, keys and switches are `brain.provider_routes`', and not this route's.** Until
+2026-09-17 this response carried two flags saying no breaker was recorded and no key status was
+served, because nothing called a model and `brain.console.model_matrix` would have drawn a closed
+breaker nobody had tested. The executor calls models now, its attempts are the evidence, and
+`GET /models/providers` serves each rung's measured health and whether each provider's key is
+held, behind this screen's own basis. Serving either here as well would be one fact behind two
+routes. What this route adds for the models screen is `fallbacks_fired`, the ledger's own sum over
+the window.
 
-**Not claimed: M27.8.8 and M27.8.13.** Providers have no registry to enable one in, routing is
-editable and changes no behaviour while no model is called, and no run can be stopped. Those are
-the missing halves of managing and of controlling, and a leaf closed over a screen that can do
-neither would be the tracker counting a read as a control.
+**Not claimed: M27.8.13.** No run can be stopped, and a leaf closed over a screen that cannot
+would be the tracker counting a read as a control.
 
 **What has never run.** This repository has no PostgreSQL, so neither statement below has been
 executed. What is tested is the SQL each compiles to, every decision over rows built in memory,
@@ -145,13 +145,12 @@ A_FIGURE_ANOTHER_ROUTE_SERVES_IS_READ_THERE: Final = (
     "draws what each one says, including a refusal."
 )
 
-#: Why a provider's health is stated as unrecorded rather than drawn as healthy.
-A_BREAKER_NOTHING_STORES_IS_NOT_A_CLOSED_BREAKER: Final = (
-    "brain.models.health.ProviderHealth.for_deployment starts closed, because a router that "
-    "started unknown would serve nothing until something had probed every rung. That is right "
-    "for a router that is running. Nothing stores a ProviderHealth and no router runs, so a "
-    "screen that applied the same default would draw every provider healthy on the strength of "
-    "nobody having looked, and nobody checks a green screen."
+#: Why the fallbacks figure is a sum the ledger holds rather than something counted here.
+FALLBACKS_ARE_THE_LEDGERS_SUM_OVER_THE_WINDOW: Final = (
+    "A fallback is counted by the executor on the request it happened in and written to that "
+    "request's ledger row. The figure is the database's sum of that column over the window, over "
+    "the whole install, served only to a reader whose basis is everybody's, so it is a sum of "
+    "rows the reader may see all of and not a figure narrowed from a larger one."
 )
 
 
@@ -318,11 +317,9 @@ class ModelsView(BaseModel):
     lanes: list[LaneTrafficView]
     providers: list[ProviderView]
     unmeasured: list[UnmeasuredView]
-    #: Nothing stores a breaker. See `A_BREAKER_NOTHING_STORES_IS_NOT_A_CLOSED_BREAKER`.
-    breaker_state_is_not_recorded: bool = True
-    #: Whether a provider's key is held is answered by the vault work, which this route does not
-    #: read. See the module docstring.
-    key_status_is_not_served: bool = True
+    #: How many times a request in the window moved to a later rung after a failure, summed from
+    #: the ledger. See `FALLBACKS_ARE_THE_LEDGERS_SUM_OVER_THE_WINDOW`.
+    fallbacks_fired: int
 
 
 # ---------------------------------------------------------------- the statements
@@ -365,6 +362,18 @@ def requests_by_lane(start: datetime, end: datetime) -> Select[tuple[str, int]]:
         .where(RequestTelemetryRow.received_at >= start, RequestTelemetryRow.received_at < end)
         .group_by(RequestTelemetryRow.lane)
     )
+
+
+def fallbacks_between(start: datetime, end: datetime) -> Select[tuple[int | None]]:
+    """The sum of every fallback the ledger recorded in `[start, end)`, zero when there is none.
+
+    Summed by the database, for `requests_by_lane`'s reason, and coalesced there, because a sum
+    over no rows is null and a window in which nothing fell back is a measured zero: every request
+    that called a model recorded its count, and a request that called none fell back from nothing.
+    """
+    return select(
+        func.coalesce(func.sum(RequestTelemetryRow.fallback_count), 0).label("fallbacks")
+    ).where(RequestTelemetryRow.received_at >= start, RequestTelemetryRow.received_at < end)
 
 
 # ------------------------------------------------------------------ the projections
@@ -544,6 +553,7 @@ async def models(
     async with factory() as session:
         found = await session.execute(requests_by_lane(start, asked.now))
         counted = [row._tuple() for row in found.all()]
+        fell_back = (await session.execute(fallbacks_between(start, asked.now))).scalar_one()
 
     return ModelsView(
         start=start,
@@ -552,4 +562,5 @@ async def models(
         lanes=lane_traffic(counted),
         providers=provider_views(),
         unmeasured=unmeasured(),
+        fallbacks_fired=int(fell_back or 0),
     )

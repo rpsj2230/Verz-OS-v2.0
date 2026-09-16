@@ -287,9 +287,11 @@ const LIVE_RUNS = {
 };
 
 /**
- * The models screen's four answers. Its own route's tiers, providers and unmeasured sentences
+ * The models screen's five answers. Its own route's tiers, providers and unmeasured sentences
  * carry unbreakable tokens, the chain is `MATRIX`, and the spend line's department is one too,
- * because a department key sits in a `.fields__row` label rather than in a scrolling table.
+ * because a department key sits in a `.fields__row` label rather than in a scrolling table. The
+ * providers answer is editable and names a credential, so both controls and the vault's column are
+ * drawn, and its unbroken provider, model and switcher all sit inside the two scrolling tables.
  */
 const MODELS_AND_HEALTH = {
   "/api/v1/operate/models": {
@@ -302,8 +304,46 @@ const MODELS_AND_HEALTH = {
     ],
     providers: [{ provider: UNBROKEN, description: UNBROKEN }],
     unmeasured: [{ measure: UNBROKEN, because: UNBROKEN }],
-    breaker_state_is_not_recorded: true,
-    key_status_is_not_served: true,
+    fallbacks_fired: 4,
+  },
+  "/api/v1/models/providers": {
+    profile: "hosted",
+    providers: [
+      {
+        provider: UNBROKEN,
+        description: UNBROKEN,
+        hosted: true,
+        switched_on: false,
+        switched_by: UNBROKEN,
+        switched_at: "2019-03-04T09:00:00Z",
+        key_held: true,
+        credential: { slot: UNBROKEN, description: UNBROKEN, held: true, set_at: "2019-03-04T09:00:00Z" },
+      },
+    ],
+    rungs: [
+      {
+        rung_id: RUNG_ID,
+        tier: "main",
+        position: 0,
+        role: "primary",
+        deployment_id: UNBROKEN,
+        provider: UNBROKEN,
+        model: UNBROKEN,
+        enabled: true,
+        answers: false,
+        skipped_because: "switched_off",
+        told: "This provider is switched off on this screen, so nothing is sent to it.",
+        state: "closed",
+        measured: false,
+        unhealthy_because: null,
+        live_seen: 0,
+        live_failed: 0,
+      },
+    ],
+    exhausted_tiers: ["main"],
+    editable: true,
+    vault: "ready",
+    vault_told: "The secrets vault answered.",
   },
   "/api/v1/routing/rungs": MATRIX,
   "/api/v1/report/service-levels": {
@@ -659,7 +699,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         people: [{ person: UNBROKEN, questions: 3 }],
         questions: 3,
         machine_included: false,
-        not_measured: ["tokens", "model", "agent"],
+        not_measured: [],
+        tokens: [
+          {
+            axis: "model",
+            lines: [{ key: UNBROKEN, runs: 3, tokens_in: 1200, tokens_out: 300 }],
+            total_runs: 3,
+            total_tokens_in: 1200,
+            total_tokens_out: 300,
+          },
+        ],
       },
       "/api/v1/agents": {
         items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN }],
@@ -1397,7 +1446,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     },
   },
   // Usage and cost. A department and a person are both identifiers with no break in them, one in
-  // each table, and every measure is named as not measured so every card on the page is drawn.
+  // each table, and a model name is one too, in the token table the API sends in place of the
+  // not-measured sentences it used to.
   "/usage": {
     address: "/usage",
     signedIn: true,
@@ -1410,7 +1460,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         people: [{ person: UNBROKEN, questions: 3 }],
         questions: 3,
         machine_included: false,
-        not_measured: ["tokens", "model", "agent"],
+        not_measured: [],
+        tokens: [
+          {
+            axis: "model",
+            lines: [{ key: UNBROKEN, runs: 3, tokens_in: 1200, tokens_out: 300 }],
+            total_runs: 3,
+            total_tokens_in: 1200,
+            total_tokens_out: 300,
+          },
+        ],
       },
     },
   },

@@ -36,6 +36,15 @@ their company, so the reach question is asked once, about the screen, and the an
 it or none of it. Saying that out loud matters because the row-by-row shape is the house
 pattern and departing from it silently would read as an oversight.
 
+**Healthy by default is not the same as measured, and since 2026-09-17 a row says which it is.**
+`brain.operate_routes` refused to serve this module for one reason: on an install whose router had
+never run, every rung would be drawn closed on the strength of nobody having looked. The router
+runs now (`brain.models.calls`) and its attempts are the evidence (`brain.models.evidence`), so a
+rung with a health record was measured and a rung without one was not. `Rung.measured` carries
+that, and the state beside an unmeasured rung stays the router's own default rather than
+becoming a question mark, for the reason above. See
+`A_CLOSED_BREAKER_NOBODY_HAS_CALLED_IS_SAID_TO_BE_UNMEASURED`.
+
 What was rejected. A percentage of failed requests per rung, which is what an operator asks
 for first: the live ring is capped at a window, so a ratio over it is a ratio over the last
 few calls rather than over traffic, and printing it as "12% failing" invites a reader to
@@ -43,7 +52,7 @@ multiply it by a request count they do not have. The rings are reported as what 
 count of recent outcomes, and `probe_fail_ratio` stays where it is, beside the note saying it
 is reported and never fed into the opening rules.
 
-Task ids: M27.2.3
+Task ids: M27.2.3, M27.8.8
 """
 
 from __future__ import annotations
@@ -88,6 +97,14 @@ A_TIER_WITH_EVERY_RUNG_OPEN_IS_AN_OUTAGE_AND_NOT_A_COLOUR: Final = (
     "at all, and that is a fact about the set rather than about any row in it, so a screen "
     "that renders state per row leaves the reader to notice it by counting. It is asked "
     "directly instead, and it is the one thing on this screen worth an alert."
+)
+
+#: Why a rung is marked measured or not, beside a state that is closed either way.
+A_CLOSED_BREAKER_NOBODY_HAS_CALLED_IS_SAID_TO_BE_UNMEASURED: Final = (
+    "A rung nothing has called is closed, because the router would try it, and it is not "
+    "healthy on any evidence. The row keeps the router's state and says whether any attempt "
+    "stands behind it, so a screen can draw a closed rung nobody has called differently from "
+    "one that has answered, without contradicting the router about which it would try."
 )
 
 #: Why the reach question is asked once here and row by row everywhere else.
@@ -136,6 +153,9 @@ class Rung:
     live_seen: int
     live_failed: int
     last_probe_at: datetime | None
+    #: Whether any attempt stands behind `state`. See
+    #: `A_CLOSED_BREAKER_NOBODY_HAS_CALLED_IS_SAID_TO_BE_UNMEASURED`.
+    measured: bool = False
 
     def __post_init__(self) -> None:
         if self.live_failed > self.live_seen:
@@ -200,6 +220,7 @@ def matrix(
                     live_seen=len(state.live),
                     live_failed=sum(1 for ok in state.live if not ok),
                     last_probe_at=state.last_probe_at,
+                    measured=rung.deployment.id in health,
                 )
             )
     return tuple(rows)

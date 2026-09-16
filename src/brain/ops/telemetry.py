@@ -52,13 +52,16 @@ to a trace store cannot reconstruct a person's movements. That difference is not
 written here. It falls out of running the row through `tracing.mask`, which is the only way
 anything in this module produces a span.
 
-**Twelve of the nineteen fields are None today, and the reasons are declared rather than
-implied.** `UNFILLABLE_TODAY` names each one and says what is missing. There is no model call
-anywhere in this repository, so there is no provider, no time to first token and no token
-count; there is no agent on the one live request path, so there is no agent version; nothing
-times a tool call. `tool_count` left that mapping on 2026-09-15, when the lane started counting
-the calls it makes (M21.3.4). Those fields are optional and default to None, and the fields
-that can be filled honestly today are required and have no default, so the difference is
+**Twelve of the nineteen fields are optional, and each one says why it may be None.** Five are
+`UNFILLABLE_TODAY`, which names what is missing: nothing times a first token or a tool call,
+the epoch never reaches a route, no connector is reached and the lane is never told what was
+withheld. `tool_count` left that mapping on 2026-09-15, when the lane started counting the
+calls it makes (M21.3.4). The other seven are `FILLED_BY_A_MODEL_CALL`, and they left it on
+2026-09-17 when `brain.models.calls.ModelCalls` started calling a model: the model, the
+provider, the tokens, the agent and the fallback and retry counts come from the request's
+`brain.models.metering.Meter` through `Finished.model_usage`, and they are None exactly when the
+request called no model, which is still every question the answer lane finishes. The fields
+that can be filled on every request are required and have no default, so the difference is
 enforced by the dataclass rather than by a comment.
 
 **Eighteen of the fields are M27.1.5's and the nineteenth is M30.5.2's, and they are declared
@@ -190,7 +193,7 @@ from brain.gate.context import TrafficClass, traffic_class_for
 
 # At run time, unlike `Finished` below: `status_of_finished` branches on this type, and a branch
 # is behaviour rather than an annotation.
-from brain.gate.finish import ToolCallOutcome
+from brain.gate.finish import ModelCallOutcome, ToolCallOutcome
 from brain.ops.retention import DataClass, Lifetime, horizon_for
 from brain.ops.tracing import (
     SAFE_ATTRIBUTES,
@@ -562,38 +565,22 @@ _FLAG_FIELDS: Final[frozenset[str]] = frozenset({"cache_hit"})
 #: Every field nothing in this repository can fill today, and what is missing.
 #:
 #: A mapping rather than a paragraph, so the claim is machine-readable: a test asserts that
-#: exactly these fields are optional on the record and that every other declared field is
-#: required. Filling one means deleting its entry here, which fails that test until the
-#: dataclass is changed to match, so the two cannot drift.
+#: these fields and `FILLED_BY_A_MODEL_CALL`'s are exactly the optional ones on the record and
+#: that every other declared field is required. Filling one means moving or deleting its entry
+#: here, which fails that test until the dataclass is changed to match, so the two cannot drift.
 UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
     {
-        "agent_version": (
-            "no agent runs on the one live request path. brain.api_routes.asking argues that "
-            "the agent term of the invariant is deliberately absent there rather than faked, "
-            "so there is no agent and therefore no version of one to record"
-        ),
         "policy_epoch": (
             "the epoch is computed inside brain.gate.answer.answer_lane and travels to the "
             "trace sink in a RedactionTrace. Answered carries no field holding it, so a "
             "route cannot read it back, and the entity it belongs to is deliberately not "
             "disclosed to the route either"
         ),
-        "model": (
-            "no model is called anywhere in this repository. See "
-            "brain.models.driver.CONCRETE_ADAPTER_NOT_BUILT: what exists is the protocol, "
-            "the per-lane call policy and the router, and nothing that speaks to a provider"
-        ),
-        "provider": (
-            "the same absence as model. A provider is which pool answered, and no pool has "
-            "been asked anything"
-        ),
         "time_to_first_token_ms": (
-            "there is no first token, because there is no model call to stream one. A figure "
-            "here today could only be the time to the first frame, which is a different "
-            "measurement wearing this one's name"
+            "nothing streams a model's answer. brain.models.calls waits for a whole response, "
+            "so there is no first token to time, and a figure here could only be the time to "
+            "the first frame, which is a different measurement wearing this one's name"
         ),
-        "tokens_in": "nothing counts tokens, because nothing sends any",
-        "tokens_out": "nothing counts tokens, because nothing produces any",
         "tool_latency_ms": (
             "nothing times the row read. brain.gate.answer takes now as a parameter and reads "
             "no clock, deliberately, so the lane cannot time itself"
@@ -610,14 +597,34 @@ UNFILLABLE_TODAY: Final[Mapping[str, str]] = MappingProxyType(
             "that nothing was redacted. Recording zero would be false on exactly the requests "
             "where something was"
         ),
-        "fallback_count": (
-            "a fallback is a decision about a model chain. brain.models.routing declares the "
-            "rules and nothing invokes them, so there is no ladder to have stepped down"
+    }
+)
+
+
+#: The fields a request fills only when it called a model, and why each is None otherwise.
+#:
+#: Split from `UNFILLABLE_TODAY` on 2026-09-17 rather than folded into it or deleted, because
+#: None now means two different things and a report has to be able to tell them apart: a field
+#: nothing measures, and a measurement of a request that made no call. Both are optional on the
+#: record and a test holds the union of the two mappings to exactly the optional fields, so a
+#: field cannot be optional without one of them saying why.
+FILLED_BY_A_MODEL_CALL: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "agent_version": (
+            "no model call this request made named an agent. brain.api_routes.asking argues that "
+            "the agent term of the invariant is absent on the answer lane rather than faked, so a "
+            "call made there names none; and a request whose calls named different agents names "
+            "none either, for brain.models.metering.A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE"
         ),
-        "retry_count": (
-            "the same absence as fallback_count. brain.models.adapter pins num_retries and "
-            "makes one transport call, and no transport call has been made"
+        "model": (
+            "this request called no model, or its calls were answered by more than one. See "
+            "brain.models.metering.A_REQUEST_ANSWERED_BY_TWO_MODELS_NAMES_NONE"
         ),
+        "provider": "this request called no model, or its calls were answered by more than one",
+        "tokens_in": "this request called no model, so no provider counted any tokens for it",
+        "tokens_out": "this request called no model, so no provider counted any tokens for it",
+        "fallback_count": "this request called no model, so no chain was walked",
+        "retry_count": "this request called no model, so no rung was tried twice",
     }
 )
 
@@ -631,9 +638,9 @@ class RequestTelemetry:
 
     Fields are declared in the order M27.1.5 names them and then M30.5.2's, and
     `TELEMETRY_FIELDS` is that order written once. The seven with no default are the seven a
-    caller can fill honestly today; the twelve defaulting to None are `UNFILLABLE_TODAY`,
-    and a test pins the two sets against each other so the mapping cannot describe a record
-    that no longer matches it.
+    caller can fill on every request; the twelve defaulting to None are `UNFILLABLE_TODAY` and
+    `FILLED_BY_A_MODEL_CALL`, and a test pins the optional fields against the two mappings so
+    neither can describe a record that no longer matches it.
 
     Every string field is checked against `tracing.mask` at construction, so a record
     carrying a person's name rather than their identifier does not exist to be written. See
@@ -737,6 +744,10 @@ def status_of_finished(finished: Finished) -> RequestStatus:
     opaque path that raises `Denied`. `Finished` carries no exception, so the day a lane
     raises one, a status for it is `status_for(outcome)` and needs the exception carried.
 
+    A model call made for its own sake, the Models screen's provider check, is `ANSWERED` when a
+    provider answered and `DEGRADED` when none could be reached, with nothing about which rung
+    or why; see `brain.gate.finish.ModelCallOutcome`.
+
     An automation's tool call is `ANSWERED` when it went through and `NOTHING_RETURNED` when it
     was refused, which is the member that already holds a withheld record and an absent one
     together. `ToolCallOutcome` carries whether it was refused and nothing about what, so this
@@ -746,6 +757,10 @@ def status_of_finished(finished: Finished) -> RequestStatus:
     outcome = finished.outcome
     if outcome is None:
         return RequestStatus.FAILED
+    if isinstance(outcome, ModelCallOutcome):
+        # A provider that could not be reached is a source that could not be reached, and
+        # nothing was substituted for it, which is DEGRADED's own definition. Never the reason.
+        return RequestStatus.ANSWERED if outcome.answered else RequestStatus.DEGRADED
     if isinstance(outcome, ToolCallOutcome):
         if outcome.refused:
             return RequestStatus.NOTHING_RETURNED
@@ -753,6 +768,27 @@ def status_of_finished(finished: Finished) -> RequestStatus:
     if outcome.abstention is not None:
         return RequestStatus.NOTHING_RETURNED
     return RequestStatus.ANSWERED
+
+
+#: Why a model's name is folded to lower case, and dropped rather than refused when that is not
+#: enough.
+A_NAME_THE_LEDGER_CANNOT_HOLD_IS_DROPPED_AND_THE_TOKENS_ARE_KEPT: Final = (
+    "A provider names the model that served a call in its own spelling, and some spell it with "
+    "capitals or a character the trace grammar treats as a value, which would refuse the whole "
+    "row and lose the tokens with it. So the name is folded to lower case, which keeps it a "
+    "grouping key for the usage screen, and a name that is still not system vocabulary after "
+    "that is recorded as None: the request's tokens are a measurement worth more than a label."
+)
+
+
+def ledger_name(name: str | None) -> str | None:
+    """A vendor's name as the ledger can hold it, or None. See the constant above."""
+    if name is None:
+        return None
+    folded = name.strip().casefold()
+    if not folded or _would_be_masked(folded):
+        return None
+    return folded
 
 
 #: Microseconds in a millisecond, for a duration read off a `timedelta` exactly.
@@ -770,9 +806,14 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
     The duration is taken from the `timedelta` in whole microseconds rather than through
     `total_seconds`, which is a float and rounds a long request's sub-millisecond digits.
     `cache_hit` is False on a fault: nothing was served from the cache, whatever was consulted.
+
+    The seven `FILLED_BY_A_MODEL_CALL` fields are read off `Finished.model_usage` and are None
+    when it is, which is a request that called no model (M27.7.14). Tokens are the providers'
+    own counts, summed; see `brain.models.metering` for what the row names when calls disagree.
     """
     origin = finished.origin
     outcome = finished.outcome
+    usage = finished.model_usage
     elapsed = finished.completed_at - finished.at
     micros = (elapsed.days * 86_400 + elapsed.seconds) * 1_000_000 + elapsed.microseconds
     return RequestTelemetry(
@@ -785,13 +826,47 @@ def request_telemetry_of(finished: Finished) -> RequestTelemetry:
         entitlement_hash=finished.entitlement_hash,
         lane=finished.lane,
         tool_count=finished.tool_calls,
-        # A tool call has no cache to have been served from, so it is never a hit.
+        # A tool call and a model call have no cache to have been served from, so neither is a hit.
         cache_hit=(
-            outcome is not None and not isinstance(outcome, ToolCallOutcome) and outcome.from_cache
+            outcome is not None
+            and not isinstance(outcome, ToolCallOutcome | ModelCallOutcome)
+            and outcome.from_cache
         ),
+        agent_version=None if usage is None else ledger_name(usage.agent_version),
+        model=None if usage is None else ledger_name(usage.model),
+        provider=None if usage is None else ledger_name(usage.provider),
+        tokens_in=None if usage is None else usage.tokens_in,
+        tokens_out=None if usage is None else usage.tokens_out,
+        fallback_count=None if usage is None else usage.fallback_count,
+        retry_count=None if usage is None else usage.retry_count,
         status=status_of_finished(finished),
         duration_ms=micros / _MICROSECONDS_PER_MS,
     )
+
+
+# --------------------------------------------------- what a request's model calls consumed
+
+
+@dataclass(frozen=True)
+class MeteredRequest:
+    """One ledger row that carries model usage, as the usage screen joins it to a question.
+
+    Only the columns the join and the four breakdowns need: the trace and the person the join is
+    made on, the model and agent it is grouped by, and the providers' token counts. No lane, no
+    status and no hash, so a figure built from these cannot say anything else about the request.
+    """
+
+    trace_id: str
+    principal: str
+    model: str | None
+    agent_version: str | None
+    tokens_in: int
+    tokens_out: int
+
+    def __post_init__(self) -> None:
+        if self.tokens_in < 0 or self.tokens_out < 0:
+            msg = f"{self.trace_id} carries a negative token count, which no provider reported"
+            raise TelemetryError(msg)
 
 
 # ------------------------------------------------------------ a question's shape (M21.3.4)

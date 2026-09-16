@@ -394,7 +394,12 @@ def is_reserved_range(text: str) -> bool:
 #: function body is still refused. That half is what caught the first draft of
 #: `brain.deployment.install_script`, which had the address written out three times inside the
 #: function that renders the Docker step.
-DECLARING_AREAS: Final[tuple[str, ...]] = ("connectors", "channels", "deployment")
+#:
+#: `models` is the fourth, for the model providers `brain.models.wire` calls. `api.anthropic.com`
+#: is where Anthropic is for every install, exactly as `api.xero.com` is where Xero is, and a
+#: provider's address is deliberately not configuration: see
+#: `brain.models.wire.A_PROVIDER_IS_REACHED_AT_ITS_OWN_ADDRESS_AND_NEVER_ONE_A_PERSON_TYPED`.
+DECLARING_AREAS: Final[tuple[str, ...]] = ("connectors", "channels", "deployment", "models")
 
 #: What a constant naming a vendor endpoint is called. A rule rather than a list of hosts: the
 #: sweep is satisfied by declaring where the vendor is, at the top of the file, once. A URL

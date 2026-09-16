@@ -50,6 +50,7 @@ import {
 import { GRANTS_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
+import { providerCheckApiPath, providerSwitchApiPath } from "../../src/pages/modelsQuery";
 import { editPath, giveBackPath } from "../../src/pages/promptsQuery";
 import {
   ERASURES_API_PATH,
@@ -252,12 +253,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "AI providers, models and the routing between them": {
     screens: ["/models", "/routing", "/routing/:rungId"],
-    routes: ["/api/v1/operate/models", "/api/v1/routing/rungs*"],
+    routes: ["/api/v1/operate/models", "/api/v1/models/providers*", "/api/v1/routing/rungs*"],
     tables: ["ops.routing_rung", "ops.routing_tier", "ops.model_attempt"],
     installation: ["INSTALL_MODEL_PROFILE", "INSTALL_MODEL_ENDPOINT", "INSTALL_EMBEDDING_DIMENSIONS"],
     gaps: [
       {
-        what: "Saving a routing rung changes its row and no answer: nothing on the answer path reads ops.routing_rung, and every question runs through brain.models.routing.seed_chain.",
+        what: "Saving a routing rung changes the chain the next model call walks and no answer: the answer lane still answers from fast-path rules and calls no model, so today only a provider check from Models and health reaches a saved rung.",
         leaf: "M27.8.8",
       },
       { what: "A provider key cannot be written or replaced from a screen after setup.", leaf: "M27.8.8" },
@@ -492,8 +493,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "The state of each service the install runs on, and each provider's circuit breaker, is not shown.",
-        because: "The Models and health screen says breaker_state_is_not_recorded, and /health/ready answers the orchestrator outside /api/v1 with no screen reading it.",
+        what: "The state of each service the install runs on is not shown.",
+        because: "/health/ready answers the orchestrator outside /api/v1 with no screen reading it. Each rung's circuit breaker is shown, on the Models and health screen from GET /api/v1/models/providers, replayed from the attempts the executor recorded.",
       },
     ],
   },
@@ -619,6 +620,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/jobs/{name}/run", "actionPath", actionPath("run", "spend_report_refresh")),
   ],
   "src/pages/Matrix.tsx rungApiPath(rung.id)": [at("PATCH /api/v1/routing/rungs/{rung_id}", "rungApiPath", rungApiPath("rung-1"))],
+  "src/pages/Models.tsx providerSwitchApiPath(pending.provider)": [
+    at("PUT /api/v1/models/providers/{provider}", "providerSwitchApiPath", providerSwitchApiPath("anthropic")),
+  ],
+  "src/pages/Models.tsx providerCheckApiPath(pending.provider)": [
+    at("POST /api/v1/models/providers/{provider}/check", "providerCheckApiPath", providerCheckApiPath("anthropic")),
+  ],
   "src/pages/People.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
   "src/pages/People.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
   "src/pages/Prompts.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
@@ -843,7 +850,21 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "PATCH /api/v1/routing/rungs/{rung_id}": {
     row: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
     audit: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
-    behaviour: { none: "Nothing on the answer path reads ops.routing_rung, so a saved rung changes no answer.", leaf: "M27.8.8" },
+    behaviour: t(
+      "test_provider_routes",
+      "test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks",
+      true,
+    ),
+  },
+  "PUT /api/v1/models/providers/{provider}": {
+    row: t("test_model_service", "test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch", true),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_provider_routes", "test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once"),
+  },
+  "POST /api/v1/models/providers/{provider}/check": {
+    row: t("test_provider_routes", "test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question"),
+    audit: { notApplicable: "A check changes no setting and no record an administrator manages; it is a metered call on the request ledger, not a change to audit." },
+    behaviour: t("test_provider_routes", "test_a_check_is_one_metered_call_recorded_on_the_ledger_and_never_as_a_question"),
   },
   "POST /api/v1/govern/grants/removal": {
     row: GRANTS_PRESSED,

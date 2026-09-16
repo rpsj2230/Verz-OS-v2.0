@@ -8,11 +8,11 @@ derived citations from a redacted payload and was called by nothing. Four correc
 documented modules with no path between them and a request, which is the recurring defect in
 this repository and by the time this was written it had thirteen recorded instances.
 
-**This is a lane and not the lane.** There is no model call here, because no code in this
-repository assembles one: nothing constructs a `DriverRequest` and `driver.
-CONCRETE_ADAPTER_NOT_BUILT` says as much. So the lane answers what a fast-path rule can
-answer, and abstains otherwise, using the abstention vocabulary that already exists rather
-than a sentence written here. When the model lane is built, it goes where `_abstained`
+**This is a lane and not the lane.** There is no model call here. A model can be called now,
+through `brain.models.calls.ModelCalls`, and this lane does not call it, because a model step
+needs what it may be shown decided first and that is not decided here. So the lane answers what a
+fast-path rule can answer, and abstains otherwise, using the abstention vocabulary that already
+exists rather than a sentence written here. When the model lane is built, it goes where `_abstained`
 currently sits, and everything around it, the ordering, the redaction and the frames, is
 already right.
 

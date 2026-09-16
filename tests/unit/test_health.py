@@ -24,7 +24,7 @@ import pytest
 from brain.core.errors import Outcome
 from brain.core.lane import Lane
 from brain.models.driver import (
-    CONCRETE_ADAPTER_NOT_BUILT,
+    CONCRETE_ADAPTERS_ARE_ONE_FILE,
     LITELLM_IS_A_DRIVER_NOT_A_PROXY,
     TAG_FILTERING_IS_INOPERATIVE_IN_SDK_MODE,
     CallPolicy,
@@ -686,10 +686,11 @@ def test_a_registry_finds_an_adapter_by_provider_rather_than_by_deployment() -> 
     assert registry.driver_for(chain_rung) is driver
 
 
-def test_the_seam_says_out_loud_that_no_concrete_adapter_exists() -> None:
-    """Nothing here calls a provider. Without this written down, the next reader sees a
-    protocol, a registry and a router and reasonably concludes the layer is finished."""
-    assert "No concrete provider adapter exists yet" in CONCRETE_ADAPTER_NOT_BUILT
+def test_the_seam_says_out_loud_where_the_concrete_adapters_are() -> None:
+    """Nothing in the seam calls a provider. Without this written down, the next reader sees a
+    protocol, a registry and a router and looks for the provider call in the wrong module."""
+    assert "brain.models.wire" in CONCRETE_ADAPTERS_ARE_ONE_FILE
+    assert "brain.models.calls" in CONCRETE_ADAPTERS_ARE_ONE_FILE
     assert "proxy server" in LITELLM_IS_A_DRIVER_NOT_A_PROXY
     assert "proxy-mode feature" in TAG_FILTERING_IS_INOPERATIVE_IN_SDK_MODE
 

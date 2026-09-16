@@ -273,6 +273,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.knowledge.scanning:Scanner.scan": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.knowledge.scanning:Parser.parse": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.member.connections:TokenRevoker.revoke": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # The model executor: the ladder is read on every call, and each attempt is one row in
+        # `ops.model_attempt`, inserted under the trace's unique sequence and finished by its id.
+        "brain.models.calls:Ladder.current": Repeat.READS,
+        "brain.models.calls:AttemptLog.started": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.models.calls:AttemptLog.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.models.driver:ModelDriver.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # Operations.
         "brain.ops.automation_owner:PrincipalRecords.live_principal": Repeat.READS,
