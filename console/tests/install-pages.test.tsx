@@ -711,7 +711,7 @@ describe("reaching the install screens from the keyboard", () => {
     }
   });
 
-  test("the five sections are the five screens the API serves and no others", () => {
+  test("the install sections are the screens the API serves and no others", () => {
     // What breaks if this is deleted: a sixth install address is added to the shell with no
     // route behind it, or a route is added with no way to reach it from the menu. Both are
     // invisible: the first renders the console's own not-found page and the second is a screen
@@ -722,6 +722,9 @@ describe("reaching the install screens from the keyboard", () => {
       "/recovery",
       "/limits",
       "/connections",
+      // The feature switches, since 2026-09-17: an install-wide setting served by
+      // `brain.feature_routes`, so it sits with the other screens about this server.
+      "/features",
     ]);
   });
 });
