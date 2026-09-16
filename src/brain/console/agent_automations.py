@@ -77,17 +77,18 @@ client. No transaction is opened, which is why M39.6.1.5's "in the same transact
 expressed as a value that cannot be half built: `SchedulerChange` carries the automation and
 its registry entry together and refuses one without the other.
 
-**Nothing here is a screen.** There is no automations tab in this repository and no route
-behind one, exactly as `brain.console.screens` says of its own registry.
+**Nothing here is a screen.** The agent workspace's Automations tab draws the gallery
+`brain.console.automation_gallery` serves, and no route lists, pauses or resumes the automations
+this module describes, exactly as `brain.console.screens` says of its own registry.
 
-**One of the nine leaves in this group is not claimed and it is M39.6.1.3**, the template
-gallery with a one-step install. A gallery is a rendered thing, which is reason enough on a
-surface with no screens, but the harder half is the content: a set of common automations is a
-set of outcomes somebody at a particular company wants, and a list of them written here would
-be exactly the company detail `CLAUDE.md` says never goes into the source. `brain.agents.
-template` already holds the install-and-overlay mechanism a gallery would use, so what is
-missing is a catalogue that is configuration rather than a constant, and deciding where that
-catalogue lives is not this module's decision to make.
+**The ninth leaf in this group, M39.6.1.3, is claimed elsewhere, and this paragraph used to
+decline it.** It said a set of common automations was a set of outcomes somebody at a particular
+company wants, so a list of them written here would be company detail. That was right about a
+company's own automations and wrong about generic ones, and `brain.console.automation_gallery`
+draws the line with CLAUDE.md's own test: an outcome that would be correct on a server belonging
+to a company nobody has met is product content, as the agent role manifests are, and anything
+else is that installation's configuration. The install it builds lands through this module's
+`register` and `registry_gaps`, and starts paused for `may_change_schedule`'s reason.
 
 Task ids: M39.6.1.1, M39.6.1.2, M39.6.1.4, M39.6.1.5
 Task ids: M39.6.2.1, M39.6.2.2, M39.6.2.3, M39.6.2.4

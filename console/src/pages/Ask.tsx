@@ -36,7 +36,38 @@
  * figure either comes from the API or is made up here, and made up is what a duration
  * measured in the browser would be: it would include the network, the proxy and React.
  *
- * Task ids: M42.6.3
+ * **The answer is reached by one control, because what it stands on is drawn above it.** A
+ * sighted reader's eye jumps past the steps and the citations to the paragraph that matters.
+ * Somebody on a keyboard or a screen reader reads in document order, so every citation is a
+ * stop on the way to the answer, and a question about one client can cite a dozen rows. The
+ * control is a native button placed straight after the form, and pressing it puts focus on the
+ * answer, which is focusable by script and by nothing else (`tabIndex` of minus one), so the
+ * tab order is not lengthened by the thing it exists to shorten. See
+ * `THE_ANSWER_IS_ONE_KEYPRESS_FROM_THE_QUESTION`.
+ *
+ * **The answer is not a live region and the control does not make it one.** Announcing text
+ * that arrives a piece at a time reads the answer letter by letter, which is
+ * `brain.locale.A_LIVE_REGION_ON_A_STREAM_READS_THE_ANSWER_LETTER_BY_LETTER`; the reader
+ * chooses when to hear it, by pressing the control, and hears it once from the start.
+ *
+ * **A button and not a fragment link.** `href="#ask-answer"` is the usual skip link and it
+ * writes the fragment into the address and a history entry, which this page's rule forbids,
+ * and a fragment whose target is not focusable moves the scroll position without moving
+ * keyboard focus in every browser this console supports.
+ *
+ * **When asking took the reader's focus away, finishing gives it back, to the control.** The
+ * field and the button are disabled while the answer is made, and a disabled element cannot
+ * hold focus, so somebody who pressed Ask from the keyboard is left focused on nothing. When
+ * the answer is finished, and only if their focus is still nowhere or still on the form they
+ * submitted, it goes to the skip control, and a screen reader says the control's name: that
+ * is the one announcement a finished answer gets. A reader who moved their focus somewhere
+ * else while waiting is left where they went. See `FOCUS_IS_RETURNED_AND_NEVER_TAKEN`.
+ *
+ * **A refusal gets the same control**, because it arrives as the same frames and is drawn by
+ * the same code; a control offered for one and not the other would be the distinction the
+ * route spent a taxonomy removing.
+ *
+ * Task ids: M42.6.3, M35.2.1.3
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
@@ -73,8 +104,35 @@ export const BASED_ON = "What this is based on";
 /** Before anybody has asked anything. It names no entity and suggests no question. */
 export const NOTHING_ASKED_YET = "Nothing has been asked yet.";
 
+/**
+ * The control that moves focus past the steps and the citations to the answer. The words are
+ * `answer.skip_to` in `brain.locale.MESSAGES`, which already carries its translation, and a
+ * test holds the two together.
+ */
+export const SKIP_TO_ANSWER = "Skip to answer";
+
+/** What the answer is called when focus lands on it, so a screen reader says where it is. */
+export const ANSWER_LABEL = "Answer";
+
+/** Why the answer is reached by a control rather than by tabbing past what it stands on. */
+export const THE_ANSWER_IS_ONE_KEYPRESS_FROM_THE_QUESTION =
+  "The citations are drawn above the answer, so reading in document order passes every one " +
+  "of them first. The skip control is the first thing after the form and puts focus on the " +
+  "answer, which is focusable by script only, so reaching the answer never costs more than " +
+  "one control however much it cites.";
+
+/** Why focus is moved on completion only when the page itself had taken it. */
+export const FOCUS_IS_RETURNED_AND_NEVER_TAKEN =
+  "Disabling the form while an answer is made leaves a keyboard reader focused on nothing. " +
+  "Finishing returns their focus to the skip control, which is also how a screen reader " +
+  "learns the answer is ready, and it does so only when their focus is still nowhere or " +
+  "still on the form: a reader who went somewhere else while waiting is not moved.";
+
 /** The id tying the label to the field. One field on the page, so one id. */
 const QUESTION_FIELD_ID = "ask-question";
+
+/** The id of the region the skip control puts focus on. One answer on the page, so one id. */
+const ANSWER_REGION_ID = "ask-answer";
 
 /** What is on the screen apart from the question somebody is typing. */
 interface Asking {
@@ -102,6 +160,13 @@ export function Ask() {
     [],
   );
 
+  // The form, the skip control and the answer, for moving focus between them. See
+  // `FOCUS_IS_RETURNED_AND_NEVER_TAKEN` for when the first hands focus to the second.
+  const form = useRef<HTMLFormElement | null>(null);
+  const skip = useRef<HTMLButtonElement | null>(null);
+  const answerRegion = useRef<HTMLElement | null>(null);
+  const focusWasInTheForm = useRef(false);
+
   const ask = useCallback(
     (submitted: FormEvent<HTMLFormElement>) => {
       submitted.preventDefault();
@@ -114,6 +179,7 @@ export function Ask() {
       inFlight.current?.abort();
       const controller = new AbortController();
       inFlight.current = controller;
+      focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
       setAsking({ view: NOTHING_ASKED, busy: true, failure: null });
 
       void (async () => {
@@ -144,13 +210,28 @@ export function Ask() {
 
   const { view, busy, failure } = asking;
   const asked = view.answer !== "" || view.citations.length > 0 || view.failed !== null;
+  // What the skip control reaches: an answer, or the sentence a stream that failed carried.
+  // Never a request that did not start a stream, which has no steps and no citations to skip.
+  const answered = view.answer !== "" || view.failed !== null;
+
+  useEffect(() => {
+    if (busy || !answered || !focusWasInTheForm.current) {
+      return;
+    }
+    focusWasInTheForm.current = false;
+    const holder = document.activeElement;
+    const nowhere = holder === null || holder === document.body;
+    if (nowhere || (form.current?.contains(holder) ?? false)) {
+      skip.current?.focus();
+    }
+  }, [busy, answered]);
 
   return (
     <article className="page">
       <h1>{ASK_HEADING}</h1>
       <p className="lede">{ASK_LEDE}</p>
 
-      <form className="ask__form" onSubmit={ask}>
+      <form className="ask__form" onSubmit={ask} ref={form}>
         <label className="ask__label" htmlFor={QUESTION_FIELD_ID}>
           {QUESTION_LABEL}
         </label>
@@ -173,6 +254,19 @@ export function Ask() {
           </button>
         </div>
       </form>
+
+      {answered ? (
+        <button
+          type="button"
+          ref={skip}
+          className="button ask__skip"
+          onClick={() => {
+            answerRegion.current?.focus();
+          }}
+        >
+          {SKIP_TO_ANSWER}
+        </button>
+      ) : null}
 
       {busy ? (
         <section className="ask__progress" role="status" aria-label={PROGRESS_LABEL}>
@@ -198,12 +292,22 @@ export function Ask() {
         </section>
       ) : null}
 
-      {view.answer !== "" ? <p className="ask__answer">{view.answer}</p> : null}
+      {answered ? (
+        <section
+          id={ANSWER_REGION_ID}
+          ref={answerRegion}
+          className="ask__result"
+          tabIndex={-1}
+          aria-label={ANSWER_LABEL}
+        >
+          {view.answer !== "" ? <p className="ask__answer">{view.answer}</p> : null}
 
-      {view.failed !== null ? (
-        <Notice title={SOMETHING_DID_NOT_WORK}>
-          <p>{view.failed}</p>
-        </Notice>
+          {view.failed !== null ? (
+            <Notice title={SOMETHING_DID_NOT_WORK}>
+              <p>{view.failed}</p>
+            </Notice>
+          ) : null}
+        </section>
       ) : null}
 
       {failure ? (

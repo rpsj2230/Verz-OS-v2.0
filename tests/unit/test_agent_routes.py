@@ -786,8 +786,9 @@ def test_a_reader_holding_every_tabs_grant_is_shown_only_the_tab_this_route_fill
     client: TestClient, stored: Stored
 ) -> None:
     """`u_elsewhere` holds every tab's capability and every plane, so every tab is permitted to
-    them, and their strip is still Settings alone because it is the only tab populated. The
-    strip test above is the sibling for the readers who may not read even that.
+    them, and their strip is still Automations and Settings alone because those are the only
+    tabs populated: the gallery and the agent's own record. The strip test above is the sibling
+    for the readers who may not read even that.
 
     Delete this and the route can mark a tab populated that it holds nothing for, which draws a
     heading over an empty panel for exactly the readers trusted with the most."""
@@ -795,7 +796,7 @@ def test_a_reader_holding_every_tabs_grant_is_shown_only_the_tab_this_route_fill
 
     tabs = workspace_of(client, "u_elsewhere", "quote_helper").json()["tabs"]
 
-    assert [one["tab"] for one in tabs] == ["settings"]
+    assert [one["tab"] for one in tabs] == ["automations", "settings"]
 
 
 def test_a_blank_summary_is_sent_as_no_summary_and_the_lineage_still_arrives(
@@ -839,8 +840,10 @@ def test_the_roster_is_ordered_by_name_and_then_by_id_whatever_order_the_table_h
 
 
 def test_a_tab_is_populated_here_only_when_this_route_holds_what_it_reads() -> None:
-    """Settings and nothing else, held against the strip itself: every tab is permitted for a
-    reader holding every tab's grant, and still only Settings is drawn.
+    """Settings and Automations and nothing else, held against the strip itself: every tab is
+    permitted for a reader holding every tab's grant, and still only those two are drawn. The
+    Automations tab is filled by the product's gallery, which is held non-empty in
+    `tests/unit/test_automation_gallery.py`.
 
     Delete this and `POPULATED_HERE` can grow a tab no route fills, which is a heading over an
     empty panel and a count of hidden things in words."""
@@ -857,8 +860,11 @@ def test_a_tab_is_populated_here_only_when_this_route_holds_what_it_reads() -> N
     from brain.console.workspace import tab_strip
 
     assert len(tab_strip(everything, populated=tuple(Tab))) == len(TABS)
-    assert frozenset({Tab.SETTINGS}) == POPULATED_HERE
-    assert [one.tab for one in tab_strip(everything, populated=POPULATED_HERE)] == [Tab.SETTINGS]
+    assert frozenset({Tab.SETTINGS, Tab.AUTOMATIONS}) == POPULATED_HERE
+    assert [one.tab for one in tab_strip(everything, populated=POPULATED_HERE)] == [
+        Tab.AUTOMATIONS,
+        Tab.SETTINGS,
+    ]
 
 
 def test_the_composition_is_sent_to_a_reader_of_the_settings_tab_and_to_nobody_else(

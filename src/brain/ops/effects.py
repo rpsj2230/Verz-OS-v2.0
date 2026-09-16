@@ -153,6 +153,13 @@ WHY: Final[Mapping[Repeat, str]] = MappingProxyType(
 #: Every public method of every protocol under `src/brain`, by `module:Class.method`.
 PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
     {
+        # The automation gallery: an agent read, and installs in this system's own table, where a
+        # second install is refused by the unique constraint and appends nothing.
+        "brain.automation_gallery_routes:AgentRecords.agent": Repeat.READS,
+        "brain.automation_gallery_routes:AutomationInstalls.installed_by": Repeat.READS,
+        "brain.automation_gallery_routes:AutomationInstalls.install": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # Approvals: reads and writes of this system's own suspension rows.
         "brain.approval_routes:SuspensionSource.open_suspensions": Repeat.READS,
         "brain.approval_routes:SuspensionSource.suspension": Repeat.READS,

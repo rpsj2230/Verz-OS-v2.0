@@ -26,11 +26,19 @@
  * refusal is the API's sentence, which is the same for an approval that is not the reader's and
  * one that does not exist.
  *
- * Task ids: M35.3.1.2, M35.3.1.1
+ * **A phone is the case this page is designed for, and the frame around it is held to the same
+ * standard** (M40.6.1.5, M40.1.2.3). The card's rules are the phone's in `styles/approvals.css`;
+ * the shell's navigation is a strip on a phone so the card is on the first screen, every control
+ * in the frame is a thumb tall, a field is never small enough for a phone to zoom the page when it
+ * takes focus, and a confirmed decision takes focus so its sentence is on the screen. Measured in
+ * Chrome on 2026-09-16 with the console's own sheets: at 360 pixels the card began 1003 pixels
+ * down before and 385 after. `tests/approvals-phone.test.tsx` holds the rules.
+ *
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3
  */
 
 import "../styles/approvals.css";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
@@ -56,6 +64,14 @@ export const A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT =
   "that never existed. So the page says approved or rejected only when the answer names this " +
   "approval and that verdict, and a refusal leaves the card and its buttons where they were " +
   "with the API's sentence beside them.";
+
+/** Why the page moves focus to the sentence confirming a decision. */
+export const A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS =
+  "On a phone the decided card is scrolled to, and after a confirmed decision it is gone: the " +
+  "queue is asked again and the card on its own loses its buttons, so the control somebody " +
+  "pressed no longer exists and the sentence saying what happened is drawn at the top of a " +
+  "page they are not looking at. Focus goes to that sentence, which scrolls it onto the " +
+  "screen and has a screen reader read it, and only after the API has confirmed the decision.";
 
 /** The page's heading. */
 export const APPROVALS_HEADING = "Approvals";
@@ -292,17 +308,42 @@ function QueueView() {
     setLast(verdict);
     setRound((one) => one + 1);
   }, []);
+  const sentence = useRef<HTMLParagraphElement | null>(null);
+  useConfirmationInView(sentence, round);
   return (
     <>
-      {last === null ? null : <p className="note">{said(last)}</p>}
+      {last === null ? null : (
+        <p className="note" ref={sentence} tabIndex={-1}>
+          {said(last)}
+        </p>
+      )}
       <QueueRows key={round} onDecided={decided} />
     </>
   );
 }
 
+/**
+ * Put focus on the sentence confirming a decision, once, when the API has confirmed one.
+ *
+ * See `A_CONFIRMATION_IS_DRAWN_WHERE_THE_THUMB_IS`. `round` changes only when a decision is
+ * confirmed, so the first render, a refusal and a queue that is merely read again move nothing.
+ */
+function useConfirmationInView(
+  sentence: RefObject<HTMLParagraphElement | null>,
+  round: number,
+): void {
+  useEffect(() => {
+    if (round > 0) {
+      sentence.current?.focus();
+    }
+  }, [sentence, round]);
+}
+
 function OneView({ suspensionId }: { readonly suspensionId: string }) {
   const answer = useResource<unknown>(approvalApiPath(suspensionId));
   const [decided, setDecided] = useState<Verdict | null>(null);
+  const sentence = useRef<HTMLParagraphElement | null>(null);
+  useConfirmationInView(sentence, decided === null ? 0 : 1);
   if (answer.failure) {
     return (
       <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
@@ -319,7 +360,11 @@ function OneView({ suspensionId }: { readonly suspensionId: string }) {
   }
   return (
     <>
-      {decided === null ? null : <p className="note">{said(decided)}</p>}
+      {decided === null ? null : (
+        <p className="note" ref={sentence} tabIndex={-1}>
+          {said(decided)}
+        </p>
+      )}
       <ApprovalCard
         card={read}
         linked={false}

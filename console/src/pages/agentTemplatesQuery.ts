@@ -29,7 +29,8 @@
  * This closes no leaf and says so positionally, because the word "not" on a line parsed for
  * ids is a claim: M39.6.1.3 is the work breakdown's only template gallery and it is a gallery
  * of common *automations* with a one-step install, which is a different thing from a catalogue
- * of agent roles and is deliberately left open by `brain.console.agent_automations`. What this
+ * of agent roles and is drawn on an agent's Automations tab by `components/AutomationGallery.tsx`
+ * over `brain.automation_gallery_routes`. What this
  * serves is the read `brain.agents.catalogue` and `brain.agents.template` already hold and no
  * screen showed.
  *

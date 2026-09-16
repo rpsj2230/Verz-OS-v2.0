@@ -118,18 +118,42 @@ code {
   letter-spacing: 0.01em;
 }
 
+/*
+ * Wraps, so on a 320 pixel phone Sign out takes a line of its own rather than being squeezed
+ * until its two words sit on two lines, which is what it did at 65 pixels tall.
+ */
 .shell__header-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-4);
 }
 
 /*
- * A phone's frame is the base, because approvals arrive on phones: the navigation is a
- * wrapping row above the page rather than a column beside it, and every link is a thumb tall.
- * The sidebar is the enhancement, in the `min-width` query further down. Until 2026-09-15 this
- * was the other way round, with the phone as a `max-width` patch over a desktop layout, which
- * made a mobile-first approvals page sit inside a frame whose phone case was the afterthought.
+ * Sign out is a thumb tall, as every navigation link is. Measured at 41 pixels on a 360 pixel
+ * screen on 2026-09-16, which is a control in the frame of every page that a thumb misses.
+ */
+.shell__header-actions .button {
+  min-height: 2.75rem;
+  white-space: nowrap;
+}
+
+/*
+ * A phone's frame is the base, because approvals arrive on phones: the navigation sits above
+ * the page rather than beside it, and every link is a thumb tall. The sidebar is the
+ * enhancement, in the `min-width` query further down. Until 2026-09-15 this was the other way
+ * round, with the phone as a `max-width` patch over a desktop layout, which made a mobile-first
+ * approvals page sit inside a frame whose phone case was the afterthought.
+ *
+ * **On a phone the navigation is one strip that scrolls sideways inside itself, and the page
+ * does not.** Until 2026-09-16 it was a wrapping row, and a wrapping row of twenty-nine links is
+ * a column of them: measured in Chrome with the console's own sheets, a person opening an
+ * approval from a chat message on a 360 pixel phone met 716 pixels of navigation, the page
+ * began 822 pixels down and the card 1003, so the first screen they saw held nothing but the
+ * menu. The strip keeps every link above the page, in the document's order and a thumb tall,
+ * and puts the card on the first screen. A menu button that opens the list was the other way
+ * to get there; it needs markup and state in `layout/Shell.tsx`, and a closed menu is a
+ * navigation that is hidden on a phone until somebody finds what opens it.
  */
 .shell__body {
   display: flex;
@@ -138,8 +162,15 @@ code {
 }
 
 .shell__nav {
+  display: flex;
+  gap: var(--space-4);
+  overflow-x: auto;
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);
+}
+
+.shell__nav-group {
+  flex: 0 0 auto;
 }
 
 .shell__nav ul {
@@ -147,17 +178,8 @@ code {
   margin: 0;
   padding: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-1);
-}
-
-/*
- * A group heading names what the entries under it are for. Small and quiet, because it labels
- * the links rather than competing with them, and spaced from the group above so the grouping
- * reads without a rule between groups.
- */
-.shell__nav-group + .shell__nav-group {
-  margin-top: var(--space-3);
 }
 
 .shell__nav-heading {
@@ -179,6 +201,7 @@ code {
   border-radius: var(--radius);
   color: var(--text);
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .shell__nav-link:hover {
@@ -243,8 +266,10 @@ code {
   }
 
   .shell__nav {
+    display: block;
     width: var(--shell-nav-width);
     flex: 0 0 auto;
+    overflow-x: visible;
     padding: var(--space-4) var(--space-3);
     border-bottom: none;
     border-right: 1px solid var(--border);
@@ -253,6 +278,21 @@ code {
   .shell__nav ul {
     flex-direction: column;
     flex-wrap: nowrap;
+  }
+
+  /*
+   * A group heading names what the entries under it are for. Small and quiet, because it
+   * labels the links rather than competing with them, and spaced from the group above so the
+   * grouping reads without a rule between groups. On a phone the groups sit side by side in
+   * the strip and the gap between them does this.
+   */
+  .shell__nav-group + .shell__nav-group {
+    margin-top: var(--space-3);
+  }
+
+  /* A sidebar has a width, so a long label wraps inside it rather than widening it. */
+  .shell__nav-link {
+    white-space: normal;
   }
 
   .shell__main {
@@ -465,6 +505,7 @@ code {
   padding-bottom: var(--space-2);
 }
 
+/* 16 pixels inside a table set at 13, for `.form-control`'s reason: a smaller field zooms a phone. */
 .grid__filter {
   width: 100%;
   padding: var(--space-1) var(--space-2);
@@ -473,6 +514,7 @@ code {
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  font-size: 1rem;
 }
 
 .grid__empty,
@@ -548,6 +590,13 @@ code {
   font-size: var(--text-sm);
 }
 
+/*
+ * A field is set at 16 pixels and not at the body's 15, and the size comes after `font` because
+ * the shorthand resets it. A phone's browser zooms the whole page in when a field under 16
+ * pixels takes focus, and leaves it zoomed: somebody choosing a reason to reject an approval is
+ * left looking at a magnified corner of the card they were deciding, scrolled sideways. One size
+ * at every width, for the reason the navigation keeps one link height.
+ */
 .form-control {
   width: 100%;
   padding: var(--space-2) var(--space-3);
@@ -556,6 +605,7 @@ code {
   background: var(--surface);
   color: var(--text);
   font: inherit;
+  font-size: 1rem;
 }
 
 .form-control:disabled {
@@ -613,8 +663,18 @@ code {
 
 /* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
 .ask__question,
-.ask__submit {
+.ask__submit,
+.ask__skip {
   min-height: 2.75rem;
+}
+
+/*
+ * The skip control is drawn and not hidden until focused, as the frame's skip link is. On a
+ * phone the citations push the answer below the fold, and a thumb needs the control as much
+ * as a keyboard does. See `pages/Ask.tsx`'s `THE_ANSWER_IS_ONE_KEYPRESS_FROM_THE_QUESTION`.
+ */
+.ask__skip {
+  margin-bottom: var(--space-3);
 }
 
 /*
@@ -903,9 +963,14 @@ code {
   border: none;
 }
 
+/*
+ * The label is what a thumb presses, because the radio inside it is a dozen pixels across, so
+ * the label is the one given a thumb's height. Measured at 20 pixels on 2026-09-16.
+ */
 .theme-control__option {
   display: inline-flex;
   align-items: center;
+  min-height: 2.75rem;
   gap: var(--space-1);
   font-size: var(--text-sm);
   color: var(--text-muted);

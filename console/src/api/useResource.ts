@@ -21,6 +21,16 @@
  * A cache here is that place. `brain.gate.resolve` caches entitlements behind a version
  * that changes when a grant changes; a browser has no such version, so it does not cache.
  *
+ * **Asking again is a version the caller moves, never a timer.** A page that has just written
+ * something passes a counter it increments after the write, and the same address is asked again
+ * without the page being rebuilt, so whatever the page was holding, a sentence saying the write
+ * worked among it, stays where it is. Optional, and nought for every page that never writes.
+ *
+ * **A null address asks nothing and stays pending.** For a request a page owns but should not make
+ * until somebody looks: the agent page's Automations tab asks for its gallery the first time the
+ * tab is shown, and never again for moving between tabs. A hook cannot be called conditionally,
+ * so the condition is the address.
+ *
  * **A request that outlives its component sets nothing.** The cleanup aborts the fetch and
  * marks the run dead, so an answer arriving after the page has gone finds nowhere to put
  * itself. Without it, navigating away during a slow request produces a state update on an
@@ -54,10 +64,13 @@ export interface Resource<T> {
  */
 const PENDING: Resource<never> = Object.freeze({ data: null, failure: null, busy: true });
 
-export function useResource<T>(path: string): Resource<T> {
+export function useResource<T>(path: string | null, version = 0): Resource<T> {
   const [answer, setAnswer] = useState<Resource<T>>(PENDING);
 
   useEffect(() => {
+    if (path === null) {
+      return;
+    }
     let live = true;
     const controller = new AbortController();
     setAnswer(PENDING);
@@ -78,7 +91,7 @@ export function useResource<T>(path: string): Resource<T> {
       live = false;
       controller.abort();
     };
-  }, [path]);
+  }, [path, version]);
 
   return answer;
 }

@@ -26,29 +26,74 @@
  * channels that same answer carries. Each block draws nothing when the answer carries nothing
  * for it, because a heading over an empty pane is a count of hidden things in words.
  *
- * **A tab's panel still has nothing to draw, and it draws nothing.** A panel would be that
- * tab's own read and no route serves one, which is why only Settings is ever in the strip. The
- * panel is still there, because moving between tabs is the behaviour M39.1.2.3 describes.
+ * **One tab's panel draws something, and the rest draw nothing.** The Automations tab draws the
+ * automation gallery (M39.6.1.3), which `brain.automation_gallery_routes` serves behind that tab's
+ * own read; every other panel would be its tab's own read and no route serves one, which is why
+ * only Automations and Settings are ever in the strip. The gallery is asked for here rather than
+ * inside the panel, because `components/AgentWorkspace.tsx` rebuilds a panel on every tab change
+ * and says the day a panel fetches is the day holding an arrow key becomes a stream of requests.
+ * It is asked the first time the panel is shown and not before, so a person who never opens the
+ * tab costs nothing, and never again for moving between tabs. After an install the same address
+ * is asked again under a new version, so nothing on the page is rebuilt.
  *
  * Loaded on demand, like the records screen, so that somebody who never opens an agent does
  * not download the workspace or its stylesheet. `tests/agent-page.test.tsx` holds that against
  * the static import graph from `main.tsx`.
  *
- * Task ids: M39.1.2.1, M39.1.2.3, M39.1.2.5, M39.1.1.5
+ * Task ids: M39.1.2.1, M39.1.2.3, M39.1.2.5, M39.1.1.5, M39.6.1.3
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { AgentCapabilities, AgentFiguresView } from "../components/AgentAssembly";
 import { AgentWorkspace } from "../components/AgentWorkspace";
+import { AutomationGallery } from "../components/AutomationGallery";
 import { CompositionDiff } from "../components/CompositionDiff";
 import { Notice } from "../ui/Notice";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "./agentQuery";
+import { AUTOMATIONS_TAB, automationGalleryApiPath } from "./automationGalleryQuery";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 /** The page's own heading. The agent's name is the workspace's heading, beneath it. */
 export const AGENT_HEADING = "Agent";
+
+/**
+ * The automation gallery for one agent, asked for the first time its panel is shown and again
+ * after each install.
+ *
+ * A render prop rather than a component the panel mounts, so the request belongs to the page and
+ * not to the panel; see the note at the top of the file.
+ */
+function WithAutomationGallery({
+  agentId,
+  children,
+}: {
+  readonly agentId: string;
+  readonly children: (panel: ReactNode) => ReactNode;
+}) {
+  const [shown, setShown] = useState(false);
+  const [installs, setInstalls] = useState(0);
+  const gallery = useResource<unknown>(shown ? automationGalleryApiPath(agentId) : null, installs);
+  const onShown = useCallback(() => {
+    setShown(true);
+  }, []);
+  const onInstalled = useCallback(() => {
+    setInstalls((count) => count + 1);
+  }, []);
+  return (
+    <>
+      {children(
+        <AutomationGallery
+          agentId={agentId}
+          gallery={gallery}
+          onShown={onShown}
+          onInstalled={onInstalled}
+        />,
+      )}
+    </>
+  );
+}
 
 /**
  * One agent's answer. A separate component so that it can be keyed on the agent, which starts
@@ -82,13 +127,13 @@ function AgentAnswer({
   if (workspace === null) {
     return null;
   }
-  return (
+  const drawn = (automations: ReactNode) => (
     <AgentWorkspace
       key={tab ?? ""}
       agent={workspace.agent}
       tabs={workspace.tabs}
       {...(tab === undefined ? {} : { initialTab: tab })}
-      renderTab={() => null}
+      renderTab={(key) => (key === AUTOMATIONS_TAB ? automations : null)}
       dashboard={
         <AgentFiguresView
           divergent={workspace.divergent}
@@ -106,6 +151,11 @@ function AgentAnswer({
         </>
       }
     />
+  );
+  return workspace.tabs.some((one) => one.tab === AUTOMATIONS_TAB) ? (
+    <WithAutomationGallery agentId={agentId}>{drawn}</WithAutomationGallery>
+  ) : (
+    drawn(null)
   );
 }
 

@@ -54,6 +54,7 @@ from brain.artifact_routes import router as artifact_router
 from brain.audit.ledger import TRACE_ID
 from brain.audit.record import LedgerWriter
 from brain.audit_routes import router as audit_router
+from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
 from brain.cache import (
@@ -795,6 +796,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # authenticates an automation's credential rather than a person's token, and runs as the
     # automation's owner. It does not take `asking`, and `asking` does not take its credential.
     app.include_router(automation_router)
+    # The automation gallery on an agent's Automations tab, and its one confirmed install. Its own
+    # router because the write is: an `admin:` authority asked before the agent is read, a
+    # confirmation recomputed on the server, and a row whose trigger writes the ledger entry.
+    app.include_router(automation_gallery_router)
     # Binding a Keycloak subject to a principal. A seventh router because it has two callers:
     # an administrator over everything under the prefix, through `asking`, and the setup
     # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified

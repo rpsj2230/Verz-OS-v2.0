@@ -102,6 +102,7 @@ MIGRATION_OPERATION = VERSIONS / "0051_operation_ledger.py"
 MIGRATION_REVIEW_DECISION = VERSIONS / "0052_review_decision.py"
 MIGRATION_CONSOLE_RECORDS = VERSIONS / "0053_webhook_changes_and_data_exports.py"
 MIGRATION_CREDENTIAL_WRITE = VERSIONS / "0054_credential_and_retention_audit.py"
+MIGRATION_AGENT_AUTOMATION = VERSIONS / "0055_agent_automation.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -258,6 +259,8 @@ REVIEW_DECISION_TABLES: tuple[str, ...] = ("gate.review_decision",)
 CONSOLE_RECORD_TABLES: tuple[str, ...] = ("ops.webhook_change", "ops.data_export")
 #: And the one 0054 adds: every credential written into the vault, by slot and writer, never what.
 CREDENTIAL_WRITE_TABLES: tuple[str, ...] = ("ops.credential_write",)
+#: And the one 0055 adds: an automation installed onto an agent, which is its registry entry too.
+AGENT_AUTOMATION_TABLES: tuple[str, ...] = ("agent.automation",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -290,6 +293,7 @@ ALL_TABLES = (
     + REVIEW_DECISION_TABLES
     + CONSOLE_RECORD_TABLES
     + CREDENTIAL_WRITE_TABLES
+    + AGENT_AUTOMATION_TABLES
 )
 
 
@@ -1007,6 +1011,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert console_records.TABLES == CONSOLE_RECORD_TABLES
     credential_write = migration_module(MIGRATION_CREDENTIAL_WRITE)
     assert credential_write.TABLES == CREDENTIAL_WRITE_TABLES
+    agent_automation = migration_module(MIGRATION_AGENT_AUTOMATION)
+    assert agent_automation.TABLES == AGENT_AUTOMATION_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1061,6 +1067,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(review_decision.TABLES)
         + tuple(console_records.TABLES)
         + tuple(credential_write.TABLES)
+        + tuple(agent_automation.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1096,6 +1103,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(review_decision.TABLES),
         set(console_records.TABLES),
         set(credential_write.TABLES),
+        set(agent_automation.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

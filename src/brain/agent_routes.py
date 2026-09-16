@@ -41,9 +41,12 @@ everybody and look like caution. Nothing in this module intersects two entitleme
 **Only what this route holds is populated.** `tab_strip` shows a tab that is permitted *and*
 has something in it, and says `populated` is handed in because what is in each tab is seven
 questions of seven modules. This route answers one of them: it holds the agent's record and
-its install, which is the Settings tab's content. The other six have no route serving their
-read, so they are not populated, and they are absent from the strip rather than drawn over an
-empty panel. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
+its install, which is the Settings tab's content. Since 2026-09-16 a second tab has something in
+it whatever the agent: the Automations tab draws the product's automation gallery, served by
+`brain.automation_gallery_routes` behind the same tab's read, and the gallery is never empty
+because `brain.console.automation_gallery.BUILT_IN` is not. The other five have no route serving
+their read, so they are not populated, and they are absent from the strip rather than drawn over
+an empty panel. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
 
 **The composition travels exactly when the Settings tab does.** `composition_rows` carries
 the persona, which is prompt material, and says whether somebody may see it is the strip's
@@ -179,6 +182,7 @@ from brain.channels.teams import TeamsAdapter
 from brain.channels.telegram import TelegramAdapter
 from brain.channels.whatsapp import WhatsAppAdapter
 from brain.console.agent_tabs import SKILL_SCREEN, rendering_profile
+from brain.console.automation_gallery import GALLERY_TAB
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import (
@@ -243,8 +247,9 @@ A_ROSTER_IS_FILTERED_BEFORE_IT_IS_BOUNDED: Final = (
 ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED: Final = (
     "tab_strip shows a tab that is permitted and populated, and a heading over an empty panel "
     "is a count of hidden things spelled out. This route holds the agent's record and its "
-    "install, which is what the Settings tab reads, and holds nothing any other tab reads. "
-    "Marking the other six populated would draw six headings over nothing; marking Settings "
+    "install, which is what the Settings tab reads, and the Automations tab always holds the "
+    "product's automation gallery, which its own route serves behind the same tab's read. "
+    "Marking the other five populated would draw five headings over nothing; marking Settings "
     "empty would withhold a tab whose content is already in the response."
 )
 
@@ -318,8 +323,8 @@ THE_VIEWER_IS_THEIR_PRIMARY_DEPARTMENT_UNTIL_MEMBERSHIP_IS_READ: Final = (
 #: with more agents than this is told so by `truncated`.
 MAX_ROSTER_ENTRIES: Final = 500
 
-#: The one tab whose content this route holds. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
-POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS})
+#: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
+POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS, GALLERY_TAB})
 
 #: The most templates one gallery answer carries. A resource bound, as the roster's is.
 MAX_TEMPLATE_ENTRIES: Final = 500

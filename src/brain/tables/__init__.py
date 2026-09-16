@@ -48,6 +48,7 @@ from __future__ import annotations
 from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
+from brain.tables.agent_automation import AgentAutomationRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.browsing import BrowserEnvelopeRow
@@ -229,11 +230,15 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0054_credential_and_retention_audit. Points at nothing: the writer is a value, and the setup
     # wizard writes a key before any principal exists to point at.
     "ops.credential_write",
+    # 0055_agent_automation. Points at nothing: the agent and the principal are values, so the
+    # record of what ran in a person's name outlives both.
+    "agent.automation",
 )
 
 __all__ = [
     "TABLES_IN_DEPENDENCY_ORDER",
     "AdaptiveMemoryRow",
+    "AgentAutomationRow",
     "AgentRow",
     "AuditEntryRow",
     "AutomationOwnerRow",

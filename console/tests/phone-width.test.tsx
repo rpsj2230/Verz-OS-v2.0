@@ -155,6 +155,22 @@ const WORKSPACE = {
   ],
 };
 
+/** The automation gallery on an agent's Automations tab, whose outcome and schedule cannot break. */
+const AUTOMATION_GALLERY = {
+  items: [
+    {
+      template_id: "weekly_work_summary",
+      version: 1,
+      name: `I ${UNBROKEN}`,
+      summary: UNBROKEN,
+      schedule: UNBROKEN,
+      installed_as: null,
+      installable: true,
+    },
+  ],
+  installing: UNBROKEN,
+};
+
 /** One page of people, whose subject key and capability are both unbreakable tokens. */
 const PEOPLE = {
   items: [{ subject: `principal:${UNBROKEN}`, capabilities: [UNBROKEN] }],
@@ -660,11 +676,18 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE },
   },
+  // The Automations tab, so the gallery it draws is held to a phone as well as the workspace.
   "/agents/:agentId/:tab": {
-    address: "/agents/quote-helper/settings",
+    address: "/agents/quote-helper/automations",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE },
+    answers: {
+      "/api/v1/agents/quote-helper/workspace": {
+        ...WORKSPACE,
+        tabs: ["automations", "settings"].map((tab) => ({ tab, label: tab, purpose: UNBROKEN })),
+      },
+      "/api/v1/agents/quote-helper/automation-templates": AUTOMATION_GALLERY,
+    },
   },
   "/approvals": {
     address: "/approvals",
