@@ -315,7 +315,19 @@ def test_the_people_a_filter_offers_are_the_actors_on_the_rows_shown_and_nobody_
     assert everything["actors"] == ["u_admin", "u_narrow", "u_elsewhere"]
     assert mine["actions"] == [one.value for one in AuditAction]
     assert mine["subject_kinds"] == sorted(
-        {"principal", "grant", "agent", "leash", "entity", "artifact", "connector", "session"}
+        {
+            "principal",
+            "grant",
+            "agent",
+            "leash",
+            "entity",
+            "artifact",
+            "connector",
+            "session",
+            "credential",
+            "retention",
+            "legal_hold",
+        }
     )
 
 

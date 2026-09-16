@@ -206,7 +206,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     edit in two files rather than an omission in one, in either direction: a member added
     without a test fails, and a member removed fails too. It has done its job four times
     now, on `compose_change`, on `approval`, on `record_read`, on `sign_in`, on
-    `session_end` and on `certification`.
+    `session_end`, on `certification`, on `credential`, on `retention` and on `legal_hold`.
 
     `record_read` is the one member that is not a change to what somebody may do, and it is
     here because Needs Rupash item 45 chose to answer "which agents have read my HR record"
@@ -228,6 +228,15 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     is why it is not GRANT, and a removal is already a REVOKE from the grant trigger, which is
     why the decision is not recorded as a second one.
 
+    `credential` records a credential written into a vault slot, written by `0054`'s trigger on
+    `ops.credential_write`. A key confers no capability on anybody, which is why it is not GRANT,
+    and its entry carries no details, because the value is the only other thing a write has.
+
+    `retention` records the retention sweep released to delete or a release withdrawn, and
+    `legal_hold` a hold placed or lifted, written by `0054`'s triggers on `ops.retention_release`
+    and `obs.legal_hold`. Two members, because a release lets data go and a hold keeps it, and
+    neither is GRANT or REVOKE, because neither changes what anybody may do.
+
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
     they differ by orders of magnitude in frequency and they answer different questions.
@@ -246,6 +255,9 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "sign-in bound or retired": AuditAction.SIGN_IN,
         "session ended before it lapsed": AuditAction.SESSION_END,
         "grant kept or removed in a review": AuditAction.CERTIFICATION,
+        "credential written into the vault": AuditAction.CREDENTIAL,
+        "retention sweep released or withdrawn": AuditAction.RETENTION,
+        "legal hold placed or lifted": AuditAction.LEGAL_HOLD,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -262,6 +274,9 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "sign_in",
         "session_end",
         "certification",
+        "credential",
+        "retention",
+        "legal_hold",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

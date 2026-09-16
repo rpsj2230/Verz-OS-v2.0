@@ -23,11 +23,36 @@ so a new administrative capability added next month is a red test asking whether
 administrator should hold it, rather than a screen nobody on the install can open. See
 `AN_ADMINISTRATOR_GOVERNS_THE_SYSTEM_AND_READS_NO_DATA`.
 
-**No `read:` or `write:` grant is written, deliberately.** An administrator decides how the
-system is run, and what a person may read of the company's data comes from the grants its own
-departments and the directory sync write. A first administrator created holding `read:` over
-everything would be the widest data reach in the system created by whoever held a setup code
-for an hour, which is exactly the account the invariant exists to prevent.
+**No grant over the company's data is written, deliberately, and since 2026-09-16 the reads of
+how the system is run are.** An administrator decides how the system is run, and what a person
+may read of the company's data comes from the grants its own departments and the directory sync
+write. A first administrator created holding a data read over everything would be the widest
+data reach in the system created by whoever held a setup code for an hour, which is exactly the
+account the invariant exists to prevent. Until 2026-09-16 this paragraph said "no `read:` grant"
+and meant that, and the result was a console that opened one screen: every screen's own read is
+a `read:` capability, `brain.console.reads.permitted` asks for it and for a plane besides, and
+the administrator held neither, so Sessions, Activity and thirty more refused the one person the
+install had. `OVERSIGHT` is the line drawn instead, and it is drawn where the console already
+draws it: every screen's read at the existence and configuration planes, the two plane
+capabilities up to configuration and never `read:console.content`, and the audit entries about
+governing the system. A screen at the content plane, Learning and Memory today, is what a
+person or an agent was told, so it is not opened.
+
+**One `approve:` capability is granted, `approve:grant`, and `approve:action` is not.** Letting a
+reach into the system is how an install gets its second person: the People screen's grant write,
+the Access review and elevation are all behind it, so a first administrator without it is an
+install on which nobody can ever grant anybody anything from the console. Approving a suspended
+action is different in kind: it lets an agent carry out an act over the company's data, whose
+content the first administrator cannot read, and it belongs to whoever a department makes its
+approver. See `GOVERNANCE` and `THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN`.
+
+`tests/unit/test_administration_reconciliation.py` derives the set from `brain.console.screens`
+and opens every screen for a fresh first administrator, because this package must not import the
+console. See `AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA`.
+
+**An administrator appointed before a capability existed is granted it at the next start.**
+`brain.identity.administration_reconciliation` is that write, and argues why it runs at startup
+rather than in a migration.
 
 **Single use is a count read under a lock, never a flag.** The transaction takes a
 transaction-scoped advisory lock, counts administrators through `gate.resolve_entitlements`,
@@ -85,7 +110,9 @@ wizard finished keeps its own record and gains the grants, and a disabled, delet
 is refused rather than resurrected. An existing live grant of one of these capabilities to that
 principal is refused by the table's unique index and the whole appointment rolls back, which is
 the right direction: `EntitlementSet.scope_for` intersects two grants of one capability, so
-writing past it would leave the first administrator narrower than they appear.
+writing past it would leave the first administrator narrower than they appear. A read in
+`OVERSIGHT` the principal already holds is the one exception, and is kept at its own scope; see
+`AN_OVERSIGHT_READ_ALREADY_HELD_IS_KEPT`.
 
 Task ids: M42.5.6, M41.2.4
 """
@@ -134,6 +161,43 @@ AN_ADMINISTRATOR_GOVERNS_THE_SYSTEM_AND_READS_NO_DATA: Final = (
     "Reading the company's data is granted by its departments and its directory, and a first "
     "administrator created holding read over everything would be the widest data reach in the "
     "system, made by whoever held a setup code for an hour."
+)
+
+#: Why the first administrator reads how the system is run, and where that stops.
+AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA: Final = (
+    "Every console screen asks for its own read capability and for a plane, and a first "
+    "administrator holding neither opened one screen of thirty-six. So the first administrator "
+    "holds every screen's read at the existence and configuration planes and both of those "
+    "planes, which says that a thing is there and how it is set up and never what is inside "
+    "it. The content plane is withheld, so is every screen that needs it, and so is every "
+    "approve verb, which decides somebody else's act rather than reading the system. The audit "
+    "kinds that name a business record or an artefact are withheld too, for the reason "
+    "brain.identity.staff_sync gives a department head: the ledger must not be the way round a "
+    "scope over the data."
+)
+
+#: Why the first administrator holds the authority to grant, and not to approve an act.
+THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN: Final = (
+    "approve:grant is the People screen's grant write, the Access review and elevation. Without "
+    "it over everything nobody on a fresh install can grant anybody anything, and the only way "
+    "to hand out a first reach is a statement at a database prompt, which is the thing the "
+    "console exists to make unnecessary. A grant written with it is still bounded by what the "
+    "writer holds and recorded by the grant trigger, and a grant somebody writes to themselves is "
+    "a self-grant the console reports loudly. approve:action is not granted: it lets an agent "
+    "act over data the first administrator cannot read, and approvals belong to whoever a "
+    "department makes its approver."
+)
+
+#: Why a read the principal already holds does not refuse the appointment, when an administration
+#: capability does.
+AN_OVERSIGHT_READ_ALREADY_HELD_IS_KEPT: Final = (
+    "A principal the directory sync made a department head already holds read:audit and three "
+    "audit kinds at their department's scope. Refusing the appointment over that, as a held "
+    "administration capability is refused, would make a head who finished the wizard after the "
+    "first sync unappointable. So the read they hold is kept and theirs is not written: two "
+    "grants of one capability intersect, so writing it would change nothing, and a read held "
+    "narrower than everything is the conservative direction, where an administration capability "
+    "held narrower is an administrator who is not one."
 )
 
 #: Why the count is taken under a lock.
@@ -197,6 +261,78 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:storage",
     "admin:webhook_subscriber",
 )
+
+#: What a first administrator reads of how the system is run, granted over everything. Three
+#: parts: every console screen's own read at the existence and configuration planes, the two plane
+#: capabilities up to configuration, and the audit kinds not withheld in `AUDIT_KINDS_WITHHELD`.
+#: Written out rather than derived, because this package must not import the console, and held
+#: equal to `brain.console.screens` and `brain.audit.view` by a test. See
+#: `AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA`.
+OVERSIGHT: Final[tuple[str, ...]] = (
+    "read:agent",
+    "read:artifact",
+    "read:audit",
+    "read:audit.agent",
+    "read:audit.connector",
+    "read:audit.credential",
+    "read:audit.grant",
+    "read:audit.leash",
+    "read:audit.legal_hold",
+    "read:audit.principal",
+    "read:audit.retention",
+    "read:audit.session",
+    "read:backup",
+    "read:budget",
+    "read:capability",
+    "read:connection_budget",
+    "read:connector",
+    "read:console.configuration",
+    "read:console.existence",
+    "read:denial_pattern",
+    "read:document",
+    "read:evaluation",
+    "read:export",
+    "read:grant",
+    "read:incident",
+    "read:knowledge_coverage",
+    "read:model_route",
+    "read:overview",
+    "read:question",
+    "read:queue",
+    "read:rate_limit",
+    "read:release",
+    "read:retention_policy",
+    "read:role",
+    "read:run",
+    "read:scope",
+    "read:session",
+    "read:skill",
+    "read:staff_source",
+    "read:usage",
+)
+
+#: The audit subject kinds a first administrator is not granted, and why. Every other kind in
+#: `brain.audit.ledger.SUBJECT_KINDS` is in `OVERSIGHT`, and a test fails when a kind is in
+#: neither, so a kind added to the ledger is decided about here rather than inherited.
+AUDIT_KINDS_WITHHELD: Final[dict[str, str]] = {
+    "entity": (
+        "A merge entry names two business record ids, and the first administrator holds no scope "
+        "over any business record, so this kind would be the id of every record in the company "
+        "reached round the scope that decides who may see one."
+    ),
+    "artifact": (
+        "A publish entry names an artefact id, and who may see an artefact is decided by "
+        "brain.console.agent_output over what it was built from, which an audit grant never asks."
+    ),
+}
+
+#: The decisions over other people's reach a first administrator holds, over everything. One, on
+#: purpose. See `THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN`.
+GOVERNANCE: Final[tuple[str, ...]] = ("approve:grant",)
+
+#: Everything a first administrator is granted at appointment, and what reconciliation grants an
+#: administrator appointed before part of it existed.
+GRANTED_AT_APPOINTMENT: Final[tuple[str, ...]] = (*ADMINISTRATION, *GOVERNANCE, *OVERSIGHT)
 
 #: The advisory lock every appointment takes. Its own number, not the ledger's.
 FIRST_RUN_LOCK: Final = 8274419101
@@ -339,8 +475,29 @@ class FirstAdministrators:
                             "granted_by": GRANTED_BY,
                             "reason": GRANT_REASON,
                         }
-                        for capability in ADMINISTRATION
+                        for capability in (*ADMINISTRATION, *GOVERNANCE)
                     ]
+                )
+            )
+            # A read the directory already granted this principal is kept at its own scope rather
+            # than refusing the appointment. See `AN_OVERSIGHT_READ_ALREADY_HELD_IS_KEPT`.
+            await session.execute(
+                insert(CapabilityGrantRow)
+                .values(
+                    [
+                        {
+                            "principal_id": principal_id,
+                            "capability": capability,
+                            "scope": everything,
+                            "granted_by": GRANTED_BY,
+                            "reason": GRANT_REASON,
+                        }
+                        for capability in OVERSIGHT
+                    ]
+                )
+                .on_conflict_do_nothing(
+                    index_elements=["principal_id", "capability"],
+                    index_where=text("deleted_at IS NULL"),
                 )
             )
         log.info("first_administrator.appointed", principal=principal_id, settings=kept)

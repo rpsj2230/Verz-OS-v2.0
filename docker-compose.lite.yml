@@ -96,6 +96,56 @@ services:
       # so it describes this container even after the environment file is edited.
       # See brain.console.version_view.A_RELEASE_TAG_IS_A_NAME_GIVEN_AFTER_THE_BUILD.
       APP_IMAGE: ${APP_IMAGE:?set APP_IMAGE to the image and release tag this install runs}
+      # **Every setting the application reads is named here, or it never reaches the container.**
+      # A compose file hands a service the variables its `environment` names and no others, so
+      # a line in the install's environment file that is not named below is a line nothing
+      # reads. Until 2026-09-16 this block stopped at APP_IMAGE: the installer minted the setup
+      # code into the environment file and printed it, and the container had no code to accept,
+      # and the identity provider's issuer set in the same file never arrived either.
+      # `brain.deployment.app_environment` derives the list from `brain.settings.Settings` and
+      # `brain.install.INSTALLATION`, and `tests/unit/test_app_environment.py` fails when a
+      # setting either declares is not passed here under its own name.
+      #
+      # `:-` and never `:?`. An unset value arrives blank and a blank is read as unset
+      # (`brain.settings.A_BLANK_VARIABLE_IS_AN_UNSET_ONE`), so each takes its declared default,
+      # and an install with no issuer still starts, unready for sign-in, which is how the setup
+      # wizard is reached at all. The vault's pair is not here: see `docker-compose.vault.yml`.
+      BRAIN_SETUP_SECRET: ${BRAIN_SETUP_SECRET:-}
+      BRAIN_SETUP_ISSUED_AT: ${BRAIN_SETUP_ISSUED_AT:-}
+      BRAIN_PROFILE: ${BRAIN_PROFILE:-}
+      BRAIN_RUN_MIGRATIONS: ${BRAIN_RUN_MIGRATIONS:-}
+      BRAIN_REQUEST_TIMEOUT_SECONDS: ${BRAIN_REQUEST_TIMEOUT_SECONDS:-}
+      BRAIN_CORS_ORIGINS: ${BRAIN_CORS_ORIGINS:-}
+      BRAIN_TOOL_SOURCE: ${BRAIN_TOOL_SOURCE:-}
+      BRAIN_READ_REPLICA_URL: ${BRAIN_READ_REPLICA_URL:-}
+      BRAIN_RELEASE_CHECK: ${BRAIN_RELEASE_CHECK:-}
+      BRAIN_RELEASE_FEED_URL: ${BRAIN_RELEASE_FEED_URL:-}
+      BRAIN_LANGFUSE_HOST: ${BRAIN_LANGFUSE_HOST:-}
+      BRAIN_LANGFUSE_PUBLIC_KEY: ${BRAIN_LANGFUSE_PUBLIC_KEY:-}
+      BRAIN_LANGFUSE_SECRET_KEY: ${BRAIN_LANGFUSE_SECRET_KEY:-}
+      BRAIN_INFERENCE_URL: ${BRAIN_INFERENCE_URL:-}
+      # This installation's own values, every one `brain.install.INSTALLATION` declares.
+      INSTALL_COMPANY_NAME: ${INSTALL_COMPANY_NAME:-}
+      INSTALL_PRODUCT_NAME: ${INSTALL_PRODUCT_NAME:-}
+      INSTALL_LOGO_URL: ${INSTALL_LOGO_URL:-}
+      INSTALL_ACCENT_COLOUR: ${INSTALL_ACCENT_COLOUR:-}
+      INSTALL_SENDER_ADDRESS: ${INSTALL_SENDER_ADDRESS:-}
+      INSTALL_OIDC_ISSUER: ${INSTALL_OIDC_ISSUER:-}
+      INSTALL_OIDC_REALM: ${INSTALL_OIDC_REALM:-}
+      INSTALL_OIDC_CLIENT_ID: ${INSTALL_OIDC_CLIENT_ID:-}
+      INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:-}
+      INSTALL_BROKERED_DIRECTORY: ${INSTALL_BROKERED_DIRECTORY:-}
+      INSTALL_STAFF_SOURCE: ${INSTALL_STAFF_SOURCE:-}
+      INSTALL_STAFF_SOURCE_LOCATION: ${INSTALL_STAFF_SOURCE_LOCATION:-}
+      INSTALL_MODEL_PROFILE: ${INSTALL_MODEL_PROFILE:-}
+      INSTALL_MODEL_ENDPOINT: ${INSTALL_MODEL_ENDPOINT:-}
+      INSTALL_EMBEDDING_DIMENSIONS: ${INSTALL_EMBEDDING_DIMENSIONS:-}
+      INSTALL_OBJECT_STORE_URL: ${INSTALL_OBJECT_STORE_URL:-}
+      INSTALL_OBJECT_STORE_PREFIX: ${INSTALL_OBJECT_STORE_PREFIX:-}
+      INSTALL_VECTOR_STORE: ${INSTALL_VECTOR_STORE:-}
+      INSTALL_LOCALES: ${INSTALL_LOCALES:-}
+      INSTALL_CURRENCY: ${INSTALL_CURRENCY:-}
+      INSTALL_TIME_ZONE: ${INSTALL_TIME_ZONE:-}
     deploy:
       resources:
         limits:

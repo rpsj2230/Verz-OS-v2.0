@@ -34,10 +34,11 @@ never used to decide what the list contains: the list is narrowed by reach, and 
 
 **No credential in, none out, and none in a log.** There is no body on this route and no write
 verb on this router. `brain.console.connector_trust.CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY`
-is the sentence served in place of a control: nothing in this repository writes a value into the
-vault at runtime, so a form collecting a credential would have nowhere to send it, and a control
-drawn and then refused reads as a permission problem with the person using it. The one thing
-this route logs is the surface name on a refusal, which is `_not_answerable`'s own rule.
+is the sentence served in place of a control: the vault's writer takes a provider key and refuses
+every connector path, so a form collecting a connector's credential would have nowhere to send
+it, and a control drawn and then refused reads as a permission problem with the person using it.
+The one thing this route logs is the surface name on a refusal, which is `_not_answerable`'s own
+rule.
 
 **A process with no registry answers a sentence and never an empty list**, which is
 `brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE` applied where it matters most: an

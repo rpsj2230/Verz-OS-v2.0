@@ -107,6 +107,13 @@ exception to deriving the includes from `files_for`, and it is derived too: from
 whose environment file holds the tunnel token, so a release without them would be an update
 that stops on exactly the installs that chose the tunnel. See `_tunnel_rules`.
 
+**The vault overlay is carried and composed the same way, for the same reason.**
+`docker-compose.vault.yml` hands the application the vault's address and token and joins it to
+the vault's network, and no profile composes it. The scripts compose it onto an install whose
+environment file names a vault address, so an update does not recreate the application without
+the vault and quietly stop loading every provider key the console put there. See
+`brain.deployment.app_environment.AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT`.
+
 Task ids: M42.3.6, M42.3.8, M30.2.7, M30.1.3
 """
 
@@ -122,6 +129,11 @@ from pathlib import Path, PurePosixPath
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.deployment.app_environment import (
+    AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT,
+    VAULT_CHOICE,
+    VAULT_OVERLAY,
+)
 from brain.deployment.compatibility import VERSIONS, Verdict, changes_in
 from brain.deployment.installer import (
     IMAGE_VARIABLE,
@@ -340,6 +352,19 @@ def _tunnel_rules(profiles: Sequence[str] = PROFILES) -> tuple[Rule, ...]:
     )
 
 
+def _vault_rules() -> tuple[Rule, ...]:
+    """The vault overlay, which no profile composes and the update and rollback scripts may."""
+    return (
+        Rule(
+            VAULT_OVERLAY,
+            "the overlay the update and rollback scripts compose onto an install whose "
+            "environment file names a vault address, so a release that did not carry it is an "
+            "update that stops on the one install that chose a vault. "
+            + AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT,
+        ),
+    )
+
+
 #: What the archive carries, and nothing else is in it.
 #:
 #: Every entry is a path rather than a glob, and a directory carries everything under it. See
@@ -350,6 +375,7 @@ def _tunnel_rules(profiles: Sequence[str] = PROFILES) -> tuple[Rule, ...]:
 INCLUDED: Final[tuple[Rule, ...]] = (
     *_compose_rules(),
     *_tunnel_rules(),
+    *_vault_rules(),
     Rule(
         ".env.example",
         "the plan copies it to /opt/brain/.env and fills the values in there, so the template "
@@ -1533,6 +1559,22 @@ def _tunnel_choice(variable: str) -> str:
     )
 
 
+def _vault_choice(variable: str = VAULT_CHOICE) -> str:
+    """The one line that composes the vault overlay in, when the environment file names a vault.
+
+    See `AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT`. A value is required after the
+    `=`, for the reason `_tunnel_choice` gives: the template carries the line empty, and an
+    empty line is not a choice. After the tunnel's line, so the overlays come after the
+    profile's own files in both scripts in one order.
+    """
+    return (
+        f'if grep -q "^{variable}=." "{INSTALL_HOME}/{INSTALL_ENV_FILE}" 2>/dev/null; then '
+        f'BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES -f {INSTALL_HOME}/{VAULT_OVERLAY}"; '
+        'say "The environment file names a secrets vault, so the vault overlay is composed in."; '
+        "fi"
+    )
+
+
 def _helpers() -> tuple[str, ...]:
     """The shell functions both scripts use, including the two that read what is running."""
     return (
@@ -1614,6 +1656,7 @@ def render_update(
         "",
         *_profile_case(profiles),
         _tunnel_choice(tunnel_token),
+        _vault_choice(),
         "",
         f'say "Updating the $BRAIN_PROFILE profile in $BRAIN_HOME to ${variable}."',
     ]
@@ -1652,6 +1695,7 @@ def render_rollback(
         "",
         *_profile_case(profiles),
         _tunnel_choice(tunnel_token),
+        _vault_choice(),
         "",
         'say "Going back one release on the $BRAIN_PROFILE profile in $BRAIN_HOME."',
     ]

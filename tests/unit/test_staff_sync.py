@@ -442,7 +442,7 @@ def test_a_dry_run_has_nowhere_to_write_and_nothing_to_write_with() -> None:
     session to it, and the pure half of the split is gone.
 
     `types` is on the list for `MappingProxyType`, which is how `AUDIT_KIND_DECISIONS` is
-    published so nobody can edit the eight decisions in process. The list is an allowlist and
+    published so nobody can edit the eleven decisions in process. The list is an allowlist and
     not "the standard library", so a module arriving on it is a line in this test rather than
     a name that quietly passes, and that is the property worth keeping: `sqlalchemy` and
     `psycopg` are absent because everything is absent until somebody writes it down."""
@@ -690,9 +690,9 @@ def test_a_heads_grants_carry_the_people_and_no_department_clause() -> None:
         assert [clause.value for clause in one.scope.clauses] == [("u_priya", "u_wei")]
 
 
-def test_every_one_of_the_eight_audit_subject_kinds_has_been_decided_about() -> None:
-    """The eight are `brain.audit.ledger.SUBJECT_KINDS`, and the decision list is compared
-    with that rather than with a copy of itself, so a ninth kind added to the ledger leaves
+def test_every_one_of_the_eleven_audit_subject_kinds_has_been_decided_about() -> None:
+    """The eleven are `brain.audit.ledger.SUBJECT_KINDS`, and the decision list is compared
+    with that rather than with a copy of itself, so a twelfth kind added to the ledger leaves
     this red until somebody says whether a head reads it.
 
     Delete this and a new subject kind arrives with no decision, and which side it lands on is
@@ -701,7 +701,7 @@ def test_every_one_of_the_eight_audit_subject_kinds_has_been_decided_about() -> 
     assert all(one.because.strip() for one in AUDIT_KIND_DECISIONS.values())
 
 
-def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_five() -> None:
+def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -> None:
     """**The answer to the question item 48 called the better one.** The list is written out
     here rather than derived from the module, because a test that asks the module what it
     decided and then agrees with it has tested nothing.
@@ -710,8 +710,11 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_five() ->
     a composition change land; `leash`, where an approval lands. Out: `grant`, which nothing
     writes; `entity` and `artifact`, whose ids are governed by a scope over the object that an
     actor-scoped audit grant never consults; `connector`, which is estate configuration a head
-    cannot touch; and `session`, which is break-glass and would amount to a standing presence
-    record over fifteen named people.
+    cannot touch; `session`, which is break-glass and would amount to a standing presence
+    record over fifteen named people; `credential`, a provider key only somebody holding
+    `admin:credential` over everything may write, which no head's governing act produces; and
+    `retention` and `legal_hold`, a release of the sweep and a hold, each decided only over
+    everything and neither something a head can do.
 
     Delete this and the set can be widened one kind at a time by whoever finds a page thin,
     and the widening is invisible because every other test here is about the shape of a grant
@@ -719,7 +722,16 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_five() ->
     left_out = sorted(one for one, decision in AUDIT_KIND_DECISIONS.items() if not decision.covered)
 
     assert HEAD_AUDIT_SUBJECT_KINDS == ("agent", "leash", "principal")
-    assert left_out == ["artifact", "connector", "entity", "grant", "session"]
+    assert left_out == [
+        "artifact",
+        "connector",
+        "credential",
+        "entity",
+        "grant",
+        "legal_hold",
+        "retention",
+        "session",
+    ]
 
 
 def test_the_page_capability_and_the_kind_capabilities_are_written_together() -> None:
@@ -1087,7 +1099,7 @@ def test_a_decision_with_no_argument_behind_it_is_refused() -> None:
     it was protecting is gone. This list is what item 48 asked for precisely because it is a
     list somebody can read, and a blank line in it reads as an answer.
 
-    Delete this and the eight arguments can be emptied one at a time by whoever is in a hurry,
+    Delete this and the eleven arguments can be emptied one at a time by whoever is in a hurry,
     leaving a mapping that still passes the completeness check above."""
     with pytest.raises(ValueError, match="carries no argument"):
         AuditKindDecision(kind="session", covered=True, because="   ")

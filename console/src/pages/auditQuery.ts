@@ -283,6 +283,9 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   sign_in: "changed the sign-in link of",
   session_end: "ended a session of",
   certification: "reviewed",
+  credential: "wrote",
+  retention: "released or withdrew",
+  legal_hold: "placed or lifted",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */

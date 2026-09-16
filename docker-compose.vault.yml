@@ -1,0 +1,55 @@
+# The secrets vault option: the application is handed the vault's address and token, and joins
+# the vault's network.
+#
+# Composed on top of a profile, never on its own, and only on an install that runs the vault in
+# `ops/openbao/compose.yml` beside it:
+#
+#   docker compose <the profile's -f files> -f /opt/brain/docker-compose.vault.yml up -d app
+#
+# The update and rollback scripts compose it themselves when the install's environment file
+# names a vault address. The steps a person follows are in `ops/openbao/credential-slots.md`,
+# under "Letting the application keep a provider key", and the argument is in
+# `brain.deployment.app_environment`. What is written here is what a reader of this file needs
+# in order not to undo it.
+#
+# **Why an overlay and not two more lines in the base files.** The vault's network is created by
+# the vault's own compose project, so it is external to this stack and exists only on a server
+# that runs the vault. A base file naming it stops every install without a vault from starting,
+# with an error about a network nobody on that install has heard of. A file composed only where
+# the vault runs has neither problem, which is the same argument `docker-compose.tunnel.yml`
+# makes about its token.
+#
+# **Both variables are required here, and optional nowhere else.** Composing this file in is
+# the choice, so a half-made choice fails when the stack is composed, naming the variable,
+# rather than starting an application that logs "secrets vault half configured" and keeps no
+# credential. `tests/unit/test_app_environment.py` holds that, and holds the base files to
+# passing neither.
+#
+# Compose merges a service's `environment` as a mapping and its `networks` as a union by name,
+# so the application keeps every variable and network the profile gives it and gains these.
+#
+# Task ids: M5.1.2, M31.3.2.1
+
+services:
+  app:
+    environment:
+      # As the application container reaches the vault: the vault's service name on the network
+      # below and its port, never an address published on the host, because nothing publishes
+      # one. `ops/openbao/compose.yml` names the service `vault` and the port 8200.
+      BRAIN_VAULT_ADDRESS: ${BRAIN_VAULT_ADDRESS:?set BRAIN_VAULT_ADDRESS to the address the application reaches the vault on}
+      # Minted on this install's own vault against the application policy, never copied from
+      # another install. Read from the environment and kept out of every log line; see
+      # `brain.settings.Settings.vault_token`.
+      BRAIN_VAULT_TOKEN: ${BRAIN_VAULT_TOKEN:?set BRAIN_VAULT_TOKEN to the token minted for the application policy}
+    networks:
+      # The vault's network and nothing else. The application keeps `default` and `tool-api`
+      # from the profile. Nothing else in the stack joins this, because a service on it is a
+      # service that can ask the vault, and only the application holds a token to ask with.
+      - brain-vault
+
+networks:
+  brain-vault:
+    # Created by the vault's own project, under this fixed name, so this stack joins it rather
+    # than creating a second network that happens to share the name.
+    external: true
+    name: brain-vault

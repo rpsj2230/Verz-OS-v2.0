@@ -101,7 +101,22 @@ REDACTED = "<redacted>"
 #: filters on this (M24.1.5), and a free-text subject kind makes "everything that ever
 #: happened to this principal" unanswerable without a full scan and a guess.
 SUBJECT_KINDS = frozenset(
-    {"principal", "grant", "agent", "leash", "entity", "artifact", "connector", "session"}
+    {
+        "principal",
+        "grant",
+        "agent",
+        "leash",
+        "entity",
+        "artifact",
+        "connector",
+        "session",
+        # A vault slot a credential was written into, since 2026-09-16. See CREDENTIAL below.
+        "credential",
+        # A release of the retention sweep, and a legal hold, since 2026-09-16. See RETENTION and
+        # LEGAL_HOLD below.
+        "retention",
+        "legal_hold",
+    }
 )
 
 
@@ -232,6 +247,52 @@ class AuditAction(enum.StrEnum):
     One member for both decisions, keep and remove, with the decision in the details, for the
     reason APPROVAL carries its verdict there. The subject is the grant, as the grant trigger
     writes it for a direct row and a pack assignment alike. Thirteen characters.
+
+    CREDENTIAL was added on 2026-09-16, and it is the fourteenth. `brain.ops.credentials` puts a
+    provider key into the vault from the console and from the setup wizard, and "who replaced
+    the key every question is sent with, and when" was answered by a log line, which is kept for
+    a month and can be edited by whoever holds the log. **Recorded by the database, from a
+    trigger on `ops.credential_write`**, the way SIGN_IN, SESSION_END and CERTIFICATION are, so a
+    row written by an operator's statement is recorded as well as one the application writes.
+
+    Every existing member was tried. COMPOSE_CHANGE is what an agent carries and a provider key
+    belongs to no agent; GRANT and REVOKE are capabilities, and a key confers none on anybody.
+    The subject kinds were tried too, and `connector` is the near miss: a connector is a source
+    this system reads, and a model provider is not one, so filing a key under it would put
+    provider keys into every answer to "what happened to our sources". So a member, and a kind
+    beside it named for what is written to, a vault slot. **Never the value**: not its length,
+    a prefix or a fingerprint, for the
+    reason `brain.credential_routes` gives against answering with any of them, and the entry
+    carries no details at all because nothing about a write is left once the value is taken
+    out. The subject is the slot's path with its slashes written as dots,
+    `credential:providers.anthropic`, which `brain.audit.record.credential_subject_id` argues.
+    Ten characters.
+
+    RETENTION and LEGAL_HOLD were added on 2026-09-16, and they are the fifteenth and sixteenth.
+    `brain.retention_routes` releases the retention sweep so its next run deletes, withdraws that
+    release, places a legal hold that suspends deletion and lifts one, and each wrote a row and
+    nothing else: "who let the sweep delete, and who took the hold off first" had no
+    tamper-evident answer, and those are the two questions asked after data is found to be gone.
+    **Recorded by the database, from triggers on `ops.retention_release` and `obs.legal_hold`**,
+    the way CREDENTIAL is, on the insert and on the one update that marks a release withdrawn or a
+    hold lifted, with the actor read off the row's own column so nothing is inferred.
+
+    Every existing member was tried. GRANT and REVOKE are capabilities, and neither write changes
+    what anybody may do; APPROVAL is a suspended action decided, and the sweep is not suspended but
+    unreleased; CERTIFICATION is a grant reviewed. **Two members rather than one**, because a
+    release lets data go and a hold keeps it, and an auditor asking one of those questions should
+    not read the other's rows. One member for both directions of each, with the change in the
+    details, for the reason SIGN_IN gives. Nine and ten characters.
+
+    **And two subject kinds, because no existing kind names either object.** `principal` was the
+    near miss for a hold, which names people as its subjects and actors, and it was rejected: a
+    hold can name everybody at once, and one entry per named person would copy the hold's lists
+    into the ledger, which is a map of whose data is under legal hold, kept longest and read most
+    widely. So the subject is the object itself, which has a start and an end:
+    `retention:<release id>` for a release, released and then withdrawn, and `legal_hold:<hold id>`
+    for a hold, placed and then lifted, so everything that happened to one is one subject. A hold's
+    id is an identifier its placer chose and `obs.legal_hold` keeps for as long as the chain, so
+    the subject discloses nothing the hold's own row does not.
     """
 
     GRANT = "grant"
@@ -261,6 +322,16 @@ class AuditAction(enum.StrEnum):
     #: A grant under access review was kept or removed by somebody other than its holder. Which
     #: of the two is in the details. Written by `0052`'s trigger on `gate.review_decision`.
     CERTIFICATION = "certification"
+    #: A credential was written into a vault slot. The slot is the subject and there are no
+    #: details, because the value is the only other thing a write has. Written by `0054`'s
+    #: trigger on `ops.credential_write`.
+    CREDENTIAL = "credential"
+    #: The retention sweep was released to delete, or a release was withdrawn. Which is in the
+    #: details. Written by `0054`'s trigger on `ops.retention_release`.
+    RETENTION = "retention"
+    #: A legal hold was placed or lifted. Which is in the details, and never whom it names.
+    #: Written by `0054`'s trigger on `obs.legal_hold`.
+    LEGAL_HOLD = "legal_hold"
 
 
 # --------------------------------------------------------------------- redaction

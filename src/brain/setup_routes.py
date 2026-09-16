@@ -36,7 +36,8 @@ for an install that cannot keep one.** Until 2026-09-16 the vault client read a 
 wrote none, so a hosted install's key had to be the one already in the process environment and
 anything else was a 409 naming `providers/anthropic`; on the owner's staging install that meant
 a hand edit of the server's environment. `brain.ops.credentials.Credentials.keep` is the write,
-the same one the console's credential route makes, and it runs after `apply_install` and before
+the same one the console's credential route makes, and it leaves the same ledger entry, with
+`brain.firstrun.GRANTED_BY` as its actor. It runs after `apply_install` and before
 `appoint`, which is the order `THE_APPOINTMENT_RUNS_IN_THE_ORDER_THAT_KEEPS_AN_INSTALL_FINISHABLE`
 already argues: a vault that refuses leaves the wizard open to try again. The 409 remains for
 an install that names no vault, whose key is still accepted when the environment already
@@ -90,7 +91,6 @@ Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7
 
 from __future__ import annotations
 
-import asyncio
 import enum
 import hmac
 import uuid
@@ -434,9 +434,8 @@ async def keep_provider_key(
         carried = hmac.compare_digest(loaded, applied.provider_key)
         return None if carried else NotKeptReason.NO_VAULT
     try:
-        await asyncio.to_thread(
-            credentials.keep, slot, applied.provider_key, actor=GRANTED_BY, trace_id=trace_id
-        )
+        # No reach to digest: first run has none, and the ledger entry says so by its sentinel.
+        await credentials.keep(slot, applied.provider_key, actor=GRANTED_BY, trace_id=trace_id)
     except CredentialProblemError:
         return NotKeptReason.NOT_A_KEY
     except CredentialsUnavailableError as unavailable:

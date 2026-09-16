@@ -55,11 +55,11 @@ from brain.core.entitlement import Capability
 
 if TYPE_CHECKING:
     # Type-only, on purpose. A runtime import would put the audit package above the gate and
-    # gets updated is whichever the person was looking at.
-    # here as local strings, which is two definitions of one vocabulary, and the one that
-    # rather than about audit. Rejected alternative: restating the rung and reason names
     # the identity layer, which are the things that will import this module; the cycle would
     # then arrive on the day somebody wired the recorder in, in a traceback about imports
+    # rather than about audit. Rejected alternative: restating the rung and reason names
+    # here as local strings, which is two definitions of one vocabulary, and the one that
+    # gets updated is whichever the person was looking at.
     from brain.gate.injection import AutonomyTier
     from brain.identity.roles import BreakGlassReason
     from brain.tables.identity import SessionEndReason
@@ -158,6 +158,9 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "sign_in": AuditAction.SIGN_IN,
         "session_end": AuditAction.SESSION_END,
         "certification": AuditAction.CERTIFICATION,
+        "credential": AuditAction.CREDENTIAL,
+        "retention": AuditAction.RETENTION,
+        "legal_hold": AuditAction.LEGAL_HOLD,
     }
 )
 
@@ -185,6 +188,56 @@ def subject(kind: str, ident: str) -> str:
         msg = f"subject kind {kind!r} is not one of {sorted(SUBJECT_KINDS)}"
         raise ValueError(msg)
     return f"{kind}:{ident}"
+
+
+#: What a credential slot looks like: a vault path of lowercase segments joined by `/`, at least
+#: two of them, and no `.` anywhere. `providers/anthropic` is one. `0054` copies it into the
+#: check constraint on `ops.credential_write`, and `brain.tables.credential` holds the two equal.
+CREDENTIAL_SLOT: Final = r"^[a-z][a-z0-9_]*(/[a-z][a-z0-9_]*)+$"
+
+#: The longest slot, which is the ledger's `IDENTIFIER` bound: the subject id is the slot with
+#: its slashes rewritten and no longer, so a longer slot could be kept and never recorded.
+CREDENTIAL_SLOT_CHARS: Final = 128
+
+_CREDENTIAL_SLOT_RE = re.compile(CREDENTIAL_SLOT)
+
+
+def credential_subject_id(slot: str) -> str:
+    """The subject id a credential write is recorded under: the slot with `/` written as `.`.
+
+    **Not the raw path, because the ledger cannot hold one.** `IDENTIFIER` admits no `/`, and it
+    is right not to: a subject is a reference the audit view filters and an operator types, and
+    widening the grammar for one kind would widen it for every kind. So the path is rewritten, and
+    the rewrite has to be one a reader can undo, which is why `CREDENTIAL_SLOT` admits no `.`: a
+    slot holding one would share its subject with the slot that has a `/` in that place, and two
+    slots under one subject is a key replaced in one read as a key replaced in the other.
+
+    Rejected: a digest of the path. It is a reference, and it is one nobody can read, so "when
+    was the Anthropic key last replaced" would need the digest computed first. Rejected: `_` for
+    `/`, which a slug may already contain, so it is not reversible. `0054`'s trigger writes the
+    same thing with `replace(NEW.slot, '/', '.')`, and a test holds the two to one answer.
+    """
+    if len(slot) > CREDENTIAL_SLOT_CHARS or not _CREDENTIAL_SLOT_RE.match(slot):
+        msg = (
+            f"{slot!r} is not a credential slot: lowercase segments joined by '/', no '.', at "
+            f"most {CREDENTIAL_SLOT_CHARS} characters"
+        )
+        raise ValueError(msg)
+    return slot.replace("/", ".")
+
+
+class RetentionChange(enum.StrEnum):
+    """What happened to a release of the retention sweep. The two values `0054`'s trigger writes."""
+
+    RELEASED = "released"
+    WITHDRAWN = "withdrawn"
+
+
+class LegalHoldChange(enum.StrEnum):
+    """What happened to a legal hold. The two values `0054`'s trigger writes."""
+
+    PLACED = "placed"
+    LIFTED = "lifted"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -628,3 +681,47 @@ class AuditRecorder:
         else:
             details["pack"] = pack
         return self._write(AuditAction.CERTIFICATION, subject("grant", grant_id), details)
+
+    def credential(self, *, slot: str) -> AuditEntry:
+        """Record that a credential was written into a vault slot.
+
+        The entry a deployed database keeps is written by `0054`'s trigger on
+        `ops.credential_write`, for the reason `session_end` gives about `0050`, and a test holds
+        this entry's subject and details to the trigger's. **There is no parameter for the value,
+        and no details at all**: the slot is the subject, the actor and the time are the entry's
+        own, and what is left of a write once the value is taken out is nothing. A length, a
+        prefix or a fingerprint would each be part of the secret, which
+        `brain.credential_routes` argues against for a response body and is truer of the table
+        kept longest. The subject id is `credential_subject_id`'s.
+        """
+        return self._write(
+            AuditAction.CREDENTIAL, subject("credential", credential_subject_id(slot)), {}
+        )
+
+    def retention(self, *, release_id: str, change: RetentionChange) -> AuditEntry:
+        """Record that the retention sweep was released to delete, or that a release was withdrawn.
+
+        The entry a deployed database keeps is written by `0054`'s trigger on
+        `ops.retention_release`, on the insert and on the update that marks the row withdrawn, for
+        the reason `session_end` gives about `0050`, and a test holds these details to the
+        trigger's. The subject is the release, so its release and its withdrawal are one subject;
+        the report it was released after is not recorded, because a report id is not a field name
+        and would be stored as the marker. The actor is whoever the row names for the change.
+        """
+        return self._write(
+            AuditAction.RETENTION, subject("retention", release_id), {"change": change.value}
+        )
+
+    def legal_hold(self, *, hold_id: str, change: LegalHoldChange) -> AuditEntry:
+        """Record that a legal hold was placed or lifted.
+
+        Written in a deployed database by `0054`'s trigger on `obs.legal_hold`, on the insert and
+        on the update that marks the hold lifted, and held to this method's details by a test.
+        **Never whom the hold names**: its subjects and actors are a list of whose data is under
+        hold, and the ledger is the table kept longest and read most widely, so the entry names
+        the hold and the hold's own row names the people. There is no parameter through which a
+        list could arrive.
+        """
+        return self._write(
+            AuditAction.LEGAL_HOLD, subject("legal_hold", hold_id), {"change": change.value}
+        )

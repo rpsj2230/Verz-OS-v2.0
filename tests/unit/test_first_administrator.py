@@ -32,6 +32,7 @@ from brain.gate.entitlement_store import StoredEntitlements
 from brain.identity.first_administrator import (
     ADMINISTRATION,
     FIRST_RUN_LOCK,
+    GRANTED_AT_APPOINTMENT,
     SIGN_IN_AUTHORITY,
     AppointmentRefusal,
     FirstAdministratorRefusedError,
@@ -228,12 +229,12 @@ def test_the_first_administrator_is_a_live_person_holding_administration_everywh
 
     assert (before, outcome, after) == (0, "appointed", 1)
     assert row == ("human", "staff", NAME, None, None)
-    assert [one[0] for one in grants] == sorted(ADMINISTRATION)
+    assert [one[0] for one in grants] == sorted(GRANTED_AT_APPOINTMENT)
     assert {(Scope.model_validate(one[1]).is_unrestricted(), one[2], one[3]) for one in grants} == {
         (True, GRANTED_BY, GRANT_REASON)
     }
     assert holds_everywhere(reach, INSIDE)
-    assert len(entries) == len(ADMINISTRATION)
+    assert len(entries) == len(GRANTED_AT_APPOINTMENT)
     # Told the actor rather than inferring it from granted_by, and carrying the request's trace.
     assert {(actor, trace, "actor" in details) for actor, trace, details in entries} == {
         (GRANTED_BY, "trace-first-run", False)
@@ -260,7 +261,7 @@ def test_a_second_appointment_is_refused_naming_nobody_and_writes_nothing() -> N
         assert NAME not in refusal
         assert "u_second" not in refusal
     assert principals == [(FIRST,)]
-    assert grants == [(len(ADMINISTRATION),)]
+    assert grants == [(len(GRANTED_AT_APPOINTMENT),)]
 
 
 def test_an_administrator_by_a_pack_closes_first_run_and_one_over_a_department_does_not() -> None:

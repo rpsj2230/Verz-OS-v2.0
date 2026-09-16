@@ -51,7 +51,7 @@ from brain.ops.credentials import (
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import Directory, Keys, NoCache, Versions, token_for, verifier
-from tests.unit.test_credentials import AT, KEY, Vault
+from tests.unit.test_credentials import AT, KEY, Recorded, Vault
 
 LISTING = f"{API_PREFIX}{CREDENTIALS_PATH}"
 ANTHROPIC = f"{LISTING}/providers/anthropic"
@@ -263,6 +263,32 @@ def test_setting_a_key_writes_the_slot_and_answers_that_it_is_held_and_when(
     assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
     assert env == {"ANTHROPIC_API_KEY": KEY}
     assert set(CredentialKeptView.model_fields) == {"slot", "held", "set_at", "in_use", "told"}
+
+
+def test_a_key_set_from_the_console_is_recorded_as_its_setter_with_their_reach_and_trace(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The route hands `keep` who is asking, the digest of what they hold and the request's own
+    trace, which is what the ledger entry is attributed with, and a caller refused before the
+    vault records nothing. Delete this and the entry can name the wrong person, carry the
+    unsupplied digest for a writer who had a reach, or carry a trace nobody can join to the
+    request that made it."""
+    writes = Recorded()
+    holding(app, Vault(), writes=writes)
+
+    refused = put(client, "u_narrow")
+    answer = put(client, "u_admin")
+
+    assert (refused.status_code, answer.status_code) == (404, 200)
+    reach = EntitlementSet(principal_id="u_admin", grants=CREDENTIAL_GRANTS["u_admin"])
+    assert writes.records == [
+        {
+            "slot": "providers/anthropic",
+            "written_by": "u_admin",
+            "trace_id": answer.headers["x-trace-id"],
+            "ent_hash": reach.ent_hash(),
+        }
+    ]
 
 
 def test_a_key_the_environment_file_outranks_is_kept_and_said_not_to_be_in_use_yet(

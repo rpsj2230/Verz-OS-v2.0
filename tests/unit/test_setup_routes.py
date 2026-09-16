@@ -38,8 +38,9 @@ from fastapi.testclient import TestClient
 
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
+from brain.firstrun import GRANTED_BY
 from brain.identity.first_administrator import (
-    ADMINISTRATION,
+    GRANTED_AT_APPOINTMENT,
     AppointmentRefusal,
     FirstAdministratorRefusedError,
     FirstAdministrators,
@@ -67,7 +68,7 @@ from tests.fixtures.http_client import Response
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_app_wiring import Realm, wired_app
 from tests.unit.test_automation_owner_store import app_engine
-from tests.unit.test_credentials import KEY, Vault
+from tests.unit.test_credentials import KEY, Recorded, Vault
 from tests.unit.test_keycloak_tokens import ISSUER, token
 from tests.unit.test_setup_wizard import (
     ADMIN_ANSWERS,
@@ -398,6 +399,30 @@ def test_a_hosted_install_with_a_vault_keeps_the_key_before_anybody_is_appointed
     assert store.held_when_appointed == [[("providers/anthropic", {KEY_FIELD: KEY})]]
     assert env == {VARIABLE: KEY}
     assert len(store.appointed) == 1
+
+
+def test_the_wizard_s_key_is_recorded_as_written_by_first_run_with_no_reach(
+    carried: Mapping[str, str],
+) -> None:
+    """The wizard writes through the same `keep` as the console, so its key leaves the same record,
+    attributed to `GRANTED_BY` because nobody is appointed yet, with the unsupplied digest because
+    first run holds nothing, and the request's trace. Delete this and the wizard can keep a key
+    the ledger never hears of, or attribute it to a person who did not exist when it was written."""
+    del carried
+    writes = Recorded()
+    store = Store()
+    with serving(store, credentials=Credentials(Vault(), environ={}, writes=writes)) as c:
+        answer = appointing(c, body(answers=HOSTED))
+
+    assert answer.status_code == 200
+    assert writes.records == [
+        {
+            "slot": "providers/anthropic",
+            "written_by": GRANTED_BY,
+            "trace_id": answer.headers["x-trace-id"],
+            "ent_hash": "",
+        }
+    ]
 
 
 def test_a_key_the_environment_file_outranks_is_kept_and_the_finish_is_told_so(
@@ -807,7 +832,7 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     assert (walked["before"], walked["appointed"], walked["again"]) == (401, 200, 404)
     assert walked["finished"] == (200, "bound")
     assert walked["me"] == (200, walked["principal_id"])
-    assert [str(row[0]) for row in granted] == sorted(ADMINISTRATION)
+    assert [str(row[0]) for row in granted] == sorted(GRANTED_AT_APPOINTMENT)
     assert [str(row[0]) for row in keys] == sorted(key_for(name) for name in carried)
     assert elsewhere == dict(carried)
     assert value_of("INSTALL_COMPANY_NAME", {}) == COMPANY_ANSWERS["company_name"]

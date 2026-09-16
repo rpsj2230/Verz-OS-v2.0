@@ -54,6 +54,7 @@ from typing import Any, Final
 import pytest
 import yaml
 
+from brain.deployment.app_environment import VAULT_OVERLAY
 from brain.deployment.requirements import COMPOSE_FILES_FOR, files_for
 from brain.ops.tunnel import overlays_for
 
@@ -129,6 +130,9 @@ def compositions() -> dict[str, tuple[str, ...]]:
         files = files_for(profile)
         found[profile] = files
         found[f"{profile} with the tunnel"] = (*files, *overlays_for(files))
+        # Composed onto any profile whose environment file names a vault. See
+        # `brain.deployment.app_environment`.
+        found[f"{profile} with the vault"] = (*files, VAULT_OVERLAY)
     return found
 
 

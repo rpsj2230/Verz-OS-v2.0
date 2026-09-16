@@ -13,6 +13,7 @@ Task ids: M27.8.7, M5.1.2
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import fields
 from datetime import UTC, datetime
@@ -21,9 +22,11 @@ from typing import Any
 import pytest
 
 from brain.ops.credentials import (
+    A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE,
     KEY_FIELD,
     MAX_CREDENTIAL_CHARS,
     SLOTS,
+    THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD,
     TOLD,
     CredentialProblemError,
     Credentials,
@@ -96,6 +99,48 @@ class Stocked(OpenBaoVault):
         raise VaultRefusedError("vault refused GET on a providers path: HTTP 404", status=404)
 
 
+class Recorded:
+    """The store's `CredentialWrites` protocol in memory: every record asked for, in order.
+
+    `events` can be shared with a `Sequenced` vault, so a test reads one list for which of the
+    two happened first. `fail` makes every record raise after it is noted.
+    """
+
+    def __init__(self, events: list[str] | None = None, *, fail: Exception | None = None) -> None:
+        self.records: list[dict[str, str]] = []
+        self.events = events if events is not None else []
+        self._fail = fail
+
+    async def record(self, *, slot: str, written_by: str, trace_id: str, ent_hash: str) -> None:
+        self.events.append("record")
+        self.records.append(
+            {"slot": slot, "written_by": written_by, "trace_id": trace_id, "ent_hash": ent_hash}
+        )
+        if self._fail is not None:
+            raise self._fail
+
+
+class Sequenced(Vault):
+    """A `Vault` that notes its write on a list shared with a `Recorded`."""
+
+    def __init__(self, events: list[str], *, fail: Exception | None = None) -> None:
+        super().__init__(fail=fail)
+        self.events = events
+
+    def write_static_kv(self, path: str, fields: Mapping[str, str]) -> datetime | None:
+        self.events.append("vault")
+        return super().write_static_kv(path, fields)
+
+
+def keeping(
+    store: Credentials, value: str = KEY, *, trace_id: str = "t", ent_hash: str = ""
+) -> Kept:
+    """`Credentials.keep` into the Anthropic slot as `u_admin`, awaited to its end."""
+    return asyncio.run(
+        store.keep(ANTHROPIC, value, actor="u_admin", trace_id=trace_id, ent_hash=ent_hash)
+    )
+
+
 # ----------------------------------------------------------------------- the slots
 def test_every_provider_is_a_slot_at_the_path_start_up_reads_it_from() -> None:
     """Built from `PROVIDER_SLOTS` rather than listed again. Delete this and a provider added
@@ -111,7 +156,7 @@ def test_a_key_is_written_under_the_field_start_up_reads_it_back_from() -> None:
     this and `KEY_FIELD` can be renamed to a field start-up does not look for, and every key the
     console sets reads as a slot holding nothing it recognises after the next restart."""
     vault = Vault()
-    Credentials(vault).keep(ANTHROPIC, KEY, actor="u_admin", trace_id="t")
+    keeping(Credentials(vault))
     [(path, written)] = vault.written
     data_path = path.replace("providers/", "providers/data/")
     assert read_static(Stocked({data_path: written[KEY_FIELD]}), path) == KEY
@@ -138,7 +183,7 @@ def test_a_key_with_a_line_break_at_the_end_is_accepted_and_stored_without_it() 
     happens."""
     vault = Vault()
     assert problems_with(f"  {KEY}\n") == ()
-    Credentials(vault).keep(ANTHROPIC, f"  {KEY}\n", actor="u_admin", trace_id="t")
+    keeping(Credentials(vault), f"  {KEY}\n")
     assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
 
 
@@ -176,7 +221,7 @@ def test_an_install_with_no_vault_is_told_so_before_its_paste_is_judged() -> Non
     thing to do. Delete this and a blank on a vaultless install says "paste the key", which they
     do, and are then told there is no vault."""
     with pytest.raises(CredentialsUnavailableError) as refused:
-        Credentials(None).keep(ANTHROPIC, "", actor="u_admin", trace_id="t")
+        keeping(Credentials(None), "")
     assert refused.value.state is VaultState.ABSENT
     assert str(refused.value) == TOLD[VaultState.ABSENT]
 
@@ -186,7 +231,7 @@ def test_a_bad_paste_is_refused_before_anything_is_sent_to_the_vault() -> None:
     version, and replaces the working one it was meant to rotate."""
     vault = Vault()
     with pytest.raises(CredentialProblemError) as refused:
-        Credentials(vault).keep(ANTHROPIC, "sk- broken", actor="u_admin", trace_id="t")
+        keeping(Credentials(vault), "sk- broken")
     assert [one.code for one in refused.value.problems] == ["not_one_piece"]
     assert vault.written == []
     assert "sk- broken" not in str(refused.value)
@@ -197,7 +242,7 @@ def test_a_good_key_is_written_and_answered_with_its_slot_and_time_alone() -> No
     and has no field that could carry more. Delete this and a store that refuses everything passes
     the rest of the file."""
     vault = Vault()
-    kept = Credentials(vault).keep(ANTHROPIC, KEY, actor="u_admin", trace_id="t")
+    kept = keeping(Credentials(vault))
     assert kept == Kept(slot="providers/anthropic", set_at=AT)
     assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
 
@@ -218,7 +263,7 @@ def test_a_silent_vault_and_a_refusing_one_are_told_apart(
     write is an engine not mounted, which is a refusal. Delete this and every failure reads as the
     same sentence and half the people reading it go to the wrong place."""
     with pytest.raises(CredentialsUnavailableError) as refused:
-        Credentials(Vault(fail=raised)).keep(ANTHROPIC, KEY, actor="u_admin", trace_id="t")
+        keeping(Credentials(Vault(fail=raised)))
     assert refused.value.state is state
     assert str(refused.value) == TOLD[state]
 
@@ -283,15 +328,13 @@ def test_the_log_names_the_slot_and_the_actor_and_never_the_value(
     path that logs is driven: kept, refused for its paste, and not kept. Delete this and the value
     is added to a log line to make an incident easier, and it is in the log for its retention."""
     capsys.readouterr()
-    Credentials(Vault()).keep(ANTHROPIC, KEY, actor="u_admin", trace_id="trace-kept")
+    keeping(Credentials(Vault()), trace_id="trace-kept")
     with pytest.raises(CredentialProblemError):
-        Credentials(Vault()).keep(ANTHROPIC, f"{KEY} x", actor="u_admin", trace_id="t")
+        keeping(Credentials(Vault()), f"{KEY} x")
     with pytest.raises(CredentialsUnavailableError):
-        Credentials(Vault(fail=VaultUnreachableError("x"))).keep(
-            ANTHROPIC, KEY, actor="u_admin", trace_id="t"
-        )
+        keeping(Credentials(Vault(fail=VaultUnreachableError("x"))))
     with pytest.raises(CredentialsUnavailableError):
-        Credentials(None).keep(ANTHROPIC, KEY, actor="u_admin", trace_id="t")
+        keeping(Credentials(None))
 
     written = capsys.readouterr()
     logged = written.out + written.err
@@ -314,6 +357,119 @@ def test_the_store_s_representation_names_no_vault_token_and_no_key() -> None:
     assert "a-token" not in shown
     assert "configured=True" in shown
     assert str(Credentials(None)) == "Credentials(configured=False, outranking=[])"
+
+
+# ------------------------------------------------------- recording a kept key
+def test_a_kept_key_is_recorded_after_the_vault_write_with_its_writer_and_no_value() -> None:
+    """`A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE`, the positive case. One
+    list shared by the vault and the record says which came first; the record names the slot,
+    the writer, the trace and the reach's digest, and nothing in it carries the key.
+
+    Delete this and the record can be dropped from `keep`, so a key is replaced from the console
+    with nothing in the ledger, or made before the vault answers, so a refused write is recorded
+    as a key replaced, or handed the value to make the entry more useful."""
+    events: list[str] = []
+    writes = Recorded(events)
+    kept = keeping(
+        Credentials(Sequenced(events), writes=writes), trace_id="trace-kept", ent_hash="e" * 32
+    )
+
+    assert kept == Kept(slot="providers/anthropic", set_at=AT)
+    assert events == ["vault", "record"]
+    assert writes.records == [
+        {
+            "slot": "providers/anthropic",
+            "written_by": "u_admin",
+            "trace_id": "trace-kept",
+            "ent_hash": "e" * 32,
+        }
+    ]
+    assert all(KEY not in one for one in writes.records[0].values())
+    assert "ledger" in A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE
+
+
+@pytest.mark.parametrize(
+    ("vault", "value"),
+    [
+        (None, KEY),
+        (Vault(), f"{KEY} x"),
+        (Vault(fail=VaultUnreachableError("did not answer")), KEY),
+        (Vault(fail=VaultRefusedError("refused", status=403)), KEY),
+    ],
+)
+def test_a_key_that_was_not_kept_is_not_recorded(vault: Vault | None, value: str) -> None:
+    """No vault, a bad paste, a silent vault and a refusing one each replaced nothing, so each
+    records nothing. Delete this and a write the vault refused leaves an entry saying the key was
+    replaced, which is the one entry an auditor would act on and the ledger cannot take back."""
+    writes = Recorded()
+    with pytest.raises((CredentialsUnavailableError, CredentialProblemError)):
+        keeping(Credentials(vault, writes=writes), value)
+    assert writes.records == []
+
+
+def test_a_record_that_fails_after_the_key_was_kept_is_an_error_in_the_log_and_the_key_is_kept(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD`. The vault holds the key
+    whatever the database did, so the write is answered as kept, and the missing record is an
+    error naming the slot, the writer, the trace and the exception's type, never the key or the
+    exception's message, which is where a statement's parameters are quoted.
+
+    Delete this and a database that refuses the insert either turns a saved key into a failure
+    the person repeats, or loses the record with nothing in the log to say so."""
+    capsys.readouterr()
+    vault = Vault()
+    writes = Recorded(fail=RuntimeError(f"insert failed with {KEY}"))
+    kept = keeping(Credentials(vault, writes=writes), trace_id="trace-lost")
+    written = capsys.readouterr()
+    logged = written.out + written.err
+
+    assert kept == Kept(slot="providers/anthropic", set_at=AT)
+    assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
+    [lost] = [line for line in logged.splitlines() if "credential write not recorded" in line]
+    assert "error" in lost.lower()
+    assert all(one in lost for one in ("providers/anthropic", "u_admin", "trace-lost"))
+    assert "RuntimeError" in lost
+    assert KEY not in logged
+    assert "second record" in THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD
+
+
+def test_a_store_with_nowhere_to_record_keeps_the_key_and_warns(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A store with no database has no ledger. It keeps the key, because no deployed route
+    reaches it there, and it says so as a warning rather than silently. Delete this and a process
+    wired without its record reads in the log exactly like one recording every write."""
+    capsys.readouterr()
+    kept = keeping(Credentials(Vault()), trace_id="trace-nowhere")
+    logged = capsys.readouterr().out
+
+    assert kept.slot == "providers/anthropic"
+    [warned] = [line for line in logged.splitlines() if "no ledger to be recorded in" in line]
+    assert "warning" in warned.lower()
+    assert "trace-nowhere" in warned
+    assert KEY not in logged
+
+
+def test_recording_somewhere_keeps_the_vault_and_environment_and_nowhere_is_the_same() -> None:
+    """The lifespan attaches the record after the database through `recording_to`. Delete this
+    and the attached store can lose the vault, so every write after start answers "no vault", or
+    lose the environment it loads keys into, so a key saved from the console is kept and never
+    used, or nowhere can replace a working store with a new one."""
+    env: dict[str, str] = {}
+    vault = Vault()
+    plain = Credentials(vault, outranking=frozenset({"OPENAI_API_KEY"}), environ=env)
+    writes = Recorded()
+    recording = plain.recording_to(writes)
+
+    assert plain.recording_to(None) is plain
+    assert recording is not plain
+    keeping(recording)
+    assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
+    assert [one["slot"] for one in writes.records] == ["providers/anthropic"]
+    assert recording.put_to_use(ANTHROPIC, KEY) is InUse.HERE
+    assert env == {"ANTHROPIC_API_KEY": KEY}
+    assert recording.put_to_use(SLOTS["providers/openai"], KEY) is InUse.OUTRANKED
 
 
 # ------------------------------------------------ which processes use a key kept here

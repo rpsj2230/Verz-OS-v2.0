@@ -72,19 +72,37 @@ these steps belongs to any particular install, and none is written into this rep
    Nothing in the application renews this token yet, so a process that outlives the period is
    refused by the vault and says so; restarting the application does not renew it either.
 4. Put the vault's address as the application container reaches it, and that token, into the
-   install's environment file as `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN`.
-5. Make sure the application container is on the vault's network and receives those two
-   variables. No compose file in this repository does either yet: see "What is not built" below.
+   install's environment file as `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN`. With the vault
+   run from `ops/openbao/compose.yml` beside the install, the address is `http://`, then the
+   vault's service name as that file declares it, then a colon and the port it exposes: the
+   name on the vault's own network, never an address on the host, because the vault publishes
+   none.
+5. Compose the vault overlay onto the application, from the install directory:
+   `docker compose <the profile's -f files> -f /opt/brain/docker-compose.vault.yml up -d app`.
+   `docker-compose.vault.yml` hands the application both variables and joins it to the
+   `brain-vault` network, and it refuses to compose when either variable is missing, naming it.
+   You do this once: from then on `ops/update/update.sh` and `ops/update/rollback.sh` compose it
+   in themselves whenever the environment file holds a `BRAIN_VAULT_ADDRESS` value.
 6. Remove any `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `MOONSHOT_API_KEY` line from the
    environment file once the vault holds that key. A variable the environment sets outranks the
    vault on every start, so a key replaced from the console would otherwise not be the one in use.
 7. Restart the application, and turn on the audit device if it is not on (`enable-audit.sh`),
    because the vault's log is the one record of each write by path until the ledger has one.
 
-**What is not built.** The compose files pass the application an explicit list of variables and
-join it to no network the vault is on, so steps 4 and 5 need an override on the server today, and
-the update script recreates the container without one. The product's half is an overlay composed
-in when the environment file names a vault, as `docker-compose.tunnel.yml` is for the tunnel.
+**Why step 5 is an overlay and is done by hand once.** The vault's network is created by the
+vault's own compose project, so it exists only on a server that runs the vault, and a base compose
+file naming it would stop every install without one from starting. The overlay is composed only
+where the vault is, as `docker-compose.tunnel.yml` is for the tunnel, and the environment file's
+address is the record that it was chosen. The installer does not compose it, because a vault is
+unsealed, given its policies and asked for a token after the install has finished, never during
+it. `brain.deployment.app_environment` argues the shape and `tests/unit/test_app_environment.py`
+holds the overlay, both scripts and the base files to it.
+
+**On a deployment panel that keeps its own copy of the compose file**, the scripts never run, so
+step 5 is made in that copy: add the two variables to the `app` service's `environment` exactly as
+`docker-compose.vault.yml` writes them, add `brain-vault` to its `networks`, declare `brain-vault`
+at the bottom of the file as `external: true` with `name: brain-vault`, set both values in the
+panel's environment variables, and redeploy.
 
 ## Webhook signing secrets
 

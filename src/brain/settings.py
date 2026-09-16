@@ -40,6 +40,16 @@ Three kinds of caller still need the raw mapping, and they are why it is exposed
   writes there from the vault. That is the one writer, and `writable_process_environment`
   exists for it alone.
 
+**A variable set to nothing is a variable not set, and since 2026-09-16 that is true of every
+field here.** The compose files hand the application each setting as `${NAME:-}`, because a
+setting the file does not name never reaches the container at all (see
+`brain.deployment.app_environment`), and an unset `NAME` then arrives as `NAME=` rather than
+not arriving. Read literally, that blank is a value: `setup_issued_at` refused it as a date,
+`release_check` as a boolean and `profile` as a member of its literal, so passing the setup
+code through would have stopped every install that had none. `brain.install.value_of` already
+treats a blank as unset, and one rule for both readers is the only arrangement where a
+template line left empty means the same thing to each. See `A_BLANK_VARIABLE_IS_AN_UNSET_ONE`.
+
 Task ids: M41.1.2, M31.3.1.2
 """
 
@@ -80,13 +90,29 @@ SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION: Final = (
 )
 
 
+#: Why a blank environment variable resolves to the field's default.
+A_BLANK_VARIABLE_IS_AN_UNSET_ONE: Final = (
+    "A compose file passes a setting as ${NAME:-}, so a variable the install never set arrives "
+    "in the container as NAME= rather than not at all. Read as a value, the blank is refused "
+    "by every field that is not a plain string, a date, a boolean, a literal, and the "
+    "application does not start over a setting nobody chose. brain.install.value_of already "
+    "reads a blank as unset, so one rule for both readers is what makes a template line left "
+    "empty mean the default to each."
+)
+
+
 class Settings(BaseSettings):
     # `arbitrary_types_allowed` is for one field and buys nothing anywhere else: every other
     # type here is one pydantic already knows, so the loosening applies to `SealedSecret`
     # alone. The alternative was a second sealed-string type, which is the thing this
     # repository refuses everywhere: two answers to one question, and the wrong copy renders.
+    #
+    # `env_ignore_empty`: see `A_BLANK_VARIABLE_IS_AN_UNSET_ONE`.
     model_config = SettingsConfigDict(
-        env_prefix="BRAIN_", extra="ignore", arbitrary_types_allowed=True
+        env_prefix="BRAIN_",
+        extra="ignore",
+        arbitrary_types_allowed=True,
+        env_ignore_empty=True,
     )
 
     env: Literal["development", "staging", "production"] = "development"

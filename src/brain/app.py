@@ -83,6 +83,12 @@ from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
 from brain.govern_people_routes import router as govern_people_router
 from brain.govern_routes import router as govern_router
+from brain.identity.administration_reconciliation import (
+    TRACE_PREFIX as RECONCILIATION_TRACE,
+)
+from brain.identity.administration_reconciliation import (
+    reconcile_first_administrators,
+)
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
 from brain.identity.first_administrator import FirstAdministrators
 from brain.identity.keycloak_tokens import http_get, keycloak_authority
@@ -99,6 +105,7 @@ from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
 from brain.operate_routes import router as operate_router
 from brain.ops.automation_owner_store import StoredAutomations
+from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.question_store import QuestionRecorder
@@ -272,12 +279,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await refresh_install_settings(app.state.db_sessions)
         except Exception:
             log.exception("installation settings could not be loaded")
+        # An administrator appointed before a capability existed is granted it now, and one whose
+        # capability was taken away is not given it back. After the migrations, under the
+        # appointment's own lock, and never fatal: a missing capability is a screen that refuses,
+        # and a process that will not start is every screen. See
+        # `brain.identity.administration_reconciliation`.
+        try:
+            await reconcile_first_administrators(
+                app.state.db_sessions,
+                now=datetime.now(UTC),
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+            )
+        except Exception:
+            log.exception("first administrator could not be reconciled")
     else:
         app.state.db_engine = None
         app.state.db_sessions = None
     # Console pages that only display, read from `read_replica_url` when one is set and from
     # the primary otherwise. None without a primary. See `brain.ops.replica_store`.
     app.state.console_reads = console_reads_for(app.state.db_sessions, settings.read_replica_url)
+    # Every credential kept from here on leaves a ledger entry through `ops.credential_write`.
+    # Attached after the database because the record is a row in it, to the store built before it
+    # because loading keys needs none; unchanged without a database. See
+    # `brain.ops.credentials.A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE`.
+    app.state.credentials = app.state.credentials.recording_to(
+        credential_writes_for(app.state.db_sessions)
+    )
 
     # Built and frozen here, and this is the first process that has ever built one. Every
     # rule in `brain.tools.registry` runs at registration and `freeze` runs the ones that

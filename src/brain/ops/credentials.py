@@ -44,14 +44,39 @@ not answered by a process still using the old key. A sibling worker started by
 outranks the vault on every start. Both are reported, `InUse.OUTRANKED` for the second, so a
 screen can say what the person has to do. See `A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`.
 
-**What is not built, stated.** The write is recorded as a structured log event naming the slot,
-the actor and the trace id, and **not as an entry in `obs.audit_entry`**. The ledger's
-`AuditAction` has no member for it and `SUBJECT_KINDS` no kind, both closed on purpose;
-`brain.tables.budget` records that a new kind is an owner's decision through
-`brain.identity.staff_sync.AUDIT_KIND_DECISIONS`, and there is no writer that appends to the
-table from the application at all, which is why `brain.app` builds no approval store either.
-The vault's own audit device records every write by path, with the value hashed, when an install
-has enabled it. See `A_CREDENTIAL_WRITE_IS_NOT_YET_A_LEDGER_ENTRY`.
+**A credential write leaves an entry in the audit ledger, and never the value.** Until
+2026-09-16 it left a log line, which is kept for a month and edited by whoever holds the log. Now
+the key is followed by a row in `ops.credential_write` naming the slot and the actor, and the
+trigger `migrations/versions/0054_credential_and_retention_audit.py` puts on that table appends a
+`credential` entry under `credential:providers.anthropic`, the way every other entry in the
+ledger is appended: from the database, on a row the application wrote. **The record is made
+inside `keep`**, so the console's route and the setup wizard are one mechanism and neither call
+site has to remember it. Neither the row nor the entry has anywhere to put the value, its
+length, a prefix or a fingerprint. See
+`A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE`.
+
+**The vault first and the record second, and the window between them is stated rather than
+closed.** The record is its own short transaction after the vault has answered, so the ledger's
+advisory lock is never held across a network call to the vault: holding it would queue every
+grant, sign-in and review decision in the install behind a vault timeout. A vault that refuses or
+is silent records nothing, because nothing was replaced. A record that fails after the key was
+kept is logged as an error naming the slot, the actor, the trace and the exception's type, and
+the write is still answered as kept, **because it was**: an error would send the person to write
+it again, making a second version and, with the database still down, a second unrecorded write.
+The vault's audit device, once an install enables it, records every write by path with the value
+hashed, and it is the second record of exactly that window. With no database there is no ledger
+at all and the write says so in a warning; no deployed route reaches `keep` there, since the
+console's gate and the wizard's appointer are both built only over a database. See
+`THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD`.
+
+Rejected: recording first, as an intent. A vault that then refused would leave an entry saying a
+key was replaced when it was not, and the ledger has no way to take an entry back.
+
+Rejected: a synchronous recorder bridged onto the event loop from the vault's worker thread,
+which would keep `keep` synchronous. It waits in one thread on a loop running in another and
+deadlocks the day somebody calls it on the loop. `keep` awaits instead: the blocking vault client
+runs in a worker thread inside it, and the record is awaited on the loop through the application's
+own sessions, with no second pool.
 
 Rejected: a lazy load in a sibling worker the first time it finds no key. It is polling with a
 different trigger, it puts a vault call on the path of a person's question, and it still does
@@ -71,6 +96,7 @@ Task ids: M27.8.7, M5.1.2
 
 from __future__ import annotations
 
+import asyncio
 import enum
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
@@ -133,13 +159,24 @@ A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE: Final = (
     "outranked so a screen can say which."
 )
 
-#: What stands in for an audit entry, and why it is not one.
-A_CREDENTIAL_WRITE_IS_NOT_YET_A_LEDGER_ENTRY: Final = (
-    "A credential written here is recorded as a log event naming the slot, the actor and the "
-    "trace id, never the value. It is not an entry in obs.audit_entry: AuditAction has no member "
-    "for it, SUBJECT_KINDS no kind, a new kind needs the owner's decision about who may read it, "
-    "and nothing in the application appends to that table. The vault's audit device, once an "
-    "install enables it, records each write by path with its value hashed."
+#: What a credential write leaves in the ledger, and what it never leaves.
+A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE: Final = (
+    "Every key kept here is followed by a row in ops.credential_write naming the slot and who "
+    "wrote it, and the database's trigger on that row appends a credential entry to the "
+    "hash-chained ledger under the slot, so who replaced a key and when is answered by the "
+    "ledger and not only by a log. The record is made inside keep, so the console and the setup "
+    "wizard cannot differ about it. Neither the row nor the entry carries the value, its length, "
+    "a prefix or a fingerprint."
+)
+
+#: The order of the two writes, the window between them, and what answers for that window.
+THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD: Final = (
+    "The vault write comes first and the record second, in a transaction of its own, so the "
+    "ledger's lock is never held across a network call to the vault and a vault that refused or "
+    "was silent records nothing. A record that fails after the key was kept is logged as an error "
+    "naming the slot, the actor and the trace, never the value, and the write is still answered "
+    "as kept, because it was. The vault's audit device, once an install enables it, is the second "
+    "record of that write."
 )
 
 # --------------------------------------------------------------------- the figures
@@ -282,6 +319,19 @@ class CredentialVault(Protocol):
         ...
 
 
+class CredentialWrites(Protocol):
+    """Where a kept credential is recorded. `brain.ops.credential_write_store` is the one.
+
+    Named for what it records and taking no value, so there is no argument through which one
+    could reach the table: a slot, who wrote it, the request's trace and the writer's reach as a
+    digest, which is empty for the setup wizard because first run has no reach to digest.
+    """
+
+    async def record(self, *, slot: str, written_by: str, trace_id: str, ent_hash: str) -> None:
+        """Record that `written_by` wrote a credential into `slot`, in a transaction of its own."""
+        ...
+
+
 # ------------------------------------------------------------------------ the decisions
 
 
@@ -330,7 +380,9 @@ class Credentials:
     """This process's way into the vault for credentials, or its lack of one.
 
     Built once, by `credentials_at_start`, and held on `app.state.credentials`. `vault` is None
-    on an install with no vault; every method then refuses with `VaultState.ABSENT`.
+    on an install with no vault; every method then refuses with `VaultState.ABSENT`. `writes` is
+    where each kept credential is recorded, attached by the lifespan through `recording_to` once
+    there is a database, and None where there is none.
     """
 
     def __init__(
@@ -339,10 +391,12 @@ class Credentials:
         *,
         outranking: frozenset[str] = frozenset(),
         environ: MutableMapping[str, str] | None = None,
+        writes: CredentialWrites | None = None,
     ) -> None:
         self._vault = vault
         self._outranking = outranking
         self._environ = environ
+        self._writes = writes
 
     def __repr__(self) -> str:
         return f"Credentials(configured={self.configured}, outranking={sorted(self._outranking)})"
@@ -353,6 +407,20 @@ class Credentials:
     def configured(self) -> bool:
         """Whether this install names a vault at all. Not whether it answers."""
         return self._vault is not None
+
+    def recording_to(self, writes: CredentialWrites | None) -> Credentials:
+        """This store, with every credential it keeps recorded to `writes`.
+
+        A new store rather than a setter, so a store is never half built. The lifespan builds
+        this one before the database, because loading keys needs none, and attaches the record
+        after, because the record is a row in it. With nowhere to record, this same store,
+        since nothing about it changes.
+        """
+        if writes is None:
+            return self
+        return Credentials(
+            self._vault, outranking=self._outranking, environ=self._environ, writes=writes
+        )
 
     def _vault_or_refuse(self) -> CredentialVault:
         if self._vault is None:
@@ -372,14 +440,25 @@ class Credentials:
             return Held(slot=slot.path, held=False, set_at=None)
         return Held(slot=slot.path, held=True, set_at=version.written_at)
 
-    def keep(self, slot: CredentialSlot, value: str, *, actor: str, trace_id: str) -> Kept:
-        """Write `value` into `slot`, in the order a person can act on, or raise.
+    async def keep(
+        self,
+        slot: CredentialSlot,
+        value: str,
+        *,
+        actor: str,
+        trace_id: str,
+        ent_hash: str = "",
+    ) -> Kept:
+        """Write `value` into `slot` and record that it was written, in that order, or raise.
 
         No vault first, because a person told to fix a paste on an install that cannot keep one
         has been given the wrong thing to do. Then what was given, judged before anything is
-        sent. Then the write, whose failure is a silence or a refusal and never both. The event
-        this logs names the slot, the actor and the trace id and nothing else; see
-        `A_CREDENTIAL_WRITE_IS_NOT_YET_A_LEDGER_ENTRY` for why that is where it is recorded.
+        sent. Then the write, in a worker thread because the vault's client blocks, whose failure
+        is a silence or a refusal and never both. Then the record, which only a kept key reaches;
+        see `THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD` for why it comes
+        second and why losing it does not unsay the write. Every event this logs names the slot,
+        the actor and the trace id and nothing else. `ent_hash` is the writer's reach as a digest,
+        and empty from the setup wizard, which has none.
         """
         vault = self._vault
         if vault is None:
@@ -395,7 +474,9 @@ class Credentials:
             )
             raise CredentialProblemError(problems)
         try:
-            set_at = vault.write_static_kv(slot.path, {KEY_FIELD: value.strip()})
+            set_at = await asyncio.to_thread(
+                vault.write_static_kv, slot.path, {KEY_FIELD: value.strip()}
+            )
         except VaultUnreachableError as silent:
             state = VaultState.UNREACHABLE
             log.info("credential not kept", slot=slot.path, actor=actor, vault=state)
@@ -405,7 +486,38 @@ class Credentials:
             log.info("credential not kept", slot=slot.path, actor=actor, vault=state)
             raise CredentialsUnavailableError(state) from refused
         log.info("credential kept", slot=slot.path, actor=actor, trace_id=trace_id)
+        await self._record(slot, actor=actor, trace_id=trace_id, ent_hash=ent_hash)
         return Kept(slot=slot.path, set_at=set_at)
+
+    async def _record(
+        self, slot: CredentialSlot, *, actor: str, trace_id: str, ent_hash: str
+    ) -> None:
+        """Record a key already kept, and never raise: the key is in the vault either way.
+
+        Broad, because any failure here is the same fact, a kept key with no record, and the one
+        thing that must not follow is a person told their key was not saved. The type name alone
+        is logged, for the reason `brain.credential_routes` gives about an exception's message.
+        """
+        if self._writes is None:
+            log.warning(
+                "credential write has no ledger to be recorded in",
+                slot=slot.path,
+                actor=actor,
+                trace_id=trace_id,
+            )
+            return
+        try:
+            await self._writes.record(
+                slot=slot.path, written_by=actor, trace_id=trace_id, ent_hash=ent_hash
+            )
+        except Exception as exc:
+            log.error(
+                "credential write not recorded",
+                slot=slot.path,
+                actor=actor,
+                trace_id=trace_id,
+                error=type(exc).__name__,
+            )
 
     def put_to_use(self, slot: CredentialSlot, value: str) -> InUse:
         """Hand a key this process has just kept to its own provider SDK, unless it is outranked.

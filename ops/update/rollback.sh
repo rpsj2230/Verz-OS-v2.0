@@ -26,6 +26,7 @@ case "$BRAIN_PROFILE" in
   *) fail "unknown profile; one of: lite standard full" ;;
 esac
 if grep -q "^CLOUDFLARE_TUNNEL_TOKEN=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES $BRAIN_TUNNEL_FILES"; say "The environment file holds the tunnel token, so the tunnel is composed in."; fi
+if grep -q "^BRAIN_VAULT_ADDRESS=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES -f /opt/brain/docker-compose.vault.yml"; say "The environment file names a secrets vault, so the vault overlay is composed in."; fi
 
 say "Going back one release on the $BRAIN_PROFILE profile in $BRAIN_HOME."
 

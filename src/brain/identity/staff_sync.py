@@ -64,9 +64,9 @@ else's. Not filtered, empty. See `A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NO_ENT
 
 **Two costs, and the second is the design question.** The reach goes stale between a transfer
 and the next sync, which is bounded by `SYNC_INTERVAL` and stated in `THE_STALENESS_WINDOW`;
-and an audit permission is per subject kind, eight in all, so somebody has to say which of the
-eight a head holds. `AUDIT_KIND_DECISIONS` is that answer with an argument beside every one of
-the eight, and `HEAD_AUDIT_SUBJECT_KINDS` is derived from it rather than written twice, so the
+and an audit permission is per subject kind, eleven in all, so somebody has to say which of the
+eleven a head holds. `AUDIT_KIND_DECISIONS` is that answer with an argument beside every one of
+the eleven, and `HEAD_AUDIT_SUBJECT_KINDS` is derived from it rather than written twice, so the
 list is data a reviewer reads and never a branch they have to trace.
 
 **Rejected: `read:audit.*` as one grant instead of a chosen set.** It is one row rather than
@@ -361,14 +361,14 @@ A_HEAD_READS_THE_GOVERNANCE_OF_THEIR_PEOPLE_AND_NOT_THEIR_WORK: Final = (
     "half of a power they have. An entry about a business record or an artefact is their "
     "people's work, and whether this reader may see one of those is decided by a scope on the "
     "object which an actor-scoped audit grant does not consult; admitting it would make the "
-    "ledger the way round the scope on the data. That is the line, and every one of the eight "
+    "ledger the way round the scope on the data. That is the line, and every one of the eleven "
     "is put on one side of it below rather than left to a reader to infer."
 )
 
 
 @dataclass(frozen=True)
 class AuditKindDecision:
-    """One of the eight audit subject kinds, and whether a department head reads it.
+    """One of the eleven audit subject kinds, and whether a department head reads it.
 
     A record rather than two lists, so the answer and its argument cannot come apart. Two
     lists drift the first time somebody moves a kind and edits one of them, and the direction
@@ -385,8 +385,8 @@ class AuditKindDecision:
     def __post_init__(self) -> None:
         if self.kind not in SUBJECT_KINDS:
             msg = (
-                f"{self.kind!r} is not an audit subject kind; the eight are "
-                f"{sorted(SUBJECT_KINDS)} and a decision about a ninth decides nothing"
+                f"{self.kind!r} is not an audit subject kind; the kinds are "
+                f"{sorted(SUBJECT_KINDS)} and a decision about another decides nothing"
             )
             raise ValueError(msg)
         if not self.because.strip():
@@ -397,10 +397,10 @@ class AuditKindDecision:
             raise ValueError(msg)
 
 
-#: All eight audit subject kinds, each with the sentence that puts it in or out.
+#: All eleven audit subject kinds, each with the sentence that puts it in or out.
 #:
 #: This is the list item 48 asked for, and it is deliberately a mapping over the whole
-#: vocabulary rather than the chosen subset: a ninth subject kind added to
+#: vocabulary rather than the chosen subset: a twelfth subject kind added to
 #: `brain.audit.ledger.SUBJECT_KINDS` leaves this incomplete and fails a test, which is how a
 #: new kind gets decided about rather than quietly inheriting whichever side the code falls
 #: on. See `A_HEAD_READS_THE_GOVERNANCE_OF_THEIR_PEOPLE_AND_NOT_THEIR_WORK` for the rule.
@@ -495,6 +495,47 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "and is the thing this decision was taken in order not to start keeping."
                 ),
             ),
+            AuditKindDecision(
+                kind="credential",
+                covered=False,
+                because=(
+                    "Not covered, and this is the owner's recommendation by default rather than a "
+                    "decision item 48 reached, since the kind was added on 2026-09-16, after it. A "
+                    "credential is estate configuration no head can set: the provider key every "
+                    "question is sent with is written only by somebody holding admin:credential "
+                    "over everything, which brain.credential_routes argues in "
+                    "A_KEY_EVERY_QUESTION_USES_IS_SET_BY_SOMEBODY_WHO_GOVERNS_EVERY_QUESTION, and "
+                    "by first run. None of a head's governing acts produces one of these entries, "
+                    "so there is nothing of their authority to review here, and an entry about a "
+                    "key belongs to whoever may replace it."
+                ),
+            ),
+            AuditKindDecision(
+                kind="retention",
+                covered=False,
+                because=(
+                    "Not covered, and this is the owner's recommendation by default rather than a "
+                    "decision item 48 reached, since the kind was added on 2026-09-16, after it. A "
+                    "release lets the retention sweep delete across every store at once, so it is "
+                    "made only by somebody holding admin:retention over everything who may read "
+                    "the whole report, which brain.retention_routes argues; no head can make one "
+                    "or withdraw one, so there is none of their authority here to review, and an "
+                    "entry about the estate's deletions belongs to whoever governs them."
+                ),
+            ),
+            AuditKindDecision(
+                kind="legal_hold",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason "
+                    "as retention. A hold is placed and lifted only by somebody holding "
+                    "admin:legal_hold over everything, because a hold scoped to one department "
+                    "cannot be expressed by the sweep that honours it. A hold is also the record "
+                    "that a dispute exists, and its identifier is chosen by whoever placed it, so "
+                    "a standing reach over these entries would tell a head which matters are under "
+                    "hold when none of their governing acts produced one."
+                ),
+            ),
         )
     }
 )
@@ -523,7 +564,7 @@ THE_PAGE_AND_THE_ROWS_ARE_TWO_GRANTS: Final = (
 #: The page capability, built from the audit view's own noun rather than spelled here.
 AUDIT_PAGE_CAPABILITY: Final = Capability(value=f"read:{AUDIT_NOUN}")
 
-#: Every audit capability this sync could ever have written, for any decision about the eight.
+#: Every audit capability this sync could ever have written, for any decision about the eleven.
 #:
 #: Wider than what it writes today, on purpose. `to_delete` is computed against this set, so
 #: the day a kind is taken out of `AUDIT_KIND_DECISIONS` the grant that kind produced is

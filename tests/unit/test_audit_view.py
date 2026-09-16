@@ -40,6 +40,8 @@ from brain.audit.record import (
     ApprovalVerdict,
     AuditRecorder,
     DenyReason,
+    LegalHoldChange,
+    RetentionChange,
     SignInChange,
     subject,
 )
@@ -379,6 +381,12 @@ CALLS: dict[str, dict[str, object]] = {
         "decision": ReviewDecision.KEEP,
         "capability": "read:client.name",
     },
+    "credential": {"slot": "providers/anthropic"},
+    "retention": {
+        "release_id": "3c2b1a09-8f7e-4d6c-9b5a-1e2d3c4b5a69",
+        "change": RetentionChange.RELEASED,
+    },
+    "legal_hold": {"hold_id": "h_dispute", "change": LegalHoldChange.PLACED},
 }
 
 

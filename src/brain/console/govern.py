@@ -92,11 +92,11 @@ console standard, makes a sensitive operation an `admin:` capability, which `bra
 withholds from a password-only session and a token with no session. The second half of the old
 worry is answered by the first fact: `tests/unit/test_first_administrator.py` reads every
 `admin:` capability in the source and requires the first administrator to hold it, so this one
-is met by the person who administers the install rather than by nobody. What that does not
-settle is the listing: the Sessions screen's read is still `read:session`, which the first
-administrator is not written, so on a fresh install the control is held by somebody who cannot yet
-open the screen it is on until a grant of that read is made. That is the same gap every `read:`
-screen has on a fresh install and is recorded rather than closed here. `SESSION_CONTROL` is written
+is met by the person who administers the install rather than by nobody. The listing's read,
+`read:session`, was not written to the first administrator either until later the same day, when
+`brain.identity.first_administrator.OVERSIGHT` gave a first administrator every screen's read
+below the content plane and `brain.identity.administration_reconciliation` gave it to those
+appointed before. `SESSION_CONTROL` is written
 out and pinned by a test against the first administrator's list and against the Sessions screen's
 own read, so repointing it fails.
 

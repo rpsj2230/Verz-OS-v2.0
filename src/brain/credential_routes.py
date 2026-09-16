@@ -278,8 +278,12 @@ async def set_credential(
         raise _not_answerable()
     store = credentials_of(request)
     try:
-        kept = await asyncio.to_thread(
-            store.keep, slot, body.value, actor=asked.reach.principal_id, trace_id=_trace_id()
+        kept = await store.keep(
+            slot,
+            body.value,
+            actor=asked.reach.principal_id,
+            trace_id=_trace_id(),
+            ent_hash=asked.reach.ent_hash(),
         )
         in_use = store.put_to_use(slot, body.value)
     except CredentialProblemError as refused:

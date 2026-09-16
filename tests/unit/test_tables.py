@@ -101,6 +101,7 @@ MIGRATION_RETENTION = VERSIONS / "0049_retention_enforcement.py"
 MIGRATION_OPERATION = VERSIONS / "0051_operation_ledger.py"
 MIGRATION_REVIEW_DECISION = VERSIONS / "0052_review_decision.py"
 MIGRATION_CONSOLE_RECORDS = VERSIONS / "0053_webhook_changes_and_data_exports.py"
+MIGRATION_CREDENTIAL_WRITE = VERSIONS / "0054_credential_and_retention_audit.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -255,6 +256,8 @@ REVIEW_DECISION_TABLES: tuple[str, ...] = ("gate.review_decision",)
 
 #: And the two 0053 adds: who changed a webhook subscriber, and every export taken.
 CONSOLE_RECORD_TABLES: tuple[str, ...] = ("ops.webhook_change", "ops.data_export")
+#: And the one 0054 adds: every credential written into the vault, by slot and writer, never what.
+CREDENTIAL_WRITE_TABLES: tuple[str, ...] = ("ops.credential_write",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -286,6 +289,7 @@ ALL_TABLES = (
     + OPERATION_TABLES
     + REVIEW_DECISION_TABLES
     + CONSOLE_RECORD_TABLES
+    + CREDENTIAL_WRITE_TABLES
 )
 
 
@@ -1001,6 +1005,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert review_decision.TABLES == REVIEW_DECISION_TABLES
     console_records = migration_module(MIGRATION_CONSOLE_RECORDS)
     assert console_records.TABLES == CONSOLE_RECORD_TABLES
+    credential_write = migration_module(MIGRATION_CREDENTIAL_WRITE)
+    assert credential_write.TABLES == CREDENTIAL_WRITE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1054,6 +1060,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(operation.TABLES)
         + tuple(review_decision.TABLES)
         + tuple(console_records.TABLES)
+        + tuple(credential_write.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1088,6 +1095,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(operation.TABLES),
         set(review_decision.TABLES),
         set(console_records.TABLES),
+        set(credential_write.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

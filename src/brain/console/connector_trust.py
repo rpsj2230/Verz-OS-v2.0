@@ -49,9 +49,11 @@ list invented in a rendering layer disagrees with it the first time anybody adds
 Rejected: a "connect" verb here. Connecting a connector means writing its credential into the
 vault and registering a manifest against it, and this package writes nothing at all. The
 registry's own write is `brain.connectors.registry.register`, which takes a manifest and an
-installer's entitlement, and the vault half has no writer anywhere in this repository:
-`brain.ops.openbao.OpenBaoVault` issues, reads the provider prefix and revokes, and there is no
-method that puts a value in. `CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY` is that stated as the
+installer's entitlement, and the vault half has no writer for a connector: since 2026-09-16
+`brain.ops.openbao.OpenBaoVault.write_static_kv` puts a provider key in from the console, and it
+refuses every path outside the static prefixes `assert_static_path` admits, which `connectors/`
+is not, because a connector's credential is one the vault mints per run and the application
+policy grants no write under it. `CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY` is that stated as the
 sentence the screen carries, rather than as a disabled button, because a control that is drawn
 and refuses is a control somebody files a bug about.
 
@@ -126,12 +128,13 @@ A_VAULT_PATH_IS_NOT_A_CREDENTIAL_AND_IS_STILL_NOT_A_CONSOLE_ROW: Final = (
 CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY: Final = (
     "Connecting a source is two writes: the credential goes into the vault, and a manifest "
     "naming where it went is registered against it. This install can do neither from a browser. "
-    "brain.ops.openbao.OpenBaoVault mints a lease, reads the provider prefix and revokes, and "
-    "has no method that puts a value in, so nothing in this system writes a credential at "
-    "runtime and a form that collected one would have nowhere to send it. A control that is "
-    "drawn and then refuses is worse than no control: it reads as a permission problem with the "
-    "person using it. So the screen says plainly what has to happen at the server instead, and "
-    "the day a vault writer exists this sentence is what it replaces."
+    "The vault takes a model provider's key from the console, and never a connector's: its "
+    "writer refuses every path under connectors/, because a connector's credential is one the "
+    "vault mints for each run and the application's policy grants no write there, so a form "
+    "that collected one would have nowhere to send it. A control that is drawn and then refuses "
+    "is worse than no control: it reads as a permission problem with the person using it. So "
+    "the screen says plainly what has to happen at the server instead, and the day a "
+    "connector's credential has a writer this sentence is what it replaces."
 )
 
 #: Why a connector nobody installed and one this reader cannot see are the same absence.

@@ -184,6 +184,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # version reads metadata only.
         "brain.ops.credentials:CredentialVault.static_kv_version": Repeat.READS,
         "brain.ops.credentials:CredentialVault.write_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # The record of a kept key (0054): a row in this system's own table, whose trigger appends
+        # the ledger entry. A repeat is a second row and a second entry, which is right, because a
+        # repeated call follows a second write to the vault.
+        "brain.ops.credentials:CredentialWrites.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # The cache.
         "brain.cache:ValkeyClient.get": Repeat.READS,
         "brain.cache:ValkeyClient.setex": Repeat.DERIVED_STATE,

@@ -33,9 +33,11 @@ which is the capability the Access review screen already requires, so inventing
 `admin:principal` for either would put a capability into the system from the rendering layer
 where the administrator reviewing grants would never meet it. That was
 `brain.console.govern.SESSION_CONTROL`'s argument too, until 2026-09-16 moved ending a session to
-`admin:session` on the measurement that nobody on a fresh install holds `approve:grant`. The same
-measurement applies to both controls here and is not acted on in this module: that is a decision
-about the first administrator's grants rather than about these surfaces. `GOVERNANCE_CONTROL` is
+`admin:session` on the measurement that nobody on a fresh install held `approve:grant`. The same
+measurement applied to both controls here, and it was answered where it belonged, in the first
+administrator's grants rather than in these surfaces:
+`brain.identity.first_administrator.GOVERNANCE` grants `approve:grant` over everything at
+appointment and at the next start. `GOVERNANCE_CONTROL` is
 written out and pinned against that screen by test rather than derived from it, so repointing
 either fails.
 

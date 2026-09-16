@@ -55,6 +55,7 @@ from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.data_export import DataExportRow
+from brain.tables.credential import CredentialWriteRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -225,6 +226,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # points at nothing, because the person who took it is a value and the record outlives them.
     "ops.webhook_change",
     "ops.data_export",
+    # 0054_credential_and_retention_audit. Points at nothing: the writer is a value, and the setup
+    # wizard writes a key before any principal exists to point at.
+    "ops.credential_write",
 )
 
 __all__ = [
@@ -243,6 +247,7 @@ __all__ = [
     "ControlRunRow",
     "ConversationRow",
     "DataExportRow",
+    "CredentialWriteRow",
     "DepartmentRow",
     "DirectoryRoleGrantRow",
     "EntityAliasRow",
