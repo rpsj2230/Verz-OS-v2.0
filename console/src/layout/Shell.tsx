@@ -97,6 +97,7 @@ const GROUPS: readonly NavGroup[] = [
       { to: "/errors", label: "Errors" },
       { to: "/models", label: "Models and health" },
       { to: "/connectors", label: "Connectors" },
+      { to: "/webhooks", label: "Webhooks" },
       { to: "/routing", label: "Routing" },
     ],
   },
@@ -131,6 +132,7 @@ const GROUPS: readonly NavGroup[] = [
       { to: "/artifacts", label: "Artifacts" },
       { to: "/retention", label: "Retention and erasure" },
       { to: "/audit", label: "Audit" },
+      { to: "/import-export", label: "Import and export" },
       { to: "/subscribers", label: "Subscribers and notifications" },
       { to: "/classification", label: "Classification" },
     ],
@@ -157,7 +159,7 @@ const GROUPS: readonly NavGroup[] = [
   },
   {
     heading: "Install",
-    sections: INSTALL_SECTIONS,
+    sections: [...INSTALL_SECTIONS, { to: "/storage", label: "Storage" }],
   },
 ];
 

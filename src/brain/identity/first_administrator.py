@@ -182,6 +182,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:connector",
     "admin:credential",
     "admin:feature",
+    "admin:export",
     "admin:field_classification",
     "admin:halt",
     "admin:legal_hold",
@@ -193,6 +194,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:schedule",
     "admin:session",
     "admin:sign_in",
+    "admin:storage",
     "admin:webhook_subscriber",
 )
 

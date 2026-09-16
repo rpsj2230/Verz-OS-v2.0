@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -51,6 +51,23 @@ path "providers/data/+" {
 # how many versions are kept and when they are deleted, which is a way to erase a key's
 # history, and custom metadata is not needed for anything here.
 path "providers/metadata/+" {
+  capabilities = ["read"]
+}
+
+# Webhook subscribers' signing secrets, the second thing nothing can lease: the receiver checks
+# every delivery against the same value, so it is stored and replaced whole. See
+# brain.ops.openbao.A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED and brain.ops.webhook_admin.
+#
+# create and update, so an administrator registers a subscriber and rotates its secret from the
+# console. No read: the application writes these and never signs with them. The process that
+# delivers will read them under its own policy when a dispatcher exists, and until then nothing
+# anywhere holds a read on this engine. Metadata read only, for the reason given above for
+# providers: it is how the console says a secret is held without reading it back.
+path "webhooks/data/+" {
+  capabilities = ["create", "update"]
+}
+
+path "webhooks/metadata/+" {
   capabilities = ["read"]
 }
 

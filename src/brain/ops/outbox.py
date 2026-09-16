@@ -159,8 +159,9 @@ THE_CONSOLE_SCREEN_IS_NOT_BUILT = (
     "what a subscriber is, what may be subscribed to, who may manage one, and what the "
     "address rule is. The table is brain.tables.outbox and the screen's decisions are "
     "brain.console.subscribers: list subscribers, show which kinds each takes and when it "
-    "last delivered, register and deactivate. There is still no HTTP route and no drawn "
-    "screen. Every change needs MANAGE_SUBSCRIBERS, which is why the capability is named "
+    "last delivered, register and deactivate. Since 2026-09-16 brain.webhook_routes serves "
+    "them with the console's Webhooks screen, and what is still not built is anything that "
+    "delivers. Every change needs MANAGE_SUBSCRIBERS, which is why the capability is named "
     "here rather than invented by whoever builds the screen."
 )
 
@@ -205,14 +206,25 @@ class EventKind(enum.StrEnum):
 MANAGE_SUBSCRIBERS: Final = Capability(value="admin:webhook_subscriber")
 
 
-def may_manage(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
-    """Whether this principal may manage subscriptions.
+#: Why the capability must be held over everything and not only held.
+A_SUBSCRIPTION_TELLS_THE_WHOLE_COMPANY_S_IDENTIFIERS: Final = (
+    "A subscriber is told about events anywhere in the company, and nothing about a subscription "
+    "is narrowed to one department: an approval requested in finance reaches it exactly as one "
+    "in sales does. A grant of admin:webhook_subscriber scoped to one department would therefore "
+    "let its holder decide where every other department's identifiers are sent, so a scoped grant "
+    "is not a grant here. Until 2026-09-16 this asked holds, and no screen could act on it."
+)
 
-    One line, and it earns its place by being the only line: the capability is named once, so
-    the screen that does not exist yet cannot check a different one, and a test can pin it
-    without importing a string literal from a template.
+
+def may_manage(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this principal may manage subscriptions: the capability, held over everything.
+
+    The one answer: the capability is named once, so a screen cannot check a different one, and a
+    test can pin it without importing a string literal from a template. Held over everything and
+    not merely held; see `A_SUBSCRIPTION_TELLS_THE_WHOLE_COMPANY_S_IDENTIFIERS`.
     """
-    return entitlement.holds(MANAGE_SUBSCRIBERS, now)
+    scope = entitlement.scope_for(MANAGE_SUBSCRIBERS, now)
+    return scope is not None and scope.is_unrestricted()
 
 
 # --------------------------------------------------------------------- the event

@@ -54,6 +54,7 @@ from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
+from brain.tables.data_export import DataExportRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -95,6 +96,7 @@ from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
+from brain.tables.webhook_change import WebhookChangeRow
 
 #: Every table, in the order a migration must create them: a table appears after everything
 #: it points at. The order is the migrations' own tuples end to end - 0002's seven, 0003's
@@ -219,6 +221,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0052_review_decision. Last, because it points at both grant tables. A decision is never
     # retired, so the record of who reviewed a grant outlives the grant being removed.
     "gate.review_decision",
+    # 0053_webhook_changes_and_data_exports. A change points at the subscriber it changed; an export
+    # points at nothing, because the person who took it is a value and the record outlives them.
+    "ops.webhook_change",
+    "ops.data_export",
 )
 
 __all__ = [
@@ -236,6 +242,7 @@ __all__ = [
     "CapabilityRegistryRow",
     "ControlRunRow",
     "ConversationRow",
+    "DataExportRow",
     "DepartmentRow",
     "DirectoryRoleGrantRow",
     "EntityAliasRow",
@@ -277,6 +284,7 @@ __all__ = [
     "TemplateInstanceRow",
     "TemplateVersionRow",
     "UpgradeDeclineRow",
+    "WebhookChangeRow",
     "WebhookSubscriberRow",
     "one_of",
 ]

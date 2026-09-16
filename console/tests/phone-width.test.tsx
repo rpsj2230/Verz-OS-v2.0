@@ -450,6 +450,105 @@ const SKILLS = {
 };
 
 /** Every registered route pattern, and what to mount for it. */
+const WEBHOOKS = {
+  manageable: true,
+  vault: "unreachable",
+  vault_told: UNBROKEN,
+  subscribers: [
+    {
+      subscriber_id: UNBROKEN,
+      endpoint: `https://${UNBROKEN}.example.test/`,
+      kinds: ["approval.requested"],
+      active: true,
+      created_by: UNBROKEN,
+      created_at: "2019-03-04T09:00:00Z",
+      deactivated_at: null,
+      last_delivered_at: null,
+      secret_held: null,
+      secret_written_at: null,
+      deliveries: [
+        {
+          kind: "approval.requested",
+          state: "pending",
+          attempts: 0,
+          occurred_at: "2019-03-04T09:00:00Z",
+          last_attempt_at: null,
+          reason: UNBROKEN,
+        },
+      ],
+      changes: [
+        {
+          change: "registered",
+          changed_by: UNBROKEN,
+          changed_at: "2019-03-04T09:00:00Z",
+          secret_written_at: null,
+        },
+      ],
+    },
+  ],
+  findings: [UNBROKEN],
+  kinds: ["automation.run_finished", "operation.settled", "connector.health_changed", "approval.requested"],
+  delivery: UNBROKEN,
+  inbound: {
+    channels: ["email", "slack"],
+    channels_told: UNBROKEN,
+    automation_path: `/api/v1/${UNBROKEN}`,
+    automation_told: UNBROKEN,
+  },
+  registering: UNBROKEN,
+  replacing: UNBROKEN,
+  switching_off: UNBROKEN,
+  secret_minimum: 32,
+};
+
+const STORAGE = {
+  buckets: [
+    {
+      name: UNBROKEN,
+      holds: UNBROKEN,
+      retention_days: 30,
+      retention_reason: UNBROKEN,
+      versioned: false,
+      public_read: false,
+      kinds: [UNBROKEN],
+    },
+  ],
+  findings: [UNBROKEN],
+  endpoint: { address: `http://${UNBROKEN}:8333`, prefix: UNBROKEN, from_default: false, told: UNBROKEN },
+  connection: UNBROKEN,
+  usage: UNBROKEN,
+  names: UNBROKEN,
+  retention: UNBROKEN,
+  read_at: "2019-03-04T09:00:00Z",
+};
+
+const DATA_TRANSFER = {
+  catalogue: [
+    { key: "audit_trail", label: UNBROKEN, direction: "export", carries: UNBROKEN, runs: true, told: UNBROKEN },
+    { key: "skills", label: UNBROKEN, direction: "import", carries: UNBROKEN, runs: false, told: UNBROKEN },
+  ],
+  reasons: ["regulatory_request"],
+  exportable: true,
+  exports: [
+    {
+      export_id: "11111111-1111-4111-8111-111111111111",
+      data_set: "audit_trail",
+      reason: "regulatory_request",
+      reason_reference: UNBROKEN.slice(0, 64),
+      produced_at: "2019-03-04T09:00:00Z",
+      first_seq: 0,
+      last_seq: 1,
+      entries: 2,
+      verified: true,
+      document_digest: "a".repeat(64),
+    },
+  ],
+  export_told: UNBROKEN,
+  document_told: UNBROKEN,
+  own_exports_told: UNBROKEN,
+  max_entries: 50000,
+};
+
 const PAGES: Readonly<Record<string, PageCase>> = {
   "/": {
     address: "/",
@@ -1345,6 +1444,30 @@ const PAGES: Readonly<Record<string, PageCase>> = {
         staleness: null,
       },
     },
+  },
+  // Webhooks. Identifiers are in the tables, which scroll; the served sentences, the vault's state
+  // and the findings are outside them, where they must wrap. No control is pressed here: the
+  // confirmation panels and the register form are held in `tests/webhooks-page.test.tsx`.
+  "/webhooks": {
+    address: "/webhooks",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/webhooks": WEBHOOKS },
+  },
+  // Storage. The bucket table scrolls; the address, the prefix and the sentences wrap.
+  "/storage": {
+    address: "/storage",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/storage": STORAGE },
+  },
+  // Import and export. The catalogue and the exports tables scroll; the served sentences and the
+  // export form sit outside them. The confirmation is held in `tests/data-transfer-page.test.tsx`.
+  "/import-export": {
+    address: "/import-export",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/data-transfer": DATA_TRANSFER },
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {

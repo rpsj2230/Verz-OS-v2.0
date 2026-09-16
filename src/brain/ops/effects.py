@@ -235,6 +235,21 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # A tool call runs whatever the tool does, and a tool may declare a write.
         "brain.ops.automation_piece:ToolCaller.call": Repeat.ISSUES,
         "brain.ops.digest_delivery:DigestSender.send": Repeat.ISSUES,
+        # The Import and export screen's export: a read of the ledger and one insert into this
+        # system's own table, whose trigger appends to the ledger, in one transaction.
+        "brain.ops.data_export_store:ExportRecords.take_audit_export": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.data_export_store:ExportRecords.taken_by": Repeat.READS,
+        # The Webhooks screen. Each write is this system's own rows in one transaction; the vault
+        # write inside a registration or a rotation goes through `CredentialVault.write_static_kv`,
+        # classified above as the same result when repeated.
+        "brain.ops.webhook_store:WebhookRecords.registered": Repeat.READS,
+        "brain.ops.webhook_store:WebhookRecords.register": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.webhook_store:WebhookRecords.replace_secret": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.ops.webhook_store:WebhookRecords.switch_off": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.erasure:Hold.is_active": Repeat.READS,
         "brain.ops.erasure:StoreEraser.count_for": Repeat.READS,
         "brain.ops.erasure:StoreEraser.erase": Repeat.SAME_RESULT_WHEN_REPEATED,

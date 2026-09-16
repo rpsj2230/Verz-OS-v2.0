@@ -436,6 +436,27 @@ def test_managing_subscriptions_needs_one_named_capability() -> None:
     assert not may_manage(other)
 
 
+def test_managing_subscribers_is_held_over_everything_or_not_held() -> None:
+    """`A_SUBSCRIPTION_TELLS_THE_WHOLE_COMPANY_S_IDENTIFIERS`. A subscription is not narrowed to a
+    department, so a grant scoped to one is a grant to redirect every other department's
+    identifiers. The positive sibling is the test above. Delete this and `holds` comes back, which
+    reads as the same thing in review, and the Webhooks screen's writes open to a department admin.
+    """
+    from brain.core.scope import Clause, Op
+
+    narrow = EntitlementSet(
+        principal_id="p_lead",
+        grants=(
+            Grant(
+                capability=MANAGE_SUBSCRIBERS,
+                scope=Scope(clauses=(Clause(field="department", op=Op.EQ, value="finance"),)),
+            ),
+        ),
+    )
+    assert narrow.holds(MANAGE_SUBSCRIBERS)
+    assert not may_manage(narrow)
+
+
 def test_two_subscriptions_to_one_endpoint_are_reported_as_a_gap() -> None:
     """Invisible from inside a single `Subscriber` and visible to the operator who is about
     to be told we are flapping. The receiver deduplicates on the event id, so the second

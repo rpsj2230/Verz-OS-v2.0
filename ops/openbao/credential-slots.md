@@ -86,6 +86,26 @@ join it to no network the vault is on, so steps 4 and 5 need an override on the 
 the update script recreates the container without one. The product's half is an overlay composed
 in when the environment file names a vault, as `docker-compose.tunnel.yml` is for the tunnel.
 
+## Webhook signing secrets
+
+A webhook subscriber is told when something happens here, and every request it receives is
+signed with a secret it shares with this system. A shared secret cannot be minted per request,
+because the receiver checks every delivery against the same value, so it is stored rather than
+leased, under an engine of its own at `webhooks/`, one path per subscriber named by the
+subscriber's id. An administrator holding `admin:webhook_subscriber` writes it when registering
+a subscriber on the console's Webhooks screen and replaces it there when rotating; the screen
+says whether one is held and when it was written, and never shows it.
+
+The application's policy may create and update `webhooks/data/+` and read `webhooks/metadata/+`,
+and nothing else there. It never reads a signing secret back. Nothing on an install delivers to a
+subscriber yet, and when a dispatcher is built it reads the secret under the worker's policy,
+which does not name this engine today.
+
+To let the application keep them, once per install that runs a vault:
+
+1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=webhooks kv-v2`.
+2. Load the policies: `sh ops/openbao/load-policies.sh`.
+
 ## Three things worth deciding before the keys are issued, not after
 
 **Xero's limit is per tenant and it is 5,000 a day.** That is a documented ceiling and it is

@@ -70,6 +70,7 @@ from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
+from brain.data_transfer_routes import router as data_transfer_router
 from brain.docs_routes import router as docs_router
 from brain.erasure_routes import router as erasure_router
 from brain.error_routes import router as error_router
@@ -104,6 +105,7 @@ from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
+from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.prompt_routes import router as prompt_router
 from brain.report_routes import router as report_router
 from brain.retention_routes import router as retention_router
@@ -126,7 +128,9 @@ from brain.setup_routes import router as setup_router
 from brain.sign_in_routes import router as sign_in_router
 from brain.skill_routes import router as skill_router
 from brain.staff_source_routes import router as staff_source_router
+from brain.storage_routes import router as storage_router
 from brain.tools.startup import build_registry
+from brain.webhook_routes import router as webhook_router
 
 log = structlog.get_logger()
 
@@ -217,6 +221,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # `brain.ops.credentials`.
     app.state.credentials = await asyncio.to_thread(
         credentials_at_start, settings.vault_address, settings.vault_token
+    )
+    # Webhook subscribers' signing secrets, through the same two settings and asking the vault
+    # nothing at start: a secret is written when somebody registers a subscriber. See
+    # `brain.ops.webhook_admin`.
+    app.state.signing_secrets = signing_secrets_at_start(
+        settings.vault_address, settings.vault_token
     )
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
@@ -582,6 +592,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The same, for where a credential is kept. `lifespan` builds it from the vault settings, and
     # a route reading None answers as an install with no vault. See `brain.credential_routes`.
     app.state.credentials = None
+    # The same, for where a webhook subscriber's signing secret is kept. See `brain.webhook_routes`.
+    app.state.signing_secrets = None
 
     # Registered first, which makes it innermost: Starlette inserts each new middleware at
     # the front of the stack, so the last one registered runs outermost. Inside `trace`
@@ -860,6 +872,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # agent's own instructions, edited as a local change to its template. See
     # `brain.prompt_routes`.
     app.include_router(prompt_router)
+    # Webhooks: every subscriber, where it points, whether its signing secret is held and its
+    # recent outcomes, and registering, replacing a secret and switching off behind
+    # `admin:webhook_subscriber`. Built on `NoEchoRoute`, because two of its writes carry a
+    # secret. See `brain.webhook_routes`.
+    app.include_router(webhook_router)
+    # Storage: the buckets the product keeps, each one's retention and why, and where the store
+    # is, behind `admin:storage` over everything. Never an object's name. See
+    # `brain.storage_routes`.
+    app.include_router(storage_router)
+    # Import and export: what the code can move and whether an install can move it now, and the
+    # audit trail export, recorded in the ledger before the document is handed over. See
+    # `brain.data_transfer_routes`.
+    app.include_router(data_transfer_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

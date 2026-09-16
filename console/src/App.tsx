@@ -86,6 +86,9 @@ import { Spend } from "./pages/Spend";
 import { NotFound } from "./pages/NotFound";
 import { FirstRun } from "./pages/FirstRun";
 import { Overview } from "./pages/Overview";
+import { DataTransfer } from "./pages/DataTransfer";
+import { Storage } from "./pages/Storage";
+import { Webhooks } from "./pages/Webhooks";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
 
@@ -265,6 +268,17 @@ export const routes: RouteObject[] = [
       // the path is the screen's key in `brain.console.screens`. Eager rather than split, for
       // the install screens' reason: it mounts neither heavy library and no stylesheet.
       { path: "connectors", element: <Connectors /> },
+      // Webhooks, under Operate beside Connectors: who outside the company is told when something
+      // happens here, and registering, replacing a secret and switching off as confirmed writes.
+      // One path and no parameter: a subscriber is changed from the listing rather than opened.
+      // Eager rather than split: it mounts neither heavy library and no stylesheet of its own.
+      { path: "webhooks", element: <Webhooks /> },
+      // Storage, under Install: the buckets, each one's retention and why, and where the store
+      // is. One path, no parameter, no control. Eager for the same reason.
+      { path: "storage", element: <Storage /> },
+      // Import and export, under Govern after Audit: what can move and the audit trail export,
+      // taken as a confirmed write. One path and no parameter. Eager for the same reason.
+      { path: "import-export", element: <DataTransfer /> },
       { path: "routing/:rungId", element: <Matrix /> },
       // Three paths and one component. The document is a path segment because it is what
       // the screen is about, the column is one because it is which rule is being argued

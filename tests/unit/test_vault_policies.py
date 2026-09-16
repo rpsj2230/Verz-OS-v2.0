@@ -288,3 +288,55 @@ def test_every_slot_the_code_writes_is_a_path_the_application_policy_grants() ->
             assert rules, f"no rule in application.hcl names {called}"
             assert any(needed in caps for caps in rules), f"{called} is not granted {needed}"
     assert not _matches("providers/data/+", "providers/data/a/b")
+
+
+# ------------------------------------------ the webhook signing secrets the application writes
+def test_the_application_may_write_signing_secrets_and_read_only_their_metadata() -> None:
+    """Exactly two rules under the webhooks engine. Create and update so a subscriber's secret is
+    written and replaced from the console; metadata read so the screen can say it is held. No read
+    of a secret: the application never signs with one, so a read here would be a standing copy of
+    every subscriber's secret in the process that answers questions. `brain.ops.webhook_admin`
+    argues the grant.
+
+    Delete this and the rule gains `read` in a debugging session, and nothing else reads the policy.
+    """
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    webhooks = {path: sorted(caps) for path, caps in granted.items() if path.startswith("webhooks")}
+    assert webhooks == {
+        "webhooks/data/+": ["create", "update"],
+        "webhooks/metadata/+": ["read"],
+    }
+
+
+def test_every_path_a_signing_secret_is_written_to_is_one_the_application_policy_grants() -> None:
+    """Held against the path `OpenBaoVault` calls for a subscriber id at the grammar's longest,
+    rather than against the words in the policy. Delete this and a subscriber id that makes two
+    path segments passes every unit test and is refused by the vault on the first install."""
+    from brain.ops.webhook_admin import signing_secret_path
+
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    mount, _, rest = signing_secret_path("a" + "0" * 62).partition("/")
+    for called, needed in (
+        (f"{mount}/data/{rest}", "update"),
+        (f"{mount}/metadata/{rest}", "read"),
+    ):
+        rules = [caps for rule, caps in granted.items() if _matches(rule, called)]
+        assert rules and any(needed in caps for caps in rules), called
+
+
+def test_the_static_path_rule_admits_the_signing_engine_and_still_refuses_every_leased_path() -> (
+    None
+):
+    """The second prefix is admitted exactly: `webhooks/` and nothing that merely starts the same
+    way, and every path the leasing design says is minted is still refused. Delete this and the
+    prefix is widened to `webhooks`, or to everything, with `test_provider_keys` green."""
+    import pytest
+
+    from brain.ops.openbao import SIGNING_PREFIX, assert_static_path
+    from brain.ops.secrets import SecretsUnavailableError
+
+    assert SIGNING_PREFIX == "webhooks/"
+    assert_static_path("webhooks/billing_bridge")
+    for refused in ("webhooksx/a", "webhook/a", "connectors/creds/xero", "secret/data/webhooks/a"):
+        with pytest.raises(SecretsUnavailableError):
+            assert_static_path(refused)

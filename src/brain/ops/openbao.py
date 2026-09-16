@@ -42,7 +42,15 @@ answer is sealed, stopped or unreachable, and one that answered no is a token, a
 engine that is not there. Reading the status out of a message string would work until
 somebody reworded the message.
 
-Task ids: M31.3.2.3, M27.8.7
+**A second static engine, `webhooks/`, for the one other kind of secret nothing can lease.**
+A webhook subscriber's signing secret is shared with the receiver, which checks every request
+against it, so a vault that minted a fresh one per delivery would sign requests no receiver
+can verify. It is written from the console (`brain.ops.webhook_admin`) and is admitted by
+`assert_static_path` as an exact second prefix beside `providers/`, so `connectors/creds/`
+and every other leased path are refused exactly as before. See
+`A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`.
+
+Task ids: M31.3.2.3, M27.8.7, M27.8.12
 """
 
 from __future__ import annotations
@@ -67,8 +75,23 @@ TIMEOUT_SECONDS = 5.0
 #: is refused below.
 DYNAMIC_MOUNTS = ("database/", "aws/", "gcp/", "azure/", "consul/")
 
-#: The one prefix `read_static_kv` may read. Everything else in the vault is leased.
+#: The provider keys' prefix. With `SIGNING_PREFIX`, the only paths the kv methods touch.
 STATIC_PREFIX = "providers/"
+
+#: Webhook subscribers' signing secrets. See `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`.
+SIGNING_PREFIX = "webhooks/"
+
+#: Every prefix the kv methods admit, and nothing else in the vault is stored rather than leased.
+STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX)
+
+#: Why a subscriber's signing secret is kept in kv rather than leased like a connector's.
+A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED = (
+    "A signing secret is held by two parties: this system signs every delivery with it and the "
+    "receiver verifies every delivery against it. A dynamic engine mints a different value per "
+    "request, which no receiver could verify, so the secret is stored and replaced as a whole "
+    "when an administrator rotates it. It is kept under an engine of its own rather than beside "
+    "the provider keys, so a policy granting one never grants the other."
+)
 
 
 class VaultRefusedError(SecretsUnavailableError):
@@ -122,11 +145,13 @@ def assert_static_path(path: str) -> None:
     Public and separate so the refusal can be tested directly rather than only through a
     call that needs a server. `providers/anthropic` is a key nobody can lease;
     `connectors/creds/xero` is one somebody should, and reading the second one this way
-    would work perfectly and be invisible.
+    would work perfectly and be invisible. `webhooks/` is the one other prefix admitted; see
+    `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`.
     """
-    if not path.startswith(STATIC_PREFIX):
+    if not any(path.startswith(prefix) for prefix in STATIC_PREFIXES):
         msg = (
-            f"{path!r} is not a provider key. Everything outside {STATIC_PREFIX!r} is leased "
+            f"{path!r} is not a provider key or a signing secret. Everything outside "
+            f"{list(STATIC_PREFIXES)!r} is leased "
             "through brain.ops.secrets.borrow, which revokes it when the run ends; reading "
             "it here would hand back a standing credential nobody gives back."
         )
