@@ -717,7 +717,9 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
     everything and neither something a head can do; and `skill`, a skill added to the library or
     decided about, which only somebody holding an `admin:` authority over everything can do; and
     `setting`, `routing` and `webhook`, a switch, a rung and a subscriber, each the install's and
-    each changed only by an authority over everything.
+    each changed only by an authority over everything; and
+    `erasure`, a request to erase somebody's data, filed only by somebody holding
+    `admin:erasure` over everything.
 
     Delete this and the set can be widened one kind at a time by whoever finds a page thin,
     and the widening is invisible because every other test here is about the shape of a grant
@@ -730,6 +732,7 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
         "connector",
         "credential",
         "entity",
+        "erasure",
         "grant",
         "legal_hold",
         "retention",

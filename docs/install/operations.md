@@ -326,12 +326,13 @@ starting the re-verification nag.
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
 | `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `nothing` |
 | `spend_report_refresh` | that the spend report a reader is shown is rebuilt daily from what runs actually cost | `in_process` |
+| `erasure_queue` | that a request to erase somebody's data, once filed, is carried out and what it did is written down | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`,
-`knowledge_reverification` and `spend_report_refresh` it is: the general worker ticks the control
-schedule and starts all three. The sweep runs in report-only mode, deleting nothing, until the
+`knowledge_reverification`, `spend_report_refresh` and `erasure_queue` it is: the general worker
+ticks the control schedule and starts all four. The sweep runs in report-only mode, deleting nothing, until the
 installation releases it: every run writes a report an administrator reads at
 `GET /api/v1/govern/retention`, and somebody holding `admin:retention` over everything releases
 the sweep after the newest report with `POST /api/v1/govern/retention/release`, or puts it back
@@ -339,7 +340,13 @@ to reporting with `POST /api/v1/govern/retention/withdrawal`. A legal hold place
 `POST /api/v1/govern/legal-holds` by somebody holding `admin:legal_hold` keeps the rows it covers
 from the next run on. The re-verification nag records each nag in the webhook outbox, asks
 the owner only while the owner can still reach the document, and sends nothing yet, because
-nothing drains the outbox.
+nothing drains the outbox. The erasure queue carries out every request somebody holding
+`admin:erasure` over everything filed with `POST /api/v1/govern/erasures`, on its next run, which
+comes round every quarter of an hour, on the worker's own database connection: a legal hold over the person
+stops it and it is recorded as held, and otherwise each store in PostgreSQL is erased, retired or
+kept by its own table's rule and what happened is written on the request, which the Retention
+screen lists. Recordings, attachments, the answer cache and the retrieval index are not reached by
+it, so every request finishes as incomplete and says which stores it could not reach.
 For `spend_correction` it means a console screen nobody opens on a schedule, for
 `directory_sync` a console page somebody presses, and for `restore_drill` a recovery panel that
 can only show an alarm, because nothing performs a drill. `on_a_route` is started from outside:

@@ -41,6 +41,7 @@ from brain.audit.record import (
     AuditRecorder,
     ConnectorChange,
     DenyReason,
+    ErasureChange,
     InstructionsChange,
     LegalHoldChange,
     RetentionChange,
@@ -407,6 +408,7 @@ CALLS: dict[str, dict[str, object]] = {
         "config_hash": "e" * 64,
     },
     "webhook": {"subscriber_id": "billing_bridge", "change": WebhookChange.SECRET_REPLACED},
+    "erasure": {"request_id": "r-1", "change": ErasureChange.INCOMPLETE},
 }
 
 

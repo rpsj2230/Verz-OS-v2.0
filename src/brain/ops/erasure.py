@@ -47,12 +47,24 @@ exactly the thing somebody asked to be erased, in a document that is emailed, fi
 longer than the data was. Counts and classes travel; content does not, and there is no
 attribute on the model to put it in.
 
-Nothing here reaches a store. `StoreEraser` is the shape the executor must have and **the
-executor is not built**; every function takes what was observed and returns what is wrong
-with it, which is why the case that matters, a store that could not be reached, is testable
-at all.
+Nothing here reaches a store. `StoreEraser` is the shape the executor must have, and
+`brain.ops.erasure_store.PostgresEraser` is the executor for the stores in PostgreSQL; every
+function here takes what was observed and returns what is wrong with it, which is why the case
+that matters, a store that could not be reached, is testable at all. `carry_out` is the one run
+over an executor, and it names every store the executor refused rather than stopping at the
+first.
 
-Task ids: M25.2.1, M25.2.2, M25.2.3, M25.2.4
+**A retired row is not a removed row, and a row no path may remove is not erased.** Two limits
+the executor meets in the database, and both are counted separately rather than folded into
+`removed`. `brain.db.SoftDeleteMixin` retires a row so its trail survives, and an erasure honours
+that rule rather than hard-deleting past it, so a retired row is unreadable to every query the
+application makes and is still stored; a certificate says so in a line of its own. And a table
+whose migration grants the application no way to remove a row keeps that row, so the store
+reports it as kept with the rule that keeps it, the deletion is not complete, and no certificate
+is issued for it. See `A_RETIRED_ROW_IS_UNREADABLE_AND_STILL_STORED` and
+`A_ROW_NO_PATH_MAY_REMOVE_IS_KEPT_AND_SAID_TO_BE`.
+
+Task ids: M25.2.1, M25.2.2, M25.2.3, M25.2.4, M27.7.24
 """
 
 from __future__ import annotations
@@ -140,6 +152,26 @@ A_HELD_SUBJECT_IS_NOT_ERASED = (
     "saying so. So a held subject is refused here, loudly, and the refusal names the hold "
     "rather than pretending the request was satisfied. The request is not lost: it is "
     "refused, and it can be made again when the hold is released."
+)
+
+#: Why a retirement is counted apart from a removal.
+A_RETIRED_ROW_IS_UNREADABLE_AND_STILL_STORED = (
+    "brain.db.SoftDeleteMixin retires rather than removes, because a hard delete destroys the "
+    "trail for the thing deleted, and an erasure does not hard-delete past that rule. A retired "
+    "row is refused to every read the application makes, row-level security included, and its "
+    "bytes are still in the table. Counting it as removed would put a false number on a "
+    "certificate, so it is counted as retired, and the certificate says in a line of its own "
+    "that retired rows remain stored."
+)
+
+#: Why a row the executor may not remove makes the deletion incomplete rather than quietly smaller.
+A_ROW_NO_PATH_MAY_REMOVE_IS_KEPT_AND_SAID_TO_BE = (
+    "A table whose migration grants the application no DELETE and gives it no deleted_at has "
+    "argued, in that migration, for how its rows leave, and an erasure does not grant itself a "
+    "second way out. Its rows about the person are therefore still there after the erasure "
+    "runs. They are counted as kept, the rule that keeps them is named beside the count, the "
+    "deletion is not complete, and no certificate is issued for it, because a certificate for "
+    "a deletion that left rows behind would say the data is gone."
 )
 
 
@@ -402,40 +434,86 @@ def assemble(
 
 
 # ------------------------------------------------------- M25.2.2  the deletion fan-out
-class StoreEraser(Protocol):
-    """What an executor must offer. **Not implemented anywhere in this repository yet.**
+@dataclass(frozen=True)
+class StoreRemoval:
+    """What an executor did in one store. Counts and one sentence, never what went.
 
-    Stated as a protocol and said out loud rather than left to be noticed: everything in
-    this module decides, reports and refuses, and something holding a database session, a
-    Valkey client and an S3 client has to do the removing. The split is
-    `brain.ops.limits` and `brain.ops.limit_store` again, and the reason is the same one:
-    the interesting case is the store that could not be reached, and a module that opened
-    its own connections could not be made to fail that way in a test.
+    Three counts because an executor meets three outcomes for a row and only one of them is a
+    removal. See `A_RETIRED_ROW_IS_UNREADABLE_AND_STILL_STORED` and
+    `A_ROW_NO_PATH_MAY_REMOVE_IS_KEPT_AND_SAID_TO_BE`.
+    """
+
+    #: Rows or objects that are gone.
+    removed: int = 0
+    #: Rows retired: unreadable to every query and still stored.
+    retired: int = 0
+    #: Rows about the person that no path this executor has may remove.
+    kept: int = 0
+    #: The rule that keeps them. Set if and only if something is kept.
+    kept_because: str = ""
+
+    def __post_init__(self) -> None:
+        if self.removed < 0 or self.retired < 0 or self.kept < 0:
+            msg = "an executor reported a negative count"
+            raise ErasureError(msg)
+        if (self.kept > 0) != bool(self.kept_because.strip()):
+            # The two readings a queue must never be left to choose between: rows kept for a
+            # rule nobody named, and a named rule with nothing kept by it.
+            msg = (
+                f"an executor reports {self.kept} kept and a reason of {self.kept_because!r}; "
+                "one of those is not true"
+            )
+            raise ErasureError(msg)
+
+
+class StoreEraser(Protocol):
+    """What an executor must offer.
+
+    `brain.ops.erasure_store.PostgresEraser` is the one for the stores in PostgreSQL, and
+    `brain.ops.erasure_store.EstateEraser` is the one the queue runs, which hands each store to
+    the executor that can reach it and refuses the rest by name. Everything in this module
+    decides, reports and refuses, and the executor does the removing. The split is
+    `brain.ops.limits` and `brain.ops.limit_store` again, and the reason is the same one: the
+    interesting case is the store that could not be reached, and a module that opened its own
+    connections could not be made to fail that way in a test.
+
+    A store an executor cannot reach raises `ErasureError` from either method, and `carry_out`
+    records it as not reached with that reason.
     """
 
     def count_for(self, store: Store, subject_id: str) -> int:
         """How many items this store holds about the subject."""
         ...
 
-    def erase(self, store: Store, subject_id: str) -> int:
-        """Remove them. Returns how many went."""
+    def erase(self, store: Store, subject_id: str) -> StoreRemoval:
+        """Remove what may go, retire what the soft-delete rule keeps, and count what is kept."""
         ...
 
 
 @dataclass(frozen=True)
 class Erased:
-    """What happened in one store. A count and a disposition, never a copy of what went."""
+    """What happened in one store. Counts and a disposition, never a copy of what went."""
 
     store: Store
     disposition: Disposition
     removed: int
     reached: bool
+    #: Rows retired rather than removed. See `A_RETIRED_ROW_IS_UNREADABLE_AND_STILL_STORED`.
+    retired: int = 0
+    #: Rows about the person no path may remove. See
+    #: `A_ROW_NO_PATH_MAY_REMOVE_IS_KEPT_AND_SAID_TO_BE`.
+    kept: int = 0
+    #: Why the store was not reached, or the rule that kept what was kept.
+    because: str = ""
 
     def __post_init__(self) -> None:
-        if self.removed < 0:
-            msg = f"{self.store.value} reported a negative number removed"
+        if self.removed < 0 or self.retired < 0 or self.kept < 0:
+            msg = f"{self.store.value} reported a negative number removed, retired or kept"
             raise ErasureError(msg)
-        if self.removed and self.disposition in (Disposition.ROTATES_OUT, Disposition.RETAINED):
+        if (self.removed or self.retired or self.kept) and self.disposition in (
+            Disposition.ROTATES_OUT,
+            Disposition.RETAINED,
+        ):
             # The line that would make a certificate false. Nothing is removed from a backup
             # or from the audit chain by this path, so a count claiming otherwise is either
             # a bug or a store that has quietly started being deleted from.
@@ -445,16 +523,25 @@ class Erased:
                 "saying it did would be false"
             )
             raise ErasureError(msg)
-        if not self.reached and self.removed:
+        if not self.reached and (self.removed or self.retired or self.kept):
             msg = f"{self.store.value} was not reached and reports {self.removed} removed"
+            raise ErasureError(msg)
+        if self.kept and not self.because.strip():
+            msg = f"{self.store.value} kept {self.kept} and names no rule that kept them"
             raise ErasureError(msg)
 
     def line(self) -> str:
         if not self.reached:
-            return f"{self.store.value}: not reached, so nothing was removed from it"
+            because = f", because {self.because}" if self.because else ""
+            return f"{self.store.value}: not reached, so nothing was removed from it{because}"
         match self.disposition:
             case Disposition.ERASE:
-                return f"{self.store.value}: {self.removed} record(s) removed"
+                parts = [f"{self.store.value}: {self.removed} record(s) removed"]
+                if self.retired:
+                    parts.append(f"{self.retired} retired and still stored")
+                if self.kept:
+                    parts.append(f"{self.kept} kept, because {self.because}")
+                return ", ".join(parts)
             case Disposition.PURGE:
                 return f"{self.store.value}: {self.removed} derived entr(y/ies) purged"
             case Disposition.ROTATES_OUT:
@@ -508,9 +595,18 @@ class Deletion:
             if not one.reached and one.disposition in (Disposition.ERASE, Disposition.PURGE)
         )
 
+    def kept(self) -> tuple[Store, ...]:
+        """Stores that still hold rows about the person which no path may remove."""
+        return tuple(one.store for one in self.results if one.kept)
+
+    @property
+    def retired(self) -> int:
+        return sum(one.retired for one in self.results)
+
     @property
     def complete(self) -> bool:
-        return not self.unreached()
+        """Every target reached and nothing kept. Retired rows do not make it incomplete."""
+        return not self.unreached() and not self.kept()
 
     def lines(self) -> tuple[str, ...]:
         return tuple(one.line() for one in self.results)
@@ -524,6 +620,8 @@ def erase(
     removed: Mapping[Store, int],
     unreachable: Iterable[Store] = (),
     holds: Iterable[Hold] = (),
+    removals: Mapping[Store, StoreRemoval] | None = None,
+    unreached_because: Mapping[Store, str] | None = None,
 ) -> Deletion:
     """Record a deletion across every store, refusing outright if the subject is held.
 
@@ -535,25 +633,25 @@ def erase(
     Counts for the stores a deletion does not reach are refused rather than ignored, because
     a caller reporting three rows removed from a backup has either done something this
     module says is impossible or is about to have it written on a certificate.
+
+    `removals` is what an executor reported, retirements and kept rows included, and
+    `unreached_because` is why each unreached store could not be reached. A store named in both
+    `removed` and `removals` is refused, because two counts for one store is a deletion whose
+    certificate would carry whichever was read first.
     """
     if active := holds_over(subject_id, holds, requested_at):
-        names = ", ".join(sorted({hold_id(one) for one in active}))
-        msg = (
-            f"{subject_id} is under {len(active)} active legal hold(s) ({names}); an "
-            "erasure is refused until they are released"
-        )
-        raise ErasureError(msg)
-    if unknown := sorted(str(store) for store in set(removed) - set(Store)):
+        raise HeldError(subject_id, active)
+    reported = {} if removals is None else dict(removals)
+    reasons = {} if unreached_because is None else dict(unreached_because)
+    if unknown := sorted(str(store) for store in {*removed, *reported, *reasons} - set(Store)):
         msg = f"a removal count was reported for {unknown}, which is not a store"
         raise ErasureError(msg)
-    could_not = set(unreachable)
+    if twice := sorted(store.value for store in set(removed) & set(reported)):
+        msg = f"{twice} reported both a removal count and an executor's removal"
+        raise ErasureError(msg)
+    could_not = set(unreachable) | set(reasons)
     results = tuple(
-        Erased(
-            store=store,
-            disposition=disposition_of(store),
-            removed=0 if store in could_not else removed.get(store, 0),
-            reached=store not in could_not,
-        )
+        _erased(store, removed, reported, reasons, reached=store not in could_not)
         for store in deletion_order()
     )
     return Deletion(
@@ -561,6 +659,96 @@ def erase(
         requested_at=requested_at,
         completed_at=completed_at,
         results=results,
+    )
+
+
+def _erased(
+    store: Store,
+    removed: Mapping[Store, int],
+    reported: Mapping[Store, StoreRemoval],
+    reasons: Mapping[Store, str],
+    *,
+    reached: bool,
+) -> Erased:
+    """One store's line, from whichever count was reported for it, or none when not reached."""
+    disposition = disposition_of(store)
+    if not reached:
+        return Erased(
+            store=store,
+            disposition=disposition,
+            removed=0,
+            reached=False,
+            because=reasons.get(store, ""),
+        )
+    found = reported.get(store)
+    if found is None:
+        return Erased(
+            store=store, disposition=disposition, removed=removed.get(store, 0), reached=True
+        )
+    return Erased(
+        store=store,
+        disposition=disposition,
+        removed=found.removed,
+        reached=True,
+        retired=found.retired,
+        kept=found.kept,
+        because=found.kept_because,
+    )
+
+
+class HeldError(ErasureError):
+    """An erasure refused because active legal holds reach the subject. Carries the holds' ids.
+
+    A subclass rather than a message to parse, because the queue records a held request as its
+    own outcome with the holds that stopped it, and reading hold ids back out of a sentence is how
+    a hold whose id contains a comma becomes two holds. See `A_HELD_SUBJECT_IS_NOT_ERASED`.
+    """
+
+    def __init__(self, subject_id: str, holds: Sequence[Hold]) -> None:
+        self.hold_ids: tuple[str, ...] = tuple(sorted({hold_id(one) for one in holds}))
+        super().__init__(
+            f"{subject_id} is under {len(holds)} active legal hold(s) "
+            f"({', '.join(self.hold_ids)}); an erasure is refused until they are released"
+        )
+
+
+def carry_out(
+    eraser: StoreEraser,
+    *,
+    subject_id: str,
+    requested_at: datetime,
+    completed_at: datetime,
+    holds: Iterable[Hold] = (),
+) -> Deletion:
+    """One erasure, carried out over every store a deletion reaches, in deletion order (M25.2.2).
+
+    **The holds are judged before anything is touched**, at `completed_at`, which is the instant
+    the removal happens: a hold placed after the request and before the run stops it, and a hold
+    lifted in between does not. `HeldError` is raised and the executor is never called.
+
+    Every target is asked, sources before copies, and **a store the executor refuses does not
+    stop the run**: its reason is recorded and the next store is asked. Stopping at the first
+    refusal would leave every later store untouched and every later line saying only "not
+    reached", which is a run that did less than it could and cannot say why. The stores a
+    deletion does not reach are never asked, which is `Disposition` rather than a list here.
+    """
+    active = holds_over(subject_id, holds, completed_at)
+    if active:
+        raise HeldError(subject_id, active)
+    removals: dict[Store, StoreRemoval] = {}
+    refused: dict[Store, str] = {}
+    for store in erasure_targets():
+        try:
+            removals[store] = eraser.erase(store, subject_id)
+        except ErasureError as why:
+            refused[store] = str(why)
+    return erase(
+        subject_id=subject_id,
+        requested_at=requested_at,
+        completed_at=completed_at,
+        removed={},
+        removals=removals,
+        unreached_because=refused,
     )
 
 
@@ -673,11 +861,20 @@ class Certificate:
     def lines(self) -> tuple[str, ...]:
         """The document, in a fixed order. Every line is a count or a statement of limit."""
         named = ", ".join(store.value for store in self.retained())
+        retired = sum(one.retired for one in self.removed)
         return (
             f"deletion {self.certificate_id} for {self.subject_id}",
             f"requested {self.requested_at.isoformat()}, completed {self.completed_at.isoformat()}",
             *(one.line() for one in self.removed),
             f"not reached by this deletion: {named}",
+            *(
+                (
+                    f"{retired} record(s) were retired rather than removed: unreadable to every "
+                    "query and still stored, because the tables they are in keep their trail",
+                )
+                if retired
+                else ()
+            ),
             (
                 "a backup taken before this deletion still contains the data until "
                 f"{self.recoverable_from_backup_until.isoformat()}"
@@ -707,6 +904,14 @@ def certify(deletion: Deletion, *, certificate_id: str) -> Certificate:
         msg = (
             f"{names} could not be reached, so this deletion did not happen everywhere and "
             "a certificate for it would say it did"
+        )
+        raise ErasureError(msg)
+    if kept := deletion.kept():
+        names = ", ".join(store.value for store in kept)
+        msg = (
+            f"{names} still hold rows about the person that no path may remove, so a "
+            "certificate would say the data is gone; see "
+            "A_ROW_NO_PATH_MAY_REMOVE_IS_KEPT_AND_SAID_TO_BE"
         )
         raise ErasureError(msg)
     return Certificate(

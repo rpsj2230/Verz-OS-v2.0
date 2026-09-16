@@ -20,13 +20,20 @@
  * decides again. A reader shown no report is shown no release, because a release is the record that
  * somebody read the report it names.
  *
- * **The export log and the deletion queue are sentences.** Nothing records an export or an erasure
- * request, and an empty table under either heading reads as nothing having left and nobody having
- * asked to be forgotten.
+ * **The export log and the erasure queue are lists, each under the sentence saying what it cannot
+ * show.** `ops.data_export` records every export taken from the console and `ops.erasure_request`
+ * every request filed, and the API decides which rows this reader is shown. A reader who may open
+ * the screen and may not read exports is told so rather than shown an empty table, which would read
+ * as nothing having left the building.
+ *
+ * **Filing an erasure request is checked, confirmed and then sent, and the confirmation is the API's
+ * sentence**, `brain.erasure_routes.ERASING`, which says what is removed, what is retired and still
+ * stored, what is kept and what is never reached. A finished request is drawn store by store in the
+ * same four terms, so a request that finished as incomplete names what still holds the person's data.
  *
  * Imported statically rather than split: it mounts neither heavy library and no stylesheet.
  *
- * Task ids: none
+ * Task ids: M27.7.24
  */
 
 import { useCallback, useState, type ReactNode } from "react";
@@ -38,12 +45,18 @@ import { Notice } from "../ui/Notice";
 import { when } from "./artifactsQuery";
 import {
   CONTROLS_API_PATH,
+  EMPTY_ERASURE,
   EMPTY_HOLD,
+  ERASURES_API_PATH,
+  EXPORT_LOG_API_PATH,
   HOLD_API_PATH,
   LIFT_API_PATH,
   RELEASE_API_PATH,
   RETENTION_API_PATH,
   WITHDRAWAL_API_PATH,
+  erasureBody,
+  erasureProblems,
+  erasureState,
   holdBody,
   holdProblems,
   holdQuestion,
@@ -51,7 +64,12 @@ import {
   releasable,
   releaseCounts,
   reportOf,
+  storeLines,
   type Controls,
+  type ErasureBody,
+  type ErasureForm,
+  type ErasureQueue,
+  type ExportLog,
   type HoldBody,
   type HoldForm,
   type Report,
@@ -111,6 +129,27 @@ export function placedSentence(holdId: string, at: string): string {
 }
 export function liftedSentence(holdId: string, at: string): string {
   return `Legal hold ${holdId} was lifted at ${when(at)}.`;
+}
+
+export const ERASURE_FORM_LABEL = "Ask for somebody's data to be erased";
+export const FILE_ERASURE_LABEL = "File the erasure request";
+export const DO_NOT_FILE = "Do not file it";
+export const ERASE_NOT_YOURS =
+  "Filing a request to erase somebody's data needs the erasure authority over the whole company.";
+export const NO_ERASURE_REQUESTS = "No request to erase anybody's data has been filed that you may see.";
+export const ERASURES_CAPTION = "Requests to erase somebody's data";
+export const READING_EXPORTS = "Reading the export log.";
+export const NO_EXPORTS = "No export has been taken on this install that you may see.";
+export const EXPORTS_CAPTION = "Exports taken from this install";
+
+export function erasureQuestion(body: ErasureBody): string {
+  return `Erase the data this install holds about ${body.subject_id}, under ${body.reason_reference}?`;
+}
+export function filedSentence(subject: string, at: string): string {
+  return (
+    `The request to erase the data held about ${subject} was filed at ${when(at)}. The queue ` +
+    "carries it out on its next run, every quarter of an hour, and this page shows how it finished."
+  );
 }
 
 function Failure({ failure }: { readonly failure: ApiFailure }) {
@@ -561,11 +600,211 @@ function Holds({
   );
 }
 
+function ExportsTaken() {
+  const log = useResource<ExportLog>(EXPORT_LOG_API_PATH);
+
+  if (log.failure !== null) {
+    return <Failure failure={log.failure} />;
+  }
+  if (log.busy || log.data === null) {
+    return (
+      <p className="note" role="status">
+        {READING_EXPORTS}
+      </p>
+    );
+  }
+  if (log.data.exports.length === 0) {
+    return <p className="note">{NO_EXPORTS}</p>;
+  }
+  return (
+    <div className="grid__scroll">
+      <table className="grid__table" aria-label={EXPORTS_CAPTION}>
+        <thead>
+          <tr>
+            <th scope="col">Taken</th>
+            <th scope="col">By</th>
+            <th scope="col">Why</th>
+            <th scope="col">Entries</th>
+            <th scope="col">Chain verified</th>
+            <th scope="col">Document digest</th>
+          </tr>
+        </thead>
+        <tbody>
+          {log.data.exports.map((one) => (
+            <tr key={one.export_id}>
+              <td>{when(one.produced_at)}</td>
+              <td>
+                <code>{one.requested_by}</code>
+              </td>
+              <td>
+                {one.reason}, <code>{one.reason_reference}</code>
+              </td>
+              <td>
+                {one.first_seq === null
+                  ? "none"
+                  : `${String(one.entries)}, from ${String(one.first_seq)} to ${String(one.last_seq)}`}
+              </td>
+              <td>{one.verified ? "Yes" : "No"}</td>
+              <td>
+                <code>{one.document_digest}</code>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Erasures({
+  queue,
+  controls,
+  onDone,
+}: {
+  readonly queue: ErasureQueue;
+  readonly controls: Controls;
+  readonly onDone: (sentence: string) => void;
+}) {
+  const [form, setForm] = useState<ErasureForm>(EMPTY_ERASURE);
+  const [problems, setProblems] = useState<readonly string[]>([]);
+  const [filing, setFiling] = useState<ErasureBody | null>(null);
+  const write = useWrite(onDone);
+
+  return (
+    <section className="card">
+      <h2>Erasure requests</h2>
+      <p>{controls.erasures}</p>
+      {queue.requests.length === 0 ? (
+        <p className="note">{NO_ERASURE_REQUESTS}</p>
+      ) : (
+        <div className="grid__scroll">
+          <table className="grid__table" aria-label={ERASURES_CAPTION}>
+            <thead>
+              <tr>
+                <th scope="col">Filed</th>
+                <th scope="col">Person</th>
+                <th scope="col">Reference</th>
+                <th scope="col">Filed by</th>
+                <th scope="col">Where it stands</th>
+                <th scope="col">What it did</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.requests.map((one) => (
+                <tr key={one.request_id}>
+                  <td>{when(one.requested_at)}</td>
+                  <td>
+                    <code>{one.subject_id}</code>
+                  </td>
+                  <td>
+                    <code>{one.reason_reference}</code>
+                  </td>
+                  <td>
+                    <code>{one.requested_by}</code>
+                  </td>
+                  <td>{erasureState(one, when)}</td>
+                  <td>
+                    {storeLines(one).length === 0 ? null : (
+                      <ul aria-label={`What the request ${one.request_id} did`}>
+                        {storeLines(one).map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {write.failure === null ? null : <Failure failure={write.failure} />}
+
+      {!controls.may_erase ? (
+        <p className="note">{ERASE_NOT_YOURS}</p>
+      ) : filing === null ? (
+        <form
+          className="form"
+          aria-label={ERASURE_FORM_LABEL}
+          onSubmit={(event) => {
+            event.preventDefault();
+            const found = erasureProblems(form);
+            setProblems(found);
+            if (found.length === 0) {
+              write.setFailure(null);
+              setFiling(erasureBody(form));
+            }
+          }}
+        >
+          <h3>{ERASURE_FORM_LABEL}</h3>
+          <label className="control-label">
+            Person, by reference{" "}
+            <input
+              className="form-control"
+              value={form.subject}
+              onChange={(event) => {
+                setForm({ ...form, subject: event.target.value });
+              }}
+            />
+          </label>
+          <label className="control-label">
+            Matter or ticket reference{" "}
+            <input
+              className="form-control"
+              value={form.reference}
+              onChange={(event) => {
+                setForm({ ...form, reference: event.target.value });
+              }}
+            />
+          </label>
+          {problems.length === 0 ? null : (
+            <ul role="alert" aria-label="What to change before filing the request">
+              {problems.map((one) => (
+                <li key={one}>{one}</li>
+              ))}
+            </ul>
+          )}
+          <div className="form-actions">
+            <button type="submit" className="button" disabled={write.busy}>
+              {FILE_ERASURE_LABEL}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <ConfirmAction
+          question={erasureQuestion(filing)}
+          consequence={controls.erasing}
+          confirmLabel={FILE_ERASURE_LABEL}
+          cancelLabel={DO_NOT_FILE}
+          busy={write.busy}
+          onConfirm={() => {
+            const body = filing;
+            write.send(
+              ERASURES_API_PATH,
+              body,
+              (payload) => filedSentence(body.subject_id, stamp(payload, "requested_at")),
+              () => {
+                setFiling(null);
+                setForm(EMPTY_ERASURE);
+              },
+            );
+          }}
+          onCancel={() => {
+            setFiling(null);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
 function RetentionBody({ onDone }: { readonly onDone: (sentence: string) => void }) {
   const answer = useResource<RetentionAnswer>(RETENTION_API_PATH);
   const controls = useResource<Controls>(CONTROLS_API_PATH);
+  const queue = useResource<ErasureQueue>(ERASURES_API_PATH);
 
-  const failure = answer.failure ?? controls.failure;
+  const failure = answer.failure ?? controls.failure ?? queue.failure;
   if (failure) {
     return (
       <section className="card">
@@ -573,7 +812,7 @@ function RetentionBody({ onDone }: { readonly onDone: (sentence: string) => void
       </section>
     );
   }
-  if (answer.busy || controls.busy || controls.data === null) {
+  if (answer.busy || controls.busy || queue.busy || controls.data === null || queue.data === null) {
     return (
       <p className="note" role="status">
         {READING_RETENTION}
@@ -615,11 +854,9 @@ function RetentionBody({ onDone }: { readonly onDone: (sentence: string) => void
       <section className="card">
         <h2>Exports</h2>
         <p>{said.exports}</p>
+        {said.may_read_exports ? <ExportsTaken /> : <p className="note">{said.exports_not_yours}</p>}
       </section>
-      <section className="card">
-        <h2>Erasure requests</h2>
-        <p>{said.erasures}</p>
-      </section>
+      <Erasures queue={queue.data} controls={said} onDone={onDone} />
     </>
   );
 }

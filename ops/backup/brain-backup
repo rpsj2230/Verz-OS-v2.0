@@ -17,10 +17,33 @@
 # before uploading means a truncated upload disagrees with its own manifest instead of being
 # described by it, and `brain.ops.recovery.Backup` refuses a copy of no bytes outright.
 #
+# WHY THE MANIFEST ALSO STATES EVERY TABLE'S ROW COUNT AND THE MIGRATION HEAD. A drill that
+# loads a copy and finds it "worked" has learned that the loader exited zero, which is the same
+# silent failure as a dump that exits zero. `ops/backup/brain-restore-drill` loads the copy into
+# a scratch database and compares what came back with what this file says went in, table by
+# table, so the answer is measured against something written before anybody hoped it would
+# match. The counts are read by this script from the database rather than worked out from the
+# artefact afterwards, because figures derived from the file are a second reading of the same
+# bytes the loader reads, and they agree with a load exactly when both are wrong the same way.
+#
+# WHY THE COUNTS ARE READ INSIDE THE SNAPSHOT THE DUMP USES. Counting before or after the dump
+# counts a different database: the audit ledger alone is written to all day, and erasure and
+# retention delete. Counts taken a second apart from the copy would make every drill on a busy
+# install report a mismatch, and a check that always fails is a check somebody learns to ignore.
+# So one read-only session opens a repeatable-read transaction, exports its snapshot, counts in
+# it, and holds it open while `pg_dump --snapshot` copies from exactly that snapshot. The
+# transaction is READ ONLY, so the one file allowed to read the database still cannot write to
+# it: PostgreSQL refuses the write, not a convention in this script. Row security is switched
+# off inside it for the reason `pg_dump` switches it off: a count a policy has filtered is a
+# wrong number that looks right, and with it off a filtered read is an error instead.
+#
+# Rejected: counting with plain `count(*)` after the dump. Cheaper by one session, and wrong on
+# every install that is in use at 02:00.
+#
 # WHY `-Fc` RATHER THAN PLAIN SQL. The custom format is compressed, and it is the only format
-# PostgreSQL's own loader can read selectively, which is what a partial recovery needs. Nothing
-# in this repository reads one back, deliberately: M30 owns that, and the test in
-# `tests/unit/test_seed.py` refuses any loader under `ops/` at all, because loading is the
+# PostgreSQL's own loader can read selectively, which is what a partial recovery needs. The
+# drill script is the one file allowed to read it back, and only into a scratch database:
+# `tests/unit/test_seed.py` refuses a loader anywhere else under `ops/`, because loading is the
 # direction that copies one stack's data into another. A copy nobody has read back is a file,
 # which `brain.ops.recovery.A_BACKUP_NOBODY_HAS_RESTORED_IS_A_FILE` says at length.
 #
@@ -31,7 +54,7 @@
 # from the environment changes nothing and the file looks clean while the script still reaches
 # somebody else's machine. Every value below is `:?`, which names what is missing and stops.
 #
-# Task ids: M30.3.1, M30.3.2
+# Task ids: M30.3.1, M30.3.2, M42.3.5
 
 set -eu
 
@@ -41,6 +64,27 @@ BRAIN_DB_USER="${BRAIN_DB_USER:?set BRAIN_DB_USER to a role that may read every 
 BRAIN_BACKUP_BUCKET="${BRAIN_BACKUP_BUCKET:?set BRAIN_BACKUP_BUCKET to the bucket copies go to}"
 BRAIN_BACKUP_ENDPOINT="${BRAIN_BACKUP_ENDPOINT:?set BRAIN_BACKUP_ENDPOINT to the object store address}"
 BRAIN_BACKUP_WORK_DIR="${BRAIN_BACKUP_WORK_DIR:-/var/tmp/brain-backup}"
+
+# How long the counting session may take to count, and how long it holds its snapshot open for
+# the dump. The same thirty minutes as the unit's TimeoutStartSec, for the reason given there: it
+# is not a prediction, it is the point past which nothing will resolve itself.
+SESSION_LIMIT_SECONDS=1800
+
+# Every ordinary table and partition outside the system schemas, with its row count, one per
+# line as a JSON key and a number. PostgreSQL writes the key with `to_json`, so a table name
+# nobody expected is escaped by the thing that knows the rules. `only` so a partitioned table's
+# rows are counted once, in its partitions. Extension members are left out because the loader
+# does not copy their rows either: the extension recreates them. `brain-restore-drill` asks the
+# scratch database exactly this, and a test holds the two scripts to the same text.
+COUNT_SQL="select to_json(n.nspname || '.' || c.relname)::text || ': ' || (xpath('/row/n/text()', query_to_xml(format('select count(*) as n from only %I.%I', n.nspname, c.relname), false, true, '')))[1]::text
+from pg_class as c join pg_namespace as n on n.oid = c.relnamespace
+where c.relkind = 'r' and n.nspname !~ '^pg_' and n.nspname <> 'information_schema'
+and not exists (select 1 from pg_depend as d where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype = 'e')
+order by 1;"
+
+# The revision the database is migrated to, as a JSON string. Joined rather than limited to one
+# row, because a branched history has two heads and a copy of it should say so.
+HEAD_SQL="select 'head ' || to_json(coalesce(string_agg(version_num, ',' order by version_num), ''))::text from public.alembic_version;"
 
 log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; }
 fail() { printf '%s\n' "$1" >&2; exit 1; }
@@ -58,21 +102,85 @@ STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 BACKUP_ID="database-$(date -u +%Y%m%dT%H%M%SZ)"
 ARTEFACT="$BRAIN_BACKUP_WORK_DIR/$BACKUP_ID.dump"
 MANIFEST="$BRAIN_BACKUP_WORK_DIR/$BACKUP_ID.manifest.json"
+SESSION_OUT="$BRAIN_BACKUP_WORK_DIR/$BACKUP_ID.session"
+DUMPED="$BRAIN_BACKUP_WORK_DIR/$BACKUP_ID.dumped"
 
-log "copying $BRAIN_DB_NAME from $BRAIN_DB_CONTAINER"
+# Whatever way this ends, the session is told to let go of its snapshot, is waited for, and its
+# scratch files go. Without the first step a failure below leaves the session holding a
+# transaction open for the full limit, which on a database is a vacuum that cannot advance.
+finish() {
+    touch "$DUMPED" 2>/dev/null || :
+    wait || :
+    rm -f "$SESSION_OUT" "$DUMPED"
+}
+trap finish EXIT
+trap 'exit 1' INT TERM
 
-# `-T` because there is no terminal on a timer, and without it docker exec fails on a unit
-# started by systemd while working perfectly when a person runs the same line by hand. That
-# difference is the kind that gets found at three in the morning rather than at the desk.
-#
+log "counting $BRAIN_DB_NAME in $BRAIN_DB_CONTAINER inside one read-only snapshot"
+
+# The left side writes the session and then waits for the dump to finish before committing; the
+# right side is psql, and it records when it ended so a session that died early is seen at once
+# rather than after the limit. `-i` because the statements arrive on standard input. No `-t` and
+# no `-T`: a timer has no terminal, and `-T` is `docker compose exec`'s flag, which plain
+# `docker exec` refuses as unknown. This line said `-T` until 2026-09-17, so every run failed
+# before it copied anything.
+{
+    printf '%s\n' \
+        "begin transaction isolation level repeatable read, read only;" \
+        "set local row_security = off;" \
+        "select 'snapshot ' || pg_export_snapshot();" \
+        "$COUNT_SQL" \
+        "$HEAD_SQL" \
+        "select 'counted';"
+    held=0
+    while [ ! -e "$DUMPED" ] && [ "$held" -lt "$SESSION_LIMIT_SECONDS" ]; do
+        sleep 1
+        held=$((held + 1))
+    done
+    printf '%s\n' "commit;"
+} | {
+    status=0
+    docker exec -i "$BRAIN_DB_CONTAINER" \
+        psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$BRAIN_DB_USER" -d "$BRAIN_DB_NAME" || status=$?
+    printf 'ended %s\n' "$status"
+} > "$SESSION_OUT" 2>&1 &
+
+waited=0
+until grep -qx 'counted' "$SESSION_OUT" 2>/dev/null; do
+    if grep -q '^ended ' "$SESSION_OUT" 2>/dev/null; then
+        fail "the counting session ended before it had counted, so no copy was taken: $(cat "$SESSION_OUT")"
+    fi
+    [ "$waited" -lt "$SESSION_LIMIT_SECONDS" ] \
+        || fail "the counting session did not finish counting within $SESSION_LIMIT_SECONDS seconds, so no copy was taken"
+    sleep 1
+    waited=$((waited + 1))
+done
+
+SNAPSHOT="$(sed -n 's/^snapshot //p' "$SESSION_OUT")"
+case "$SNAPSHOT" in
+    '' | *[!0-9A-Fa-f-]*) fail "the session exported no snapshot this can pass to pg_dump: $(cat "$SESSION_OUT")" ;;
+esac
+HEAD_JSON="$(sed -n 's/^head //p' "$SESSION_OUT")"
+case "$HEAD_JSON" in
+    '""' | '') fail "$BRAIN_DB_NAME records no migration revision, so it is not a database this product migrated and nothing was copied" ;;
+    \"*\") ;;
+    *) fail "the migration head came back as $HEAD_JSON, which is not a JSON string" ;;
+esac
+COUNTS="$(grep '^"' "$SESSION_OUT" || :)"
+
+log "copying $BRAIN_DB_NAME from $BRAIN_DB_CONTAINER at snapshot $SNAPSHOT"
+
 # The redirect is outside the container on purpose: writing inside it and copying out would
 # need space in the container's filesystem, which on a database container is the volume the
 # database is using.
-if ! docker exec -T "$BRAIN_DB_CONTAINER" \
-    pg_dump -U "$BRAIN_DB_USER" -d "$BRAIN_DB_NAME" -Fc > "$ARTEFACT"; then
+if ! docker exec "$BRAIN_DB_CONTAINER" \
+    pg_dump -U "$BRAIN_DB_USER" -d "$BRAIN_DB_NAME" -Fc --snapshot="$SNAPSHOT" > "$ARTEFACT"; then
     rm -f "$ARTEFACT"
     fail "pg_dump failed; nothing was uploaded and the partial file has been removed"
 fi
+
+# The copy has its snapshot, so the session may let go of it now rather than at exit.
+touch "$DUMPED"
 
 FINISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
@@ -82,6 +190,11 @@ SIZE_BYTES="$(wc -c < "$ARTEFACT" | tr -d ' ')"
 [ "$SIZE_BYTES" -gt 0 ] || fail "pg_dump exited zero and wrote nothing; refusing to upload it"
 
 log "wrote $SIZE_BYTES bytes"
+
+# One table per line, in the layout `brain-restore-drill` reads: that script runs on a server
+# with no JSON parser, so the layout is part of the format and the drill refuses a manifest
+# that is not in it.
+ROW_COUNTS="$(printf '%s\n' "$COUNTS" | awk 'NF { printf "%s    %s", (seen++ ? ",\n" : ""), $0 } END { if (seen) printf "\n" }')"
 
 # `recoverable_to` equals `finished_at` for a full copy, and only continuous archiving may
 # claim to restore past the moment it finished. `brain.ops.recovery.Backup` refuses anything
@@ -95,7 +208,11 @@ cat > "$MANIFEST" <<MANIFEST_JSON
   "started_at": "$STARTED_AT",
   "finished_at": "$FINISHED_AT",
   "recoverable_to": "$FINISHED_AT",
-  "size_bytes": $SIZE_BYTES
+  "size_bytes": $SIZE_BYTES,
+  "migration_head": $HEAD_JSON,
+  "row_counts": {
+$ROW_COUNTS
+  }
 }
 MANIFEST_JSON
 

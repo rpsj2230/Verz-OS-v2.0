@@ -413,6 +413,7 @@ ESCALATE_AFTER_UNANSWERED: Final = 2
 _DAILY: Final = timedelta(days=1)
 _WEEKLY: Final = timedelta(days=7)
 _SIX_HOURLY: Final = timedelta(hours=6)
+_QUARTER_HOURLY: Final = timedelta(minutes=15)
 
 CONTROLS: Final[tuple[Control, ...]] = (
     Control(
@@ -738,6 +739,30 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=_DAILY,
         cadence_from="brain.console.spend_report_view:REFRESH_EVERY",
         severity=Severity.NOTICED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="erasure_queue",
+        # Added on 2026-09-17 with `ops.erasure_request`, and started by the worker's schedule
+        # from the day it was registered. The drain is what the schedule calls, and `carry_out`
+        # is the run it makes over each request.
+        symbols=("brain.ops.erasure_store:drain_erasure_queue", "brain.ops.erasure:carry_out"),
+        guards=(
+            "that a request to erase somebody's data, once an administrator has filed it, is "
+            "carried out across every store a deletion reaches, stopped by any legal hold over "
+            "them, and written down with what it removed, retired, kept and could not reach"
+        ),
+        lost_silently=(
+            "Requests pile up as filed and never finished. The Retention screen still lists each "
+            "one with the instant it was filed, which reads as a queue being worked through, and "
+            "the person who asked is still answerable from every store until somebody notices "
+            "that nothing on the list has ever finished."
+        ),
+        # A quarter of an hour, restated rather than imported: `brain.ops.erasure_store` imports
+        # the tables, which import this registry for the control-run name constraint.
+        every=_QUARTER_HOURLY,
+        cadence_from="brain.ops.erasure_store:DRAIN_EVERY",
+        severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
 )

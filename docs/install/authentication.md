@@ -1,8 +1,12 @@
 # Authentication, the staff list, and your first administrators
 
-Two decisions on install day, and they are not independent. **Where your staff list comes from
-is also what signs people in**, and asking them as two questions is how an install ends up
-brokering sign-in to one directory and pulling its roster from another.
+Three things are settled on install day: where people sign in, where the list of who works at
+your company comes from, and who administers the system first. The setup wizard asks the second
+and the third, and derives a setting for the first from the second, because **choosing where your
+staff list comes from is meant to be choosing what signs people in**. Asking them as two questions
+is how an install ends up brokering sign-in to one directory and pulling its roster from another.
+That derived setting is written today and nothing acts on it yet; the staff source section below
+says exactly what is built and what is not.
 
 ## This system holds no passwords
 
@@ -11,57 +15,111 @@ Sign-in goes to an identity provider, and the console receives an authorisation 
 system as its own container, with its own database and no connection string to yours: sharing
 one would put the credential store and the company records it protects in one blast radius.
 
-**On `lite` there is no identity provider at all, and the system still refuses to start without
-one.** `lite` deploys the application, the pooler, the database and the cache, and nothing else.
-`INSTALL_OIDC_ISSUER` has no default, and without it nobody can sign in: every page behind sign-in
-refuses, and `/health/ready` names `sign_in` as not ready under `reported`. It stays 200, so the
-pages that need no sign-in keep serving while you set it. So a `lite` install
-points at an identity provider you already run, and everything on this page about
-`KEYCLOAK_ADMIN` and the realm belongs to the other two profiles.
+**On `lite` there is no identity provider at all, and nobody can sign in until the system is
+pointed at one.** `lite` deploys the application, the pooler, the database and the cache, and
+nothing else. `INSTALL_OIDC_ISSUER` has no default. Without it the system still starts, but it
+cannot check a sign-in: every page behind sign-in refuses, and `/health/ready` names `sign_in` as
+not configured under `reported`. It stays 200, so the pages that need no sign-in, the setup wizard
+among them, keep serving while you set it. So a `lite` install points at an identity provider you
+already run, and everything on this page about `KEYCLOAK_ADMIN` and the realm belongs to the other
+two profiles.
 
 That is worth knowing before you choose a profile, because the obvious way round it is to run
 `standard`, and **`standard` and `full` cannot start today**: both compose an inference server
 whose image variable is required with no default, and no image is published for that service
 anywhere. Until one is, `lite` plus your own identity provider is the arrangement that works.
 
-Three settings connect the two, and one of them refuses to start when it is unset.
+Four settings connect the two.
 
 | Setting | What it is |
 | --- | --- |
-| `INSTALL_OIDC_ISSUER` | The issuer address of your realm. No default. The system refuses to start without it, because an issuer guessed wrong is a sign-in page that authenticates against something you do not control. |
+| `INSTALL_OIDC_ISSUER` | The issuer address of your realm. No default, and no wizard screen asks for it, because an issuer guessed wrong is a sign-in page that authenticates against something you do not control. Unset, the system starts and refuses every sign-in, as above. |
 | `INSTALL_OIDC_REALM` | The realm's name. Asked for separately because the setup script needs it before the issuer exists. |
 | `INSTALL_OIDC_CLIENT_ID` | What the console registers as inside that realm. |
-| `INSTALL_OIDC_REDIRECT_URIS` | Where the realm will send somebody back to. No default, for the same reason: wrong here is a sign-in that completes and lands on a page you do not own. |
+| `INSTALL_OIDC_REDIRECT_URIS` | Where the realm will send somebody back to. No default. The wizard writes it from the web address you give it, followed by `/auth/callback`, rather than asking you to type it: wrong here is a sign-in that completes and lands on a page you do not own. |
 
 ## Choosing the staff source
 
-The wizard offers four on install day. Two more exist and are added afterwards from the
-console, because neither is one a person picks on the first afternoon without help.
+The wizard's staff list screen comes after the administrator screen and asks two things: **where
+your staff list comes from**, and **where that list is**. It offers four choices and has to be
+answered with one of them. There is no "no list" on this screen.
 
-| Choice | Signs people in through | Offered by the wizard |
+<!-- checked: the staff sources the wizard offers -->
+| Choice | Written as `INSTALL_STAFF_SOURCE` | Written as `INSTALL_BROKERED_DIRECTORY` | Where the list is | How the screen reads it |
+| --- | --- | --- | --- | --- |
+| Google Workspace | `google_workspace` | `google` | needed: your primary domain | sign in, then read |
+| Microsoft Entra | `microsoft_entra` | `microsoft` | needed: your tenant ID, or your tenant's domain | sign in, then read |
+| Lark | `lark` | `lark` | needed: `larksuite.com` or `feishu.cn`, whichever your company signs in to | sign in, then read |
+| A spreadsheet | `spreadsheet` | `none` | refused: the file is the list, so there is nowhere to point | from a CSV file you choose |
+
+"Needed" and "refused" are the screen's own rules, checked beside the box. A directory with no
+location is refused, because a source pointed nowhere reads as a company with nobody in it. A
+Google domain or an Entra tenant that is not shaped like one is refused, and so is a Lark location
+that is not one of Lark's two platforms, because the location decides which address your client
+secret is sent to. A location given for a spreadsheet is refused because it would be written into
+a setting nothing reads.
+
+The product can read three more values of `INSTALL_STAFF_SOURCE`, and the wizard offers none of
+them.
+
+<!-- checked: the staff sources the product reads and the wizard does not offer -->
+| Source | Written as | Why the wizard does not offer it |
 | --- | --- | --- |
-| Google Workspace | Google | yes |
-| Microsoft Entra | Microsoft | yes |
-| Lark | Lark | yes |
-| A spreadsheet | the realm itself, which holds the passwords | yes |
-| A Google Sheet | as above | no, add it later |
-| LDAP | LDAP | no, add it later |
+| A Google Sheet | `google_sheet` | Not one a person picks on the first afternoon without help. |
+| LDAP or Active Directory | `ldap` | The same. |
+| No list | `none` | The default of an install that never answered. The wizard's question has to be answered, so an install set up through the wizard never has it. |
+
+**Choosing a Google Sheet or LDAP after setup is not built.** No screen offers it: the console's
+Staff sources screen lists every source and says that choosing one cannot be done from a browser.
+The wizard's answer is saved in the database, a saved value outranks the environment file, and
+nothing writes that value again after the appointment. So an installed system has no supported way
+to change its staff source today.
+
+**What is written, and when.**
+
+1. **Moving past the screen writes nothing.** The answers stay in the setup page with the rest of
+   the wizard's answers until you send the review.
+2. **Sending the review writes them**, in the same database transaction that appoints the first
+   administrator: `INSTALL_STAFF_SOURCE`, `INSTALL_STAFF_SOURCE_LOCATION` when there is one, and
+   `INSTALL_BROKERED_DIRECTORY` derived from the choice as the table shows. Either all of it is
+   written with the appointment or none of it is.
+3. **The check under the questions writes nothing at any point.** The next section is about it.
+4. **Nothing reads the list after setup yet.** No scheduled sync is built, so choosing a source
+   creates nobody, and the console's Staff sources trial says that nothing on the server can read a
+   live source rather than showing an empty one.
+
+**What `INSTALL_BROKERED_DIRECTORY` does not do yet.** The wizard writes it so that the directory
+your staff list comes from is also the one people sign in through. Nothing in the product sets that
+brokering up: the realm this product imports carries no Google, Microsoft or Lark identity
+provider, and the only reader of the setting today is the statement the system makes about its own
+privacy posture, which says whether sign-in is brokered. Until your directory is added to the realm
+in the identity provider's own admin console, people sign in with accounts held in the realm
+itself, whichever source you chose.
 
 ## Reading the staff list on the wizard's screen
 
-The staff list screen asks two things and writes both when you send the review:
-**where the list comes from**, and **where that list is**. For Google Workspace, where it is is
-your primary domain; for Microsoft Entra, your tenant ID or your tenant's domain; for Lark,
-`larksuite.com` or `feishu.cn`, whichever your company signs in to. A spreadsheet has no
-location, and the screen refuses one, because it would be written into a setting nothing reads.
+Under the two questions is a check you can run before anything is written. It reads the list once
+and shows the people a first run would add. Nobody is added and nothing is stored. You do not have
+to run it to finish setup, and the file, client ID and secret you give it are not answers to the
+wizard, so none of them is in the review or written at the appointment. The check asks for your
+setup code first, and with a wrong code it reads nothing and contacts nobody.
 
-Under those two questions is a check you can run before anything is written. It reads the list
-once and shows the people a first run would add. Nobody is added and nothing is stored. You do
-not have to run it to finish setup.
+**A spreadsheet** is read from a file you choose. Save it as CSV first. The first row holds the
+headings, matched regardless of capitals and surrounding spaces, and every row needs an address and
+a name.
 
-**A spreadsheet** is read from a file you choose. Save it as CSV first. The columns it looks for
-are an address (`Work Email`, `Email`) and a name (`Full Name`, `Name`); a department, groups and a
-column saying somebody has left are read if they are there.
+<!-- checked: the headings a spreadsheet is read by -->
+| Column | Found under any of these headings |
+| --- | --- |
+| Work address | `Work Email`, `Email`, `Email Address`, `Work Address` |
+| Name | `Full Name`, `Name`, `Display Name` |
+| Department | `Department`, `Dept`, `Team` |
+| Groups, separated by commas | `Groups`, `Group` |
+| Has left | `Left?`, `Left`, `Departed`, `Inactive` |
+
+A department and groups are read from a spreadsheet and not believed, because a spreadsheet is
+trusted to say that somebody exists and nothing else; the section on trust below says why. A
+has-left cell saying `yes` marks that person as having left.
 
 **Google Workspace, Microsoft Entra and Lark need an application your company registers with
 them before anybody can sign in.** This is not something the product can do for you. A directory
@@ -85,6 +143,9 @@ exchange for a sign-in, and nothing on your server stores it. That is deliberate
 unfinished work: nothing in this product reads a directory on a schedule yet, and a secret kept
 for a job nobody runs is a standing credential with nothing using it. When the scheduled sync
 exists, it will ask for a credential it can keep in the vault.
+
+**Groups are not read from a directory on this screen.** The check proposes who would be added and
+nothing else; reading each directory's groups is the scheduled sync's work.
 
 **What has never happened.** The sign-in and the read are written from each directory's own
 documentation and tested against a stand-in; none of them has been run against a real Google,
@@ -112,10 +173,12 @@ by whoever holds the link, and a directory needs an administrative console and l
 in it. A sheet that could assert a role is a sheet where adding a row to a column called
 "groups" makes somebody an auditor.
 
-The default is a default and not a fixed rule. An install whose sheet is locked to two people
-can raise it; an install whose directory groups are edited by a helpdesk should lower it. What
-it cannot do is start permissive, which is why a source nobody has configured asserts existence
-alone.
+**The defaults are a ceiling, and nothing on an install changes them yet.** The product's reading
+of a list can be given a narrower trust than the table, which is how an install whose directory
+groups are edited by a helpdesk would lower it, but no setting or screen supplies one today. Trust
+cannot be raised: a list read through the install's own choice that claims more than its source's
+default is refused rather than trimmed, because a widening somebody configured and cannot see is
+the whole failure. A source nobody has assessed asserts existence alone.
 
 ## The roles
 
@@ -139,22 +202,162 @@ Admin nobody appointed; an Approver with no scope approves anything anybody asks
 
 ## Your first administrator, and your second
 
-The wizard's administrator screen appoints one person, and they become a Super Admin.
+The wizard's administrator screen names one person. Sending the review appoints them, in one
+transaction that writes them as a live person, saves every setting the wizard collected, and
+writes their grants. Once anybody holds `admin:sign_in` over everything, the wizard refuses to
+appoint again.
 
-**Appoint a second one on the first day.** The system will not let you go from two Super Admins
-to one: a single Super Admin is a single point of lockout, and there is no support desk
-anywhere that can let you back in, because nobody outside your organisation holds a credential
-on your server. Two is the floor and the refusal fires when you try to drop below it.
+**The Super Admin role confers no capabilities by itself, so the appointment writes them as
+grants.** No role implies a capability, Super Admin included, and the appointment stores no role
+row at all. What the first administrator can do is exactly the grants in the table below, each over
+everything, written by first run and recorded in the ledger. They come in three groups.
 
-**The Super Admin role confers no capabilities by itself.** It is a role, not an elevation: the
-first administrator is created with a role grant and no capability grants at all, and a Super
-Admin sees exactly what somebody wrote a grant for. If you were expecting the administrator
-account to be able to read everything, it cannot, and that is the invariant the whole system
-serves rather than an omission in the wizard.
+- **Running the system**: every `admin:` capability the product declares. Sign-ins, connectors,
+  credentials, the stop button, budgets, routing, retention and the rest.
+- **Letting the second person in**: `approve:grant`, which is the People screen's grant write,
+  the Access review, and authorising a break-glass session. Without it nobody on a fresh install
+  could grant anybody anything from the console.
+- **Reading how the system is run**: every console screen's own read at the existence and
+  configuration planes, the two plane capabilities themselves, and the audit entries about
+  governing the system. That says a thing is there and how it is set up, and never what is inside
+  it.
+
+<!-- checked: what the first administrator is granted at appointment -->
+| Capability | Granted for |
+| --- | --- |
+| `admin:agent_instructions` | running the system |
+| `admin:automation` | running the system |
+| `admin:budget` | running the system |
+| `admin:connector` | running the system |
+| `admin:credential` | running the system |
+| `admin:erasure` | running the system |
+| `admin:export` | running the system |
+| `admin:feature` | running the system |
+| `admin:field_classification` | running the system |
+| `admin:halt` | running the system |
+| `admin:legal_hold` | running the system |
+| `admin:operations_alert` | running the system |
+| `admin:operations_incident` | running the system |
+| `admin:plugin` | running the system |
+| `admin:retention` | running the system |
+| `admin:routing_matrix` | running the system |
+| `admin:schedule` | running the system |
+| `admin:session` | running the system |
+| `admin:sign_in` | running the system |
+| `admin:skill` | running the system |
+| `admin:skill_review` | running the system |
+| `admin:storage` | running the system |
+| `admin:webhook_subscriber` | running the system |
+| `approve:grant` | letting the second person in |
+| `read:agent` | reading how the system is run |
+| `read:artifact` | reading how the system is run |
+| `read:audit` | reading how the system is run |
+| `read:audit.agent` | reading how the system is run |
+| `read:audit.connector` | reading how the system is run |
+| `read:audit.credential` | reading how the system is run |
+| `read:audit.erasure` | reading how the system is run |
+| `read:audit.grant` | reading how the system is run |
+| `read:audit.leash` | reading how the system is run |
+| `read:audit.legal_hold` | reading how the system is run |
+| `read:audit.principal` | reading how the system is run |
+| `read:audit.retention` | reading how the system is run |
+| `read:audit.routing` | reading how the system is run |
+| `read:audit.session` | reading how the system is run |
+| `read:audit.setting` | reading how the system is run |
+| `read:audit.skill` | reading how the system is run |
+| `read:audit.webhook` | reading how the system is run |
+| `read:backup` | reading how the system is run |
+| `read:budget` | reading how the system is run |
+| `read:capability` | reading how the system is run |
+| `read:connection_budget` | reading how the system is run |
+| `read:connector` | reading how the system is run |
+| `read:console.configuration` | reading how the system is run |
+| `read:console.existence` | reading how the system is run |
+| `read:denial_pattern` | reading how the system is run |
+| `read:document` | reading how the system is run |
+| `read:evaluation` | reading how the system is run |
+| `read:export` | reading how the system is run |
+| `read:grant` | reading how the system is run |
+| `read:incident` | reading how the system is run |
+| `read:knowledge_coverage` | reading how the system is run |
+| `read:model_route` | reading how the system is run |
+| `read:overview` | reading how the system is run |
+| `read:question` | reading how the system is run |
+| `read:queue` | reading how the system is run |
+| `read:rate_limit` | reading how the system is run |
+| `read:release` | reading how the system is run |
+| `read:retention_policy` | reading how the system is run |
+| `read:role` | reading how the system is run |
+| `read:run` | reading how the system is run |
+| `read:scope` | reading how the system is run |
+| `read:session` | reading how the system is run |
+| `read:skill` | reading how the system is run |
+| `read:staff_source` | reading how the system is run |
+| `read:usage` | reading how the system is run |
+
+**What the first administrator is not granted, on purpose.**
+
+<!-- checked: what the first administrator is not granted at appointment -->
+| Capability | Why not |
+| --- | --- |
+| `read:console.content` | The content plane is what a person or an agent was told. The screens that need it, Learning and Memory today, do not open. |
+| `approve:action` | Approving a suspended action lets an agent act over data the first administrator cannot read. Approvals belong to whoever a department makes its approver. |
+| `read:audit.artifact` | A publish entry names an artefact, and who may see an artefact is decided by what it was built from, which an audit grant never asks. |
+| `read:audit.entity` | A merge entry names two business records, and the first administrator holds no scope over any business record. |
+
+Nor is any read of the company's data. What a person may read of that comes from grants somebody
+writes for them. **If you were expecting the administrator account to be able to read everything,
+it cannot**, and that is the invariant the whole system serves rather than an omission in the
+wizard.
+
+**A capability added in a later release is granted at the next start, and one you take away stays
+away.** An administrator appointed before a capability existed does not hold it, so every start
+grants each first administrator whatever of the table above they do not already hold at any scope.
+It never grants a capability first run has granted them before, because a revoked grant looks
+exactly like a missing one and granting it again would undo the revocation at every restart. It
+only touches a live person holding an `admin:sign_in` over everything that first run wrote; an
+administrator you made by hand keeps exactly what you gave them.
+
+### Signing in, and what a sign-in grants
+
+After the appointment the finishing screen asks you to sign in through the identity provider, and
+binds that sign-in to the first administrator. It does that once: it is open only while no sign-in
+is bound anywhere on the install. Every later sign-in is bound by an administrator holding
+`admin:sign_in` over everything, and nobody binds their own.
+
+**Binding a sign-in grants that person their own workspace, and nothing else.** Each binding
+writes one grant, in the binding's own transaction.
+
+<!-- checked: what binding a sign-in grants -->
+| Capability | Over | Granted by |
+| --- | --- | --- |
+| `read:member.*` | their own things | whoever bound the sign-in |
+
+That opens every member screen, My workspace among them, and no console screen and no workspace
+tab. On the finishing screen the binder is first run, so once signed in the first administrator
+holds the appointment's grants and this one. A person who already holds a live `read:member.*`
+keeps the one they have. A member grant you take away is not given back by a retry or a restart
+for the same binding; binding the person again is a new binding and a new grant. A sign-in bound
+before binding granted a workspace is granted one at the next start.
+
+**Appoint a second administrator on the first day.** A single administrator is a single point of
+lockout, and there is no support desk anywhere that can let you back in, because nobody outside
+your organisation holds a credential on your server. The wizard appoints once, so the second is
+made by the first: on the People screen, grant them what they need, which can be anything you hold
+over no wider a scope than you hold it, `admin:sign_in` over everything included, and then bind
+their sign-in.
+
+**What stops you dropping below one.** The Sign-in links screen refuses to unlink the last
+administrator who can sign in, and counts under a lock, so two administrators unlinking each other
+at once are one unlink and one refusal. The product's role rules also set a floor of two Super
+Admins and refuse a role removal below it, but the appointment stores no role row and nothing on an
+install calls that rule yet, so the unlink refusal is the one you will meet.
 
 **Emergency access is the installing partner's path and not yours.** There is a break-glass
-mechanism in this system and it belongs to a partner employment rather than to a role. No code
-path elevates an administrator, and none should.
+mechanism in this system and it belongs to a partner employment rather than to a role: a partner
+holds nothing standing, and authorising a session for one needs `approve:grant`. No code path
+elevates an administrator, and none should. Nothing on an install stores or opens a break-glass
+session yet; the Elevation screen shows the rules a session would be held to, with no control.
 
 ## The identity provider's own accounts
 
@@ -201,11 +404,17 @@ than thirty. A slow start beats a container that never becomes ready.
 | Claim | Held by |
 | --- | --- |
 | The six roles and what each is for | `test_roles.py`, against the compiled role table |
-| That two Super Admins is the floor | the same test |
+| That the role rules refuse a removal below two Super Admins | the same test; nothing on an install calls that rule yet |
+| That the last administrator who can sign in cannot be unlinked | `test_sign_in_links.py` and `test_session_routes.py` |
 | What each source is trusted to assert | `test_staff_source.py`, against the trust table |
-| Which four sources the wizard offers | `test_setup_wizard.py`, against the wizard's own question |
+| Which four sources the wizard offers, what each writes, whether each needs a location, and which are signed in to | `test_authentication_guide.py`, by answering the wizard's own screen and reading its settings, and by asking the trial route's own source reader |
+| Which sources the product reads and the wizard does not offer | `test_authentication_guide.py`, against the selectable sources |
+| The headings a spreadsheet is read by | `test_authentication_guide.py`, by reading a sheet under each heading |
 | That a directory is chosen, signed in to and read, and a spreadsheet chosen and read, before anything is written | `test_setup_staff_routes.py`, against a stand-in directory |
 | What to register at each directory, as the screen shows it | **nobody. The table above is kept true by hand against `brain.connectors.staff_directories.REGISTRATION`.** |
+| Which capabilities the first administrator is granted and for what, and which they are not | `test_authentication_guide.py`, against `GRANTED_AT_APPOINTMENT`; that the appointment writes exactly that set is `test_first_administrator.py`, against a database, in CI |
+| That a capability taken away from the first administrator is not given back at a start | `test_administration_reconciliation.py`, against a database, in CI |
+| The grant a binding writes | `test_authentication_guide.py`, against the statement the binding executes; what it opens is `test_plane_scope.py` |
 | The four identity settings and their defaults | `test_install_docs.py`, through the configuration guide |
 | **Everything else on this page** | **nobody. Prose, kept true by hand.** |
 

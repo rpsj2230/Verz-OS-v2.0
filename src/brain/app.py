@@ -876,8 +876,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # company-wide reader and to nobody else. See `brain.retention_routes`.
     app.include_router(retention_router)
     # What the Retention screen needs beside the report: who may act, what each act does in the
-    # words a confirmation shows, and the export log and deletion queue this install does not
-    # record. Read-only; the writes are `brain.retention_routes`'. See `brain.erasure_routes`.
+    # words a confirmation shows, the export log, and the erasure queue with its one write, which
+    # files a request the worker's queue carries out. See `brain.erasure_routes`.
     app.include_router(erasure_router)
     # The Artifacts screen. A list only when something attached records what an agent produced,
     # and a sentence saying nothing does until then. See `brain.artifact_routes`.

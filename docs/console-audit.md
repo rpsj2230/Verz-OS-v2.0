@@ -7,11 +7,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 63 tables, from `brain.db.Base.metadata`.
+- 64 tables, from `brain.db.Base.metadata`.
 - 22 installation values, from `brain.install.INSTALLATION`.
-- 93 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 96 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 64 console addresses, from the route table in `console/src/App.tsx`.
-- 29 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 34 routes.
+- 29 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 35 routes.
 - 33 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
@@ -331,14 +331,17 @@ No gap recorded.
 ### Backup and recovery
 
 - **Screens:** `/recovery`, `/retention`
-- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`
+- **Tables:** `ops.retention_release`, `ops.retention_report`, `obs.legal_hold`, `ops.erasure_request`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
+| `GET /api/v1/govern/erasures` | `/retention` |
 | `GET /api/v1/govern/retention` | `/retention` |
 | `GET /api/v1/govern/retention/controls` | `/retention` |
+| `GET /api/v1/govern/retention/exports` | `/retention` |
 | `GET /api/v1/install/recovery` | `/recovery` |
+| `POST /api/v1/govern/erasures` | `/retention` |
 | `POST /api/v1/govern/legal-holds` | `/retention` |
 | `POST /api/v1/govern/legal-holds/lift` | `/retention` |
 | `POST /api/v1/govern/retention/release` | `/retention` |
@@ -386,7 +389,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 28 of 34 write routes have all three proved or not applicable, 4 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 29 of 35 write routes have all three proved or not applicable, 4 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -399,6 +402,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | **None.** No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET. |
 | `POST /api/v1/data-transfer/exports` | `/import-export` | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own` in `tests/unit/test_data_transfer_routes.py` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
+| `POST /api/v1/govern/erasures` | `/retention` | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what_it_could_not` in `tests/unit/test_erasure_store.py` (database, in CI) |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/legal-holds` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |

@@ -44,7 +44,13 @@ import { GRANTS_API_PATH, REMOVAL_API_PATH } from "../../src/pages/governQuery";
 import { actionPath } from "../../src/pages/jobsQuery";
 import { rungApiPath } from "../../src/pages/matrixQuery";
 import { editPath, giveBackPath } from "../../src/pages/promptsQuery";
-import { HOLD_API_PATH, LIFT_API_PATH, RELEASE_API_PATH, WITHDRAWAL_API_PATH } from "../../src/pages/retentionQuery";
+import {
+  ERASURES_API_PATH,
+  HOLD_API_PATH,
+  LIFT_API_PATH,
+  RELEASE_API_PATH,
+  WITHDRAWAL_API_PATH,
+} from "../../src/pages/retentionQuery";
 import { END_SESSION_API_PATH } from "../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../src/pages/signInLinksQuery";
 import { TRIAL_API_PATH } from "../../src/pages/staffSourcesQuery";
@@ -459,8 +465,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Backup and recovery": {
     screens: ["/recovery", "/retention"],
-    routes: ["/api/v1/install/recovery", "/api/v1/govern/retention*", "/api/v1/govern/legal-holds*"],
-    tables: ["ops.retention_release", "ops.retention_report", "obs.legal_hold"],
+    routes: [
+      "/api/v1/install/recovery",
+      "/api/v1/govern/retention*",
+      "/api/v1/govern/legal-holds*",
+      "/api/v1/govern/erasures",
+    ],
+    tables: ["ops.retention_release", "ops.retention_report", "obs.legal_hold", "ops.erasure_request"],
     installation: [],
     gaps: [{ what: "A recovery drill cannot be started, and a restore cannot be verified, from the console.", leaf: "M30.3.9" }],
   },
@@ -570,6 +581,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/retention/withdrawal", "WITHDRAWAL_API_PATH", WITHDRAWAL_API_PATH),
     at("POST /api/v1/govern/legal-holds", "HOLD_API_PATH", HOLD_API_PATH),
     at("POST /api/v1/govern/legal-holds/lift", "LIFT_API_PATH", LIFT_API_PATH),
+    at("POST /api/v1/govern/erasures", "ERASURES_API_PATH", ERASURES_API_PATH),
   ],
   "src/pages/Sessions.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
   "src/pages/SignInLinks.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
@@ -762,6 +774,11 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_retention_store", "test_a_hold_is_placed_lifted_once_and_kept", true),
     audit: t("test_retention_audit", "test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor", true),
     behaviour: HOLDS_SWEPT,
+  },
+  "POST /api/v1/govern/erasures": {
+    row: t("test_erasure_store", "test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished", true),
+    audit: t("test_erasure_store", "test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished", true),
+    behaviour: t("test_erasure_store", "test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what_it_could_not", true),
   },
   "POST /api/v1/govern/sessions/end": {
     row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),

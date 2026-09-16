@@ -123,6 +123,8 @@ SUBJECT_KINDS = frozenset(
         "setting",
         "routing",
         "webhook",
+        # A request to erase somebody's data, since 2026-09-17. See ERASURE below.
+        "erasure",
     }
 )
 
@@ -394,6 +396,24 @@ class AuditAction(enum.StrEnum):
     is an address the company's identifiers are sent to and `connector`, the near miss, is a
     source this system reads. `brain.identity.staff_sync.AUDIT_KIND_DECISIONS` decides for each
     whether a department head reads it, and none of the three is a head's.
+
+    ERASURE was added on 2026-09-17, and it is the twenty-third. The Retention and erasure screen
+    files a request to erase one person's data and the worker carries it out across every store it
+    can reach (M27.7.24). "Who asked for her data to be erased, and what did that do" is asked
+    after the data is found to be gone, and the removals themselves answer only part of it: a
+    retired grant writes a `revoke` from `0003`'s trigger and nothing else says why. **Recorded by
+    the database, from a trigger on `ops.erasure_request`**, the way LEGAL_HOLD is, on the insert
+    and on the one update that marks the request finished, with the actor read off the row's own
+    column for that change.
+
+    Every existing member was tried. RETENTION is the sweep released to delete by age, and an
+    erasure is one person's data removed on a request, whatever its age; LEGAL_HOLD keeps data
+    rather than letting it go; REVOKE is a grant taken away, which an erasure causes and is not.
+    One member for the request and its outcome, with the change in the details, for the reason
+    SIGN_IN gives. **The subject is the request, never the person**: `erasure:<request id>`, for
+    the reason LEGAL_HOLD's subject is the hold, because a list of the people who asked to be
+    erased is a list of endings, and the ledger is the table kept longest and read most widely.
+    Seven characters.
     """
 
     GRANT = "grant"
@@ -453,6 +473,10 @@ class AuditAction(enum.StrEnum):
     #: A webhook subscriber was registered, had its signing secret replaced, or was switched off.
     #: Written by `0059`'s trigger on `ops.webhook_change`.
     WEBHOOK = "webhook"
+    #: A request to erase somebody's data was filed, or the queue finished it: erased, held or
+    #: incomplete. Which is in the details, and never whose data it was. Written by `0060`'s
+    #: trigger on `ops.erasure_request`.
+    ERASURE = "erasure"
 
 
 # --------------------------------------------------------------------- redaction

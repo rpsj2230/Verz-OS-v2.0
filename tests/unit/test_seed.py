@@ -484,6 +484,14 @@ def test_a_table_whose_name_is_not_an_identifier_stops_the_seed_rather_than_bein
 #: rather than sitting there waiting to cover whatever takes the name next.
 THE_ONLY_TAKER = "ops/backup/brain-backup"
 
+#: The one file under `ops/` allowed to name `pg_restore`, perishable in the same way.
+#:
+#: It loads this install's own copy into a scratch database on this install's own host and
+#: refuses the live database as a target, which is not the direction the rule below bans.
+#: `tests/unit/test_backup_scripts.py` holds that refusal by running the script, and the test
+#: after the taker's below holds that the exemption still names a file that loads and takes none.
+THE_ONLY_LOADER = "ops/backup/brain-restore-drill"
+
 
 def _ops_lines(repo: Path) -> list[tuple[str, int, str]]:
     """Every line of every non-Markdown file under `ops/`, with where it came from."""
@@ -512,13 +520,18 @@ def test_nothing_in_this_repository_loads_a_database_from_one_stack_into_another
     for. A blanket ban would have refused the backup this system needs in order to have one,
     which is a guard that eventually gets deleted rather than narrowed.
 
+    **On 2026-09-17 the same narrowing reached `pg_restore`, for the same reason.** A copy
+    nobody has read back is a file, and reading one back needs the loader. `THE_ONLY_LOADER`
+    loads this install's copy into a scratch database it refuses to point at the live one, and
+    it is the only file exempted; `pg_basebackup` is still banned everywhere.
+
     Delete this and a convenience script that restores production into staging lands in `ops/`
     with nothing objecting."""
     repo = Path(__file__).resolve().parents[2]
     offenders = [
         f"{where}:{number}"
         for where, number, line in _ops_lines(repo)
-        if "pg_restore" in line or "pg_basebackup" in line
+        if ("pg_restore" in line and where != THE_ONLY_LOADER) or "pg_basebackup" in line
     ]
     assert not offenders, f"something loads a database from elsewhere: {offenders}"
 
@@ -544,6 +557,12 @@ def test_the_one_file_allowed_to_take_a_copy_exists_and_only_takes_one() -> None
     exempted from the rule above that then did the thing the rule is about would be the whole
     guard undone by one line in one file.
 
+    **`psql` left this list on 2026-09-17, and what replaced it is stronger than the word.** The
+    taker now counts every table inside the snapshot its dump copies, so the manifest can state
+    what a drill must get back. That needs a query, and a textual ban on the client cannot tell
+    a count from a write. `tests/unit/test_backup_scripts.py` runs the taker and holds the
+    session it opens to a `read only` transaction, which PostgreSQL itself enforces.
+
     Delete this and the exemption becomes a name in a constant that nothing checks."""
     repo = Path(__file__).resolve().parents[2]
     taker = repo / THE_ONLY_TAKER
@@ -554,7 +573,7 @@ def test_the_one_file_allowed_to_take_a_copy_exists_and_only_takes_one() -> None
     )
 
     source = taker.read_text(encoding="utf-8")
-    for forbidden in ("pg_restore", "pg_basebackup", "psql"):
+    for forbidden in ("pg_restore", "pg_basebackup"):
         assert forbidden not in source, (
             f"{THE_ONLY_TAKER} names {forbidden}, so the one file allowed to read a database "
             "also writes to one, which is the guard above undone in the place it exempted"
@@ -563,6 +582,34 @@ def test_the_one_file_allowed_to_take_a_copy_exists_and_only_takes_one() -> None
         f"{THE_ONLY_TAKER} is exempted from the copy rule and takes no copy, so the exemption "
         "is covering a file that does not need it"
     )
+
+
+def test_the_one_file_allowed_to_load_a_copy_exists_loads_and_takes_none() -> None:
+    """`THE_ONLY_LOADER` held the way `THE_ONLY_TAKER` is, for the same reason: an exemption
+    naming a file that is gone covers whatever takes the name next, and one naming a file that
+    no longer loads is covering nothing.
+
+    The loader may not take a copy and may not reach the bucket. Taking is the taker's, and a
+    loader that also reached the object store could fetch a copy from any install whose key it
+    was handed, which is the cross-stack direction the first test bans.
+
+    Delete this and the loader exemption becomes a name nothing checks."""
+    repo = Path(__file__).resolve().parents[2]
+    loader = repo / THE_ONLY_LOADER
+
+    assert loader.is_file(), (
+        f"{THE_ONLY_LOADER} does not exist and is still exempted, so the exemption now covers "
+        "whatever is written at that path next"
+    )
+    source = loader.read_text(encoding="utf-8")
+    assert "pg_restore" in source, (
+        f"{THE_ONLY_LOADER} is exempted from the load rule and loads nothing"
+    )
+    for forbidden in ("pg_dump", "pg_basebackup", "aws ", "BRAIN_BACKUP_ENDPOINT"):
+        assert forbidden not in source, (
+            f"{THE_ONLY_LOADER} names {forbidden}, so the one file allowed to load also takes "
+            "or fetches, which is the guard above undone in the place it exempted"
+        )
 
 
 def test_the_guard_looks_in_every_schema_that_exists() -> None:

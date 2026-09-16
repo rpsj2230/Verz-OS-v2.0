@@ -20,7 +20,11 @@ row is how `produce` knows a window is too large without anything counting the w
 reading the ledger inside the export's own transaction means the entries exported and the append
 recording the export are one consistent view of the chain.
 
-Task ids: M27.8.16
+**The log is read back whole and narrowed by the route.** `StoredExports.recent` returns every
+person's newest exports, and `brain.erasure_routes` hands each to
+`brain.console.govern_surfaces.export_log`, which decides who may be told that it happened.
+
+Task ids: M27.8.16, M27.7.24
 """
 
 from __future__ import annotations
@@ -97,6 +101,20 @@ class ExportRecords(Protocol):
 
     async def taken_by(self, principal_id: str, *, limit: int) -> tuple[TakenExport, ...]:
         """The newest exports this person took, newest first."""
+        ...
+
+
+@runtime_checkable
+class ExportLog(Protocol):
+    """What the Retention screen's export log needs from the database. `StoredExports` is one.
+
+    A protocol of its own rather than a third method on `ExportRecords`, because the log is read
+    by a screen whose reader may take no export at all, and a fake standing in for the export
+    routes should not have to answer for a list it never serves.
+    """
+
+    async def recent(self, *, limit: int) -> tuple[TakenExport, ...]:
+        """The newest exports anybody took, newest first."""
         ...
 
 
@@ -190,6 +208,22 @@ class StoredExports:
                     await session.execute(
                         select(DataExportRow)
                         .where(DataExportRow.requested_by == principal_id)
+                        .order_by(DataExportRow.produced_at.desc(), DataExportRow.export_id)
+                        .limit(limit)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            return tuple(taken_from(row) for row in rows)
+
+    async def recent(self, *, limit: int) -> tuple[TakenExport, ...]:
+        """Every person's exports, newest first. Who may be shown one is the route's to decide."""
+        async with self._sessions() as session, session.begin():
+            rows = (
+                (
+                    await session.execute(
+                        select(DataExportRow)
                         .order_by(DataExportRow.produced_at.desc(), DataExportRow.export_id)
                         .limit(limit)
                     )

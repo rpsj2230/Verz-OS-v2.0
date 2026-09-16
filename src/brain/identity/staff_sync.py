@@ -590,6 +590,19 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "none of their governing acts sent them there."
                 ),
             ),
+            AuditKindDecision(
+                kind="erasure",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason as "
+                    "legal_hold, since the kind was added on 2026-09-17, after item 48. A request "
+                    "to erase somebody's data is filed only by somebody holding admin:erasure over "
+                    "everything, because the erasure reaches every store at once, so none of a "
+                    "head's governing acts produces one of these entries. The entries name the "
+                    "request and never the person, and the queue on the Retention screen is where "
+                    "whoever may read it reads whose request it is."
+                ),
+            ),
         )
     }
 )

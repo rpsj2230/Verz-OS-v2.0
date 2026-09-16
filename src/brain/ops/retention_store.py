@@ -295,35 +295,7 @@ class PostgresSweeper:
     # ------------------------------------------------------------------- which tables
     def tables_of(self, store: Store) -> tuple[str, ...]:
         """The tables this store holds, read from the catalogue. Refuses what it cannot place."""
-        schemas = facts_for(store).schemas
-        if not schemas:
-            raise RetentionError(NOT_HELD_IN_POSTGRES)
-        found = self.conn.execute(
-            "SELECT n.nspname, c.relname FROM pg_catalog.pg_class AS c "
-            "JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace "
-            "WHERE n.nspname = ANY(%s) AND c.relkind IN ('r', 'p') AND NOT c.relispartition "
-            "ORDER BY 1, 2",
-            (sorted(schemas),),
-        ).fetchall()
-        owned: list[str] = []
-        for schema, name in found:
-            table = f"{schema}.{name}"
-            # A detached month of the ledger is declared as the ledger. See
-            # `brain.ops.ledger_partitions.declared_as`.
-            declared = declared_as(table)
-            if declared in self.attributed:
-                if self.attributed[declared] is store:
-                    owned.append(table)
-                continue
-            sharing = sum(1 for entry in STORES if schema in entry.schemas)
-            if sharing > 1:
-                msg = (
-                    f"{table} is attributed to no store: "
-                    f"{A_TABLE_IN_A_SHARED_SCHEMA_BELONGS_TO_NOBODY_UNTIL_IT_IS_ATTRIBUTED}"
-                )
-                raise RetentionError(msg)
-            owned.append(table)
-        return tuple(owned)
+        return store_tables(self.conn, store, self.attributed)
 
     def removal_rule(self, table: str) -> str:
         """Why this sweep may not remove rows from `table` itself, or an empty string if it may.
@@ -495,6 +467,47 @@ class PostgresSweeper:
 def _identifier(table: str) -> sql.Identifier:
     schema, _, name = table.partition(".")
     return sql.Identifier(schema, name)
+
+
+def store_tables(
+    conn: psycopg.Connection[Any], store: Store, attributed: Mapping[str, Store] = ATTRIBUTED
+) -> tuple[str, ...]:
+    """The tables a store holds, read from the catalogue. Refuses what it cannot place.
+
+    A function of the connection rather than only a method of the sweeper, because
+    `brain.ops.erasure_store.PostgresEraser` asks the same question of the same catalogue, and a
+    second reading of which store a table in `obs` belongs to is a second place for an
+    attribution to be missed.
+    """
+    schemas = facts_for(store).schemas
+    if not schemas:
+        raise RetentionError(NOT_HELD_IN_POSTGRES)
+    found = conn.execute(
+        "SELECT n.nspname, c.relname FROM pg_catalog.pg_class AS c "
+        "JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace "
+        "WHERE n.nspname = ANY(%s) AND c.relkind IN ('r', 'p') AND NOT c.relispartition "
+        "ORDER BY 1, 2",
+        (sorted(schemas),),
+    ).fetchall()
+    owned: list[str] = []
+    for schema, name in found:
+        table = f"{schema}.{name}"
+        # A detached month of the ledger is declared as the ledger. See
+        # `brain.ops.ledger_partitions.declared_as`.
+        declared = declared_as(table)
+        if declared in attributed:
+            if attributed[declared] is store:
+                owned.append(table)
+            continue
+        sharing = sum(1 for entry in STORES if schema in entry.schemas)
+        if sharing > 1:
+            msg = (
+                f"{table} is attributed to no store: "
+                f"{A_TABLE_IN_A_SHARED_SCHEMA_BELONGS_TO_NOBODY_UNTIL_IT_IS_ATTRIBUTED}"
+            )
+            raise RetentionError(msg)
+        owned.append(table)
+    return tuple(owned)
 
 
 # -------------------------------------------------------------------------- legal holds

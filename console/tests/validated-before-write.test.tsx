@@ -56,6 +56,7 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },
+    { pattern: "/retention", index: 2, writes: true },
   ],
   "src/pages/Sessions.tsx": [{ pattern: "/sessions", index: 0, writes: false }],
   "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 0, writes: true }],

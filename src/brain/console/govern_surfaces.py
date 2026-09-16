@@ -64,13 +64,15 @@ way in is that the reader is named among the export's own subjects, which is the
 `brain.audit.view.AuditView._may_see` and `brain.console.agent_output.may_see` both have: a
 person may learn that their own data left the building.
 
-**The deletion queue does not drain, and saying so is most of the leaf.**
-`brain.ops.erasure.StoreEraser` and `brain.ops.retention.StoreSweeper` are protocols and both
-of their modules state plainly that nothing implements them. A queue rendered with a due date
-and no executor behind it is a compliance claim nobody is keeping, in the one place somebody
-would go to check. `drain_gaps` reports it, separately from `surface_gaps` for the reason
-`brain.console.agent_output.retention_enforcement_gaps` is separate from `artifact_gaps`: a
-deployment check that is red on the day it lands is a check somebody switches off.
+**A queue with no executor behind it is a compliance claim nobody is keeping, and saying so
+was most of the leaf.** When this was written `brain.ops.erasure.StoreEraser` and
+`brain.ops.retention.StoreSweeper` were protocols nothing implemented. Since 2026-09-17
+`brain.ops.erasure_store.PostgresEraser` and `brain.ops.retention_store.PostgresSweeper` do, for
+the stores in PostgreSQL, and a row still carries no due date, because neither reaches the
+object store. `drain_gaps` reports whichever executor a caller cannot hand in, separately from
+`surface_gaps` for the reason `brain.console.agent_output.retention_enforcement_gaps` is
+separate from `artifact_gaps`: a deployment check that is red on the day it lands is a check
+somebody switches off.
 
 **A retention report cannot be narrowed, so it is shown whole or withheld.**
 `brain.ops.retention.RetentionReport` carries no subject anywhere and no field one could go
@@ -226,11 +228,12 @@ A_PERSON_MAY_LEARN_THAT_THEIR_OWN_DATA_LEFT_THE_BUILDING: Final = (
 #: Why the deletion queue's rows say nothing about when anything will be removed.
 A_QUEUE_NOTHING_DRAINS_IS_A_COMPLIANCE_CLAIM_NOBODY_IS_KEEPING: Final = (
     "brain.ops.erasure.StoreEraser and brain.ops.retention.StoreSweeper are protocols, and "
-    "both modules say in their own docstrings that the executor is not built. A row reading "
-    "due for deletion, in the one screen somebody opens to check that deletion happens, is "
-    "therefore a statement about the future that nothing in this system will make true. The "
-    "row carries when the request was made and when it completed, which are both facts, and "
-    "the absence of an executor is reported by a diagnostic rather than implied by a blank."
+    "until 2026-09-17 nothing implemented either; what does now reaches the stores in "
+    "PostgreSQL and not the object store. A row reading due for deletion, in the one screen "
+    "somebody opens to check that deletion happens, is therefore a statement about a future "
+    "nothing in this system will fully make true. The row carries when the request was made and "
+    "when it completed, which are both facts, and a missing executor is reported by a "
+    "diagnostic rather than implied by a blank."
 )
 
 #: Why a list of people who asked to be erased is a list about those people.
@@ -743,11 +746,11 @@ def drain_gaps(*, eraser: object | None = None, sweeper: object | None = None) -
     somebody switches off, which `brain.console.agent_output.retention_enforcement_gaps`
     records about its own finding and `brain.ops.sweeps.sweep_house_style` about its scope.
 
-    Both findings are real. `brain.ops.erasure.StoreEraser` is the protocol an executor must
-    satisfy for anything to be deleted and `brain.ops.retention.StoreSweeper` is the one for
-    anything to be expired, and both modules state that the executor is not built. Passing
-    `None` is the deployment call, because there is nothing to pass; a test hands in a stub
-    for one and gets the other finding, which is what makes the two separable.
+    `brain.ops.erasure.StoreEraser` is the protocol an executor must satisfy for anything to be
+    deleted and `brain.ops.retention.StoreSweeper` is the one for anything to be expired. Both
+    have a PostgreSQL executor since 2026-09-17, each needing a connection this module does not
+    hold, so a caller with none to hand passes `None` and is told which is missing; a test hands
+    in a stub for one and gets the other finding, which is what makes the two separable.
     """
     findings: list[str] = []
     if eraser is None:

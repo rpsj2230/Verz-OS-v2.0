@@ -168,6 +168,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "routing": AuditAction.ROUTING,
         "instructions": AuditAction.INSTRUCTIONS,
         "webhook": AuditAction.WEBHOOK,
+        "erasure": AuditAction.ERASURE,
     }
 )
 
@@ -295,6 +296,19 @@ class InstructionsChange(enum.StrEnum):
 #: so the actor is the database role the statement ran as. `0003`'s grant trigger writes the same
 #: word when it attributes a revocation to the granter.
 INFERRED_ACTOR: Final = "inferred"
+
+
+class ErasureChange(enum.StrEnum):
+    """What happened to a request to erase somebody's data. The four values `0060`'s trigger writes.
+
+    The last three are `brain.tables.erasure.ErasureOutcome`, and a test holds the two equal: a
+    request is filed, and the queue finishes it one of three ways.
+    """
+
+    REQUESTED = "requested"
+    ERASED = "erased"
+    HELD = "held"
+    INCOMPLETE = "incomplete"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -898,4 +912,18 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.WEBHOOK, subject("webhook", subscriber_id), {"change": change.value}
+        )
+
+    def erasure(self, *, request_id: str, change: ErasureChange) -> AuditEntry:
+        """Record that a request to erase somebody's data was filed, or how the queue finished it.
+
+        Written in a deployed database by `0060`'s trigger on `ops.erasure_request`, on the insert
+        and on the update that marks the request finished, and held to this method's details by a
+        test. **Never whose data it was**: the subject is the request, for the reason `legal_hold`
+        gives about whom a hold names, and there is no parameter through which a person could
+        arrive. The actor is whoever the row names for the change: the administrator who filed it,
+        or the queue that finished it.
+        """
+        return self._write(
+            AuditAction.ERASURE, subject("erasure", request_id), {"change": change.value}
         )

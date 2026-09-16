@@ -67,7 +67,7 @@ fi
 # install and this script does not mint, print or store them: they are read from the operator's
 # environment and written to a file only root can read.
 : "${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID to a key that may write to the backups bucket}"
-: "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY to that key's secret}"
+: "${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY to the secret of that key}"
 
 umask 077
 cat > /etc/brain-backup.env <<ENVFILE
@@ -130,5 +130,6 @@ echo
 echo "Installed. Take one now to prove it works, rather than finding out in the morning:"
 echo "  systemctl start brain-backup.service && journalctl -u brain-backup.service -n 20 --no-pager"
 echo
-echo "A copy nobody has read back is a file, not a backup. Reading one back is M30's work"
-echo "and it is deliberately not here: see docs/needs-rupash.md item 44."
+echo "A copy nobody has read back is a file, not a backup. Reading one back is a drill, and it"
+echo "is not scheduled: follow docs/install/restore-drill.md, whose load and row counts"
+echo "ops/backup/brain-restore-drill performs."

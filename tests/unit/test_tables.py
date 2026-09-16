@@ -106,6 +106,7 @@ MIGRATION_AGENT_AUTOMATION = VERSIONS / "0055_agent_automation.py"
 MIGRATION_SKILL_LIBRARY = VERSIONS / "0056_skill_library.py"
 MIGRATION_CONNECTOR_CONNECTION = VERSIONS / "0057_connector_connection.py"
 MIGRATION_ARTIFACT = VERSIONS / "0058_artifact_store.py"
+MIGRATION_ERASURE_REQUEST = VERSIONS / "0060_erasure_request.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -275,6 +276,8 @@ ARTIFACT_TABLES: tuple[str, ...] = ("agent.artifact",)
 
 #: And the one 0057 adds: a source connected from the console, and when that stopped.
 CONNECTOR_CONNECTION_TABLES: tuple[str, ...] = ("ops.connector_connection",)
+#: And the one 0060 adds: a request to erase somebody's data, and how the queue finished it.
+ERASURE_REQUEST_TABLES: tuple[str, ...] = ("ops.erasure_request",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -311,6 +314,7 @@ ALL_TABLES = (
     + SKILL_LIBRARY_TABLES
     + CONNECTOR_CONNECTION_TABLES
     + ARTIFACT_TABLES
+    + ERASURE_REQUEST_TABLES
 )
 
 
@@ -1036,6 +1040,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert connector_connection.TABLES == CONNECTOR_CONNECTION_TABLES
     artifact = migration_module(MIGRATION_ARTIFACT)
     assert artifact.TABLES == ARTIFACT_TABLES
+    erasure_request = migration_module(MIGRATION_ERASURE_REQUEST)
+    assert erasure_request.TABLES == ERASURE_REQUEST_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1094,6 +1100,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(skill_library.TABLES)
         + tuple(connector_connection.TABLES)
         + tuple(artifact.TABLES)
+        + tuple(erasure_request.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1133,6 +1140,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(skill_library.TABLES),
         set(connector_connection.TABLES),
         set(artifact.TABLES),
+        set(erasure_request.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

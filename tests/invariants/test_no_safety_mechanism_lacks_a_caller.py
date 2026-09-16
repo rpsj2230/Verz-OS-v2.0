@@ -106,8 +106,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #: until the installation releases it, and `spend_report_refresh` the day it was registered.
 #: `knowledge_reverification` joined later that day from `KNOWN_ORPHANS`, recording nags that
 #: nothing sends yet: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` says so.
+#: `erasure_queue` joined on 2026-09-17 the day it was registered, draining `ops.erasure_request`.
 SCHEDULED_BY_THE_WORKER = frozenset(
-    {"retention_sweep", "knowledge_reverification", "spend_report_refresh"}
+    {"retention_sweep", "knowledge_reverification", "spend_report_refresh", "erasure_queue"}
 )
 
 #: Controls whose caller is itself imported by nothing, named rather than counted.

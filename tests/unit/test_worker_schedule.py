@@ -62,6 +62,7 @@ from tests.fixtures.scratch_postgres import (
     migrate,
     run,
     sql,
+    with_every_control_name,
 )
 
 NOW = datetime(2999, 3, 1, 9, 0, tzinfo=UTC)
@@ -75,6 +76,7 @@ STARTED = [
     ("retention_sweep", True),
     ("knowledge_reverification", False),
     ("spend_report_refresh", False),
+    ("erasure_queue", False),
 ]
 
 
@@ -89,6 +91,7 @@ def control_runs(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0025")
         migrate(database, "stamp", "0036")
         migrate(database, "upgrade", "0037")
+        with_every_control_name(url)
         add_modelled(url, (*RETENTION_TABLES, *SCHEDULE_CONTROL_TABLES))
         yield url
     finally:
@@ -142,12 +145,17 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_three_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_four_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
-    Delete this and every assertion below that names the three could be satisfied by a table
+    Delete this and every assertion below that names the four could be satisfied by a table
     that had quietly lost one of them."""
-    assert WIRED == ["retention_sweep", "knowledge_reverification", "spend_report_refresh"]
+    assert WIRED == [
+        "retention_sweep",
+        "knowledge_reverification",
+        "spend_report_refresh",
+        "erasure_queue",
+    ]
 
 
 def test_only_the_general_worker_ticks_the_schedule_and_it_needs_the_applications_url() -> None:
@@ -303,6 +311,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
 
         assert starts.calls == STARTED
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
+            ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
@@ -355,7 +364,7 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
     starts: Starts,
 ) -> None:
     """A second tick a minute later starts nothing and records nothing; a tick a day and a minute
-    after the first starts all three again.
+    after the first starts every wired control again.
 
     Delete this and the loop could restart every wired control on every thirty-second tick, which
     is a retention sweep two thousand eight hundred and eighty times a day."""
@@ -364,19 +373,19 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
         later = tick(url, at=NOW + timedelta(minutes=1))
 
         assert starts.calls == STARTED
-        assert len(recorded(url)) == 3
+        assert len(recorded(url)) == 4
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 6
-        assert len(recorded(url)) == 6
+        assert len(starts.calls) == 8
+        assert len(recorded(url)) == 8
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
     starts: Starts,
 ) -> None:
     """Another connection holds the refresh's advisory lock in an open transaction: the refresh is
-    reported as locked elsewhere, is not started and leaves no row, and the other two still run.
+    reported as locked elsewhere, is not started and leaves no row, and the others still run.
 
     Delete this and two replicas ticking together could both start one control, which for the
     sweep is two deletions of one window."""
@@ -386,8 +395,12 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == STARTED[:2]
-        assert [row[0] for row in recorded(url)] == ["knowledge_reverification", "retention_sweep"]
+        assert starts.calls == [*STARTED[:2], STARTED[3]]
+        assert [row[0] for row in recorded(url)] == [
+            "erasure_queue",
+            "knowledge_reverification",
+            "retention_sweep",
+        ]
         assert {one.name: one.ticked for one in found}["spend_report_refresh"] is (
             Ticked.LOCKED_ELSEWHERE
         )
@@ -397,7 +410,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The sweep's runner raises: its run is finished as failed with the exception's type and
-    message, and the two declared after it still start and are recorded as ok.
+    message, and the ones declared after it still start and are recorded as ok.
 
     Delete this and one broken control would either vanish from the record or stop every control
     declared after it."""
@@ -408,6 +421,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
 
         assert fake.calls == STARTED
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
+            ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
@@ -421,7 +435,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     """**The leaf, end to end.** One tick of the worker's schedule starts
     `knowledge_reverification` through the real `start_control`, which reads a lapsed item out
     of `know.item`, resolves its owner's grants, records the owner's nag in the outbox and
-    commits, and the tick records the run as ok with the store's sentence. The other two wired
+    commits, and the tick records the run as ok with the store's sentence. The other wired
     controls are stood in for, because they need tables this database does not hold.
 
     Delete this and every other test of the nag could pass with nothing on a schedule reaching
@@ -448,6 +462,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         # The tick reads the sweep's release since 0049, which this chain stops short of, and a
         # person's pauses from `ops.setting`, which is created only when missing.
         add_modelled(url, (*RETENTION_TABLES, *SCHEDULE_CONTROL_TABLES))
+        with_every_control_name(url)
         a_person(url, "u_owner")
         a_reader(url, "u_owner", "web")
         put(url, item)
@@ -464,7 +479,11 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     assert recorded_nags == [
         ("kb.renewals", {"route": "owner", "recipient": "u_owner", "review_by": lapsed.isoformat()})
     ]
-    assert others.calls == [("retention_sweep", True), ("spend_report_refresh", False)]
+    assert others.calls == [
+        ("retention_sweep", True),
+        ("spend_report_refresh", False),
+        ("erasure_queue", False),
+    ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.
     from brain.ops.controls import control

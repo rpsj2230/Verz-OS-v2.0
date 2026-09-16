@@ -207,7 +207,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     without a test fails, and a member removed fails too. It has done its job four times
     now, on `compose_change`, on `approval`, on `record_read`, on `sign_in`, on
     `session_end`, on `certification`, on `credential`, on `retention`, on `legal_hold`, on
-    `skill`, and on the four added together on 2026-09-17.
+    `skill`, on `connector`, on the four added together on 2026-09-17 and on `erasure`.
 
     `record_read` is the one member that is not a change to what somebody may do, and it is
     here because Needs Rupash item 45 chose to answer "which agents have read my HR record"
@@ -253,6 +253,11 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     may do, which is why none is GRANT, and four rather than one, because an auditor of any one of
     those questions should not read the other three's rows.
 
+    `erasure` records a request to erase somebody's data filed, and the queue finishing it,
+    written by `0060`'s trigger on `ops.erasure_request`. An erasure lets one person's data go on a
+    request rather than by age, which is why it is not RETENTION, and the grants it retires are
+    REVOKEs already.
+
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
     they differ by orders of magnitude in frequency and they answer different questions.
@@ -280,6 +285,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "routing rung added, changed or retired": AuditAction.ROUTING,
         "agent instructions edited or given back": AuditAction.INSTRUCTIONS,
         "webhook subscriber registered, rotated or switched off": AuditAction.WEBHOOK,
+        "erasure requested, then erased, held or left incomplete": AuditAction.ERASURE,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -305,6 +311,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "routing",
         "instructions",
         "webhook",
+        "erasure",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

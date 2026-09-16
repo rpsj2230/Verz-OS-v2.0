@@ -399,6 +399,10 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And to eight later that day, for the same reason.** `start_control` calls the
     re-verification runner, so `knowledge_reverification` left the list too.
 
+    **And sixteen controls on 2026-09-17, with eight orphans still.** `erasure_queue` arrived
+    already wired, the way `spend_report_refresh` did, so the control count rose and the orphan
+    count did not.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -407,7 +411,7 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 15
+    assert len(CONTROLS) == 16
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -429,7 +433,12 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
     }
 
     assert arms == {one.name for one in RUNNERS if one.run is not None}
-    assert arms == {"retention_sweep", "knowledge_reverification", "spend_report_refresh"}
+    assert arms == {
+        "retention_sweep",
+        "knowledge_reverification",
+        "spend_report_refresh",
+        "erasure_queue",
+    }
 
 
 def test_the_nag_runner_asked_for_a_report_records_nothing_and_reaches_no_database() -> None:

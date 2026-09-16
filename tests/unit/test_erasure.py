@@ -15,7 +15,7 @@ The legal hold used throughout is `brain.audit.ledger.LegalHold`, the real one, 
 protocol checked only against a stub written in the test file is a protocol describing a
 class that may no longer exist.
 
-Task ids: M25.2.1, M25.2.2, M25.2.3, M25.2.4
+Task ids: M25.2.1, M25.2.2, M25.2.3, M25.2.4, M27.7.24
 """
 
 from __future__ import annotations
@@ -40,11 +40,14 @@ from brain.ops.erasure import (
     Disposition,
     Erased,
     ErasureError,
+    HeldError,
     Hold,
     StoreHolding,
+    StoreRemoval,
     SubjectAccess,
     assemble,
     backup_horizon,
+    carry_out,
     certify,
     deletion_order,
     disposition_of,
@@ -292,7 +295,17 @@ def test_an_erasure_removes_a_memory_although_a_correction_never_deletes_one() -
     )
     gone = next(one for one in deletion.results if one.store is Store.MEMORY)
     assert gone.removed == 1
-    assert {f.name for f in fields(Erased)} == {"store", "disposition", "removed", "reached"}
+    # Counts, and the one sentence that names a rule or a refusal; still nothing that names the
+    # memory, which is the difference from `corrected` above.
+    assert {f.name for f in fields(Erased)} == {
+        "store",
+        "disposition",
+        "removed",
+        "reached",
+        "retired",
+        "kept",
+        "because",
+    }
 
 
 def test_a_deletion_covers_every_store_and_counts_only_what_it_removed() -> None:
@@ -663,3 +676,190 @@ def test_the_real_legal_hold_satisfies_the_protocol_without_adaptation() -> None
     assert "p_ada" in hold.subjects
     assert not hold.all_subjects
     assert holds_over("p_ada", [hold], NOW) == (hold,)
+
+
+# --------------------------------------------- M27.7.24  retired, kept and carried out
+class Executor:
+    """A `StoreEraser` that answers from a table of outcomes and records every store it was asked.
+
+    A store mapped to a string raises `ErasureError` with it, which is how a real executor says a
+    store is out of its reach.
+    """
+
+    def __init__(self, outcomes: dict[Store, StoreRemoval | str]) -> None:
+        self.outcomes = outcomes
+        self.asked: list[Store] = []
+
+    def count_for(self, store: Store, subject_id: str) -> int:
+        return 0
+
+    def erase(self, store: Store, subject_id: str) -> StoreRemoval:
+        self.asked.append(store)
+        found = self.outcomes.get(store, StoreRemoval())
+        if isinstance(found, str):
+            raise ErasureError(found)
+        return found
+
+
+def test_a_retired_row_is_counted_apart_from_a_removed_one_and_the_certificate_says_it_stays() -> (
+    None
+):
+    """`brain.db.SoftDeleteMixin` retires rather than removes, and an erasure honours that rule.
+    The retired rows are counted as retired, never folded into `removed`, and a certificate for
+    the deletion carries a line saying they are still stored.
+
+    Delete this and an executor's retirements can be reported as removals, which puts a false
+    number on the one document produced to be relied on."""
+    deletion = erase(
+        subject_id="p_ada",
+        requested_at=NOW,
+        completed_at=LATER,
+        removed={},
+        removals={Store.ROWS: StoreRemoval(removed=1, retired=4)},
+    )
+    certificate = certify(deletion, certificate_id="c-1")
+
+    rows = next(one for one in deletion.results if one.store is Store.ROWS)
+    assert (rows.removed, rows.retired, deletion.removed, deletion.retired) == (1, 4, 1, 4)
+    assert deletion.complete
+    assert certificate.total_removed == 1
+    retired_lines = [
+        one for one in certificate.lines() if one.startswith("4 record(s) were retired")
+    ]
+    assert len(retired_lines) == 1 and "still stored" in retired_lines[0]
+    assert not any("retired rather than removed" in one for one in _plain_certificate().lines())
+
+
+def _plain_certificate() -> Certificate:
+    """A certificate for a deletion that retired nothing, for the sibling of the line above."""
+    plain = erase(
+        subject_id="p_ada", requested_at=NOW, completed_at=LATER, removed={Store.MEMORY: 1}
+    )
+    return certify(plain, certificate_id="c-2")
+
+
+def test_rows_no_path_may_remove_make_the_deletion_incomplete_and_uncertifiable() -> None:
+    """A table the application may neither delete from nor retire keeps its rows about the
+    person, and the deletion says so: the store is reached, the rows are counted as kept with the
+    rule that keeps them, the deletion is not complete, and no certificate is issued.
+
+    Delete this and a deletion that left memory rows behind is certified, and the person who
+    asked holds a document saying their data is gone."""
+    rule = "the application role holds no DELETE on it"
+    deletion = erase(
+        subject_id="p_ada",
+        requested_at=NOW,
+        completed_at=LATER,
+        removed={},
+        removals={Store.MEMORY: StoreRemoval(kept=2, kept_because=rule)},
+    )
+
+    memory = next(one for one in deletion.results if one.store is Store.MEMORY)
+    assert (memory.reached, memory.kept, memory.because) == (True, 2, rule)
+    assert deletion.kept() == (Store.MEMORY,)
+    assert deletion.unreached() == ()
+    assert not deletion.complete
+    assert f"2 kept, because {rule}" in memory.line()
+    with pytest.raises(ErasureError, match="no path may remove"):
+        certify(deletion, certificate_id="c-1")
+
+
+def test_a_kept_count_needs_the_rule_that_kept_it_and_a_rule_needs_something_kept() -> None:
+    """Both halves of the one sentence a queue shows beside a kept count. Delete this and rows
+    can be kept for a reason nobody named, or a reason shown beside nothing."""
+    with pytest.raises(ErasureError, match="one of those is not true"):
+        StoreRemoval(kept=1)
+    with pytest.raises(ErasureError, match="one of those is not true"):
+        StoreRemoval(kept_because="a rule with nothing kept")
+    with pytest.raises(ErasureError, match="negative"):
+        StoreRemoval(retired=-1)
+    with pytest.raises(ErasureError, match="names no rule"):
+        Erased(store=Store.MEMORY, disposition=Disposition.ERASE, removed=0, reached=True, kept=1)
+    with pytest.raises(ErasureError, match="a deletion does not reach it"):
+        Erased(
+            store=Store.BACKUP,
+            disposition=Disposition.ROTATES_OUT,
+            removed=0,
+            reached=True,
+            retired=1,
+        )
+    with pytest.raises(ErasureError, match="was not reached"):
+        Erased(store=Store.ROWS, disposition=Disposition.ERASE, removed=0, reached=False, retired=1)
+    assert StoreRemoval(kept=1, kept_because="a rule").kept == 1
+
+
+def test_carrying_out_asks_every_target_in_order_and_a_refusal_does_not_stop_the_run() -> None:
+    """The fan-out over an executor. Every store a deletion reaches is asked, sources before the
+    copies drawn from them; a store the executor refuses is recorded as not reached with the
+    executor's own reason, and the stores after it are still asked; the stores a deletion never
+    reaches are never asked.
+
+    Delete this and a run can stop at the first store out of reach, leaving every later store
+    untouched and reported only as not reached, or ask the audit chain to erase itself."""
+    executor = Executor(
+        {
+            Store.ROWS: StoreRemoval(retired=2),
+            Store.RECORDING: "no object-store eraser is attached",
+            Store.MEMORY: StoreRemoval(removed=3),
+        }
+    )
+
+    deletion = carry_out(executor, subject_id="p_ada", requested_at=NOW, completed_at=LATER)
+
+    assert executor.asked == list(erasure_targets())
+    assert not set(executor.asked) & {Store.BACKUP, Store.EXPORT, Store.AUDIT}
+    recording = next(one for one in deletion.results if one.store is Store.RECORDING)
+    assert (recording.reached, recording.because) == (False, "no object-store eraser is attached")
+    assert deletion.unreached() == (Store.RECORDING,)
+    assert (deletion.removed, deletion.retired) == (3, 2)
+    assert not deletion.complete
+
+
+def test_a_hold_judged_at_the_run_stops_it_before_any_store_is_asked() -> None:
+    """Holds are judged at the instant the removal happens, before the executor is called, and
+    the refusal carries the holds' ids for the queue to record. A hold placed after the request
+    and active at the run stops it; the same hold lifted before the run does not.
+
+    Delete this and a hold placed while a request waited in the queue is walked past, or the
+    executor removes a store's rows before the refusal arrives."""
+    placed_after_request = _hold(placed_at=NOW + timedelta(minutes=1))
+    executor = Executor({})
+
+    with pytest.raises(HeldError) as refused:
+        carry_out(
+            executor,
+            subject_id="p_ada",
+            requested_at=NOW,
+            completed_at=LATER,
+            holds=[placed_after_request],
+        )
+    assert refused.value.hold_ids == ("hold-1",)
+    assert executor.asked == []
+
+    lifted = _hold(placed_at=NOW + timedelta(minutes=1), released_at=NOW + timedelta(minutes=2))
+    done = carry_out(
+        executor, subject_id="p_ada", requested_at=NOW, completed_at=LATER, holds=[lifted]
+    )
+    assert executor.asked == list(erasure_targets())
+    assert done.unreached() == ()
+
+
+def test_a_store_named_twice_or_a_reason_for_something_that_is_not_a_store_is_refused() -> None:
+    """Two counts for one store is a certificate carrying whichever was read first. Delete this
+    and a caller mixing the two ways of reporting can put either number on the document."""
+    with pytest.raises(ErasureError, match="both a removal count"):
+        erase(
+            subject_id="p_ada",
+            requested_at=NOW,
+            completed_at=LATER,
+            removed={Store.MEMORY: 1},
+            removals={Store.MEMORY: StoreRemoval(removed=1)},
+        )
+    with pytest.raises(ErasureError, match="which is not a store"):
+        erase(
+            subject_id="p_ada",
+            requested_at=NOW,
+            completed_at=LATER,
+            removed={},
+            unreached_because={"caches": "why"},  # type: ignore[dict-item]
+        )

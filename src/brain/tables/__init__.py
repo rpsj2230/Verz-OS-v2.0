@@ -59,6 +59,7 @@ from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
+from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -247,6 +248,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0058_artifact_store. Points at nothing: the agent, the run and the person are values, so the
     # record of what was produced outlives all three.
     "agent.artifact",
+    # 0060_erasure_request. Points at nothing: the person and the administrator are values, so the
+    # record that an erasure was asked for outlives the rows it erased.
+    "ops.erasure_request",
 )
 
 __all__ = [
@@ -274,6 +278,8 @@ __all__ = [
     "EntityAliasRow",
     "EntityIdentifierRow",
     "EntityLinkRow",
+    "ErasureOutcome",
+    "ErasureRequestRow",
     "FastPathRuleRow",
     "FieldPolicyRow",
     "GrantsVersionRow",

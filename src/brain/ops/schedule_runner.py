@@ -31,10 +31,10 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Three controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
-`knowledge_reverification` and `spend_report_refresh` have a runner that gathers what they
-need, and `brain.ops.worker` starts them on the schedule through `start_control`. Every other
-control entry point is a policy function that takes its inputs: `retention.enforcement_report`
+**Four controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+`knowledge_reverification`, `spend_report_refresh` and `erasure_queue` have a runner that gathers
+what they need, and `brain.ops.worker` starts them on the schedule through `start_control`. Every
+other control entry point is a policy function that takes its inputs: `retention.enforcement_report`
 takes a census "the executor saw", `denial_alerts.digest` takes patterns and recipients,
 `recovery.alerts` takes backups and verifications. None of them gathers anything. So the
 registry's orphans are not mechanisms waiting for a timer, they are mechanisms whose policy is
@@ -77,6 +77,7 @@ import psycopg
 from brain.db import libpq_url
 from brain.knowledge.item_store import run_reverification_now
 from brain.ops.controls import Control
+from brain.ops.erasure_store import drain_erasure_queue
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
@@ -263,6 +264,17 @@ def knowledge_reverification(now: datetime, report_only: bool, database_url: str
     return ran.summary(now)
 
 
+def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
+    """Carry out the erasure requests filed by `now`, as report lines.
+
+    On the worker's own connection, which is the database owner's: `brain.ops.erasure_store` refuses
+    a connection row-level security narrows, because a row a policy hides is a row the erasure
+    would neither count nor retire. `prepare_threshold=None` for the reason `retention_sweep` gives.
+    """
+    with psycopg.connect(libpq_url(database_url), prepare_threshold=None) as conn:
+        return drain_erasure_queue(conn, now=now, report_only=report_only)
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
 #: Two with a `run` since 2026-09-15, which the worker's schedule starts, and the rest saying what
@@ -368,6 +380,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
         ),
     ),
     Runner(name="spend_report_refresh", run=spend_report_refresh),
+    # Wired on 2026-09-17 with `ops.erasure_request`. See `brain.ops.erasure_store`.
+    Runner(name="erasure_queue", run=erasure_queue),
 )
 
 
@@ -400,6 +414,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return knowledge_reverification(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
+        case "erasure_queue":
+            return erasure_queue(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

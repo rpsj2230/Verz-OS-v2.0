@@ -28,6 +28,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
+from sqlalchemy import CheckConstraint
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -158,6 +159,36 @@ def add_modelled(url: str, qualified: Sequence[str]) -> None:
         metadata.create_all(built, tables=[metadata.tables[one] for one in qualified])
     finally:
         built.dispose()
+
+
+def with_every_control_name(url: str) -> None:
+    """`ops.control_run`'s name constraint as the model declares it, on a chain stopped at `0037`.
+
+    For a test that ticks the worker's schedule on a database whose chain stops short of the
+    migration that last widened the names: `erasure_queue` arrived in `0060`, which cannot run on a
+    chain that skips everything between, and the tick records a run under it. Rendered from the
+    model rather than copied from `0060`, so the next control added widens this without an edit.
+    """
+    import brain.tables  # noqa: F401 - registers every table on the metadata
+    from brain.db import metadata
+
+    table = metadata.tables["ops.control_run"]
+    [check] = [
+        one
+        for one in table.constraints
+        if isinstance(one, CheckConstraint) and str(one.name).endswith("control_run_name")
+    ]
+    sql(
+        url,
+        "DO $$ DECLARE v_name text; BEGIN FOR v_name IN SELECT c.conname FROM pg_constraint c "
+        "WHERE c.conrelid = 'ops.control_run'::regclass AND c.contype = 'c' "
+        "AND right(c.conname, 16) = 'control_run_name' LOOP EXECUTE "
+        "'ALTER TABLE ops.control_run DROP CONSTRAINT ' || quote_ident(v_name); END LOOP; END $$",
+    )
+    sql(
+        url,
+        f"ALTER TABLE ops.control_run ADD CONSTRAINT {check.name} CHECK ({check.sqltext})",
+    )
 
 
 #: The retention tables a tick reads, for `add_modelled`.

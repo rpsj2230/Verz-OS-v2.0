@@ -285,6 +285,12 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.ops.data_export_store:ExportRecords.taken_by": Repeat.READS,
+        # The Retention screen's export log: a read of the same table, every person's rows.
+        "brain.ops.data_export_store:ExportLog.recent": Repeat.READS,
+        # The Retention screen's erasure queue: one insert into this system's own table, whose
+        # trigger appends to the ledger, and whose open-request key refuses a second one.
+        "brain.ops.erasure_store:ErasureRecords.file": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.erasure_store:ErasureRecords.requests": Repeat.READS,
         # The Webhooks screen. Each write is this system's own rows in one transaction; the vault
         # write inside a registration or a rotation goes through `CredentialVault.write_static_kv`,
         # classified above as the same result when repeated.

@@ -1,0 +1,285 @@
+#!/bin/sh
+# Load one nightly copy into a scratch database and check it against its own manifest.
+#
+# `brain-backup` writes the copy and a manifest stating how many rows every table held and which
+# migration the database was at, both read inside the snapshot the copy was taken from. This
+# reads the copy back into a database nothing else uses and asks that database the same two
+# questions with the same query. The load is judged by the answers and never by the loader's
+# exit status, because a loader that exits zero having brought back half the rows is the same
+# silent failure as a dump that exits zero having written nothing.
+#
+# WHAT THIS DOES NOT DO, SO NOBODY READS IT AS A WHOLE DRILL. It does not download the copy,
+# create the scratch container, create the roles the copy's policies name, run the schema check,
+# run the row-level security sweep, ask the permission canary, or write the drill record. Those
+# are steps in `docs/install/restore-drill.md`, and the record in particular is left to the
+# person: what this proves is that the rows and the revision came back, which is one of the
+# three questions a drill asks and not the one that sees a restore bring back every row and none
+# of the rules about who may read them.
+#
+# WHY IT NEVER TOUCHES THE LIVE DATABASE, AND HOW THAT IS HELD RATHER THAN HOPED. A load aimed
+# at the wrong place is the one mistake here that destroys data, and the moment somebody makes
+# it is a stressful one. So the target is never chosen by this script and never defaulted: the
+# scratch container and the scratch database are both required by name, and both are refused
+# before anything is written when they are the live ones.
+#
+#   - The container is compared by name with the install's own `BRAIN_DB_CONTAINER`, and then
+#     by the identifier docker reports for each, so the live container named by its id, a
+#     prefix of it, or anything else docker resolves to the same container is refused too.
+#   - The database name is compared with the install's own `BRAIN_DB_NAME`, so even a container
+#     check that was somehow passed would load into a new database beside the live one and not
+#     into it. The live database's name is the one name a scratch database may not have.
+#   - The database is created fresh, without `if not exists`, so a name that already holds
+#     anything stops the run instead of being loaded on top of.
+#   - The live container is only ever inspected. No command that writes names it.
+#
+# Every refusal exits 2 before any command that could write has run; a load or a check that
+# fails exits 1; a copy whose rows and revision all came back exits 0.
+#
+# WHY THE SCRATCH CONTAINER MUST BE ON AN INTERNAL NETWORK. The scratch database holds every
+# record the install holds, loaded by a superuser, with whatever the copy's policies failed to
+# bring back. A container that can reach the outside world, or that anything on a shared bridge
+# can reach, is a second unguarded copy of the company. Docker's own `internal` flag is the
+# property checked, not a network name somebody chose.
+#
+# WHY NO JSON PARSER. This runs on the client's server, which has docker, a shell and awk and
+# nothing else this product can count on. The manifest's layout is therefore part of its format:
+# `brain-backup` writes one field per line and one table per line, and a manifest not in that
+# layout is refused rather than half read.
+#
+# Rejected: taking the expected counts from the copy itself instead of from the manifest. It
+# needs nothing from the backup script, and it compares the loader with a second reading of the
+# bytes the loader reads, which agree exactly when both are wrong in the same way.
+#
+# Rejected: dropping the scratch database at the end. The schema check, the row-level security
+# sweep and the canary in the drill procedure all need the loaded copy, and the procedure's last
+# step destroys the whole scratch container, which is the only cleanup that cannot miss a table.
+#
+# Task ids: M42.3.5
+
+set -eu
+
+# The same text as `brain-backup`'s, and a test holds the two scripts to that. A drill that
+# counted differently from the taker would report every difference in counting as lost rows.
+COUNT_SQL="select to_json(n.nspname || '.' || c.relname)::text || ': ' || (xpath('/row/n/text()', query_to_xml(format('select count(*) as n from only %I.%I', n.nspname, c.relname), false, true, '')))[1]::text
+from pg_class as c join pg_namespace as n on n.oid = c.relnamespace
+where c.relkind = 'r' and n.nspname !~ '^pg_' and n.nspname <> 'information_schema'
+and not exists (select 1 from pg_depend as d where d.classid = 'pg_class'::regclass and d.objid = c.oid and d.deptype = 'e')
+order by 1;"
+
+HEAD_SQL="select 'head ' || to_json(coalesce(string_agg(version_num, ',' order by version_num), ''))::text from public.alembic_version;"
+
+# The superuser the official PostgreSQL image creates when only a password is given, which is
+# how the drill procedure starts the scratch container. Not an install value.
+SCRATCH_USER=postgres
+
+usage() {
+    cat <<'USAGE'
+usage: brain-restore-drill --manifest FILE --dump FILE --scratch-container NAME --scratch-database NAME
+
+Loads FILE (a copy brain-backup took) into a new database NAME inside the scratch container,
+then compares every table's row count and the migration head with the copy's manifest.
+
+  --manifest FILE            the copy's manifest, downloaded beside it
+  --dump FILE                the copy itself, named after the manifest's backup_id
+  --scratch-container NAME   a PostgreSQL container on an internal docker network, that is
+                             not this install's database container
+  --scratch-database NAME    a database name that does not exist in that container yet, and
+                             is not this install's database name
+  -h, --help                 print this and do nothing else
+
+Reads BRAIN_DB_CONTAINER and BRAIN_DB_NAME, as /etc/brain-backup.env sets them, only to refuse
+them as a target. Exits 0 when every count and the head match, 1 when a load or a check fails,
+and 2 when it refuses before writing anything.
+USAGE
+}
+
+refuse() {
+    printf 'refused: %s\n' "$1" >&2
+    exit 2
+}
+fail() {
+    printf 'failed: %s\n' "$1" >&2
+    exit 1
+}
+log() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"; }
+
+MANIFEST=
+DUMP=
+SCRATCH_CONTAINER=
+SCRATCH_DATABASE=
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        --manifest | --dump | --scratch-container | --scratch-database)
+            if [ "$#" -lt 2 ]; then
+                usage >&2
+                refuse "$1 needs a value"
+            fi
+            case "$2" in
+                '' | -*)
+                    usage >&2
+                    refuse "$1 needs a value, and was given '$2'"
+                    ;;
+            esac
+            case "$1" in
+                --manifest) MANIFEST="$2" ;;
+                --dump) DUMP="$2" ;;
+                --scratch-container) SCRATCH_CONTAINER="$2" ;;
+                --scratch-database) SCRATCH_DATABASE="$2" ;;
+            esac
+            shift 2
+            ;;
+        *)
+            usage >&2
+            refuse "unknown argument '$1'"
+            ;;
+    esac
+done
+
+[ -n "$MANIFEST" ] || refuse "no --manifest; the manifest is what the load is checked against"
+[ -n "$DUMP" ] || refuse "no --dump; there is no copy to load"
+[ -n "$SCRATCH_CONTAINER" ] \
+    || refuse "no --scratch-container; this loads only into a container you name, and never picks one"
+[ -n "$SCRATCH_DATABASE" ] \
+    || refuse "no --scratch-database; this loads only into a database you name, and never picks one"
+[ -n "${BRAIN_DB_CONTAINER:-}" ] \
+    || refuse "BRAIN_DB_CONTAINER is not set, so nothing says which container is live; load /etc/brain-backup.env first"
+[ -n "${BRAIN_DB_NAME:-}" ] \
+    || refuse "BRAIN_DB_NAME is not set, so nothing says which database is live; load /etc/brain-backup.env first"
+
+# The two refusals that need nothing but the names, before docker is asked anything.
+[ "$SCRATCH_CONTAINER" != "$BRAIN_DB_CONTAINER" ] \
+    || refuse "$SCRATCH_CONTAINER is this install's live database container, and a drill never loads into it"
+[ "$SCRATCH_DATABASE" != "$BRAIN_DB_NAME" ] \
+    || refuse "$SCRATCH_DATABASE is this install's live database name; give the scratch database a name the live one does not have"
+
+# ------------------------------------------------------------------ the copy and its manifest
+[ -f "$MANIFEST" ] || refuse "no manifest at $MANIFEST"
+[ -f "$DUMP" ] || refuse "no copy at $DUMP"
+
+BACKUP_ID="$(sed -n 's/^  "backup_id": "\([^"]*\)",$/\1/p' "$MANIFEST")"
+SIZE_STATED="$(sed -n 's/^  "size_bytes": \([0-9][0-9]*\),\{0,1\}$/\1/p' "$MANIFEST")"
+HEAD_STATED="$(sed -n 's/^  "migration_head": \("[^"]*"\),\{0,1\}$/\1/p' "$MANIFEST")"
+
+[ -n "$BACKUP_ID" ] || refuse "$MANIFEST states no backup_id in the layout brain-backup writes"
+[ -n "$SIZE_STATED" ] || refuse "$MANIFEST states no size_bytes in the layout brain-backup writes"
+case "$HEAD_STATED" in
+    '' | '""')
+        refuse "$MANIFEST states no migration head, so it was written before copies carried one and a load of it has nothing to be compared with"
+        ;;
+esac
+[ "$(basename "$DUMP")" = "$BACKUP_ID.dump" ] \
+    || refuse "the manifest describes $BACKUP_ID and the copy is $(basename "$DUMP"); download the pair under the names the bucket gives them"
+
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/brain-restore-drill.XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
+trap 'exit 1' INT TERM
+
+awk '
+    $0 == "  \"row_counts\": {" { inside = 1; found = 1; next }
+    inside && ($0 == "  }" || $0 == "  },") { inside = 0; next }
+    inside { sub(/^ +/, ""); sub(/,$/, ""); if ($0 != "") print }
+    END { exit (found ? 0 : 3) }
+' "$MANIFEST" > "$WORK/expected" \
+    || refuse "$MANIFEST states no row_counts in the layout brain-backup writes, so a load of it has nothing to be compared with"
+[ -s "$WORK/expected" ] \
+    || refuse "$MANIFEST states row counts for no tables at all, which no copy of this product's database has"
+
+SIZE_ACTUAL="$(wc -c < "$DUMP" | tr -d ' ')"
+[ "$SIZE_ACTUAL" = "$SIZE_STATED" ] \
+    || fail "the copy is $SIZE_ACTUAL bytes and its manifest says $SIZE_STATED, so it was truncated or is a different file; nothing was loaded"
+
+# ------------------------------------------------------------------ the target, asked of docker
+command -v docker >/dev/null || fail "docker is not on PATH; this runs beside the containers"
+
+LIVE_ID="$(docker container inspect --format '{{.Id}}' "$BRAIN_DB_CONTAINER" 2>/dev/null)" \
+    || refuse "docker cannot find the live database container $BRAIN_DB_CONTAINER, so nothing can show that $SCRATCH_CONTAINER is a different one"
+SCRATCH_ID="$(docker container inspect --format '{{.Id}}' "$SCRATCH_CONTAINER" 2>/dev/null)" \
+    || refuse "docker cannot find a container named $SCRATCH_CONTAINER; start the scratch container first"
+[ -n "$LIVE_ID" ] && [ -n "$SCRATCH_ID" ] \
+    || refuse "docker reported no identifier for $BRAIN_DB_CONTAINER or $SCRATCH_CONTAINER, so they cannot be told apart"
+[ "$SCRATCH_ID" != "$LIVE_ID" ] \
+    || refuse "$SCRATCH_CONTAINER is the live database container under another name, and a drill never loads into it"
+
+NETWORKS="$(docker container inspect --format '{{range $name, $settings := .NetworkSettings.Networks}}{{$name}} {{end}}' "$SCRATCH_CONTAINER")" \
+    || refuse "docker cannot say which networks $SCRATCH_CONTAINER is on"
+for network in $NETWORKS; do
+    [ "$network" != none ] || continue
+    INTERNAL="$(docker network inspect --format '{{.Internal}}' "$network")" \
+        || refuse "docker cannot say whether network $network is internal"
+    [ "$INTERNAL" = true ] \
+        || refuse "$SCRATCH_CONTAINER is on network $network, which is not internal, so a copy of every record could leave through it; attach it only to a network created with --internal"
+done
+
+# ------------------------------------------------------------------ the load
+log "loading $BACKUP_ID into $SCRATCH_DATABASE in $SCRATCH_CONTAINER"
+
+docker exec "$SCRATCH_CONTAINER" createdb -U "$SCRATCH_USER" "$SCRATCH_DATABASE" \
+    || fail "could not create $SCRATCH_DATABASE in $SCRATCH_CONTAINER; it already exists or the container is not ready, and nothing was loaded"
+
+# One transaction and the first error ends it, so a load that fails leaves an empty database
+# rather than a partial one that looks complete. Ownership and grants are kept: a table's owner
+# is who row-level security exempts, so a load that changed owners would change who is refused.
+docker exec -i "$SCRATCH_CONTAINER" \
+    pg_restore -U "$SCRATCH_USER" -d "$SCRATCH_DATABASE" --exit-on-error --single-transaction < "$DUMP" \
+    || fail "the load stopped at its first error, shown above; the usual cause is the roles the copy's policies name not having been created in $SCRATCH_CONTAINER first"
+
+# ------------------------------------------------------------------ the checks
+docker exec "$SCRATCH_CONTAINER" \
+    psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$SCRATCH_USER" -d "$SCRATCH_DATABASE" -c "$COUNT_SQL" \
+    > "$WORK/actual" || fail "could not count the rows in $SCRATCH_DATABASE"
+HEAD_LOADED="$(docker exec "$SCRATCH_CONTAINER" \
+    psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$SCRATCH_USER" -d "$SCRATCH_DATABASE" -c "$HEAD_SQL")" \
+    || fail "could not read the migration head from $SCRATCH_DATABASE"
+HEAD_LOADED="${HEAD_LOADED#head }"
+
+# Every table the manifest states and every table the scratch database has, both ways round,
+# one line per difference and each line starting with the table's name as the manifest wrote it.
+awk '
+    function parse(line) {
+        at = match(line, /": [0-9]+$/)
+        if (!at) { return 0 }
+        key = substr(line, 1, at)
+        value = substr(line, at + 3)
+        return 1
+    }
+    FILENAME == ARGV[1] { if (parse($0)) expected[key] = value; next }
+    { if (parse($0)) actual[key] = value }
+    END {
+        for (key in expected) {
+            if (!(key in actual)) {
+                printf "%s: the copy held %s rows and the scratch database has no such table\n", key, expected[key]
+            } else if (actual[key] != expected[key]) {
+                printf "%s: the copy held %s rows and the scratch database has %s\n", key, expected[key], actual[key]
+            }
+        }
+        for (key in actual) {
+            if (!(key in expected)) {
+                printf "%s: the scratch database has %s rows in a table the copy did not state\n", key, actual[key]
+            }
+        }
+    }
+' "$WORK/expected" "$WORK/actual" > "$WORK/unsorted" \
+    || fail "could not compare the counts; this copy is not verified"
+# Not a pipeline, so a comparison that failed to run cannot look like one that found nothing.
+sort "$WORK/unsorted" > "$WORK/differences"
+
+TABLES="$(wc -l < "$WORK/expected" | tr -d ' ')"
+WRONG=0
+if [ -s "$WORK/differences" ]; then
+    printf 'row counts that did not come back:\n' >&2
+    cat "$WORK/differences" >&2
+    WRONG=1
+fi
+if [ "$HEAD_LOADED" != "$HEAD_STATED" ]; then
+    printf 'migration head: the copy was at %s and the scratch database is at %s\n' "$HEAD_STATED" "$HEAD_LOADED" >&2
+    WRONG=1
+fi
+[ "$WRONG" -eq 0 ] || fail "$BACKUP_ID did not come back as its manifest describes it; this copy is not verified"
+
+log "every one of $TABLES tables came back with the row count $BACKUP_ID's manifest states, at migration head $HEAD_STATED"
+log "not yet asked: the schema check, the row-level security sweep and the permission canary; see docs/install/restore-drill.md"
