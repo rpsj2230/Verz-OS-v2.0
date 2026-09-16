@@ -1,0 +1,22 @@
+# Line endings, decided here rather than by each machine's git configuration.
+#
+# **Written because a test went red in every fresh worktree on this machine and green in the
+# main tree.** `core.autocrlf=true` converts on checkout, so `ops/install/install.sh` arrived
+# with carriage returns in a clean checkout and `test_the_committed_script_has_unix_line
+# endings_and_nothing_else` reported the file as broken when the committed bytes were right.
+# That test is worth keeping exactly as it is: a shell script with carriage returns fails on a
+# server with `bad interpreter`, which is a failure a client meets on their first install.
+#
+# So the shape of a file is a property of the repository. Anything a Linux server executes or
+# reads is LF whatever the machine editing it prefers.
+* text=auto eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
