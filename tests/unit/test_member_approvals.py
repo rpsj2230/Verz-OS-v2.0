@@ -63,6 +63,7 @@ from brain.member.approvals import (
     envelope_for,
     lapsed,
 )
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2027, 5, 4, 10, 0, tzinfo=UTC)
 CLEAN = RiskAssessment(score=0, matched=())
@@ -316,6 +317,7 @@ def test_an_unanswered_approval_does_not_run_when_it_expires() -> None:
         trace_id="tr_1",
         now=later,
         execute=executor,
+        ledger=MemoryLedger(),
     )
 
     assert outcome.resumed is False
@@ -342,6 +344,7 @@ def test_an_approved_envelope_inside_its_window_does_run() -> None:
         trace_id="tr_1",
         now=NOW + timedelta(minutes=2),
         execute=executor,
+        ledger=MemoryLedger(),
     )
 
     assert outcome.resumed is True

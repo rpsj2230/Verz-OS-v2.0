@@ -294,8 +294,9 @@ CALLABLES: Final[Mapping[str, Repeat]] = MappingProxyType(
     {
         # A shadow run renders what would have happened and does nothing.
         "brain.gate.leash:run_shadow.simulate": Repeat.NO_EFFECT_AT_THE_FAR_END,
-        # The real run. The one door in the task lane, and not yet through `issue_once`: see
-        # `tests/invariants/test_every_side_effect_is_keyed.NOT_YET_THROUGH_THE_DOOR`.
+        # The real run. The one door in the task lane, called inside the effect `run_real`
+        # hands `issue_once`. What a repeat is handed is decided in `brain.gate.leash`:
+        # `AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`.
         "brain.gate.leash:run_real.execute": Repeat.ISSUES,
     }
 )

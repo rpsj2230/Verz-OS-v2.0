@@ -73,9 +73,10 @@ every called parameter typed as a callable over `brain.gate.leash.Action`, and f
 one classified as issuing a side effect. A call that is not inside the effect handed to
 `issue_once`, and not preceded by `assert_no_side_effect`, fails
 `tests/invariants/test_every_side_effect_is_keyed.py`, and so does a door nobody has classified.
-A new side effect therefore cannot arrive without its key. **One existing door is not yet through
-it and is named there**: `brain.gate.leash.run_real`, which runs an agent's action through the
-callable its caller hands in, for the reasons that test's `NOT_YET_THROUGH_THE_DOOR` gives.
+A new side effect therefore cannot arrive without its key. **Every existing door is through it**:
+the last was `brain.gate.leash.run_real`, which runs an agent's action through the callable its
+caller hands in and was keyed on 2026-09-16, once what an agent is handed when its action already
+ran had been decided.
 
 Rejected: a key per call site, with each module deduplicating in its own way. It is how this
 repository had it: `brain.ops.digest_delivery` asked a register before sending and recorded after,

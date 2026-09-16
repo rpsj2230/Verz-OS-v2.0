@@ -51,6 +51,7 @@ from brain.gate.leash import (
     route_for,
     run_shadow,
 )
+from tests.fixtures.operation_ledger import MemoryLedger
 
 pytestmark = pytest.mark.invariant
 
@@ -155,6 +156,7 @@ def govern_at(
         now=NOW,
         simulate=result,
         execute=execute,
+        ledger=MemoryLedger(),
     )
 
 
@@ -356,7 +358,7 @@ def test_the_result_handed_to_an_agent_has_nowhere_to_say_it_was_simulated() -> 
 
     shadow = govern_at(leash_at(AutonomyTier.SHADOW)).for_agent()
     real = govern_at(leash_at(AutonomyTier.AUTONOMOUS)).for_agent()
-    assert shadow is not None and real is not None
+    assert isinstance(shadow, TypedResult) and isinstance(real, TypedResult)
     assert type(shadow) is type(real)
     assert shadow.model_dump() == real.model_dump()
 
@@ -404,6 +406,7 @@ def _resume(
         trace_id="tr_2",
         now=NOW + timedelta(minutes=10),
         execute=result,
+        ledger=MemoryLedger(),
     )
 
 
@@ -521,6 +524,7 @@ def test_an_expired_approval_can_neither_be_granted_nor_resumed() -> None:
         trace_id="tr_2",
         now=after,
         execute=result,
+        ledger=MemoryLedger(),
     )
     assert not outcome.resumed
     assert outcome.refusal is ResumeRefusal.EXPIRED
@@ -602,6 +606,7 @@ def test_the_record_of_an_action_can_carry_no_value() -> None:
         now=NOW,
         simulate=result,
         execute=result,
+        ledger=MemoryLedger(),
     )
     dumped = governed.record.model_dump_json()
     assert "SNM Construction" not in dumped

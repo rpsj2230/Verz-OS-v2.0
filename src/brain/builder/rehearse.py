@@ -62,6 +62,14 @@ for it and fatal here: returning the `Governed` so a caller could persist it wou
 saying EXECUTE into the history of an agent that has never run. `Step` carries the route and
 nothing that could be written to the ledger as a fact.
 
+**Nor an operation key.** Since 2026-09-16 `govern` keys every execute through
+`brain.ops.idempotency.issue_once`, and a key claimed in the real operation ledger is a record
+that an effect happened, which a later real run of the same action would be deduplicated
+against. The rehearsal hands the gate a ledger that keeps nothing and wins every key. See
+`A_REHEARSAL_KEYS_NOTHING_A_REAL_RUN_WOULD_MEET`. This is argued and not tested: a `Step` is
+built from the route, so a ledger that remembered would produce the same report, and the row it
+would leave in the real ledger is outside anything a unit test here can see.
+
 **The cassette moves the privacy rule from the output to the input.** `publish` argues at
 length that a rehearsal must not become a way of reading a colleague's data by picking them as
 a persona, and answers it by giving `RehearsalOutcome` nowhere to put a row. Replay answers it
@@ -133,6 +141,7 @@ from brain.core.field_policy import FieldPolicy
 from brain.core.redaction import simulate_redaction
 from brain.gate.injection import AutonomyTier, RiskAssessment
 from brain.gate.leash import Action, CheckName, Governed, Leash, Route, govern
+from brain.ops.idempotency import Operation, OperationState
 from brain.ops.spend import NO_CORRECTION, Correction, CostInputs, Estimate, estimate
 
 # ------------------------------------------------------------------ written-down reasons
@@ -165,6 +174,16 @@ A_SUSPENSION_THAT_ESCAPED_IS_A_SIDE_EFFECT_NO_CASSETTE_STOPS: Final = (
     "person's queue is outside this process, so that is a real side effect fired by a "
     "rehearsal. The suspension is read for its route and dropped, and the id it is built "
     "with says what it was so that one which somehow escaped does not look like a real one."
+)
+
+#: Why a rehearsal's executes are keyed in a ledger that keeps nothing.
+A_REHEARSAL_KEYS_NOTHING_A_REAL_RUN_WOULD_MEET: Final = (
+    "govern keys every execute in an operation ledger so a real action runs once. A rehearsal "
+    "keyed in the real one would leave a record saying an effect happened when a replay "
+    "happened, in the table recovery reads, and a real run of the same action under the same "
+    "trace would then be handed a repeat and never run. So a rehearsal's ledger lives for the "
+    "rehearsal and wins every key, which is the same line the suspension and the action "
+    "record are drawn along: what the gate produces is read, and nothing is left behind."
 )
 
 #: Why the rehearsal does not measure tokens for itself.
@@ -360,6 +379,32 @@ class RehearsalReport:
 
 
 # ---------------------------------------------------------------------- the replay
+class _EveryTakeIsAFirstRun:
+    """The operation ledger a rehearsal hands `govern`: it keeps nothing and refuses nothing.
+
+    `govern` keys an execute through `brain.ops.idempotency.issue_once` and cannot be called
+    without a ledger. See `A_REHEARSAL_KEYS_NOTHING_A_REAL_RUN_WOULD_MEET` for why it is not the
+    real one. It wins every key, because each take replays a recording of one run and a
+    ledger that remembered takes would turn the second identical take into a repeat that no
+    recording shows. It has no guard to get wrong: the only edge it checks is the state
+    machine's own, through `Operation.advanced`.
+    """
+
+    def __init__(self) -> None:
+        self._claimed: dict[str, Operation] = {}
+
+    def claim(self, operation: Operation) -> Operation:
+        self._claimed[operation.key] = operation
+        return operation
+
+    def win(self, key: str) -> bool:
+        del key  # Every take is a first run; see the class docstring.
+        return True
+
+    def settle(self, key: str, *, frm: OperationState, to: OperationState) -> Operation:
+        return replace(self._claimed[key], state=frm).advanced(to)
+
+
 def _replaying(result: TypedResult[Entity]) -> Callable[[Action], TypedResult[Entity]]:
     """A callable that answers with a value already in hand, whatever it is asked.
 
@@ -510,6 +555,7 @@ def rehearse(
 
     expected = run_reach.ent_hash()
     steps: list[Step] = []
+    unkept = _EveryTakeIsAFirstRun()
     for index, take in enumerate(takes):
         # One replay, handed to the gate as both of its callables. `govern` is the router and
         # necessarily holds both; this is the one place that can decide what is on the far
@@ -526,6 +572,7 @@ def rehearse(
             now=now,
             simulate=replay,
             execute=replay,
+            ledger=unkept,
             suspension_id=f"{REHEARSAL_SUSPENSION_PREFIX}.{index}",
         )
         if governed.decision.ent_hash != expected:

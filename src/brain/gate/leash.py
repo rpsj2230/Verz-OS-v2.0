@@ -41,11 +41,34 @@ tell it is being simulated is an agent whose simulated behaviour proves nothing,
 comes back from a shadow run is the same type carrying the same shape as a real one, and
 `TypedResult` has nowhere to say otherwise. The person gets a `Notice` that says so plainly.
 
-Scope: this is policy, not a runtime. M3.8.1, the agent loop itself, does not exist yet, so
-simulation and execution arrive as callables. Nothing here opens a connection, reads a
-table or calls a model.
+**A real run goes through `brain.ops.idempotency.issue_once`, and a repeat is told what the
+first run left rather than run again (M17.3.1).** `run_real` was the last door in the tree that
+issued a side effect outside it, so a resume retried after its action ran ran it a second time:
+the approval was still APPROVED, every check still passed, and nothing remembered the first
+run. The key is derived from the decision and the action: the approval's id and the action's
+digest on a resume, the turn's trace id and the digest on an autonomous run. What an agent is
+handed when the key is already taken was the open question, and the decision adopted is
+`AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`: a `Repeated` carrying the outcome the
+ledger recorded, and when that outcome is unknown the agent is told so and nothing runs.
 
-Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6
+**Rejected: handing a repeat the first run's result.** It is what an agent would find most
+useful and it needs the result stored beside the key, which makes the ledger a copy of whatever
+the tool returned with no permissions on it: the argument `brain.ops.queue.Job` and
+`brain.ops.checkpoints` make for refusing long values. The ledger records whether an effect
+happened and never what came back.
+
+**A simulation claims no key, and that costs one thing, stated.** A shadow run keyed through the
+ledger would leave a record of an effect that never happened, and the real run after a promotion
+would be deduplicated against it. So the same action asked for twice in one turn is run twice in
+shadow and once for real, which an agent could in principle notice. Keying the simulation in a
+ledger of its own would close that and was not built, because nothing yet runs an agent that
+could ask.
+
+Scope: this is policy, not a runtime. M3.8.1, the agent loop itself, does not exist yet, so
+simulation and execution arrive as callables and the operation ledger as a protocol. Nothing
+here opens a connection, reads a table or calls a model.
+
+Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M17.3.1
 """
 
 from __future__ import annotations
@@ -55,17 +78,27 @@ import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Final, Self, assert_never
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.envelope import Entity, ToolDefinition, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.core.redaction import compute_mask
 from brain.core.scope import Scope
 from brain.gate.injection import AutonomyTier, RiskAssessment, autonomy_ceiling
+from brain.ops.idempotency import (
+    Intent,
+    Operation,
+    OperationLedger,
+    OperationState,
+    issue_once,
+    operation_for,
+)
 
 # --------------------------------------------------------------------- grammars
 
@@ -500,7 +533,7 @@ def route_for(decision: Decision) -> Route:
             assert_never(decision.tier)
 
 
-#: What a person is told. Four constants, and the refusal is one string for every reason it
+#: What a person is told. Five constants, and the refusal is one string for every reason it
 #: could have been refused, for the reason `brain.core.redaction.render_lock` takes no
 #: arguments: a message that varies by cause is a side channel that two people can read by
 #: comparing screens.
@@ -508,6 +541,10 @@ SIMULATED_LABEL: Final = "Simulated. Nothing left the building."
 SUSPENDED_LABEL: Final = "Waiting for approval."
 EXECUTED_LABEL: Final = "Done."
 REFUSAL_NOTICE: Final = "I could not do that."
+#: An action that had already run, and nobody knows whether it landed. "Done." would be a claim
+#: the ledger does not make, and the person is the one who has to find out before it is tried
+#: again.
+OUTCOME_UNKNOWN_LABEL: Final = "This may already have happened. Check before asking again."
 
 
 @dataclass(frozen=True)
@@ -614,11 +651,132 @@ def run_shadow[T: Entity](
     return simulate(action)
 
 
+#: The decision on what an agent is handed when the action it asked for has already run.
+AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN: Final = (
+    "A resume retried after its action ran, or a turn asking for the same action twice, finds "
+    "the key already claimed and runs nothing. The agent is handed the outcome the ledger "
+    "recorded for the first run, marked as a repeat: it happened, it did not, or nobody knows. "
+    "Nobody knows is what the ledger holds when the first run raised or the process died "
+    "between issuing and recording, and then the agent is told exactly that and nothing runs, "
+    "because only a person or a read-back can say whether it landed and a retry is the "
+    "duplicate the key exists to prevent. Adopted on 2026-09-16 as the owner's recommendation "
+    "by default."
+)
+
+#: The connector every action the leash runs is recorded under in the operation ledger. One
+#: name rather than the tool's `source`, which a definition may leave empty, so a record is
+#: never spelled two ways for one tool.
+LEDGER_CONNECTOR: Final = "leash"
+
+
+class RunOutcome(enum.StrEnum):
+    """What the ledger says about an action that had already run under this key.
+
+    Three, for the reason `brain.ops.idempotency.UNKNOWN_IS_NOT_FAILED` gives: an outcome
+    nobody knows is not a failure, and an agent told it failed would try again.
+    """
+
+    #: It happened, once. Asking again changes nothing.
+    HAPPENED = "happened"
+    #: It definitely did not happen. Trying again is a new decision, not a retry of this one.
+    DID_NOT_HAPPEN = "did not happen"
+    #: Nobody knows whether it happened. Not to be tried again without a person.
+    UNKNOWN = "unknown"
+
+
+#: What each ledger state tells an agent whose action already ran. Exhaustive over
+#: `OperationState`, and only a settled state is a claim either way: a record still pending
+#: after the key was refused to this caller, or sent, or being verified, is a first run nobody
+#: has an answer for.
+OUTCOME_OF: Final[Mapping[OperationState, RunOutcome]] = MappingProxyType(
+    {
+        OperationState.PENDING: RunOutcome.UNKNOWN,
+        OperationState.SENT: RunOutcome.UNKNOWN,
+        OperationState.UNKNOWN: RunOutcome.UNKNOWN,
+        OperationState.VERIFYING: RunOutcome.UNKNOWN,
+        OperationState.SUCCEEDED: RunOutcome.HAPPENED,
+        OperationState.FAILED: RunOutcome.DID_NOT_HAPPEN,
+    }
+)
+
+
+@dataclass(frozen=True)
+class Repeated:
+    """What an agent is handed in place of a result when its action had already run.
+
+    An outcome and no result. See `AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`,
+    and the module docstring for why the first run's result is not kept to hand back.
+    """
+
+    outcome: RunOutcome
+
+
+def action_operation(action: Action, intent: Intent) -> Operation:
+    """The operation one real run of an action is, keyed by the decision and the action.
+
+    The action's digest is the argument, so a different action under the same decision has a
+    key and an effect of its own, and the same action asked for again under the same decision
+    meets the record the first left. The digest rather than the arguments, because it already
+    covers everything that decides what happens, the target's row included, and
+    `derive_key` hashes whatever it is handed.
+    """
+    return operation_for(
+        intent,
+        connector=LEDGER_CONNECTOR,
+        tool=action.tool.name,
+        arguments={"action": action.digest()},
+    )
+
+
 def run_real[T: Entity](
-    action: Action, *, execute: Callable[[Action], TypedResult[T]]
-) -> TypedResult[T]:
-    """Do it (M3.8.5). Separate from `run_shadow` so neither can see the other's callable."""
-    return execute(action)
+    action: Action,
+    *,
+    execute: Callable[[Action], TypedResult[T]],
+    ledger: OperationLedger,
+    intent: Intent,
+) -> TypedResult[T] | Repeated:
+    """Do it, at most once per key (M3.8.5, M17.3.1).
+
+    Separate from `run_shadow` so neither can see the other's callable. Through `issue_once`, so
+    the key is claimed and won before `execute` is called, and a second call under the same key
+    runs nothing and is handed a `Repeated`.
+
+    An `execute` that raises leaves the record UNKNOWN and the exception carries on, as
+    `issue_once` leaves it: the call that raised learns it from the exception, and every call
+    after it is told the outcome is unknown.
+    """
+    ran: list[TypedResult[T]] = []
+
+    def effect(_: Operation) -> CallOutcome:
+        ran.append(execute(action))
+        return CallOutcome.OK
+
+    issued = issue_once(ledger, action_operation(action, intent), effect)
+    if issued.issued:
+        return ran[0]
+    return Repeated(outcome=OUTCOME_OF[issued.operation.state])
+
+
+def _split[T: Entity](
+    ran: TypedResult[T] | Repeated,
+) -> tuple[TypedResult[T] | None, Repeated | None]:
+    """A real run's answer as the two fields `Governed` and `Resumption` keep it in."""
+    if isinstance(ran, Repeated):
+        return None, ran
+    return ran, None
+
+
+def notice_for_repeat(repeated: Repeated) -> Notice:
+    """What a person is told about an action that had already run. Exhaustive over outcomes."""
+    match repeated.outcome:
+        case RunOutcome.HAPPENED:
+            return Notice(simulated=False, text=EXECUTED_LABEL)
+        case RunOutcome.DID_NOT_HAPPEN:
+            return Notice(simulated=False, text=REFUSAL_NOTICE)
+        case RunOutcome.UNKNOWN:
+            return Notice(simulated=False, text=OUTCOME_UNKNOWN_LABEL)
+        case _:
+            assert_never(repeated.outcome)
 
 
 # ------------------------------------------------------------- assisted (M3.8.4)
@@ -785,8 +943,13 @@ class Resumption[T: Entity]:
     decision: Decision | None = None
     result: TypedResult[T] | None = None
     record: ActionRecord | None = None
+    #: Set in place of `result` when the approved action had already run under this approval,
+    #: so this resume ran nothing. See `AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`.
+    repeated: Repeated | None = None
 
     def notice(self) -> Notice:
+        if self.repeated is not None:
+            return notice_for_repeat(self.repeated)
         return notice_for(Route.EXECUTE if self.resumed else Route.REFUSED)
 
 
@@ -801,8 +964,9 @@ def resume[T: Entity](
     trace_id: str,
     now: datetime,
     execute: Callable[[Action], TypedResult[T]],
+    ledger: OperationLedger,
 ) -> Resumption[T]:
-    """Re-check everything, then do it (M3.8.4).
+    """Re-check everything, then do it once (M3.8.4, M17.3.1).
 
     An approval is a statement about a moment, not a permit. Between the approval and the
     resume a person can change department, a grant can be revoked, an agent's ceiling can be
@@ -817,6 +981,11 @@ def resume[T: Entity](
     Order matters only for what gets reported first. Expiry and state come before anything
     expensive; identity, then the artefact's own integrity; then the reach; then the three
     checks again, because a leash lowered since the approval must still bite.
+
+    **And every one of those passes a second time on a retry**, because an approval stays
+    APPROVED after its action runs. So the run is keyed by the approval's id and the action's
+    digest, not by `trace_id`, which is this attempt's: a resume retried under a new trace meets
+    the record the first left and is handed a `Repeated`.
     """
     if suspension.is_expired(now):
         return Resumption(resumed=False, refusal=ResumeRefusal.EXPIRED)
@@ -877,10 +1046,19 @@ def resume[T: Entity](
             ),
         )
 
+    result, repeated = _split(
+        run_real(
+            suspension.action,
+            execute=execute,
+            ledger=ledger,
+            intent=Intent(principal_id=suspension.principal_id, intent_ref=suspension.id),
+        )
+    )
     return Resumption(
         resumed=True,
         decision=decision,
-        result=run_real(suspension.action, execute=execute),
+        result=result,
+        repeated=repeated,
         record=_record(
             suspension.action,
             decision,
@@ -912,13 +1090,19 @@ class Governed[T: Entity]:
     record: ActionRecord
     result: TypedResult[T] | None = None
     suspension: SuspendedAction | None = None
+    #: Set in place of `result` when this action had already run in this turn, so this call ran
+    #: nothing. See `AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`.
+    repeated: Repeated | None = None
 
-    def for_agent(self) -> TypedResult[T] | None:
-        """What the loop sees. None on suspend and refuse, because nothing happened yet."""
-        return self.result
+    def for_agent(self) -> TypedResult[T] | Repeated | None:
+        """What the loop sees. A `Repeated` when the action had already run, and None on
+        suspend and refuse, because nothing happened yet."""
+        return self.result if self.repeated is None else self.repeated
 
     def notice(self) -> Notice:
         """What a person sees."""
+        if self.repeated is not None:
+            return notice_for_repeat(self.repeated)
         return notice_for(self.route)
 
 
@@ -934,6 +1118,7 @@ def govern[T: Entity](
     now: datetime,
     simulate: Callable[[Action], TypedResult[T]],
     execute: Callable[[Action], TypedResult[T]],
+    ledger: OperationLedger,
     window: timedelta = DEFAULT_APPROVAL_WINDOW,
     suspension_id: str | None = None,
 ) -> Governed[T]:
@@ -942,6 +1127,11 @@ def govern[T: Entity](
     The one entry point, so there is a single place to read for the answer to "can this agent
     do that". A second path to a side effect is a second chance to skip a check, which is the
     same argument `brain.gate.context` makes about there being one gate.
+
+    An execute is keyed by the caller, `trace_id` and the action's digest, because the trace is
+    the turn that decided to act: the same action asked for again in that turn runs once, and
+    the same action in another turn is another decision. A simulation is not keyed at all; see
+    the module docstring.
     """
     decision = decide(
         action,
@@ -988,12 +1178,21 @@ def govern[T: Entity](
                 ),
             )
         case Route.EXECUTE:
+            result, repeated = _split(
+                run_real(
+                    action,
+                    execute=execute,
+                    ledger=ledger,
+                    intent=Intent(principal_id=caller.principal_id, intent_ref=trace_id),
+                )
+            )
             return Governed(
                 action=action,
                 decision=decision,
                 route=route,
                 record=record,
-                result=run_real(action, execute=execute),
+                result=result,
+                repeated=repeated,
             )
         case Route.REFUSED:
             # No result and no suspension. A refusal that returned an empty envelope would

@@ -3,9 +3,9 @@
 The invariant suite next door pins the rules that must never bend. This file is about
 behaviour: that a lookup narrows on all three of agent, target and scope, that shadow
 simulates without touching anything, that assisted really does stop and really does resume,
-and that autonomous proceeds.
+and that autonomous proceeds, once per key however many times it is asked.
 
-Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6
+Task ids: M3.8.2, M3.8.3, M3.8.4, M3.8.5, M3.8.6, M17.3.1
 """
 
 from __future__ import annotations
@@ -22,8 +22,11 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.injection import ELEVATED, AutonomyTier, RiskAssessment, assess
 from brain.gate.leash import (
     DEFAULT_APPROVAL_WINDOW,
+    EXECUTED_LABEL,
     MAX_APPROVAL_WINDOW,
     MISSING_ENTRY_RUNG,
+    OUTCOME_OF,
+    OUTCOME_UNKNOWN_LABEL,
     REFUSAL_NOTICE,
     SIMULATED_LABEL,
     Action,
@@ -36,19 +39,25 @@ from brain.gate.leash import (
     Governed,
     Leash,
     LeashEntry,
+    Repeated,
     ResumeRefusal,
     Resumption,
     Route,
+    RunOutcome,
     SuspendedAction,
+    action_operation,
     decide,
     effective_tier,
     govern,
+    notice_for_repeat,
     render_artefact,
     resume,
     route_for,
     run_shadow,
     suspend,
 )
+from brain.ops.idempotency import RESUME_PLAN, Disposition, Intent, OperationState
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 17, 9, 0, tzinfo=UTC)
 CLEAN = RiskAssessment(score=0, matched=())
@@ -166,6 +175,8 @@ def run(
     now: datetime = NOW,
     simulate: Callable[[Action], TypedResult[Ticket]] = simulated,
     execute: Callable[[Action], TypedResult[Ticket]] = executed,
+    ledger: MemoryLedger | None = None,
+    trace_id: str = "tr_1",
 ) -> Governed[Ticket]:
     return govern(
         subject if subject is not None else action(),
@@ -174,10 +185,11 @@ def run(
         policy=POLICY,
         leash=leash,
         assessment=assessment,
-        trace_id="tr_1",
+        trace_id=trace_id,
         now=now,
         simulate=simulate,
         execute=execute,
+        ledger=ledger if ledger is not None else MemoryLedger(),
     )
 
 
@@ -466,7 +478,7 @@ def test_a_shadow_result_is_indistinguishable_from_a_real_one_to_the_agent() -> 
     proves nothing. Deleting this lets a marker leak into the loop's own context."""
     shadow = run(leash=leash_at(AutonomyTier.SHADOW)).for_agent()
     real = run(leash=leash_at(AutonomyTier.AUTONOMOUS)).for_agent()
-    assert shadow is not None and real is not None
+    assert isinstance(shadow, TypedResult) and isinstance(real, TypedResult)
     assert type(shadow) is type(real)
     assert shadow.model_dump() == real.model_dump()
     assert SIMULATED_LABEL not in shadow.model_dump_json()
@@ -580,6 +592,7 @@ def test_an_approved_action_resumes_and_executes() -> None:
         trace_id="tr_2",
         now=NOW + timedelta(minutes=6),
         execute=executed,
+        ledger=MemoryLedger(),
     )
     assert outcome.resumed
     assert outcome.result is not None
@@ -602,6 +615,7 @@ def test_a_rejected_action_never_executes() -> None:
         trace_id="tr_2",
         now=NOW + timedelta(minutes=6),
         execute=executed,
+        ledger=MemoryLedger(),
     )
     assert not outcome.resumed
     assert outcome.refusal is ResumeRefusal.NOT_APPROVED
@@ -642,6 +656,7 @@ def test_an_expired_approval_cannot_be_resumed() -> None:
         trace_id="tr_2",
         now=NOW + DEFAULT_APPROVAL_WINDOW + timedelta(seconds=1),
         execute=executed,
+        ledger=MemoryLedger(),
     )
     assert not outcome.resumed
     assert outcome.refusal is ResumeRefusal.EXPIRED
@@ -663,6 +678,7 @@ def test_a_leash_lowered_after_the_approval_still_bites_on_resume() -> None:
         trace_id="tr_2",
         now=NOW + timedelta(minutes=6),
         execute=executed,
+        ledger=MemoryLedger(),
     )
     assert not outcome.resumed
     assert outcome.refusal is ResumeRefusal.RUNG_LOWERED
@@ -687,6 +703,7 @@ def test_an_approval_granted_to_one_person_cannot_be_resumed_by_another() -> Non
         trace_id="tr_2",
         now=NOW + timedelta(minutes=6),
         execute=executed,
+        ledger=MemoryLedger(),
     )
     assert not outcome.resumed
     assert outcome.refusal is ResumeRefusal.PRINCIPAL_CHANGED
@@ -740,11 +757,14 @@ def attempt_resume(
     policy: FieldPolicy = POLICY,
     now: datetime = NOW + timedelta(minutes=6),
     execute: Callable[[Action], TypedResult[Ticket]] = executed,
+    ledger: MemoryLedger | None = None,
+    trace_id: str = "tr_2",
 ) -> Resumption[Ticket]:
     """Resume the baseline world, with at most one argument changed from it.
 
     A helper rather than the call written out each time, so the argument a test varies reads
-    as the only difference rather than as one line in twenty identical ones.
+    as the only difference rather than as one line in twenty identical ones. A fresh ledger
+    unless one is handed in, so every resume here is a first run unless a test says otherwise.
     """
     return resume(
         suspension,
@@ -753,9 +773,10 @@ def attempt_resume(
         policy=policy,
         leash=leash_at(AutonomyTier.ASSISTED),
         assessment=CLEAN,
-        trace_id="tr_2",
+        trace_id=trace_id,
         now=now,
         execute=execute,
+        ledger=ledger if ledger is not None else MemoryLedger(),
     )
 
 
@@ -1074,3 +1095,148 @@ def test_the_record_carries_names_and_digests_and_never_an_argument() -> None:
     assert "SNM Construction" not in dumped
     assert "48000" not in dumped
     assert isinstance(governed.record, ActionRecord)
+
+
+# ------------------------------------------------ M17.3.1 an action runs once per key
+#
+# `AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN` is the decision under test. Every
+# ledger below is shared between the calls in one test, because a fresh ledger per call is the
+# arrangement in which a repeat cannot be seen at all.
+
+
+def counting(calls: list[str]) -> Callable[[Action], TypedResult[Ticket]]:
+    def execute(subject: Action) -> TypedResult[Ticket]:
+        calls.append(subject.args.get("status", ""))
+        return executed(subject)
+
+    return execute
+
+
+def test_a_repeated_resume_runs_the_action_once_and_is_handed_the_first_outcome() -> None:
+    """An approval stays APPROVED after its action runs, so a retried resume passes every
+    re-check a second time. Before M17.3.1 it then ran the action again: a client emailed twice
+    because a response was lost on the way back to whoever pressed approve.
+
+    The retry is under a different trace, a minute later, which is what a real retry looks
+    like, so the key has to come from the approval rather than from the attempt.
+
+    Delete this and the approval queue's resume is a way to repeat a side effect by asking."""
+    ledger = MemoryLedger()
+    calls: list[str] = []
+    approved = approved_suspension()
+
+    first = attempt_resume(approved, execute=counting(calls), ledger=ledger)
+    again = attempt_resume(
+        approved,
+        execute=counting(calls),
+        ledger=ledger,
+        trace_id="tr_3",
+        now=NOW + timedelta(minutes=7),
+    )
+
+    assert calls == ["closed"]
+    assert ledger.issued() == 1
+    assert first.resumed and first.result is not None and first.repeated is None
+    assert again.resumed
+    assert again.result is None
+    assert again.repeated == Repeated(outcome=RunOutcome.HAPPENED)
+    assert first.notice().text == again.notice().text == EXECUTED_LABEL
+
+
+def test_an_action_whose_outcome_is_unknown_is_reported_unknown_and_never_run_again() -> None:
+    """The half of the decision that matters most. A first run that raised, or a process that
+    died between issuing and recording, leaves a record nobody can read as done or not done,
+    and the next resume is told exactly that and runs nothing. Retrying it is the duplicate the
+    key exists to prevent, so only a person may decide to try again.
+
+    Both ways of getting there: an `execute` that raised, and a record the process left in
+    SENT when it died, built by claiming and winning the key the resume will derive.
+
+    Delete this and an unknown outcome reads as a failure, and a failure reads as safe to
+    retry, which is `brain.ops.idempotency.UNKNOWN_IS_NOT_FAILED` undone one layer up."""
+    ledger = MemoryLedger()
+    calls: list[str] = []
+
+    def hung_up(_: Action) -> TypedResult[Ticket]:
+        raise ConnectionError("the source closed the connection after the request was sent")
+
+    raised = approved_suspension()
+    with pytest.raises(ConnectionError):
+        attempt_resume(raised, execute=hung_up, ledger=ledger)
+    after_raise = attempt_resume(raised, execute=counting(calls), ledger=ledger, trace_id="tr_3")
+
+    died = approved_suspension()
+    left = action_operation(died.action, Intent(principal_id=died.principal_id, intent_ref=died.id))
+    ledger.claim(left)
+    assert ledger.win(left.key)
+    after_crash = attempt_resume(died, execute=counting(calls), ledger=ledger, trace_id="tr_3")
+
+    assert calls == []
+    for outcome in (after_raise, after_crash):
+        assert outcome.result is None
+        assert outcome.repeated == Repeated(outcome=RunOutcome.UNKNOWN)
+        assert outcome.notice().text == OUTCOME_UNKNOWN_LABEL
+
+
+def test_a_different_action_or_a_different_approval_has_an_effect_of_its_own() -> None:
+    """The positive sibling. A key too coarse is as wrong as none: two approvals of the same
+    change are two decisions somebody made, and two different changes asked for in one turn are
+    two effects, so neither may be swallowed as a repeat of the other.
+
+    And the autonomous route is keyed by the turn: the same action asked for again in that turn
+    runs once and is handed a repeat, and a simulation claims no key at all, so a real run
+    after a promotion is never deduplicated against something that did not happen.
+
+    Delete this and the key can drop the action's digest or the approval's id, and the tests
+    above still pass because each of them repeats one action under one approval."""
+    ledger = MemoryLedger()
+    calls: list[str] = []
+
+    attempt_resume(approved_suspension(), execute=counting(calls), ledger=ledger)
+    attempt_resume(approved_suspension(), execute=counting(calls), ledger=ledger)
+    assert calls == ["closed", "closed"]
+
+    turn = MemoryLedger()
+    autonomous = leash_at(AutonomyTier.AUTONOMOUS)
+    shadowed = run(leash=leash_at(AutonomyTier.SHADOW), ledger=turn)
+    assert shadowed.route is Route.SIMULATE
+    assert turn.records == {}
+
+    run(action(), leash=autonomous, execute=counting(calls), ledger=turn)
+    run(action(args={"status": "open"}), leash=autonomous, execute=counting(calls), ledger=turn)
+    repeat = run(action(), leash=autonomous, execute=counting(calls), ledger=turn)
+    next_turn = run(
+        action(), leash=autonomous, execute=counting(calls), ledger=turn, trace_id="tr_9"
+    )
+
+    assert calls == ["closed", "closed", "closed", "open", "closed"]
+    assert repeat.for_agent() == Repeated(outcome=RunOutcome.HAPPENED)
+    assert repeat.result is None
+    assert next_turn.repeated is None and next_turn.for_agent() is not None
+
+
+def test_only_a_settled_record_tells_a_repeat_that_anything_is_known() -> None:
+    """What each ledger state tells an agent, held against the recovery plan in
+    `brain.ops.idempotency` rather than against itself: an action happened exactly where a
+    recovering worker would call it DONE, did not happen exactly where it would STOP, and every
+    other state, the ones a worker would verify, is unknown.
+
+    Delete this and SENT can be read as happened, which tells an agent an effect landed on the
+    strength of a request having left, the collapse that module exists to refuse."""
+    assert set(OUTCOME_OF) == set(OperationState)
+    for state, outcome in OUTCOME_OF.items():
+        disposition = RESUME_PLAN[state][1]
+        assert (outcome is RunOutcome.HAPPENED) is (disposition is Disposition.DONE), state
+        assert (outcome is RunOutcome.DID_NOT_HAPPEN) is (disposition is Disposition.STOP), state
+
+
+def test_a_person_is_told_done_only_about_a_repeat_that_happened() -> None:
+    """The person-facing half of a repeat. "Done." about an action nobody knows landed is the
+    sentence that makes somebody stop checking, and the unknown label is the one that asks them
+    to check.
+
+    Delete this and every repeat can be labelled "Done." whatever the ledger says."""
+    assert notice_for_repeat(Repeated(outcome=RunOutcome.HAPPENED)).text == EXECUTED_LABEL
+    assert notice_for_repeat(Repeated(outcome=RunOutcome.DID_NOT_HAPPEN)).text == REFUSAL_NOTICE
+    assert notice_for_repeat(Repeated(outcome=RunOutcome.UNKNOWN)).text == OUTCOME_UNKNOWN_LABEL
+    assert OUTCOME_UNKNOWN_LABEL not in {EXECUTED_LABEL, REFUSAL_NOTICE}

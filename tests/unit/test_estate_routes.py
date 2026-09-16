@@ -638,12 +638,15 @@ def test_the_memory_viewer_shows_a_subjects_memory_split_by_where_it_came_from(
     body = response.json()
     assert body["subject_id"] == "u_subject"
     assert [one["statement"] for one in body["curated"]] == ["Prefers invoices by post"]
-    # Formed an hour ago as certain, so decayed a little and not at all to the floor: the
-    # recollection's confidence, rather than the formed one or a constant.
-    assert 0.99 < body["curated"][0]["confidence"] < 1.0
+    # The recollection's confidence, rather than the formed one or a constant. A stated memory
+    # does not decay (`formation.A_STATED_MEMORY_DOES_NOT_DECAY`), so it is still certain an
+    # hour on; the inferred one, formed at 0.9 two hours ago, has decayed a little and not at
+    # all to the floor.
+    assert body["curated"][0]["confidence"] == 1.0
     assert [one["statement"] for one in body["extracted"]] == [
         "Usually asks about renewals on Mondays"
     ]
+    assert 0.89 < body["extracted"][0]["confidence"] < 0.9
     assert sorted(one["memory_id"] for one in body["history"]) == ["m_inferred", "m_stated"]
     assert body["corrections_are_not_recorded"] is True
     assert body["edit_is_not_writable"] is True

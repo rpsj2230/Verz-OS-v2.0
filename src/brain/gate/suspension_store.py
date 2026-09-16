@@ -61,6 +61,7 @@ from brain.core.envelope import Entity, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.gate.injection import RiskAssessment
 from brain.gate.leash import Action, ApprovalState, Leash, Resumption, SuspendedAction, resume
+from brain.ops.idempotency import OperationLedger
 from brain.tables.suspension import SuspensionRow
 
 log = structlog.get_logger()
@@ -347,6 +348,7 @@ async def resume_stored[T: Entity](
     trace_id: str,
     now: datetime,
     execute: Callable[[Action], TypedResult[T]],
+    ledger: OperationLedger,
 ) -> Resumption[T] | None:
     """Resume a stored suspension through `brain.gate.leash.resume`, at the reach as it is now.
 
@@ -355,6 +357,10 @@ async def resume_stored[T: Entity](
     `resume` can only notice a change if the reach it is handed is Friday's. The suspension is
     read at that same reach, so the policy's own-row clause is what admits it. None when nothing
     is stored for this principal under that id.
+
+    `ledger` is the operation ledger the run is keyed in, so a resume retried after the action
+    ran is handed what the first run left rather than running it again. See
+    `brain.gate.leash.AN_ACTION_THAT_ALREADY_RAN_IS_REPORTED_AND_NOT_RUN_AGAIN`.
     """
     reach = reach_now(principal_id)
     found = await store.reading_as(reach, now).suspension(suspension_id)
@@ -370,4 +376,5 @@ async def resume_stored[T: Entity](
         trace_id=trace_id,
         now=now,
         execute=execute,
+        ledger=ledger,
     )

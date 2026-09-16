@@ -51,6 +51,7 @@ from brain.gate.leash import IDENTIFIER, Action, CheckName, Leash, LeashEntry, R
 from brain.models.routing import Tier
 from brain.ops.spend import NO_CORRECTION, Correction, CostInputs, preflight
 from tests.fixtures.cassettes import CASSETTES, Source, for_source
+from tests.fixtures.operation_ledger import MemoryLedger
 
 # A date well outside any plausible wall clock in either direction is not what this file
 # needs: the gate is handed `now` explicitly everywhere and nothing here has an expiry, so a
@@ -609,6 +610,7 @@ def test_the_routes_that_cost_something_are_the_routes_the_gate_answers_on() -> 
             now=NOW,
             simulate=lambda _: REPLAYED,
             execute=lambda _: REPLAYED,
+            ledger=MemoryLedger(),
         )
         if governed.for_agent() is not None:
             answered.add(governed.route)

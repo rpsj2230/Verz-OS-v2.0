@@ -16,6 +16,7 @@ Task ids: M16.1.1, M16.1.4, M16.1.5, M16.4.1, M16.4.4
 
 from __future__ import annotations
 
+import math
 from dataclasses import fields as dataclass_fields
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -26,6 +27,7 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.memory import formation as formation_module
 from brain.memory.formation import (
+    DECAYS_WITH_TIME,
     HALF_LIFE_DAYS,
     RECALL_FLOOR,
     Formation,
@@ -55,13 +57,19 @@ def reader(
     )
 
 
-def formed(*capabilities: str, scope: Scope = WEB, at: datetime = NOW) -> Formation:
+def formed(
+    *capabilities: str,
+    scope: Scope = WEB,
+    at: datetime = NOW,
+    kind: MemoryKind = MemoryKind.ADAPTIVE,
+) -> Formation:
     return Formation(
         principal_id="p_writer",
         capabilities=tuple(Capability(value=one) for one in capabilities),
         scope=scope,
         ent_hash="0" * 32,
         formed_at=at,
+        kind=kind,
     )
 
 
@@ -324,6 +332,79 @@ def test_a_memory_below_the_floor_is_not_recalled_and_one_at_it_is() -> None:
 
     assert may_recall(memory, who, now=NOW, formed_confidence=RECALL_FLOOR) is not None
     assert may_recall(memory, who, now=NOW, formed_confidence=RECALL_FLOOR - 0.01) is None
+
+
+def _days_until_an_extracted_memory_is_forgotten() -> float:
+    """The day a memory formed at full confidence crosses the floor, from the two constants.
+
+    Worked out rather than written as 46, so the tests below are about the curve and the floor
+    as they are set, and a retuned half-life moves the boundary they check instead of breaking
+    them for a reason nobody reading the failure would guess."""
+    return HALF_LIFE_DAYS * math.log2(1.0 / RECALL_FLOOR)
+
+
+def test_a_stated_memory_is_recalled_long_after_an_extracted_one_is_forgotten() -> None:
+    """What somebody said does not become less true with time; it becomes wrong when something
+    contradicts it. Until 2026-09-16 recall decayed every kind on one curve, so a stated
+    memory was recalled at 45 days and not at 46, while `brain.tables.memory` gave the stated
+    table no confidence column precisely so that it would never decay.
+
+    Checked the day after the crossing, which is the day it used to vanish, and a hundred
+    half-lives on. And the floor still applies to what it was formed with: not decaying is not
+    being immune to the floor, and a correction that demotes a stated memory below it has to
+    stop it being recalled whatever its kind.
+
+    Delete this and a stated preference quietly disappears six weeks after somebody stated it,
+    with nothing anywhere recording that it was forgotten rather than contradicted."""
+    stated = formed("read:client.name", kind=MemoryKind.PERSISTENT)
+    who = reader("read:client.name")
+    crossing = _days_until_an_extracted_memory_is_forgotten()
+
+    for later in (math.ceil(crossing), HALF_LIFE_DAYS * 100):
+        recollection = may_recall(stated, who, now=NOW + timedelta(days=later))
+        assert recollection is not None, f"a stated memory was forgotten after {later} days"
+        assert recollection.confidence == pytest.approx(1.0)
+
+    far_later = NOW + timedelta(days=HALF_LIFE_DAYS * 100)
+    assert may_recall(stated, who, now=far_later, formed_confidence=RECALL_FLOOR) is not None
+    assert may_recall(stated, who, now=far_later, formed_confidence=RECALL_FLOOR - 0.01) is None
+
+
+def test_an_extracted_memory_still_decays_below_the_floor_on_schedule() -> None:
+    """The sibling. A fix that stopped every memory decaying would pass the test above and
+    turn a system that forgets what it guessed into one that never does.
+
+    Asserted either side of the crossing, so the day it stops being recalled is the day the
+    curve says and not merely some day.
+
+    Delete this and exempting the stated kind from decay can exempt the inferred one too."""
+    extracted = formed("read:client.name", kind=MemoryKind.ADAPTIVE)
+    who = reader("read:client.name")
+    crossing = _days_until_an_extracted_memory_is_forgotten()
+
+    assert may_recall(extracted, who, now=NOW + timedelta(days=math.floor(crossing))) is not None
+    assert may_recall(extracted, who, now=NOW + timedelta(days=math.ceil(crossing))) is None
+
+
+def test_every_kind_declares_whether_it_decays_and_the_tables_agree() -> None:
+    """The class of the defect above, rather than its instance. Whether a kind decays is
+    declared once, for every kind, and the declaration is held against something outside
+    itself: the table a kind is stored in carries a confidence column exactly when that kind
+    decays, because a stored confidence is what the curve is applied to.
+
+    Delete this and a fourth kind can be added to `MemoryKind` with no answer, which fails at
+    the first recall of one in production rather than here, or the declaration can drift from
+    the tables so that a stated memory decays again while the table still says it cannot."""
+    from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+
+    assert set(DECAYS_WITH_TIME) == set(MemoryKind)
+
+    for kind, row in (
+        (MemoryKind.PERSISTENT, PersistentMemoryRow),
+        (MemoryKind.ADAPTIVE, AdaptiveMemoryRow),
+    ):
+        stores_a_confidence = "formed_confidence" in row.__table__.columns
+        assert DECAYS_WITH_TIME[kind] is stores_a_confidence, kind
 
 
 def test_reach_is_decided_before_confidence(monkeypatch: pytest.MonkeyPatch) -> None:

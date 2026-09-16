@@ -64,6 +64,7 @@ from brain.gate.suspension_store import (
     stored_from,
 )
 from brain.session import make_session_factory
+from tests.fixtures.operation_ledger import MemoryLedger
 from tests.fixtures.scratch_postgres import (
     ROOT,
     drop,
@@ -608,6 +609,7 @@ def test_the_raiser_reads_their_approved_suspension_and_resumes_at_the_reach_now
                     trace_id="trace_resume",
                     now=NOW,
                     execute=executed,
+                    ledger=MemoryLedger(),
                 )
 
             same = await attempt(ASKER_REACH, "m_1", ASKER)

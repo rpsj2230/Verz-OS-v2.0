@@ -50,6 +50,16 @@ below the floor stops being recalled and stays on the record, because the reason
 mattering is worth being able to look up, and because a system that deleted what it stopped
 trusting would have no way to show somebody why it changed its mind.
 
+**Only the kinds declared to decay decay, and `DECAYS_WITH_TIME` is the one declaration.** Until
+2026-09-16 `may_recall` put every memory on the curve, so something a person stated was recalled
+at 45 days and not at 46, while `brain.tables.memory` had given the stated table no confidence
+column precisely so that it never would. Two modules each held half of "a stated memory does not
+decay" and the half that decided recall was the one that did not know it. The declaration is
+exhaustive over `MemoryKind` and a test holds it so, so a kind added later cannot arrive without
+somebody saying which lifetime it has. See `A_STATED_MEMORY_DOES_NOT_DECAY`. Rejected: a set of
+the kinds that do not decay, which reads well and lets a new kind decay by default without anybody
+having decided that it should.
+
 **Two of M16.4's leaves are here rather than in `correction.py`, and that is not an accident
 of where they were written.** Time decay reducing confidence below the retrieval threshold is
 `confidence_now` and `RECALL_FLOOR`, and entitlement expiry is `may_recall` going through
@@ -69,6 +79,7 @@ import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from types import MappingProxyType
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
@@ -143,6 +154,31 @@ class MemoryKind(enum.StrEnum):
     PERSISTENT = "persistent"
     #: A table. Something the system inferred, which carries confidence and decays.
     ADAPTIVE = "adaptive"
+
+
+#: Why a stated memory is recalled at the confidence it was formed with, however old it is.
+A_STATED_MEMORY_DOES_NOT_DECAY = (
+    "What a person stated does not become less true with time; it becomes wrong when something "
+    "contradicts it, and contradiction is supersession or demotion in brain.memory.correction, "
+    "which leave a record. Decaying it on the curve for inferences makes it vanish after about "
+    "six weeks with no record of why, which is forgetting dressed as caution. The floor still "
+    "applies to the confidence it was formed with, so a demoted stated memory stops being "
+    "recalled like any other."
+)
+
+#: Whether each kind of memory loses confidence with time. The one declaration `may_recall`
+#: reads, and exhaustive over `MemoryKind`: a kind added without an answer here is a failing
+#: test rather than a kind that quietly takes whichever lifetime a default gave it.
+#:
+#: The session kind decays as it always has. Its lifetime is `SESSION_IDLE_SECONDS`, over which
+#: the curve moves by about one per cent, so the answer changes nothing a session can reach.
+DECAYS_WITH_TIME: Mapping[MemoryKind, bool] = MappingProxyType(
+    {
+        MemoryKind.SESSION: True,
+        MemoryKind.PERSISTENT: False,
+        MemoryKind.ADAPTIVE: True,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -283,7 +319,11 @@ def may_recall(
     if place and not reached.matches(place):
         return None
 
-    confidence = confidence_now(formed_confidence, formed_at=formation.formed_at, now=now)
+    confidence = (
+        confidence_now(formed_confidence, formed_at=formation.formed_at, now=now)
+        if DECAYS_WITH_TIME[formation.kind]
+        else formed_confidence
+    )
     if confidence < floor:
         return None
 
