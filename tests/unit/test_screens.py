@@ -718,6 +718,12 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         "M27.4": 4,  # report
         "M27.5": 10,  # console security: five leaves in reads.py and the five claimed here
         "M27.6": 4,  # install
+        # The browser half, added 2026-09-16. The six groups above are read modules, which is
+        # what `SCREENS` registers, and the owner asking where his console screens were is what
+        # made the difference visible: about forty screens closed, six pages in `console/src`.
+        # These seven are not registry entries and never will be, so they are counted here and
+        # excluded from the comparison below rather than left to make the registry look short.
+        "M27.7": 7,  # screens in the browser
     }
 
     every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}
