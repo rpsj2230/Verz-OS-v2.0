@@ -46,6 +46,7 @@ from brain.identity.first_administrator import (
     FirstAdministrators,
 )
 from brain.identity.roles import Role, RoleGrant
+from brain.identity.sign_in_binding import MEMBER_SURFACE
 from brain.install import BY_NAME, hold_saved, saved_values, value_of
 from brain.ops.credentials import KEY_FIELD, Credentials
 from brain.ops.install_settings import key_for
@@ -832,7 +833,11 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     assert (walked["before"], walked["appointed"], walked["again"]) == (401, 200, 404)
     assert walked["finished"] == (200, "bound")
     assert walked["me"] == (200, walked["principal_id"])
-    assert [str(row[0]) for row in granted] == sorted(GRANTED_AT_APPOINTMENT)
+    # Everything the appointment grants, and since 2f21276 the member grant that binding the
+    # sign-in writes, which is what lets the administrator open their own workspace.
+    assert [str(row[0]) for row in granted] == sorted(
+        {*GRANTED_AT_APPOINTMENT, MEMBER_SURFACE.value}
+    )
     assert [str(row[0]) for row in keys] == sorted(key_for(name) for name in carried)
     assert elsewhere == dict(carried)
     assert value_of("INSTALL_COMPANY_NAME", {}) == COMPANY_ANSWERS["company_name"]
