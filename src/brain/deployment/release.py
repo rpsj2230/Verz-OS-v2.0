@@ -16,6 +16,15 @@ honest state is that an archive can be built and none has been published.
 page claiming an install can be followed end to end is worth less than one that says which
 step still has nothing to fetch.
 
+**A release is two artefacts and this module only ever described one of them.** The archive
+pins an image by tag, and until 2026-09-16 no workflow here published an image at a release
+tag: the deploy pipeline is triggered by CI completing on `main` and a tag push runs neither
+CI nor the deploy. So the declaration below could be perfect and the install would still stop
+at the pull. `THE_IMAGE_A_RELEASE_PINS_IS_PROMOTED_AND_NEVER_REBUILT` and
+`A_TAG_WITH_NO_IMAGE_BEHIND_IT_IS_A_COMMIT_THAT_NEVER_PASSED` are the two rules the release
+workflow's image job holds, and `image-repository` is what it asks this module so that the
+name is not written into a fifth file. `ops/RELEASE.md` is the procedure for the tag itself.
+
 **The file list is an allowlist and never a set of `tar --exclude` flags.** An exclusion list
 is written against the tree that exists on the day somebody writes it, and every file added
 afterwards ships by default: a script added under `ops/` for this deployment's own VPS would
@@ -244,6 +253,29 @@ A_ROLLBACK_RE_PINS_THE_CODE_AND_LEAVES_THE_SCHEMA: Final = (
     "recreating the containers and finding out from the logs."
 )
 
+#: Why the release names an image it did not build, and what a rebuild would cost.
+THE_IMAGE_A_RELEASE_PINS_IS_PROMOTED_AND_NEVER_REBUILT: Final = (
+    "The install writes APP_IMAGE as the product repository at the release tag, so a tag with "
+    "no image at it is an install that stops at the pull with the machine already half "
+    "prepared. The image that carries that tag is the one the deploy pipeline already built "
+    "for the commit the tag names, retagged in the registry, and it is never a second build "
+    "of the same source. A second build produces a second digest from the same commit, and "
+    "then the artefact a client runs is one no test ever ran against and no signature covers: "
+    "cosign signs a digest, so an image rebuilt after signing is an unsigned image wearing a "
+    "release tag. Retagging moves a name onto a digest and leaves the digest alone, which is "
+    "why the signature made at build time still verifies against the release."
+)
+
+#: Why a release refuses when the commit it names has no published image.
+A_TAG_WITH_NO_IMAGE_BEHIND_IT_IS_A_COMMIT_THAT_NEVER_PASSED: Final = (
+    "Only the deploy pipeline publishes an image, and only a commit whose CI went green "
+    "reaches it, so the absence of an image at a commit is the statement that the commit was "
+    "never shipped. A release built anyway would hand a client an archive pinning an image "
+    "that does not exist, and the failure would land on their server rather than in this "
+    "repository. Refusing here also means the gate CI holds over production is the same gate "
+    "a client's install is behind, with nothing restating it."
+)
+
 
 # ------------------------------------------------------------------ the declaration
 @dataclass(frozen=True)
@@ -350,6 +382,15 @@ INCLUDED: Final[tuple[Rule, ...]] = (
         "ops/seaweedfs",
         "the object store's credentials file and its provisioning script, both bind-mounted. "
         "The second is named as an entrypoint, so its absence at least fails loudly",
+    ),
+    Rule(
+        "ops/install",
+        "the installer this release was installed by, carried for the reason ops/update is: an "
+        "install is safe to run twice and re-running it after an update is a repair somebody "
+        "reaches for at a bad moment, and the script that does it has to be the one belonging "
+        "to the release on the server rather than whichever one is newest. It is also published "
+        "beside the archive, because running it is what fetches the archive, so this copy is "
+        "the record of what was run and never the way anybody gets it",
     ),
     Rule(
         "ops/update",
@@ -1625,7 +1666,7 @@ def render_rollback(
 # ------------------------------------------------------------------ what the workflow asks
 USAGE: Final = (
     "usage: python -m brain.deployment.release "
-    "files | gaps | migrations-path | update-script | rollback-script | "
+    "files | gaps | image-repository | migrations-path | update-script | rollback-script | "
     "notes <tag> <message file> [migration file ...]"
 )
 
@@ -1637,6 +1678,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     git which migration files a tag added, which needs the directory, and a directory typed
     into a workflow is a second declaration of where migrations live. It is
     `brain.deployment.compatibility.VERSIONS` here and nowhere else.
+
+    `image-repository` is the same argument about the other artefact a release publishes. The
+    image name is declared once, in `brain.deployment.installer.PRODUCT_IMAGE`, and the release
+    workflow has to name it to move a tag onto it; written into the workflow it would be a
+    fifth copy of a string that has already broken this deployment once by being renamed in
+    four places and not in a fifth. Going through `image_repository` rather than printing the
+    constant is deliberate: the answer is refused outright when no compose file reads the
+    variable the install writes, so a release cannot publish an image tag that nothing an
+    install brings up would ever pull.
 
     The two script commands are not asked by the workflow at all. They are how the checked-in
     files under `ops/update/` are produced, and the test that compares those files against
@@ -1657,6 +1707,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         carried = archive_files(REPO)
         print(f"ok: {len(carried)} file(s), {len(INCLUDED)} include(s), {len(EXCLUDED)} refusal(s)")
+        return 0
+    if command == "image-repository":
+        print(image_repository(compose_documents()))
         return 0
     if command == "migrations-path":
         print(VERSIONS.relative_to(REPO).as_posix())

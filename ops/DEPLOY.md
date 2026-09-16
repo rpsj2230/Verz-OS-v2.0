@@ -128,6 +128,15 @@ the server, to the server.
 ssh access to the server. It uses the administrative SSH access that is already open, and
 nothing automatic depends on it.
 
+## This is not how a client is given the system
+
+Everything above is one deployment of this product, deployed from `main` on every push. A
+client is given a tag: an archive they fetch and an image their compose file pins, both
+published by the `Release` workflow and neither produced by anything on this page. See
+[RELEASE.md](RELEASE.md) for how a tag is cut, what it produces, how both artefacts are proved
+to exist from a machine that has never seen this repository, and the two publication settings
+that still stop a client install from working.
+
 ## Rollback
 
 Images are tagged by commit SHA, so rolling back is redeploying an older tag - set

@@ -1,6 +1,16 @@
 name: Release
 
-# One archive of one tag, published where the fourth step of the installer can fetch it.
+# One archive of one tag and the image that tag pins, published where the installer can reach
+# both of them.
+#
+# **A tag runs this workflow and nothing else, and until 2026-09-16 that meant a release with
+# no image in it.** `Deploy` is triggered by `CI` completing on `main`, `CI` runs on a push to
+# `main` and on a pull request, and a tag push is neither, so nothing in this repository ever
+# published `<product image>:<release tag>`. The installer's seventh step writes exactly that
+# reference into a client's environment file and its tenth step pulls it, so the first real
+# release would have been fetched, unpacked, configured, and then stopped at the pull against
+# a tag nobody had ever created. The `image` job below is that half, and `archive` waits for
+# it so no client can fetch an archive pinning an image that is not there.
 #
 # Nothing about what a client receives is written in this file. The file list, the refusals,
 # where the migrations live and the notes all come from `brain.deployment.release`, and the
@@ -27,9 +37,125 @@ env:
   UV_VERSION: "0.12.9"
 
 jobs:
+  image:
+    name: The release tag names the image CI built
+    runs-on: ubuntu-latest
+    permissions:
+      # Narrower than the workflow's `contents: write`, which this job has no use for. The
+      # registry write is what moves a tag onto an existing manifest; nothing here signs, so
+      # no `id-token` either. See the promote step for why the signature is already made.
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+    outputs:
+      repository: ${{ steps.name.outputs.repository }}
+      digest: ${{ steps.promote.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          # One commit is enough here: this job asks what commit the tag names and nothing
+          # about the history in front of it. The archive job needs the whole of it and says
+          # why there.
+          fetch-depth: 1
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - run: uv sync --locked
+
+      - id: name
+        name: The image name, asked of the module rather than written here
+        # Four files named this image and disagreed after a rename, which is why it is declared
+        # once and read. A fifth copy in this file would be the same defect with a longer fuse:
+        # a release publishing to a package no install pulls goes green from both ends.
+        run: |
+          echo "repository=$(uv run python -m brain.deployment.release image-repository)" \
+            >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: sigstore/cosign-installer@v3.7.0
+
+      - id: promote
+        name: Verify what CI built for this commit, then put the release tag on it
+        env:
+          REPOSITORY: ${{ steps.name.outputs.repository }}
+          # The two constraints cosign is given, out here rather than in the command, because
+          # the issuer's host name contains `.git` as a substring and the test that refuses an
+          # archive path spelled in this file reads the commands and matches on text.
+          IDENTITY: ^https://github.com/${{ github.repository }}/
+          ISSUER: https://token.actions.githubusercontent.com
+        run: |
+          commit=$(git rev-parse HEAD)
+          digest=""
+          # The deploy workflow tags with `git rev-parse --short HEAD`, whose length is
+          # whatever git thought unambiguous on the day that build ran. The repository grows,
+          # so the same command run later can answer one character longer and this job would
+          # look for a tag nothing ever pushed. Ask the registry about every length that
+          # command could have produced rather than pick one and be right most of the time.
+          for n in 7 8 9 10 11 12; do
+            short=$(printf "%s" "$commit" | cut -c "1-$n")
+            found=$(docker buildx imagetools inspect "$REPOSITORY:$short" \
+                      --format '{{.Manifest.Digest}}' 2>/dev/null || true)
+            if [ -n "$found" ]; then
+              digest="$found"
+              echo "$REPOSITORY:$short is $digest"
+              break
+            fi
+          done
+          if [ -z "$digest" ]; then
+            echo "::error::no image at $REPOSITORY for commit $commit."
+            echo "::error::Only Deploy publishes one, and only for a commit whose CI passed."
+            echo "::error::Wait for CI and Deploy on that commit, then run this workflow again."
+            exit 1
+          fi
+          # Before the tag is moved, never after. A release tag on an unsigned digest is a
+          # client running an artefact with no signature over it, and withdrawing a tag a server has
+          # already pulled is not a thing this repository can do.
+          cosign verify "$REPOSITORY@$digest" \
+            --certificate-identity-regexp "$IDENTITY" \
+            --certificate-oidc-issuer "$ISSUER" > /dev/null
+          echo "the digest is signed by a workflow of ${{ github.repository }}"
+          # A registry-side manifest copy: a second name on one digest, so the signature made
+          # at build time still covers what the release tag resolves to. Building again here
+          # would produce a second digest from the same source, unsigned, untested, and
+          # indistinguishable from the first by anything a client can see.
+          docker buildx imagetools create --tag "$REPOSITORY:$TAG" "$REPOSITORY@$digest"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: The release tag resolves to the digest that was verified
+        env:
+          REPOSITORY: ${{ steps.name.outputs.repository }}
+          DIGEST: ${{ steps.promote.outputs.digest }}
+        # A create that reported success and left the tag pointing somewhere else is the one
+        # failure this job cannot see from the inside, and it is asked of the registry rather
+        # than of the command that just ran.
+        run: |
+          landed=$(docker buildx imagetools inspect "$REPOSITORY:$TAG" \
+                     --format '{{.Manifest.Digest}}')
+          [ "$landed" = "$DIGEST" ] || {
+            echo "::error::$REPOSITORY:$TAG is $landed, not the verified $DIGEST"
+            exit 1
+          }
+          echo "### Image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`$REPOSITORY:$TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- digest \`$DIGEST\`, signed and verified" >> "$GITHUB_STEP_SUMMARY"
+
   archive:
     name: Publish the archive and its notes
     runs-on: ubuntu-latest
+    # An archive is what a client fetches, and it pins the image by tag. Published first, it
+    # would be a working download of a release that cannot start, and the person who finds
+    # that out is standing at somebody else's server.
+    needs: image
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     steps:
@@ -96,6 +222,32 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # `--verify-tag`, because `gh release create` creates the tag at the head of the
+        # default branch when the one it is given does not exist. On the dispatch path a
+        # mistyped tag would then publish a release of whatever main happened to be, under a
+        # name nobody chose, and every check in this run would have passed.
+        #
+        # The installer script goes beside the archive as well as inside it. It is the one
+        # thing a client needs *before* the archive, since running it is what fetches the
+        # archive, so a copy that is only inside is a download you need in order to download it.
+        #
+        # Found in the file list the module already printed rather than named here, for the
+        # reason nothing else in this file names a path: the declaration decides where the
+        # script lives, and a second spelling would go on publishing an asset from a path that
+        # had moved. Absent, the release is still publishable and still installable by hand
+        # from the guide the archive carries, and the summary says so rather than the person
+        # finding out at the terminal.
         run: |
-          gh release create "$TAG" --title "$TAG" \
-            --notes-file "$RUNNER_TEMP/notes.md" "$RUNNER_TEMP/brain-$TAG.tar.gz"
+          script=$(grep -E '(^|/)install\.sh$' "$RUNNER_TEMP/files.txt" | head -n 1 || true)
+          set -- "$RUNNER_TEMP/brain-$TAG.tar.gz"
+          if [ -n "$script" ]; then
+            set -- "$@" "$script"
+          else
+            echo "### No installer script in this release" >> "$GITHUB_STEP_SUMMARY"
+            echo "This tag carries no rendered installer, so the install is the step table" \
+              >> "$GITHUB_STEP_SUMMARY"
+            echo "in the install guide this archive carries, followed by hand." \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+          gh release create "$TAG" --verify-tag --title "$TAG" \
+            --notes-file "$RUNNER_TEMP/notes.md" "$@"

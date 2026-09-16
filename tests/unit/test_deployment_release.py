@@ -77,6 +77,7 @@ from brain.deployment.release import (
     image_repository,
     included_by,
     install_needs,
+    main,
     mounts_in,
     notes_from_tag_message,
     paths_the_install_reads,
@@ -871,6 +872,218 @@ def test_the_release_workflow_refuses_before_it_builds_and_publishes_what_it_bui
     assert order["gaps"] < order["tar"] < order["publish"]
     assert '--notes-file "$RUNNER_TEMP/notes.md"' in steps[order["publish"]]
     assert "--strip-components" not in "\n".join(steps), "the installer strips, not the build"
+
+
+# ------------------------------------------------- the image a release pins (M42.6.7)
+def _image_steps() -> list[dict[str, Any]]:
+    """The steps of the job that puts the release tag on an image."""
+    steps = _workflow()["jobs"]["image"]["steps"]
+    return [one for one in steps if isinstance(one, dict)]
+
+
+def _image_commands() -> str:
+    """Every `run:` of that job, concatenated."""
+    return "\n".join(str(one["run"]) for one in _image_steps() if "run" in one)
+
+
+def test_a_tag_publishes_the_image_the_installer_pins_and_not_only_an_archive() -> None:
+    """**The defect the whole leaf turns on, and it was invisible from every direction.** The
+    install writes `APP_IMAGE=<product image>:<release tag>` and pulls it, and nothing in this
+    repository published an image at a release tag: `Deploy` fires on `CI` completing on `main`,
+    `CI` fires on a push to `main` and on a pull request, and a tag push is neither. A tag ran
+    this workflow alone, so the first release would have been fetched, unpacked and configured
+    on a client's server and then stopped at the pull.
+
+    Asserted on the parsed workflow, which is where the answer is: both halves of the pipeline
+    look healthy from inside themselves, and the gap is only visible by asking which workflow a
+    tag runs and what that workflow produces.
+
+    Delete this and the image job can be removed as redundant with `Deploy` - which is exactly
+    what it looks like, since `Deploy` also publishes this image, for commits rather than tags.
+    """
+    assert "$TAG" in _image_commands(), "nothing in the image job names the release tag"
+    assert 'imagetools create --tag "$REPOSITORY:$TAG"' in _image_commands()
+
+
+def test_no_archive_is_published_for_a_tag_that_has_no_image() -> None:
+    """Order, across jobs rather than across steps, and the sibling of the step-order test
+    above. An archive is what a client downloads and it pins the image by tag, so an archive
+    published before the image exists is a working download of a release that cannot start.
+
+    Delete this and the two jobs run in parallel, which is faster and green on the day the
+    image job fails, because a release would then exist with an archive in it and no image.
+    """
+    assert _workflow()["jobs"]["archive"]["needs"] == "image"
+
+
+def test_the_release_never_rebuilds_the_image_it_publishes() -> None:
+    """`THE_IMAGE_A_RELEASE_PINS_IS_PROMOTED_AND_NEVER_REBUILT`, held against the file. A second
+    build of the same commit produces a second digest, and cosign signs digests, so the release
+    would carry an image no signature covers and no suite ever ran against, indistinguishable
+    from the right one by anything a client can see.
+
+    Both halves are asserted. The refusal alone is satisfied by a job that publishes nothing,
+    and the positive alone is satisfied by a job that builds and then also retags.
+
+    Delete this and `docker/build-push-action` arrives here the next time somebody notices the
+    release depends on a deploy having already happened, which is a reasonable-looking change.
+    """
+    job = _workflow()["jobs"]["image"]
+
+    uses = [str(one.get("uses", "")) for one in _image_steps()]
+    assert not [one for one in uses if "build-push-action" in one]
+    assert re.search(r"docker build(?!x)", _image_commands()) is None
+    assert "imagetools create" in _image_commands(), "the job publishes no tag at all"
+    # No signing either, for the same reason: what it promotes is already signed.
+    assert "cosign sign" not in _image_commands()
+    assert "id-token" not in str(job["permissions"]), "a job that signs nothing needs no token"
+
+
+def test_the_release_workflow_asks_the_module_for_the_image_name() -> None:
+    """`test_the_image_the_pipeline_pushes_is_the_image_the_server_pulls` records what four
+    copies of this string cost when a rename moved one of them. This is the fifth place that
+    would have needed the name, so it reads it instead.
+
+    Both directions, because reading the module and then writing the name beside it passes a
+    membership check on either half alone.
+
+    Delete this and the literal comes back, agrees for as long as nobody renames anything, and
+    publishes a release tag onto a package no install pulls when somebody does."""
+    assert "brain.deployment.release image-repository" in _image_commands()
+    assert PRODUCT_IMAGE not in yaml.safe_dump(_workflow()), "the image name is written out"
+
+
+def test_the_image_is_verified_before_the_release_tag_is_moved_onto_it() -> None:
+    """A signature checked after the tag exists is a check on an artefact clients can already
+    pull, and a tag pointing at an unsigned digest cannot be withdrawn from a server that has
+    it. Both cosign constraints are asserted for the reason
+    `test_the_verification_is_pinned_to_this_repository` gives: the issuer alone accepts any
+    GitHub workflow anywhere, and the identity alone accepts another issuer claiming the name.
+
+    Delete this and the verify can move below the create, or lose a flag, and the job goes on
+    passing in both cases."""
+    run = _image_commands()
+    step = next(one for one in _image_steps() if "IDENTITY" in dict(one.get("env", {})))
+
+    assert run.index("cosign verify") < run.index("imagetools create")
+    assert "--certificate-identity-regexp" in run
+    assert "--certificate-oidc-issuer" in run
+    assert str(step["env"]["IDENTITY"]).startswith("^https://github.com/${{ github.repository }}")
+
+
+def test_a_commit_with_no_published_image_fails_the_release_rather_than_publishing_one() -> None:
+    """`A_TAG_WITH_NO_IMAGE_BEHIND_IT_IS_A_COMMIT_THAT_NEVER_PASSED`. Only `Deploy` publishes an
+    image and only a commit whose CI passed reaches it, so no image at a commit is the statement
+    that the commit never shipped, and building one here would route around the gate rather than
+    report it. The empty-digest branch is the one that decides this, and it exits rather than
+    carrying on with a tag nothing resolves.
+
+    Delete this and the loop can fall through to an `imagetools create` against an empty
+    reference, which fails too, with a message about a malformed image name."""
+    run = _image_commands()
+
+    assert 'if [ -z "$digest" ]; then' in run
+    assert run.index('if [ -z "$digest" ]') < run.index("cosign verify")
+    assert "exit 1" in run.split('if [ -z "$digest" ]')[1].split("fi")[0]
+
+
+def test_the_release_tag_is_asked_of_the_registry_after_it_is_created() -> None:
+    """The one failure the create cannot see from the inside: a command that reported success
+    and left the tag resolving to something else. Asked of the registry rather than of the
+    command that just ran, which is the same argument the deploy's live check makes about the
+    difference between a trigger and an outcome.
+
+    Delete this and the job's last word about the image is the exit status of the tool that
+    wrote it."""
+    run = _image_commands()
+
+    assert run.count("imagetools inspect") >= 2, "nothing reads the tag back"
+    assert run.rindex("imagetools inspect") > run.index("imagetools create")
+    assert '[ "$landed" = "$DIGEST" ]' in run
+
+
+def test_a_release_is_never_published_for_a_tag_that_does_not_exist() -> None:
+    """`gh release create` creates the tag at the head of the default branch when the one it is
+    given does not exist. This workflow can be dispatched with a tag typed by hand, so a typo
+    would publish a release of whatever `main` happened to be, under a name nobody chose, with
+    every check in the run passing.
+
+    Delete this and the flag goes the next time somebody hits `--verify-tag` refusing a tag that
+    has not been pushed yet, which is the flag doing its job."""
+    publish = next(
+        one for one in _workflow()["jobs"]["archive"]["steps"] if "gh release create" in str(one)
+    )
+
+    assert "--verify-tag" in str(publish["run"])
+
+
+def test_the_release_carries_the_installer_script_when_the_repository_has_one() -> None:
+    """The script a client runs to fetch the archive cannot be inside the archive, so it is
+    published beside it. Conditional rather than required, because the release is still
+    installable by hand from the guide the archive carries, and a release that refused to
+    publish without a file this repository does not yet have would block the first release over
+    the one thing a person can work around.
+
+    The condition is asserted as well as the mention: an unconditional reference to a file that
+    may not exist is a failed publish, and `gh release create` fails after the tarball is built
+    and before anything reaches a client, which is the expensive half of the run.
+
+    Delete this and the installer stops being published the next time the publish step is
+    rewritten, and nobody notices until a client asks what to run."""
+    publish = str(
+        next(
+            one
+            for one in _workflow()["jobs"]["archive"]["steps"]
+            if "gh release create" in str(one)
+        )["run"]
+    )
+
+    assert 'if [ -n "$script" ]; then' in publish
+    assert 'set -- "$@" "$script"' in publish
+    assert '"$RUNNER_TEMP/files.txt"' in publish, "the asset is not found in the declared list"
+    assert publish.index("install") < publish.index("gh release create")
+    assert included_by("ops/install/install.sh"), "the archive does not carry the installer"
+
+
+def test_the_install_fetches_the_archive_and_the_image_with_no_credential() -> None:
+    """**What the published release has to be, stated where it can be read rather than
+    discovered on a client's server.** The plan fetches the archive with a bare `curl` and pulls
+    the image with a bare `docker compose pull`: no registry login, no authorisation header, no
+    token variable anywhere in it. That is deliberate and it is the whole of "nobody outside
+    your organisation creates a credential on your behalf", and it has a consequence nothing
+    else in this repository says out loud, which is that the published release and the published
+    package must both be readable without one.
+
+    The positive half is asserted beside the refusal, or a plan that fetched nothing at all
+    would pass.
+
+    Delete this and a `docker login` with a repository secret appears in the plan the first time
+    somebody hits a denied pull, which turns one company's token into a value the product ships.
+    """
+    commands = "\n".join(one.run for one in PLAN)
+
+    assert "curl -fsSL" in commands, "the plan fetches no archive"
+    assert "compose" in commands and "pull" in commands, "the plan pulls no image"
+    for credential in ("docker login", "Authorization", "--header", "curl -u", "--netrc"):
+        assert credential not in commands, f"the install now needs {credential!r}"
+
+
+def test_the_command_the_release_asks_answers_the_image_the_install_pins(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The workflow reads this name out of a subshell, so an answer with anything else on the
+    line becomes part of an image reference and the pull fails on a name nobody typed. Run
+    through `main` rather than through `image_repository`, because what the workflow depends on
+    is the command and its output, and an unknown command answering 2 is the sibling that stops
+    this passing for a `main` that prints the name whatever it is asked.
+
+    Delete this and `image-repository` can be renamed, or start printing a second line of
+    explanation, and the release publishes a tag onto a reference with a sentence in it."""
+    assert main(["image-repository"]) == 0
+    printed = capsys.readouterr().out
+
+    assert printed == f"{PRODUCT_IMAGE}\n"
+    assert main(["image-repositories"]) == 2
 
 
 # ======================================== moving an install between two releases (M42.3.6)
