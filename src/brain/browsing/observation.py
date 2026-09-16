@@ -42,14 +42,26 @@ Rejected: making `Snapshot` a Pydantic model like `brain.core.envelope.ToolDefin
 Nothing validates a snapshot against a schema, because there is nothing to validate: a page
 may legitimately contain any role and any name. A frozen dataclass says that plainly.
 
+**A `Frame` is a picture, held by reference, and it is here because it is page content.**
+M19.5.2 asks for a second scoring pass with screenshots, and `brain.browsing.grading` recorded
+that as a conflict with M19.4.5. It is not one once the two are asked who reads what. Vision is
+refused to the hands: nothing that decides the next action has a field a picture could arrive
+in, and `Snapshot` still has none. The judge of a finished run may see a picture, taken with
+every form control painted over and admitted only under the rules in
+`brain.browsing.verification`. The type lives here so that every structural refusal in
+`brain.browsing.shape` covers it the moment it exists: the planner cannot import it and no
+function may turn one into a plan or a rubric. It carries a digest and never the bytes, which
+live in the run's recording under the recordings bucket's retention.
+
 Scope: domain logic. Nothing here opens a browser, and no browser exists in this repository
 to open. What is here is the type a runner would fill in and the refusals that govern it.
 
-Task ids: M19.1.4, M19.4.5
+Task ids: M19.1.4, M19.4.5, M19.5.2
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass, fields
 from typing import Any, Final, cast
@@ -190,6 +202,39 @@ class Snapshot:
             if node.ref == ref:
                 return node
         return None
+
+
+#: What a frame's digest looks like: the whole of a SHA-256 in lower-case hex.
+FRAME_DIGEST_RE: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+@dataclass(frozen=True)
+class Frame:
+    """A picture of the page at one snapshot, named by digest and never carried by value.
+
+    `inputs_masked` is the runner's statement that every form control was painted over before
+    capture. It is carried rather than assumed because it is the half of M19.4.5 a picture has
+    to satisfy, and `brain.browsing.verification.admit_frames` withholds a frame that says no.
+    """
+
+    run_id: str
+    #: The snapshot this picture was taken beside. Pictures and trees share one sequence.
+    sequence: int
+    origin: str
+    #: SHA-256 of the stored picture, which is how the recording finds it.
+    digest: str
+    inputs_masked: bool
+
+    def __post_init__(self) -> None:
+        if not self.run_id.strip() or not self.origin.strip():
+            msg = "a frame belonging to no run or no origin cannot be matched to a trajectory"
+            raise ObservationError(msg)
+        if self.sequence < 1:
+            msg = f"frame sequence {self.sequence} is not a position in a run"
+            raise ObservationError(msg)
+        if not FRAME_DIGEST_RE.match(self.digest):
+            msg = f"frame {self.sequence} of run {self.run_id!r} names no stored picture"
+            raise ObservationError(msg)
 
 
 def is_current(snapshot: Snapshot, *, run_id: str, sequence: int) -> bool:

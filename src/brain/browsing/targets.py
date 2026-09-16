@@ -35,7 +35,11 @@ its checks are load bearing. A second origin parser is a second answer to whethe
 `HTTPS://Bank.example./` is the same place as `https://bank.example`, and the wrong answer
 is the one that admits a look-alike.
 
-Task ids: M19.2.4
+**`read_back` is declared here for the reason `api_tools` is.** Whether a system of record can
+be asked, out of band, if a write on a surface landed is a fact about that system, and M19.5.5
+reads it from the declaration rather than from a list kept beside the verifier.
+
+Task ids: M19.2.4, M19.5.5
 """
 
 from __future__ import annotations
@@ -127,10 +131,22 @@ class Surface:
     #: Declared field names a READ on this surface may return. Empty means the surface is
     #: navigation only, which is a legitimate thing for a login page to be.
     reads: tuple[str, ...] = ()
+    #: The tool that asks the system of record, rather than the page, whether a write here
+    #: landed. Empty where the system offers no such read. See `brain.browsing.verification`.
+    read_back: str = ""
 
     def __post_init__(self) -> None:
         if not NAME_RE.match(self.name):
             msg = f"surface name {self.name!r} is not a lowercase slug"
+            raise TargetError(msg)
+        if self.read_back and not self.writes():
+            msg = (
+                f"surface {self.name!r} declares a read-back and no write, so the read-back "
+                "confirms nothing and would read on review as though it confirmed something"
+            )
+            raise TargetError(msg)
+        if self.read_back != self.read_back.strip():
+            msg = f"surface {self.name!r} names read-back tool {self.read_back!r} with spaces"
             raise TargetError(msg)
         # The empty case first, and it is not covered by the check below. `normalise_origin`
         # returns the empty string for everything it cannot parse, so an empty declared origin

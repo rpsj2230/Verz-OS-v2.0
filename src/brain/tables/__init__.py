@@ -54,8 +54,8 @@ from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
-from brain.tables.data_export import DataExportRow
 from brain.tables.credential import CredentialWriteRow
+from brain.tables.data_export import DataExportRow
 from brain.tables.fast_lane import FastPathRuleRow
 from brain.tables.gate import (
     CapabilityGrantRow,
@@ -246,8 +246,8 @@ __all__ = [
     "CapabilityRegistryRow",
     "ControlRunRow",
     "ConversationRow",
-    "DataExportRow",
     "CredentialWriteRow",
+    "DataExportRow",
     "DepartmentRow",
     "DirectoryRoleGrantRow",
     "EntityAliasRow",

@@ -315,17 +315,18 @@ def test_a_trajectory_has_nowhere_to_put_the_agents_claim() -> None:
 # --------------------------------------------------------------------- what is not built
 
 
-def test_the_module_reports_the_two_verification_leaves_it_does_not_close() -> None:
-    """M19.5.2 wants screenshots and M19.4.5 refuses them, which is a conflict between two
-    leaves rather than a gap in one.
+def test_the_module_reports_what_verification_still_does_not_do() -> None:
+    """Until 2026-09-16 this asserted that M19.5.2 conflicted with M19.4.5 and that nothing read
+    back from a system of record. `brain.browsing.verification` resolved the first and built the
+    second, and what remains unbuilt is the judge and each target's read-back query.
 
-    Delete this and the conflict survives only in a commit message, and the next person to
-    read M19.5.2 builds the second pass and quietly undoes the credential rule.
+    Delete this and the report can go empty, which reads as verification being complete while no
+    judge exists and no target declares a read-back.
     """
     gaps = verification_gaps()
 
-    assert any("M19.5.2" in one and "M19.4.5" in one for one in gaps)
-    assert any("M19.5.5" in one and "out-of-band" in one for one in gaps)
+    assert any("no judge is built" in one for one in gaps)
+    assert any("read_back" in one and "no target" in one for one in gaps)
 
 
 def test_a_criterion_with_no_name_is_refused() -> None:

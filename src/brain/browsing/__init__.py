@@ -35,11 +35,13 @@ builds a request and calls `decide`. The stop button belongs to `brain.ops.halt`
 the first thing in the repository to consult its `SIGNAL_RUNNING` effect, because a browser
 run is the case that lasts long enough for stopping it to mean something.
 
-**What is not here, and it is most of M19's first group.** There is no gVisor, no container
-runtime, no Playwright, no Chromium and no mitmproxy, and no dependency on any of them: `uv
-.lock` names none. So the ephemeral container, the per-run network namespace, the tmpfs
-writable layer, the CDP worker and the proxy sidecar are not delivered and are not declared
-either, because a protocol nothing implements makes a register complete and worse. What is
-here is the decision such a runtime would ask for, in a form that can be tested without one.
-Every module ends its docstring by saying which of its own leaves it does not close.
+**The runner is specified and has never run.** `sandbox` builds the Engine bodies for one run: a
+gVisor container with nothing writable but memory, on a network of its own whose only other member
+is a mitmproxy container holding the run's origins (`egress_addon`). `launcher` is the one service
+holding the Docker socket, creating and removing those and relaying `wire`, the line protocol, to
+`runner`, the process inside the container that owns the DevTools session. `recording` keeps the
+transcript for the recordings bucket's window, and `verification` judges a run on its actions,
+then on masked pictures, then on its system of record. There is no Docker, gVisor or browser on the
+machine this was written on, so every decision is tested and none of the plumbing has run;
+`ops/browser/REHEARSAL.md` is the rehearsal for a server that can.
 """

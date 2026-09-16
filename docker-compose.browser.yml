@@ -1,0 +1,85 @@
+# The browser runner's launcher, composed onto `standard` or `full` when a company turns browsing on.
+#
+# `brain.browsing.launcher` explains the design and `tests/unit/test_browsing_deployment.py` holds
+# this file to it. Read those first; what is here is only what a compose file has to say.
+#
+# **One service, and it is the only thing in the product that mounts the Docker socket.** Whatever
+# can reach the socket can start a container with any mount and any privilege, so the service
+# holding it is given nothing else: no database address, no vault, no provider key, a read-only
+# filesystem, no capabilities, and one internal network shared with the worker. It builds every
+# container body itself from a start message and refuses any body with a gap in it, so the worker
+# can ask for a run and cannot ask for a container.
+#
+# **The runs themselves are not in this file.** Each run's network, egress proxy and runner are
+# created by the launcher for that run and removed when it ends, under the `runsc` runtime, named
+# and labelled by the run. A compose service is long-lived by nature, which is the property a run
+# must not have. The shared network the proxies reach out on, `brain-browser-egress`, is created by
+# the launcher at start for the same reason: nothing composed here joins it.
+#
+# **The worker joins the control network, and keeps its own.** A service given a `networks` key is
+# on exactly the networks it lists, so `default` is listed again. Without it the worker would lose
+# the database the moment this file was composed.
+#
+# **gVisor must be installed on the host and registered with Docker as `runsc`.** The launcher's
+# health check asks the daemon for its runtimes and fails without it, so a host that skipped the
+# step shows an unhealthy service rather than one whose every run is refused. The steps, and what
+# has not yet been verified on a real server, are in `ops/browser/REHEARSAL.md`.
+#
+# **The runner image is the application's release with `-browser` on its tag**, built from
+# `ops/browser/Dockerfile`, so `APP_IMAGE` selects it along with every other container here.
+#
+# Task ids: M19.1.1, M19.1.6
+
+services:
+  browser-launcher:
+    image: ${APP_IMAGE:?set APP_IMAGE to the release this install runs}
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - brain.browsing.launcher
+      - --app-image
+      - ${APP_IMAGE:?set APP_IMAGE to the release this install runs}
+    # Root inside the container, so the socket's owner can open it, with every capability dropped
+    # and no way to gain one. Root without capabilities cannot override a file's permissions; it
+    # can open a socket it owns, which is the one thing this service needs.
+    user: "0:0"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - browser-control
+    expose:
+      - "7300"
+    healthcheck:
+      # Ready means the daemon answers and has gVisor, not that a port is open.
+      test:
+        - CMD
+        - python
+        - -m
+        - brain.browsing.launcher
+        - --app-image
+        - ${APP_IMAGE:?set APP_IMAGE to the release this install runs}
+        - --check
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  brain-worker:
+    networks:
+      - default
+      - browser-control
+
+networks:
+  # Internal: the launcher has no route anywhere, and the worker's route out is its own network's.
+  browser-control:
+    internal: true

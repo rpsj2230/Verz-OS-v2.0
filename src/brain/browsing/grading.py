@@ -35,11 +35,15 @@ them. That split is the same one `brain.ops.limits` makes about policy and clien
 what makes the asymmetry above testable at all: the interesting cases are combinations of
 outcomes, and they can be enumerated exhaustively rather than sampled.
 
-M19.5.2 asks for a second scoring pass over screenshots and that pass is **not** built. It
-cannot be, in this repository, and the reason is worth reading twice: M19.4.5 and
-`brain.browsing.observation` refuse screenshots outright, so the second pass wants exactly the
-capability the credential rule removes. The two leaves are in conflict and resolving them is
-not a decision to take inside a module. See the report in `verification_gaps`.
+**The second pass and the read-back are `brain.browsing.verification`'s**, and this module is
+what they apply. Until 2026-09-16 this paragraph said the second pass over screenshots could not
+be built because M19.4.5 refuses screenshots. That reading was too wide: M19.4.5 refuses a
+picture to whatever acts, and the judge of a finished run acts on nothing. The resolution, and
+the rules a picture has to satisfy before a judge may see it, are in that module.
+
+**A write surface gets a criterion of its own**, `landed_<surface>`, because a browser write
+is an attempt rather than an action until something other than the page says it landed. It is
+written from the declaration like every other criterion here, so it exists before the run does.
 
 Task ids: M19.5.1, M19.5.3, M19.5.4
 """
@@ -174,6 +178,16 @@ class Rubric:
         return tuple(one for one in self.criteria if one.must)
 
 
+def landed_criterion(surface: str) -> str:
+    """The name of the criterion a write on this surface is judged under.
+
+    One function rather than an f-string in two modules, because the verifier matches a
+    read-back to a criterion by this name and a second spelling of it would be a read-back that
+    confirms a criterion nobody wrote.
+    """
+    return f"landed_{surface}"
+
+
 def build_rubric(request: PlanRequest, target: Target, *, now: datetime) -> Rubric:
     """Write the criteria from the goal and the declaration, before anything has run.
 
@@ -182,10 +196,11 @@ def build_rubric(request: PlanRequest, target: Target, *, now: datetime) -> Rubr
     for is enforced by the type of the function rather than by whoever calls it.
 
     What it produces today is derived from the declared surfaces: every surface the request
-    names must have been reached, and every read surface must have returned its declared
-    fields. That is a weak rubric and it is deliberately the weak half. The strong half is a
-    model reading the goal, and when it arrives it goes here, where the parameters already
-    forbid it seeing the run.
+    names must have been reached, every read surface must have returned its declared fields,
+    and every write surface must have landed in the system of record (see `landed_criterion`).
+    That is a weak rubric and it is deliberately the weak half. The strong half is a model
+    reading the goal, and when it arrives it goes here, where the parameters already forbid it
+    seeing the run.
     """
     criteria: list[Criterion] = [
         Criterion(
@@ -198,15 +213,23 @@ def build_rubric(request: PlanRequest, target: Target, *, now: datetime) -> Rubr
     ]
     for name in request.surfaces:
         surface = target.surface(name)
-        if surface is None or not surface.reads:
+        if surface is None:
             continue
-        fields = ", ".join(surface.reads)
-        criteria.append(
-            Criterion(
-                name=f"read_{name}",
-                text=f"The surface {name} returned the declared fields: {fields}.",
+        if surface.reads:
+            fields = ", ".join(surface.reads)
+            criteria.append(
+                Criterion(
+                    name=f"read_{name}",
+                    text=f"The surface {name} returned the declared fields: {fields}.",
+                )
             )
-        )
+        if surface.writes():
+            criteria.append(
+                Criterion(
+                    name=landed_criterion(name),
+                    text=f"What the run wrote on {name} is in the system of record.",
+                )
+            )
     criteria.append(
         Criterion(
             name="goal_satisfied",
@@ -303,16 +326,16 @@ def score(rubric: Rubric, trajectory: Trajectory, outcomes: Mapping[str, Outcome
 def verification_gaps(rubrics: Sequence[Rubric] = ()) -> tuple[str, ...]:
     """What verification does not do, written where somebody reading a score will find it.
 
-    The first two are permanent statements about this module. The third is per-rubric and is
-    the one that catches a rubric which would pass every run: no required criteria at all.
+    The first two are permanent statements about what is not built. The third is per-rubric and
+    is the one that catches a rubric which would pass every run: no required criteria at all.
     """
     gaps = [
-        "the second scoring pass M19.5.2 asks for reads screenshots, and M19.4.5 refuses "
-        "screenshots so that a credential cannot be read off one; the two leaves ask for "
-        "opposite things and which wins is a decision for the owner rather than for a module",
-        "M19.5.5 asks for an out-of-band read-back from the system of record and nothing "
-        "here reads one back; every outcome is judged from the trajectory or by a person, so "
-        "a run that reported filing a return is not confirmed against the return",
+        "no judge is built: an outcome per criterion, from the actions or from the admitted "
+        "frames, is produced by a model or a person that brain.browsing.verification takes as "
+        "input, and nothing in this repository calls one yet",
+        "a read-back is asked through the port brain.browsing.verification declares, and what "
+        "each system of record is asked to look for is owed by whoever declares the surface's "
+        "read_back tool; no target in this repository declares one",
     ]
     for rubric in rubrics:
         if not rubric.required():

@@ -48,6 +48,7 @@ from brain.ops.effects import (
 #: sends and calls are side effects instead of agreeing with whatever the table says today.
 ISSUING: frozenset[str] = frozenset(
     {
+        "brain.browsing.runner:Browser.act",
         "brain.channels.adapter:ChannelAdapter.send",
         "brain.ops.automation_piece:ToolCaller.call",
         "brain.ops.digest_delivery:DigestSender.send",
@@ -68,6 +69,8 @@ DELIVERS_THROUGH_THE_DOOR: frozenset[str] = frozenset(
         "brain.ops.digest_delivery",
         # Not a delivery: an agent's approved or autonomous action, run by `run_real`.
         "brain.gate.leash",
+        # Not a delivery: a click or a keystroke on somebody else's page, inside a runner.
+        "brain.browsing.runner",
     }
 )
 

@@ -674,6 +674,7 @@ def test_the_check_still_sees_every_container_of_this_product_in_the_real_files(
 
     Delete this and the test above can be satisfied by a check that is blind."""
     assert product_services(every_compose_file()) == (
+        "docker-compose.browser.yml: browser-launcher",
         "docker-compose.keycloak.yml: keycloak-realm",
         "docker-compose.lite.yml: app",
         "docker-compose.matcher.yml: record-matcher",

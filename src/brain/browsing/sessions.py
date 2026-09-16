@@ -248,6 +248,7 @@ def concurrency_gaps() -> tuple[str, ...]:
     return (
         "the per-domain and per-agent session counts brain.browsing.concurrency decides "
         "against are filled by nothing, because there is no runner holding a session open",
-        "M19.6.4 asks for memory and CPU caps per session, which are cgroup limits on a "
-        "container runtime; nothing in this repository starts a container",
+        "M19.6.4 asks for memory and CPU caps per session; brain.browsing.sandbox writes them "
+        "into every runner's container body and refuses one without them, and no runner has "
+        "been started on a host, so no cap has been seen to hold",
     )

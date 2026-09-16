@@ -188,6 +188,30 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # the ledger entry. A repeat is a second row and a second entry, which is right, because a
         # repeated call follows a second write to the vault.
         "brain.ops.credentials:CredentialWrites.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The browser sandbox. A runner's `act` is a click or a keystroke on somebody else's page
+        # and is issued through `issue_once` inside the container, keyed on the instruction; the
+        # rest of its browser reads. Every Engine call names a resource by the run it belongs to,
+        # so a second create is refused as a conflict, a second start or join finds it done and a
+        # second removal finds nothing. A killed proxy flow stays killed. A read-back is a read
+        # through the gate, and a line to the control plane is a transcript entry.
+        "brain.browsing.egress_addon:AnyFlow.kill": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.egress_addon:ProxiedFlow.kill": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.create_network": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.create_container": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.connect": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.start": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.remove_container": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.remove_network": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.browsing.launcher:Engine.labelled": Repeat.READS,
+        "brain.browsing.launcher:Engine.runtimes": Repeat.READS,
+        "brain.browsing.runner:Browser.navigate": Repeat.READS,
+        "brain.browsing.runner:Browser.origin": Repeat.READS,
+        "brain.browsing.runner:Browser.accessibility_tree": Repeat.READS,
+        "brain.browsing.runner:Browser.act": Repeat.ISSUES,
+        "brain.browsing.runner:Browser.capture": Repeat.READS,
+        "brain.browsing.runner:Channel.receive": Repeat.READS,
+        "brain.browsing.runner:Channel.emit": Repeat.DERIVED_STATE,
+        "brain.browsing.verification:ReadBackPort.look": Repeat.READS,
         # The cache.
         "brain.cache:ValkeyClient.get": Repeat.READS,
         "brain.cache:ValkeyClient.setex": Repeat.DERIVED_STATE,
