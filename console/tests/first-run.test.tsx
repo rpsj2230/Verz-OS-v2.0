@@ -293,7 +293,13 @@ describe("the whole of first run", () => {
     press(container, "Set up this system");
     await arriveAt(container, "Overview");
 
-    expect(seen.map((one) => one.path)).toEqual([APPOINTMENT_PATH, FINISH_PATH, "/api/v1/me"]);
+    // Waited for rather than asserted outright: the overview's own read of `/me` is fired by
+    // the page, so the heading can be on screen a tick before the request is recorded. This
+    // read as a stable assertion until the twelve console screens changed what the shell loads
+    // on the way in, and then failed in CI on a flow that was working.
+    await waitFor(() =>
+      expect(seen.map((one) => one.path)).toEqual([APPOINTMENT_PATH, FINISH_PATH, "/api/v1/me"]),
+    );
     expect(callsTo(seen, APPOINTMENT_PATH)[0]?.body).toEqual({
       setup_code: CODE,
       answers: {
