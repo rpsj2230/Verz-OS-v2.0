@@ -106,7 +106,10 @@ describe("addresses behind the guard", () => {
       // either and would satisfy the line above for ever.
       expect(heading, `${String(href)} renders no heading`).not.toBe("");
     }
-  });
+    // One mount per menu entry, and the menu holds more than fifty. Under the full suite's
+    // parallel files that ran past vitest's five-second default on 2026-09-17 while every
+    // entry resolved, so the ceiling is sized to the loop rather than to one page.
+  }, 60_000);
 
   test("an unknown address renders the console's own not-found page", async () => {
     // What breaks if this is deleted: an address with no page renders the shell and
