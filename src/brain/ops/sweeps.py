@@ -22,7 +22,7 @@ from pathlib import Path
 
 from brain.core.envelope import TOOL_NAME_PATTERN
 from brain.db import libpq_url
-from brain.ops import console_screens
+from brain.ops import console_design, console_screens
 from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 
 REPO = Path(__file__).resolve().parents[3]
@@ -438,6 +438,19 @@ def sweep_traceability() -> None:
     # that can be a gate is in `findings` at the top of this function rather than here.
     for line in console_screens.report_lines():
         print(line)
+
+    # And the other half of the same question, which the line above cannot ask: a console can
+    # serve every read it has and still not be the console `docs/screens.html` designs. That
+    # file is thirteen screens with the section each sits in, it was written before any of them
+    # was built, and on 2026-09-16 the owner opened his own install and asked what the point of
+    # it was. Nothing had ever compared the two. See
+    # `brain.ops.console_design.A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE`.
+    unbuilt = console_design.navigation_gaps(REPO)
+    if unbuilt:
+        print(
+            f"note: {len(unbuilt)} navigation item(s) the design names are not in the console: "
+            + ", ".join(one.line for one in unbuilt)
+        )
 
     # And the shape of the line itself, which is not a third direction but the thing that
     # decides whether any of the three above read what the author meant. This raises rather
