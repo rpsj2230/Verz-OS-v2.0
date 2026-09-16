@@ -64,6 +64,7 @@ from brain.cache import (
     make_async_client,
 )
 from brain.classification_routes import router as classification_router
+from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
@@ -108,6 +109,8 @@ from brain.session import (
 from brain.settings import Settings as Settings
 from brain.setup_routes import router as setup_router
 from brain.sign_in_routes import router as sign_in_router
+from brain.skill_routes import router as skill_router
+from brain.staff_source_routes import router as staff_source_router
 from brain.tools.startup import build_registry
 
 log = structlog.get_logger()
@@ -754,6 +757,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # reader is refused a configuration screen, and the two writes defer entirely to
     # `brain.console.scoped_authority` and `brain.console.govern`. See `brain.govern_routes`.
     app.include_router(govern_router)
+    # The Skills screen, SCREEN 6 of `docs/screens.html`. A router of its own because what it
+    # answers about is neither a grant nor an agent: it is the catalogue of procedures the
+    # agents a reader may see are pinned to, assembled from their installs. It carries no
+    # write at all, and `brain.skill_routes` argues at length why an assignment control cannot
+    # be built until something stores an imported skill. See `brain.skill_routes`.
+    app.include_router(skill_router)
+    # The connectors screen. A router of its own because what it answers about is which outside
+    # systems this company reads, where the name itself is the disclosure: the list is narrowed
+    # by the reader's own grant and a refusal names nothing. It is also the one console surface
+    # whose subject is an act nobody can perform from a browser, and the sentence saying so is
+    # served beside the list. See `brain.connector_routes`.
+    app.include_router(connector_router)
+    # The Staff sources screen and the trial run behind it. A router of its own because it
+    # refuses nobody on its listing: a source sits at `brain.console.govern.NOWHERE`, so the
+    # answer for a reader who reaches none of them is the empty page rather than the refusal
+    # the four govern screens make, and refusing instead would let a caller read off whether
+    # somebody else holds a capability. See `brain.staff_source_routes`.
+    app.include_router(staff_source_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

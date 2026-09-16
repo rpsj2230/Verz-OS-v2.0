@@ -30,7 +30,28 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
-import { AgentHeader, LINEAGE_LABEL, OWNER_LABEL, VERSION_WORD } from "../src/components/AgentHeader";
+import {
+  AgentHeader,
+  BUILDER_LABEL,
+  LINEAGE_LABEL,
+  OWNER_LABEL,
+  VERSION_WORD,
+} from "../src/components/AgentHeader";
+import {
+  AgentCapabilities,
+  AgentFiguresView,
+  basisWords,
+  CAPABILITIES_HEADING,
+  CHANNELS_LABEL,
+  CONNECTORS_LABEL,
+  DIVERGENCE_LABEL,
+  FIGURES_HEADING,
+  measuredOver,
+  minorUnits,
+  RUNS_LABEL,
+  SKILLS_LABEL,
+  SPEND_LABEL,
+} from "../src/components/AgentAssembly";
 import { PANE_LABELS } from "../src/components/AgentWorkspace";
 import { CompositionDiff } from "../src/components/CompositionDiff";
 import { tabAddress, type Pane } from "../src/components/agentWorkspaceState";
@@ -146,8 +167,20 @@ function compositionWire(): Record<string, unknown>[] {
   ];
 }
 
+/** The capability block and the figures, as the route sends them to a reader who holds both
+ * the Settings tab and the Skills screen. */
+function assemblyWire(): Record<string, unknown> {
+  return {
+    divergent: ["persona"],
+    skills: [{ name: "ssl-renewal-runbook", digest: "a".repeat(64) }],
+    connectors: { shown: [{ source: "ledger", presence: "attached" }], overflow: 0 },
+    channels: [{ channel: "lark", profile: "card" }],
+    headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7 },
+  };
+}
+
 function body(agent: Record<string, unknown> = agentWire()): Record<string, unknown> {
-  return { agent, tabs: stripWire(), composition: compositionWire() };
+  return { agent, tabs: stripWire(), composition: compositionWire(), ...assemblyWire() };
 }
 
 function without(record: Record<string, unknown>, ...keys: string[]): Record<string, unknown> {
@@ -313,6 +346,76 @@ describe("where the workspace is reachable", () => {
     ).toEqual(["persona", "skills", "tier"]);
   });
 
+  test("the profile pane shows the agent's connectors, skills and channels, each as the API sent it", async () => {
+    // What breaks if this is deleted: SCREEN 13's capability block, which is the whole of what
+    // the owner opened an agent to see, silently missing while every reader test stays green.
+    const { container } = await consoleAt("/agents/quote-helper", {
+      "quote-helper": { body: body() },
+    });
+    fireEvent.click(paneButton(container, "profile"));
+    const block = container.querySelector<HTMLElement>(`section[aria-label="${CAPABILITIES_HEADING}"]`);
+    if (!block) {
+      throw new Error("The profile pane drew no capability block.");
+    }
+    const codes = [...block.querySelectorAll("code")].map((one) => one.textContent);
+
+    expect(codes).toEqual(["ledger", "ssl-renewal-runbook", "lark"]);
+    expect(block.textContent).toContain(CONNECTORS_LABEL);
+    expect(block.textContent).toContain(SKILLS_LABEL);
+    expect(block.textContent).toContain(CHANNELS_LABEL);
+    expect(block.textContent).toContain("attached");
+    expect(block.textContent).toContain("a".repeat(64));
+  });
+
+  test("a block the API sent nothing for draws no heading, and nothing at all when all three are empty", async () => {
+    // What breaks if this is deleted: "Skills" over an empty list, which tells a reader this
+    // agent has skills they may not be told about. The sibling above is the populated case.
+    const onlyChannels = {
+      ...body(),
+      skills: [],
+      connectors: { shown: [], overflow: 0 },
+    };
+    const { container } = await consoleAt("/agents/quote-helper", {
+      "quote-helper": { body: onlyChannels },
+    });
+    fireEvent.click(paneButton(container, "profile"));
+    const block = container.querySelector(`section[aria-label="${CAPABILITIES_HEADING}"]`);
+    expect(block?.textContent).toContain(CHANNELS_LABEL);
+    expect(block?.textContent).not.toContain(SKILLS_LABEL);
+    expect(block?.textContent).not.toContain(CONNECTORS_LABEL);
+
+    const nothing = render(
+      <AgentCapabilities connectors={{ shown: [], overflow: 0 }} skills={[]} channels={[]} />,
+    );
+    expect(nothing.container.innerHTML).toBe("");
+  });
+
+  test("the dashboard is the figures over their window, whose they are, and the local divergence", async () => {
+    // What breaks if this is deleted: the dashboard pane empty again, which it was until the
+    // route served `headline`, or a figure drawn with no label saying whose runs it counts.
+    const { container } = await consoleAt("/agents/quote-helper", {
+      "quote-helper": { body: body() },
+    });
+    fireEvent.click(paneButton(container, "dashboard"));
+    const figures = container.querySelector<HTMLElement>(`section[aria-label="${FIGURES_HEADING}"]`);
+    if (!figures) {
+      throw new Error("The dashboard drew no figures.");
+    }
+    const labels = [...figures.querySelectorAll("dt")].map((one) => one.textContent);
+
+    expect(labels).toEqual([
+      measuredOver(SPEND_LABEL, "30d"),
+      measuredOver(RUNS_LABEL, "30d"),
+      DIVERGENCE_LABEL,
+    ]);
+    expect(figures.textContent).toContain(minorUnits(1234));
+    expect(figures.textContent).toContain(basisWords("own"));
+    expect(figures.textContent).toContain("persona");
+
+    const withoutFigures = render(<AgentFiguresView divergent={[]} />);
+    expect(withoutFigures.container.innerHTML).toBe("");
+  });
+
   test("the workspace and its stylesheet are not in the first response, and the page reaches both", () => {
     // What breaks if this is deleted: the split, silently. A static import of the page in
     // `App.tsx` puts three components and a stylesheet in front of everybody who never opens
@@ -342,9 +445,19 @@ describe("where the workspace is reachable", () => {
     expect(paths.filter((path) => path.startsWith(AGENTS_API))).toContain(WORKSPACE_ROUTE);
 
     const workspace = declaredResponseSchema(WORKSPACE_ROUTE, "get");
-    expect(declaredPropertyNames(workspace)).toEqual(["agent", "composition", "tabs"]);
+    expect(declaredPropertyNames(workspace)).toEqual([
+      "agent",
+      "channels",
+      "composition",
+      "connectors",
+      "divergent",
+      "headline",
+      "skills",
+      "tabs",
+    ]);
     expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).toEqual([
       "agent_id",
+      "created_by",
       "display_name",
       "owner_id",
       "summary",
@@ -355,7 +468,19 @@ describe("where the workspace is reachable", () => {
     const rows = declaredPropertyNames(declaredProperty(workspace, "composition"));
     expect(rows).toEqual(["instance", "part", "path", "source", "template"]);
     expect(rows).not.toContain("set_by");
-    expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).not.toContain("created_by");
+    // The builder is declared now and was not until 2026-09-16, and the change is a decision
+    // rather than a drift: the route sends it only where the Settings tab is, which is where
+    // an audit reads, and `tests/unit/test_agent_routes.py` holds that a reader without that
+    // tab gets a header with no builder in it. Who set a composition value stays undeclared,
+    // because nothing decides who may be told that.
+    expect(declaredPropertyNames(declaredProperty(workspace, "skills"))).toEqual([
+      "digest",
+      "name",
+    ]);
+    expect(declaredPropertyNames(declaredProperty(workspace, "channels"))).toEqual([
+      "channel",
+      "profile",
+    ]);
   });
 });
 
@@ -397,6 +522,11 @@ describe("what an answer becomes", () => {
         lineage: { templateId: "pricing-desk", version: 4 },
       },
       tabs: stripWire(),
+      divergent: ["persona"],
+      skills: [{ name: "ssl-renewal-runbook", digest: "a".repeat(64) }],
+      connectors: { shown: [{ source: "ledger", presence: "attached" }], overflow: 0 },
+      channels: [{ channel: "lark", profile: "card" }],
+      figures: { basis: "own", range: "30d", spendMinor: 1234, runs: 7 },
       composition: [
         {
           part: partOf("persona"),
@@ -490,17 +620,27 @@ describe("what an answer becomes", () => {
     expect(diffMarkup(complete)).toContain("quote-draft");
   });
 
-  test("the owner shown is the steward, and the builder is never shown in the steward's place", () => {
+  test("the owner shown is the steward, and the builder is shown under its own label or not at all", () => {
     // What breaks if this is deleted: a fallback from the steward to whoever built the agent,
     // which puts a name on exactly the agents whose steward was withheld, and puts the wrong
     // name there: `brain.agents.model` keeps the two apart because they stop being one person.
+    //
+    // The builder is drawn since 2026-09-16, under `BUILDER_LABEL`, and the route sends it
+    // only to a reader of the Settings tab. So the two halves here are that it never appears
+    // where the steward goes, and that an agent whose steward was withheld draws no owner row
+    // at all however much else the body carries.
     const both = headerMarkup({ ...agentWire(), created_by: "the-builder" });
     expect(both).toContain("steward-one");
-    expect(both).not.toContain("the-builder");
+    expect(both).toContain(BUILDER_LABEL);
+    expect(both.indexOf("steward-one")).toBeLessThan(both.indexOf("the-builder"));
 
     const builderOnly = headerMarkup({ ...without(agentWire(), "owner_id"), created_by: "the-builder" });
-    expect(builderOnly).not.toContain("the-builder");
     expect(builderOnly).not.toContain(OWNER_LABEL);
+    expect(builderOnly).toContain(BUILDER_LABEL);
+
+    const neither = headerMarkup(without(agentWire(), "owner_id", "created_by"));
+    expect(neither).not.toContain(BUILDER_LABEL);
+    expect(neither).not.toContain("the-builder");
   });
 
   test("a count or a capability the API sends reaches nothing on the page", async () => {
@@ -508,7 +648,7 @@ describe("what an answer becomes", () => {
     // in an attribute. A route serialising `WorkspaceTab` whole would send its `read`, which
     // names the grant each tab needs, and a total beside a narrowed strip is the subtraction.
     const leaky = {
-      agent: { ...agentWire(), hidden_count: 4700, created_by: "the-builder" },
+      agent: { ...agentWire(), hidden_count: 4700 },
       tabs: stripWire().map((tab) => ({
         ...tab,
         read: { screen: `agent_workspace.${String(tab["tab"])}`, requires: "read:memory" },
@@ -518,11 +658,11 @@ describe("what an answer becomes", () => {
       hidden: 4700,
       of_total: "4700",
     };
-    expect(JSON.stringify(read(leaky))).not.toMatch(/4700|read:memory|agent_workspace|the-builder/);
+    expect(JSON.stringify(read(leaky))).not.toMatch(/4700|read:memory|agent_workspace/);
 
     const { container } = await consoleAt("/agents/quote-helper", { "quote-helper": { body: leaky } });
     fireEvent.click(paneButton(container, "profile"));
-    expect(container.innerHTML).not.toMatch(/4700|read:memory|agent_workspace\.|the-builder/);
+    expect(container.innerHTML).not.toMatch(/4700|read:memory|agent_workspace\./);
   });
 
   test("the answer the page holds has no field for what was left out", () => {
@@ -531,7 +671,16 @@ describe("what an answer becomes", () => {
     const forbidden = new Set(backendHiddenCountNames());
     const members = membersOf(parseConsoleSource("src/pages/agentQuery.ts"), "AgentWorkspaceAnswer");
 
-    expect(members).toEqual(["agent", "tabs", "composition"]);
+    expect(members).toEqual([
+      "agent",
+      "tabs",
+      "composition",
+      "divergent",
+      "skills",
+      "connectors",
+      "channels",
+      "figures",
+    ]);
     expect(members.filter((member) => forbidden.has(asPythonName(member)))).toEqual([]);
   });
 
@@ -553,6 +702,10 @@ describe("what an answer becomes", () => {
       agent: { agentId: "quote-helper", displayName: "Quote Helper" },
       tabs: [],
       composition: [],
+      divergent: [],
+      skills: [],
+      connectors: { shown: [], overflow: 0 },
+      channels: [],
     });
 
     const { container } = await consoleAt("/agents/quote-helper", { "quote-helper": { body: {} } });

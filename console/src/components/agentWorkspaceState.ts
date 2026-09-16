@@ -175,6 +175,17 @@ export interface AgentIdentity {
    * been responsible for this agent for a year.
    */
   readonly ownerId?: string;
+  /**
+   * Who built it: `brain.agents.model.AgentRecord.created_by`, and never the steward.
+   *
+   * A separate field rather than a fallback for `ownerId`, because the two answer different
+   * questions and the API sends them to different readers: the steward goes to everybody the
+   * audience covers and the builder goes where an audit reads, which is the Settings tab's
+   * own grant. A console that fell back from one to the other would put the builder's name
+   * where the person who answers for the agent goes, on exactly the agents whose steward was
+   * withheld.
+   */
+  readonly createdBy?: string;
   readonly lineage?: TemplateLineage;
 }
 

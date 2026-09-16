@@ -51,8 +51,13 @@ const SECTIONS: readonly { to: string; label: string }[] = [
   { to: "/ask", label: "Ask" },
   { to: "/records", label: "Records" },
   { to: "/routing", label: "Routing" },
+  // Connectors sits in Operate, which is where `docs/screens.html` SCREEN 9 puts it: beside
+  // the overview, live runs and models, and above the Govern group. Under the design's own
+  // label rather than the registry's title, because `brain.ops.console_design.navigation_gaps`
+  // compares this list against the design on the label. Written out rather than spread from
+  // `pages/connectorsQuery.ts`, because that sweep reads the rows in this file.
+  { to: "/connectors", label: "Connectors" },
   { to: "/classification", label: "Classification" },
-  { to: "/agents", label: "Agents" },
   { to: "/approvals", label: "Approvals" },
   { to: "/service-levels", label: "Service levels" },
   { to: "/spend", label: "Spend" },
@@ -60,9 +65,31 @@ const SECTIONS: readonly { to: string; label: string }[] = [
   // The govern group, in the order `brain.console.screens` registers it and under the titles
   // that registry gives it. Flat, for the reason the install group below is flat.
   { to: "/people", label: "People and grants" },
+  { to: "/staff_sources", label: "Staff sources" },
   { to: "/roles", label: "Roles" },
   { to: "/capabilities", label: "Capabilities" },
   { to: "/scopes", label: "Scopes and departments" },
+  // Agents, in Govern and under the design's own label, which is what
+  // `brain.ops.console_design.navigation_gaps` compares this list against: SCREEN 4 calls it
+  // "Agents & leashes" and sits it beside People and Scopes. The design draws a count badge
+  // beside it and there is none here, for the reason given below about the skills badge.
+  { to: "/agents", label: "Agents and leashes" },
+  // Skills, in Govern and under the design's own label, which SCREEN 6 spells "Skills &
+  // templates". The design draws a badge beside it carrying the number awaiting review and
+  // there is none here: a badge is a figure from a request, this list is a constant that
+  // renders before anything is fetched, and a menu whose contents depend on a response is the
+  // shape the note above says the navigation is not allowed to have. The same number is on the
+  // screen itself, where it is the count of the entries listed directly beneath it.
+  { to: "/skills", label: "Skills and templates" },
+  // The catalogue, flat and immediately under the section it belongs to. `docs/screens.html`
+  // SCREEN 5 addresses it as "Skills & templates › Templates", which is a child of the row
+  // above; this list has no nesting, and inventing some for one page would make the shape of
+  // the menu a claim decided here, which is the argument the install group already makes
+  // about its own five entries. A section rather than a link from the roster alone, because
+  // `tests/phone-width.test.tsx` holds every page under the shell to being reachable from the
+  // menu: a page a person can only find by knowing where it is linked from is a page nobody
+  // finds.
+  { to: "/agent-templates", label: "Agent templates" },
   // The install group, in the order `brain.console.screens` lists it and under the titles that
   // registry gives it. Five flat entries rather than one heading with five under it, because
   // this list has no nesting and inventing some for one group would make the shape of the menu

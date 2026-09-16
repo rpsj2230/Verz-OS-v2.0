@@ -136,6 +136,13 @@ const WORKSPACE = {
     template_version: 4,
   },
   tabs: ["conversations", "settings"].map((tab) => ({ tab, label: tab, purpose: UNBROKEN })),
+  // The capability block and the figures, whose widest values are a connector name, a skill
+  // name and a sixty-four character digest, each a token with nowhere to break.
+  skills: [{ name: UNBROKEN, digest: "d".repeat(64) }],
+  connectors: { shown: [{ source: UNBROKEN, presence: "attached" }], overflow: 0 },
+  channels: [{ channel: UNBROKEN, profile: "plain" }],
+  divergent: ["persona"],
+  headline: { basis: "own", range: "30d", spend_minor: 1234, runs: 7 },
   composition: [
     {
       part: "persona",
@@ -173,6 +180,56 @@ const SCOPES = {
   truncated: false,
   departments: [UNBROKEN],
   staleness: null,
+};
+
+/** One staff source whose setting names and whose meaning are both unbreakable tokens. */
+const STAFF_SOURCES = {
+  options: [
+    {
+      name: UNBROKEN,
+      meaning: UNBROKEN,
+      reads_a_list: true,
+      needs: [UNBROKEN],
+      unsupplied: [UNBROKEN],
+      chosen: true,
+    },
+  ],
+  // Ready, with no refusal, and that is the loop's constraint rather than the screen's: a
+  // refusal is drawn in a `Notice`, `Notice` carries `role="status"`, and `mount` reads that as
+  // a page still asking. The values this test is about are the identifier-shaped ones, which
+  // are the name, the setting names and the meaning; a refusal is a sentence with spaces in it.
+  // What a refusal draws is held in `tests/staff-sources-page.test.tsx`.
+  selection: {
+    name: UNBROKEN,
+    meaning: UNBROKEN,
+    reads_a_list: true,
+    unsupplied: [UNBROKEN],
+    refusal: "",
+    ready: true,
+  },
+  not_written_here: UNBROKEN,
+};
+
+/**
+ * One skill, whose name, whose pinned digest and whose agent are all unbreakable tokens.
+ *
+ * A digest is sixty-four characters with nowhere to break and it is on every row of this
+ * screen, which makes it the widest single value the console renders anywhere.
+ */
+const SKILLS = {
+  items: [
+    {
+      name: UNBROKEN,
+      pinned_by: [{ agent_id: UNBROKEN, digest: "d".repeat(64) }],
+      versions_differ: true,
+    },
+  ],
+  next_cursor: null,
+  total: null,
+  truncated: false,
+  queue: { entries: [], waiting: 0, edits: 0, stale: 0 },
+  review_is_not_recorded: true,
+  assignment_is_not_writable: true,
 };
 
 /** Every registered route pattern, and what to mount for it. */
@@ -243,7 +300,43 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/agents",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/agents": { items: [{ agent_id: "quote-helper", display_name: UNBROKEN }] } },
+    answers: {
+      "/api/v1/agents": {
+        items: [
+          {
+            agent_id: "quote-helper",
+            display_name: UNBROKEN,
+            owner_id: UNBROKEN,
+            department: UNBROKEN,
+            ceiling: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+          },
+        ],
+      },
+    },
+  },
+  // The catalogue. Its widest values are a template slug and the publisher's principal id,
+  // which are both identifiers, and the summary is a sentence the API wrote.
+  "/agent-templates": {
+    address: "/agent-templates",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/agent-templates": {
+        items: [
+          {
+            template_id: UNBROKEN,
+            version: 2,
+            display_name: UNBROKEN,
+            summary: UNBROKEN,
+            published_by: UNBROKEN,
+            origin: "built_in",
+          },
+        ],
+        next_cursor: null,
+        total: null,
+        truncated: false,
+      },
+    },
   },
   "/agents/:agentId": {
     address: "/agents/quote-helper",
@@ -375,6 +468,31 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/govern/scopes": SCOPES },
   },
+  // Skills, mounted twice for the people screen's reason: once from the menu and once at one
+  // skill's own address, because the second draws a second list under the open skill.
+  "/skills": {
+    address: "/skills",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/skills": SKILLS },
+  },
+  "/skills/:name": {
+    address: `/skills/${encodeURIComponent(UNBROKEN)}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/skills": SKILLS },
+  },
+  // Staff sources. The unbreakable token is a setting name and a source's meaning, which are
+  // the two values on this screen with nowhere to wrap: a setting name is an identifier and a
+  // meaning is a paragraph the API wrote. The trial is not answered here, because it is asked
+  // for by a button this loop does not press; what it draws once a plan arrives is held to the
+  // same rules in `tests/staff-sources-page.test.tsx`.
+  "/staff_sources": {
+    address: "/staff_sources",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/staff_sources": STAFF_SOURCES },
+  },
   // The five install screens. Each draws a value the API sent, so the unbroken identifier is on
   // every one of them: a fact's value, a release statement, a copy's timestamp, a ceiling's name
   // and a database's name are all identifiers with nowhere to break, which is the shape that
@@ -492,6 +610,41 @@ const PAGES: Readonly<Record<string, PageCase>> = {
           unbudgeted: [],
         },
         connections: [{ database: UNBROKEN, admissible: 100, demand: 60, headroom: 40 }],
+      },
+    },
+  },
+  // Connectors. Every text column on it is either an identifier from the API or a sentence, and
+  // the identifier is the source's own name, which is the shape that took five views off the
+  // side of a phone before `.grid__scroll` existed. The unread and failure states draw a notice
+  // and are held in `tests/connectors-page.test.tsx` instead, for the recovery case's reason.
+  "/connectors": {
+    address: "/connectors",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/connectors": {
+        connectors: [
+          {
+            name: UNBROKEN,
+            wiring: "rest",
+            credential: `Held in the vault, borrowed as application. ${UNBROKEN}`,
+            budget: `60 requests a minute. ${UNBROKEN}`,
+            projected_fields: 9,
+            checked_at: "2019-03-04T09:00:00Z",
+            health: "ok",
+            lifecycle: "enabled",
+            serving: true,
+            version: "1.0.0",
+            reaches: `Reaches view ${UNBROKEN}, and nothing else in the source.`,
+            access: UNBROKEN,
+            permission_sync: UNBROKEN,
+          },
+        ],
+        unread: "",
+        connecting: UNBROKEN,
+        copy_policy: [{ what: UNBROKEN, verdict: "projected", why: UNBROKEN }],
+        budget_unread: UNBROKEN,
+        may_connect: true,
       },
     },
   },

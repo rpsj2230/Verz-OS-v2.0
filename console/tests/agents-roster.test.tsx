@@ -108,7 +108,7 @@ function page(container: HTMLElement): HTMLElement {
 }
 
 function links(container: HTMLElement): [string, string][] {
-  return [...page(container).querySelectorAll("ul.roster a")].map((link) => [
+  return [...page(container).querySelectorAll("table.roster a")].map((link) => [
     link.textContent ?? "",
     link.getAttribute("href") ?? "",
   ]);
@@ -143,13 +143,20 @@ describe("the roster", () => {
     ]);
   });
 
-  test("a count, a state or an owner the API sends beside an entry reaches nothing on the page", async () => {
+  test("a count or a lifecycle word beside an entry reaches nothing on the page", async () => {
     // What breaks if this is deleted: "3 of 47 agents", or an agent greyed out as disabled,
-    // arriving because a route sent a field and a renderer was generous. The leaky body must
-    // render byte for byte what the bare entries render.
+    // arriving because a route sent a field and a renderer was generous. The body carrying
+    // both must render byte for byte what the bare entries render.
+    //
+    // The steward is deliberately not in this list any more and is the test below. It was
+    // refused here while the roster was a list of names; `docs/screens.html` SCREEN 4 is a
+    // table with an Owner column, the route sends it to a reader whose audience already
+    // covers the agent, and that reader is told the same fact by the agent's own page. What
+    // stays refused is a count and a state, because those are facts about agents the reader
+    // was not shown and about a decision nobody made on this page.
     const bare = { items: [entry("quote_helper", "Quote Helper")] };
     const leaky = {
-      items: [{ ...entry("quote_helper", "Quote Helper"), state: "disabled", owner_id: "the-steward", hidden_count: 4700 }],
+      items: [{ ...entry("quote_helper", "Quote Helper"), state: "disabled", hidden_count: 4700 }],
       total: 4700,
       hidden: 4700,
       of_total: "4700",
@@ -161,8 +168,44 @@ describe("the roster", () => {
     });
     const markup = await rosterMarkup(leaky);
     expect(markup).toBe(await rosterMarkup(bare));
-    expect(markup).not.toMatch(/4700|disabled|the-steward/);
+    expect(markup).not.toMatch(/4700|disabled/);
     expect(markup).toContain("Quote Helper");
+  });
+
+  test("the department, the steward and the ceiling are drawn when they are sent and absent when they are not", async () => {
+    // What breaks if this is deleted: SCREEN 4's three columns silently missing, which is how
+    // this roster started, or a column drawn with a word in it for a reader who was not sent
+    // the field. The bare body is the sibling: the same page, the same columns, nothing in
+    // the cells, and no sentence saying anything was withheld.
+    const full = {
+      items: [
+        {
+          ...entry("quote_helper", "Quote Helper"),
+          department: "web",
+          owner_id: "the-steward",
+          ceiling: { clauses: [{ field: "department", op: "eq", value: "web" }] },
+        },
+      ],
+    };
+
+    expect(readRoster(full)?.entries).toEqual([
+      {
+        agentId: "quote_helper",
+        displayName: "Quote Helper",
+        department: "web",
+        ownerId: "the-steward",
+        ceiling: ["department eq web"],
+      },
+    ]);
+
+    const drawn = await rosterMarkup(full);
+    expect(drawn).toContain("the-steward");
+    expect(drawn).toContain("department eq web");
+
+    const bare = await rosterMarkup({ items: [entry("quote_helper", "Quote Helper")] });
+    expect(bare).not.toMatch(/the-steward|unknown|withheld|not shown/i);
+    expect(readRoster({ items: [{ ...entry("quote_helper", "Quote Helper"), ceiling: {} }] })
+      ?.entries[0]).toEqual({ agentId: "quote_helper", displayName: "Quote Helper" });
   });
 
   test("the answer the page holds has no field for what was left out", () => {
@@ -263,12 +306,25 @@ describe("the roster", () => {
 
   test("every name the roster reads is a name the route declares, and an entry declares no more", () => {
     // What breaks if this is deleted: a reader and the route drifting apart, or a route that
-    // started sending an entry's state or owner, which is a disclosure decision taken by a
-    // serialiser. The entry's set is exact.
+    // started sending an entry's lifecycle state, which is a disclosure decision taken by a
+    // serialiser. The entry's set is exact, so a sixth field is a red test rather than a
+    // column that appeared.
+    //
+    // Five rather than two since 2026-09-16, and the three that arrived are the columns
+    // `docs/screens.html` SCREEN 4 tabulates: the department, the steward and the ceiling.
+    // The first two are what the agent's own page already tells the same reader, and the
+    // ceiling is sent only to a reader holding the Agents screen's read, which
+    // `tests/unit/test_agent_routes.py` holds against a narrower one.
     const roster = declaredResponseSchema(ROSTER_ROUTE, "get");
 
     expect(declaredPropertyNames(roster)).toEqual(expect.arrayContaining(["items", "truncated"]));
-    expect(declaredPropertyNames(declaredProperty(roster, "items"))).toEqual(["agent_id", "display_name"]);
+    expect(declaredPropertyNames(declaredProperty(roster, "items"))).toEqual([
+      "agent_id",
+      "ceiling",
+      "department",
+      "display_name",
+      "owner_id",
+    ]);
   });
 
   test("an agent's address on the roster is the address the Python side spells", () => {
@@ -318,7 +374,7 @@ describe("the way back from a workspace", () => {
     await settled(container);
     expect(links(container)).toEqual([["Quote Helper", "/agents/quote_helper"]]);
 
-    const name = page(container).querySelector<HTMLAnchorElement>("ul.roster a");
+    const name = page(container).querySelector<HTMLAnchorElement>("table.roster a");
     if (!name) {
       throw new Error("The roster drew no link.");
     }
@@ -337,6 +393,12 @@ describe("the way back from a workspace", () => {
       link.getAttribute("href") ?? "",
     ]);
 
-    expect(nav).toContainEqual([ROSTER_HEADING, ROSTER_ADDRESS]);
+    // The address rather than the label, and then the label separately: the menu says what
+    // `docs/screens.html` calls this section, which is "Agents and leashes", and
+    // `brain.ops.console_design.navigation_gaps` is what holds the two together. What this
+    // test is for is that the section is there at all and lands where the way back does.
+    const entry = nav.find(([, href]) => href === ROSTER_ADDRESS);
+    expect(entry).toBeDefined();
+    expect(entry?.[0]).toContain(ROSTER_HEADING);
   });
 });

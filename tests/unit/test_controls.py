@@ -383,20 +383,30 @@ def test_a_control_whose_only_caller_is_itself_uncalled_is_reported() -> None:
     repaired the same way: `brain.install_routes` serves the recovery panel at an address and
     `brain.app` mounts it, so `brain.console.recovery_view` is a module something imports.
 
-    The staff sync is the same shape today: `dry_run` is called from
-    `brain.console.staff_source_view`, a console page nothing imports. The fixture has to be a
-    real chain in this tree rather than an invented one, so it moves as the tree is wired, and
-    the day nothing here is left unreached this test needs a tree of its own instead.
+    **It named `brain.identity.staff_sync:dry_run` until 2026-09-16**, whose only caller was
+    `brain.console.staff_source_view.trial`, a console page nothing imported. That one was
+    repaired the same way as the two above: `brain.staff_source_routes` serves the Staff sources
+    screen at an address and `brain.app` mounts it, so the module that calls `dry_run` is now a
+    module another one imports. The fixture moves one function along rather than being deleted,
+    because it has to be a real chain in this tree: an invented one would go on passing after
+    the last real chain was repaired, which is the day this test should stop being satisfiable
+    and start needing a tree of its own.
+
+    `is_due` is that chain today. Its only caller is
+    `brain.console.scoped_authority.activity_basis`, which serves the staleness window on the
+    scoped authority surface and which nothing calls: serving one function of a console module
+    does not reach the rest of it, and that is the distinction
+    `A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE` exists to draw.
     """
     from brain.ops.controls import chains_worth_checking
 
     inner_only = _control(
-        symbols=("brain.identity.staff_sync:dry_run",),
+        symbols=("brain.identity.staff_sync:is_due",),
         invoked_by=Invocation.IN_PROCESS,
     )
     findings = chains_worth_checking((inner_only,))
     assert any(
-        "called from brain.console.staff_source_view:" in one
+        "called from brain.console.scoped_authority:activity_basis" in one
         and "as unreached as the control" in one
         for one in findings
     )

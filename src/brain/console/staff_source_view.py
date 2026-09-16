@@ -232,6 +232,25 @@ def _may_read(read: ConsoleRead, entitlement: EntitlementSet, now: datetime | No
     return _in_reach(entitlement, read.requires, NOWHERE, now)
 
 
+def may_trial(entitlement: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader reaches the trial, asked before anything is gathered for one.
+
+    `_may_read` over `TRIAL_READ` and nothing else, made public because a caller serving this
+    page over HTTP has to know the answer *before* it assembles the trial's inputs. Those
+    inputs are a roster read, a map of who this system already holds and the role grants it is
+    holding, and gathering them opens a connection and contacts the source; a route that
+    gathered first and asked afterwards would let somebody who reaches nothing here decide when
+    a company's directory is read. `brain.govern_routes` keeps the same ordering property for
+    the narrower reason that a database's presence must not be readable off a refusal, and this
+    is that rule where the thing on the far side is somebody else's server.
+
+    It is not a second decision. `trial` asks the same question again with the same function on
+    the same read, because a caller that skipped this would still be refused; this exists so
+    that the refusal can happen one step earlier than the work.
+    """
+    return _may_read(TRIAL_READ, entitlement, now)
+
+
 # ------------------------------------------------------------------ what can be chosen
 @dataclass(frozen=True)
 class SourceOption:

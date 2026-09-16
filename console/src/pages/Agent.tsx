@@ -20,11 +20,15 @@
  * or a colleague, and landing on it is the point of M39.1.2.4's address. Selecting a tab by
  * hand does not change the address, so it rebuilds nothing, which is what M39.1.2.3 needs.
  *
- * **Two of the three regions have nothing to draw, and they draw nothing.** The dashboard
- * would be `brain.console.workspace.headline` and a tab's panel would be that tab's own read,
- * and no route serves either. The pane and the panel are still there, because moving between
- * them is the behaviour M39.1.2.3 and M39.1.2.5 describe, and an empty region says less than a
- * sentence claiming that this agent has no figures would.
+ * **The dashboard is the agent's figures and the profile is what it is assembled from.** The
+ * dashboard is `brain.console.workspace.headline` at the basis this reader holds, which the
+ * route now serves; the profile is the composition diff beside the connectors, skills and
+ * channels that same answer carries. Each block draws nothing when the answer carries nothing
+ * for it, because a heading over an empty pane is a count of hidden things in words.
+ *
+ * **A tab's panel still has nothing to draw, and it draws nothing.** A panel would be that
+ * tab's own read and no route serves one, which is why only Settings is ever in the strip. The
+ * panel is still there, because moving between tabs is the behaviour M39.1.2.3 describes.
  *
  * Loaded on demand, like the records screen, so that somebody who never opens an agent does
  * not download the workspace or its stylesheet. `tests/agent-page.test.tsx` holds that against
@@ -36,6 +40,7 @@
 import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
+import { AgentCapabilities, AgentFiguresView } from "../components/AgentAssembly";
 import { AgentWorkspace } from "../components/AgentWorkspace";
 import { CompositionDiff } from "../components/CompositionDiff";
 import { Notice } from "../ui/Notice";
@@ -84,8 +89,22 @@ function AgentAnswer({
       tabs={workspace.tabs}
       {...(tab === undefined ? {} : { initialTab: tab })}
       renderTab={() => null}
-      dashboard={null}
-      profile={<CompositionDiff rows={workspace.composition} />}
+      dashboard={
+        <AgentFiguresView
+          divergent={workspace.divergent}
+          {...(workspace.figures === undefined ? {} : { figures: workspace.figures })}
+        />
+      }
+      profile={
+        <>
+          <CompositionDiff rows={workspace.composition} />
+          <AgentCapabilities
+            connectors={workspace.connectors}
+            skills={workspace.skills}
+            channels={workspace.channels}
+          />
+        </>
+      }
     />
   );
 }

@@ -40,6 +40,16 @@ export const OWNER_LABEL = "Owner";
 export const LINEAGE_LABEL = "Template";
 
 /**
+ * The label over who built the agent, which is a different person from the steward.
+ *
+ * "Built by" rather than "Created by", because the row beside it says Owner and the pair has
+ * to read as two questions rather than as two words for one: who answers for this now, and
+ * who made it. The field arrives only for a reader of the Settings tab, and a reader without
+ * it gets no row at all, which is `AN_ABSENT_FIELD_AND_A_WITHHELD_ONE_ARE_ONE_ABSENCE`.
+ */
+export const BUILDER_LABEL = "Built by";
+
+/**
  * The word before a version number.
  *
  * A word rather than a `v`, because the number beside it is
@@ -53,7 +63,8 @@ export function AgentHeader({ agent }: { readonly agent: AgentIdentity }) {
   // rendered an empty definition list would be an element where facts go, and one that
   // rendered how many facts survived would be the subtraction disclosure with a number on
   // it. There is no third branch.
-  const hasFacts = agent.ownerId !== undefined || agent.lineage !== undefined;
+  const hasFacts =
+    agent.ownerId !== undefined || agent.createdBy !== undefined || agent.lineage !== undefined;
 
   return (
     <header className="agent-header">
@@ -81,6 +92,15 @@ export function AgentHeader({ agent }: { readonly agent: AgentIdentity }) {
                 <dt>{OWNER_LABEL}</dt>
                 <dd>
                   <code>{agent.ownerId}</code>
+                </dd>
+              </div>
+            )}
+
+            {agent.createdBy === undefined ? null : (
+              <div className="fields__row">
+                <dt>{BUILDER_LABEL}</dt>
+                <dd>
+                  <code>{agent.createdBy}</code>
                 </dd>
               </div>
             )}

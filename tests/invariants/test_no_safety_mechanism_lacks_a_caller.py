@@ -132,9 +132,14 @@ SCHEDULED_BY_THE_WORKER = frozenset(
 #: another one imports, and the chain is repaired rather than hidden. That is what this set is
 #: for in both directions, and the equality below is what makes the repair have to be recorded.
 #:
-#: `directory_sync` stays, and the sentence above about the console is now narrower than it was:
-#: five console pages are reachable, and `brain.console.staff_source_view` and
-#: `brain.console.scoped_authority` are not two of them.
+#: `directory_sync` stays, and the sentence above about the console is narrower again on
+#: 2026-09-16: `brain.staff_source_routes` serves the Staff sources screen and `brain.app` mounts
+#: it, so `brain.console.staff_source_view` is reachable and `dry_run`'s caller is no longer a
+#: module nothing imports. What keeps this control here is `is_due` and `due_at`, whose only
+#: caller is `brain.console.scoped_authority.activity_basis`, which nothing calls. Serving one
+#: function of a console module does not reach the rest of it, which is
+#: `A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE`, and it is why this set
+#: goes down one chain at a time rather than one module at a time.
 CALLERS_NOTHING_REACHES = frozenset({"directory_sync"})
 
 

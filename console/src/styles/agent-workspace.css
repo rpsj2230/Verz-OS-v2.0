@@ -247,3 +247,43 @@
 .composition-diff__empty {
   color: var(--text-muted);
 }
+
+/*
+ * The capability and figures blocks (SCREEN 13). Phone width is the base case, as every
+ * sheet in this console is written: the lists stack, and every value a source, a skill name
+ * or a digest can be is a token with nowhere to break, so each may break anywhere. A digest
+ * is sixty-four characters and is the widest value drawn here.
+ */
+.agent-assembly {
+  margin-top: var(--space-4);
+}
+
+.agent-assembly__block {
+  margin-top: var(--space-3);
+}
+
+.agent-assembly__label {
+  margin: 0 0 var(--space-1);
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.agent-assembly__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-assembly__list li {
+  padding: var(--space-1) 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.agent-assembly__digest {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

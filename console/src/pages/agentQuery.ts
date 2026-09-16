@@ -51,13 +51,82 @@ export function agentWorkspaceApiPath(agentId: string): string {
   return `/agents/${encodeURIComponent(agentId)}/workspace`;
 }
 
-/** One agent's workspace, as this console holds it. Three fields, and none of them a count. */
+/**
+ * One skill this agent is pinned to, as `brain.agent_routes.SkillView` sends one.
+ *
+ * A name and a digest and no review word. The route says why: the approved library has no
+ * table on this installation, so a chip reading approved would be about bytes nobody here has
+ * read. A console that supplied one would be inventing the very state
+ * `brain.console.agent_tabs.Review` exists to keep honest.
+ */
+export interface SkillPin {
+  readonly name: string;
+  /** The digest the pin is over, which is what a run resolves rather than the version. */
+  readonly digest: string;
+}
+
+/**
+ * One connector this agent names, as this reader may see it.
+ *
+ * `presence` is rendered as it arrived, which is `src/ui/Status.tsx`'s rule about a state
+ * word: `brain.console.workspace_capabilities.Presence` has two members, the console acts on
+ * neither, and a word that is neither renders as itself rather than as a guess.
+ */
+export interface ConnectorPresence {
+  readonly source: string;
+  readonly presence: string;
+}
+
+/**
+ * The connector row and the count beside it.
+ *
+ * `overflow` is the one number this console draws about a list, and it is legitimate for the
+ * reason `AN_OVERFLOW_COUNTS_WHAT_IS_OFF_THE_ROW_AND_NEVER_WHAT_IS_OUT_OF_REACH` gives on the
+ * Python side: it is computed from the rows this reader may see, so it counts what is off the
+ * end of the row and never what is out of reach. It is carried only as a whole number from
+ * one, so a body sending a string or a negative draws nothing.
+ */
+export interface ConnectorStrip {
+  readonly shown: readonly ConnectorPresence[];
+  readonly overflow: number;
+}
+
+/** One surface a run of this agent could be carried on, and how it would be laid out. */
+export interface ChannelOffer {
+  readonly channel: string;
+  /** `brain.console.agent_tabs.RenderProfile`, derived by the adapter's own capabilities. */
+  readonly profile: string;
+}
+
+/**
+ * The agent's figures, and whose they are.
+ *
+ * `basis` is required and is not decoration: a figure with no label is read as the agent's
+ * total, so a reader shown their own spend would read it as everybody's. A body with no basis
+ * carries no figures at all here, which is the direction this has to fail in.
+ */
+export interface AgentFigures {
+  readonly basis: string;
+  readonly range: string;
+  readonly spendMinor: number;
+  readonly runs: number;
+}
+
+/** One agent's workspace, as this console holds it. No field here is a count of what was
+ * withheld, and the one number is an overflow over rows this reader was shown. */
 export interface AgentWorkspaceAnswer {
   readonly agent: AgentIdentity;
   /** The strip, in the order the API answered it. */
   readonly tabs: readonly WorkspaceTabView[];
   /** The composition beside its template, path by path, in the order the API answered it. */
   readonly composition: readonly DiffRow[];
+  /** The composition parts this install has edited that its template supplies. */
+  readonly divergent: readonly string[];
+  readonly skills: readonly SkillPin[];
+  readonly connectors: ConnectorStrip;
+  readonly channels: readonly ChannelOffer[];
+  /** Absent when the API sent no figures, which is not the same as figures of nought. */
+  readonly figures?: AgentFigures;
 }
 
 type Fields = Readonly<Record<string, unknown>>;
@@ -108,6 +177,7 @@ export function readAgent(payload: unknown): AgentIdentity | null {
   }
   const roleLine = said(fields["summary"]);
   const ownerId = said(fields["owner_id"]);
+  const createdBy = said(fields["created_by"]);
   const templateId = said(fields["template_id"]);
   const version = pinnedVersion(fields["template_version"]);
   return {
@@ -115,6 +185,10 @@ export function readAgent(payload: unknown): AgentIdentity | null {
     displayName,
     ...(roleLine === undefined ? {} : { roleLine }),
     ...(ownerId === undefined ? {} : { ownerId }),
+    // Carried under its own name and never folded into the owner. The route sends it to a
+    // reader of the Settings tab and to nobody else, so an absent key here is a reader who
+    // was not told rather than an agent nobody built.
+    ...(createdBy === undefined ? {} : { createdBy }),
     // Both or neither. Half a lineage is the count of hidden things spelled out in words.
     ...(templateId === undefined || version === undefined
       ? {}
@@ -202,15 +276,135 @@ export function readComposition(payload: unknown): DiffRow[] {
  * `readClassification`'s reasoning: a body that is not a workspace is a console built against
  * a different API, and the only sentence available would be one this console made up.
  */
+/** A whole number from nought: a count of rows this reader was shown, or a figure in minor
+ * units. Anything else is not carried, so a malformed body draws no number. */
+function counted(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+/** The strings in an array, keeping the ones that say something and the order they arrived. */
+function saidEach(payload: unknown): string[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  const kept: string[] = [];
+  for (const entry of payload as readonly unknown[]) {
+    const one = said(entry);
+    if (one !== undefined && !kept.includes(one)) {
+      kept.push(one);
+    }
+  }
+  return kept;
+}
+
+/**
+ * The skills this agent is pinned to, keeping the ones that carry both halves of a pin.
+ *
+ * A skill with a name and no digest is dropped rather than drawn, for the reason a half
+ * lineage is: a name with nothing under it says this agent runs a procedure whose version the
+ * reader may not be told, which is a fact they did not have. A repeated name is dropped as a
+ * repeated tab is, because the list is keyed on it.
+ */
+export function readSkills(payload: unknown): SkillPin[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const pins: SkillPin[] = [];
+  for (const entry of payload as readonly unknown[]) {
+    const fields = fieldsOf(entry);
+    const name = said(fields?.["name"]);
+    const digest = said(fields?.["digest"]);
+    if (name === undefined || digest === undefined || seen.has(name)) {
+      continue;
+    }
+    seen.add(name);
+    pins.push({ name, digest });
+  }
+  return pins;
+}
+
+/**
+ * The connector strip, with an overflow that is only ever a number the API sent.
+ *
+ * A body with no strip is an empty row and no overflow, which is what a reader who reaches no
+ * source is answered. A row missing its source or its presence is not carried: half a row
+ * would say a connector is there whose name the reader may not have.
+ */
+export function readConnectors(payload: unknown): ConnectorStrip {
+  const fields = fieldsOf(payload);
+  const rows: ConnectorPresence[] = [];
+  const shown = fields?.["shown"];
+  if (Array.isArray(shown)) {
+    const seen = new Set<string>();
+    for (const entry of shown as readonly unknown[]) {
+      const row = fieldsOf(entry);
+      const source = said(row?.["source"]);
+      const presence = said(row?.["presence"]);
+      if (source === undefined || presence === undefined || seen.has(source)) {
+        continue;
+      }
+      seen.add(source);
+      rows.push({ source, presence });
+    }
+  }
+  return { shown: rows, overflow: counted(fields?.["overflow"]) ?? 0 };
+}
+
+/** The surfaces offered, keeping the ones that name a channel and a profile. */
+export function readChannels(payload: unknown): ChannelOffer[] {
+  if (!Array.isArray(payload)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const offers: ChannelOffer[] = [];
+  for (const entry of payload as readonly unknown[]) {
+    const fields = fieldsOf(entry);
+    const channel = said(fields?.["channel"]);
+    const profile = said(fields?.["profile"]);
+    if (channel === undefined || profile === undefined || seen.has(channel)) {
+      continue;
+    }
+    seen.add(channel);
+    offers.push({ channel, profile });
+  }
+  return offers;
+}
+
+/**
+ * The figures, or nothing at all.
+ *
+ * Every field is required, and the basis most of all: a spend figure drawn without the label
+ * saying whose it is reads as the agent's total. So a body missing any one of the four draws
+ * no figures, rather than figures with a field composed here.
+ */
+export function readFigures(payload: unknown): AgentFigures | undefined {
+  const fields = fieldsOf(payload);
+  const basis = said(fields?.["basis"]);
+  const range = said(fields?.["range"]);
+  const spendMinor = counted(fields?.["spend_minor"]);
+  const runs = counted(fields?.["runs"]);
+  if (basis === undefined || range === undefined || spendMinor === undefined || runs === undefined) {
+    return undefined;
+  }
+  return { basis, range, spendMinor, runs };
+}
+
 export function readAgentWorkspace(payload: unknown): AgentWorkspaceAnswer | null {
   const fields = fieldsOf(payload);
   const agent = readAgent(fields?.["agent"]);
   if (fields === null || agent === null) {
     return null;
   }
+  const figures = readFigures(fields["headline"]);
   return {
     agent,
     tabs: readTabs(fields["tabs"]),
     composition: readComposition(fields["composition"]),
+    divergent: saidEach(fields["divergent"]),
+    skills: readSkills(fields["skills"]),
+    connectors: readConnectors(fields["connectors"]),
+    channels: readChannels(fields["channels"]),
+    ...(figures === undefined ? {} : { figures }),
   };
 }

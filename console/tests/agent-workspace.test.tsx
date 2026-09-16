@@ -401,7 +401,16 @@ describe("the agent header", () => {
     const state = parseConsoleSource(STATE_MODULE);
     expect(membersOf(state, "TemplateLineage")).toEqual(["templateId", "version"]);
     expect(optionalMembersOf(state, "TemplateLineage")).toEqual([]);
-    expect(optionalMembersOf(state, "AgentIdentity")).toEqual(["roleLine", "ownerId", "lineage"]);
+    // Four optional fields since 2026-09-16: the builder joined them, under its own label,
+    // sent by the route only where the Settings tab is. Optional and never required, for the
+    // reason every other one here is: an absent key is a reader who was not told, and a
+    // required field would make that a rendering decision instead.
+    expect(optionalMembersOf(state, "AgentIdentity")).toEqual([
+      "roleLine",
+      "ownerId",
+      "createdBy",
+      "lineage",
+    ]);
   });
 
   test("a header with nothing beyond the name renders nowhere for facts to go", () => {

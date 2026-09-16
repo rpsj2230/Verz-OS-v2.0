@@ -1,4 +1,4 @@
-"""The agent roster and one agent's workspace over HTTP, and why they refuse alike.
+"""The agent roster, one agent's workspace and the template catalogue over HTTP.
 
 `brain.console.workspace` builds a tab strip, a deep link and a composition diff, and the
 console's agent page has asked `GET /api/v1/agents/{agent_id}/workspace` since M39.1.2.1 was
@@ -51,6 +51,59 @@ question. So the rows are sent when the strip holds Settings, and a reader witho
 empty list, which is also what an agent with no install gets. `set_by` is never sent, for
 `A_COMPOSITION_ROW_SAYS_WHAT_AND_NEVER_WHO`.
 
+**The roster carries what the workspace already tells the same reader, and not one word
+more.** `docs/screens.html` SCREEN 4 is a table of agent, department, owner, ceiling, leash
+rungs, runs and cost, and the first three of those are facts a reader who can open the agent
+is already given on its own page: an agent listed is an agent that opens. So the department
+and the steward travel on a roster entry, and the ceiling travels only for a reader who holds
+the Agents screen's own read, because a scope predicate is the widest a run could reach and
+that is the screen where an administrator reads one. What does not travel is a lifecycle
+word, a count, or a figure this route cannot measure. See
+`A_ROSTER_ENTRY_SAYS_NO_MORE_THAN_THE_WORKSPACE_IT_OPENS`.
+
+**The builder travels with the Settings tab and the steward travels with the agent.**
+`AgentRecord.created_by` is history and `AgentAudience.owner_id` is who answers for the agent
+now, and `brain.agents.model` keeps them apart deliberately. The steward is who a person
+needs in order to ask for something, so it goes to everybody the audience covers; the builder
+is the question an audit asks, so it goes where the audit reads, which is the Settings tab's
+own grant. Until 2026-09-16 the builder was sent nowhere and `tests/agent-page.test.tsx`
+pinned that absence, which was right while nothing decided who could be told. See
+`THE_BUILDER_TRAVELS_WITH_THE_AUDIT_AND_THE_STEWARD_TRAVELS_WITH_THE_AGENT`.
+
+**The capability block is four reads of three modules and no arithmetic of its own.**
+SCREEN 13 puts connectors, skills, knowledge and channels in one block under the heading
+"what this agent is assembled from". Connectors are `brain.console.workspace_capabilities.
+connector_rows` over the manifest's declared names, bound against the tools the agent's
+ceiling actually allows and narrowed to the sources this caller could reach at all, with
+`connector_strip` computing the overflow from those same rows. Skills are the manifest's
+pinned references, behind the Skills screen's own read. Channels are `offered_channels` at
+`E_run(caller, agent)`, each with `brain.console.agent_tabs.rendering_profile`'s derived
+profile. Nothing here re-decides any of it and nothing here intersects two entitlement sets:
+`run_reach` is the console's one route into the intersection and this module calls it.
+
+**Four things SCREEN 13 and SCREEN 4 ask for are absent rather than guessed, and each is
+absent because nothing stores it.** A channel row says which surfaces a run could be carried
+on and never whether the install has one switched on, because no table holds a per-agent
+channel enablement and a row reading "not enabled" would be an assertion nobody measured. A
+connector row carries no health, because this route probes nothing and
+`AN_UNPROBED_CONNECTOR_IS_NOT_A_HEALTHY_ONE` is exactly that rule. A skill chip carries no
+review state, because the approved library has no table and a chip reading approved for a
+skill nobody can read is worse than no chip. And the headline carries spend and runs and no
+message count, because the turns are not joined here and nought would read as silence rather
+than as absence. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
+
+**The template catalogue is the Skills and templates screen's grant and never one of its
+own.** SCREEN 5 is a gallery of roles somebody can install, and it sits under Govern beside
+the skills review queue in `docs/screens.html` as it does in `brain.console.screens`, where
+one entry is called "Skills and templates". So `GET /agent-templates` asks `permitted` about
+that screen's read and refuses in its words, rather than inventing a capability a gallery
+would be the only reader of. The catalogue is the product's own twenty-three manifests plus
+whatever this installation has published, each at its highest version, and a published
+template that does not construct is absent for everybody exactly as an agent is. Installing
+is not offered: `brain.agents.install` needs a signing key and a wizard, and a gallery with
+an install button and nothing behind it is a worse answer than a gallery without one. See
+`A_GALLERY_IS_A_LISTING_AND_A_LISTING_IS_WHERE_A_TOTAL_LEAKS`.
+
 **A row that does not construct is absent for everybody.** A record that fails its own
 validators is refused as though it were not there, uniformly, whoever asks, and logged at a
 level an operator reads. A 500 would be the obvious answer and it is an oracle in both
@@ -87,8 +140,10 @@ Task ids: M39.1.2.5
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import enum
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Final
 
 import structlog
@@ -97,6 +152,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.agents.catalogue import CATALOGUE
 from brain.agents.model import (
     AgentAudience,
     AgentAuthority,
@@ -114,22 +170,51 @@ from brain.agents.template import (
     materialise,
 )
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
-from brain.api_routes import Asked, Asking
+from brain.api_routes import Asked, Asking, reachable_sources
+from brain.channels.adapter import ChannelAdapter, ChannelCapabilities
+from brain.channels.email import EmailAdapter
+from brain.channels.lark import LarkAdapter
+from brain.channels.slack import SlackAdapter
+from brain.channels.teams import TeamsAdapter
+from brain.channels.telegram import TelegramAdapter
+from brain.channels.whatsapp import WhatsAppAdapter
+from brain.console.agent_tabs import SKILL_SCREEN, rendering_profile
+from brain.console.reads import permitted
+from brain.console.screens import screen
 from brain.console.workspace import (
+    Range,
     Tab,
     WorkspaceTab,
+    basis_for,
     composition_rows,
+    divergent_parts,
+    headline,
     tab_strip,
+    window,
+)
+from brain.console.workspace_capabilities import (
+    connector_rows,
+    connector_strip,
+    offered_channels,
+    run_reach,
 )
 from brain.core.entitlement import Capability
 from brain.core.envelope import SideEffect
 from brain.core.errors import Absent, Failed
+from brain.core.field_policy import FieldPolicy
+from brain.core.lane import Lane
+from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.context import TrafficClass
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import Tier
+from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
+from brain.tables.spend import SpendActualRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
+from brain.tools.registry import ToolRegistry
+from brain.tools.startup import every_row_classification
 
 log = structlog.get_logger()
 
@@ -172,6 +257,50 @@ A_ROW_THAT_DOES_NOT_CONSTRUCT_IS_ABSENT_FOR_EVERYBODY: Final = (
     "alike and it is logged, so the difference reaches an operator and never a response."
 )
 
+#: Why a roster entry carries a department and a steward and not a figure.
+A_ROSTER_ENTRY_SAYS_NO_MORE_THAN_THE_WORKSPACE_IT_OPENS: Final = (
+    "An agent on the roster is an agent whose workspace opens for this reader, and the "
+    "workspace already tells them its steward. So a department and a steward on the entry "
+    "disclose nothing a click does not, and they are what SCREEN 4 is a table of. The "
+    "ceiling is a different question, because a scope predicate says how wide any run "
+    "through this agent could be, so it travels only for a reader holding the Agents "
+    "screen's own read. No entry carries a lifecycle word, a total or a figure, because a "
+    "listing filtered by audience is where each of those becomes the number of agents the "
+    "reader was not shown."
+)
+
+#: Why the builder is sent where the audit reads and the steward is sent to everybody.
+THE_BUILDER_TRAVELS_WITH_THE_AUDIT_AND_THE_STEWARD_TRAVELS_WITH_THE_AGENT: Final = (
+    "created_by is history and never moves; audience.owner_id is who answers for the agent "
+    "today. A person looking at an agent needs the second in order to ask for anything, and "
+    "it is theirs the moment the audience covers them. The first is the question an audit "
+    "asks, so it is sent exactly where an audit reads, which is the Settings tab's own "
+    "grant, and a reader without that tab gets a header with no builder on it rather than a "
+    "field saying one is being withheld."
+)
+
+#: Why a figure nothing stores is left out rather than sent as nought.
+A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT: Final = (
+    "Nought is a measurement. A channel row reading not enabled, a connector reading "
+    "healthy, a skill reading approved and a message count reading nought are each an "
+    "assertion about a store this route does not have, and each of them reads to a person "
+    "as a fact somebody checked. The honest answer is the field's absence: the surfaces a "
+    "run could be carried on without saying which are switched on, a connector with no "
+    "health at all, a skill with its pinned digest and no review, and a headline with spend "
+    "and runs and no message count."
+)
+
+#: Why the template gallery asks one screen's grant and counts nothing.
+A_GALLERY_IS_A_LISTING_AND_A_LISTING_IS_WHERE_A_TOTAL_LEAKS: Final = (
+    "A template catalogue is read behind the Skills and templates screen, which is where an "
+    "administrator already reads what agents can be taught to do, and a gallery with a "
+    "capability of its own would be a second answer to that question reachable from one "
+    "page. The listing carries no total for the roster's reason, and it carries no install "
+    "count per template: the number of agents installed from a template is the number of "
+    "agents, filtered by nothing, which is a count of rows the reader may not be able to "
+    "open."
+)
+
 #: Why the viewer carries at most one department.
 THE_VIEWER_IS_THEIR_PRIMARY_DEPARTMENT_UNTIL_MEMBERSHIP_IS_READ: Final = (
     "AgentViewer takes a set of departments because a person can sit in two, and the "
@@ -192,22 +321,73 @@ MAX_ROSTER_ENTRIES: Final = 500
 #: The one tab whose content this route holds. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
 POPULATED_HERE: Final[frozenset[Tab]] = frozenset({Tab.SETTINGS})
 
+#: The most templates one gallery answer carries. A resource bound, as the roster's is.
+MAX_TEMPLATE_ENTRIES: Final = 500
+
+#: The most accounting rows one headline is computed over. A bound on the read and not on
+#: the figure: the rows are this agent's own and are filtered again by basis and window.
+MAX_HEADLINE_ROWS: Final = 20_000
+
+#: The window the front page's figures cover. Thirty days, which is `docs/screens.html`
+#: SCREEN 13's own heading and `brain.ops.budgets.DAYS_IN_BUDGET_MONTH` through
+#: `brain.console.workspace.RANGE_DAYS`, so the figure sits over the month a budget divides.
+HEADLINE_RANGE: Final = Range.THIRTY_DAYS
+
+#: The screen whose read decides whether a roster row carries a ceiling. The Settings tab's
+#: capability is this screen's, which is what `brain.console.workspace.TABS` wires it to, so
+#: a reader who sees a ceiling on the roster is one who could read it on the agent's page.
+AGENT_SCREEN: Final = "agents"
+
+#: The screen whose grant the template gallery is read behind. `brain.console.agent_tabs`
+#: already names it for a skill on an agent, and the registry calls it "Skills and
+#: templates". See `A_GALLERY_IS_A_LISTING_AND_A_LISTING_IS_WHERE_A_TOTAL_LEAKS`.
+TEMPLATE_SCREEN: Final = SKILL_SCREEN
+
+#: Every surface this product can deliver on, as the six adapters that own the declaration.
+#:
+#: Classes rather than a table of capabilities written here, because each adapter argues its
+#: own ceiling in its own docstring and a second table is the copy that says `INTERNAL` where
+#: the adapter says `CONFIDENTIAL`. None of them takes a constructor argument and none holds a
+#: credential: `brain.ops.secrets.borrow` leases one per run, so asking a fresh adapter what
+#: it can carry opens nothing and reads no configuration. It is also not a statement that this
+#: installation has any of them set up. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
+CHANNEL_ADAPTERS: Final[tuple[Callable[[], ChannelAdapter], ...]] = (
+    EmailAdapter,
+    LarkAdapter,
+    SlackAdapter,
+    TeamsAdapter,
+    TelegramAdapter,
+    WhatsAppAdapter,
+)
+
 
 # ------------------------------------------------------------------------ the shapes
 
 
 class RosterEntry(BaseModel):
-    """One agent this caller may see. Its id and its name, and nothing about its state.
+    """One agent this caller may see, as SCREEN 4 tabulates one.
 
-    The id is the address of its workspace and the name is what a person looks for. No
-    owner, no summary and no lifecycle word: each is a separate disclosure decision, and the
-    roster's job is to be a list of doors.
+    The id is the address of its workspace and the name is what a person looks for. The
+    department and the steward are the next two columns of that table and are facts the
+    workspace already gives this reader; the ceiling is the fourth and travels only for a
+    reader holding the Agents screen's read. Nothing here is a lifecycle word, a total or a
+    figure. See `A_ROSTER_ENTRY_SAYS_NO_MORE_THAN_THE_WORKSPACE_IT_OPENS`.
+
+    `department` is null for an agent whose audience is not a department's, which is the
+    record's own shape rather than a blank column: `AgentAudience` refuses a department on a
+    personal or company agent, so there is nothing there to send.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     agent_id: str
     display_name: str
+    owner_id: str
+    department: str | None = None
+    #: `AgentAuthority.scope`, as `Scope.model_dump` spells it, for a reader who holds the
+    #: Agents screen's read. Null for everybody else, and null is the field's absence rather
+    #: than an unrestricted ceiling: `Scope()` dumps to a clause list of its own.
+    ceiling: dict[str, Any] | None = None
 
 
 class RosterPage(Page[RosterEntry]):
@@ -241,6 +421,9 @@ class AgentHeaderView(BaseModel):
     summary: str | None = None
     template_id: str | None = None
     template_version: int | None = None
+    #: Who built it. Sent exactly where the Settings tab is. See
+    #: `THE_BUILDER_TRAVELS_WITH_THE_AUDIT_AND_THE_STEWARD_TRAVELS_WITH_THE_AGENT`.
+    created_by: str | None = None
 
 
 class TabView(BaseModel):
@@ -273,14 +456,143 @@ class CompositionRowView(BaseModel):
     source: str
 
 
+class SkillView(BaseModel):
+    """One skill this agent is pinned to: its name and the digest the pin is over.
+
+    No review state and no invocation count. The approved library has no table on this
+    installation, so a chip reading approved would be about bytes nobody here can read, and a
+    count would be mostly somebody else's afternoon read outside the usage screen's grant.
+    See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    digest: str
+
+
+class ConnectorView(BaseModel):
+    """One connector this agent names, exactly as `ConnectorRow` carries one.
+
+    `presence` is `brain.console.workspace_capabilities.Presence`, which has two members and
+    no member meaning refused: a connector this reader could not see produces no row at all
+    rather than a row saying why. There is no health field, because this route probes nothing.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source: str
+    presence: str
+
+
+class ConnectorStripView(BaseModel):
+    """The connector row and the count beside it, both over this reader's own rows.
+
+    `overflow` counts what is off the end of the row and never what is out of reach, which is
+    the rule `ConnectorStrip` enforces in its constructor rather than one restated here.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    shown: list[ConnectorView]
+    overflow: int = 0
+
+
+class ChannelView(BaseModel):
+    """One surface a run of this agent could be carried on, and how it would be laid out.
+
+    There is no `enabled` field. See `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`:
+    nothing stores a per-agent channel enablement, and a row reading not enabled would be an
+    assertion nobody measured, drawn beside rows that are measurements.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    channel: str
+    #: `brain.console.agent_tabs.RenderProfile`, derived from the surface's own capabilities.
+    profile: str
+
+
+class HeadlineView(BaseModel):
+    """Spend and runs for this agent over one window, and whose they are.
+
+    `basis` is carried rather than left implicit, for `brain.console.workspace.Headline`'s
+    reason: a figure whose meaning is unstated is read as the total, so a reader shown their
+    own spend with no label would read it as the agent's.
+
+    No message count, and no projection. The turns are not read here, and a projection is
+    `projection`'s answer on the wider basis only, which needs an `Allowance` this route has
+    no budget to load.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    basis: str
+    range: str
+    spend_minor: int
+    runs: int
+
+
 class WorkspaceView(BaseModel):
-    """One agent's workspace, as this caller may read it. Three fields and none a count."""
+    """One agent's workspace, as this caller may read it. No field here is a count of what
+    was withheld."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     agent: AgentHeaderView
     tabs: list[TabView]
     composition: list[CompositionRowView]
+    #: The composition parts this install has edited that its template supplies. Travels with
+    #: the composition, because it is a fact about the same rows.
+    divergent: list[str] = []
+    skills: list[SkillView] = []
+    connectors: ConnectorStripView = ConnectorStripView(shown=[])
+    channels: list[ChannelView] = []
+    headline: HeadlineView | None = None
+
+
+class Origin(enum.StrEnum):
+    """Where a template in the gallery came from. Two, and the difference is who signed it.
+
+    A built-in template is one of the twenty-three this product ships, and
+    `brain.agents.catalogue` says plainly that nothing publishes them: they hold no
+    signature, because a signature is a claim about who published and nobody has. A published
+    one is a row this installation signed with its own key. Saying which is which is the
+    difference between "this is what the product offers" and "this is what we have made", and
+    a gallery that merged them would let the second wear the first's authority.
+    """
+
+    BUILT_IN = "built_in"
+    PUBLISHED = "published"
+
+
+class TemplateEntry(BaseModel):
+    """One template a person could install, as SCREEN 5 shows one.
+
+    The name, the version, the sentence underneath and who published it. No install count:
+    see `A_GALLERY_IS_A_LISTING_AND_A_LISTING_IS_WHERE_A_TOTAL_LEAKS`. No department either,
+    because a template has no audience of its own until it is installed, and the department
+    on SCREEN 5's card is the department of the agents somebody has installed from it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    template_id: str
+    version: int
+    display_name: str
+    summary: str | None = None
+    published_by: str
+    origin: str
+
+
+class TemplateGallery(Page[TemplateEntry]):
+    """Every template this reader may be offered, by name.
+
+    `total` is inherited and never populated and `next_cursor` is always null, exactly as the
+    roster's page is, and for the same reason.
+    """
+
+    truncated: bool = False
 
 
 # ------------------------------------------------------------------ rows to records
@@ -348,6 +660,12 @@ class Install:
     template_version: int
     summary: str
     composition: tuple[CompositionRowView, ...]
+    #: The parts this install has edited that its template supplies, in `Part`'s spelling.
+    divergent: tuple[str, ...]
+    #: The skills the effective manifest pins, by name and digest.
+    skills: tuple[SkillView, ...]
+    #: The connectors the effective manifest declares, in its own sorted order.
+    connectors: tuple[str, ...]
 
 
 def install_of(
@@ -395,6 +713,11 @@ def install_of(
         template_version=instance.template_version,
         summary=effective.manifest.identity.summary,
         composition=tuple(CompositionRowView(**row.wire()) for row in rows),
+        divergent=tuple(sorted(one.value for one in divergent_parts(instance))),
+        skills=tuple(
+            SkillView(name=one.name, digest=one.digest) for one in effective.manifest.skills
+        ),
+        connectors=tuple(effective.manifest.connectors),
     )
 
 
@@ -413,7 +736,28 @@ def viewer_of(asked: Asking) -> AgentViewer:
     )
 
 
-def roster(records: Sequence[AgentRecord], viewer: AgentViewer) -> RosterPage:
+def roster_entry(record: AgentRecord, *, ceilings: bool) -> RosterEntry:
+    """One agent as a row of SCREEN 4's table, at this reader's reach.
+
+    `ceilings` is the Agents screen's own read, asked once by the caller rather than per row,
+    so every row of one answer was decided by one question. See
+    `A_ROSTER_ENTRY_SAYS_NO_MORE_THAN_THE_WORKSPACE_IT_OPENS`.
+
+    The department is `AgentAudience.department`, which is empty for every audience but a
+    department's, and empty is sent as absent rather than as a blank column.
+    """
+    return RosterEntry(
+        agent_id=record.agent_id,
+        display_name=record.display_name,
+        owner_id=record.audience.owner_id,
+        department=record.audience.department or None,
+        ceiling=record.authority.scope.model_dump(mode="json") if ceilings else None,
+    )
+
+
+def roster(
+    records: Sequence[AgentRecord], viewer: AgentViewer, *, ceilings: bool = False
+) -> RosterPage:
     """The agents this viewer's audience covers, by name, bounded after filtering.
 
     Ordered by name and then by id, so two readings of an unchanged table are one list and
@@ -425,12 +769,201 @@ def roster(records: Sequence[AgentRecord], viewer: AgentViewer) -> RosterPage:
         key=lambda one: (one.display_name, one.agent_id),
     )
     return RosterPage(
-        items=[
-            RosterEntry(agent_id=one.agent_id, display_name=one.display_name)
-            for one in kept[:MAX_ROSTER_ENTRIES]
-        ],
+        items=[roster_entry(one, ceilings=ceilings) for one in kept[:MAX_ROSTER_ENTRIES]],
         next_cursor=None,
         truncated=len(kept) > MAX_ROSTER_ENTRIES,
+    )
+
+
+def template_entry(manifest: TemplateManifest, origin: Origin) -> TemplateEntry:
+    """One manifest as a gallery card, read off its identity section and nothing else."""
+    identity = manifest.identity
+    return TemplateEntry(
+        template_id=identity.template_id,
+        version=identity.version,
+        display_name=identity.display_name,
+        summary=identity.summary or None,
+        published_by=identity.published_by,
+        origin=origin.value,
+    )
+
+
+def gallery(published: Sequence[TemplateManifest]) -> TemplateGallery:
+    """The catalogue this installation can offer: what ships, and what has been published.
+
+    **The highest version of each published template and no other, and a published template
+    hides the built-in one it shares an id with.** A gallery listing three versions of one
+    role is a version history wearing a gallery's clothes, and a built-in card beside a
+    published card of the same id would offer two different documents under one name, with
+    nothing on either saying which an install would pin. The published row wins because it is
+    the one an install can actually be pinned to: `brain.agents.template.install` verifies a
+    signature, and the built-in manifests carry none.
+
+    Ordered by name and then by id, as the roster is, so two readings of an unchanged
+    catalogue are one list.
+    """
+    highest: dict[str, TemplateManifest] = {}
+    for one in published:
+        identity = one.identity
+        held = highest.get(identity.template_id)
+        if held is None or identity.version > held.identity.version:
+            highest[identity.template_id] = one
+    cards = [template_entry(one, Origin.PUBLISHED) for one in highest.values()]
+    cards.extend(
+        template_entry(one, Origin.BUILT_IN)
+        for one in CATALOGUE
+        if one.identity.template_id not in highest
+    )
+    cards.sort(key=lambda one: (one.display_name, one.template_id))
+    return TemplateGallery(
+        items=cards[:MAX_TEMPLATE_ENTRIES],
+        next_cursor=None,
+        truncated=len(cards) > MAX_TEMPLATE_ENTRIES,
+    )
+
+
+def declared_channels() -> tuple[ChannelCapabilities, ...]:
+    """What each surface this product ships can carry, asked of the adapters themselves.
+
+    A fresh adapter per call and no configuration read, because `capabilities` is a
+    declaration: `brain.channels.adapter.ChannelCapabilities` is frozen and is read at send
+    time rather than at registration precisely so that an adapter cannot widen itself, and
+    every one of the six declares it from constants in its own module. Restating the six here
+    would be a second answer to what a surface can carry, and the permissive copy is the one
+    that ends up in front of somebody.
+    """
+    return tuple(one().capabilities() for one in CHANNEL_ADAPTERS)
+
+
+def product_field_policy() -> FieldPolicy:
+    """Every column classification this product ships, as one policy.
+
+    Wider than whatever this install has registered tools for, and that is the direction it
+    has to fail in: the policy decides the most sensitive thing a run could return, which
+    decides which surfaces may carry it, so a policy missing a rule offers a channel that
+    should not have been offered. `brain.tools.startup.every_row_classification` is the one
+    list of what this product classifies, and one classification per entity is pinned by that
+    module's own test, so the rules cannot collide here.
+    """
+    return FieldPolicy(
+        rules=tuple(rule for one in every_row_classification() for rule in one.policy().rules)
+    )
+
+
+def channel_views(record: AgentRecord, asked: Asking) -> tuple[ChannelView, ...]:
+    """The surfaces a run of this agent by this caller could be carried on (M39.2.4.2).
+
+    `offered_channels` at `E_run(caller, agent)`, which `run_reach` computes through the
+    console's one call into `EntitlementSet.intersect`. Computed at the run's reach rather
+    than at the agent's ceiling, for `brain.console.workspace_capabilities.
+    A_CHANNEL_OFFERED_AT_THE_CEILING_DESCRIBES_THE_CEILING`: the ceiling's sensitivity is a
+    fact about the agent and not about the person reading the page.
+
+    No row says whether the install has a surface switched on. See
+    `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
+    """
+    capabilities = declared_channels()
+    reach = run_reach(asked.reach, record)
+    offered = frozenset(offered_channels(reach, capabilities, product_field_policy(), asked.now))
+    return tuple(
+        ChannelView(channel=one.channel.value, profile=rendering_profile(one).value)
+        for one in capabilities
+        if one.channel in offered
+    )
+
+
+def connector_view(
+    install: Install | None, record: AgentRecord, registry: ToolRegistry | None, asked: Asking
+) -> ConnectorStripView:
+    """The connectors this agent names, as this reader may see them (M39.2.1.1, M39.2.1.4).
+
+    Three sets and none of them decided here. `declared` is the effective manifest's own
+    list, which is what the template asked an install to bind. `attached` is the sources
+    behind the tools the agent's ceiling actually allows, because that is what
+    `brain.agents.install.bind_tool` wrote when the install bound one, and a source with no
+    bound tool is a connector the agent asks for and cannot use, which is M39.2.1.4's
+    `REQUESTED`. `visible` is `brain.api_routes.reachable_sources`, the same function the
+    records route consults, so "may this caller be told about this source" has one answer.
+
+    A process with no tool registry can name no source, so nothing is visible and the strip
+    is empty: the same answer a reader who reaches no source gets, which is the direction an
+    absent registry has to fail in.
+    """
+    if install is None:
+        return ConnectorStripView(shown=[])
+    visible = () if registry is None else reachable_sources(registry, asked)
+    allowed = record.authority.allowed_tools
+    attached = (
+        ()
+        if registry is None
+        else tuple(
+            {one.source for one in registry.definitions() if one.name in allowed and one.source}
+        )
+    )
+    rows = connector_rows(declared=install.connectors, attached=attached, visible=visible)
+    strip = connector_strip(rows)
+    return ConnectorStripView(
+        shown=[
+            ConnectorView(source=one.source, presence=one.presence.value) for one in strip.shown
+        ],
+        overflow=strip.overflow,
+    )
+
+
+def actual_of(row: SpendActualRow) -> Actual | None:
+    """One accounting row as the domain type, or None when it does not construct.
+
+    `trace_id` is nullable in this release only, and `Actual` requires one, so a row written
+    by the previous release is absent from a figure rather than taking the page down. Absent
+    for everybody alike, as a malformed agent row is, and the loss is a run's cost missing
+    from a headline rather than a number computed from a row nobody could account for.
+    """
+    try:
+        return Actual(
+            principal_id=row.principal_id,
+            principal_kind=PrincipalKind(row.principal_kind),
+            traffic=TrafficClass(row.traffic),
+            department=row.department,
+            agent_id=row.agent_id,
+            model=row.model,
+            lane=Lane(row.lane),
+            cost_minor=row.cost_minor,
+            at=row.at,
+            trace_id=row.trace_id or "",
+        )
+    except (ValueError, SpendError) as exc:
+        log.warning("spend row does not construct", error=type(exc).__name__)
+        return None
+
+
+def headline_view(agent_id: str, rows: Sequence[Actual], asked: Asking) -> HeadlineView:
+    """Spend and runs for this agent over `HEADLINE_RANGE`, at whichever basis this reader
+    holds (M39.1.3.1).
+
+    `basis_for` asks `brain.console.reads.permitted` about the budget screen's own read
+    rather than a capability invented for a front page, and `headline` applies the window and
+    the basis to the rows. Both are the workspace module's, unchanged: a figure on an agent's
+    front page and the same figure on the budget screen cannot disagree about what a run cost
+    because they are computed by one function.
+
+    The message count `Headline` also carries is deliberately not sent on. See
+    `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
+    """
+    basis = basis_for(asked.reach, asked.now)
+    since, until = window(HEADLINE_RANGE, asked.now)
+    figures = headline(
+        agent_id,
+        caller_id=asked.caller.principal.id,
+        basis=basis,
+        actuals=rows,
+        since=since,
+        until=until,
+    )
+    return HeadlineView(
+        basis=figures.basis.value,
+        range=HEADLINE_RANGE.value,
+        spend_minor=figures.spend_minor,
+        runs=figures.runs,
     )
 
 
@@ -439,14 +972,35 @@ def tab_view(one: WorkspaceTab) -> TabView:
     return TabView(tab=one.tab.value, label=one.tab.value.capitalize(), purpose=one.purpose)
 
 
-def workspace(record: AgentRecord, install: Install | None, asked: Asking) -> WorkspaceView:
+def workspace(
+    record: AgentRecord,
+    install: Install | None,
+    asked: Asking,
+    *,
+    registry: ToolRegistry | None = None,
+    spend: Sequence[Actual] = (),
+) -> WorkspaceView:
     """One visible agent's workspace at this caller's reach.
 
     Takes a record the audience has already admitted; `agent_workspace` is where that is
     decided, and nothing here could decide it, because nothing here is handed a viewer.
+
+    **Three of the blocks travel with the Settings tab and two do not, and the split is the
+    plane each sits on.** The composition, the divergence and the builder are the agent's own
+    configuration, which is what that tab is; the skills are configuration too and are
+    narrowed again by the Skills screen's read, because a skill's name describes a procedure
+    somebody wants to run. The connectors are narrowed by which sources this caller could be
+    told about at all, which `reachable_sources` already answers per source, so the Settings
+    tab is not a second gate over them. The channels and the headline are computed at the
+    run's reach and at the budget screen's grant respectively, and neither is a fact about
+    the agent's configuration.
     """
     strip = tab_strip(asked.reach, populated=POPULATED_HERE, now=asked.now)
     may_read_settings = any(one.tab is Tab.SETTINGS for one in strip)
+    # One name for "there is an install and this reader may read its configuration", so the
+    # three blocks below cannot come apart by somebody editing one condition of three.
+    settings = install if install is not None and may_read_settings else None
+    may_read_skills = permitted(screen(SKILL_SCREEN).read, asked.reach, asked.now)
     return WorkspaceView(
         agent=AgentHeaderView(
             agent_id=record.agent_id,
@@ -455,9 +1009,15 @@ def workspace(record: AgentRecord, install: Install | None, asked: Asking) -> Wo
             summary=(install.summary or None) if install is not None else None,
             template_id=install.template_id if install is not None else None,
             template_version=install.template_version if install is not None else None,
+            created_by=record.created_by if may_read_settings else None,
         ),
         tabs=[tab_view(one) for one in strip],
-        composition=list(install.composition) if install is not None and may_read_settings else [],
+        composition=list(settings.composition) if settings is not None else [],
+        divergent=list(settings.divergent) if settings is not None else [],
+        skills=list(settings.skills) if settings is not None and may_read_skills else [],
+        connectors=connector_view(install, record, registry, asked),
+        channels=list(channel_views(record, asked)),
+        headline=headline_view(record.agent_id, spend, asked),
     )
 
 
@@ -489,6 +1049,41 @@ def install_for(agent_id: str) -> Select[tuple[TemplateInstanceRow, TemplateVers
     )
 
 
+def spend_for(agent_id: str, since: datetime) -> Select[tuple[SpendActualRow]]:
+    """This agent's completed runs since an instant, bounded.
+
+    Filtered by agent and by time in SQL, which is a different decision from the roster's:
+    these rows are not a listing of things that exist, they are the input to one figure about
+    one agent, and the basis narrows them again afterwards. The bound is a resource one, and
+    a busy month over it loses cost off the older end of the window rather than showing a
+    reader a number nobody could have derived.
+
+    **The window here decides how many rows are read and never which are counted.**
+    `brain.console.workspace.headline` applies the same window again over whatever arrives, so
+    widening this one changes no figure on any screen: a mutation that reads ninety days
+    instead of thirty survives its own test suite, and it survives it for the right reason.
+    The two are kept equal anyway, because reading three months to report one is a cost paid
+    on every agent page.
+    """
+    return (
+        select(SpendActualRow)
+        .where(and_(SpendActualRow.agent_id == agent_id, SpendActualRow.at >= since))
+        .order_by(SpendActualRow.at.desc())
+        .limit(MAX_HEADLINE_ROWS)
+    )
+
+
+def published_templates() -> Select[tuple[TemplateVersionRow]]:
+    """Every published template version. Reduced to the highest version per template here
+    rather than in SQL, for the reason `every_agent` gives about the audience: the reduction
+    is a rule about what a gallery shows and it is written once, in Python, where a test can
+    read it.
+    """
+    return select(TemplateVersionRow).order_by(
+        TemplateVersionRow.template_id, TemplateVersionRow.version
+    )
+
+
 def _no_agent_here() -> Absent:
     """The one refusal this router makes about an agent.
 
@@ -497,6 +1092,29 @@ def _no_agent_here() -> Absent:
     `Absent.public_message`, and the string below reaches a log.
     """
     return Absent("no agent is answerable for this caller")
+
+
+def _no_templates_here() -> Absent:
+    """The refusal the gallery makes, in the words a govern screen refuses in.
+
+    It names the screen, which is the console's own menu and is identical in every install,
+    and never a capability or a template. `brain.govern_routes._not_answerable` is the same
+    sentence for the same reason, and the two being one sentence is what stops a reader
+    telling this refusal from that one.
+    """
+    return Absent(f"the {TEMPLATE_SCREEN} screen is not answerable for this caller")
+
+
+def _tool_registry(request: Request) -> ToolRegistry | None:
+    """The registry `brain.app.lifespan` built, or None on a process with none.
+
+    None rather than a failure, and the difference from `_require_session_factory` is what
+    each absence costs: with no pool there is no agent to answer about at all, and with no
+    registry there is a workspace whose connector strip is empty. Empty is also what a reader
+    who reaches no source sees, so the two are one answer.
+    """
+    found = getattr(request.app.state, "tools", None)
+    return found if isinstance(found, ToolRegistry) else None
 
 
 def _require_session_factory(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -536,7 +1154,11 @@ async def agents(request: Request, asked: Asked) -> RosterPage:
     async with factory() as session:
         rows = (await session.execute(every_agent())).scalars().all()
     records = [record for record in (record_of(row) for row in rows) if record is not None]
-    return roster(records, viewer_of(asked))
+    return roster(
+        records,
+        viewer_of(asked),
+        ceilings=permitted(screen(AGENT_SCREEN).read, asked.reach, asked.now),
+    )
 
 
 @router.get(
@@ -546,11 +1168,46 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
     """One agent's workspace, or the answer an agent that does not exist gets.
 
     The audience is decided before the install is read, so nothing about an agent this
-    caller may not see is fetched on their behalf.
+    caller may not see is fetched on their behalf, and the same is true of its costs: the
+    accounting rows are loaded after the record has been admitted and never before.
     """
     factory = _require_session_factory(request)
+    since, _ = window(HEADLINE_RANGE, asked.now)
     async with factory() as session:
         record = await _visible_record(session, agent_id, asked)
         pair = (await session.execute(install_for(agent_id))).one_or_none()
+        costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
     install = install_of(pair[0], pair[1], record) if pair is not None else None
-    return workspace(record, install, asked)
+    spend = [one for one in (actual_of(row) for row in costs) if one is not None]
+    return workspace(record, install, asked, registry=_tool_registry(request), spend=spend)
+
+
+@router.get("/agent-templates", response_model=TemplateGallery, responses=COMMON_RESPONSES)
+async def agent_templates(request: Request, asked: Asked) -> TemplateGallery:
+    """The templates an agent can be installed from: what ships, and what has been published.
+
+    The screen's question first and the database second, which is `brain.govern_routes`'
+    order and for its reason: a reader who may not open the screen has nothing fetched on
+    their behalf, so the refusal cannot be timed.
+
+    A published row that does not construct is absent for everybody, exactly as a malformed
+    agent is: `manifest_of` walks the same paths `document` wrote, and a row that fails them
+    is logged and left out rather than taking the gallery down for the whole company.
+    """
+    if not permitted(screen(TEMPLATE_SCREEN).read, asked.reach, asked.now):
+        log.info("template gallery not answerable", principal=asked.caller.principal.id)
+        raise _no_templates_here()
+    factory = _require_session_factory(request)
+    async with factory() as session:
+        rows = (await session.execute(published_templates())).scalars().all()
+    published: list[TemplateManifest] = []
+    for row in rows:
+        try:
+            published.append(manifest_of(row.document))
+        except (KeyError, ValueError) as exc:
+            log.warning(
+                "published template does not construct",
+                template=row.template_id,
+                error=type(exc).__name__,
+            )
+    return gallery(published)

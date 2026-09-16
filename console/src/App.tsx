@@ -46,11 +46,15 @@ import { configProblems } from "./config";
 import { Shell } from "./layout/Shell";
 import { Adoption } from "./pages/Adoption";
 import { Agents } from "./pages/Agents";
+import { AgentTemplates } from "./pages/AgentTemplates";
 import { Ask } from "./pages/Ask";
 import { Capabilities } from "./pages/Capabilities";
 import { Capacity } from "./pages/Capacity";
+import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
+import { Skills } from "./pages/Skills";
+import { StaffSources } from "./pages/StaffSources";
 import { Install } from "./pages/Install";
 import { Limits } from "./pages/Limits";
 import { Recovery } from "./pages/Recovery";
@@ -215,6 +219,11 @@ export const routes: RouteObject[] = [
       // it is what the screen is about, and the same screen with none named is the matrix on
       // its own: it has the grid and no form, because no rung has been opened.
       { path: "routing", element: <Matrix /> },
+      // Connectors, which `docs/screens.html` SCREEN 9 puts in Operate beside the overview,
+      // live runs and models. One path and no parameter: a source has no sub-object here, and
+      // the path is the screen's key in `brain.console.screens`. Eager rather than split, for
+      // the install screens' reason: it mounts neither heavy library and no stylesheet.
+      { path: "connectors", element: <Connectors /> },
       { path: "routing/:rungId", element: <Matrix /> },
       // Three paths and one component. The document is a path segment because it is what
       // the screen is about, the column is one because it is which rule is being argued
@@ -228,6 +237,10 @@ export const routes: RouteObject[] = [
       // from the workspace rather than a third path on it, because it is a listing and the
       // workspace is one agent, and the rules for the two differ: see `pages/agentsQuery.ts`.
       { path: "agents", element: <Agents /> },
+      // The catalogue, at an address of its own rather than under `agents/`, because an agent
+      // slug is a path segment there and a template is not an agent: `agents/templates` would
+      // be the workspace of an agent called templates on the day somebody names one that.
+      { path: "agent-templates", element: <AgentTemplates /> },
       // Two paths and one component, at the address `brain.console.workspace.deep_link`
       // spells: an agent, and one tab of it. The bare agent opens the first tab its strip
       // holds, and so does a tab the strip does not hold, because `resolve` gives those one
@@ -263,7 +276,17 @@ export const routes: RouteObject[] = [
       // nothing on them a person opens: a role, a capability and a scope are each shown whole.
       { path: "people", element: <People /> },
       { path: "people/:subject", element: <People /> },
+      // Staff sources, at the screen's own key so `brain.ops.console_screens.routed_screen_keys`
+      // matches this address against the registry. One path and no parameter: a source is shown
+      // whole, and the trial is a request this page makes rather than a thing somebody opens.
+      { path: "staff_sources", element: <StaffSources /> },
       { path: "roles", element: <Roles /> },
+      // Skills, SCREEN 6 of `docs/screens.html`. Two paths and one component, at the address
+      // one skill's page has: the bare path is where somebody arrives from the menu and the
+      // segment is the skill's name, resolved against the page rather than against a route of
+      // its own. See `pages/Skills.tsx`. Eager rather than split, for `Roles`' reason.
+      { path: "skills", element: <Skills /> },
+      { path: "skills/:name", element: <Skills /> },
       { path: "capabilities", element: <Capabilities /> },
       { path: "scopes", element: <Scopes /> },
       { path: "*", element: <NotFound /> },
