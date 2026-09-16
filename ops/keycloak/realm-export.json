@@ -165,6 +165,16 @@
       },
       "protocolMappers": [
         {
+          "name": "subject",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "config": {
+            "access.token.claim": "true",
+            "introspection.token.claim": "true",
+            "_comment": "Keycloak 25 moved sub out of the access token into its built-in basic scope. A full import replaces the client scope set with the one this file declares, so naming that built-in on the client would be discarded exactly as openid, profile and email were on 2026-09-06. Minting it from this realm's own scope is the only spelling that survives an import. Without it every token is refused as missing_claim and nobody signs in."
+          }
+        },
+        {
           "name": "groups",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-group-membership-mapper",

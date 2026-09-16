@@ -429,3 +429,27 @@ def test_every_required_action_names_the_provider_that_implements_it() -> None:
     for action in actions:
         assert action.get("providerId"), action.get("alias")
         assert action["providerId"] == action["alias"], action
+
+
+def test_the_realms_own_scope_mints_the_subject_every_token_is_read_for() -> None:
+    """**A token with no `sub` names nobody, and `brain.identity.oidc` refuses it as a missing
+    claim.** Keycloak 25 moved `sub` out of every access token into a built-in client scope
+    called `basic`, so a realm whose clients name only their own scope is minted tokens
+    carrying this system's claims and not the one every OIDC reader assumes. Measured on a real
+    install on 2026-09-16: the realm imported, the signature and audience were right, and the
+    finishing screen refused the token because there was no subject to bind.
+
+    The mapper lives in this realm's own scope rather than the client naming Keycloak's
+    built-in, and that is the whole point: a full import replaces the client scope set with the
+    one this file declares, so a built-in named on a client is discarded exactly as `openid`,
+    `profile` and `email` were on 2026-09-06, and the test above is what catches that. A claim
+    minted here survives the import that a reference would not.
+
+    Delete this and the mapper can be removed as looking redundant beside a built-in scope
+    nobody imported, with every other realm test green and nobody able to sign in."""
+    scope = next(one for one in _realm()["clientScopes"] if one["name"] == "brain-identity")
+    mappers = {one["name"]: one for one in scope["protocolMappers"]}
+
+    assert "subject" in mappers, sorted(mappers)
+    assert mappers["subject"]["protocolMapper"] == "oidc-sub-mapper", mappers["subject"]
+    assert mappers["subject"]["config"]["access.token.claim"] == "true", mappers["subject"]
