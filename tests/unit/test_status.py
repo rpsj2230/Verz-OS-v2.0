@@ -1276,3 +1276,24 @@ def test_every_heading_level_the_document_uses_is_rendered_as_a_heading() -> Non
     # heading: the hashes were in a `<p>`.
     for stray in re.findall(r">\s*(#{1,6} [^<]{0,60})", page):
         raise AssertionError(f"markup published as content: {stray!r}")
+
+
+def test_the_tracker_offers_the_filter_that_shows_only_what_is_left() -> None:
+    """The owner reads this page to see what is not done, and until 2026-09-16 that meant
+    scrolling twelve hundred rows past the ones that are. The filter hides the done leaves and,
+    with them, every group and module heading left with nothing under it, so the page reads as
+    the remaining work rather than as a list of empty headings.
+
+    Asserted on the rendered page rather than on the renderer, because the page is what is
+    served: `docs/tracker.html` is committed and `docs/wbs/render.js` is run by hand, so a
+    change to the renderer that nobody regenerates is a change nobody sees.
+
+    Delete this and the button can go, or the three rules under it can be trimmed to the first,
+    which leaves headings standing over nothing and reads as work that does not exist."""
+    root = Path(__file__).resolve().parents[2]
+    page = (root / "docs" / "tracker.html").read_text(encoding="utf-8")
+
+    assert 'id="bLeft"' in page
+    assert "body.leftonly li.leaf.done{display:none}" in page
+    assert "body.leftonly li.n:not(.leaf):not(:has(li.leaf:not(.done))){display:none}" in page
+    assert "body.leftonly section[data-mod]:not(:has(li.leaf:not(.done))){display:none}" in page

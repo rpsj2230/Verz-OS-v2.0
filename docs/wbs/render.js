@@ -304,6 +304,13 @@ li.leaf.done .due{color:var(--ok)}
 .chip.trim{background:var(--warn-bg);color:var(--warn)}
 .ldot{display:inline-block;width:6px;height:6px;border-radius:99px;background:var(--ok);margin-right:5px;vertical-align:middle}
 body.lonly section[data-launch="0"]{display:none}
+/* "Not done yet": the remaining work, with the headings that have nothing under them gone.
+   :has() is what makes the second and third rules possible without a second copy of the
+   state in JavaScript, which would then be a second place for "done" to mean something. */
+body.leftonly li.leaf.done{display:none}
+body.leftonly li.n:not(.leaf):not(:has(li.leaf:not(.done))){display:none}
+body.leftonly section[data-mod]:not(:has(li.leaf:not(.done))){display:none}
+body.leftonly nav.toc{display:none}
 body.lonly nav.toc li[data-launch="0"]{display:none}
 button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .sched{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-top:9px;padding-top:9px;border-top:1px dashed var(--rule)}
@@ -340,6 +347,7 @@ footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-fa
       <span><b id="cMods">0</b>/${TREE.length} modules complete</span>
     </div>
     <div class="acts">
+      <button id="bLeft">Not done yet</button>
       <button id="bExpand">Expand all</button>
       <button id="bCollapse">Collapse</button>
       <button id="bExport">Export</button>
@@ -499,6 +507,14 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     });
   });
 
+  document.getElementById("bLeft").addEventListener("click",function(){
+    // Everything open as well as filtered: a reader who asked for what is left wants to see
+    // it, and a collapsed group under this filter is a heading with a hidden answer.
+    var on=document.body.classList.toggle("leftonly");
+    this.classList.toggle("on",on);
+    this.textContent=on?"Show everything":"Not done yet";
+    if(on){[].slice.call(document.querySelectorAll("ul.c")).forEach(function(u){u.hidden=false})}
+  });
   document.getElementById("bExpand").addEventListener("click",function(){
     [].slice.call(document.querySelectorAll("ul.c")).forEach(function(u){u.hidden=false});
   });
