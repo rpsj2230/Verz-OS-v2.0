@@ -20,6 +20,14 @@
  * owns it. What must never happen is a role check in this file, computed here from a
  * token; `scripts/check-boundaries.mjs` refuses the names such a check is usually given.
  *
+ * **The API's half of that already exists and is not served.** `brain.console.screens.
+ * navigation` takes an `EntitlementSet` and nothing else, returns the screens and no count of
+ * what it withheld, and is reachable from no route: `brain.launch` reads it and no request
+ * does. So the menu a browser can compute from grants today is none, and a section added here
+ * is added to a list rather than to a registry. When that navigation is served, this constant
+ * is what the route's answer replaces, and the argument above is why it is a replacement
+ * rather than a filter applied here.
+ *
  * The skip link is first in the DOM on purpose. Without one, reaching the page content
  * from the keyboard means tabbing through every navigation item on every page.
  *
@@ -39,6 +47,7 @@ import { signOut } from "../auth/session";
 /** Every section, for everyone. See the note above before adding a condition to this. */
 const SECTIONS: readonly { to: string; label: string }[] = [
   { to: "/", label: "Overview" },
+  { to: "/ask", label: "Ask" },
   { to: "/records", label: "Records" },
   { to: "/routing", label: "Routing" },
   { to: "/classification", label: "Classification" },

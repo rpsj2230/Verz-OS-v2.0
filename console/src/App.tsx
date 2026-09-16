@@ -45,6 +45,7 @@ import { CallbackRoute, SignedOutRoute } from "./auth/routes";
 import { configProblems } from "./config";
 import { Shell } from "./layout/Shell";
 import { Agents } from "./pages/Agents";
+import { Ask } from "./pages/Ask";
 import { NotFound } from "./pages/NotFound";
 import { FirstRun } from "./pages/FirstRun";
 import { Overview } from "./pages/Overview";
@@ -173,6 +174,12 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Overview /> },
+      // One path and no parameter, which is the whole of what this route has to get right. A
+      // question is not a segment and not a query: it is the most sensitive value in the
+      // request and it travels in a POST body, so there is no address here that could carry
+      // one and no history entry that could keep one. Eager rather than split, because the
+      // page mounts neither heavy library and imports no stylesheet of its own.
+      { path: "ask", element: <Ask /> },
       // Two paths and one component. The entity is a path segment rather than a query
       // parameter because it is what the screen is about, and the same screen with none
       // named is where somebody arrives from the menu: it has the form and no grid, because

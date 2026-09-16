@@ -166,6 +166,11 @@ const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // No answers, and `drawsValues` false, because this page asks nothing until somebody types
+  // a question and presses a button: mounting it draws the form and the sentence saying
+  // nothing has been asked. What it draws once an answer arrives is held to the same rules in
+  // `tests/ask-page.test.tsx`, which can drive the asking this loop cannot.
+  "/ask": { address: "/ask", signedIn: true, drawsValues: false, answers: {} },
   "/records": { address: "/records", signedIn: true, drawsValues: false, answers: {} },
   "/records/:entity": {
     address: "/records/customer_account",

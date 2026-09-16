@@ -564,6 +564,76 @@ code {
   gap: var(--space-2);
 }
 
+/* ------------------------------------------------------------------ asking */
+
+/*
+ * The ask screen: a field, a button, the steps while it works, what the answer stands on,
+ * and the answer.
+ *
+ * One column at every width, so there is no wider layout to enhance into and no query here.
+ * The field and the button are a thumb tall, because the first thing anybody does with a new
+ * install is ask it something from the phone in their hand.
+ *
+ * There is deliberately no rule that varies the answer by anything about it. No tone for a
+ * refusal, no muted style for a short answer, no colour for one with no citations above it: a
+ * refusal and an answer arrive as the same frames and must leave as the same markup, and a
+ * stylesheet is the quietest place to rebuild a difference the API spent a taxonomy removing.
+ */
+.ask__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: var(--form-max-width);
+  margin-bottom: var(--space-4);
+}
+
+.ask__label {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+
+/* A thumb is not a cursor. 2.75rem is 44 CSS pixels at the default root size. */
+.ask__question,
+.ask__submit {
+  min-height: 2.75rem;
+}
+
+/*
+ * The steps, while there are steps. No markers, because a marker is a number: an ordered
+ * list would put a figure beside every label, and the vocabulary those labels come from is
+ * checked for digits on the Python side precisely because every number that fits in a
+ * progress label is a count of something the reader was not shown.
+ */
+.ask__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+/*
+ * Each citation is an identifier the API rendered, so it is monospaced for the reason the
+ * review's list is: a record id and a column name set in prose read as prose.
+ */
+.ask__sources {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+/*
+ * The answer keeps the line breaks it arrived with. Not a preference: a cached answer carries
+ * the sentence saying how old it is after a blank line, which `brain.gate.answer_cache`
+ * raises rather than let be dropped, and collapsing white space here would run that sentence
+ * into the answer. `pre-wrap` rather than `pre` so a long line still wraps inside a phone.
+ */
+.ask__answer {
+  white-space: pre-wrap;
+  max-width: var(--content-max-width);
+}
+
 /* ------------------------------------------------------------------ canvases */
 
 /*

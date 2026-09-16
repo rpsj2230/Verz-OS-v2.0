@@ -598,3 +598,56 @@ export function backendDisplayNameChars(): number {
     ),
   );
 }
+
+/**
+ * Every progress label the answer lane may send, from `brain.gate.streaming.STEP_LABELS`.
+ *
+ * Read so the console can prove it holds no copy of any of them. A label is a string that
+ * goes out before any redaction has run, its vocabulary is closed on the Python side and
+ * checked there for digits and for source names, and a copy in a browser bundle is a seventh
+ * sentence nobody held to either check. The console renders what the frame carried.
+ */
+export function backendStepLabels(): string[] {
+  const block = extractOne(
+    readRepoFile("src/brain/gate/streaming.py"),
+    /^STEP_LABELS: Final\[Mapping\[Progress, str\]\] = MappingProxyType\(\n([\s\S]*?)^\)$/m,
+    "STEP_LABELS in brain.gate.streaming",
+  );
+  const labels = [...block.matchAll(/^\s+Progress\.[A-Z_]+: "([^"]*)",$/gm)].map(
+    (entry) => entry[1] ?? "",
+  );
+  if (labels.length === 0) {
+    throw new Error("Parsed no step labels; the parser is stale.");
+  }
+  return labels;
+}
+
+/** The media type an event stream is served as, from `brain.api_routes.EVENT_STREAM`. */
+export function backendEventStream(): string {
+  return extractOne(
+    readRepoFile("src/brain/api_routes.py"),
+    /^EVENT_STREAM: Final = "([^"]*)"$/m,
+    "EVENT_STREAM in brain.api_routes",
+  );
+}
+
+/** Every event name that may go on the wire, from `brain.gate.streaming.Event`. */
+export function backendStreamEvents(): string[] {
+  return Object.values(backendEnumMembers("src/brain/gate/streaming.py", "Event"));
+}
+
+/**
+ * The sentence an abstention renders for the asker, from `brain.gate.abstain.NOT_FOUND_TEXT`.
+ *
+ * It is the string `PUBLIC_TEXT` maps both `NOT_ENTITLED` and `NOTHING_RETRIEVED` to, by
+ * identity rather than by two literals that agree, which is what makes a withheld record and
+ * an absent one one sentence. Read here so a console test can build the refusal the route
+ * would actually send rather than one somebody typed.
+ */
+export function backendAbstentionText(): string {
+  return extractOne(
+    readRepoFile("src/brain/gate/abstain.py"),
+    /^NOT_FOUND_TEXT: Final = "([^"]*)"$/m,
+    "NOT_FOUND_TEXT in brain.gate.abstain",
+  );
+}
