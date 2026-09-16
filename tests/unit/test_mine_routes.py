@@ -9,7 +9,9 @@ answered from rows belonging to two people, so a route that stopped narrowing a 
 asking would be answered the other person's rows and a test below would see them.
 
 **The member grant is spelled out here**, so a member screen repointed at another capability is a
-failure in this file rather than a constant compared with itself.
+failure in this file rather than a constant compared with itself. So is its plane, which is the
+member surface's own since 2026-09-17: `read:member.content`, never the console's
+`read:console.content`, whose holder is refused below.
 
 The present is the wall clock, because the route reads it through `brain.api_routes.asking` and a
 month, a day and recall are all measured from it. Rows here are an hour old, never dated.
@@ -33,6 +35,7 @@ from sqlalchemy.sql import operators
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
+from brain.console.own_things import own_scope
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import SCREENS
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -70,7 +73,13 @@ WORKSPACE = f"{API_PREFIX}/me/workspace"
 
 #: The member screen's capability and the plane it is registered on, written out.
 MEMBER_HOME = Capability(value="read:member.home")
-CONTENT = plane_capability(Plane.CONTENT)
+CONTENT = Capability(value="read:member.content")
+
+#: The console's content plane, which opened this page until 2026-09-17 and opens it no longer.
+CONSOLE_CONTENT = plane_capability(Plane.CONTENT)
+
+#: The one grant a sign-in binding writes, spelled out: the member surface over one's own things.
+MEMBER_SURFACE = Capability(value="read:member.*")
 
 ME = "u_narrow"
 SOMEBODY_ELSE = "u_wide"
@@ -82,15 +91,17 @@ def _everywhere(*capabilities: Capability) -> tuple[Grant, ...]:
 
 #: `u_narrow` is a member who administers nothing: the member grant, its plane, and the capability
 #: their memories were formed under. `u_wide` is the same without the recall capability.
-#: `u_admin` holds every console screen's capability and every plane and not the member grant.
-#: `u_prefix` holds the member grant with no plane.
+#: `u_admin` holds every console screen's capability and the console's content plane and not the
+#: member grant. `u_prefix` holds the member grant with no member plane, and the console's content
+#: plane over everything in its place. `u_elsewhere` holds exactly what a sign-in binding writes
+#: and nothing else.
 GRANTS: Mapping[str, tuple[Grant, ...]] = {
     "u_narrow": _everywhere(MEMBER_HOME, CONTENT, CLIENT_NAME),
     "u_wide": _everywhere(MEMBER_HOME, CONTENT),
-    "u_admin": _everywhere(*{one.read.requires for one in SCREENS}, CONTENT),
-    "u_prefix": _everywhere(MEMBER_HOME),
+    "u_admin": _everywhere(*{one.read.requires for one in SCREENS}, CONSOLE_CONTENT),
+    "u_prefix": _everywhere(MEMBER_HOME, CONSOLE_CONTENT),
     "u_none": (),
-    "u_elsewhere": (),
+    "u_elsewhere": (Grant(capability=MEMBER_SURFACE, scope=own_scope("u_elsewhere")),),
 }
 
 
@@ -318,9 +329,11 @@ def test_a_spend_load_that_came_back_full_shows_no_budget_rather_than_a_short_on
 def test_the_page_opens_on_the_member_grant_and_on_no_administrative_grant(
     client: TestClient, rows: dict[type, list[Any]]
 ) -> None:
-    """**Administers nothing, as a property.** Every console screen's capability and every plane
-    opens nothing here; the member grant without its plane opens nothing either; the member grant
-    with it opens the page. A refusal is the same whatever the database holds.
+    """**Administers nothing, as a property.** Every console screen's capability and the console's
+    content plane opens nothing here; the member grant without the member surface's own plane opens
+    nothing either, even beside the console's content plane over everything, which opened it until
+    2026-09-17; the member grant with its own plane opens the page. A refusal is the same whatever
+    the database holds.
 
     Delete this and the page could be gated on an administrative capability, which is a personal
     screen only administrators can open, or on nothing, which is `permitted` skipped."""
@@ -329,7 +342,26 @@ def test_the_page_opens_on_the_member_grant_and_on_no_administrative_grant(
     empty = get(client, "u_admin").json()["message"]
     two_people(rows)
     assert get(client, "u_admin").json()["message"] == empty
+    assert get(client, "u_prefix").json()["message"] == empty
     assert get(client, ME).status_code == 200
+
+
+def test_the_grant_a_sign_in_binding_writes_opens_the_page_on_its_own(
+    client: TestClient, rows: dict[type, list[Any]]
+) -> None:
+    """**The owner's goal, over HTTP.** A person holding nothing but the member surface over their
+    own things, which is what `brain.identity.sign_in_binding` writes, opens their workspace and it
+    is theirs. Delete this and binding a sign-in can go back to opening a page that refuses the
+    person it was bound for, and the way round it is a console content grant again."""
+    two_people(rows)
+
+    response = get(client, "u_elsewhere")
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["principal_id"] == "u_elsewhere"
+    assert body["asked"]["questions"] == 0
+    assert body["knowledge"] == []
 
 
 def test_there_is_no_way_to_ask_about_somebody_else() -> None:

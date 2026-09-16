@@ -19,12 +19,13 @@ in the browser from `/me`, which is the note at the top of `console/src/layout/S
 browser that chose the menu would be a permission model in the copy an attacker edits. See
 `WHICH_CONSOLE_IS_DECIDED_BY_THE_SCOPE_A_SCREEN_IS_HELD_IN`.
 
-**The plane grant is asked in its own scope as well as the screen's.** `brain.console.reads.
-permitted` asks whether a plane is held, and a plane capability is a grant with a scope like any
-other. A reader holding `read:grant` across the install and the configuration plane in one
-department reads configuration only there, so they are a department's reader and not the
-install's. Asking both halves is right whether or not `permitted` itself compares the two
-scopes, which is why this module does not depend on how it does.
+**The plane grant is asked in its own scope as well as the screen's.** A plane capability is a
+grant with a scope like any other, and since 2026-09-17 `brain.console.reads.permitted` counts a
+plane only over a scope containing the screen's own, so a reader holding `read:grant` across the
+install and the configuration plane in one department is not offered People and grants at all.
+`held_across_the_install` still asks both halves itself, and asks the narrower question of
+whether each is unrestricted, because it is public and asked of a screen directly as well as over
+`navigation`.
 
 **The menu fails closed.** A reader who holds no screen across the install is not given the
 install's screens, and that includes a reader who holds no screen at all: their department

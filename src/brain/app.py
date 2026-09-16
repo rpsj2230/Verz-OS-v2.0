@@ -89,6 +89,7 @@ from brain.identity.administration_reconciliation import (
 )
 from brain.identity.administration_reconciliation import (
     reconcile_first_administrators,
+    reconcile_member_grants,
 )
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
 from brain.identity.first_administrator import FirstAdministrators
@@ -294,6 +295,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception:
             log.exception("first administrator could not be reconciled")
+        # A sign-in bound before binding granted a workspace is granted one now, once per binding,
+        # and one taken away is not given back. Its own attempt, so a failure in either leaves the
+        # other done, and never fatal for the same reason. See
+        # `brain.identity.administration_reconciliation.reconcile_member_grants`.
+        try:
+            await reconcile_member_grants(
+                app.state.db_sessions,
+                now=datetime.now(UTC),
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+            )
+        except Exception:
+            log.exception("member grants could not be reconciled")
     else:
         app.state.db_engine = None
         app.state.db_sessions = None

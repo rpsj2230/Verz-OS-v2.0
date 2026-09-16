@@ -95,6 +95,33 @@ once are one unlink and one refusal rather than two unlinks and nobody. The coun
 live binding, which is `FirstAdministrators`' own argument for resolving rather than reading the
 grant table. See `THE_LAST_WAY_IN_FOR_AN_ADMINISTRATOR_IS_NOT_TAKEN_AWAY`.
 
+**A binding grants the person their own workspace, in the same transaction, and nothing else.**
+Until 2026-09-17 a bound person signed in to a member surface that refused them, because nothing
+granted the member screens, and the one way round it that an agent wiring an install found was a
+content plane grant, which is what opened company content screens to the first administrator.
+So a binding writes one grant: `MEMBER_SURFACE`, which is every member screen and the member
+surface's own three planes, over `own_scope`, which is that person's own things. It opens no
+console screen and no workspace tab, because `brain.member.shell` holds every console screen away
+from the member noun and `brain.console.reads.permitted` never decides a console read by a member
+plane. See `A_SIGN_IN_OPENS_ONES_OWN_WORKSPACE_AND_NOTHING_ELSE`.
+
+**Additive, audited, and never given back once taken away.** The grant is an insert, and it writes
+nothing when the person already holds a live grant of `read:member.*`, whose scope whoever wrote it
+chose. One held through a pack is not a conflict and is narrowed to their own things by the second
+grant, because two grants of one capability intersect; that is the conservative direction for a
+surface that is only ever about one person. It names the binder as `granted_by` and the
+binder is already the transaction's actor, so `0003`'s trigger records it beside `0047`'s
+`sign_in` entry under the same trace. Its id is derived from the binding's own id by
+`member_grant_id`, so the retired row of a revoked member grant still holds that key and the
+insert that would re-grant it conflicts and writes nothing. That is how a revocation outlives a
+retry, a restart and `brain.identity.administration_reconciliation`, which grants the same row to
+a binding made before this existed, without reading a retired row the application role cannot
+see. A new binding is a new id and a new grant, because binding somebody again is the deliberate
+act of letting them in. See `A_MEMBER_GRANT_TAKEN_AWAY_IS_NOT_GIVEN_BACK_FOR_THE_SAME_BINDING`.
+
+Rejected: granting the member screens at first sign-in. It puts a write on the path of every
+token exchange for a fact decided once, by whoever bound the sign-in.
+
 The callers are `brain.sign_in_routes`: an administrator's route, and the setup wizard's
 finishing screen, which binds the first administrator's sign-in once and is the answer to how
 anybody signs in to bind anybody at all; and `brain.session_routes`, which lists the bindings on
@@ -106,6 +133,7 @@ Task ids: M1.2.2, M27.7.11
 from __future__ import annotations
 
 import enum
+import uuid
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -116,7 +144,9 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.core.entitlement import Capability
 from brain.core.principal import Principal
+from brain.core.scope import Scope
 from brain.gate.entitlement_store import entitlements_from
 from brain.identity.first_administrator import holds_everywhere
 from brain.identity.keycloak_tokens import jwks_url_for
@@ -124,7 +154,10 @@ from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
 from brain.identity.principal_store import COLUMNS, PRINCIPAL_SETTING, readable
 from brain.identity.roles import IdentityError
 from brain.install import value_of
+from brain.knowledge.visibility import Visibility
+from brain.knowledge.visibility import scope_for as visibility_scope
 from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
+from brain.tables.gate import CapabilityGrantRow
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
 log = structlog.get_logger(__name__)
@@ -209,6 +242,37 @@ THE_LAST_WAY_IN_FOR_AN_ADMINISTRATOR_IS_NOT_TAKEN_AWAY: Final = (
     "made the first link closed the moment it did. So it is refused, the refusal says so, and "
     "the way round it is to link a second administrator first."
 )
+
+#: Why a binding grants the member surface and nothing wider.
+A_SIGN_IN_OPENS_ONES_OWN_WORKSPACE_AND_NOTHING_ELSE: Final = (
+    "A person bound to a sign-in who can open nothing has been let in to a page that refuses "
+    "them, and the grant somebody writes to fix that by hand is the widest one that works. So "
+    "the binding writes the member surface over that person's own things: every member screen "
+    "and the member surface's own planes, which no console screen and no workspace tab is "
+    "decided by, over the one scope that is theirs."
+)
+
+#: Why the member grant's id is derived from the binding's.
+A_MEMBER_GRANT_TAKEN_AWAY_IS_NOT_GIVEN_BACK_FOR_THE_SAME_BINDING: Final = (
+    "Revocation is the retirement of a grant and the application role cannot read a retired row, "
+    "so a writer that granted whatever is missing would undo a revocation on the next retry or "
+    "the next start. The member grant's id is derived from the binding's, the retired row keeps "
+    "that key, and an insert under it conflicts and writes nothing. Binding the person again is "
+    "a new binding, a new id and a deliberate new grant."
+)
+
+#: The member surface, granted at binding: every member screen and its three planes.
+#:
+#: Written out rather than read off `brain.member.shell`, because this package must not import the
+#: console, which that module does. `tests/unit/test_plane_scope.py` holds it to covering every
+#: member screen's capability and plane and no console screen's.
+MEMBER_SURFACE: Final = Capability(value="read:member.*")
+
+#: The reason on every member grant a binding writes.
+MEMBER_GRANT_REASON: Final = "their own workspace, granted when their sign-in was bound"
+
+#: The namespace a member grant's id is derived in. A constant of this product, never an install's.
+MEMBER_GRANT_NAMESPACE: Final = uuid.UUID("dd4c7535-24ae-4463-bbe6-aab29ea425f7")
 
 #: The advisory lock every unlink takes before it counts. Its own number, not the ledger's or
 #: first run's.
@@ -329,6 +393,48 @@ def decide_unlink(
     return Unlinked.UNLINKED
 
 
+def own_scope(principal_id: str) -> Scope:
+    """A person's own things: `brain.knowledge.visibility.scope_for` at the personal level.
+
+    The same call `brain.console.own_things.own_scope` makes, and not an import of it, because
+    this package must not import the console. That function refuses an empty owner, which is why
+    both route through it: a personal scope with a blank owner is the unrestricted scope.
+    """
+    return visibility_scope(Visibility.PERSONAL, owner_id=principal_id)
+
+
+def member_grant_id(binding_id: uuid.UUID) -> uuid.UUID:
+    """The id of the member grant one binding writes. See
+    `A_MEMBER_GRANT_TAKEN_AWAY_IS_NOT_GIVEN_BACK_FOR_THE_SAME_BINDING`."""
+    return uuid.uuid5(MEMBER_GRANT_NAMESPACE, str(binding_id))
+
+
+def member_grant(
+    binding_id: uuid.UUID, principal_id: str, *, granted_by: str, reason: str = MEMBER_GRANT_REASON
+) -> Any:
+    """The insert that grants one binding's person their own workspace, or writes nothing.
+
+    `ON CONFLICT DO NOTHING` with no target, so both conflicts it can meet write nothing: the live
+    grant of `MEMBER_SURFACE` the person already holds, whose scope whoever wrote it chose, and the
+    retired row of this binding's own member grant, which is a revocation. Returns the id when a
+    row was written. Shared with `brain.identity.administration_reconciliation`, so a binding made
+    before this existed is granted the same row under the same id.
+    """
+    return (
+        insert(CapabilityGrantRow)
+        .values(
+            id=member_grant_id(binding_id),
+            principal_id=principal_id,
+            capability=MEMBER_SURFACE.value,
+            scope=own_scope(principal_id).model_dump(mode="json"),
+            granted_by=granted_by,
+            reason=reason,
+        )
+        .on_conflict_do_nothing()
+        .returning(CapabilityGrantRow.id)
+    )
+
+
 def _set_config(name: str, value: str) -> Any:
     return text("SELECT set_config(:name, :value, true)").bindparams(name=name, value=value)
 
@@ -425,11 +531,15 @@ class SignInBindings:
                     )
                     .returning(PrincipalIdentityRow.id)
                 )
-                if written.first() is None:
+                binding = written.first()
+                if binding is None:
                     # See THE_RACE_IS_LOST_BY_WRITING_NOTHING.
                     raise SignInBindingRefusedError(
                         BindingRefusal.SUBJECT_BOUND_ELSEWHERE, principal_id
                     )
+                # In this transaction, so a binding and the workspace it opens commit together.
+                # See A_SIGN_IN_OPENS_ONES_OWN_WORKSPACE_AND_NOTHING_ELSE.
+                await session.execute(member_grant(binding.id, principal_id, granted_by=bound_by))
         log.info("sign_in.bound", principal=principal_id, bound_by=bound_by, outcome=outcome.value)
         return outcome
 

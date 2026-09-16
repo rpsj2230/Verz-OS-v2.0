@@ -18,10 +18,15 @@ placed in two departments. The rows are built in memory because this repository 
 PostgreSQL; what is proved is each screen's own narrowing, which is where a department's rows
 are chosen, and every route's own tests already hold that the route calls it.
 
-**These tests do not depend on the change to `brain.console.reads.permitted` that makes a plane
-grant count only over its own scope.** Every fixture here holds the plane grants in the same scope
-as the capability grants, so `permitted` answers the same under either reading, and the one test
-that separates the two scopes asks `console_for`, which reads both scopes itself.
+**Two tests here separate a plane's scope from the capability's, and since 2026-09-17 they follow
+`brain.console.reads.permitted`.** Every other fixture holds the plane grants in the same scope as
+the capability grants, so `permitted` answers the same under either reading. The two that do not
+hold `read:grant` over everything and the configuration plane in one department. They were written
+expecting that reader to be offered People and grants in a department's console named for
+Maintenance, which is a menu bounded to one department over a screen whose rows are read at the
+company's scope: the defect `permitted` now refuses. So they assert the console that reader gets
+now, a department's with nothing in it, and assert `held_across_the_install`'s plane half directly,
+which is what they were written to hold.
 
 Task ids: M27.7.29
 """
@@ -57,6 +62,7 @@ from brain.console.department_console import (
     Entry,
     console_for,
     departments_held,
+    held_across_the_install,
 )
 from brain.console.govern import people
 from brain.console.govern_estate import learning_review, library_rows, spans_departments
@@ -188,9 +194,14 @@ def test_a_screen_held_everywhere_with_its_plane_held_in_one_department_is_a_dep
     written for one department."""
     narrow_plane = holding("read:grant", scope=WHOLE, planes=IN_MAINTENANCE)
     wide_plane = holding("read:grant", scope=WHOLE, planes=WHOLE)
+    people_screen = screen("people")
 
-    assert console_for(narrow_plane, NOW).kind is ConsoleKind.DEPARTMENT
-    assert console_for(narrow_plane, NOW).departments == (MAINTENANCE,)
+    assert held_across_the_install(people_screen, narrow_plane, NOW) is False
+    assert held_across_the_install(people_screen, wide_plane, NOW) is True
+    # Not offered People at all: its rows are read over everything and the plane covers one
+    # department, which `permitted` refuses. See `brain.console.reads.
+    # A_PLANE_GRANT_COUNTS_ONLY_OVER_THE_SCOPE_IT_IS_HELD_IN`.
+    assert console_for(narrow_plane, NOW) == ConsoleNavigation(kind=ConsoleKind.DEPARTMENT)
     assert console_for(wide_plane, NOW).kind is ConsoleKind.COMPANY
 
 
@@ -211,10 +222,10 @@ def test_only_a_plane_that_admits_the_screen_can_make_it_the_installs() -> None:
         ),
     )
 
-    decided = console_for(reader, NOW)
-    assert decided.kind is ConsoleKind.DEPARTMENT
-    assert decided.departments == (MAINTENANCE,)
-    assert entry_keys(decided) == ["people"]
+    assert held_across_the_install(screen("people"), reader, NOW) is False
+    # Offered nothing rather than People over the company's people in a menu named for
+    # Maintenance, for the reason the test above gives.
+    assert console_for(reader, NOW) == ConsoleNavigation(kind=ConsoleKind.DEPARTMENT)
 
 
 def test_a_reader_holding_nothing_is_given_an_empty_department_console_not_the_companys() -> None:

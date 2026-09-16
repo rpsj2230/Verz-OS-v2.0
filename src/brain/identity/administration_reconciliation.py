@@ -60,6 +60,25 @@ release lands goes on being refused until they sign in again.
 Rejected: a control on the console. The administrator who needs it is the one the console refuses,
 and the capability to grant capabilities is the kind of thing that gets added in a release.
 
+**A sign-in bound before binding granted a workspace is granted one at the next start.** Since
+2026-09-17 `brain.identity.sign_in_binding.SignInBindings.bind` writes the member surface over a
+person's own things in the binding's transaction, and every binding made before that holds nothing
+of it, the first administrator's included. `reconcile_member_grants` writes the same row for each
+live binding of a live principal, through the same `member_grant` statement, so the id is derived
+from the binding and the two paths cannot write two grants. It reads no ledger and no reach: the
+insert writes nothing over a live grant of the member surface and nothing over the retired row of
+this binding's own member grant, which is how a revocation survives every later start. See
+`sign_in_binding.A_MEMBER_GRANT_TAKEN_AWAY_IS_NOT_GIVEN_BACK_FOR_THE_SAME_BINDING`.
+
+The price, stated rather than hidden: a person whose hand-written member grant was revoked, and
+who never had the product's own, is granted the product's own once at the next start, because
+the row that would remember a revocation is the one that was never written. Every binding from
+this release on has the product's own row from the moment it is bound.
+
+No lock, which `reconcile_first_administrators` takes. Two starts writing the same derived id wait
+on each other's insert and the second writes nothing, so the key is the serialisation, and a start
+reports only the rows its own inserts returned.
+
 Task ids: M41.2.4, M42.5.6
 """
 
@@ -85,7 +104,9 @@ from brain.identity.first_administrator import (
     SIGN_IN_AUTHORITY,
     holds_everywhere,
 )
+from brain.identity.principal_directory import SIGN_IN_CHANNEL
 from brain.identity.principal_store import COLUMNS, readable
+from brain.identity.sign_in_binding import member_grant
 from brain.tables.audit import ACTOR_SETTING, TRACE_ID_SETTING
 from brain.tables.gate import CapabilityGrantRow
 from brain.tables.identity import PrincipalRow
@@ -137,6 +158,22 @@ _EVER_GRANTED_BY_FIRST_RUN: Final = text(
 
 #: One principal's reach, from the one resolver.
 _REACH: Final = text("SELECT gate.resolve_entitlements(:principal, :at)")
+
+#: Who a start's member grants are attributed to: the start, and never a person or first run.
+MEMBER_RECONCILED_BY: Final = "startup.reconcile"
+
+#: The reason on every member grant a start writes, so it reads unlike one a binding wrote.
+MEMBER_RECONCILED_REASON: Final = (
+    "their own workspace, granted at a start because their sign-in was bound before binding "
+    "granted it"
+)
+
+#: Every live sign-in binding, oldest first. The policy hides retired rows.
+_LIVE_BINDINGS: Final = text(
+    "SELECT pi.id, pi.principal_id FROM auth.principal_identity AS pi"
+    " WHERE pi.channel = :channel AND pi.deleted_at IS NULL"
+    " ORDER BY pi.bound_at, pi.principal_id"
+)
 
 
 @dataclass(frozen=True)
@@ -267,4 +304,36 @@ async def reconcile_first_administrators(
         granted={one.principal_id: list(one.granted) for one in granted},
         trace_id=trace_id,
     )
+    return tuple(granted)
+
+
+async def reconcile_member_grants(
+    sessions: async_sessionmaker[AsyncSession], *, now: datetime, trace_id: str
+) -> tuple[str, ...]:
+    """Grant every live binding's live principal their own workspace, once per binding. Idempotent.
+
+    One transaction. Returns the principals a row was written for, in binding order, so a start
+    with nothing to do returns an empty tuple and logs that it looked. A principal who is not live
+    is skipped, because a binding outliving its person is an offboarding still in progress and not
+    somebody to let into a workspace.
+    """
+    granted: list[str] = []
+    async with sessions() as session, session.begin():
+        await session.execute(_set_config(ACTOR_SETTING, MEMBER_RECONCILED_BY))
+        await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+        bindings = (await session.execute(_LIVE_BINDINGS, {"channel": SIGN_IN_CHANNEL.value})).all()
+        for binding_id, principal_id in bindings:
+            if not await _live(session, principal_id, now):
+                continue
+            written = await session.execute(
+                member_grant(
+                    binding_id,
+                    principal_id,
+                    granted_by=MEMBER_RECONCILED_BY,
+                    reason=MEMBER_RECONCILED_REASON,
+                )
+            )
+            if written.first() is not None:
+                granted.append(principal_id)
+    log.info("member_grants.reconciled", bindings=len(bindings), granted=granted, trace_id=trace_id)
     return tuple(granted)

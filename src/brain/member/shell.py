@@ -84,7 +84,7 @@ from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
 from typing import Any, Final
 
-from brain.console.reads import ConsoleRead, Plane, permitted
+from brain.console.reads import MEMBER_NOUN, ConsoleRead, Plane, permitted
 from brain.console.screens import SCREENS, Screen
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.gate.context import Channel
@@ -181,8 +181,11 @@ class MemberShellError(Exception):
 #: One noun rather than one per screen, because the check that matters is a set comparison
 #: against the console's own requirements and a namespace makes that comparison exact. A
 #: grant of `read:member.*` is therefore the whole member surface, which is deliberate: the
-#: member surface is what somebody gets for having an account.
-MEMBER_CAPABILITY_NOUN: Final = "member"
+#: member surface is what somebody gets for having an account, and since 2026-09-17 it covers
+#: the member surface's own planes too, which `brain.console.reads.member_plane_capability`
+#: builds under the same noun. Spelled once, in `brain.console.reads`, because `permitted`
+#: chooses a read's planes by it and that module cannot import this one.
+MEMBER_CAPABILITY_NOUN: Final = MEMBER_NOUN
 
 #: The only return annotation `serve` may carry. See `boundary_gaps`.
 #:

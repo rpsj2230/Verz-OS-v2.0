@@ -144,14 +144,23 @@ def entitlement(*values: str, principal_id: str = ME) -> EntitlementSet:
     )
 
 
-#: Every plane, so a screen is never refused for want of one when the point is the capability.
+#: Every console plane, so a screen is never refused for want of one when the point is the
+#: capability.
 ALL_PLANES: tuple[str, ...] = tuple(plane_capability(one).value for one in Plane)
+
+#: Every plane of the member surface, spelled out. A member screen is decided by these and never by
+#: the console's. See `brain.console.reads.ONES_OWN_THINGS_AND_THE_COMPANYS_CONTENT_ARE_TWO_GRANTS`.
+MEMBER_PLANES: tuple[str, ...] = (
+    "read:member.existence",
+    "read:member.configuration",
+    "read:member.content",
+)
 
 
 def every_member_grant(principal_id: str = ME) -> EntitlementSet:
     return entitlement(
         *(one.read.requires.value for one in MEMBER_SCREENS),
-        *ALL_PLANES,
+        *MEMBER_PLANES,
         principal_id=principal_id,
     )
 
@@ -405,7 +414,7 @@ def test_the_menu_and_the_router_never_disagree_about_a_member_screen() -> None:
     people editing the same file a week apart."""
     partial = entitlement(
         MEMBER_SCREENS[0].read.requires.value,
-        plane_capability(Plane.CONTENT).value,
+        "read:member.content",
     )
 
     assert menu_and_route_agree(partial, NOW) == ()

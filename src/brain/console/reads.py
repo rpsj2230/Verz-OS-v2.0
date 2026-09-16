@@ -25,6 +25,34 @@ inverted by accident. What it deliberately does not do is let one capability cov
 `plane_capability` gives each its own, so reaching content is a grant somebody made rather
 than a consequence of being trusted with settings.
 
+**A plane grant counts only over the scope it is held in, and until 2026-09-17 it counted
+everywhere.** `permitted` asked whether a plane capability was held and never where. An agent
+wiring an install gave the first administrator `read:member.*` and `read:console.content`, both
+scoped to that person's own things, so that My workspace would open, and measured the agent
+Conversations tab and the staff source trial opening too: the administrator held `read:question`
+and `read:staff_source` over everything, and a content plane held over one person's things was
+read as a content plane. A read is made over the scope its tool capability is held in, so the
+plane is asked about that scope: it counts when it is held over a scope containing it, decided
+by `brain.core.scope_sql.scope_narrows`, the one containment test the repository has. See
+`A_PLANE_GRANT_COUNTS_ONLY_OVER_THE_SCOPE_IT_IS_HELD_IN`.
+
+Rejected: narrowing the read to the conjunction of the two scopes, which would have given a
+reader holding `read:question` over everything and the content plane over Maintenance the
+Maintenance conversations rather than none. `permitted` returns a verdict and every caller
+filters its rows at the tool capability's own scope, so a conjunction here would have to be
+carried into forty call sites in twenty-eight modules, counted on the day, and the one that
+missed it would show the company again. A
+refusal costs that reader a screen they can be granted properly; the conjunction missed once
+costs everybody else their content.
+
+**The member surface has planes of its own** (M40.1.2.2). Until the same day a member screen
+was opened by the console's planes, so the only way to open My workspace was a
+`read:console.content` grant, which is how the grant above came to be written. A content plane
+over one's own things and a content plane over the company's are different grants and are
+now different capabilities: `member_plane_capability` builds them under the member noun, a read
+whose requirement carries that noun is decided by them and nothing else, and a console read is
+never decided by them. See `ONES_OWN_THINGS_AND_THE_COMPANYS_CONTENT_ARE_TWO_GRANTS`.
+
 **A console read is a tool call and there is no other kind** (M27.5.1). `ConsoleRead` names a
 tool and refuses to exist without a required capability, so a screen cannot be wired to
 something the registry does not hold and cannot be wired to a tool that asks for nothing. The
@@ -74,6 +102,8 @@ from typing import Any, Final
 
 from brain.audit.ledger import AuditAction, AuditEntry
 from brain.core.entitlement import Capability, EntitlementSet
+from brain.core.scope import Scope
+from brain.core.scope_sql import scope_narrows
 
 #: Why a console screen may not have a data path of its own.
 A_REPORT_QUERY_IS_A_SECOND_DATA_PATH_WITH_NO_REDACTOR: Final = (
@@ -112,6 +142,25 @@ KNOWING_A_THING_EXISTS_IS_A_DISCLOSURE_OF_ITS_OWN: Final = (
     "than a consequence of being trusted with settings."
 )
 
+#: Why a plane is asked about the scope a read is made over rather than about whether it is held.
+A_PLANE_GRANT_COUNTS_ONLY_OVER_THE_SCOPE_IT_IS_HELD_IN: Final = (
+    "A read is made over the scope its tool capability is held in. A plane held over a narrower "
+    "scope says nothing about the rest of that one, so counting it anyway lets a content plane "
+    "held over one person's own things open the content of every screen whose capability that "
+    "person holds over the company, which is what was measured on 2026-09-17. The plane counts "
+    "when the scope it is held in contains the scope of the read, decided by scope_narrows, and "
+    "a refusal is the same False as holding no plane at all."
+)
+
+#: Why the member surface does not share the console's plane capabilities.
+ONES_OWN_THINGS_AND_THE_COMPANYS_CONTENT_ARE_TWO_GRANTS: Final = (
+    "A member screen shows a person their own things, and while it was opened by the console's "
+    "planes the only way to open one was read:console.content, a grant written for the company's "
+    "content. So the member surface has three plane capabilities under the member noun, a member "
+    "read is decided by them alone, and no console read is ever decided by them, whatever scope "
+    "they are held over."
+)
+
 #: Why a self-grant is recognised rather than declared.
 THE_GRANT_THAT_MUST_NOT_BE_MISSED_IS_THE_ONE_NOBODY_DECLARES: Final = (
     "A separate audit action for a self-grant is a member the next person to write a grant "
@@ -138,6 +187,12 @@ PRINCIPAL_SUBJECT: Final = "principal:"
 #: and `ConsoleRead`, which refuses one as a tool's requirement. A second spelling would
 #: make the refusal stop firing with nothing failing, because the answer would be False.
 CONSOLE_CAPABILITY_PREFIX: Final = "read:console."
+
+#: The capability noun of the member surface: its screens and its three planes.
+#:
+#: Held here rather than in `brain.member.shell`, which re-exports it, because `permitted` decides
+#: by it and this module cannot import that one: `brain.member.shell` imports this module.
+MEMBER_NOUN: Final = "member"
 
 
 class Plane(enum.IntEnum):
@@ -171,6 +226,28 @@ def plane_capability(plane: Plane) -> Capability:
     return Capability(value=f"{CONSOLE_CAPABILITY_PREFIX}{plane.name.lower()}")
 
 
+def member_plane_capability(plane: Plane) -> Capability:
+    """The capability a reader needs for one plane of the member surface.
+
+    Under the member noun, so a grant of `read:member.*` is the whole member surface, planes
+    included, which `brain.member.shell` already says a member grant is. See
+    `ONES_OWN_THINGS_AND_THE_COMPANYS_CONTENT_ARE_TWO_GRANTS` for why these are not the console's.
+    """
+    return Capability(value=f"read:{MEMBER_NOUN}.{plane.name.lower()}")
+
+
+def plane_capability_for(read: ConsoleRead, plane: Plane) -> Capability:
+    """The plane capability that decides `read` at `plane`: the member surface's or the console's.
+
+    Decided by the noun of what the read requires, which is the definition `brain.member.shell`
+    holds every member screen to and holds every console screen away from, so the choice is a
+    property of the registry rather than a flag somebody sets on a read.
+    """
+    if read.requires.noun == MEMBER_NOUN:
+        return member_plane_capability(plane)
+    return plane_capability(plane)
+
+
 def admits(held: Plane, wanted: Plane) -> bool:
     """Whether a reader at `held` may see something needing `wanted`.
 
@@ -185,7 +262,9 @@ def planes_reachable(entitlement: EntitlementSet, now: Any = None) -> tuple[Plan
     """Every plane this caller holds a capability for, widest last.
 
     Derived from the grants rather than from a role, because a role is a bundle somebody
-    edits and a grant is the thing the gate actually checks. A caller holding content and not
+    edits and a grant is the thing the gate actually checks. The console's planes, held at any
+    scope: this describes a reader and decides nothing, and `permitted` is what asks where each
+    one is held. A caller holding content and not
     existence is a configuration error rather than a state to honour, and it is reported by
     `console_gaps` rather than quietly repaired here: repairing it would mean this module
     deciding somebody reaches more than their grants say.
@@ -218,7 +297,11 @@ class ConsoleRead:
         if not self.screen or not self.tool:
             msg = "a console read with no screen or no tool names nothing anybody can audit"
             raise ValueError(msg)
-        if self.requires.value.startswith(CONSOLE_CAPABILITY_PREFIX):
+        # Both surfaces' planes, and the member half was added with the member planes: a member
+        # screen requiring `read:member.content` would be opened by the plane grant alone.
+        if self.requires.value.startswith(CONSOLE_CAPABILITY_PREFIX) or self.requires in {
+            member_plane_capability(plane) for plane in Plane
+        }:
             msg = (
                 f"{self.screen} requires {self.requires.value}, which is a plane capability "
                 "rather than a grant over what it reads, so the console grant would be doing "
@@ -234,17 +317,44 @@ class ConsoleRead:
         # records having removed: two enforcement points that are really one.
 
 
+def _held_over(entitlement: EntitlementSet, capability: Capability, where: Scope, now: Any) -> bool:
+    """Whether `capability` is held over a scope containing `where`.
+
+    `EntitlementSet.scope_for` followed by `brain.core.scope_sql.scope_narrows`, which are the two
+    public calls `brain.console.scoped_authority.within_reach` makes. Not an import of that
+    function, because that module imports this one; not a comparison of clause sets either, which
+    `scoped_authority` records rejecting because it calls a scope narrower than a department wider
+    than it. `scope_narrows` is sound, incomplete and fails towards False, which here is a screen
+    refused rather than a screen opened.
+    """
+    held = entitlement.scope_for(capability, now)
+    return held is not None and scope_narrows(where, held)
+
+
 def permitted(read: ConsoleRead, entitlement: EntitlementSet, now: Any = None) -> bool:
     """Whether this caller may make this read, on both counts.
 
-    Both, and the order does not matter because they are conjunctive: the tool's own
-    capability, which is what an agent making the same call would need, and the plane's,
-    which is what the console adds. A screen showing configuration of something the caller
-    may only know exists is refused by the second even when the first passes.
+    Both, and they are conjunctive: the tool's own capability, which is what an agent making the
+    same call would need, and a plane admitting the read's, which is what the console adds. A
+    screen showing configuration of something the caller may only know exists is refused by the
+    second even when the first passes.
+
+    **The plane is asked about the scope the read is made over.** That is the scope the tool
+    capability is held in, and a plane counts only when it is held over a scope containing it.
+    See `A_PLANE_GRANT_COUNTS_ONLY_OVER_THE_SCOPE_IT_IS_HELD_IN`. Every plane at or above the
+    read's is asked separately, each over its own scope, because the planes nest and a reader
+    whose content plane covers the read has the listing whatever scope their existence plane is
+    held in. Which planes is `plane_capability_for`: a member read is decided by the member
+    surface's planes and a console read by the console's.
     """
-    if entitlement.scope_for(read.requires, now) is None:
+    where = entitlement.scope_for(read.requires, now)
+    if where is None:
         return False
-    return any(admits(held, read.plane) for held in planes_reachable(entitlement, now))
+    return any(
+        _held_over(entitlement, plane_capability_for(read, plane), where, now)
+        for plane in Plane
+        if admits(plane, read.plane)
+    )
 
 
 def audience(caller: EntitlementSet, report: EntitlementSet) -> EntitlementSet:
