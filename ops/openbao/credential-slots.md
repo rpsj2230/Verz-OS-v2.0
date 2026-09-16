@@ -124,6 +124,31 @@ To let the application keep them, once per install that runs a vault:
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=webhooks kv-v2`.
 2. Load the policies: `sh ops/openbao/load-policies.sh`.
 
+## A connected source's key
+
+Connecting a source from the console's Connectors screen keeps the key that source's vendor
+issued for this company: a helpdesk's agent key, a CRM's private app token. Like a provider key,
+nothing can mint one per run, so it is stored rather than leased, under an engine of its own at
+`connector_keys/`, one path per source named by the source's short name. An administrator holding
+`admin:connector` writes it by connecting the source; the screen says whether a key is held and
+when it was written, and never shows it. The scopes to ask the vendor for are the ones in the
+table at the top of this file.
+
+The application's policy may create and update `connector_keys/data/+` and read
+`connector_keys/metadata/+`, and nothing else there. It never reads a source's key back, and it
+cannot delete one: disconnecting a source leaves its key in the vault, so revoke the key in the
+source's own settings as well. Nothing on an install reads from a connected source yet, because
+no worker runs a connector, and when one does it reads the key under its own policy, which does not
+name this engine today.
+
+To let the application keep them, once per install that runs a vault:
+
+1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=connector_keys kv-v2`.
+2. Load the policies: `sh ops/openbao/load-policies.sh`.
+
+Until both are done, connecting a source is refused with a sentence saying the vault refused, and
+nothing is recorded as connected.
+
 ## Three things worth deciding before the keys are issued, not after
 
 **Xero's limit is per tenant and it is 5,000 a day.** That is a documented ceiling and it is

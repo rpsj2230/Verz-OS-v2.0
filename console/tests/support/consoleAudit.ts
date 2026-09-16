@@ -48,6 +48,7 @@ import { HOLD_API_PATH, LIFT_API_PATH, RELEASE_API_PATH, WITHDRAWAL_API_PATH } f
 import { END_SESSION_API_PATH } from "../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../src/pages/signInLinksQuery";
 import { TRIAL_API_PATH } from "../../src/pages/staffSourcesQuery";
+import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
   REGISTRATION_PATH as STAFF_LIST_REGISTRATION_PATH,
@@ -295,10 +296,21 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Connectors and third-party integrations": {
     screens: ["/connectors"],
-    routes: ["/api/v1/connectors"],
-    tables: ["proj.record", "er.alias", "er.canonical", "er.identifier", "er.link"],
+    routes: ["/api/v1/connectors", "/api/v1/connectors/{connector}/disconnect"],
+    tables: ["ops.connector_connection", "proj.record", "er.alias", "er.canonical", "er.identifier", "er.link"],
     installation: [],
-    gaps: [{ what: "A connector cannot be connected, and its credential cannot be held from a screen.", leaf: "M42.6.5" }],
+    gaps: [
+      {
+        what: "Nothing reads from a connected source: it is not synced, projected, probed or answered from, and its key is read by nothing.",
+        because:
+          "No worker runs a connector on any install, which brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET says on the screen; the worker's vault policy names no connector_keys rule until one does.",
+      },
+      {
+        what: "Freshdesk, Google Drive, the Laravel views, Lark Base and Lark Wiki cannot be connected from a screen.",
+        because:
+          "Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.",
+      },
+    ],
   },
   "API keys, credentials and secrets, held in the vault and never displayed": {
     screens: ["/webhooks"],
@@ -573,6 +585,10 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Skills.tsx assignPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/assignments", "assignPath", assignPath("d".repeat(64))),
   ],
+  "src/pages/Connectors.tsx disconnectApiPath(row.name)": [
+    at("POST /api/v1/connectors/{connector}/disconnect", "disconnectApiPath", disconnectApiPath("xero")),
+  ],
+  "src/components/ConnectSource.tsx CONNECTORS_API_PATH": [at("POST /api/v1/connectors", "CONNECTORS_API_PATH", CONNECTORS_API_PATH)],
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
@@ -610,8 +626,28 @@ const INSTRUCTIONS_LEDGER: Proof = {
   none: "An edit is recorded on the install it changes, who set it and when, and not in the ledger: brain.prompt_routes writes no audit entry.",
 };
 
+const CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER = t(
+  "test_connector_store",
+  "test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record",
+  true,
+);
+const NOTHING_READS_A_CONNECTED_SOURCE: Proof = {
+  none:
+    "No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET.",
+};
+
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/connectors": {
+    row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
+    audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
+    behaviour: NOTHING_READS_A_CONNECTED_SOURCE,
+  },
+  "POST /api/v1/connectors/{connector}/disconnect": {
+    row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
+    audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
+    behaviour: NOTHING_READS_A_CONNECTED_SOURCE,
+  },
   "POST /api/v1/govern/access-review/decision": {
     row: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
     audit: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),

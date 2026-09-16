@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7, M27.8.12
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -68,6 +68,25 @@ path "webhooks/data/+" {
 }
 
 path "webhooks/metadata/+" {
+  capabilities = ["read"]
+}
+
+# The key a connected source's vendor issued, the third thing nothing can lease. See
+# brain.ops.openbao.A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT and
+# brain.ops.connector_admin.
+#
+# create and update, so an administrator holding admin:connector connects a source from the
+# console and the key goes straight into its slot, one slot per source. No read: this process
+# answers questions and runs no connector, so a read here would be a standing copy of every
+# source's key in the process that talks to a model. Whatever runs a connector will read under its
+# own policy, and the worker's names this engine nowhere today. No delete: disconnecting a source
+# leaves its key here, and the console says to revoke it in the source's own settings. Metadata
+# read only, for the reason given above for providers.
+path "connector_keys/data/+" {
+  capabilities = ["create", "update"]
+}
+
+path "connector_keys/metadata/+" {
   capabilities = ["read"]
 }
 

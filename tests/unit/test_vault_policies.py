@@ -340,3 +340,75 @@ def test_the_static_path_rule_admits_the_signing_engine_and_still_refuses_every_
     for refused in ("webhooksx/a", "webhook/a", "connectors/creds/xero", "secret/data/webhooks/a"):
         with pytest.raises(SecretsUnavailableError):
             assert_static_path(refused)
+
+
+# ---------------------------------------- the connected sources' keys the application writes
+def test_the_application_may_write_connector_keys_and_read_only_their_metadata() -> None:
+    """Exactly two rules under the connector key engine. Create and update so connecting a source
+    from the console writes its key; metadata read so the screen can say it is held. No read of a
+    key: this process runs no connector, so a read here would be a standing copy of every source's
+    key in the process that talks to a model. No delete: a disconnect leaves the key and says so.
+    `brain.ops.openbao.A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT` argues it.
+
+    Delete this and the rule gains `read` or `delete` in a debugging session, and nothing else reads
+    the policy."""
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    keys = {
+        path: sorted(caps) for path, caps in granted.items() if path.startswith("connector_keys")
+    }
+    assert keys == {
+        "connector_keys/data/+": ["create", "update"],
+        "connector_keys/metadata/+": ["read"],
+    }
+
+
+def test_no_other_role_reaches_the_connector_key_engine_yet() -> None:
+    """The worker will read a source's key when it runs connectors, under a rule named for the
+    connectors a job is configured for, and the browser runner never. Neither holds one today, so
+    a copy of the application's rule into either reads as consistency and is a way to read every
+    source's key. Delete this and nothing notices the copy."""
+    for role in (VaultRole.WORKER, VaultRole.BROWSER_RUNNER):
+        granted = _granted_paths(_policy_file(role).read_text(encoding="utf-8"))
+        assert not [path for path in granted if path.startswith("connector_keys")], role
+
+
+def test_every_path_a_connector_key_is_written_to_is_one_the_application_policy_grants() -> None:
+    """Held against the paths `OpenBaoVault` calls for a source name at the grammar's longest,
+    rather than against the words in the policy. Delete this and a source name that makes two path
+    segments passes every unit test and is refused by the vault on the first install."""
+    from brain.ops.credentials import connector_key_slot
+
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    mount, _, rest = connector_key_slot("a" + "0" * 62).path.partition("/")
+    for called, needed in (
+        (f"{mount}/data/{rest}", "update"),
+        (f"{mount}/metadata/{rest}", "read"),
+    ):
+        rules = [caps for rule, caps in granted.items() if _matches(rule, called)]
+        assert rules and any(needed in caps for caps in rules), called
+    assert not any(
+        "read" in caps for rule, caps in granted.items() if _matches(rule, f"{mount}/data/{rest}")
+    )
+
+
+def test_the_static_path_rule_admits_the_connector_key_engine_and_still_refuses_every_lease() -> (
+    None
+):
+    """The third prefix is admitted exactly: `connector_keys/` and nothing that merely starts the
+    same way, and in particular not `connectors/`, which is where the leased path lives. Delete this
+    and the prefix is widened to `connector`, which admits `connectors/creds/xero`."""
+    import pytest
+
+    from brain.ops.openbao import CONNECTOR_KEY_PREFIX, assert_static_path
+    from brain.ops.secrets import SecretsUnavailableError
+
+    assert CONNECTOR_KEY_PREFIX == "connector_keys/"
+    assert_static_path("connector_keys/xero")
+    for refused in (
+        "connectors/creds/xero",
+        "connector_keysx/xero",
+        "connector_key/xero",
+        "database/creds/brain_app",
+    ):
+        with pytest.raises(SecretsUnavailableError):
+            assert_static_path(refused)

@@ -1,95 +1,131 @@
-"""The connectors screen over HTTP: which sources are installed, and what each may read.
+"""The connectors screen over HTTP: what this install connected, what each may read, and two writes.
 
-`brain.console.connector_trust` decides what a reader may be told about a connector and renders
-nothing. This is the half that makes it openable, and it adds no second opinion about any of it:
-every field below is a projection of a value that module produced.
+`brain.console.connector_trust` decides what a reader may be told about a connected source,
+`brain.ops.connector_admin` decides who may connect one and what a connection must be,
+`brain.ops.credentials` keeps its key and `brain.ops.connector_store` holds the rows. This module
+asks each of them in order and adds no second opinion about any of it.
 
 **A router of its own, and the reason is the act rather than the noun.** `brain.install_routes`
 answers about the deployment, where there is no name to guess and no row belonging to anybody.
 This answers about which outside systems this company reads, where a name is exactly the thing a
 refusal must not confirm: `brain.connectors.federation.NAMING_A_SOURCE_IS_A_DISCLOSURE` is the
-rule, and `brain.console.operate.reachable_connectors` is where it is applied. It is also the
-one console surface whose subject is an act nobody can perform from here, and the sentence
-saying so is served beside the list rather than written into a page, so it is one statement
-rather than two that can drift apart.
+rule, and `brain.console.operate.reachable_connectors` is where it is applied.
 
-**The capability is read out of the screen registry and is not declared again**, for the reason
-`brain.install_routes.A_SECOND_SPELLING_OF_A_CAPABILITY_IS_THE_ONE_THAT_GOES_STALE` gives.
-`brain.console.screens` already registers `connectors` against `read:connector`, and
-`Screen.__post_init__` refuses a screen wired to a read that audits itself under another key.
+**The screen's read is asked before anything else is.** The capability is read out of the screen
+registry, for `brain.install_routes.A_SECOND_SPELLING_OF_A_CAPABILITY_IS_THE_ONE_THAT_GOES_STALE`'s
+reason, and it is asked with the console plane through `brain.console.reads.permitted`, before
+the database or the vault is: a caller holding no grant is refused identically on an install with
+twelve connections, with none, and with no database, so nobody learns whether this company reads
+anything at all by reaching the port.
 
-**The capability is checked before the registry is consulted.** Copied from
-`brain.install_routes` deliberately: a caller holding no grant is refused identically on an
-install with twelve connectors and on one with none, so nobody can learn whether this company
-reads anything at all by reaching the port.
+**Each write asks `brain.ops.connector_admin.may_connect_source` before it judges what was sent**,
+and a caller it refuses is refused in the one way this router refuses anybody, whether or not the
+source is connected, whether the install runs a vault, and whether the source is one the console
+can connect. That order is `brain.credential_routes`' for the same reason.
 
-**Two different facts about the reader are answered here and only one of them is a permission
-check.** Whether the screen opens is `brain.console.reads.permitted`, which is the tool's
-capability and the console plane together. Whether the reader holds the authority to install a
-connector is `brain.connectors.registry.may_install`, and it is a fact about the reader's own
-grant, answered because the screen has to tell somebody who could install a source what has to
-happen for one to be installed and somebody who could not that it is not theirs to do. It is
-never used to decide what the list contains: the list is narrowed by reach, and a reader holding
-`admin:connector` and no reach sees nothing.
+**What a connect answers, and in which status.** 200 with the source, when, when its key was
+written and what that means. 422 with every problem by field and code, of which a source already
+connected is one, because disconnecting it first is something the person does. 409 when the
+install runs no vault or the vault refused, and 503 when it did not answer, each as `ErrorBody`
+with `brain.ops.connector_admin.TOLD`'s sentence, and nothing recorded as connected in any of the
+three. A disconnect answers 200 or the one refusal: a source that is not connected is a 404 for a
+caller who may manage it, who can see the list, so the refusal hides nothing from them.
 
-**No credential in, none out, and none in a log.** There is no body on this route and no write
-verb on this router. `brain.console.connector_trust.CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY`
-is the sentence served in place of a control: the vault's writer takes a provider key and refuses
-every connector path, so a form collecting a connector's credential would have nowhere to send
-it, and a control drawn and then refused reads as a permission problem with the person using it.
-The one thing this route logs is the surface name on a refusal, which is `_not_answerable`'s own
-rule.
+**No credential out, and none in a log.** The router is `brain.api.NoEchoRoute`, so a body refused
+by its model names the field and does not repeat the key. Every answer is built from a source's
+name, times, booleans and sentences. What is logged is the surface, the source's name and the
+principal, never the settings and never the key.
 
-**A process with no registry answers a sentence and never an empty list**, which is
-`brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE` applied where it matters most: an
-empty list of connectors reads as an install that reads nothing, which is the reassuring answer
-to "what does this system have access to". Nothing in this repository constructs a
-`ConnectorRegistry`, so this answers the sentence on every install today, and the day something
-attaches one the list appears with no line here changing.
+**What connecting does not do is served beside the screen**, as `connecting`, for
+`brain.skill_routes`' reason: the day a worker runs connectors, the sentence changes in the same
+commit as the behaviour. So are the two confirmations, so the words a person agrees to are the
+words of the system that does it.
 
-Rejected: building the registry here out of the manifest builders in `brain.connectors`. Each of
-those takes the folder ids, hosts and vault paths of one company's install, so a module calling
-them would be this repository holding a client's configuration, and `brain.ops.independence` is
-the sweep that refuses it. The registry is a runtime record of what somebody installed and it
-has to arrive from wherever that happened.
+**A process with no database answers a sentence and never an empty list**, which is
+`brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE`: an empty list of connectors reads as an
+install that reads nothing, which is the reassuring answer to "what does this system have access
+to".
 
-Rejected: a POST that registers a manifest. `brain.connectors.registry.register` already takes
-an installer's entitlement and refuses without `admin:connector`, so the guard exists; what does
-not exist is the vault write that has to happen first. A route that registered a manifest
-pointing at a vault path holding nothing would produce a connector that is installed, enabled
-and fails on its first call, which is the state this screen is meant to let somebody avoid.
-
-Scope: one read-only route. Nothing here writes, and it opens no session.
+Rejected, and kept from the first version of this module: building a registry out of the manifest
+builders in `brain.connectors` at start. Each takes the identifiers of one company's install, so a
+module calling them with values of its own would be this repository holding a client's
+configuration. The identifiers arrive from the person connecting the source, and are kept in that
+install's database.
 
 Task ids: M42.6.5
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Final, Protocol, cast
+from typing import Final
 
 import structlog
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from brain.api import API_PREFIX, COMMON_RESPONSES
+from brain.api import API_PREFIX, COMMON_RESPONSES, ErrorBody, NoEchoRoute
 from brain.api_routes import Asked
-from brain.connectors.contract import ConnectorHealth
-from brain.connectors.registry import RegisteredConnector, may_install
+from brain.audit.record import ConnectorChange
+from brain.connectors.manifest import manifest_digest
+from brain.connectors.registry import may_install
 from brain.console.connector_trust import (
-    CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY,
     COPY_POLICY,
+    NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED,
     NOTHING_HERE_COUNTS_TODAYS_CALLS,
-    NOTHING_HERE_HOLDS_A_CONNECTOR_REGISTRY,
+    ConnectedRow,
     TrustRow,
-    trust_rows,
+    admitted_connections,
+    connected_rows,
 )
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
-from brain.core.errors import Absent
+from brain.core.errors import Absent, BrainError, Failed
+from brain.credential_routes import credentials_of
+from brain.ops.connectable import (
+    CONNECTABLE,
+    MAX_SETTING_CHARS,
+    NOT_FROM_THE_CONSOLE,
+    SettingProblem,
+    blank_sentence,
+    given,
+    key_reference,
+)
+from brain.ops.connector_admin import (
+    CONNECTED,
+    CONNECTING_A_SOURCE,
+    DISCONNECTED,
+    DISCONNECTING_A_SOURCE,
+    KEY_SENTENCES,
+    NOTHING_READS_A_CONNECTED_SOURCE_YET,
+    SOURCE_FIELD,
+    TOLD,
+    VAULT_SAYS,
+    connection_problems,
+    key_problems,
+    may_connect_source,
+)
+from brain.ops.connector_store import (
+    Connection,
+    ConnectorRecords,
+    ConnectorTakenError,
+    NotConnectedError,
+    StoredConnections,
+)
+from brain.ops.credentials import (
+    MAX_CREDENTIAL_CHARS,
+    CredentialProblemError,
+    Credentials,
+    CredentialsUnavailableError,
+    Held,
+    VaultState,
+    connector_key_slot,
+)
+from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
 
@@ -99,37 +135,16 @@ log = structlog.get_logger()
 #: Every source this install reads, and what each was connected to.
 CONNECTORS_READ: Final[Capability] = screen("connectors").read.requires
 
+#: Where the screen is read and a source connected, and where one is disconnected.
+CONNECTORS_PATH: Final = "/connectors"
+DISCONNECT_PATH: Final = CONNECTORS_PATH + "/{connector}/disconnect"
 
-# ------------------------------------------------------- what is not on this process
-
-
-class InstalledConnectors(Protocol):
-    """Every connector this install registered, and what the last probe of each found.
-
-    Both together, in the shape `brain.install_routes.ThrottleSource` uses and for its reason: a
-    caller holding one would have to invent the other, and a screen carrying a lifecycle state
-    with no health beside it is the screen that sends an operator to chase the wrong thing.
-
-    A protocol read off `app.state` rather than a parameter, because there is nothing to pass.
-    Nothing in this repository constructs a `brain.connectors.registry.ConnectorRegistry`, so
-    there is no value `brain.app` could attach today, and the absence is answered as a sentence
-    rather than as an empty list.
-    """
-
-    def __call__(self) -> tuple[Sequence[RegisteredConnector], dict[str, ConnectorHealth]]: ...
-
-
-def installed_connectors_of(request: Request) -> InstalledConnectors | None:
-    """The registry reader this process was built with, or None.
-
-    `getattr` and a `callable` check rather than an `isinstance` against the protocol, in the
-    shape `brain.install_routes.backup_objects_of` uses and with its argument: a runtime
-    checkable protocol whose only member is `__call__` admits every function in the process, so
-    the check would read as structural and be a callable check with more words. The attribute's
-    name is what discriminates and this comment is the proof the structural match was not made.
-    """
-    found = getattr(request.app.state, "installed_connectors", None)
-    return cast(InstalledConnectors, found) if callable(found) else None
+#: The status a connect that kept nothing answers, by what the vault's state was.
+NOT_KEPT_STATUS: Final = {
+    VaultState.ABSENT: 409,
+    VaultState.REFUSED: 409,
+    VaultState.UNREACHABLE: 503,
+}
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -164,36 +179,124 @@ class TrustView(BaseModel):
     permission_sync: str
 
 
+class ConnectedView(BaseModel):
+    """One source this install connected: who, when, its key, and what it may read.
+
+    `key_held` is None when the vault could not be asked, which `ConnectorsView.vault_told` says in
+    words; None is "not known" and never "not held". `trust` is None when this release cannot
+    rebuild what the source was connected as, and `declaration` says so.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    connected_by: str
+    connected_at: datetime
+    key_held: bool | None
+    key_written_at: datetime | None
+    pinned: bool
+    declaration: str
+    trust: TrustView | None
+    #: Whether this reader may disconnect it. Their own grant, and it narrows nothing.
+    may_disconnect: bool
+
+
+class CopyLineView(BaseModel):
+    """One line of what this system copies out of a source and what it never does.
+
+    `brain.console.connector_trust.CopyLine`, field by field. Served rather than written into a
+    page, because it is the answer to the question a client's own auditor asks and it must be
+    one document: a console holding its own copy of it is a second policy, edited by whoever is
+    next in the browser.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    what: str
+    verdict: str
+    why: str
+
+
+class SettingView(BaseModel):
+    """One identifier a source is connected with, as the form asks for it.
+
+    `blank` is the sentence the connect route answers when this setting is left blank, served so a
+    console can say it beside the field before the confirmation opens, in the route's own words.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    hint: str
+    max_chars: int
+    blank: str
+
+
+class ConnectableView(BaseModel):
+    """A source the console can connect, and what the form asks for. The same on every install."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    settings: list[SettingView]
+    credential_label: str
+    credential_hint: str
+    #: Whether this reader may connect it. Their own grant over this source.
+    may_connect: bool
+
+
+class NotConnectableView(BaseModel):
+    """A source this release has a connector for and the console cannot connect, and why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    why: str
+
+
 class ConnectorsView(BaseModel):
-    """The connectors this reader may be told exist, or why there is no list.
+    """The connected sources this reader may be told exist, or why there is no list.
 
     Exactly one of a list and a sentence, refused in the model rather than left to whatever
     draws it, which is `brain.install_routes.LimitsView`'s construction and its reason: an empty
     list of connectors and an absent one draw the same nothing, and one of them means this
     install reads no outside system while the other means nothing here looked.
 
-    `connecting` is on every response including the unread one, because it is a statement about
-    what this build can do rather than about what this install has, and a reader who cannot see
-    a list is exactly the reader who needs to know what connecting involves.
+    Everything else is on every response, including the unread one: what connecting does and does
+    not do, the sources that could be connected and why the others cannot, and the copy policy,
+    because each is a statement about this release rather than about this install.
 
     No count and no total, on either half.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    connectors: list[TrustView] | None = None
+    connectors: list[ConnectedView] | None = None
     #: Why there is no list. Required when there is none, empty when there is one.
     unread: str = ""
-    #: What has to happen for a source to be connected, and where.
+    #: What connecting a source does and what still does not happen.
     connecting: str
-    #: What is copied out of any source and what never is. The same on every install and for
-    #: every reader, because it is the platform's rule rather than this company's configuration.
+    #: The confirmations' consequences, in the words a person agrees to.
+    confirm_connect: str
+    confirm_disconnect: str
+    #: What is copied out of any source and what never is.
     copy_policy: list[CopyLineView]
     #: Why the budget column states a ceiling and draws no bar of today's use.
     budget_unread: str
-    #: Whether this reader holds the authority to install one. Their own grant and nobody's
-    #: else, and it narrows nothing on this response.
+    #: Whether this reader holds the authority to connect any source. It narrows nothing.
     may_connect: bool
+    #: The vault's state, and a sentence when there is something to say about it.
+    vault: VaultState
+    vault_told: str
+    connectable: list[ConnectableView]
+    not_connectable: list[NotConnectableView]
+    #: The longest key the form accepts, which the server refuses above in words.
+    key_max_chars: int
+    #: What the connect route answers for a blank key, for the reason `SettingView.blank` gives.
+    key_blank: str
 
     @model_validator(mode="after")
     def _exactly_one(self) -> ConnectorsView:
@@ -206,10 +309,54 @@ class ConnectorsView(BaseModel):
         if self.connectors is None and not self.unread:
             msg = (
                 "no connector list and nothing saying why, which renders as an install that "
-                f"reads no outside system. {NOTHING_HERE_HOLDS_A_CONNECTOR_REGISTRY}"
+                f"reads no outside system. {NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED}"
             )
             raise ValueError(msg)
         return self
+
+
+class ConnectAsked(BaseModel):
+    """A connection: the source, its settings, and its key. No length on any field on purpose.
+
+    `brain.ops.connector_admin.connection_problems` judges every one in words, and a length on the
+    model would be refused by FastAPI in a shape that names no sentence.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    settings: dict[str, str]
+    credential: str
+
+
+class ConnectorProblemView(BaseModel):
+    """One thing wrong with what was sent: the field, a stable code, and what to do."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    field: str
+    code: str
+    message: str
+
+
+class ConnectorProblemsView(BaseModel):
+    """Everything wrong with what was sent. Nothing was written."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    problems: list[ConnectorProblemView]
+
+
+class ConnectorChangedView(BaseModel):
+    """What one write changed, when, and what that means. Never a key, never a setting."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    connector: str
+    change: ConnectorChange
+    changed_at: datetime
+    key_written_at: datetime | None
+    told: str
 
 
 def trust_view(one: TrustRow) -> TrustView:
@@ -231,20 +378,19 @@ def trust_view(one: TrustRow) -> TrustView:
     )
 
 
-class CopyLineView(BaseModel):
-    """One line of what this system copies out of a source and what it never does.
-
-    `brain.console.connector_trust.CopyLine`, field by field. Served rather than written into a
-    page, because it is the answer to the question a client's own auditor asks and it must be
-    one document: a console holding its own copy of it is a second policy, edited by whoever is
-    next in the browser.
-    """
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    what: str
-    verdict: str
-    why: str
+def connected_view(one: ConnectedRow, *, may_disconnect: bool) -> ConnectedView:
+    """One connection, copied field by field, for `TrustView`'s reason."""
+    return ConnectedView(
+        name=one.name,
+        connected_by=one.connected_by,
+        connected_at=one.connected_at,
+        key_held=one.key_held,
+        key_written_at=one.key_written_at,
+        pinned=one.pinned,
+        declaration=one.declaration,
+        trust=None if one.trust is None else trust_view(one.trust),
+        may_disconnect=may_disconnect,
+    )
 
 
 # ---------------------------------------------------------------------- the refusals
@@ -264,7 +410,7 @@ def _not_answerable(surface: str) -> Absent:
 
 
 def _permitted(reach: EntitlementSet, now: datetime) -> None:
-    """Refuse unless this caller may open this screen, before the registry is consulted.
+    """Refuse unless this caller may open this screen, before anything else is consulted.
 
     `brain.console.reads.permitted` rather than a `holds` call on the capability, because a
     console read asks for the plane as well; see
@@ -274,46 +420,244 @@ def _permitted(reach: EntitlementSet, now: datetime) -> None:
         raise _not_answerable("connectors")
 
 
-# ----------------------------------------------------------------------- the route
-
-router = APIRouter(prefix=API_PREFIX, tags=["connectors"])
+# ------------------------------------------------------------------------- the wiring
 
 
-@router.get("/connectors", response_model=ConnectorsView, responses=COMMON_RESPONSES)
+def records_of(request: Request) -> ConnectorRecords | None:
+    """What `app.state.connector_records` holds, or the database, or None without one.
+
+    None rather than a fault, because the read answers a process with no database in a sentence;
+    the writes turn it into a process fault.
+    """
+    found = getattr(request.app.state, "connector_records", None)
+    if isinstance(found, ConnectorRecords):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredConnections(sessions)
+
+
+def _trace_id() -> str:
+    # The id the trace middleware vouched for or minted, as `brain.credential_routes` reads it.
+    return str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+
+
+def keys_held(store: Credentials, names: Sequence[str]) -> tuple[VaultState, dict[str, Held]]:
+    """Whether each named source's key is held, or nothing known and the vault's state.
+
+    One failure answers for the whole list, for `brain.credential_routes.listing`'s reason. An
+    install naming no vault is `ABSENT` without asking, and a list with nothing on it asks nothing.
+    """
+    if not store.configured:
+        return VaultState.ABSENT, {}
+    try:
+        return VaultState.READY, {one: store.held(connector_key_slot(one)) for one in names}
+    except CredentialsUnavailableError as unavailable:
+        return unavailable.state, {}
+
+
+def _problems(found: Sequence[SettingProblem]) -> JSONResponse:
+    told = ConnectorProblemsView(
+        problems=[
+            ConnectorProblemView(field=one.field, code=one.code, message=one.message)
+            for one in found
+        ]
+    )
+    return JSONResponse(status_code=422, content=told.model_dump(mode="json"))
+
+
+def _not_kept(state: VaultState) -> JSONResponse:
+    body = ErrorBody(message=TOLD[state], trace_id=_trace_id())
+    return JSONResponse(status_code=NOT_KEPT_STATUS[state], content=body.model_dump())
+
+
+def _page(
+    reach: EntitlementSet,
+    now: datetime,
+    *,
+    connections: list[ConnectedView] | None,
+    vault: VaultState,
+) -> ConnectorsView:
+    return ConnectorsView(
+        connectors=connections,
+        unread="" if connections is not None else NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED,
+        connecting=NOTHING_READS_A_CONNECTED_SOURCE_YET,
+        confirm_connect=CONNECTING_A_SOURCE,
+        confirm_disconnect=DISCONNECTING_A_SOURCE,
+        copy_policy=[
+            CopyLineView(what=one.what, verdict=one.verdict, why=one.why) for one in COPY_POLICY
+        ],
+        budget_unread=NOTHING_HERE_COUNTS_TODAYS_CALLS,
+        may_connect=may_install(reach, now),
+        vault=vault,
+        vault_told=VAULT_SAYS[vault],
+        connectable=[
+            ConnectableView(
+                name=kind.name,
+                label=kind.label,
+                settings=[
+                    SettingView(
+                        name=one.name,
+                        label=one.label,
+                        hint=one.hint,
+                        max_chars=MAX_SETTING_CHARS,
+                        blank=blank_sentence(one),
+                    )
+                    for one in kind.settings
+                ],
+                credential_label=kind.credential_label,
+                credential_hint=kind.credential_hint,
+                may_connect=may_connect_source(reach, kind.name, now),
+            )
+            for kind in CONNECTABLE.values()
+        ],
+        not_connectable=[
+            NotConnectableView(name=one.name, label=one.label, why=one.why)
+            for one in NOT_FROM_THE_CONSOLE.values()
+        ],
+        key_max_chars=MAX_CREDENTIAL_CHARS,
+        key_blank=KEY_SENTENCES["blank"],
+    )
+
+
+router = APIRouter(prefix=API_PREFIX, tags=["connectors"], route_class=NoEchoRoute)
+
+_WRITE_RESPONSES: Final[dict[int | str, dict[str, object]]] = {
+    **COMMON_RESPONSES,
+    422: {"model": ConnectorProblemsView, "description": "What is wrong with what was sent."},
+}
+
+
+# ----------------------------------------------------------------------- the routes
+
+
+@router.get(CONNECTORS_PATH, response_model=ConnectorsView, responses=COMMON_RESPONSES)
 async def connectors(request: Request, asked: Asked) -> ConnectorsView:
-    """Which sources this install reads, and what each one is trusted to read (M42.6.5).
+    """Which sources this install connected, and what each one is trusted to read (M42.6.5).
 
-    The capability first and the registry second, for the reason the module docstring gives.
-
-    `may_connect` is answered for every caller who gets this far, including one who will be
-    shown the unread sentence, because it is a fact about their own grant and it decides which
-    of two things the screen tells them to do. It narrows nothing: a reader holding
-    `admin:connector` and no reach over any source is shown an empty list of connectors and the
-    same sentence about what connecting involves.
-
-    There is no connect control and no credential field. See
-    `brain.console.connector_trust.CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY`, which is served
-    as the `connecting` field so the sentence is stated once rather than once here and once in a
-    page.
+    The screen's read first, then the database, then the vault for the keys of the connections
+    this reader may be told of and no others.
     """
     _permitted(asked.reach, asked.now)
-    may_connect = may_install(asked.reach, asked.now)
-    policy = [CopyLineView(what=one.what, verdict=one.verdict, why=one.why) for one in COPY_POLICY]
-    source = installed_connectors_of(request)
-    if source is None:
-        return ConnectorsView(
-            unread=NOTHING_HERE_HOLDS_A_CONNECTOR_REGISTRY,
-            connecting=CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY,
-            copy_policy=policy,
-            budget_unread=NOTHING_HERE_COUNTS_TODAYS_CALLS,
-            may_connect=may_connect,
+    credentials = credentials_of(request)
+    records = records_of(request)
+    if records is None:
+        vault = VaultState.READY if credentials.configured else VaultState.ABSENT
+        return _page(asked.reach, asked.now, connections=None, vault=vault)
+    found: tuple[Connection, ...] = await records.connected()
+    shown = admitted_connections(found, asked.reach, asked.now)
+    vault, held = await asyncio.to_thread(keys_held, credentials, [one.connector for one in shown])
+    rows = connected_rows(shown, asked.reach, now=asked.now, held=held, vault=vault)
+    return _page(
+        asked.reach,
+        asked.now,
+        connections=[
+            connected_view(one, may_disconnect=may_connect_source(asked.reach, one.name, asked.now))
+            for one in rows
+        ],
+        vault=vault,
+    )
+
+
+@router.post(CONNECTORS_PATH, response_model=ConnectorChangedView, responses=_WRITE_RESPONSES)
+async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONResponse:
+    """Connect a source and keep its key, or write nothing and say why."""
+    if not may_connect_source(asked.reach, body.connector, asked.now):
+        log.info("connecting a source not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("connect")
+    found = connection_problems(body.connector, body.settings, body.credential)
+    if found:
+        return _problems(found)
+    credentials = credentials_of(request)
+    if not credentials.configured:
+        return _not_kept(VaultState.ABSENT)
+    records = records_of(request)
+    if records is None:
+        raise Failed("no database on this process")
+    kind = CONNECTABLE[body.connector]
+    settings = given(kind, body.settings)
+    digest = manifest_digest(kind.build(settings, key_reference(kind.name)))
+    slot = connector_key_slot(kind.name)
+    actor = asked.reach.principal_id
+    trace_id = _trace_id()
+    ent_hash = asked.reach.ent_hash()
+    written: list[datetime | None] = []
+
+    async def keep_key() -> datetime | None:
+        kept = await credentials.keep(
+            slot, body.credential, actor=actor, trace_id=trace_id, ent_hash=ent_hash
         )
-    registry, checked = source()
-    rows = trust_rows(registry, asked.reach, now=asked.now, checked=checked)
-    return ConnectorsView(
-        connectors=[trust_view(one) for one in rows],
-        connecting=CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY,
-        copy_policy=policy,
-        budget_unread=NOTHING_HERE_COUNTS_TODAYS_CALLS,
-        may_connect=may_connect,
+        written.append(kept.set_at)
+        return kept.set_at
+
+    try:
+        connection = await records.connect(
+            connector=kind.name,
+            settings=settings,
+            digest=digest,
+            actor=actor,
+            trace_id=trace_id,
+            ent_hash=ent_hash,
+            keep_key=keep_key,
+        )
+    except ConnectorTakenError:
+        return _problems(
+            (
+                SettingProblem(
+                    field=SOURCE_FIELD,
+                    code="connected",
+                    message=(
+                        f"{kind.label} is already connected. Disconnect it first to connect it "
+                        "again with other settings or a new key."
+                    ),
+                ),
+            )
+        )
+    except CredentialProblemError:
+        # Judged above, so this is unreachable unless the two judgements part company; answered
+        # in this router's words rather than as a fault, because nothing was written.
+        return _problems(key_problems(body.credential))
+    except CredentialsUnavailableError as unavailable:
+        return _not_kept(unavailable.state)
+    except BrainError:
+        raise
+    except Exception as exc:
+        # Broad for `brain.api_routes.answer`'s reason, and the type name alone for
+        # `brain.credential_routes`': an exception's message is a place a value can be quoted.
+        raise Failed(f"connecting a source: {type(exc).__name__}") from exc
+    log.info("source connected", connector=kind.name, principal=actor)
+    answered = ConnectorChangedView(
+        connector=connection.connector,
+        change=ConnectorChange.CONNECTED,
+        changed_at=connection.connected_at,
+        key_written_at=written[0] if written else None,
+        told=CONNECTED,
+    )
+    return JSONResponse(status_code=200, content=answered.model_dump(mode="json"))
+
+
+@router.post(DISCONNECT_PATH, response_model=ConnectorChangedView, responses=COMMON_RESPONSES)
+async def disconnect(request: Request, connector: str, asked: Asked) -> ConnectorChangedView:
+    """Disconnect a source and record who did. Its key stays in the vault, as the answer says."""
+    if not may_connect_source(asked.reach, connector, asked.now):
+        log.info("disconnecting a source not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable("disconnect")
+    records = records_of(request)
+    if records is None:
+        raise Failed("no database on this process")
+    try:
+        at = await records.disconnect(
+            connector,
+            actor=asked.reach.principal_id,
+            trace_id=_trace_id(),
+            ent_hash=asked.reach.ent_hash(),
+        )
+    except NotConnectedError as absent:
+        raise _not_answerable("disconnect") from absent
+    log.info("source disconnected", connector=connector, principal=asked.reach.principal_id)
+    return ConnectorChangedView(
+        connector=connector,
+        change=ConnectorChange.DISCONNECTED,
+        changed_at=at,
+        key_written_at=None,
+        told=DISCONNECTED,
     )

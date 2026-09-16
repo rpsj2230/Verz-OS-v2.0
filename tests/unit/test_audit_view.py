@@ -39,6 +39,7 @@ from brain.audit.record import (
     ACTION_BY_METHOD,
     ApprovalVerdict,
     AuditRecorder,
+    ConnectorChange,
     DenyReason,
     LegalHoldChange,
     RetentionChange,
@@ -389,6 +390,7 @@ CALLS: dict[str, dict[str, object]] = {
     },
     "legal_hold": {"hold_id": "h_dispute", "change": LegalHoldChange.PLACED},
     "skill": {"name": "hosting-expiry", "digest": "d" * 64, "change": SkillChange.APPROVED},
+    "connector": {"connector": "xero", "change": ConnectorChange.CONNECTED},
 }
 
 

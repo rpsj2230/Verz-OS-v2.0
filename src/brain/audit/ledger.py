@@ -34,7 +34,7 @@ Scope: M24.1 is the chain logic only. Nothing here touches a database. The table
 eventually persists these entries stores the same fields and runs `verify` as its check
 job (M24.1.2).
 
-Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1
+Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5
 """
 
 from __future__ import annotations
@@ -315,6 +315,27 @@ class AuditAction(enum.StrEnum):
     bytes the change was about rides in the details: a skill's digest is over its whole text,
     which is not an enumerable input, so it is recordable for `_is_recordable`'s reason about a
     digest rather than refused as a value. Five characters.
+
+    CONNECTOR was added on 2026-09-17, and it is the eighteenth. The Connectors screen connects a
+    source from the console and disconnects one (M42.6.5), and "who let this system read our
+    finance ledger, and who stopped it" is the question an auditor asks about a source, answered
+    until then by nothing: `brain.connectors.registry` returned a lifecycle event for somebody to
+    record and there was no member to record it under, which `COMPOSE_CHANGE`'s paragraph above
+    already said. **Recorded by the database, from a trigger on `ops.connector_connection`**, the
+    way CREDENTIAL is, on the insert and on the one update that marks a connection disconnected,
+    with the actor read off the row's own column for that change.
+
+    Every existing member was tried. CREDENTIAL records the key being written, and a connection
+    writes one, so connecting a source leaves both entries: the key under `credential:` and the
+    decision to read the source under `connector:`. Filing the second under CREDENTIAL would put
+    a disconnect, which writes no key, under a member whose whole content is a key written.
+    COMPOSE_CHANGE is what one agent carries, and a connected source is the install's rather than
+    an agent's; GRANT and REVOKE are capabilities, and connecting a source grants nobody anything,
+    which is `brain.connectors.registry`'s own first sentence. The subject kind `connector` has
+    existed since `0002` with nothing written under it, and
+    `brain.identity.staff_sync.AUDIT_KIND_DECISIONS` already decides who reads it. One member for
+    both directions, with the change in the details, for the reason SIGN_IN gives. Nine
+    characters.
     """
 
     GRANT = "grant"
@@ -358,6 +379,9 @@ class AuditAction(enum.StrEnum):
     #: added it. Which is in the details, with the digest of the bytes it was about. Written by
     #: `0056`'s triggers on `agent.skill` and `agent.skill_review`.
     SKILL = "skill"
+    #: A source was connected from the console, or disconnected. Which is in the details, and
+    #: never its settings or its key. Written by `0057`'s trigger on `ops.connector_connection`.
+    CONNECTOR = "connector"
 
 
 # --------------------------------------------------------------------- redaction

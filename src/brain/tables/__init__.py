@@ -55,6 +55,7 @@ from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
+from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.fast_lane import FastPathRuleRow
@@ -239,6 +240,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     "agent.skill",
     "agent.skill_review",
     "agent.skill_assignment",
+    # 0057_connector_connection. Points at nothing: both actors are values, so the record of who
+    # let this system read a source outlives them.
+    "ops.connector_connection",
 )
 
 __all__ = [
@@ -255,6 +259,7 @@ __all__ = [
     "CapabilityPackAssignmentRow",
     "CapabilityPackRow",
     "CapabilityRegistryRow",
+    "ConnectorConnectionRow",
     "ControlRunRow",
     "ConversationRow",
     "CredentialWriteRow",

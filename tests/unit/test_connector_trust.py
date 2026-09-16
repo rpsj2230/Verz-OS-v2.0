@@ -42,19 +42,29 @@ from brain.connectors.manifest import (
     PermissionSync,
     ProjectedEntity,
     ProjectedField,
+    manifest_digest,
 )
 from brain.connectors.registry import ConnectorState, RegisteredConnector
 from brain.console.connector_trust import (
     ACCESS_SAYS,
     COPY_POLICY,
+    DECLARATION_AGREED,
+    DECLARATION_CHANGED,
+    DECLARATION_UNREADABLE,
+    KEY_HELD,
+    KEY_NOT_HELD,
+    KEY_NOT_KNOWN,
     NEVER,
     PERMISSION_SYNC_SAYS,
     PROJECTED,
     THE_SCREEN,
+    admitted_connections,
     assert_total,
     ceiling_in_words,
+    connected_rows,
     connectors_reachable,
     credential_in_words,
+    key_in_words,
     projected_field_count,
     scope_in_words,
     trust_rows,
@@ -63,6 +73,9 @@ from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.projection import MAX_LABEL_CHARS, MAX_PROJECTED_FIELDS
 from brain.core.scope import Clause, Op, Scope
+from brain.ops.connectable import CONNECTABLE, manifest_for
+from brain.ops.connector_store import Connection
+from brain.ops.credentials import Held, VaultState
 from brain.ops.limits import SOURCE_CEILINGS, connector_ceiling
 from brain.ops.secrets import SecretRef, VaultRole
 
@@ -392,3 +405,109 @@ def test_a_sentence_table_with_a_member_missing_is_refused() -> None:
     # And the module's own tables really are the ones checked at import, so this test is about
     # the guard the module runs rather than about a function nothing calls.
     assert_total(((ACCESS_SAYS, AccessMode), (PERMISSION_SYNC_SAYS, PermissionSync)))
+
+
+# ------------------------------------------------------------ what this install connected
+
+
+def a_connection(name: str = "xero", *, digest: str | None = None) -> Connection:
+    """One connection of a source the console can connect, pinned to what its settings build."""
+    settings = {CONNECTABLE[name].settings[0].name: "11111111"} if name in CONNECTABLE else {}
+    pinned = digest if digest is not None else manifest_digest(manifest_for(name, settings))
+    return Connection(
+        connector=name, settings=settings, digest=pinned, connected_by="u_admin", connected_at=NOW
+    )
+
+
+def a_reader(scope: Scope) -> EntitlementSet:
+    return EntitlementSet(
+        principal_id=READER, grants=(Grant(capability=CONNECTOR_READ, scope=scope),)
+    )
+
+
+HELD: Final = {
+    "xero": Held(slot="connector_keys/xero", held=True, set_at=NOW),
+    "hubspot": Held(slot="connector_keys/hubspot", held=False, set_at=None),
+}
+
+
+def test_a_reader_is_told_of_the_connections_their_grant_reaches_and_of_no_other() -> None:
+    """The same two narrowings `trust_rows` uses, applied to connections before anything is built
+    from them, so a reader holding one source is told of that one, a reader holding nothing is told
+    of none, and a connection whose manifest cannot be built is narrowed exactly the same way.
+    Delete this and the vault is asked about, and the list names, a source the reader holds nothing
+    over. The positive case is the reader holding every source."""
+    every = (
+        a_connection("xero"),
+        a_connection("hubspot"),
+        a_connection("laravel", digest="0" * 64),
+    )
+    one = Scope(clauses=(Clause(field="connector", op=Op.EQ, value="laravel"),))
+
+    assert [
+        c.connector for c in admitted_connections(every, a_reader(Scope.unrestricted()), NOW)
+    ] == [
+        "xero",
+        "hubspot",
+        "laravel",
+    ]
+    assert [c.connector for c in admitted_connections(every, a_reader(one), NOW)] == ["laravel"]
+    assert admitted_connections(every, EntitlementSet(principal_id=READER), NOW) == ()
+    rows = connected_rows(every, a_reader(one), now=NOW, held=HELD, vault=VaultState.READY)
+    assert [row.name for row in rows] == ["laravel"]
+
+
+def test_a_connected_row_says_what_the_vault_holds_and_never_how_a_lease_is_borrowed() -> None:
+    """The key of a connected source is not leased by anything, so the credential column says
+    whether the vault holds it, from the vault's own metadata, and says nothing is known when the
+    vault could not be asked. Delete this and the row says "borrowed as worker for the length of
+    one call" about a key nothing borrows, or a silent vault reads as a missing key."""
+    reader = a_reader(Scope.unrestricted())
+    connections = (a_connection("xero"), a_connection("hubspot"))
+
+    ready = {
+        row.name: row
+        for row in connected_rows(connections, reader, now=NOW, held=HELD, vault=VaultState.READY)
+    }
+    silent = connected_rows(connections, reader, now=NOW, held=HELD, vault=VaultState.UNREACHABLE)
+
+    assert ready["xero"].trust is not None and ready["xero"].trust.credential == KEY_HELD
+    assert (ready["xero"].key_held, ready["xero"].key_written_at) == (True, NOW)
+    assert ready["hubspot"].trust is not None and ready["hubspot"].trust.credential == KEY_NOT_HELD
+    assert ready["hubspot"].key_held is False
+    for row in silent:
+        assert (row.key_held, row.key_written_at) == (None, None)
+        assert row.trust is not None
+        assert row.trust.credential == KEY_NOT_KNOWN[VaultState.UNREACHABLE]
+        assert "borrowed" not in row.trust.credential
+    assert key_in_words(None, VaultState.READY) == KEY_NOT_KNOWN[VaultState.READY]
+
+
+def test_a_connection_says_whether_what_it_declares_is_what_was_agreed_to() -> None:
+    """The digest pinned at connect is compared with the manifest its settings build today, and a
+    connection whose manifest cannot be built at all is still a row. Delete this and a release that
+    changes a connector's tools shows the new declaration as the one agreed to, or a connection
+    nobody can rebuild drops off the list while its key stays in the vault."""
+    reader = a_reader(Scope.unrestricted())
+    rows = {
+        row.name: row
+        for row in connected_rows(
+            (
+                a_connection("xero"),
+                a_connection("hubspot", digest="f" * 64),
+                a_connection("laravel", digest="0" * 64),
+            ),
+            reader,
+            now=NOW,
+            held=HELD,
+            vault=VaultState.READY,
+        )
+    }
+
+    assert (rows["xero"].pinned, rows["xero"].declaration) == (True, DECLARATION_AGREED)
+    assert (rows["hubspot"].pinned, rows["hubspot"].declaration) == (False, DECLARATION_CHANGED)
+    assert rows["hubspot"].trust is not None
+    assert (rows["laravel"].trust, rows["laravel"].declaration) == (None, DECLARATION_UNREADABLE)
+    assert rows["xero"].trust is not None
+    assert rows["xero"].trust.lifecycle == ConnectorState.REGISTERED.value
+    assert rows["xero"].trust.serving is False

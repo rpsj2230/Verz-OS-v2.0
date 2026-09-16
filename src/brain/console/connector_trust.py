@@ -40,22 +40,23 @@ a console row on the argument that a console row is the obvious second place for
 Two modules that far apart agreeing is worth more than the convenience. See
 `A_VAULT_PATH_IS_NOT_A_CREDENTIAL_AND_IS_STILL_NOT_A_CONSOLE_ROW`.
 
-**This lists what is installed and does not offer a catalogue of what could be**, which is the
-one thing a reader coming to connect something will expect and must not be given.
-`brain.setup_wizard._slug_list` already recorded why: nothing in this repository declares which
-sources are connectable, the registry is a runtime record of manifests somebody installed, and a
-list invented in a rendering layer disagrees with it the first time anybody adds a connector.
+**What is listed is what this install connected, and the product's list of what could be is a
+different list served beside it.** Until 2026-09-17 nothing in the repository declared which
+sources are connectable, so there was no second list; `brain.ops.connectable` declares it
+now, total over the manifest builders. It is the same on every install, so offering it tells a
+reader nothing about this one. A connection is `brain.ops.connector_store.Connection`, and
+`connected_rows` turns each into a row by rebuilding the manifest it was connected with, so every
+sentence on the row is still read off a manifest and the digest pinned at connect says whether
+what it declares today is what was agreed to. See `WHAT_IS_SHOWN_IS_WHAT_IT_DECLARES_NOW`.
 
-Rejected: a "connect" verb here. Connecting a connector means writing its credential into the
-vault and registering a manifest against it, and this package writes nothing at all. The
-registry's own write is `brain.connectors.registry.register`, which takes a manifest and an
-installer's entitlement, and the vault half has no writer for a connector: since 2026-09-16
-`brain.ops.openbao.OpenBaoVault.write_static_kv` puts a provider key in from the console, and it
-refuses every path outside the static prefixes `assert_static_path` admits, which `connectors/`
-is not, because a connector's credential is one the vault mints per run and the application
-policy grants no write under it. `CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY` is that stated as the
-sentence the screen carries, rather than as a disabled button, because a control that is drawn
-and refuses is a control somebody files a bug about.
+**A connection this build cannot rebuild is listed, and says so.** A source dropped from the
+connectable list, or settings a stricter connector now refuses, still has a key in the vault and a
+row saying it was connected. Leaving it off would make the one connection nobody can account for
+the one nobody sees. See `A_CONNECTION_THIS_BUILD_CANNOT_REBUILD_IS_STILL_A_CONNECTION`.
+
+Rejected: a "connect" verb here. This package writes nothing, and connecting a source is
+`brain.ops.connector_admin`'s judgement, `brain.ops.credentials`' write and
+`brain.ops.connector_store`'s row, asked for by `brain.connector_routes`.
 
 Scope: reads values and returns values. Nothing here opens a connection, reads a clock of its
 own or writes anything.
@@ -67,18 +68,26 @@ from __future__ import annotations
 
 import enum
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final
 
-from brain.connectors.contract import AccessMode, ConnectorHealth, ConnectorScope
-from brain.connectors.manifest import ConnectorManifest, PermissionSync
-from brain.connectors.registry import RegisteredConnector
+from brain.connectors.contract import (
+    AccessMode,
+    ConnectorContractError,
+    ConnectorHealth,
+    ConnectorScope,
+)
+from brain.connectors.manifest import ConnectorManifest, PermissionSync, manifest_digest
+from brain.connectors.registry import ConnectorState, RegisteredConnector
 from brain.console.operate import reachable_connectors
-from brain.console.screens import screen
+from brain.console.screens import offerable, screen
 from brain.core.entitlement import EntitlementSet
 from brain.core.projection import MAX_LABEL_CHARS, MAX_PROJECTED_FIELDS
+from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_store import Connection
+from brain.ops.credentials import Held, VaultState
 from brain.ops.limits import connector_ceiling
 
 #: The screen this module serves, as `brain.ops.console_screens` reads a declaration.
@@ -124,28 +133,30 @@ A_VAULT_PATH_IS_NOT_A_CREDENTIAL_AND_IS_STILL_NOT_A_CONSOLE_ROW: Final = (
     "and neither of those is the path."
 )
 
-#: Why this screen offers no control for connecting a connector.
-CONNECTING_IS_NOT_DONE_FROM_A_BROWSER_TODAY: Final = (
-    "Connecting a source is two writes: the credential goes into the vault, and a manifest "
-    "naming where it went is registered against it. This install can do neither from a browser. "
-    "The vault takes a model provider's key from the console, and never a connector's: its "
-    "writer refuses every path under connectors/, because a connector's credential is one the "
-    "vault mints for each run and the application's policy grants no write there, so a form "
-    "that collected one would have nowhere to send it. A control that is drawn and then refuses "
-    "is worse than no control: it reads as a permission problem with the person using it. So "
-    "the screen says plainly what has to happen at the server instead, and the day a "
-    "connector's credential has a writer this sentence is what it replaces."
-)
-
 #: Why a connector nobody installed and one this reader cannot see are the same absence.
 AN_UNINSTALLED_CONNECTOR_AND_AN_UNREACHABLE_ONE_ARE_ONE_ABSENCE: Final = (
     "brain.console.operate.NAMING_A_SOURCE_IS_A_DISCLOSURE_ON_A_LIST_TOO already holds this for "
     "the health table and this list is narrowed by the same function, so a source that is out "
-    "of this reader's reach and a source nobody installed produce an identical screen. That is "
-    "also why there is no catalogue of connectable sources here: brain.setup_wizard._slug_list "
-    "records that nothing in this repository declares which sources can be connected, so a list "
-    "invented in a rendering layer would be wrong the first time anybody adds one, and it would "
-    "be read as the set of sources this company could have."
+    "of this reader's reach and a source nobody connected produce an identical screen. The list "
+    "of sources that could be connected is brain.ops.connectable's, the same on every "
+    "install, so it is served whole and says nothing about which of them this company reads."
+)
+
+#: Why a connected source's row is built from its manifest as it is declared today.
+WHAT_IS_SHOWN_IS_WHAT_IT_DECLARES_NOW: Final = (
+    "A connection keeps its settings and the digest of the manifest agreed to, and not the "
+    "manifest, because the manifest is the product's code and a release can change a connector's "
+    "tools. So the row is built from what the connector declares today with those settings, and "
+    "when the digest differs the row says that this is not what was agreed to, rather than "
+    "showing the new declaration as though somebody had accepted it."
+)
+
+#: Why a connection whose manifest cannot be rebuilt stays on the list.
+A_CONNECTION_THIS_BUILD_CANNOT_REBUILD_IS_STILL_A_CONNECTION: Final = (
+    "A source can leave the connectable list, or a connector can come to refuse settings it once "
+    "accepted, and the connection still has a key in the vault and a row saying who connected it. "
+    "It is listed with nothing said about what it may read, because nothing can be read off a "
+    "manifest that cannot be built, and with the one thing to do, which is to disconnect it."
 )
 
 #: Why the design's budget bar carries a ceiling and no figure for today's use.
@@ -188,12 +199,50 @@ NO_EXPIRY_IS_READABLE_FROM_HERE: Final = (
     "in a vendor's dashboard rather than in anything this install can ask."
 )
 
-#: What is said when nothing on this process holds a registry to read.
-NOTHING_HERE_HOLDS_A_CONNECTOR_REGISTRY: Final = (
-    "This process holds no record of which sources are installed, so nothing on this screen is "
-    "a statement about them. It is not that none is connected: it is that nothing here has "
-    "looked. Until a registry is attached, find out at the server which manifests were "
-    "registered, and treat this screen as empty of information rather than as an empty list."
+#: What is said when this process has no database to ask which sources are connected.
+NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED: Final = (
+    "This process has no database, so nothing on this screen can say which sources this install "
+    "has connected. It is not that none is connected: it is that nothing here has looked. Treat "
+    "this screen as empty of information rather than as an empty list."
+)
+
+#: The sentence a connected source's key column carries, by what the vault said.
+KEY_HELD: Final = (
+    "Held in the vault since it was connected, and never shown again. Nothing on this install "
+    "reads it yet, because no worker runs a connector."
+)
+KEY_NOT_HELD: Final = (
+    "The vault holds no key for this source, so nothing could read from it even once a worker "
+    "runs connectors. Disconnect it and connect it again with its key."
+)
+KEY_NOT_KNOWN: Final[Mapping[VaultState, str]] = MappingProxyType(
+    {
+        VaultState.ABSENT: (
+            "This install runs no secrets vault, so whether a key for this source is held is not "
+            "known here."
+        ),
+        VaultState.UNREACHABLE: (
+            "Whether the vault holds this source's key is not known, because the vault did not "
+            "answer."
+        ),
+        VaultState.REFUSED: (
+            "Whether the vault holds this source's key is not known, because the vault refused to "
+            "say."
+        ),
+        VaultState.READY: "Whether the vault holds this source's key was not asked.",
+    }
+)
+
+#: The sentence beside a connection, by whether what it declares is what was agreed to.
+DECLARATION_AGREED: Final = "What it declares is what was agreed to when it was connected."
+DECLARATION_CHANGED: Final = (
+    "What this release of the connector declares is not what was agreed to when the source was "
+    "connected, and what is shown is what it declares now. Disconnect it and connect it again to "
+    "agree to it."
+)
+DECLARATION_UNREADABLE: Final = (
+    "This release cannot rebuild what the source was connected as, so nothing is said about what "
+    "it may read. Disconnect it, and connect it again if the screen still offers it."
 )
 
 
@@ -538,3 +587,106 @@ def trust_rows(
     return tuple(
         trust_row(one, checked.get(one.name)) for one in reachable_connectors(registry, reachable)
     )
+
+
+# ------------------------------------------------------------------ what was connected
+
+
+@dataclass(frozen=True)
+class ConnectedRow:
+    """One source this install connected from the console, as a reader may be told of it.
+
+    `trust` is the row this module has always drawn, built from the manifest the connection's
+    settings make today, with its credential sentence saying what the vault holds rather than how
+    a lease is borrowed, because nothing borrows this key. It is None when the manifest cannot be
+    rebuilt; see `A_CONNECTION_THIS_BUILD_CANNOT_REBUILD_IS_STILL_A_CONNECTION`.
+    """
+
+    name: str
+    connected_by: str
+    connected_at: datetime
+    #: Whether the vault holds its key, or None when the vault could not be asked.
+    key_held: bool | None
+    key_written_at: datetime | None
+    #: Whether what it declares today is what was agreed to at connect.
+    pinned: bool
+    declaration: str
+    trust: TrustRow | None
+
+
+def key_in_words(held: Held | None, vault: VaultState) -> str:
+    """What the vault said about one source's key, as the sentence its credential column carries."""
+    if vault is not VaultState.READY or held is None:
+        return KEY_NOT_KNOWN[vault]
+    return KEY_HELD if held.held else KEY_NOT_HELD
+
+
+def admitted_connections(
+    connections: Sequence[Connection], reader: EntitlementSet, now: datetime | None = None
+) -> tuple[Connection, ...]:
+    """The connections this reader may be told exist, in the order given.
+
+    Narrowed by the two functions `trust_rows` narrows by, in the same order, over names, so a
+    connection whose manifest cannot be rebuilt is narrowed exactly as one whose manifest can.
+    Public so a route asks the vault about these and no others. No count of what was left out.
+    """
+    names = [one.connector for one in connections]
+    admitted = set(offerable(names, connectors_reachable(names, reader, now)))
+    return tuple(one for one in connections if one.connector in admitted)
+
+
+def connected_rows(
+    connections: Sequence[Connection],
+    reader: EntitlementSet,
+    *,
+    now: datetime | None = None,
+    held: Mapping[str, Held],
+    vault: VaultState,
+) -> tuple[ConnectedRow, ...]:
+    """Every connection this reader may be told exists, each with what it is trusted to read.
+
+    Narrowed by `admitted_connections` whatever the caller already narrowed, so a reader holding
+    nothing over a source is told of it by no path through this function. See
+    `AN_UNINSTALLED_CONNECTOR_AND_AN_UNREACHABLE_ONE_ARE_ONE_ABSENCE`.
+
+    No count of what was left out, and the reader is taken rather than a list of names, for
+    `trust_rows`' reasons.
+    """
+    rows: list[ConnectedRow] = []
+    for one in admitted_connections(connections, reader, now):
+        key = held.get(one.connector) if vault is VaultState.READY else None
+        written = None if key is None else key.set_at
+        known = None if key is None else key.held
+        try:
+            manifest = manifest_for(one.connector, one.settings)
+        except (NotConnectableError, ConnectorContractError):
+            rows.append(
+                ConnectedRow(
+                    name=one.connector,
+                    connected_by=one.connected_by,
+                    connected_at=one.connected_at,
+                    key_held=known,
+                    key_written_at=written,
+                    pinned=False,
+                    declaration=DECLARATION_UNREADABLE,
+                    trust=None,
+                )
+            )
+            continue
+        pinned = manifest_digest(manifest) == one.digest
+        registered = RegisteredConnector(
+            manifest=manifest, digest=one.digest, state=ConnectorState.REGISTERED
+        )
+        rows.append(
+            ConnectedRow(
+                name=one.connector,
+                connected_by=one.connected_by,
+                connected_at=one.connected_at,
+                key_held=known,
+                key_written_at=written,
+                pinned=pinned,
+                declaration=DECLARATION_AGREED if pinned else DECLARATION_CHANGED,
+                trust=replace(trust_row(registered, None), credential=key_in_words(key, vault)),
+            )
+        )
+    return tuple(rows)

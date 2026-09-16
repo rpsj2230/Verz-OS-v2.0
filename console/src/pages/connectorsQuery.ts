@@ -1,52 +1,70 @@
 /**
- * What the connectors screen asks the API for, and the three rules it renders by. No React.
+ * What the connectors screen asks the API for, what it sends, and the rules it renders by. No React.
  *
  * The split is `installQuery.ts`'s: this decides what may be asked and what a row is, the page
- * renders it. `brain.console.connector_trust` decides what a reader may be told and
- * `brain.connector_routes` serves it, and nothing here adds an opinion about either.
+ * renders it. `brain.console.connector_trust` decides what a reader may be told,
+ * `brain.ops.connector_admin` decides who may connect a source and what a connection must be, and
+ * `brain.connector_routes` serves both; nothing here adds an opinion about any of it.
  *
- * **Rule one: the sentences are the API's, whole.** Every column on this screen that is not a
- * word out of an enumeration is a sentence the Python side composed: what a connector reaches,
- * what its credential is allowed to be used for, what its ceiling is, and what the source
- * contributes to who may see a row. A console that summarised any of them would be deciding half
- * the meaning of a permission fact in a browser. See `A_SENTENCE_IS_NOT_A_BADGE`.
+ * **Rule one: the sentences are the API's, whole.** What a connector reaches, what its key is,
+ * what its ceiling is, what the source contributes to who may see a row, what connecting does not
+ * do, and what a confirmation agrees to are each a sentence the Python side composed. A console
+ * that summarised any of them would be deciding half the meaning of a permission fact in a
+ * browser. See `A_SENTENCE_IS_NOT_A_BADGE`.
  *
  * **Rule two: an absent list and an empty list are drawn differently.** The API sends exactly one
  * of a list and a sentence, refused in its own model, and `readConnectors` turns the absence into
- * a value so a page cannot write `connectors ?? []`. An empty list means this reader may be told
- * of no source; an absent one means nothing on the server looked, and drawing the second as the
- * first says this system reads no outside data, which is the reassuring answer to the question
- * the screen exists to answer honestly.
+ * a value so a page cannot write `connectors ?? []`.
  *
- * **Rule three: no count, no total, and no bar drawn from a number nobody measured.**
- * `docs/screens.html` SCREEN 9 draws a bar of calls made today against each source's ceiling.
- * The API sends the ceiling in words and a sentence saying why there is no figure for today, and
- * this module offers no field a bar could be drawn from. See `A_BAR_NEEDS_A_NUMERATOR`.
+ * **Rule three: no count, no total, and no bar drawn from a number nobody measured.** See
+ * `A_BAR_NEEDS_A_NUMERATOR`.
  *
- * Task ids: M42.6.5
+ * **Rule four: a key is sent once and kept by nobody here.** `connectionBody` is the one place a
+ * key is put into anything, it is the request body and nothing else, and the form that holds it
+ * clears it before the request leaves. See `A_KEY_IS_SENT_ONCE_AND_KEPT_BY_NOBODY_HERE`.
+ *
+ * Task ids: M42.6.5, M42.5.9
  */
 
 import type { components } from "../api/schema";
+import { problemsFor, readProblems, when, type Problem } from "./webhooksQuery";
 
-/** One connector, as `brain.connector_routes.TrustView` sends it. */
+export { problemsFor, readProblems, when, type Problem };
+
+/** One connected source, as `brain.connector_routes.ConnectedView` sends it. */
+export type Connected = components["schemas"]["ConnectedView"];
+
+/** What one connected source is trusted to read, as `brain.connector_routes.TrustView` sends it. */
 export type Trust = components["schemas"]["TrustView"];
 
 /** The screen's whole answer. */
 export type Connectors = components["schemas"]["ConnectorsView"];
 
+/** A source the console can connect, and what its form asks for. */
+export type Connectable = components["schemas"]["ConnectableView"];
+
+/** A source this release has a connector for that the console cannot connect, and why. */
+export type NotConnectable = components["schemas"]["NotConnectableView"];
+
 /** One line of what this system copies out of a source and what it never does. */
 export type CopyLine = components["schemas"]["CopyLineView"];
+
+/** What a connect sends. */
+export type ConnectionBody = components["schemas"]["ConnectAsked"];
+
+/** What a connect or a disconnect answers. */
+export type ConnectorChanged = components["schemas"]["ConnectorChangedView"];
 
 /**
  * Written down because turning a sentence into a badge is a tidy-up that removes the argument.
  */
 export const A_SENTENCE_IS_NOT_A_BADGE =
-  "What a connector reaches, what its credential may be used for and what the source " +
-  "contributes to who may see a row are each a decision with a reason attached, composed on " +
-  "the server for somebody who has a server and no source tree. Rendered as a chip saying " +
-  "read-only they all become one word, and the word a reader remembers is the reassuring half " +
-  "of a two-member enumeration. The state column is the one place a value picks a colour here, " +
-  "it is `ui/Status.tsx`, and its table is the connector health vocabulary and nothing else.";
+  "What a connector reaches, what its key is and what the source contributes to who may see a " +
+  "row are each a decision with a reason attached, composed on the server for somebody who has a " +
+  "server and no source tree. Rendered as a chip saying read-only they all become one word, and " +
+  "the word a reader remembers is the reassuring half of a two-member enumeration. The state " +
+  "column is the one place a value picks a colour here, it is `ui/Status.tsx`, and its table is " +
+  "the connector health vocabulary and nothing else.";
 
 /**
  * Written down because a progress bar is four lines of markup and is the one element on this
@@ -61,18 +79,23 @@ export const A_BAR_NEEDS_A_NUMERATOR =
   "rendered beside the column.";
 
 /**
- * Written down because a vault path looks harmless in a row and is the one value on this screen
- * that names a credential rather than describing one.
+ * Written down because the obvious convenience, keeping what was typed in case the request fails,
+ * is a key held in a page's memory for as long as the page is open.
  */
-export const NOTHING_HERE_ASKS_FOR_A_CREDENTIAL =
-  "This screen has no field a credential could be typed into and no field a vault path arrives " +
-  "in. Connecting a source is two writes on the server, and the API sends the sentence saying " +
-  "so in place of a control: a form that collected a key would have nowhere to send it, and a " +
-  "button that refused would read as a permission problem with the person pressing it.";
+export const A_KEY_IS_SENT_ONCE_AND_KEPT_BY_NOBODY_HERE =
+  "A source's key is typed into one field, put into one request body by `connectionBody`, and " +
+  "cleared from the form's state before the request leaves, whatever comes back. It is never " +
+  "written to a store, an address or a log, never shown on a confirmation, and never echoed by " +
+  "the API, so a refused connection asks for the key again rather than offering it back.";
 
 // ------------------------------------------------------------------- where the API answers
 
 export const CONNECTORS_API_PATH = "/connectors";
+
+/** Where a source is disconnected. The name is a path segment and is encoded as one. */
+export function disconnectApiPath(name: string): string {
+  return `${CONNECTORS_API_PATH}/${encodeURIComponent(name)}/disconnect`;
+}
 
 // ------------------------------------------------------------- where the console answers
 //
@@ -105,17 +128,12 @@ export function wasRead<T>(read: Read<T>): read is { readonly rows: T } {
 }
 
 /**
- * The connector list, or why there is none.
- *
- * The absence is turned into a value here rather than left as a null on the payload, so a page
- * cannot write `connectors ?? []` and draw an empty table. That expression is one keystroke and
- * it renders "nothing here looked" as "this system reads nothing".
+ * The connected sources, or why there is no list.
  *
  * A body carrying neither is treated as unread with the API's own empty sentence, because the
- * direction to fail in is the one that claims less: a console that drew an empty table would be
- * indistinguishable from a page that had not loaded.
+ * direction to fail in is the one that claims less.
  */
-export function readConnectors(payload: Connectors | null): Read<readonly Trust[]> {
+export function readConnectors(payload: Connectors | null): Read<readonly Connected[]> {
   const rows = payload?.connectors;
   if (rows === null || rows === undefined) {
     return { unread: payload?.unread ?? "" };
@@ -124,19 +142,18 @@ export function readConnectors(payload: Connectors | null): Read<readonly Trust[
 }
 
 /**
- * How a connector's columns are shown, in `docs/screens.html` SCREEN 9's order.
+ * How a connected source's columns are shown, in `docs/screens.html` SCREEN 9's order.
  *
- * The header is this console's own wording and the values are the API's, which is the one place
- * this screen departs from `installQuery.ts`' rule that the API owns the vocabulary. The reason
- * is that two of these columns do not answer the design's question: the design asks for the last
- * read and the API can say only when the source was last probed, and the design asks for the
- * budget used today and the API can say only the ceiling. A header repeating the design's word
- * over the weaker fact is the screen claiming a measurement it does not have.
+ * The header is this console's own wording and the values are the API's. Two of these columns do
+ * not answer the design's question: the design asks for the last read and the API can say only
+ * when the source was last probed, and the design asks for the budget used today and the API can
+ * say only the ceiling. A header repeating the design's word over the weaker fact is the screen
+ * claiming a measurement it does not have.
  */
 export const TRUST_COLUMNS: readonly { readonly field: keyof Trust; readonly header: string }[] = [
   { field: "name", header: "Source" },
   { field: "wiring", header: "Wiring" },
-  { field: "credential", header: "Credential" },
+  { field: "credential", header: "Key" },
   { field: "budget", header: "Ceiling" },
   { field: "projected_fields", header: "Projected" },
   { field: "checked_at", header: "Last checked" },
@@ -158,12 +175,103 @@ export const TRUST_DETAIL: readonly { readonly field: keyof Trust; readonly labe
  *
  * An empty string reaches here for a source with no probe, and it is drawn as this word rather
  * than as a blank: a blank in a column of states reads as nothing being wrong with it.
- * `ui/Status.tsx` does not recognise the word, so it renders in the quietest tone, which is
- * exactly right and is that file's own rule about a word it has never heard of.
+ * `ui/Status.tsx` does not recognise the word, so it renders in the quietest tone.
  */
 export const NOT_PROBED = "not probed";
 
 /** The state word for a row, never a blank. */
 export function stateOf(row: Trust): string {
   return row.health === "" ? NOT_PROBED : row.health;
+}
+
+/**
+ * The key column in a few words, beside the API's sentence. `null` is not known and never not
+ * held: a vault that did not answer draws every key as unknown rather than as missing.
+ */
+export function keyWords(row: Connected): string {
+  if (row.key_held === null) {
+    return "Not known";
+  }
+  if (!row.key_held) {
+    return "Not held";
+  }
+  return row.key_written_at ? `Held, written ${when(row.key_written_at)}` : "Held";
+}
+
+// ------------------------------------------------------------------------ connecting one
+
+/** The settings a form starts with: every setting this source asks for, blank. */
+export function blankSettings(source: Connectable): Record<string, string> {
+  return Object.fromEntries(source.settings.map((one) => [one.name, ""]));
+}
+
+/**
+ * What a connect sends: the source, exactly the settings it asks for, and the key.
+ *
+ * Only the settings the source declares are sent, so a value left in the form from another source
+ * cannot arrive as a setting this one does not take. Nothing is trimmed or checked here: the API
+ * judges every field in words, and a second judgement in a browser is a second place to be wrong.
+ */
+export function connectionBody(
+  source: Connectable,
+  settings: Readonly<Record<string, string>>,
+  key: string,
+): ConnectionBody {
+  return {
+    connector: source.name,
+    settings: Object.fromEntries(source.settings.map((one) => [one.name, settings[one.name] ?? ""])),
+    credential: key,
+  };
+}
+
+/**
+ * The blank fields of a connection, as the problems the API would have answered with.
+ *
+ * **Only blankness is judged here, before the confirmation opens**, for `webhooksQuery.ts`' reason:
+ * a connection with nothing typed was one press from a confirmation a person could agree to and be
+ * refused for afterwards. The sentences are the ones the API serves beside the form
+ * (`SettingView.blank` and `ConnectorsView.key_blank`), so there is no copy of them here to drift.
+ * Every other rule, what the connector refuses and what makes a key one piece, stays the API's.
+ */
+export function blankConnectionProblems(
+  source: Connectable,
+  settings: Readonly<Record<string, string>>,
+  key: string,
+  keyBlank: string,
+): Problem[] {
+  const found: Problem[] = source.settings
+    .filter((one) => (settings[one.name] ?? "").trim() === "")
+    .map((one) => ({ field: one.name, code: "blank", message: one.blank }));
+  if (key.trim() === "") {
+    found.push({ field: "credential", code: "blank", message: keyBlank });
+  }
+  return found;
+}
+
+/** The sentence a success carries, or an empty one when the body is not that document. */
+export function readTold(payload: unknown): string {
+  if (typeof payload !== "object" || payload === null) {
+    return "";
+  }
+  const told = (payload as { told?: unknown }).told;
+  return typeof told === "string" ? told : "";
+}
+
+/**
+ * The sources this reader may connect, in the API's order, with any the setup wizard named first.
+ *
+ * `named` is the free text of the wizard's Data sources screen, split on commas; a name there that
+ * is a source this reader may connect is offered first, and nothing else about the text is read.
+ */
+export function offered(
+  connectable: readonly Connectable[],
+  named: string = "",
+): readonly Connectable[] {
+  const wanted = named
+    .split(",")
+    .map((one) => one.trim())
+    .filter((one) => one !== "");
+  const mine = connectable.filter((one) => one.may_connect);
+  const first = mine.filter((one) => wanted.includes(one.name));
+  return [...first, ...mine.filter((one) => !wanted.includes(one.name))];
 }

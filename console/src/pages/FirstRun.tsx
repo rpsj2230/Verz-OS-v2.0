@@ -46,6 +46,12 @@
  * did that fail" is the sentence. A local install, which kept no key, lands as it always did.
  * See `brain.ops.credentials.A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`.
  *
+ * **Sources named on the Data sources screen are offered for connecting after the sign-in.** The
+ * finishing screen binds the administrator's sign-in first, and only then, when that screen named
+ * any source, `setup/ConnectSourcesStep.tsx` offers each one through the Connectors screen's own
+ * form and request, skippable and said to be repeatable from Connectors. A person who skipped the
+ * screen lands exactly as before. See that module's `CONNECTING_WAITS_FOR_THE_ADMINISTRATOR`.
+ *
  * **Nothing sends a person here.** The root address does not detect an unfinished install and
  * redirect, because there is no route that says whether an install is finished, and there must
  * not be: that is the fact `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER` hides. The install
@@ -55,7 +61,7 @@
  * which reads the chosen list once and holds what it needs in its own state, so nothing it asks
  * for is an answer, in the review or in the appointment.
  *
- * Task ids: M42.5.14, M27.8.7, M42.5.7
+ * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9
  */
 
 import { useState, useSyncExternalStore } from "react";
@@ -65,6 +71,7 @@ import type { ApiFailure } from "../api/errors";
 import type { components } from "../api/schema";
 import { clearSignInAttempts } from "../auth/pkce";
 import { accessToken, beginSignIn, getSessionState, subscribe } from "../auth/session";
+import { ConnectSourcesStep, namedSources } from "../setup/ConnectSourcesStep";
 import {
   APPOINTMENT_PATH,
   FINISH_PATH,
@@ -271,6 +278,7 @@ function Wizard() {
   const [keyKept, setKeyKept] = useState<ProviderKeyKept>("not_asked");
   const [finishing, setFinishing] = useState(false);
   const [finished, setFinished] = useState(false);
+  const [connectingSources, setConnectingSources] = useState(false);
 
   function valueOf(screen: Screen, question: Question): string {
     if (screen.key === "setup_code") {
@@ -320,6 +328,12 @@ function Wizard() {
       return;
     }
     setCode("");
+    // M42.5.9: sources named on the Data sources screen are offered now, with the administrator's
+    // own token. See `setup/ConnectSourcesStep.tsx`.
+    if (namedSources(answers, skipped).length > 0) {
+      setConnectingSources(true);
+      return;
+    }
     if (keptSentence(kept) === null) {
       navigate("/", { replace: true });
       return;
@@ -375,6 +389,15 @@ function Wizard() {
   }
 
   const kept = keptSentence(keyKept);
+  if (connectingSources) {
+    return (
+      <ConnectSourcesStep
+        named={namedSources(answers, skipped)}
+        kept={kept}
+        onDone={() => navigate("/", { replace: true })}
+      />
+    );
+  }
   if (finished && kept !== null) {
     return (
       <main className="first-run">

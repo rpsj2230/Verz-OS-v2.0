@@ -50,7 +50,15 @@ can verify. It is written from the console (`brain.ops.webhook_admin`) and is ad
 and every other leased path are refused exactly as before. See
 `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`.
 
-Task ids: M31.3.2.3, M27.8.7, M27.8.12
+**A third, `connector_keys/`, for the key a source's vendor issued.** Connecting a source from the
+console (`brain.ops.connector_admin`) keeps the key its vendor issued for this company, which no
+engine can mint any more than it can mint a provider key: a helpdesk's agent key or a CRM's private
+app token is valid until somebody revokes it in the vendor's own settings. It is a prefix of its
+own and not a path under `connectors/`, because `connectors/creds/` is the leased path and a prefix
+check reading `startswith` would admit every lease beside it. See
+`A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT`.
+
+Task ids: M31.3.2.3, M27.8.7, M27.8.12, M42.6.5
 """
 
 from __future__ import annotations
@@ -81,8 +89,12 @@ STATIC_PREFIX = "providers/"
 #: Webhook subscribers' signing secrets. See `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`.
 SIGNING_PREFIX = "webhooks/"
 
+#: The key a connected source's vendor issued. See
+#: `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT`.
+CONNECTOR_KEY_PREFIX = "connector_keys/"
+
 #: Every prefix the kv methods admit, and nothing else in the vault is stored rather than leased.
-STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX)
+STATIC_PREFIXES = (STATIC_PREFIX, SIGNING_PREFIX, CONNECTOR_KEY_PREFIX)
 
 #: Why a subscriber's signing secret is kept in kv rather than leased like a connector's.
 A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED = (
@@ -91,6 +103,17 @@ A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED = (
     "request, which no receiver could verify, so the secret is stored and replaced as a whole "
     "when an administrator rotates it. It is kept under an engine of its own rather than beside "
     "the provider keys, so a policy granting one never grants the other."
+)
+
+
+#: Why a connected source's key is kept in kv, and why under a prefix that is not `connectors/`.
+A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT = (
+    "A source's vendor issues the key a connection reads with, and it stays valid until somebody "
+    "revokes it in the vendor's own settings, so there is no engine that could mint a fresh one "
+    "per run and nothing to lease. It is stored, written once from the console and never read "
+    "back by the process that wrote it. It sits under connector_keys/ and not under connectors/, "
+    "because connectors/creds/ is the leased path and a prefix check that admitted connectors/ "
+    "would admit every lease beside the stored key."
 )
 
 
@@ -145,12 +168,14 @@ def assert_static_path(path: str) -> None:
     Public and separate so the refusal can be tested directly rather than only through a
     call that needs a server. `providers/anthropic` is a key nobody can lease;
     `connectors/creds/xero` is one somebody should, and reading the second one this way
-    would work perfectly and be invisible. `webhooks/` is the one other prefix admitted; see
-    `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED`.
+    would work perfectly and be invisible. `webhooks/` and `connector_keys/` are the two other
+    prefixes admitted; see `A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED` and
+    `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT`.
     """
     if not any(path.startswith(prefix) for prefix in STATIC_PREFIXES):
         msg = (
-            f"{path!r} is not a provider key or a signing secret. Everything outside "
+            f"{path!r} is not a provider key, a signing secret or a connected source's key. "
+            "Everything outside "
             f"{list(STATIC_PREFIXES)!r} is leased "
             "through brain.ops.secrets.borrow, which revokes it when the run ends; reading "
             "it here would hand back a standing credential nobody gives back."

@@ -43,6 +43,7 @@ interface FormCase {
 
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
+  "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 0, writes: true }],
   "src/pages/AccessReview.tsx": [{ pattern: "/access_review", index: 0, writes: false }],
   "src/pages/Classification.tsx": [
     { pattern: "/classification/:entity/:column", index: 0, writes: false },

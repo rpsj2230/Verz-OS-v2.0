@@ -37,7 +37,7 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4
+Task ids: M24.1.3, M24.1.4, M42.6.5
 """
 
 from __future__ import annotations
@@ -162,6 +162,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "retention": AuditAction.RETENTION,
         "legal_hold": AuditAction.LEGAL_HOLD,
         "skill": AuditAction.SKILL,
+        "connector": AuditAction.CONNECTOR,
     }
 )
 
@@ -247,6 +248,13 @@ class SkillChange(enum.StrEnum):
     IMPORTED = "imported"
     APPROVED = "approved"
     REJECTED = "rejected"
+
+
+class ConnectorChange(enum.StrEnum):
+    """What happened to a connected source. The two values `0057`'s trigger writes."""
+
+    CONNECTED = "connected"
+    DISCONNECTED = "disconnected"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -755,4 +763,18 @@ class AuditRecorder:
             AuditAction.SKILL,
             subject("skill", name),
             {"change": change.value, "digest": digest},
+        )
+
+    def connector(self, *, connector: str, change: ConnectorChange) -> AuditEntry:
+        """Record that a source was connected from the console, or disconnected.
+
+        Written in a deployed database by `0057`'s trigger on `ops.connector_connection`, on the
+        insert and on the update that marks the connection disconnected, and held to this
+        method's details by a test. **Never the settings and never the key**: the settings are the
+        source's own identifiers, which the connection's row keeps, and the key is recorded as a
+        write under `credential` by `credential`, with nothing of it in either entry. There is no
+        parameter through which either could arrive.
+        """
+        return self._write(
+            AuditAction.CONNECTOR, subject("connector", connector), {"change": change.value}
         )

@@ -294,6 +294,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.ops.webhook_store:WebhookRecords.switch_off": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The Connectors screen. A connection is this system's own row in one transaction, with the
+        # key written inside it through `CredentialVault.write_static_kv`, classified above; a
+        # repeat finds the source already connected and is refused before its key is written. A
+        # disconnect is one update, and a repeat finds nothing live to mark.
+        "brain.ops.connector_store:ConnectorRecords.connected": Repeat.READS,
+        "brain.ops.connector_store:ConnectorRecords.connect": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.connector_store:ConnectorRecords.disconnect": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         "brain.ops.erasure:Hold.is_active": Repeat.READS,
         "brain.ops.erasure:StoreEraser.count_for": Repeat.READS,
         "brain.ops.erasure:StoreEraser.erase": Repeat.SAME_RESULT_WHEN_REPEATED,

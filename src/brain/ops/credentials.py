@@ -91,13 +91,24 @@ Rejected: validating a key against its provider before storing it. It sends the 
 party from a code path whose whole job is to hold it, it fails on an install with no egress, and
 a provider's key format is not ours to bound; `brain.setup_wizard.MAX_KEY_CHARS` says the same.
 
-Task ids: M27.8.7, M5.1.2
+**A connected source's key is a second kind of slot, and it goes through this same `keep`.**
+Connecting a source from the console (`brain.ops.connector_admin`) writes the key the source's
+vendor issued into `connector_keys/<source>`, and that write is recorded in `ops.credential_write`
+and reaches the ledger exactly as a provider key's does, because it is this function. The two
+kinds share `KeySlot`, which is a path and a sentence; only `CredentialSlot` names a provider, so
+`put_to_use` and `told_in_use` cannot be handed a connector's slot, which nothing reads out of the
+environment. The console's credential route writes `SLOTS` and nothing else, so a connector's key
+is written by connecting the source, under `admin:connector`, and never under `admin:credential`.
+See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT`.
+
+Task ids: M27.8.7, M5.1.2, M42.6.5
 """
 
 from __future__ import annotations
 
 import asyncio
 import enum
+import re
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -106,7 +117,12 @@ from typing import Final, Protocol
 
 import structlog
 
-from brain.ops.openbao import OpenBaoVault, StaticVersion, VaultUnreachableError
+from brain.ops.openbao import (
+    CONNECTOR_KEY_PREFIX,
+    OpenBaoVault,
+    StaticVersion,
+    VaultUnreachableError,
+)
 from brain.ops.provider_keys import (
     PROVIDER_SLOTS,
     ProviderSlot,
@@ -179,6 +195,15 @@ THE_KEY_IS_KEPT_BEFORE_IT_IS_RECORDED_AND_A_LOST_RECORD_IS_LOUD: Final = (
     "record of that write."
 )
 
+#: Why a connected source's key has a slot kind of its own and a writer of its own.
+A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT: Final = (
+    "A source's key is kept by the same write as a provider key, so it is recorded in the ledger "
+    "the same way, and it is never read back by either. It is a different kind of slot because "
+    "nothing reads it into this process's environment, and it is written only by connecting the "
+    "source under admin:connector, because a key written without the settings that say what it "
+    "reaches is a key nothing on the connectors screen can account for."
+)
+
 # --------------------------------------------------------------------- the figures
 
 #: The one field a provider slot's secret is written under. `api_key`, because it is the first
@@ -240,19 +265,64 @@ class InUse(enum.StrEnum):
 
 
 @dataclass(frozen=True)
-class CredentialSlot:
-    """One place a credential is kept: its vault path, what it is for, and who reads it.
+class KeySlot:
+    """Where a credential is kept and what it is for. Everything `keep` and `held` need.
 
-    Only provider keys today, and `provider` is required because every slot is one. A
-    connector's credential will be a second kind of slot beside this with a prefix of its own
-    added to what `brain.ops.openbao.assert_static_path` admits and a line in the application
-    policy; `provider` is the field that kind will not have, because nothing reads a connector
-    credential out of the environment.
+    Two kinds below, and a function taking this takes either: the write, the metadata read and
+    the record are one mechanism for both. See
+    `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT`.
     """
 
     path: str
     description: str
+
+
+@dataclass(frozen=True)
+class CredentialSlot(KeySlot):
+    """A model provider's key: its vault path, what it is for, and the provider that reads it.
+
+    `provider` is required, and it is the field `ConnectorKeySlot` does not have, because nothing
+    reads a connector's key out of the environment. `put_to_use` takes this type and not
+    `KeySlot`, so a connector's slot cannot be handed to a provider's SDK by a caller that mixed
+    the two up.
+    """
+
     provider: ProviderSlot
+
+
+@dataclass(frozen=True)
+class ConnectorKeySlot(KeySlot):
+    """The key a connected source's vendor issued, at `connector_keys/<source>`.
+
+    Built only by `connector_key_slot`, which holds the source's name to one path segment, so the
+    slot is one the application policy's `+` names and one `brain.audit.record.CREDENTIAL_SLOT`
+    admits as a ledger subject.
+    """
+
+    connector: str
+
+
+#: A source's name as a slot takes it: one lower-case path segment, a letter first. The same
+#: grammar as `brain.ops.webhook_admin.SUBSCRIBER_ID_PATTERN`, for that constant's reason.
+CONNECTOR_NAME_PATTERN: Final = r"^[a-z][a-z0-9_]{0,62}$"
+_CONNECTOR_NAME_RE: Final = re.compile(CONNECTOR_NAME_PATTERN)
+
+
+def connector_key_slot(connector: str) -> ConnectorKeySlot:
+    """Where a connected source's key is kept. Refuses a name that is not one path segment.
+
+    Refused rather than escaped, because the name is the path: `xero/../providers/anthropic` would
+    be a write over the key every question is sent with, and a name the grammar refuses is one
+    no connectable source in `brain.ops.connectable` has.
+    """
+    if not _CONNECTOR_NAME_RE.fullmatch(connector):
+        msg = f"{connector!r} is not a source name a key slot can be built from"
+        raise ValueError(msg)
+    return ConnectorKeySlot(
+        path=f"{CONNECTOR_KEY_PREFIX}{connector}",
+        description=f"The key {connector} issued for this company's connection.",
+        connector=connector,
+    )
 
 
 #: Every slot this system writes, by path. Closed, and built from `PROVIDER_SLOTS` rather than
@@ -427,7 +497,7 @@ class Credentials:
             raise CredentialsUnavailableError(VaultState.ABSENT)
         return self._vault
 
-    def held(self, slot: CredentialSlot) -> Held:
+    def held(self, slot: KeySlot) -> Held:
         """Whether `slot` holds a secret, and when it was written. Reads metadata only."""
         vault = self._vault_or_refuse()
         try:
@@ -442,7 +512,7 @@ class Credentials:
 
     async def keep(
         self,
-        slot: CredentialSlot,
+        slot: KeySlot,
         value: str,
         *,
         actor: str,
@@ -489,9 +559,7 @@ class Credentials:
         await self._record(slot, actor=actor, trace_id=trace_id, ent_hash=ent_hash)
         return Kept(slot=slot.path, set_at=set_at)
 
-    async def _record(
-        self, slot: CredentialSlot, *, actor: str, trace_id: str, ent_hash: str
-    ) -> None:
+    async def _record(self, slot: KeySlot, *, actor: str, trace_id: str, ent_hash: str) -> None:
         """Record a key already kept, and never raise: the key is in the vault either way.
 
         Broad, because any failure here is the same fact, a kept key with no record, and the one

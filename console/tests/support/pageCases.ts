@@ -1085,8 +1085,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
   },
   // Connectors. Every text column on it is either an identifier from the API or a sentence, and
   // the identifier is the source's own name, which is the shape that took five views off the
-  // side of a phone before `.grid__scroll` existed. The unread and failure states draw a notice
-  // and are held in `tests/connectors-page.test.tsx` instead, for the recovery case's reason.
+  // side of a phone before `.grid__scroll` existed. The connect card draws a select, and the
+  // sources connected at the server draw sentences whose labels are identifiers too. The unread
+  // and failure states draw a notice and are held in `tests/connectors-page.test.tsx` instead,
+  // for the recovery case's reason.
   "/connectors": {
     address: "/connectors",
     signedIn: true,
@@ -1096,25 +1098,52 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         connectors: [
           {
             name: UNBROKEN,
-            wiring: "rest",
-            credential: `Held in the vault, borrowed as application. ${UNBROKEN}`,
-            budget: `60 requests a minute. ${UNBROKEN}`,
-            projected_fields: 9,
-            checked_at: "2019-03-04T09:00:00Z",
-            health: "ok",
-            lifecycle: "enabled",
-            serving: true,
-            version: "1.0.0",
-            reaches: `Reaches view ${UNBROKEN}, and nothing else in the source.`,
-            access: UNBROKEN,
-            permission_sync: UNBROKEN,
+            connected_by: UNBROKEN,
+            connected_at: "2019-03-04T09:00:00Z",
+            key_held: true,
+            key_written_at: "2019-03-04T09:00:05Z",
+            pinned: true,
+            declaration: UNBROKEN,
+            may_disconnect: true,
+            trust: {
+              name: UNBROKEN,
+              wiring: "rest",
+              credential: `Held in the vault since it was connected. ${UNBROKEN}`,
+              budget: `60 requests a minute. ${UNBROKEN}`,
+              projected_fields: 9,
+              checked_at: "2019-03-04T09:00:00Z",
+              health: "ok",
+              lifecycle: "registered",
+              serving: false,
+              version: "1.0.0",
+              reaches: `Reaches view ${UNBROKEN}, and nothing else in the source.`,
+              access: UNBROKEN,
+              permission_sync: UNBROKEN,
+            },
           },
         ],
         unread: "",
         connecting: UNBROKEN,
+        confirm_connect: UNBROKEN,
+        confirm_disconnect: UNBROKEN,
         copy_policy: [{ what: UNBROKEN, verdict: "projected", why: UNBROKEN }],
         budget_unread: UNBROKEN,
         may_connect: true,
+        vault: "ready",
+        vault_told: "",
+        connectable: [
+          {
+            name: UNBROKEN,
+            label: UNBROKEN,
+            settings: [{ name: "tenant_id", label: UNBROKEN, hint: UNBROKEN, max_chars: 200, blank: `Give the ${UNBROKEN}.` }],
+            credential_label: UNBROKEN,
+            credential_hint: UNBROKEN,
+            may_connect: true,
+          },
+        ],
+        not_connectable: [{ name: UNBROKEN, label: UNBROKEN, why: UNBROKEN }],
+        key_max_chars: 1000,
+        key_blank: "Paste the key the source issued for this connection.",
       },
     },
   },

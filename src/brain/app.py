@@ -873,9 +873,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(skill_router)
     # The connectors screen. A router of its own because what it answers about is which outside
     # systems this company reads, where the name itself is the disclosure: the list is narrowed
-    # by the reader's own grant and a refusal names nothing. It is also the one console surface
-    # whose subject is an act nobody can perform from a browser, and the sentence saying so is
-    # served beside the list. See `brain.connector_routes`.
+    # by the reader's own grant and a refusal names nothing. Connecting and disconnecting a source
+    # are its two writes, under `admin:connector` over that source, and what connecting does not do
+    # yet is served beside the list. See `brain.connector_routes`.
     app.include_router(connector_router)
     # The Staff sources screen and the trial run behind it. A router of its own because it
     # refuses nobody on its listing: a source sits at `brain.console.govern.NOWHERE`, so the

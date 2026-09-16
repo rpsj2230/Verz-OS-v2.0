@@ -16,7 +16,12 @@
  * in the same body, and the finishing screen that follows a kept key is drawn from a reason and
  * an outcome, never from what was typed.
  *
- * Task ids: M42.5.14, M27.8.7
+ * **The sources named on the Data sources screen are connected after the sign-in, and only then.**
+ * The connectors read and the connect are asserted to follow the finishing screen, to carry the
+ * administrator's token, and to be the Connectors screen's own request, and skipping the step is
+ * asserted to connect nothing.
+ *
+ * Task ids: M42.5.14, M27.8.7, M42.5.9
  */
 
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
@@ -44,6 +49,13 @@ import {
   UNKEPT_SENTENCES,
   UNKEPT_TITLE,
 } from "../src/pages/FirstRun";
+import {
+  CONNECT_LATER,
+  CONNECT_SOURCES_TITLE,
+  NO_SUCH_SOURCE,
+  ON_TO_THE_CONSOLE,
+  SKIP_CONNECTING,
+} from "../src/setup/ConnectSourcesStep";
 import { THE_BRAIN_COULD_NOT_BE_REACHED } from "../src/ui/FailureNotice";
 import { CONSOLE_ORIGIN, everythingInStorage, fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
@@ -88,6 +100,8 @@ interface Seen {
 interface Stand {
   readonly appointment: () => Response;
   readonly signIn?: () => Response;
+  /** Answers the Connectors routes, which first run's data sources step calls after the sign-in. */
+  readonly connectors?: (path: string, init: RequestInit | undefined) => Response;
 }
 
 /** A stand-in API answering the two setup routes and `/me`, recording what reached it. */
@@ -114,6 +128,10 @@ function standIn(answers: Stand) {
       if (path === "/api/v1/me") {
         record();
         return json(A_CALLER);
+      }
+      if (path.startsWith("/api/v1/connectors") && answers.connectors) {
+        record();
+        return answers.connectors(path, init);
       }
       return null;
     },
@@ -164,8 +182,8 @@ async function openFirstRun(idp: ReturnType<typeof fakeIdentityProvider>) {
   return { loaded, router, container, landed };
 }
 
-/** Every screen answered, the data sources skipped, ending on the review. */
-async function answerEverything(container: HTMLElement, hosted = false): Promise<void> {
+/** Every screen answered, the data sources skipped unless some are named, ending on the review. */
+async function answerEverything(container: HTMLElement, hosted = false, sources = ""): Promise<void> {
   give(container, "setup_code", "setup_code", CODE);
   press(container, "Continue");
   await arriveAt(container, "Your company");
@@ -189,7 +207,12 @@ async function answerEverything(container: HTMLElement, hosted = false): Promise
   }
   press(container, "Continue");
   await arriveAt(container, "Data sources");
-  press(container, "Skip this screen");
+  if (sources === "") {
+    press(container, "Skip this screen");
+  } else {
+    give(container, "connections", "connections", sources);
+    press(container, "Continue");
+  }
   await arriveAt(container, REVIEW_TITLE);
 }
 
@@ -583,5 +606,130 @@ describe("what a refusal is drawn as", () => {
     }
     expect(drawn[0]).toBe(drawn[1]);
     expect(SETUP_REFUSED_MESSAGE.toLowerCase()).not.toMatch(/code|expire|finish|administrator|already|wrong/);
+  });
+});
+
+describe("connecting the sources named during setup", () => {
+  /** A key nothing else could contain, looked for wherever the setup code is. */
+  const SOURCE_KEY = "SOURCE-KEY-SENTINEL-first-run";
+
+  const CONNECTORS_BODY = {
+    connectors: [],
+    unread: "",
+    connecting: "CONNECTING-SENTINEL",
+    confirm_connect: "CONFIRM-CONNECT-SENTINEL",
+    confirm_disconnect: "CONFIRM-DISCONNECT-SENTINEL",
+    copy_policy: [],
+    budget_unread: "",
+    may_connect: true,
+    vault: "ready",
+    vault_told: "",
+    connectable: [
+      {
+        name: "xero",
+        label: "Xero",
+        settings: [
+          { name: "tenant_id", label: "Organisation id", hint: "HINT-SENTINEL", max_chars: 200, blank: "BLANK-SENTINEL" },
+        ],
+        credential_label: "The key Xero issued for this connection",
+        credential_hint: "KEY-HINT-SENTINEL",
+        may_connect: true,
+      },
+    ],
+    not_connectable: [{ name: "freshdesk", label: "Freshdesk", why: "FRESHDESK-WHY-SENTINEL" }],
+    key_max_chars: 1000,
+    key_blank: "KEY-BLANK-SENTINEL",
+  };
+
+  function connectorsAnswer(path: string, init: RequestInit | undefined): Response {
+    if (init?.method === "POST") {
+      return json({
+        connector: "xero",
+        change: "connected",
+        changed_at: "2019-03-04T10:00:00Z",
+        key_written_at: "2019-03-04T10:00:00Z",
+        told: "CONNECTED-TOLD-SENTINEL",
+      });
+    }
+    return path === "/api/v1/connectors" ? json(CONNECTORS_BODY) : json({ message: "no" }, 404);
+  }
+
+  function byId(container: HTMLElement, id: string): HTMLInputElement {
+    const found = container.querySelector(`#${id}`);
+    if (!found) {
+      throw new Error(`No control #${id} on "${headingOf(container)}".`);
+    }
+    return found as HTMLInputElement;
+  }
+
+  test("the sources named are offered after the sign-in and connected with the administrator's own token", async () => {
+    // What breaks if this is deleted: M42.5.9. The step can run before the appointment, where
+    // nobody holds the grant and the setup code would be the only authority; it can post
+    // something other than the Connectors screen's own request; it can drop the name the
+    // console cannot connect, or the one it has no connector for, without a sentence; or the key
+    // can stay in the page or a store once it is sent.
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    const { idp, seen } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
+      connectors: connectorsAnswer,
+    });
+    const { container, router } = await openFirstRun(idp);
+    await answerEverything(container, false, "xero, freshdesk, nonesuch");
+    press(container, "Set up this system");
+
+    await arriveAt(container, CONNECT_SOURCES_TITLE);
+    await waitFor(() => expect(container.querySelector("#connect-xero-tenant_id")).not.toBeNull());
+    expect(container.textContent).toContain(CONNECT_LATER);
+    expect(container.textContent).toContain("CONNECTING-SENTINEL");
+    expect(container.textContent).toContain("FRESHDESK-WHY-SENTINEL");
+    expect(container.textContent).toContain(NO_SUCH_SOURCE);
+    expect(router.state.location.pathname).toBe(FIRST_RUN_PATH);
+
+    fireEvent.change(byId(container, "connect-xero-tenant_id"), { target: { value: "11111111" } });
+    fireEvent.change(byId(container, "connect-xero-credential"), { target: { value: SOURCE_KEY } });
+    fireEvent.submit(byId(container, "connect-xero-credential").form as HTMLFormElement);
+    const panel = container.querySelector(".confirm") as HTMLElement;
+    expect(panel.textContent).toContain("CONFIRM-CONNECT-SENTINEL");
+    press(panel, "Connect Xero");
+    await waitFor(() => expect(container.textContent).toContain("CONNECTED-TOLD-SENTINEL"));
+
+    expect(seen.map((one) => one.path)).toEqual([
+      APPOINTMENT_PATH,
+      FINISH_PATH,
+      "/api/v1/connectors",
+      "/api/v1/connectors",
+    ]);
+    const appointed = callsTo(seen, APPOINTMENT_PATH)[0];
+    expect(appointed?.body).toMatchObject({ answers: { connections: { connections: "xero, freshdesk, nonesuch" } } });
+    expect(JSON.stringify(appointed?.body)).not.toContain(SOURCE_KEY);
+    const connect = callsTo(seen, "/api/v1/connectors")[1];
+    expect(connect?.body).toEqual({ connector: "xero", settings: { tenant_id: "11111111" }, credential: SOURCE_KEY });
+    expect(connect?.authorization).toBe("Bearer ACCESS-TOKEN-1");
+    expect(container.innerHTML).not.toContain(SOURCE_KEY);
+    for (const call of writes.mock.calls) {
+      expect(String(call[1])).not.toContain(SOURCE_KEY);
+    }
+
+    press(container, ON_TO_THE_CONSOLE);
+    await arriveAt(container, "Overview");
+    writes.mockRestore();
+  });
+
+  test("skipping the step connects nothing and lands on the console", async () => {
+    // What breaks if this is deleted: a step that cannot be left without connecting, which is the
+    // opposite of `A_CONNECTION_SKIPPED_NOW_IS_NOT_A_CONNECTION_REFUSED`, or a skip that posts.
+    const { idp, seen } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
+      connectors: connectorsAnswer,
+    });
+    const { container, router } = await openFirstRun(idp);
+    await answerEverything(container, false, "xero");
+    press(container, "Set up this system");
+    await arriveAt(container, CONNECT_SOURCES_TITLE);
+
+    press(container, SKIP_CONNECTING);
+    await arriveAt(container, "Overview");
+    expect(router.state.location.pathname).toBe("/");
+    expect(seen.filter((one) => one.path === "/api/v1/connectors" && one.body !== null)).toEqual([]);
   });
 });

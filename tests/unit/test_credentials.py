@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 
+from brain.audit.record import credential_subject_id
 from brain.ops.credentials import (
     A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE,
     KEY_FIELD,
@@ -30,17 +31,20 @@ from brain.ops.credentials import (
     TOLD,
     CredentialProblemError,
     Credentials,
+    CredentialSlot,
     CredentialsUnavailableError,
     Held,
     InUse,
     Kept,
     VaultState,
     _application_vault,
+    connector_key_slot,
     credentials_at_start,
     problems_with,
     told_in_use,
 )
 from brain.ops.openbao import (
+    CONNECTOR_KEY_PREFIX,
     OpenBaoVault,
     StaticVersion,
     VaultRefusedError,
@@ -584,3 +588,46 @@ def test_the_vault_start_up_builds_asks_as_the_application() -> None:
         repr(built)
         == "OpenBaoVault(address='http://vault:8200', role=<VaultRole.APPLICATION: 'application'>)"
     )
+
+
+# ------------------------------------------------------------ a connected source's key
+
+
+def test_a_connected_source_s_key_is_kept_by_the_same_write_at_its_own_slot_and_recorded() -> None:
+    """`A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT`: one `keep` for both kinds of slot, so
+    a source's key reaches the vault at `connector_keys/<source>` under the one field this module
+    writes, is recorded exactly as a provider key is, and is never put into this process's
+    environment. Delete this and the connector slot can grow a writer of its own that forgets the
+    record."""
+    vault, recorded = Vault(), Recorded()
+    environ: dict[str, str] = {}
+    store = Credentials(vault, environ=environ, writes=recorded)
+    slot = connector_key_slot("xero")
+
+    kept = asyncio.run(store.keep(slot, f" {KEY}\n", actor="u_admin", trace_id="t"))
+
+    assert (kept.slot, kept.set_at) == ("connector_keys/xero", AT)
+    assert vault.written == [("connector_keys/xero", {KEY_FIELD: KEY})]
+    assert [one["slot"] for one in recorded.records] == ["connector_keys/xero"]
+    assert environ == {}
+    assert not isinstance(slot, CredentialSlot)
+
+
+@pytest.mark.parametrize("name", ["", "Xero", "xero/../providers/anthropic", "x y", "a" * 64])
+def test_a_source_name_that_is_not_one_lower_case_segment_makes_no_slot(name: str) -> None:
+    """The name is the path, so a name that is not one segment could be walked into another slot:
+    `xero/../providers/anthropic` is the key every question is sent with. Delete this and the slot
+    rule can loosen to whatever a source's display name looks like. The positive half is the longest
+    name the grammar admits, which is also a subject the ledger can hold."""
+    with pytest.raises(ValueError, match="not a source name"):
+        connector_key_slot(name)
+    longest = connector_key_slot("a" * 63)
+    assert credential_subject_id(longest.path) == "connector_keys." + "a" * 63
+
+
+def test_the_console_s_credential_route_writes_no_connected_source_s_slot() -> None:
+    """`SLOTS` is what `brain.credential_routes` admits under `admin:credential`, and it holds the
+    provider keys and nothing under the connector prefix. Delete this and a source's key can be
+    written without its settings under a different capability."""
+    assert SLOTS
+    assert not [path for path in SLOTS if path.startswith(CONNECTOR_KEY_PREFIX)]

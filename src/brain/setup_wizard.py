@@ -386,12 +386,14 @@ def _one_of(allowed: Sequence[str]) -> Check:
 def _slug_list(value: str) -> str:
     """A comma-separated list of source names, each shaped like a source name.
 
-    Shape only, and there is no closed list to check against: nothing in this repository
-    declares which sources are connectable at install time. `brain.connectors.registry` is a
-    runtime registry of manifests that have already been installed, and inventing a second
-    list here would be a list that disagrees with it the first time somebody adds a connector.
-    Its own error code rather than `unknown_choice`, because "choose one of the options shown"
-    is the wrong sentence for a screen with no options to show.
+    Shape only, and deliberately not checked against `brain.ops.connectable`, which since
+    2026-09-17 declares which sources the console can connect. A name typed here commits nothing
+    and is connected after the sign-in, by first run's data sources step
+    (`console/src/setup/ConnectSourcesStep.tsx`), which says for each name whether the console
+    can connect it, why it is connected at the server instead, or that this release has no
+    connector by that name. Refusing a name here would refuse one somebody means to connect at
+    the server. Its own error code rather than `unknown_choice`, because "choose one of the
+    options shown" is the wrong sentence for a screen with no options to show.
     """
     for one in value.split(","):
         name = one.strip()
