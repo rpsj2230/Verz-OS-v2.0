@@ -284,6 +284,16 @@ def test_the_plan_a_whole_container_worker_prints_does_not_report_a_standard_slo
 
 
 # --------------------------------------------- the connection the worker actually gets
+def _pools() -> dict[str, str]:
+    """Every pooler any compose file deploys, against the mode it runs in."""
+    return {
+        name: (body.get("environment") or {})["POOL_MODE"]
+        for compose in _compose_files()
+        for name, body in (_compose(compose).get("services") or {}).items()
+        if "POOL_MODE" in (body.get("environment") or {})
+    }
+
+
 def test_every_pool_this_stack_deploys_is_named_in_the_constant_that_refuses_one() -> None:
     """`POOLER_HOSTNAMES` is the whole of the hostname half of the pooler rule, and it is a
     hand-written set of service names. Rename the pgbouncer service and every existing test
@@ -291,65 +301,54 @@ def test_every_pool_this_stack_deploys_is_named_in_the_constant_that_refuses_one
     `pgbouncer` themselves, so they compare the constant against a copy of itself.
 
     Asserted against the compose files instead, which is the thing outside the constant that
-    decides what a hostname resolves to on the container network.
+    decides what a hostname resolves to on the container network. Only the transaction-mode
+    pools are its business: the session-mode one is where the queue is meant to go.
 
     Delete this and the guard can be turned into a set of names nothing deploys, which refuses
     nothing and reports nothing."""
-    deployed = {
-        name
-        for compose in _compose_files()
-        for name, body in (_compose(compose).get("services") or {}).items()
-        if "POOL_MODE" in (body.get("environment") or {})
-    }
+    transaction = {name for name, mode in _pools().items() if mode == "transaction"}
 
-    assert deployed, "no pooler was found at all, so this test is comparing nothing"
-    assert deployed <= POOLER_HOSTNAMES, sorted(deployed - POOLER_HOSTNAMES)
+    assert transaction, "no transaction pooler was found at all, so this compares nothing"
+    assert transaction <= POOLER_HOSTNAMES, sorted(transaction - POOLER_HOSTNAMES)
 
 
-def test_no_pool_in_this_repository_is_in_the_session_mode_a_listener_would_need() -> None:
-    """The premise worth checking rather than repeating. A queue can live behind a pooler in
-    session mode, and this repository has none: every pool it deploys is in transaction mode,
-    which is why the worker goes straight to Postgres instead.
+def test_the_one_session_mode_pool_is_the_workers_and_the_constant_does_not_refuse_it() -> None:
+    """The premise, checked rather than repeated. A queue can live behind a pooler in session
+    mode, and since 2026-09-16 this repository deploys exactly one, for the workers. Until then
+    every pool was in transaction mode and this test asserted that, which is why the workers went
+    straight to Postgres.
 
-    Delete this and a pool could be switched to session mode, which would make
-    `pooler_url_findings` refuse a connection that had become safe, and nothing would say
-    that the reason in the message had stopped being true."""
-    modes = {
-        (compose, name): (body.get("environment") or {})["POOL_MODE"]
-        for compose in _compose_files()
-        for name, body in (_compose(compose).get("services") or {}).items()
-        if "POOL_MODE" in (body.get("environment") or {})
-    }
+    Delete this and a second pool can be switched to session mode unnoticed, or the workers' pool
+    can be added to `POOLER_HOSTNAMES`, which would make `pooler_url_findings` refuse the one
+    connection that is correct."""
+    pools = _pools()
+    session = {name for name, mode in pools.items() if mode == "session"}
 
-    assert modes
-    assert set(modes.values()) == {"transaction"}, modes
+    assert session == {"pgbouncer-session"}, pools
+    assert set(pools.values()) == {"transaction", "session"}, pools
+    assert not session & POOLER_HOSTNAMES
 
 
-def test_both_workers_reach_postgres_without_passing_through_a_pool_at_all() -> None:
+def test_both_workers_reach_postgres_through_the_session_pool_and_never_a_transaction_one() -> None:
     """What the worker actually gets, asserted from the deployment rather than assumed from a
-    docstring. `QUEUE_URL` names the database service directly on both worker containers, so
-    the LISTEN a driver would take is on a backend nothing moves.
+    docstring. `QUEUE_URL` names the session pool on both worker containers, so the LISTEN a
+    driver takes keeps its backend for the life of the connection.
 
-    Asserted by naming the host and checking it against the set of services that are pools,
-    rather than by checking the string is not `pgbouncer`: the second passes the moment
-    somebody adds a second pool under another name.
+    Asserted by naming the host and checking it against the modes of the services that are
+    pools, rather than by checking the string is not `pgbouncer`: the second passes the moment
+    somebody adds a second transaction pool under another name.
 
-    Delete this and either worker can be pointed at the pooler by one edit, which is the
-    failure with no error message anywhere."""
-    pools = {
-        name
-        for compose in _compose_files()
-        for name, body in (_compose(compose).get("services") or {}).items()
-        if "POOL_MODE" in (body.get("environment") or {})
-    }
+    Delete this and either worker can be pointed at the application's pooler by one edit, which
+    is the failure with no error message anywhere."""
+    pools = _pools()
 
     for compose in (GENERAL_WORKER_COMPOSE, PARSE_WORKER_COMPOSE):
         env = _environment(compose)
         queue_host = env["QUEUE_URL"].split("@")[1].split(":")[0]
         app_host = env["DATABASE_URL"].split("@")[1].split(":")[0]
 
-        assert queue_host not in pools, f"{compose}: the queue goes through {queue_host}"
-        assert app_host in pools, f"{compose}: the application no longer goes through a pool"
+        assert pools.get(queue_host) == "session", f"{compose}: the queue goes to {queue_host}"
+        assert pools.get(app_host) == "transaction", f"{compose}: the application does not"
 
 
 # ------------------------------------------------- what installs the queue (M32.4.1.1)

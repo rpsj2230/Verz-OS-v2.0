@@ -56,6 +56,8 @@ import yaml
 
 from brain.deployment.app_environment import VAULT_OVERLAY
 from brain.deployment.requirements import COMPOSE_FILES_FOR, files_for
+from brain.ops.split import overlays_for as split_overlays_for
+from brain.ops.streaming_replica import OVERLAY as REPLICA_OVERLAY
 from brain.ops.tunnel import overlays_for
 
 REPO = Path(__file__).resolve().parents[2]
@@ -69,8 +71,8 @@ OURS = re.compile(r"^\$\{(APP_IMAGE|STAGING_IMAGE)[:}]")
 
 THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT: Final = (
     "The application needs a route out and Compose grants one to a network, not to one of its "
-    "members, so the pooler, the database, the cache, the trace ledger and the object store on "
-    "`default` have one too. They are pinned store images handed no flow and no model. Closing "
+    "members, so the two poolers, the database, the cache, the trace ledger and the object store "
+    "on `default` have one too. They are pinned store images handed no flow and no model. Closing "
     "it means an internal network for the stores in the base file of every profile, which has "
     "not been done, and this entry is where that is recorded rather than forgotten."
 )
@@ -99,6 +101,7 @@ THE_PANELS_NETWORK_IS_NOT_OURS_TO_DECLARE: Final = (
 ROUTE_OUT: Final[Mapping[str, Mapping[str, str]]] = {
     "default": {
         "pgbouncer": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
+        "pgbouncer-session": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
         "db": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
         "cache": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
         "langfuse-web": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
@@ -107,6 +110,8 @@ ROUTE_OUT: Final[Mapping[str, Mapping[str, str]]] = {
         "langfuse-cache": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
         "seaweedfs": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
         "seaweedfs-init": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
+        "db-replica": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
+        "db-replication-setup": THE_APPLICATIONS_STORES_SHARE_ITS_ROUTE_OUT,
         "cloudflared": THE_TUNNEL_DIALS_OUT_TO_CLOUDFLARE,
     },
     "egress": {"automation-egress": THE_PROXY_IS_THE_ROUTE_OUT},
@@ -133,6 +138,8 @@ def compositions() -> dict[str, tuple[str, ...]]:
         # Composed onto any profile whose environment file names a vault. See
         # `brain.deployment.app_environment`.
         found[f"{profile} with the vault"] = (*files, VAULT_OVERLAY)
+        found[f"{profile} split across two hosts"] = (*files, *split_overlays_for(files))
+        found[f"{profile} with a read replica"] = (*files, REPLICA_OVERLAY)
     return found
 
 

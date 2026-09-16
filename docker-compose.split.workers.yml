@@ -1,0 +1,29 @@
+# The two-host split, for a profile that runs the workers (`standard` and `full`).
+#
+# Composed after `docker-compose.split.yml`, and only where `docker-compose.worker.yml` is
+# composed, which is what `brain.ops.split.overlays_for` decides. The workers stay on the
+# application host with the application; both of their poolers are on the data host.
+#
+# **The queue and the checkpointer go to the session-mode pooler's port, 6433, and ordinary
+# queries to the transaction pooler's, 6432.** On one host that difference is a service name;
+# across two it is a port number, and a queue sent to 6432 reaches the transaction pooler, where
+# a LISTEN stops being notified with no error anywhere. `brain.ops.split.split_gaps` holds every
+# rewritten address to the port of the service it used to name.
+#
+# Task ids: M36.1.4.1, M36.1.4.2
+
+services:
+  brain-worker:
+    environment:
+      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6433/brain
+      DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6432/brain
+      BRAIN_CHECKPOINTER_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6433/brain
+
+  brain-parse-worker:
+    environment:
+      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6433/brain
+      DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6432/brain
+
+  pgbouncer-session:
+    ports:
+      - "${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6433:5432"

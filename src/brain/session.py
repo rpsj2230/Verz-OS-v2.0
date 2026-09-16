@@ -102,22 +102,22 @@ def make_app_engine(url: str, *, echo: bool = False) -> AsyncEngine:
 
 
 def make_worker_engine(url: str, *, echo: bool = False) -> AsyncEngine:
-    """The engine for background work, connecting directly rather than through a pooler.
+    """The engine for background work, never through the transaction pooler.
 
     Keeps a real pool, because a worker holds long-lived connections for LISTEN/NOTIFY
     and re-establishing one per transaction would drop notifications between them.
 
-    **M0.3.5 asked for a PgBouncer session-mode pool here and this is not one.** Every
-    pooler in every compose file is `POOL_MODE: transaction`, and transaction pooling
-    cannot carry LISTEN: the connection a notification arrives on is handed to somebody
-    else between statements. The worker therefore connects straight to Postgres, which is
-    what LISTEN needs and is a defensible answer to the same problem.
+    **Its URL names the session-mode pooler, `pgbouncer-session`, and that is M0.3.5.**
+    Transaction pooling cannot carry LISTEN: the connection a notification arrives on is
+    handed to somebody else between statements. Session pooling keeps one server connection
+    per client connection for as long as the client holds it, so this pool behaves exactly as
+    it would against Postgres directly, and the pooler counts what both workers hold together.
+    Until 2026-09-16 the workers went straight to Postgres, which served LISTEN and left the
+    bound below as the only thing between this pool and the database's ceiling.
 
-    It is a different answer, so the leaf is not claimed. The cost is that these
-    connections are outside PgBouncer's bound and are held by this pool instead:
-    `pool_size` plus `max_overflow` below, per worker process. That figure is the one
-    `docs/needs-rupash.md` item 41 needs, and it is why two of the four services named
-    there are already bounded in code and merely undeclared.
+    `pool_size` plus `max_overflow` below is still the figure `brain.ops.connections` reads for
+    the checkpointer, and `brain.ops.session_pool` holds the pooler's ceiling equal to the
+    workers' rows that include it.
     """
     return create_async_engine(
         _async_url(url),

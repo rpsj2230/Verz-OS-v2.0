@@ -77,6 +77,7 @@ import psycopg
 from brain.db import libpq_url
 from brain.knowledge.item_store import run_reverification_now
 from brain.ops.controls import Control
+from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
 from brain.ops.spend_store import refresh_spend_daily_now
@@ -208,9 +209,17 @@ def retention_sweep(now: datetime, report_only: bool, database_url: str) -> str:
     Passes no holds. See `THE_SWEEP_READS_ITS_OWN_HOLDS`. `prepare_threshold=None` for the reason
     `brain.session.make_app_engine` gives: the URL is the application's, behind a transaction
     pooler, and a statement prepared on one server connection is executed on another.
+
+    Then the metadata ledger's monthly partitions, on the same connection and under the same
+    release: `brain.ops.ledger_partitions.maintain` creates the months ahead in either mode and
+    detaches a month past its horizon only when the sweep is released. After the sweep rather
+    than before, so the sweep's report is written whatever the partitions do, and a failure in
+    either is the run's failure.
     """
     with psycopg.connect(libpq_url(database_url), prepare_threshold=None) as conn:
-        return run_retention_sweep(conn, now=now, report_only=report_only)
+        swept = run_retention_sweep(conn, now=now, report_only=report_only)
+        partitions = maintain_ledger_partitions(conn, now=now, report_only=report_only)
+    return f"{swept}\n{partitions.summary()}"
 
 
 def spend_report_refresh(now: datetime, report_only: bool, database_url: str) -> str:

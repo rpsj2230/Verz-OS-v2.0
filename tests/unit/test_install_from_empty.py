@@ -335,6 +335,25 @@ def test_an_install_step_that_restores_a_database_is_reported(tmp_path: Path) ->
     assert any("pg_restore" in one for one in findings), findings
 
 
+def test_a_standby_copying_this_installs_own_primary_is_not_an_input(tmp_path: Path) -> None:
+    """`docker-compose.replica.yml` copies `db` with `pg_basebackup`, and `db` is the database the
+    install built from empty. Deleting this reports the read replica as an install that depends on
+    somebody else's data, and the gate that says so is one people then learn to ignore."""
+    line = "gosu postgres pg_basebackup --pgdata=/data --host=db --username=brain_replicator"
+    repo = _repo(tmp_path, {"docker-compose.replica.yml": "command: " + line})
+    assert install_input_gaps(repo) == ()
+
+
+def test_a_copy_of_any_other_host_is_still_an_input(tmp_path: Path) -> None:
+    """The allowance is the host and nothing else. Deleting this lets a copy of a database on
+    another server through, provided the line also mentions the word db somewhere."""
+    for host in ("--host=db.example.org", "--host=olddb", "--host=10.0.0.9 # --host=db"):
+        line = f"pg_basebackup --pgdata=/data {host} --username=brain_replicator"
+        repo = _repo(tmp_path, {"docker-compose.replica.yml": "command: " + line})
+        findings = install_input_gaps(repo)
+        assert any("pg_basebackup" in one for one in findings), (host, findings)
+
+
 def test_a_comment_mentioning_a_restore_is_not_an_install_step(tmp_path: Path) -> None:
     """The runbooks explain what a restore is and why the install does not do one, and a rule
     that reported the explanation would be a rule people stop reading.

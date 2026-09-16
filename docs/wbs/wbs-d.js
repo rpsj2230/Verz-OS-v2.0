@@ -1,7 +1,7 @@
 module.exports = [
 {id:"M36",name:"Scaling triggers and performance",wave:8,tasks:[
  {n:"Deferred scaling work, each behind a written trigger",s:[
-   {n:"Ledger partitioning",k:["pg_partman on the metadata ledger","Partition by month with automatic creation","Retention detach and archive rather than delete","Trigger: ledger row count or query latency threshold"]},
+   {n:"Ledger partitioning",k:["Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL","Partition by month with automatic creation","Retention detach and archive rather than delete","Trigger: ledger row count or query latency threshold"]},
    {n:"Read replica",k:["Streaming replica configuration","Console reads routed to the replica","Replication lag monitoring with a staleness banner","Trigger: console queries affecting answer latency"]},
    {n:"Materialised reporting views",k:["Views for the heaviest report screens","Refresh schedule and staleness display","Trigger: a report exceeding two seconds"]},
    {n:"Two-box split",k:["Application and browser on one host, database and object store on the other","Rehearsed without an application change","Trigger: RAM pressure or a resilience requirement"]}

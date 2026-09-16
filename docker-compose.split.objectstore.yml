@@ -1,0 +1,17 @@
+# The two-host split, for a profile that runs the object store (`standard` and `full`).
+#
+# Composed after `docker-compose.split.yml`, and only where `docker-compose.objectstore.yml` is
+# composed. The object store stays with the database on the data host, and its S3 gateway is
+# published on the same private address as the poolers.
+#
+# The application and the parse worker find the object store through
+# `INSTALL_OBJECT_STORE_URL`, which is a setting of the install rather than a line of any compose
+# file, so on a split install it is set to `http://<data host address>:8333`. The steps are in
+# `docs/install/scaling.md`.
+#
+# Task ids: M36.1.4.1
+
+services:
+  seaweedfs:
+    ports:
+      - "${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:8333:8333"

@@ -104,6 +104,20 @@ RESTORE_SHAPED: Final[re.Pattern[str]] = re.compile(
 )
 
 
+#: A copy whose source is this install's own primary, named by its service on the compose network.
+#: `docker-compose.replica.yml` is the case: a standby is created by copying `db`, which is the
+#: database this install already built from empty, so it reads nobody else's data.
+OWN_PRIMARY_COPY: Final[re.Pattern[str]] = re.compile(r"\bpg_basebackup\b.*--host=db(?=\s|$)")
+
+#: Why a standby copy of the install's own primary is not a restore from somebody else.
+A_STANDBY_COPYING_ITS_OWN_PRIMARY_READS_NOTHING_FROM_ELSEWHERE: Final = (
+    "pg_basebackup is refused because it copies a whole database from wherever it is pointed. "
+    "Pointed at `db`, the primary of the same compose project, it copies the database this "
+    "install built from empty, which is a replica and not an input. The allowance is the host "
+    "and nothing else: the same command pointed at any other host is refused as before."
+)
+
+
 class InstallError(Exception):
     """Raised when the tree cannot describe an install from empty at all."""
 
@@ -485,6 +499,13 @@ def install_input_gaps(repo: Path = REPO) -> tuple[str, ...]:
             ):
                 stripped = line.split("#", 1)[0]
                 match = RESTORE_SHAPED.search(stripped)
+                # See A_STANDBY_COPYING_ITS_OWN_PRIMARY_READS_NOTHING_FROM_ELSEWHERE.
+                if (
+                    match
+                    and match.group(0).lower() == "pg_basebackup"
+                    and OWN_PRIMARY_COPY.search(stripped)
+                ):
+                    continue
                 if match:
                     findings.append(
                         f"{where}:{number}: names {match.group(0)!r}, so installing depends "

@@ -68,9 +68,9 @@ arrive with row-level security off in a schema that sweep enumerates. A red swee
 remedy written down is a sweep somebody switches off, so the remedy is here.
 
 `python -m brain.ops.worker --deploy-plan` prints this same plan with the full reasoning for
-each step, and `--install-queue` runs steps two to four. Run them on a direct connection and
-never through the pooler: the driver needs `LISTEN`, which the pooler does not carry in
-transaction mode.
+each step, and `--install-queue` runs steps two to four. Run them on the connection `QUEUE_URL`
+names, which is the workers' session-mode pooler, and never through the application's pooler:
+the driver needs `LISTEN`, which that pooler does not carry in transaction mode.
 
 <!-- checked: the steps that install the job queue -->
 
@@ -99,6 +99,90 @@ A control can be run once, on demand, through the queue rather than waiting for 
 `python -m brain.ops.worker --run-control <name>` enqueues it, and the general worker runs it
 under the same lock and records it in the same table as a scheduled run.
 
+
+## Starting the workers for the first time
+
+The workers have never been started on a server, and neither has the pooler they reach the
+database through. These steps start them on their own, beside a running stack, and each check
+says what it proves. Run them on a server running `docker-compose.yml`, from `/opt/brain`.
+
+Set this once in the shell you run them from. It names the three files, and `--profile standard`
+is what switches the workers on:
+
+```
+F="-f docker-compose.yml -f docker-compose.worker.yml -f docker-compose.parse-worker.yml --profile standard"
+```
+
+1. **Start the workers' pooler.** `docker compose $F up -d pgbouncer-session`, then
+   `docker compose $F ps pgbouncer-session` shows `healthy`. It is in session mode, so a worker's
+   `LISTEN` keeps its connection, and it admits at most twenty connections to the database for
+   both workers together.
+2. **Install the queue and the checkpointer through it.**
+   `docker compose $F run --rm brain-worker python -m brain.ops.worker --install-queue`, then the
+   same with `--install-checkpointer`. Both connect through the pooler, so this is the first proof
+   that the pooler passes the driver's own statements.
+3. **Start both workers.** `docker compose $F up -d brain-worker brain-parse-worker`. Within a
+   minute `docker compose $F ps` shows both `healthy`, which means each has fetched from the queue
+   and written its heartbeat.
+4. **Check the listeners are on the pooler.** This lists the connections waiting for
+   notifications, and the address each came from, which is the pooler's:
+
+   ```
+   docker compose $F exec db psql -U brain -d brain -c "SELECT client_addr, state, left(query, 40) FROM pg_stat_activity WHERE query ILIKE 'LISTEN%'"
+   ```
+
+5. **Check a job is woken rather than polled.** Enqueue a control, and read when it started:
+
+   ```
+   docker compose $F exec brain-worker python -m brain.ops.worker --run-control retention_sweep
+   docker compose $F exec db psql -U brain -d brain -c "SELECT name, started_at, outcome FROM ops.control_run ORDER BY started_at DESC LIMIT 1"
+   ```
+
+   Note the time you enqueued it and the `started_at`. Repeat five times. If every start follows
+   its enqueue by well under five seconds, notifications are arriving; a start that lands on a
+   five-second boundary each time means the workers are polling, and the pooler is not carrying
+   `LISTEN`.
+6. **Check the ceiling.** Count the database connections by where they come from. The row for the
+   workers' pooler never exceeds twenty:
+
+   ```
+   docker compose $F exec db psql -U brain -d brain -c "SELECT client_addr, count(*) FROM pg_stat_activity WHERE datname = 'brain' GROUP BY 1"
+   ```
+
+Write down what each step showed, with the date and `docker compose version`. That record is what
+lets the task for the workers' deployment and the task for their pooler be closed.
+
+## Starting the trace ledger on its own
+
+The trace ledger's five services, its interface, worker, column store, cache and the file store,
+have never been started together. These steps start them beside `docker-compose.yml` without the
+rest of `full`, so they can be tried on a server with enough memory for their limits. Set this
+once in the shell you run them from:
+
+```
+T="-f docker-compose.yml -f docker-compose.objectstore.yml -f docker-compose.langfuse.yml"
+```
+
+1. Put `ops/seaweedfs/s3.json`, `ops/seaweedfs/provision.sh` and `ops/langfuse/clickhouse-memory.xml`
+   from the release under `/opt/brain/settings/`, keeping the path after `ops/`.
+2. Set every `LANGFUSE_` value [configuration.md](configuration.md) lists for `full`, and point
+   `LANGFUSE_PUBLIC_URL`'s address at the server through your proxy on port 3000.
+3. `docker compose $T up -d db`, then run the statements of the installer step "create the databases
+   the compose files do not", from `ops/install/install.sh`, so the trace ledger has its database.
+4. `docker compose $T up -d`. Within a few minutes `docker compose $T ps` shows `langfuse-web`,
+   `langfuse-worker`, `langfuse-clickhouse`, `langfuse-cache` and `seaweedfs` running and healthy,
+   and `seaweedfs-init` exited with `0`.
+5. Sign in to the trace ledger's console, create a project and its keys, and send one trace:
+
+   ```
+   curl -s -u <public key>:<secret key> -H 'Content-Type: application/json' -X POST https://<trace ledger address>/api/public/ingestion -d '{"batch":[{"id":"rehearsal-event-1","timestamp":"2026-01-01T00:00:00Z","type":"trace-create","body":{"id":"rehearsal-trace-1","name":"rehearsal"}}]}'
+   ```
+
+6. Read it back with `curl -s -u <public key>:<secret key> https://<trace ledger address>/api/public/traces/rehearsal-trace-1`.
+   An answer naming `rehearsal-trace-1` means the interface took it, the worker wrote it and the
+   column store returned it.
+
+Write down what each step showed, with `docker stats --no-stream` for the five services.
 
 ## Creating, migrating and seeding the database
 
@@ -281,9 +365,9 @@ before anything else on the list.
 
 ## A read replica for the console, if you add one
 
-This is optional, and nothing in this repository creates the replica for you. Setting up
-PostgreSQL streaming replication is your database administrator's job. What the application does
-once you have one is described here.
+This is optional. `docker-compose.replica.yml` creates a replica on the same server as the
+database, and [scaling.md](scaling.md) has the steps; a replica you already run elsewhere works
+the same way. What the application does once you have one is described here.
 
 Set `BRAIN_READ_REPLICA_URL` to the replica's address. Leave it empty, which is the default, and
 every console page is read from the main database exactly as before.

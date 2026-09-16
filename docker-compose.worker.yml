@@ -37,18 +37,31 @@
 # failure, which is a slot count sized for a machine we do not have.
 #
 # **Capped a third time, and this one is connections rather than memory.** Both of the URLs
-# below that go straight to `db` are outside PgBouncer's bound, deliberately: the queue needs
-# LISTEN and the checkpointer needs server-side prepared statements, and a pooler in
-# transaction mode carries neither. So the only thing bounding them is this container, and
-# until 2026-09-09 nothing did. `BRAIN_WORKER_POOL_MAX` is that bound and
+# below that need session state are outside the application's PgBouncer, deliberately: the
+# queue needs LISTEN and the checkpointer needs server-side prepared statements, and a pooler in
+# transaction mode carries neither. Until 2026-09-09 nothing bounded them at all.
+# `BRAIN_WORKER_POOL_MAX` is the bound this container gives its driver, and
 # `brain.ops.connections` holds the matching `Client` row, which a test compares against this
 # file.
+#
+# **And since 2026-09-16 the bound is enforced by something other than the container that
+# declares it.** Both URLs reach `pgbouncer-session`, declared below: a second PgBouncer in
+# session mode, which hands each client one server connection for the whole of its session, so
+# a LISTEN stays on the backend that took it and a prepared statement stays where it was
+# prepared. It pools nothing away, one client connection is one server connection, and that is
+# not what it is for. It is for `MAX_DB_CONNECTIONS`: the most the two worker containers may
+# hold against `db` between them, counted by a process that is not either of them, so a driver
+# that opens outside its pool, or a worker scaled to two replicas, waits at the pooler instead
+# of spending the database's ceiling. `brain.ops.session_pool` holds that figure equal to the
+# two workers' declared rows. Before this file had it, the row "a driver that opens outside
+# its pool" in the table below was covered by nothing.
 #
 # | cap | value | where it is set | what it does not cover |
 # | --- | --- | --- | --- |
 # | checkpointer pool | 10 | `brain.session.make_worker_engine`, pool 5 plus 5 overflow | nothing; it is measured |
-# | queue pool | 5 | the total below, minus the checkpointer's ten | a driver that opens outside its pool |
+# | queue pool | 5 | the total below, minus the checkpointer's ten | a driver that opens outside its pool, which the next row covers |
 # | declared total | 15 | `BRAIN_WORKER_POOL_MAX` below | nothing; it is what the driver is given |
+# | both workers at the pooler | 20 | `MAX_DB_CONNECTIONS` on `pgbouncer-session` below | nothing; it is counted outside the worker |
 #
 # **The third row stopped being a declaration on 2026-09-11 and became the figure that binds.**
 # It said "it declares rather than enforces", because nothing in this repository opened a queue
@@ -61,7 +74,8 @@
 # still correct and every other check green; the container prints that as an advisory and
 # starts, because the database is still bounded at the figure it was sized for.
 #
-# **QUEUE_URL goes straight to the database and DATABASE_URL does not.** Both are set, and
+# **QUEUE_URL goes through the session pooler and DATABASE_URL through the transaction one.**
+# Both are set, and
 # the worker compares them: `brain.ops.queue.queue_url_refusals` exists for the case where
 # somebody gives the worker one connection string for both jobs, which is the mistake that is
 # easy to write and impossible to see. A LISTEN behind the transaction pooler is moved to
@@ -96,21 +110,23 @@ services:
     # compose selects them. Held equal by test, in both directions.
     profiles: ["standard", "full"]
     depends_on:
-      db:
+      pgbouncer-session:
         condition: service_healthy
     command: ["python", "-m", "brain.ops.worker"]
     environment:
-      # Straight to Postgres. Not through pgbouncer, and deliberately not the same string as
-      # DATABASE_URL below: see the header, and `brain.ops.queue.queue_url_refusals`, which
-      # this container runs against these two values before it starts.
-      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@db:5432/brain
+      # Through the session pooler. Not through `pgbouncer`, which is in transaction mode, and
+      # deliberately not the same string as DATABASE_URL below: see the header, and
+      # `brain.ops.queue.queue_url_refusals`, which this container runs against these two values
+      # before it starts.
+      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
       # The application's connection, through the pooler like everything else. The worker
       # makes ordinary queries on it, and reads it here so the two can be compared.
       DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
-      # Where a durable graph's saved state would go. Direct for a different reason from the
-      # queue's: the saver prepares statements server-side, and a pooler in transaction mode
-      # hands the next statement to a backend that never saw the prepare.
-      BRAIN_CHECKPOINTER_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@db:5432/brain
+      # Where a durable graph's saved state would go. Session mode for a different reason from
+      # the queue's: the saver prepares statements server-side, and a pooler in transaction mode
+      # hands the next statement to a backend that never saw the prepare. A session pooler keeps
+      # the backend for the life of the connection, so the prepare and the execute meet.
+      BRAIN_CHECKPOINTER_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
       # The per-class allocation, one variable per class. `brain.ops.queue.CONCURRENCY` is
       # where these numbers are decided and argued; they are repeated here because a
       # container is configured by its environment, and the test holds the two equal.
@@ -165,3 +181,61 @@ services:
       timeout: 5s
       retries: 4
       start_period: 30s
+
+  # PgBouncer in session mode, for the two workers and nothing else (M0.3.5).
+  #
+  # A second pooler rather than a second database entry on `pgbouncer`, because that one is the
+  # application's request path on every install and its configuration is generated from these
+  # same variables by the image's entrypoint, which writes one wildcard database with one pool
+  # mode. A per-database mode needs a hand-written `pgbouncer.ini`, which is either a bind mount
+  # (resolved to an empty directory by a stored compose, see `brain.ops.compose`) or a change to
+  # the one pooler every request already depends on. A container costing 64 MiB is neither.
+  #
+  # **Session mode, and the figures are the argument.** See `brain.ops.session_pool`, which holds
+  # every number below against `brain.ops.connections` and says why each is what it is:
+  #
+  # - `MAX_DB_CONNECTIONS` is the sum of the two workers' declared rows, fifteen and five. It is
+  #   the ceiling that makes this service worth running, because it is counted here rather than
+  #   inside the worker that declares it.
+  # - `DEFAULT_POOL_SIZE` is the same twenty. In session mode a client holds its server
+  #   connection until it disconnects, so a pool smaller than the declared demand is a LISTEN
+  #   that waits for a backend another worker is holding, and it waits in silence.
+  # - `MAX_CLIENT_CONN` is that plus a margin for the healthcheck and a one-off
+  #   `--install-queue`, never less than the pool.
+  # - `QUERY_WAIT_TIMEOUT` turns a client beyond the ceiling into an error after thirty seconds
+  #   rather than PgBouncer's default of two minutes, so a worker scaled past its budget fails
+  #   where somebody reads it.
+  pgbouncer-session:
+    image: edoburu/pgbouncer:v1.24.1-p1
+    restart: unless-stopped
+    # Where the workers are, and nowhere else. Held equal to `brain.ops.wiring` by test.
+    profiles: ["standard", "full"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: brain
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: brain
+      POOL_MODE: session
+      DEFAULT_POOL_SIZE: "20"
+      MAX_DB_CONNECTIONS: "20"
+      MAX_CLIENT_CONN: "24"
+      QUERY_WAIT_TIMEOUT: "30"
+      AUTH_TYPE: scram-sha-256
+    expose:
+      - "5432"
+    deploy:
+      resources:
+        limits:
+          # Matches the `pgbouncer-session` component in `brain.ops.wiring`. Half of the
+          # application's pooler, which holds two hundred clients to this one's twenty-four.
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U brain"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s

@@ -223,13 +223,15 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
 
     **This one does resolve by waiting, and the sibling test is where that is measured.**
     `test_removing_the_other_project_is_what_makes_the_full_set_fit` computes it rather than
-    asserting it here: with the neighbours gone the cap is 11,704, standard fits with 1,976
+    asserting it here: with the neighbours gone the cap is 11,704, standard fits with 1,912
     MiB spare, and it is `full` that is left short. So standard is a capacity problem with a
     known answer, which is not what this test said before.
 
     **The guard keeps its teeth by being exact.** One breach, naming the largest single
-    component, of exactly 4040 MiB. Any further growth in standard fails here, which is what
-    the previous three versions of this assertion were for.
+    component, of exactly 4104 MiB. Any further growth in standard fails here, which is what
+    the previous three versions of this assertion were for. It was 4040 until 2026-09-16, when
+    the workers' session-mode pooler added 64 MiB to standard and the figure moved by exactly
+    that, which is this guard doing its job rather than a reason to loosen it.
 
     Delete this and the overrun stops being visible anywhere, which means it is discovered by
     deploying it."""
@@ -237,11 +239,11 @@ def test_the_standard_profile_is_over_by_the_identity_provider_and_the_inference
 
     assert len(breaches) == 1, breaches
     assert "inference-server" in breaches[0]
-    assert "over by 4040 MiB" in breaches[0], (
+    assert "over by 4104 MiB" in breaches[0], (
         "the standard overrun has moved; something has grown or shrunk and this test is the "
         "only place that would have said so"
     )
-    assert wave_two_mib("standard") - spendable_mib() == 4040
+    assert wave_two_mib("standard") - spendable_mib() == 4104
 
 
 def test_the_full_profile_does_not_fit_and_names_the_component_that_does_not() -> None:

@@ -117,13 +117,14 @@ for is a port nobody decided about. The third column is prose.
 | `automation-db` | `5432` | The automation canvas alone. It is a separate database from yours, deliberately: the canvas runs work somebody assembled in a browser. |
 | `automation-egress` | `3128` | The automation canvas alone. This is the proxy that stops an assembled flow reaching anything it was not allowed to, so it is the one container here whose reachability is a security control rather than a convenience. |
 | `cache` | `6379` | The application alone. Never from outside. |
-| `db` | `5432` | The pooler and the workers. Never from outside, and never from the application directly. |
+| `db` | `5432` | The two poolers. Never from outside, and never from the application or the workers directly. |
 | `inference-server` | `8080` | The application alone. It is handed the text of documents that have already passed the permission layer, so anything that can reach it can ask it to read them. `standard` and `full`. |
 | `keycloak` | `8080` | Staff browsers, through your proxy, on the identity provider's own address. `standard` and `full`. |
 | `langfuse-cache` | `6379` | The trace ledger alone. `full` only. |
 | `langfuse-clickhouse` | `8123` | The trace ledger alone. `full` only. |
 | `langfuse-web` | `3000` | Whoever operates this install, through your proxy, on the trace ledger's own address. Not your staff. `full` only. |
 | `pgbouncer` | `5432` | The application alone. Everything the application does to the database goes through here. |
+| `pgbouncer-session` | `5432` | The two workers alone. It is in session mode, so a worker's `LISTEN` keeps its connection, and it caps what both workers together may hold against the database. `standard` and `full`. |
 | `seaweedfs` | `8333` | The application, the workers and, on `full`, the trace ledger. `standard` and `full`. |
 
 The application itself is deliberately not in that table, because it opens no declared port at

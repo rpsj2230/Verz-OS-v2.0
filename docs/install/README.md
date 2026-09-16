@@ -1,6 +1,6 @@
 # Installing this system
 
-Ten pages, written for somebody who has never met anybody who built this and is standing in
+Twelve pages, written for somebody who has never met anybody who built this and is standing in
 front of a bare server. Nothing in them names another company's installation.
 
 | Page | What it covers |
@@ -15,6 +15,8 @@ front of a bare server. Nothing in them names another company's installation.
 | [update-and-rollback.md](update-and-rollback.md) | Updating, and going back |
 | [restore-drill.md](restore-drill.md) | Reading a copy back to prove it can be, by hand |
 | [checklist.md](checklist.md) | Everything above as one list to tick, in ten sections |
+| [coolify.md](coolify.md) | Deploying with the Coolify panel instead of the installer |
+| [scaling.md](scaling.md) | A read replica, and splitting the stack across two hosts |
 
 ## Which half of this is checked
 
@@ -85,7 +87,7 @@ takes a backup and the one that proves a backup can be restored. See operations.
 **No update and no rollback has ever been performed on an install of this product.** See
 update-and-rollback.md.
 
-**Three of the ten pages here do not claim their leaf.** install.md, operations.md and
+**Three of the twelve pages here do not claim their leaf.** install.md, operations.md and
 update-and-rollback.md each say why at the foot of the page. They are worth reading anyway; they
 are not worth relying on as finished.
 

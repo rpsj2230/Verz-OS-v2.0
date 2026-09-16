@@ -60,8 +60,8 @@ fi
 
 case "$BRAIN_PROFILE" in
   lite) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.lite.yml"; BRAIN_SERVICES="4"; BRAIN_MEMORY_MIB="3968" ;;
-  standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml"; BRAIN_SERVICES="12"; BRAIN_MEMORY_MIB="9920" ;;
-  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml"; BRAIN_SERVICES="20"; BRAIN_MEMORY_MIB="13888" ;;
+  standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml"; BRAIN_SERVICES="13"; BRAIN_MEMORY_MIB="9984" ;;
+  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml"; BRAIN_SERVICES="21"; BRAIN_MEMORY_MIB="13952" ;;
   *) fail "unknown profile: $BRAIN_PROFILE. One of: lite standard full" ;;
 esac
 BRAIN_RELEASE_URL="${BRAIN_RELEASE_URL:?set BRAIN_RELEASE_URL to the release archive for $BRAIN_RELEASE}"

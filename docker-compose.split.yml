@@ -1,0 +1,48 @@
+# The two-host split (M36.1.4.1): the application on one host, the database and its pooler on
+# the other. Composed on BOTH hosts, after the profile's own files, with the same environment
+# file on each; what differs between the hosts is which services `docker compose up` is told to
+# start, and `python -m brain.ops.split --services <profile> <host>` prints that list.
+#
+#   application host:  docker compose <profile files> -f docker-compose.split.yml up -d --no-deps <application services>
+#   data host:         docker compose <profile files> -f docker-compose.split.yml up -d <data services>
+#
+# The steps, the checks and the rehearsal are in `docs/install/scaling.md`, and the argument is
+# in `brain.ops.split`. What a reader of this file needs in order not to undo it:
+#
+# **This file changes an address and a published port, and nothing the image reads besides.**
+# That is the whole of the claim that the split needs no application change (M36.1.4.2), and
+# `brain.ops.split.application_change_gaps` refuses an overlay that sets anything else. The
+# application reads where its database is from `DATABASE_URL`; the rest of its block stays in
+# the base file, so a setting the application gains there is not copied here.
+#
+# **The pooler is published on one private address, never on every interface.** A port with no
+# address in front of it is bound on the public interface as well, and Docker's rule is read
+# before the host firewall's, so a deny rule would not stop it. `BRAIN_DATA_HOST_ADDRESS` is
+# required rather than defaulted for that reason: unset, compose refuses to start instead of
+# publishing the database's pooler to the internet. Check the value with
+# `python -m brain.ops.split --check-address <address>` before you set it.
+#
+# **The address must be on an encrypted private link**, such as a WireGuard interface between the
+# two hosts. Nothing here gives the pooler a certificate, so the link is what keeps the traffic
+# private.
+#
+# **The database itself is not published.** Only its pooler is. The `db` port admits the
+# superuser, and nothing on the application host needs it.
+#
+# `--no-deps` on the application host is not optional. The application depends on `pgbouncer`,
+# which is on the other host; without it compose starts a second, empty database here.
+#
+# Task ids: M36.1.4.1, M36.1.4.2
+
+services:
+  app:
+    environment:
+      # The data host's pooler, on its published port, as the same login and database the base
+      # file names. Held to that by `brain.ops.split.split_gaps`.
+      DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6432/brain
+
+  pgbouncer:
+    ports:
+      # Started on the data host only, so this is bound there. Declared on the application host
+      # too, where the pooler is never started and the entry is never used.
+      - "${BRAIN_DATA_HOST_ADDRESS:?set BRAIN_DATA_HOST_ADDRESS to the data host private address}:6432:5432"

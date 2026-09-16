@@ -2450,7 +2450,7 @@
     "M36.2.4.3"
    ],
    "leaf_texts": [
-    "pg_partman on the metadata ledger",
+    "Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL",
     "Partition by month with automatic creation",
     "Retention detach and archive rather than delete",
     "Trigger: ledger row count or query latency threshold",

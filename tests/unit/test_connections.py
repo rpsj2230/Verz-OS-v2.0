@@ -456,9 +456,10 @@ def test_every_service_that_goes_round_the_pooler_is_declared_by_the_budget() ->
         for service, urls in every_connection_string().items()
         if any(direct_database_in(url) for url in urls)
     }
+    # The two workers left this set on 2026-09-16, when their connections moved behind the
+    # session-mode pooler. Their rows stay, because the pooler passes each connection through
+    # one for one, and `brain.ops.session_pool` holds its ceiling equal to the two rows.
     assert direct == {
-        "brain-worker",
-        "brain-parse-worker",
         "keycloak",
         "langfuse-web",
         "langfuse-worker",

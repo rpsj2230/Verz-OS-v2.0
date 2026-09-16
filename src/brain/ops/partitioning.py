@@ -51,14 +51,15 @@ premake has to cover the backup window and not merely the next period, and `prem
 computes it from that window rather than from a habit. See
 `A_PARTITION_SET_THAT_STOPS_AT_TODAY_REFUSES_TOMORROWS_WRITE`.
 
-**What is not built, said here rather than left to be inferred.** M36.1.1.1 asks for pg_partman
-on the metadata ledger. The ledger table exists since `0039` (`obs.request_telemetry`), and it
-was created partitioned by range on `CONTROL_COLUMN` with a default partition, so that pg_partman,
-which takes an existing partitioned parent, has a parent to take and nothing to rewrite.
-pg_partman itself is not installed, no period partitions exist, and nothing detaches one, so every
-row lands in the default partition and nothing yet enforces this scheme. `partman_settings` is
-the configuration that step will need, as data a test can check against the row shape
-`RequestTelemetry.ledger_row` actually produces.
+**Who applies the scheme, said here rather than left to be inferred.** The ledger table exists
+since `0039` (`obs.request_telemetry`), created partitioned by range on `CONTROL_COLUMN` with a
+default partition, so nothing has to rewrite it. `brain.ops.ledger_partitions` makes the months
+ahead, moves rows out of the default partition and detaches a month past its horizon, in plain
+SQL on the retention sweep's schedule. M36.1.1.1 asked for pg_partman until 2026-09-16, when the
+owner chose plain SQL over building a database image that carries the extension.
+`partman_settings` is kept as the scheme in pg_partman's own vocabulary, for an install that runs
+the extension itself, and is checked against the row shape `RequestTelemetry.ledger_row`
+actually produces. What is still not built is dropping a detached month after `SETTLE_DAYS`.
 
 Rejected: a partition per data class, so that traces and payloads ride the same scheme. They
 are three horizons in one schema, which is precisely why `brain.ops.retention.store_gaps`
@@ -622,11 +623,10 @@ def spec_gaps(
 
 # ------------------------------------------------------------- what is deliberately absent
 #: Why there is no migration in this module, said where somebody looking for one will read it.
-THE_LEDGER_IS_PARTITIONED_AND_NOTHING_MANAGES_ITS_PARTITIONS: Final = (
-    "M36.1.1.1 asks for pg_partman on the metadata ledger. Migration 0039 creates that table "
-    "partitioned by range on received_at with one default partition, because converting a "
-    "populated table later rewrites it, and the migration belongs with the table rather than "
-    "here. pg_partman is not installed, so no period partitions are made and none is detached: "
-    "every row lands in the default partition and the scheme below is data nothing applies "
-    "yet. PARTMAN_SETTINGS is what that step will need."
+THE_LEDGER_IS_PARTITIONED_BY_ITS_MIGRATION_AND_KEPT_IN_ORDER_BY_THE_WORKER: Final = (
+    "Migration 0039 creates the metadata ledger partitioned by range on received_at with one "
+    "default partition, because converting a populated table later rewrites it, and the "
+    "migration belongs with the table rather than here. The months are made and detached by "
+    "brain.ops.ledger_partitions on the retention sweep's schedule, in plain SQL, from the "
+    "scheme this module derives; nothing here opens a connection."
 )

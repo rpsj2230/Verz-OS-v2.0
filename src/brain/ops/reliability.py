@@ -1116,6 +1116,26 @@ MATRIX: Final[tuple[FailureMode, ...]] = (
         ),
     ),
     FailureMode(
+        component="pgbouncer-session",
+        fails=(
+            "the workers' session pooler is down, or both workers together have reached its "
+            "twenty server connections"
+        ),
+        presents_as=(
+            "down is a connection refused at worker start and is loud. At the ceiling a new "
+            "worker connection waits, and after thirty seconds fails with a query wait "
+            "timeout, which reads as a worker error rather than as a full pool"
+        ),
+        blocks=("brain-worker", "brain-parse-worker", "scheduled work", "background jobs"),
+        retry=RetryClass.AFTER_VERIFICATION,
+        response=(
+            "brain.ops.session_pool holds MAX_DB_CONNECTIONS equal to the two workers' rows in "
+            "brain.ops.connections, so a worker at the ceiling is a worker scaled past its "
+            "budget or a driver opening outside its pool; raise the rows and the ceiling "
+            "together, never the ceiling alone"
+        ),
+    ),
+    FailureMode(
         component="cache",
         fails="Valkey is unreachable",
         presents_as=(

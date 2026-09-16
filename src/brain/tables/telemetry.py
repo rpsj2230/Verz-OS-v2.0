@@ -11,9 +11,10 @@ declared for, and the audit chain beside it is the other half of reconstructing 
 
 **Partitioned by range on `received_at` from the first migration, with a default partition.**
 `brain.ops.partitioning` derives the scheme and records converting a populated table as the
-change that cannot be undone cheaply, because it rewrites the table. pg_partman (M36.1.1.1) takes
-an existing partitioned parent, so creating the parent partitioned now leaves that leaf a
-configuration step rather than a rewrite. The primary key is `(id, received_at)` because a key on
+change that cannot be undone cheaply, because it rewrites the table. The monthly partitions
+`brain.ops.ledger_partitions` makes (M36.1.1.1) are created under an existing partitioned parent,
+so creating the parent partitioned now left that leaf a statement per month rather than a rewrite.
+The primary key is `(id, received_at)` because a key on
 a partitioned table has to include the partition key, and `partitioning.CONTROL_COLUMN` is what a
 test holds the server's partition key to.
 

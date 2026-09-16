@@ -1,0 +1,122 @@
+# A streaming replica of the application's database, for console pages that only display
+# (M36.1.2.1). Composed on top of a profile's files, on the same host as `db`:
+#
+#   docker compose <profile files> -f docker-compose.replica.yml up -d
+#
+# What the application does with it is `brain.console.read_replica`: pages that only display are
+# read here while it is less than five minutes behind, and from the primary otherwise, so this
+# service can stop without the console stopping. The argument for every setting below is in
+# `brain.ops.streaming_replica`, and the steps and the rehearsal are in `docs/install/scaling.md`.
+#
+# **Two services, and the first one runs once.** `db-replication-setup` makes the primary ready to
+# be copied: a replication login, a rule letting that login connect for replication, a slot that
+# keeps the WAL the replica has not received yet, and a ceiling on how much WAL that slot may keep.
+# It exits when it has done that. `db-replica` copies the primary with `pg_basebackup` the first
+# time its volume is empty and runs as a hot standby from then on.
+#
+# **The setup mounts the primary's data volume, and writes one line to one file in it.** A
+# replication connection is refused unless `pg_hba.conf` has a `replication` rule, the image's own
+# rules do not match replication, and the rule cannot be written through SQL. The script asks the
+# server where that file is, appends the rule only if it is missing, and reloads. It writes nothing
+# else in the volume, and `brain.ops.streaming_replica` holds its command to that.
+#
+# **The slot has a ceiling, and the ceiling is the primary's disk.** A replication slot keeps every
+# WAL segment its replica has not confirmed, so a replica that stops while the slot remains fills
+# the primary's disk until the database stops accepting writes. `max_slot_wal_keep_size` caps
+# that: past it the slot is given up, the replica has to be copied again, and the primary keeps
+# running. The console notices first, because the replica stops being caught up and pages are read
+# from the primary.
+#
+# **Nothing is published.** The replica is reached on the compose network by the application
+# alone, like the primary.
+#
+# Task ids: M36.1.2.1
+
+services:
+  db-replication-setup:
+    # The primary's own image, so `psql` speaks its version.
+    image: pgvector/pgvector:pg18
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: brain
+      PGDATABASE: brain
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # Minted for this install and required: unset, compose refuses to start rather than
+      # creating a replication login with an empty password.
+      BRAIN_REPLICATION_PASSWORD: ${BRAIN_REPLICATION_PASSWORD:?set BRAIN_REPLICATION_PASSWORD to a password minted for this install}
+    volumes:
+      # The primary's volume, at the path the primary mounts it, so the path the server reports
+      # for its rules file is a path in this container too.
+      - brain-db:/var/lib/postgresql
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        hba="$$(psql -Atc 'SHOW hba_file')"
+        rule='host replication brain_replicator all scram-sha-256'
+        grep -qxF "$$rule" "$$hba" || printf '%s\n' "$$rule" >> "$$hba"
+        psql -v ON_ERROR_STOP=1 -v password="$$BRAIN_REPLICATION_PASSWORD" <<'SQL'
+        SELECT 'CREATE ROLE brain_replicator WITH REPLICATION LOGIN' WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'brain_replicator') \gexec
+        ALTER ROLE brain_replicator WITH REPLICATION LOGIN PASSWORD :'password';
+        SELECT pg_create_physical_replication_slot('brain_replica') WHERE NOT EXISTS (SELECT 1 FROM pg_replication_slots WHERE slot_name = 'brain_replica');
+        ALTER SYSTEM SET max_slot_wal_keep_size = '2GB';
+        SELECT pg_reload_conf();
+        SQL
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  db-replica:
+    # The primary's image exactly. A standby replays the primary's WAL, which needs the same major
+    # version, and reads rows whose types come from the same extensions.
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    depends_on:
+      db-replication-setup:
+        condition: service_completed_successfully
+    environment:
+      # Read by pg_basebackup for the first copy and by the standby's WAL receiver afterwards.
+      PGPASSWORD: ${BRAIN_REPLICATION_PASSWORD:?set BRAIN_REPLICATION_PASSWORD to a password minted for this install}
+    volumes:
+      - brain-db-replica:/var/lib/postgresql
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      # `max_connections` is the primary's figure and may not be lower: a hot standby refuses to
+      # start with fewer connections than the primary it replays. `shared_buffers` is half the
+      # primary's, because this serves display reads only.
+      - |
+        set -euo pipefail
+        data=/var/lib/postgresql/18/docker
+        if [ ! -s "$$data/PG_VERSION" ]; then
+          install -d -o postgres -g postgres -m 0700 "$$data"
+          gosu postgres pg_basebackup --pgdata="$$data" --host=db --username=brain_replicator --slot=brain_replica --wal-method=stream --write-recovery-conf --checkpoint=fast
+        fi
+        exec gosu postgres postgres -D "$$data" -c hot_standby=on -c max_connections=100 -c shared_buffers=256MB -c work_mem=16MB
+    expose:
+      - "5432"
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    healthcheck:
+      # A hot standby accepts connections once it has reached a consistent state, which is the
+      # earliest moment a read from it means anything.
+      test: ["CMD-SHELL", "pg_isready -U brain -d brain"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
+  app:
+    environment:
+      # Read by `brain.settings` as `read_replica_url`. The application measures this server's lag
+      # before every display read it sends here and falls back to the primary on its own.
+      BRAIN_READ_REPLICA_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@db-replica:5432/brain
+
+volumes:
+  brain-db-replica:

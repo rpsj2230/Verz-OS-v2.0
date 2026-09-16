@@ -280,6 +280,22 @@ COMPONENTS: Final[tuple[Component, ...]] = (
         ),
     ),
     Component(
+        # The workers' pooler, in session mode (M0.3.5). `Wiring.DIRECT` because it holds one
+        # server connection per client for the whole session, which is the property LISTEN and
+        # a server-side prepare need, and `needs_session_state` stays false because the pooler
+        # itself keeps none. 64 MiB is a ceiling rather than a measurement: PgBouncer's own
+        # buffers for twenty-four clients are a few MiB, and the application's pooler holds
+        # two hundred in 128. `brain.ops.session_pool` holds its figures against the workers'.
+        name="pgbouncer-session",
+        memory_mib=64,
+        profiles=frozenset({"standard", "full"}),
+        wiring=Wiring.DIRECT,
+        ready_when=(
+            "pg_isready answers through the pooler on its own port, which is true once it "
+            "accepts a client; a server connection is taken on the first query"
+        ),
+    ),
+    Component(
         name="seaweedfs",
         memory_mib=256,
         profiles=frozenset({"standard", "full"}),

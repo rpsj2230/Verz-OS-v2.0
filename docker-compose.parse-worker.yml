@@ -32,8 +32,10 @@
 # and there is no subprocess here.
 #
 # **The connection bound is where this container is smaller than the general worker rather
-# than larger.** `QUEUE_URL` below goes straight to `db` because the queue needs LISTEN and a
-# transaction pooler cannot carry one, so nothing outside this container bounds it.
+# than larger.** `QUEUE_URL` below goes to `pgbouncer-session`, declared in
+# `docker-compose.worker.yml`, because the queue needs LISTEN and a transaction pooler cannot
+# carry one. That pooler's `MAX_DB_CONNECTIONS` counts this container's five with the general
+# worker's fifteen, so what bounds it is no longer this container alone.
 # `BRAIN_WORKER_POOL_MAX` is five here against fifteen on the general worker, and the ten in
 # between is the checkpointer pool this container has no use for. `brain.ops.connections`
 # holds the matching `Client` row and `brain.ops.worker` refuses to start a container that has
@@ -85,7 +87,9 @@ services:
     # test, in both directions.
     profiles: ["standard", "full"]
     depends_on:
-      db:
+      # Declared in `docker-compose.worker.yml`, which every profile composing this file also
+      # composes. Named here with no body, so there is one description of it.
+      pgbouncer-session:
         condition: service_healthy
     command: ["python", "-m", "brain.ops.worker"]
     environment:
@@ -93,11 +97,11 @@ services:
       # against this component's limit, and without it this process would size itself as the
       # general worker: seven slots inside 384 MiB, which is not what is deployed here.
       BRAIN_WORKER_COMPONENT: brain-parse-worker
-      # Straight to Postgres, not through pgbouncer, and deliberately not the same string as
-      # DATABASE_URL: `brain.ops.queue.queue_url_refusals` runs against these two values
-      # before this container starts. A LISTEN behind a transaction pooler stops delivering
-      # and raises nothing.
-      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@db:5432/brain
+      # Through the session pooler, not through `pgbouncer`, and deliberately not the same
+      # string as DATABASE_URL: `brain.ops.queue.queue_url_refusals` runs against these two
+      # values before this container starts. A LISTEN behind a transaction pooler stops
+      # delivering and raises nothing; behind a session pooler it keeps its backend.
+      QUEUE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer-session:5432/brain
       # The application's connection, through the pooler like everything else. A parse worker
       # makes ordinary queries on it, and it is read here so the two can be compared.
       DATABASE_URL: postgresql+psycopg://brain:${POSTGRES_PASSWORD}@pgbouncer:5432/brain
@@ -117,8 +121,8 @@ services:
       # choose one. Declaring a job whole-container is never an advantage; it moves the job to
       # the container that runs one at a time.
       BRAIN_WORKER_SLOT_CLASS: whole_container
-      # What this container may hold against `db`, which no pooler bounds. Five rather than
-      # the general worker's fifteen, and the difference is the ten
+      # What this container may hold against `db`, counted again at the session pooler. Five
+      # rather than the general worker's fifteen, and the difference is the ten
       # `brain.session.make_worker_engine` keeps for a checkpointer this container does not
       # have: it sets no BRAIN_CHECKPOINTER_URL, because a parse is not a graph. So this is a
       # queue connection and nothing else. `brain.ops.connections` declares it as a Client row

@@ -358,8 +358,9 @@ CLIENTS: Final[tuple[Client, ...]] = (
         pool_max=WORKER_CHECKPOINTER_CONNECTIONS + WORKER_QUEUE_CONNECTIONS,
         why=(
             "Ten of it is measured: brain.session.make_worker_engine keeps a pool of five "
-            "plus five overflow for the checkpointer, which goes straight to the database "
-            "because a saver prepares statements server-side. Five more for the queue "
+            "plus five overflow for the checkpointer, which goes through the session-mode "
+            "pooler rather than the transaction one because a saver prepares statements "
+            "server-side. Five more for the queue "
             "connection, which is a judgement rather than a measurement while no driver is "
             "installed. BRAIN_WORKER_POOL_MAX in docker-compose.worker.yml carries the total "
             "to the container, and brain.ops.worker refuses to start one that has a driver "

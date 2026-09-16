@@ -32,9 +32,11 @@ else's budget.** Both memory caps above are spent inside a cgroup limit, so gett
 kills this container and nothing else. A connection is spent out of a database's ceiling,
 which every other client of that database is spending from too, and the 2026-09-07 outage is
 what that looks like when one client has no bound: the first thing refused is whoever is
-trying to find out why. Both of this worker's direct URLs go round PgBouncer deliberately,
-because the queue needs LISTEN and the checkpointer needs server-side prepared statements, so
-there is nothing between them and the ceiling except a number somebody has to choose.
+trying to find out why. Both of this worker's session URLs go round the application's PgBouncer
+deliberately, because the queue needs LISTEN and the checkpointer needs server-side prepared
+statements, so until the session-mode pooler existed there was nothing between them and the
+ceiling except a number somebody has to choose. `brain.ops.session_pool` now counts both
+workers at that pooler as well, which covers the driver that opens outside its pool.
 `BRAIN_WORKER_POOL_MAX` is that number, `brain.ops.connections` budgets the same figure, and
 `pool_declaration_gaps` refuses a container where the two disagree or where a queue driver is
 importable and nothing has been declared at all. That refusal is a refusal rather than an

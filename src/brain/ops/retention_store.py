@@ -105,6 +105,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.audit.ledger import LegalHold
 from brain.ops.erasure import Hold
+from brain.ops.ledger_partitions import declared_as
 from brain.ops.retention import (
     STORES,
     CitedHold,
@@ -307,8 +308,11 @@ class PostgresSweeper:
         owned: list[str] = []
         for schema, name in found:
             table = f"{schema}.{name}"
-            if table in self.attributed:
-                if self.attributed[table] is store:
+            # A detached month of the ledger is declared as the ledger. See
+            # `brain.ops.ledger_partitions.declared_as`.
+            declared = declared_as(table)
+            if declared in self.attributed:
+                if self.attributed[declared] is store:
                     owned.append(table)
                 continue
             sharing = sum(1 for entry in STORES if schema in entry.schemas)
@@ -428,7 +432,7 @@ class PostgresSweeper:
         return now - timedelta(days=cast(int, horizon_of(store).days))
 
     def _clock(self, table: str) -> str:
-        clock = self.clocks.get(table)
+        clock = self.clocks.get(declared_as(table))
         if clock is None:
             msg = (
                 f"{table} holds a fixed-window class and declares no clock column, so its rows "
@@ -438,7 +442,7 @@ class PostgresSweeper:
         return clock
 
     def _subject(self, table: str) -> str:
-        column = self.subjects.get(table)
+        column = self.subjects.get(declared_as(table))
         if column is None:
             raise RetentionError(f"{table}: {A_HOLD_THIS_CANNOT_MATCH_TO_A_ROW_STOPS_THE_SWEEP}")
         return column
@@ -474,7 +478,7 @@ class PostgresSweeper:
         """Age in whole days of the oldest row with a declared clock, or None when none has one."""
         oldest: datetime | None = None
         for table in tables:
-            clock = self.clocks.get(table)
+            clock = self.clocks.get(declared_as(table))
             if clock is None:
                 continue
             row = self.conn.execute(
