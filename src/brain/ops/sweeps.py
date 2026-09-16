@@ -451,6 +451,12 @@ def sweep_traceability() -> None:
             f"note: {len(unbuilt)} navigation item(s) the design names are not in the console: "
             + ", ".join(one.line for one in unbuilt)
         )
+    others = console_design.unmeasured_navigations(REPO)
+    if others:
+        print(
+            "note: navigations the design draws with no shell of their own to compare yet: "
+            + ", ".join(others)
+        )
 
     # And the shape of the line itself, which is not a third direction but the thing that
     # decides whether any of the three above read what the author meant. This raises rather

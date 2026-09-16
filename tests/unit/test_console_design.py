@@ -11,15 +11,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from brain.ops.console_design import (
+    COMPANY_CONSOLE,
     Unbuilt,
     console_labels,
     design_navigation,
     navigation_gaps,
+    unmeasured_navigations,
 )
 
 REPO = Path(__file__).resolve().parents[2]
 
 _DESIGN = """
+<section class="scr">
+<h2>Company Overview</h2>
 <div class="navsec">Operate</div>
 <div class="navitem on">Overview</div>
 <div class="navitem">Live runs</div>
@@ -27,8 +31,28 @@ _DESIGN = """
 <div class="navsec">Govern</div>
 <div class="navitem">People &amp; grants</div>
 <div class="navitem">Quality &amp; canaries</div>
+</section>
+<section class="scr">
+<h2>Department Console</h2>
+<div class="navsec">Operate</div>
+<div class="navitem on">Department</div>
+<div class="navsec">Report</div>
+<div class="navitem">Gaps</div>
+</section>
+<section class="scr">
+<h2>My Workspace</h2>
 <div class="navsec">Mine</div>
 <div class="navitem">My agents</div>
+</section>
+<section class="scr">
+<h2>Ask</h2>
+<p>A screen that draws no navigation.</p>
+</section>
+<section class="scr">
+<p>A frame with a navigation and no title, as a half-finished edit to the page leaves.</p>
+<div class="navsec">Report</div>
+<div class="navitem">Untitled</div>
+</section>
 """
 
 _SHELL = """
@@ -86,20 +110,44 @@ def test_an_item_the_console_offers_under_the_designs_own_wording_is_not_a_gap(
     assert "Overview" not in reported
 
 
-def test_a_members_own_navigation_is_not_the_administrative_consoles_gap(
+def test_another_screens_navigation_is_not_the_company_consoles_gap(
     tmp_path: Path,
 ) -> None:
-    """The design draws a member's screens too, under Mine, Me, Use and Agent. This module
-    reads the administrative console, so `My agents` is not a missing administrative screen: it
-    is a screen for somebody else, and reporting it would make the note the thing people learn
-    to ignore.
+    """The design draws four navigations: the company console, the department console, a
+    member's workspace and the menu inside an agent. Only the first is what the administrative
+    shell is for. Until 2026-09-16 every section heading on the page was read into one list,
+    and seven of the nineteen gaps printed were the department console's `Department`, `Gaps`
+    and `Usage` and the agent's `Leash history`, `Runs and cost` and `Settings`, reported
+    against a screen none of them belongs to.
 
-    Delete this and every member item joins the count, the number stops meaning what it says,
-    and the first person to act on it builds a member page into the administrative shell."""
+    Delete this and the reading can go back to one list, the count grows by items nobody
+    should build into this shell, and the first person to act on it does exactly that."""
     repo = _tree(tmp_path, _DESIGN, _SHELL)
 
-    assert all(one.section != "Mine" for one in navigation_gaps(repo))
-    assert "Mine" not in design_navigation(repo)
+    reported = {one.label for one in navigation_gaps(repo)}
+
+    assert "Department" not in reported
+    assert "Gaps" not in reported
+    assert "My agents" not in reported
+    assert set(design_navigation(repo)) == {"Operate", "Govern"}
+
+
+def test_the_other_navigations_are_named_as_not_measured_rather_than_dropped(
+    tmp_path: Path,
+) -> None:
+    """The sibling of the test above, and the reason reading one screen is not a silence. The
+    department console and a member's workspace are designed and nothing compares them with
+    anything yet, because neither has a shell of its own. Naming them is what keeps that a
+    known gap. A screen that draws no navigation is not a navigation to measure, and a frame
+    with no title has no screen to be read under, so it is left out rather than named as an
+    empty string or allowed to stop the sweep.
+
+    Delete this and those navigations can simply stop being read, and the note that says the
+    console matches its design says so about one of the four menus it was given."""
+    repo = _tree(tmp_path, _DESIGN, _SHELL)
+
+    assert unmeasured_navigations(repo) == ("Department Console", "My Workspace")
+    assert COMPANY_CONSOLE not in unmeasured_navigations(repo)
 
 
 def test_the_design_and_the_console_are_read_out_of_the_real_files() -> None:
@@ -117,5 +165,7 @@ def test_the_design_and_the_console_are_read_out_of_the_real_files() -> None:
     labels = console_labels(REPO)
 
     assert set(sections) == {"Operate", "Govern", "Report"}, sorted(sections)
+    assert "Department" not in sections["Operate"]
+    assert "Department Console" in unmeasured_navigations(REPO)
     assert "Overview" in labels
     assert all(items for items in sections.values())

@@ -19,6 +19,17 @@ switches off, so the count and the names print on every run beside the reads wit
 and the pair of them is the distance between what exists and what was designed. See
 `A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE`.
 
+**The design draws four navigations, and only one of them is this console's.** SCREEN 1 is
+the company console a Super Admin runs, SCREEN 2 is the same shape bounded to one department,
+SCREEN 11 is a member's own workspace and SCREEN 12 is the menu inside one agent. Until
+2026-09-16 every section heading on the page was read into one list, so the department
+console's "Department", "Gaps" and "Usage" and the agent's "Leash history" and "Settings" were
+reported as missing from the company console, which is a screen none of them belongs to. Seven
+of nineteen reported gaps were that. Each navigation is now read under the screen that draws
+it, the company console is compared with the shell, and the other three are named as not
+measured, because none of them has a shell of its own yet to compare with. See
+`ONE_PAGE_FOUR_NAVIGATIONS`.
+
 **What it cannot see.** Whether a screen shows the columns the design draws, whether a figure on
 it means what the mockup means, and whether the wording matches. Those are read by a person
 against the page. This reads the navigation, which is the half a machine can hold: every item
@@ -36,11 +47,15 @@ from typing import Final
 
 __all__ = [
     "A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE",
+    "COMPANY_CONSOLE",
     "DESIGN_PAGE",
+    "ONE_PAGE_FOUR_NAVIGATIONS",
     "Unbuilt",
     "console_labels",
     "design_navigation",
+    "design_navigations",
     "navigation_gaps",
+    "unmeasured_navigations",
 ]
 
 #: Why this reports rather than refuses.
@@ -58,10 +73,19 @@ DESIGN_PAGE: Final = Path("docs") / "screens.html"
 #: Where the console declares what its navigation holds.
 CONSOLE_SHELL: Final = Path("console") / "src" / "layout" / "Shell.tsx"
 
-#: Sections in the design that belong to a member rather than an administrator. The console
-#: this module reads is the administrative one, so a member's own navigation is not its gap.
-MEMBER_SECTIONS: Final[frozenset[str]] = frozenset({"Use", "Mine", "Me", "Agent"})
+#: Why the navigations are read per screen rather than per page.
+ONE_PAGE_FOUR_NAVIGATIONS: Final = (
+    "docs/screens.html draws a company console, a department console, a member's workspace "
+    "and the menu inside an agent, and each is a different reader's navigation. Reading every "
+    "section heading on the page into one list reports another reader's menu items as gaps in "
+    "this one, so each is read under the screen title that draws it."
+)
 
+#: The screen whose navigation the administrative shell is compared with.
+COMPANY_CONSOLE: Final = "Company Overview"
+
+_SCREEN = re.compile(r'<section class="scr">')
+_TITLE = re.compile(r"<h2>([^<]+)</h2>")
 _SECTION = re.compile(r'<div class="navsec">([^<]+)')
 _ITEM = re.compile(r'<div class="navitem[^"]*">([^<]*?)(?:<span[^>]*>\d+</span>)?</div>')
 _NAV_ROW = re.compile(r'\{\s*to:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"\s*\}')
@@ -92,25 +116,41 @@ def _comparable(label: str) -> str:
     return stripped.replace(" and ", " ").replace("-", " ").lower().strip()
 
 
-def design_navigation(repo: Path) -> dict[str, tuple[str, ...]]:
-    """Every administrative navigation item the design names, by the section it sits in.
+def design_navigations(repo: Path) -> dict[str, dict[str, tuple[str, ...]]]:
+    """Every navigation the design draws, by the title of the screen that draws it.
 
     Read out of the page's own markup rather than a list kept here, because a list here is a
-    second copy of the design that drifts from it exactly as the console did.
+    second copy of the design that drifts from it exactly as the console did. A screen that
+    draws no navigation is not in the answer.
     """
     page = (repo / DESIGN_PAGE).read_text(encoding="utf-8", errors="replace")
-    found: dict[str, list[str]] = {}
-    for chunk in re.split(r'(?=<div class="navsec">)', page):
-        heading = _SECTION.search(chunk)
-        if heading is None:
+    drawn: dict[str, dict[str, tuple[str, ...]]] = {}
+    for screen in _SCREEN.split(page)[1:]:
+        title = _TITLE.search(screen)
+        if title is None:
             continue
-        section = _text(heading.group(1))
-        if section in MEMBER_SECTIONS:
-            continue
-        items = [_text(one) for one in _ITEM.findall(chunk)]
-        seen = found.setdefault(section, [])
-        seen.extend(one for one in items if one and one not in seen)
-    return {section: tuple(items) for section, items in found.items() if items}
+        found: dict[str, list[str]] = {}
+        for chunk in re.split(r'(?=<div class="navsec">)', screen):
+            heading = _SECTION.search(chunk)
+            if heading is None:
+                continue
+            items = [_text(one) for one in _ITEM.findall(chunk)]
+            seen = found.setdefault(_text(heading.group(1)), [])
+            seen.extend(one for one in items if one and one not in seen)
+        sections = {section: tuple(items) for section, items in found.items() if items}
+        if sections:
+            drawn[_text(title.group(1))] = sections
+    return drawn
+
+
+def design_navigation(repo: Path) -> dict[str, tuple[str, ...]]:
+    """The company console's navigation, by section: the one the administrative shell is for."""
+    return design_navigations(repo).get(COMPANY_CONSOLE, {})
+
+
+def unmeasured_navigations(repo: Path) -> tuple[str, ...]:
+    """The titles of the other navigations the design draws, which nothing here compares yet."""
+    return tuple(title for title in design_navigations(repo) if title != COMPANY_CONSOLE)
 
 
 def console_labels(repo: Path) -> tuple[str, ...]:
