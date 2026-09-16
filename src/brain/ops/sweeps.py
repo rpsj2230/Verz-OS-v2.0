@@ -22,6 +22,7 @@ from pathlib import Path
 
 from brain.core.envelope import TOOL_NAME_PATTERN
 from brain.db import libpq_url
+from brain.ops import console_screens
 from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 
 REPO = Path(__file__).resolve().parents[3]
@@ -315,6 +316,15 @@ def sweep_traceability() -> None:
     # separately, so one run tells you everything wrong with the record at once.
     findings: list[str] = list(_malformed_task_lines())
 
+    # And the exemption list of the fifth note below, which is checked here rather than
+    # printed there because it is the one half of that note that is a gate. See
+    # `brain.ops.console_screens.
+    # AN_EXEMPTION_IS_THE_ONLY_WAY_THIS_COUNT_FALLS_WITHOUT_A_SCREEN_BEING_BUILT`: the backlog
+    # of reads with no screen is advisory because it would be red on arrival, and an exemption
+    # that names nothing or has been overtaken is that backlog getting shorter for a reason
+    # nobody would accept if they were told about it.
+    findings.extend(console_screens.exemption_gaps())
+
     # Read claims from the `Task ids:` line only, never from body prose. A file that says
     # "M24.1 is the chain logic only, M24.1.5 needs a decision" is discussing those ids,
     # not claiming them, and counting prose turns every honest caveat into a false claim.
@@ -410,6 +420,24 @@ def sweep_traceability() -> None:
     if phantom:
         print(f"      {', '.join(phantom)}")
         print("      name the leaves under each one individually, or Reopens: the claim")
+
+    # And the fifth direction, which is not about the record at all but about what the record
+    # is a record of. The four above compare two written claims against each other or against
+    # a test. This one compares a claim against a browser: M27's screen leaves were closed by
+    # the modules under `src/brain/console`, every one of which decides what a reader may see
+    # and renders nothing, so a leaf went green on the day its reader decision was written
+    # rather than on the day somebody could open the screen. Twenty-four of twenty-nine reads
+    # had no page in `console/src` on 2026-09-16 and nothing anywhere said so.
+    #
+    # It lives in this sweep for a duller reason than the argument: this is the only sweep the
+    # pre-push hook runs against the commit and CI runs against the branch, so a note printed
+    # here is a note printed on every run, and a note printed anywhere else is one nobody sees.
+    #
+    # Advisory for the reason the two notes above are, and `brain.ops.console_screens` argues
+    # it at length: a gate red on arrival is a gate somebody switches off, and the half of this
+    # that can be a gate is in `findings` at the top of this function rather than here.
+    for line in console_screens.report_lines():
+        print(line)
 
     # And the shape of the line itself, which is not a third direction but the thing that
     # decides whether any of the three above read what the author meant. This raises rather
