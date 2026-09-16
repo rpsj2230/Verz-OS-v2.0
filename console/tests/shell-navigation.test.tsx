@@ -85,6 +85,39 @@ describe("the navigation", () => {
     expect(onRecords).toEqual(onOverview);
   });
 
+  test("the navigation is grouped under the design's headings, in the design's order", async () => {
+    // What breaks if this is deleted: the menu goes back to one flat list in the order screens
+    // happened to be built, which is what the owner opened on 2026-09-16 and what
+    // `docs/admin-console.md` refuses: navigation grouped by what an administrator is trying to
+    // do, not by which module serves it. `docs/screens.html` SCREEN 1 draws Operate, Govern and
+    // Report in that order. Each list is asserted to be named by its own heading, because a
+    // heading beside a list that nothing ties to it reads as grouped and is announced as one
+    // long list.
+    await loadConsole();
+    const holder = document.createElement("div");
+    holder.innerHTML = await navigationAt("/");
+
+    const headings = [...holder.querySelectorAll("nav h2")].map((one) => one.textContent);
+    expect(headings.slice(0, 3)).toEqual(["Operate", "Govern", "Report"]);
+
+    const under = (heading: string): string[] => {
+      const title = [...holder.querySelectorAll("nav h2")].find((one) => one.textContent === heading);
+      const list = holder.querySelector(`ul[aria-labelledby="${title?.id ?? "missing"}"]`);
+      return [...(list?.querySelectorAll("a") ?? [])].map((link) => link.textContent ?? "");
+    };
+    expect(under("Operate")).toContain("Overview");
+    expect(under("Operate")).toContain("Connectors");
+    expect(under("Govern")).toContain("People and grants");
+    expect(under("Govern")).toContain("Agents and leashes");
+    expect(under("Govern")).not.toContain("Overview");
+    expect(under("Report")).toContain("Spend");
+
+    // Every link sits in exactly one group, so grouping neither hid a section nor listed one twice.
+    const grouped = headings.flatMap((heading) => under(heading ?? ""));
+    const all = targets(holder.innerHTML).map((one) => one.label);
+    expect([...grouped].sort()).toEqual([...all].sort());
+  });
+
   test("the current section is marked by more than a colour", async () => {
     // What breaks if this is deleted: the only signal of where you are becomes a colour,
     // which is invisible to a screen reader and to anyone who cannot distinguish the two

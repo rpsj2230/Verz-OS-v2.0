@@ -14,6 +14,7 @@ from brain.ops.console_design import (
     COMPANY_CONSOLE,
     Unbuilt,
     console_labels,
+    console_navigation,
     design_navigation,
     navigation_gaps,
     unmeasured_navigations,
@@ -56,10 +57,38 @@ _DESIGN = """
 """
 
 _SHELL = """
-const SECTIONS: readonly { to: string; label: string }[] = [
-  { to: "/", label: "Overview" },
-  { to: "/people", label: "people and grants" },
-  { to: "/quality", label: "Quality-canaries" },
+const GROUPS: readonly NavGroup[] = [
+  {
+    heading: "Operate",
+    sections: [
+      { to: "/", label: "Overview" },
+    ],
+  },
+  {
+    heading: "Govern",
+    sections: [
+      { to: "/people", label: "people and grants" },
+      { to: "/quality", label: "Quality-canaries" },
+    ],
+  },
+];
+"""
+
+_MISFILED_SHELL = """
+const GROUPS: readonly NavGroup[] = [
+  {
+    heading: "Operate",
+    sections: [
+      { to: "/", label: "Overview" },
+      { to: "/people", label: "People and grants" },
+    ],
+  },
+  {
+    heading: "Govern",
+    sections: [
+      { to: "/quality", label: "Quality and canaries" },
+    ],
+  },
 ];
 """
 
@@ -108,6 +137,26 @@ def test_an_item_the_console_offers_under_the_designs_own_wording_is_not_a_gap(
     assert "People and grants" not in reported
     assert "Quality &amp; canaries" not in reported
     assert "Overview" not in reported
+
+
+def test_an_item_offered_under_another_group_is_reported_with_the_group_it_sits_under(
+    tmp_path: Path,
+) -> None:
+    """The half of M27.8.2 a label comparison cannot see. `People and grants` is offered, but under
+    Operate where the design draws it under Govern, so somebody following the design opens Govern
+    and does not find it. It is reported, and the line names where it was put.
+
+    Delete this and the comparison can go back to labels alone, and a menu with every screen in
+    the wrong group reads as a menu that matches its design."""
+    repo = _tree(tmp_path, _DESIGN, _MISFILED_SHELL)
+
+    misfiled = [one for one in navigation_gaps(repo) if one.label == "People and grants"]
+
+    assert misfiled == [
+        Unbuilt(section="Govern", label="People and grants", placed_under="Operate")
+    ]
+    assert misfiled[0].line == "Govern: People and grants (offered under Operate)"
+    assert console_navigation(repo)["Operate"] == ("Overview", "People and grants")
 
 
 def test_another_screens_navigation_is_not_the_company_consoles_gap(
@@ -163,9 +212,12 @@ def test_the_design_and_the_console_are_read_out_of_the_real_files() -> None:
     note that says nothing is missing because nothing was found."""
     sections = design_navigation(REPO)
     labels = console_labels(REPO)
+    grouped = console_navigation(REPO)
 
     assert set(sections) == {"Operate", "Govern", "Report"}, sorted(sections)
     assert "Department" not in sections["Operate"]
     assert "Department Console" in unmeasured_navigations(REPO)
     assert "Overview" in labels
+    assert set(sections) <= set(grouped), sorted(grouped)
+    assert not [one for one in navigation_gaps(REPO) if one.placed_under], navigation_gaps(REPO)
     assert all(items for items in sections.values())

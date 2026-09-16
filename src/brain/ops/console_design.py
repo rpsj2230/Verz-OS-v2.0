@@ -30,6 +30,13 @@ it, the company console is compared with the shell, and the other three are name
 measured, because none of them has a shell of its own yet to compare with. See
 `ONE_PAGE_FOUR_NAVIGATIONS`.
 
+**An item is found only in the group the design puts it in.** Until the console grouped its
+navigation this compared labels alone, which was all a flat list could be compared on. The
+shell now declares its groups as `{ heading, sections }`, and an item the design draws under
+Govern that the console offers under Operate is reported with the group it was found under,
+because a screen filed in the wrong group is one somebody following the design looks for and
+does not find. See `A_SCREEN_IN_THE_WRONG_GROUP_IS_NOT_FOUND`.
+
 **What it cannot see.** Whether a screen shows the columns the design draws, whether a figure on
 it means what the mockup means, and whether the wording matches. Those are read by a person
 against the page. This reads the navigation, which is the half a machine can hold: every item
@@ -47,11 +54,13 @@ from typing import Final
 
 __all__ = [
     "A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE",
+    "A_SCREEN_IN_THE_WRONG_GROUP_IS_NOT_FOUND",
     "COMPANY_CONSOLE",
     "DESIGN_PAGE",
     "ONE_PAGE_FOUR_NAVIGATIONS",
     "Unbuilt",
     "console_labels",
+    "console_navigation",
     "design_navigation",
     "design_navigations",
     "navigation_gaps",
@@ -81,6 +90,13 @@ ONE_PAGE_FOUR_NAVIGATIONS: Final = (
     "this one, so each is read under the screen title that draws it."
 )
 
+#: Why a label offered under another heading still counts as a gap.
+A_SCREEN_IN_THE_WRONG_GROUP_IS_NOT_FOUND: Final = (
+    "The design says where each screen lives as well as what it is called. A person following "
+    "it opens Govern to find Audit, and a console that offers Audit under Report has a screen "
+    "that exists and cannot be found, so it is reported with the group it sits under."
+)
+
 #: The screen whose navigation the administrative shell is compared with.
 COMPANY_CONSOLE: Final = "Company Overview"
 
@@ -88,6 +104,7 @@ _SCREEN = re.compile(r'<section class="scr">')
 _TITLE = re.compile(r"<h2>([^<]+)</h2>")
 _SECTION = re.compile(r'<div class="navsec">([^<]+)')
 _ITEM = re.compile(r'<div class="navitem[^"]*">([^<]*?)(?:<span[^>]*>\d+</span>)?</div>')
+_GROUP_HEADING = re.compile(r'heading:\s*"([^"]+)"')
 _NAV_ROW = re.compile(r'\{\s*to:\s*"([^"]+)"\s*,\s*label:\s*"([^"]+)"\s*\}')
 
 
@@ -97,11 +114,14 @@ class Unbuilt:
 
     section: str
     label: str
+    #: The console group the label was found under instead, or empty when it is nowhere.
+    placed_under: str = ""
 
     @property
     def line(self) -> str:
         """The reported line, section first because the section is the part that is missing."""
-        return f"{self.section}: {self.label}"
+        where = f" (offered under {self.placed_under})" if self.placed_under else ""
+        return f"{self.section}: {self.label}{where}"
 
 
 def _text(raw: str) -> str:
@@ -159,17 +179,47 @@ def console_labels(repo: Path) -> tuple[str, ...]:
     return tuple(label for _, label in _NAV_ROW.findall(shell))
 
 
+def console_navigation(repo: Path) -> dict[str, tuple[str, ...]]:
+    """The console shell's labels, by the heading of the group each sits under.
+
+    A group runs from its `heading:` to the next one. A shell with no headings has no groups, and
+    every item the design names is then reported as missing from its section, which is the true
+    state of a flat menu.
+    """
+    shell = (repo / CONSOLE_SHELL).read_text(encoding="utf-8", errors="replace")
+    headings = list(_GROUP_HEADING.finditer(shell))
+    grouped: dict[str, tuple[str, ...]] = {}
+    for at, heading in enumerate(headings):
+        end = headings[at + 1].start() if at + 1 < len(headings) else len(shell)
+        rows = tuple(label for _, label in _NAV_ROW.findall(shell[heading.end() : end]))
+        grouped[heading.group(1)] = grouped.get(heading.group(1), ()) + rows
+    return grouped
+
+
 def navigation_gaps(repo: Path) -> tuple[Unbuilt, ...]:
-    """Every item the design names that the console's navigation does not offer.
+    """Every item the design names that the console does not offer in the same group.
 
     Compared on the label rather than the address, because the design draws a navigation and
     never an address, and a screen that is reachable under another name is still a screen
-    somebody following the design cannot find.
+    somebody following the design cannot find. An item offered under another group is reported
+    with that group named.
     """
-    offered = {_comparable(one) for one in console_labels(repo)}
+    grouped = console_navigation(repo)
+    found_under: dict[str, str] = {}
+    for heading, labels in grouped.items():
+        for label in labels:
+            found_under.setdefault(_comparable(label), heading)
     missing: list[Unbuilt] = []
     for section, items in design_navigation(repo).items():
+        offered = {_comparable(one) for one in grouped.get(section, ())}
         for label in items:
-            if _comparable(label) not in offered:
-                missing.append(Unbuilt(section=section, label=label))
+            if _comparable(label) in offered:
+                continue
+            missing.append(
+                Unbuilt(
+                    section=section,
+                    label=label,
+                    placed_under=found_under.get(_comparable(label), ""),
+                )
+            )
     return tuple(missing)

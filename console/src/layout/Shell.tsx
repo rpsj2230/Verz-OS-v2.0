@@ -45,58 +45,99 @@ import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
 import { INSTALL_SECTIONS } from "../pages/installQuery";
 
-/** Every section, for everyone. See the note above before adding a condition to this. */
-const SECTIONS: readonly { to: string; label: string }[] = [
-  { to: "/", label: "Overview" },
-  { to: "/ask", label: "Ask" },
-  { to: "/records", label: "Records" },
-  { to: "/routing", label: "Routing" },
-  // Connectors sits in Operate, which is where `docs/screens.html` SCREEN 9 puts it: beside
-  // the overview, live runs and models, and above the Govern group. Under the design's own
-  // label rather than the registry's title, because `brain.ops.console_design.navigation_gaps`
-  // compares this list against the design on the label. Written out rather than spread from
-  // `pages/connectorsQuery.ts`, because that sweep reads the rows in this file.
-  { to: "/connectors", label: "Connectors" },
-  { to: "/classification", label: "Classification" },
-  { to: "/approvals", label: "Approvals" },
-  { to: "/service-levels", label: "Service levels" },
-  { to: "/spend", label: "Spend" },
-  { to: "/adoption", label: "Adoption" },
-  // The govern group, in the order `brain.console.screens` registers it and under the titles
-  // that registry gives it. Flat, for the reason the install group below is flat.
-  { to: "/people", label: "People and grants" },
-  { to: "/staff_sources", label: "Staff sources" },
-  { to: "/roles", label: "Roles" },
-  { to: "/capabilities", label: "Capabilities" },
-  { to: "/scopes", label: "Scopes and departments" },
-  // Agents, in Govern and under the design's own label, which is what
-  // `brain.ops.console_design.navigation_gaps` compares this list against: SCREEN 4 calls it
-  // "Agents & leashes" and sits it beside People and Scopes. The design draws a count badge
-  // beside it and there is none here, for the reason given below about the skills badge.
-  { to: "/agents", label: "Agents and leashes" },
-  // Skills, in Govern and under the design's own label, which SCREEN 6 spells "Skills &
-  // templates". The design draws a badge beside it carrying the number awaiting review and
-  // there is none here: a badge is a figure from a request, this list is a constant that
-  // renders before anything is fetched, and a menu whose contents depend on a response is the
-  // shape the note above says the navigation is not allowed to have. The same number is on the
-  // screen itself, where it is the count of the entries listed directly beneath it.
-  { to: "/skills", label: "Skills and templates" },
-  // The catalogue, flat and immediately under the section it belongs to. `docs/screens.html`
-  // SCREEN 5 addresses it as "Skills & templates › Templates", which is a child of the row
-  // above; this list has no nesting, and inventing some for one page would make the shape of
-  // the menu a claim decided here, which is the argument the install group already makes
-  // about its own five entries. A section rather than a link from the roster alone, because
-  // `tests/phone-width.test.tsx` holds every page under the shell to being reachable from the
-  // menu: a page a person can only find by knowing where it is linked from is a page nobody
-  // finds.
-  { to: "/agent-templates", label: "Agent templates" },
-  // The install group, in the order `brain.console.screens` lists it and under the titles that
-  // registry gives it. Five flat entries rather than one heading with five under it, because
-  // this list has no nesting and inventing some for one group would make the shape of the menu
-  // a claim about which screens belong together, decided here rather than by the registry that
-  // already decides it. See `pages/installQuery.ts`.
-  ...INSTALL_SECTIONS,
+/** One entry in the menu. */
+interface NavSection {
+  readonly to: string;
+  readonly label: string;
+}
+
+/** A heading in the menu and the sections under it. */
+interface NavGroup {
+  readonly heading: string;
+  readonly sections: readonly NavSection[];
+}
+
+/**
+ * Every section, for everyone, grouped by what the person opening it is trying to do. See the
+ * note above before adding a condition to this.
+ *
+ * **The groups and their order are the design's, not this file's.** `docs/screens.html` SCREEN 1
+ * draws the company console's menu as Operate, Govern and Report, and names what sits in each.
+ * Until 2026-09-16 this was one flat list of twenty-six entries in the order screens happened to
+ * be built, and the owner's standard in `docs/admin-console.md` refuses exactly that: navigation
+ * grouped by what an administrator is trying to do, "not by which module happens to serve it".
+ * `brain.ops.console_design` compares these groups with the design's on every traceability run,
+ * and reports an item the design names that is missing from its group or sits under another.
+ *
+ * **Labels are the design's where the design has one**, because that comparison is on the label:
+ * "Scopes" rather than the screen's own heading "Scopes and departments", which the page keeps.
+ * Rows are written out as `{ to, label }` literals rather than spread from a page module, because
+ * the check reads the rows in this file. The install group is spread, and is the one group the
+ * design does not draw, so there is nothing for it to be compared with.
+ *
+ * **Two groups the design does not draw, and why they exist.** Use holds the screens a person
+ * works in rather than administers (asking, deciding an approval, reading records), which the
+ * design gives a member's own workspace and which an administrator also needs. Install holds the
+ * screens about this server, which the owner's standard lists (version, backup, limits) and the
+ * design predates. Both come after the design's three, so the design's reading order is the
+ * menu's reading order.
+ *
+ * **No count badges.** The design draws a number beside several entries. A badge is a figure
+ * from a request, this list is a constant that renders before anything is fetched, and a menu
+ * whose contents depend on a response is the shape the note above says it may not have. Each
+ * number is on its screen instead, beside the entries it counts.
+ */
+const GROUPS: readonly NavGroup[] = [
+  {
+    heading: "Operate",
+    sections: [
+      { to: "/", label: "Overview" },
+      { to: "/connectors", label: "Connectors" },
+      { to: "/routing", label: "Routing" },
+    ],
+  },
+  {
+    heading: "Govern",
+    sections: [
+      { to: "/people", label: "People and grants" },
+      { to: "/staff_sources", label: "Staff sources" },
+      { to: "/roles", label: "Roles" },
+      { to: "/capabilities", label: "Capabilities" },
+      { to: "/scopes", label: "Scopes" },
+      { to: "/agents", label: "Agents and leashes" },
+      { to: "/skills", label: "Skills and templates" },
+      // SCREEN 5 addresses the catalogue as "Skills & templates > Templates", a child of the
+      // row above, so it sits directly beneath it.
+      { to: "/agent-templates", label: "Agent templates" },
+      { to: "/classification", label: "Classification" },
+    ],
+  },
+  {
+    heading: "Report",
+    sections: [
+      { to: "/service-levels", label: "Service levels" },
+      { to: "/spend", label: "Spend" },
+      { to: "/adoption", label: "Adoption" },
+    ],
+  },
+  {
+    heading: "Use",
+    sections: [
+      { to: "/ask", label: "Ask" },
+      { to: "/approvals", label: "Approvals" },
+      { to: "/records", label: "Records" },
+    ],
+  },
+  {
+    heading: "Install",
+    sections: INSTALL_SECTIONS,
+  },
 ];
+
+/** The id a group's heading carries, so its list can name it. */
+function headingId(heading: string): string {
+  return `nav-${heading.toLowerCase()}`;
+}
 
 export function Shell() {
   return (
@@ -123,21 +164,28 @@ export function Shell() {
 
       <div className="shell__body">
         <nav className="shell__nav" aria-label="Sections">
-          <ul>
-            {SECTIONS.map((section) => (
-              <li key={section.to}>
-                <NavLink
-                  to={section.to}
-                  end={section.to === "/"}
-                  className={({ isActive }) =>
-                    isActive ? "shell__nav-link shell__nav-link--current" : "shell__nav-link"
-                  }
-                >
-                  {section.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+          {GROUPS.map((group) => (
+            <div key={group.heading} className="shell__nav-group">
+              <h2 id={headingId(group.heading)} className="shell__nav-heading">
+                {group.heading}
+              </h2>
+              <ul aria-labelledby={headingId(group.heading)}>
+                {group.sections.map((section) => (
+                  <li key={section.to}>
+                    <NavLink
+                      to={section.to}
+                      end={section.to === "/"}
+                      className={({ isActive }) =>
+                        isActive ? "shell__nav-link shell__nav-link--current" : "shell__nav-link"
+                      }
+                    >
+                      {section.label}
+                    </NavLink>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </nav>
 
         <main id="main" className="shell__main">
