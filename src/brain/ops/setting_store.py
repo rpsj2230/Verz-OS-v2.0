@@ -17,11 +17,12 @@ and a feature switch are exactly those knobs. A table of their own would need a 
 second row-level security policy and a registration in `brain.tables`, to hold the same four
 facts this one already holds: the key, the value, who changed it last and when.
 
-**What that costs is stated rather than hidden.** A row records its last change and nothing
-before it, which `brain.tables.config` calls "not small": there is no history, and the audit
-ledger has no action for tuning a setting, so no entry is written. The console screens that turn
-these switches say so in words beside the switch. See
-`A_SWITCH_RECORDS_ITS_LAST_CHANGE_AND_NOTHING_BEFORE_IT`.
+**What that cost was, and how it was paid.** A row records its last change and nothing before it,
+which `brain.tables.config` called "not small": until 2026-09-17 there was no history, because the
+audit ledger had no action for tuning a setting. `0059` added one and a trigger on the table, so
+every write here that moves a row is a `setting` entry appended in the same transaction, and the
+history is the ledger's rather than a second one kept here. See
+`A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`.
 
 **`updated_at` is set on the conflict branch, by the database.** An upsert's update half is a
 Core statement, which `TimestampMixin`'s `onupdate` does not reach, so a row turned on in March
@@ -51,13 +52,13 @@ from brain.tables.config import (
     SettingType,
 )
 
-#: Why the console says a switch records only its last change.
-A_SWITCH_RECORDS_ITS_LAST_CHANGE_AND_NOTHING_BEFORE_IT: Final = (
+#: Why the console says a switch shows its last change and the audit trail holds the rest.
+A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE: Final = (
     "ops.setting keeps who changed a row last and when, and overwrites both on the next change. "
-    "The audit ledger has no action for tuning a setting, which brain.tables.config records as a "
-    "gap rather than a decision, so switching a feature or pausing a control writes no ledger "
-    "entry. A screen that showed the last change as though it were the history would be read as "
-    "the whole record, so the screen says what is kept."
+    "The history is the audit ledger's: 0059's trigger on the table appends a setting entry for "
+    "every write that moves a row, naming the key, the direction of a switch and the writer, and "
+    "never the value. A screen that showed the last change as though it were the history would "
+    "be read as the whole record, so the screen says where the rest is."
 )
 
 

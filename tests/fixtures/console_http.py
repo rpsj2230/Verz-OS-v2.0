@@ -18,6 +18,7 @@ from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import TextClause
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api_routes import GateWiring
@@ -29,6 +30,7 @@ from brain.identity.bearer import TokenAuthority
 from brain.jobs_routes import router as jobs_router
 from brain.prompt_routes import router as prompt_router
 from tests.fixtures.http_client import Response
+from tests.fixtures.setting_rows import Result
 from tests.unit.test_agent_routes import Directory
 from tests.unit.test_api_routes import (
     AUDIENCE,
@@ -53,8 +55,23 @@ class Stub:
     def __init__(self) -> None:
         self.answerers: list[Answerer] = []
         self.statements: list[Any] = []
+        #: Each transaction setting a route set for the trigger that records its write, as the
+        #: setting's name and value, in the order set. See `brain.tables.audit.attributed_to`.
+        self.attributions: list[tuple[str, str]] = []
         self.commits = 0
         self.rollbacks = 0
+
+
+def attribution_of(statement: Any) -> tuple[str, str] | None:
+    """The setting and value a `set_config` statement sets, or None for any other statement.
+
+    Answered by the stub itself rather than left to each test's answerers, because every route
+    that writes a recorded row sets these first and the result is never read.
+    """
+    if not isinstance(statement, TextClause) or not str(statement).startswith("SELECT set_config"):
+        return None
+    params = statement.compile().params
+    return str(params["name"]), str(params["value"])
 
 
 _STUB = Stub()
@@ -65,6 +82,10 @@ class StubSession(AsyncSession):
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _STUB.statements.append(statement)
+        attribution = attribution_of(statement)
+        if attribution is not None:
+            _STUB.attributions.append(attribution)
+            return Result([])
         for answerer in _STUB.answerers:
             found = answerer(statement)
             if found is not None:
@@ -107,20 +128,29 @@ def console_client(
     for router in ROUTERS:
         app.include_router(router)
     with TestClient(app, raise_server_exceptions=False) as client:
-        app.state.gate = GateWiring(
-            authority=TokenAuthority(
-                issuer=ISSUER,
-                audience=AUDIENCE,
-                keys=Keys(),
-                verify=verifier,
-                directory=Directory(),
-            ),
-            versions=Versions(),
-            store=Store(grants),
-            cache=NoCache(),
-        )
+        app.state.gate = gate_wiring(grants)
         app.state.db_sessions = async_sessionmaker(class_=StubSession) if database else None
         yield client, _STUB
+
+
+def gate_wiring(grants: Mapping[str, tuple[Grant, ...]]) -> GateWiring:
+    """The token machinery these tests sign in with, over a grants mapping the test chose.
+
+    Separate from `console_client` so a test driving the same routes against a real database
+    signs its people in the same way rather than through a second copy of this.
+    """
+    return GateWiring(
+        authority=TokenAuthority(
+            issuer=ISSUER,
+            audience=AUDIENCE,
+            keys=Keys(),
+            verify=verifier,
+            directory=Directory(),
+        ),
+        versions=Versions(),
+        store=Store(grants),
+        cache=NoCache(),
+    )
 
 
 #: What a sign-in with a second factor carries. `brain.gate.admission` withholds every `admin:`

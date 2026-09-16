@@ -12,10 +12,10 @@ active row, writes the secret, records the change and commits. A vault that refu
 answer raises inside the transaction, so no subscriber is left registered with no secret and no
 rotation is recorded that did not happen. See `THE_VAULT_IS_WRITTEN_WHILE_THE_ROW_IS_HELD`.
 
-**Every change is recorded with who made it; none reaches the hash-chained ledger yet.** Each
-write leaves an `ops.webhook_change` row in its own transaction, and the request's trace and the
-writer's reach digest are set as transaction settings beside it, where a trigger reads them. See
-`A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED`.
+**Every change is recorded with who made it, and reaches the hash-chained ledger.** Each write
+leaves an `ops.webhook_change` row in its own transaction, and the request's trace and the writer's
+reach digest are set as transaction settings beside it, where `0059`'s trigger reads them into the
+`webhook` entry it appends. See `A_CHANGE_IS_ATTRIBUTED_HERE_AND_CHAINED_BY_A_TRIGGER`.
 
 **The price, stated.** The transaction is held open for as long as the vault takes to answer, which
 `brain.ops.openbao.TIMEOUT_SECONDS` bounds at five seconds. And a commit that fails after the vault
@@ -66,14 +66,14 @@ THE_VAULT_IS_WRITTEN_WHILE_THE_ROW_IS_HELD: Final = (
     "refusal from the vault rolls the row back."
 )
 
-#: Why a change is attributed in a table of its own and is not yet a ledger entry.
-A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED: Final = (
-    "No member of the audit ledger records a change to where the company's identifiers are sent, "
-    "and no subject kind fits a subscriber id, so a registration, a replaced signing key and a "
-    "switch-off are each an ops.webhook_change row naming who and when, written in the "
-    "transaction that makes the change. A replaced key is also a credential written into a vault "
-    "slot, and the subscriber id grammar is the slot grammar a credential write is recorded "
-    "under, so recording one beside the change is a single insert once that record exists."
+#: Why a change is attributed in a table of its own and chained into the ledger from there.
+A_CHANGE_IS_ATTRIBUTED_HERE_AND_CHAINED_BY_A_TRIGGER: Final = (
+    "A registration, a replaced signing key and a switch-off are each an ops.webhook_change row "
+    "naming who and when, written in the transaction that makes the change, and 0059's trigger "
+    "on that table appends a webhook entry about the subscriber for each, so a change made by an "
+    "operator's statement is chained exactly as one made here. A replaced key is not also "
+    "recorded as a credential: the subscriber's change is the event an auditor of where "
+    "identifiers are sent reads, and a second entry for it would be the same event twice."
 )
 
 #: How many recent deliveries and changes the screen reads for each subscriber.
@@ -237,7 +237,7 @@ async def _attribute(session: AsyncSession, *, trace_id: str, ent_hash: str) -> 
 
     Where every trigger in this schema reads them, so a trigger added to record a change in the
     ledger attributes it to the reach it was made under. See
-    `A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED`.
+    `A_CHANGE_IS_ATTRIBUTED_HERE_AND_CHAINED_BY_A_TRIGGER`.
     """
     await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
     await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))

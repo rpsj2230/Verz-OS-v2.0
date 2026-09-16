@@ -6,8 +6,9 @@ and the behaviour it changes. Registering leaves a subscriber row naming its cre
 `ops.webhook_change` row; replacing a secret leaves a change row; switching off leaves the
 deactivation and a change row naming who did it. The behaviour is the fan-out: a subscriber switched
 off is no longer given a delivery when an event is written. A vault that refuses inside the
-transaction leaves none of it. None of these reaches the hash-chained ledger yet, and
-`brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED` says why.
+transaction leaves none of it. Each change also reaches the hash-chained ledger from `0059`'s
+trigger, which `tests/unit/test_console_control_audit.py` holds, and
+`brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_CHAINED_BY_A_TRIGGER` says how.
 
 It needs the full migration chain, which a server with pgvector builds, and skips without one; CI
 has one.

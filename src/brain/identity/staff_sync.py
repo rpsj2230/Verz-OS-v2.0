@@ -64,10 +64,10 @@ else's. Not filtered, empty. See `A_DEPARTMENT_SCOPED_AUDIT_GRANT_MATCHES_NO_ENT
 
 **Two costs, and the second is the design question.** The reach goes stale between a transfer
 and the next sync, which is bounded by `SYNC_INTERVAL` and stated in `THE_STALENESS_WINDOW`;
-and an audit permission is per subject kind, eleven in all, so somebody has to say which of the
-eleven a head holds. `AUDIT_KIND_DECISIONS` is that answer with an argument beside every one of
-the eleven, and `HEAD_AUDIT_SUBJECT_KINDS` is derived from it rather than written twice, so the
-list is data a reviewer reads and never a branch they have to trace.
+and an audit permission is per subject kind, so somebody has to say which kinds a head holds.
+`AUDIT_KIND_DECISIONS` is that answer with an argument beside every kind the ledger has, and
+`HEAD_AUDIT_SUBJECT_KINDS` is derived from it rather than written twice, so the list is data a
+reviewer reads and never a branch they have to trace.
 
 **Rejected: `read:audit.*` as one grant instead of a chosen set.** It is one row rather than
 four and it hands a head the merge history of every business record their people touched, the
@@ -361,14 +361,14 @@ A_HEAD_READS_THE_GOVERNANCE_OF_THEIR_PEOPLE_AND_NOT_THEIR_WORK: Final = (
     "half of a power they have. An entry about a business record or an artefact is their "
     "people's work, and whether this reader may see one of those is decided by a scope on the "
     "object which an actor-scoped audit grant does not consult; admitting it would make the "
-    "ledger the way round the scope on the data. That is the line, and every one of the eleven "
-    "is put on one side of it below rather than left to a reader to infer."
+    "ledger the way round the scope on the data. That is the line, and every subject kind is "
+    "put on one side of it below rather than left to a reader to infer."
 )
 
 
 @dataclass(frozen=True)
 class AuditKindDecision:
-    """One of the eleven audit subject kinds, and whether a department head reads it.
+    """One audit subject kind, and whether a department head reads it.
 
     A record rather than two lists, so the answer and its argument cannot come apart. Two
     lists drift the first time somebody moves a kind and edits one of them, and the direction
@@ -427,7 +427,11 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "Leash changes and composition changes land here. Both are acts a head "
                     "already performs, and a rung raised above the ceiling its side effects "
                     "allow is not inert: it runs autonomously on any call whose risk score is "
-                    "low. The head who may move a rung is the reader who should see one moved."
+                    "low. The head who may move a rung is the reader who should see one moved. "
+                    "Instruction edits land here too since 2026-09-17, and they are a head's for "
+                    "the same reason: admin:agent_instructions is granted in a scope matching the "
+                    "agent, so a department's head may be the one who changed what its agents are "
+                    "told."
                 ),
             ),
             AuditKindDecision(
@@ -550,6 +554,42 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "already reads."
                 ),
             ),
+            AuditKindDecision(
+                kind="setting",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason as "
+                    "credential, since the kind was added on 2026-09-17, after item 48. A setting "
+                    "is the whole install's: a feature is switched only by somebody holding "
+                    "admin:feature over everything, a job is paused or run only by somebody "
+                    "holding admin:schedule over everything, which brain.feature_routes and "
+                    "brain.jobs_routes argue, and the rest are the setup wizard's answers. None of "
+                    "a head's governing acts produces one of these entries."
+                ),
+            ),
+            AuditKindDecision(
+                kind="routing",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason. "
+                    "The routing matrix is one for the install and brain.routing_routes refuses a "
+                    "per-caller view of it, so a rung is changed only by somebody holding "
+                    "admin:routing_matrix; no head's governing act moves one, and an entry about a "
+                    "model's timeout says nothing about a department's people."
+                ),
+            ),
+            AuditKindDecision(
+                kind="webhook",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason. A "
+                    "subscriber is an address the company's identifiers are sent to, registered, "
+                    "rotated and switched off only by somebody holding admin:webhook_subscriber "
+                    "over everything, which brain.ops.outbox.may_manage decides, and a standing "
+                    "reach over these entries would tell a head where the estate's events go when "
+                    "none of their governing acts sent them there."
+                ),
+            ),
         )
     }
 )
@@ -578,7 +618,7 @@ THE_PAGE_AND_THE_ROWS_ARE_TWO_GRANTS: Final = (
 #: The page capability, built from the audit view's own noun rather than spelled here.
 AUDIT_PAGE_CAPABILITY: Final = Capability(value=f"read:{AUDIT_NOUN}")
 
-#: Every audit capability this sync could ever have written, for any decision about the eleven.
+#: Every audit capability this sync could ever have written, for any decision about any kind.
 #:
 #: Wider than what it writes today, on purpose. `to_delete` is computed against this set, so
 #: the day a kind is taken out of `AUDIT_KIND_DECISIONS` the grant that kind produced is

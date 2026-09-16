@@ -37,8 +37,11 @@ a caller without them is refused identically whether or not this process has a p
 `brain.ops.features.A_SWITCH_TURNED_OFF_DOES_NOT_TRAP_WHAT_IT_OPENED`. A caller holding the
 authority is told by name that the feature is off and where it is switched on.
 
-**Recorded on the row, not in the ledger.** A pause and a request keep who and when on their
-`ops.setting` row, and the audit ledger has no action for either; the answer says so.
+**Recorded on the row, and in the ledger.** A pause and a request keep who and when on their
+`ops.setting` row, which the next press overwrites, and `0059`'s trigger on that table appends a
+`setting` entry for every press that moves the row, in the same transaction. The route sets who, at
+what reach and for which request first, so the entry carries the request's trace; the answer says
+every change is in the audit trail.
 
 **Claimed: M27.8.13, and what the claim does not include is written here rather than rounded
 away.** The background work this product starts is the scheduled controls, and a control run
@@ -91,6 +94,7 @@ from brain.ops.schedule_runner import due_now
 from brain.ops.schedule_store import last_successes
 from brain.ops.setting_store import SettingState
 from brain.routing_routes import sessions_of
+from brain.tables.audit import attributed_to
 from brain.tables.schedule import ControlRunRow
 
 log = structlog.get_logger()
@@ -190,8 +194,9 @@ class JobsPage(BaseModel):
     #: A run in progress cannot be stopped. See `NO_RUN_CAN_BE_STOPPED_FROM_HERE` in
     #: `brain.operate_routes`.
     no_run_can_be_stopped: bool = True
-    #: A pause or a request keeps its last change on its row and writes no ledger entry.
-    only_the_last_change_is_kept: bool = True
+    #: A pause or a request shows its last change on its row, and every change is an entry in the
+    #: audit trail, from `0059`'s trigger.
+    every_change_is_in_the_audit_trail: bool = True
 
 
 class JobChanged(BaseModel):
@@ -339,6 +344,15 @@ def _authorised(name: str, asked: Asking) -> None:
         raise _not_controllable()
 
 
+async def _attribute(session: AsyncSession, asked: Asking) -> None:
+    """Who is pressing, at what reach, for which request, for the entry `0059`'s trigger appends."""
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    for statement in attributed_to(
+        actor_id=asked.caller.principal.id, ent_hash=asked.reach.ent_hash(), trace_id=trace_id
+    ):
+        await session.execute(statement)
+
+
 async def _now_holds(session: AsyncSession, name: str) -> tuple[bool, datetime | None]:
     """Whether the job is paused and when a run was last asked for, read back after the write."""
     return name in await paused_controls(session), (await run_requests(session)).get(name)
@@ -387,6 +401,7 @@ async def pause_job(request: Request, name: str, asked: Asked) -> JobChanged:
             await session.rollback()
             raise _refused_because(SWITCHED_OFF)
         try:
+            await _attribute(session, asked)
             await set_paused(session, name, paused=True, by=asked.caller.principal.id)
         except ScheduleControlError as refused:
             await session.rollback()
@@ -408,6 +423,7 @@ async def resume_job(request: Request, name: str, asked: Asked) -> JobChanged:
     _authorised(name, asked)
     async with _require_sessions(request)() as session:
         try:
+            await _attribute(session, asked)
             await set_paused(session, name, paused=False, by=asked.caller.principal.id)
         except ScheduleControlError as refused:
             await session.rollback()
@@ -432,6 +448,7 @@ async def run_job(request: Request, name: str, asked: Asked) -> JobChanged:
             await session.rollback()
             raise _refused_because(SWITCHED_OFF)
         try:
+            await _attribute(session, asked)
             await request_run(session, name, at=asked.now, by=asked.caller.principal.id)
         except ScheduleControlError as refused:
             await session.rollback()

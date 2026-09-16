@@ -47,7 +47,7 @@ function page(overrides: Record<string, unknown> = {}, one: Record<string, unkno
     features: [feature(one)],
     components_are_chosen_by_the_profile: true,
     plugins_have_no_loader: true,
-    only_the_last_change_is_kept: true,
+    every_change_is_in_the_audit_trail: true,
     ...overrides,
   };
 }
@@ -87,7 +87,7 @@ describe("what the Features screen draws", () => {
           page({
             components_are_chosen_by_the_profile: false,
             plugins_have_no_loader: false,
-            only_the_last_change_is_kept: false,
+            every_change_is_in_the_audit_trail: false,
           }),
         ),
     });

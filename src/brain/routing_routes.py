@@ -104,6 +104,7 @@ from brain.console.read_replica import StalenessBanner
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.ops.replica_store import ConsoleReads
+from brain.tables.audit import attributed_to
 from brain.tables.routing import RoutingRungRow
 
 log = structlog.get_logger()
@@ -506,6 +507,14 @@ async def edit_rung(
 
     factory = _require_sessions(request)
     async with factory() as session:
+        # Who is saving, at what reach, for which request, for the entry `0059`'s trigger appends:
+        # a rung has no column naming who changed it, so the trigger reads these or records the
+        # database role as an inferred actor.
+        trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+        for statement in attributed_to(
+            actor_id=asked.caller.principal.id, ent_hash=asked.reach.ent_hash(), trace_id=trace_id
+        ):
+            await session.execute(statement)
         row = (await session.execute(apply_edit(rung_id, edit))).scalar_one_or_none()
         if row is None:
             # Rolled back rather than committed, so a refused edit leaves no transaction

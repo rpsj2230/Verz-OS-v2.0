@@ -63,15 +63,16 @@ environment. A check constraint refusing keys that *look* like secrets was writt
 dropped: it catches `smtp_password` and misses `smtp_pw`, so it is a constraint that is
 right for a reason it cannot state, and its real effect is the belief that the table is safe.
 
-**What is missing, and it is not small.** This table records who changed a setting last and
-when, and nothing else. There is no history, so "what was this a week ago" has no answer, and
-the deploy log that used to answer it is exactly what M31.3.1.4 removes. The obvious fix is
-an audit entry from a trigger, the way `0003` writes one for every grant - and it cannot be
-written here, because `brain.audit.ledger.SUBJECT_KINDS` has no kind for a setting and
-`AuditAction` has no member for tuning one. Both vocabularies are closed on purpose, and
-`brain.tables.audit` is explicit that widening one to make a trigger read better is how a
-closed set stops being closed. Widening them is a decision for whoever owns the ledger, with
-its own migration; until then the gap is recorded rather than papered over.
+**What was missing, and it was not small.** This table records who changed a setting last and
+when, and nothing else, so "who changed this before the last time" had no answer, and the deploy
+log that used to answer it is exactly what M31.3.1.4 removes. The fix is an audit entry from a
+trigger, the way `0003` writes one for every grant, and it could not be written in `0004`
+because the ledger had no subject kind for a setting and no member for tuning one. `0059` added
+both, each named `setting`, with the argument in `brain.audit.ledger.AuditAction`, and a trigger
+on this table that records every write moving a row's key, type or value and every retirement,
+by `updated_by`, **never the value**. "What was this a week ago" is still not answerable from the
+ledger, deliberately: the ledger says that it changed and who changed it, and the value stays
+here.
 
 Task ids: M31.3.1.4
 """

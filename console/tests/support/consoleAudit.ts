@@ -443,12 +443,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: ["/api/v1/audit*"],
     tables: ["obs.audit_entry"],
     installation: [],
-    gaps: [
-      {
-        what: "A feature switch, a job control, an instruction edit, a rung save and a webhook change are not in the ledger.",
-        because: "ops.setting has no audit trigger, which migration 0004 records as a gap because the ledger has no subject kind for a setting; instructions are recorded on the install, rungs on nothing, and webhook changes in ops.webhook_change under A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED.",
-      },
-    ],
+    gaps: [],
   },
   "System health and the state of every service": {
     screens: ["/models", "/runs"],
@@ -618,20 +613,19 @@ function t(file: string, name: string, database = false): Proof {
   return { test: `tests/unit/${file}.py::${name}`, database };
 }
 
-const NO_SETTING_LEDGER: Proof = {
-  none:
-    "ops.setting has no audit trigger, which migration 0004 records as a gap: the ledger has no subject kind for a setting, so the switch is attributed on its own row and nowhere else.",
-};
-const GRANT_NEEDS_A_DATABASE =
-  "Only a stub session is asserted, which proves the statement committed and not the row. The row, the trigger's entry and what the holder then reaches are Postgres facts, and no test drives this route against a scratch database yet.";
-const WEBHOOK_LEDGER: Proof = {
-  none: "A webhook change is attributed in ops.webhook_change and not chained into the ledger: brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED.",
-};
+/** `tests/unit/test_console_control_audit.py`, which presses these controls against PostgreSQL. */
+function audited(name: string): Proof {
+  return t("test_console_control_audit", name, true);
+}
+
+const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick");
+const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
+const GRANTS_PRESSED = audited("test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach");
+const WEBHOOK_LEDGER = audited("test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author");
+const HOLDS_SWEPT = audited("test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them");
 const NOTHING_SENDS_A_WEBHOOK: Proof = {
   none: "Nothing on an install delivers a webhook yet, so no behaviour follows from a subscriber or its secret.",
-};
-const INSTRUCTIONS_LEDGER: Proof = {
-  none: "An edit is recorded on the install it changes, who set it and when, and not in the ledger: brain.prompt_routes writes no audit entry.",
+  leaf: "M27.8.12",
 };
 
 const CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER = t(
@@ -685,8 +679,8 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: t("test_data_transfer_routes", "test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own"),
   },
   "POST /api/v1/install/features/{name}": {
-    row: t("test_features", "test_switching_a_feature_on_writes_its_row_and_the_next_read_sees_it"),
-    audit: NO_SETTING_LEDGER,
+    row: SETTINGS_PRESSED,
+    audit: SETTINGS_PRESSED,
     behaviour: t("test_console_controls_reach_behaviour", "test_switching_schedule_control_on_from_the_features_screen_is_what_lets_a_job_be_paused"),
   },
   "POST /setup/sign-in": {
@@ -710,46 +704,44 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: t("test_setup_staff_routes", "test_a_directory_is_chosen_signed_in_to_and_its_list_pulled"),
   },
   "POST /api/v1/jobs/{name}/pause": {
-    row: t("test_jobs_routes", "test_pausing_writes_the_row_the_tick_reads_and_the_list_says_who_paused_it"),
-    audit: NO_SETTING_LEDGER,
+    row: SETTINGS_PRESSED,
+    audit: SETTINGS_PRESSED,
     behaviour: t("test_console_controls_reach_behaviour", "test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started"),
   },
   "POST /api/v1/jobs/{name}/resume": {
-    row: t("test_jobs_routes", "test_resuming_is_not_behind_the_feature_so_a_switch_turned_off_traps_nothing"),
-    audit: NO_SETTING_LEDGER,
+    row: SETTINGS_PRESSED,
+    audit: SETTINGS_PRESSED,
     behaviour: t("test_console_controls_reach_behaviour", "test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started"),
   },
   "POST /api/v1/jobs/{name}/run": {
-    row: t("test_jobs_routes", "test_running_now_writes_the_instant_the_request_was_admitted"),
-    audit: NO_SETTING_LEDGER,
+    row: SETTINGS_PRESSED,
+    audit: SETTINGS_PRESSED,
     behaviour: t("test_console_controls_reach_behaviour", "test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused"),
   },
   "PATCH /api/v1/routing/rungs/{rung_id}": {
-    row: { none: "Only a stub session is asserted, which proves the update committed and not the row it left." },
-    audit: { none: "No trigger records a rung change: migration 0003 creates ops.routing_rung with none." },
+    row: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
+    audit: audited("test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved"),
     behaviour: { none: "Nothing on the answer path reads ops.routing_rung, so a saved rung changes no answer.", leaf: "M27.8.8" },
   },
   "POST /api/v1/govern/grants/removal": {
-    row: {
-      none: `${GRANT_NEEDS_A_DATABASE} What that cost is recorded: row-level security refused every removal on every install until d2cfb32, and the stub session saw a commit each time.`,
-    },
-    audit: { none: GRANT_NEEDS_A_DATABASE },
-    behaviour: { none: GRANT_NEEDS_A_DATABASE },
+    row: GRANTS_PRESSED,
+    audit: GRANTS_PRESSED,
+    behaviour: GRANTS_PRESSED,
   },
   "POST /api/v1/govern/grants": {
-    row: { none: GRANT_NEEDS_A_DATABASE },
-    audit: { none: GRANT_NEEDS_A_DATABASE },
-    behaviour: { none: GRANT_NEEDS_A_DATABASE },
+    row: GRANTS_PRESSED,
+    audit: GRANTS_PRESSED,
+    behaviour: GRANTS_PRESSED,
   },
   "POST /api/v1/govern/prompts/{agent_id}": {
-    row: t("test_prompt_routes", "test_an_edit_is_written_to_the_install_and_changes_what_the_agent_is_given"),
-    audit: INSTRUCTIONS_LEDGER,
-    behaviour: t("test_prompt_routes", "test_an_edit_is_written_to_the_install_and_changes_what_the_agent_is_given"),
+    row: INSTRUCTIONS_PRESSED,
+    audit: INSTRUCTIONS_PRESSED,
+    behaviour: INSTRUCTIONS_PRESSED,
   },
   "POST /api/v1/govern/prompts/{agent_id}/give-back": {
-    row: t("test_prompt_routes", "test_giving_instructions_back_restores_the_templates_and_is_not_behind_the_feature"),
-    audit: INSTRUCTIONS_LEDGER,
-    behaviour: t("test_prompt_routes", "test_giving_instructions_back_restores_the_templates_and_is_not_behind_the_feature"),
+    row: INSTRUCTIONS_PRESSED,
+    audit: INSTRUCTIONS_PRESSED,
+    behaviour: INSTRUCTIONS_PRESSED,
   },
   "POST /api/v1/govern/retention/release": {
     row: t("test_retention_store", "test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked", true),
@@ -764,16 +756,12 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/govern/legal-holds": {
     row: t("test_retention_store", "test_a_hold_is_placed_lifted_once_and_kept", true),
     audit: t("test_retention_audit", "test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor", true),
-    behaviour: {
-      none: "The sweep is tested against holds written with raw SQL and holds built in memory, and nothing places a hold through the store and then runs the sweep over it.",
-    },
+    behaviour: HOLDS_SWEPT,
   },
   "POST /api/v1/govern/legal-holds/lift": {
     row: t("test_retention_store", "test_a_hold_is_placed_lifted_once_and_kept", true),
     audit: t("test_retention_audit", "test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor", true),
-    behaviour: {
-      none: "Nothing lifts a hold through the store and then shows the sweep reaching what it held.",
-    },
+    behaviour: HOLDS_SWEPT,
   },
   "POST /api/v1/govern/sessions/end": {
     row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),

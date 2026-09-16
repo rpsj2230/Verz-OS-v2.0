@@ -206,8 +206,8 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     edit in two files rather than an omission in one, in either direction: a member added
     without a test fails, and a member removed fails too. It has done its job four times
     now, on `compose_change`, on `approval`, on `record_read`, on `sign_in`, on
-    `session_end`, on `certification`, on `credential`, on `retention`, on `legal_hold` and on
-    `skill`.
+    `session_end`, on `certification`, on `credential`, on `retention`, on `legal_hold`, on
+    `skill`, and on the four added together on 2026-09-17.
 
     `record_read` is the one member that is not a change to what somebody may do, and it is
     here because Needs Rupash item 45 chose to answer "which agents have read my HR record"
@@ -246,6 +246,12 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     trigger on `ops.connector_connection`. Connecting a source writes its key as well, which is a
     `credential` entry of its own; a disconnect writes no key, which is why the two are not one
     member.
+    `setting`, `routing`, `instructions` and `webhook` record the console's knobs, written by
+    `0059`'s triggers on `ops.setting`, `ops.routing_rung`, `agent.template_instance` and
+    `ops.webhook_change`: a feature switched or a job paused, a model rung retuned, what an agent is
+    told replaced, and where the company's identifiers are sent changed. None changes what anybody
+    may do, which is why none is GRANT, and four rather than one, because an auditor of any one of
+    those questions should not read the other three's rows.
 
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
@@ -270,6 +276,10 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "legal hold placed or lifted": AuditAction.LEGAL_HOLD,
         "skill added, approved or rejected": AuditAction.SKILL,
         "source connected or disconnected": AuditAction.CONNECTOR,
+        "setting switched, set or retired": AuditAction.SETTING,
+        "routing rung added, changed or retired": AuditAction.ROUTING,
+        "agent instructions edited or given back": AuditAction.INSTRUCTIONS,
+        "webhook subscriber registered, rotated or switched off": AuditAction.WEBHOOK,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -291,6 +301,10 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "legal_hold",
         "skill",
         "connector",
+        "setting",
+        "routing",
+        "instructions",
+        "webhook",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

@@ -36,7 +36,7 @@ import {
   NO_FEATURES,
   OFF,
   ON,
-  ONLY_THE_LAST_CHANGE_IS_KEPT,
+  EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL,
   PLUGINS_HAVE_NO_LOADER,
   READING_FEATURES,
   readFeature,
@@ -110,7 +110,7 @@ function FeatureList({ onSwitched }: { readonly onSwitched: (sentence: string) =
   const cannot = [
     body.components_are_chosen_by_the_profile === false ? null : COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE,
     body.plugins_have_no_loader === false ? null : PLUGINS_HAVE_NO_LOADER,
-    body.only_the_last_change_is_kept === false ? null : ONLY_THE_LAST_CHANGE_IS_KEPT,
+    body.every_change_is_in_the_audit_trail === false ? null : EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL,
   ].filter((one): one is string => one !== null);
 
   return (

@@ -64,6 +64,7 @@ if TYPE_CHECKING:
     from brain.identity.roles import BreakGlassReason
     from brain.tables.identity import SessionEndReason
     from brain.tables.review import ReviewDecision
+    from brain.tables.webhook_change import WebhookChange
 
 
 class DenyReason(enum.StrEnum):
@@ -163,6 +164,10 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "legal_hold": AuditAction.LEGAL_HOLD,
         "skill": AuditAction.SKILL,
         "connector": AuditAction.CONNECTOR,
+        "setting": AuditAction.SETTING,
+        "routing": AuditAction.ROUTING,
+        "instructions": AuditAction.INSTRUCTIONS,
+        "webhook": AuditAction.WEBHOOK,
     }
 )
 
@@ -255,6 +260,41 @@ class ConnectorChange(enum.StrEnum):
 
     CONNECTED = "connected"
     DISCONNECTED = "disconnected"
+
+
+class SettingChange(enum.StrEnum):
+    """What happened to a row of `ops.setting`. The four words `0059`'s trigger writes.
+
+    A boolean is recorded by the way it was switched, because a boolean has two values and neither
+    can carry content; every other type is `SET`, because its value might, and the ledger holds no
+    value. `RETIRED` is the row's `deleted_at` being set, which returns the setting to its default.
+    """
+
+    SWITCHED_ON = "switched_on"
+    SWITCHED_OFF = "switched_off"
+    SET = "set"
+    RETIRED = "retired"
+
+
+class RoutingChange(enum.StrEnum):
+    """What happened to a rung of the routing matrix. The three words `0059`'s trigger writes."""
+
+    ADDED = "added"
+    CHANGED = "changed"
+    RETIRED = "retired"
+
+
+class InstructionsChange(enum.StrEnum):
+    """What happened to an agent's instructions. The two words `0059`'s trigger writes."""
+
+    EDITED = "edited"
+    GIVEN_BACK = "given_back"
+
+
+#: The detail a trigger adds when neither the row nor the application named whoever made the change,
+#: so the actor is the database role the statement ran as. `0003`'s grant trigger writes the same
+#: word when it attributes a revocation to the granter.
+INFERRED_ACTOR: Final = "inferred"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -777,4 +817,85 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.CONNECTOR, subject("connector", connector), {"change": change.value}
+        )
+
+    def setting(self, *, key: str, change: SettingChange) -> AuditEntry:
+        """Record that a row of `ops.setting` was switched, set or retired (M27.8.17).
+
+        Written in a deployed database by `0059`'s trigger on `ops.setting`, and held to this
+        method's details by a test. The subject is the key, so a feature switch, a job's pause and
+        a wizard's answer each have a subject of their own and everything that happened to one knob
+        is one subject. The actor is the row's `updated_by`, which every writer of the table sets.
+        **There is no parameter for the value**: a boolean is recorded by its direction, which is
+        all a boolean has, and anything else is `SET`, for the reason `SettingChange` gives.
+        """
+        return self._write(AuditAction.SETTING, subject("setting", key), {"change": change.value})
+
+    def routing(
+        self,
+        *,
+        rung_id: str,
+        change: RoutingChange,
+        fields: Sequence[str] = (),
+        actor_inferred: bool = False,
+    ) -> AuditEntry:
+        """Record that a rung of the routing matrix was added, changed or retired (M27.8.8).
+
+        Written in a deployed database by `0059`'s trigger on `ops.routing_rung`, and held to this
+        method's details by a test. `fields` names the columns that moved on a change, sorted, and
+        is refused on the other two: an addition moves every column and a retirement moves one,
+        so a list there would say nothing a reader could use. Never the values, for the reason
+        `changed_fields` gives. `actor_inferred` is the trigger's mark for a statement nobody named
+        an actor for; see `INFERRED_ACTOR`.
+        """
+        if (change is RoutingChange.CHANGED) != bool(fields):
+            msg = (
+                "a changed rung names the columns that moved, and an added or retired one names "
+                f"none; this is {change.value} with fields={list(fields)!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        _with_names(details, "fields", fields)
+        if actor_inferred:
+            details["actor"] = INFERRED_ACTOR
+        return self._write(AuditAction.ROUTING, subject("routing", rung_id), details)
+
+    def instructions(
+        self,
+        *,
+        agent_id: str,
+        change: InstructionsChange,
+        config_hash: str,
+        actor_inferred: bool = False,
+    ) -> AuditEntry:
+        """Record that an agent's instructions were edited or given back to its template (M27.8.9).
+
+        Written in a deployed database by `0059`'s trigger on `agent.template_instance`, and held to
+        this method's details by a test. The subject is the agent. **Never the instructions**:
+        `config_hash` is the digest of the effective configuration put in force, which is the key
+        `brain.gate.cache_key` answers under, so the entry says which configuration without saying
+        what it tells the model. It is refused unless it is a sha256, for the reason `skill` gives
+        about its digest.
+        """
+        if not re.fullmatch(DIGEST, config_hash):
+            msg = f"{config_hash!r} is not a configuration digest; the entry would not say which"
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value, "config_hash": config_hash}
+        if actor_inferred:
+            details["actor"] = INFERRED_ACTOR
+        return self._write(AuditAction.INSTRUCTIONS, subject("agent", agent_id), details)
+
+    def webhook(self, *, subscriber_id: str, change: WebhookChange) -> AuditEntry:
+        """Record that a webhook subscriber was registered, had its secret replaced, or was switched
+        off (M27.8.12).
+
+        Written in a deployed database by `0059`'s trigger on `ops.webhook_change`, one entry per
+        change row, and held to this method's details by a test. The subject is the subscriber and
+        the actor is the row's `changed_by`. **Never the endpoint or the secret**: where the
+        company's identifiers are sent is on the subscriber's own row, and a replaced secret is
+        recorded as having been replaced and nothing more. `WebhookChange` is the table's own
+        vocabulary, imported for typing only so this package stays underneath the tables.
+        """
+        return self._write(
+            AuditAction.WEBHOOK, subject("webhook", subscriber_id), {"change": change.value}
         )

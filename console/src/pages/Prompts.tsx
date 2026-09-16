@@ -35,7 +35,7 @@ import {
   lengthProblem,
   NO_AGENTS,
   NO_MODEL_IS_CALLED_YET,
-  ONLY_THE_LAST_CHANGE_IS_KEPT,
+  EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL,
   PROMPTS_API_PATH,
   PROMPTS_CRUMB,
   PROMPTS_LABEL,
@@ -286,8 +286,8 @@ function PromptList({ onDone }: { readonly onDone: (sentence: string) => void })
       )}
       {body.editing_switched_on ? null : <p className="note">{EDITING_SWITCHED_OFF}</p>}
       {body.no_model_is_called_yet === false ? null : <p className="note">{NO_MODEL_IS_CALLED_YET}</p>}
-      {body.only_the_last_change_is_kept === false ? null : (
-        <p className="note">{ONLY_THE_LAST_CHANGE_IS_KEPT}</p>
+      {body.every_change_is_in_the_audit_trail === false ? null : (
+        <p className="note">{EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL}</p>
       )}
       {body.agents.length === 0 ? (
         <section className="card">

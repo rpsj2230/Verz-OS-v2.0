@@ -41,8 +41,11 @@ from brain.audit.record import (
     AuditRecorder,
     ConnectorChange,
     DenyReason,
+    InstructionsChange,
     LegalHoldChange,
     RetentionChange,
+    RoutingChange,
+    SettingChange,
     SignInChange,
     SkillChange,
     subject,
@@ -72,6 +75,7 @@ from brain.gate.injection import AutonomyTier
 from brain.identity.roles import BreakGlassReason
 from brain.tables.identity import SessionEndReason
 from brain.tables.review import ReviewDecision
+from brain.tables.webhook_change import WebhookChange
 from tests.fixtures.company import CANARIES, NOW, person
 
 ENT = person("u_weiling").entitlement().ent_hash()
@@ -391,6 +395,18 @@ CALLS: dict[str, dict[str, object]] = {
     "legal_hold": {"hold_id": "h_dispute", "change": LegalHoldChange.PLACED},
     "skill": {"name": "hosting-expiry", "digest": "d" * 64, "change": SkillChange.APPROVED},
     "connector": {"connector": "xero", "change": ConnectorChange.CONNECTED},
+    "setting": {"key": "feature.prompt_editing", "change": SettingChange.SWITCHED_ON},
+    "routing": {
+        "rung_id": "3c2b1a09-8f7e-4d6c-9b5a-1e2d3c4b5a69",
+        "change": RoutingChange.CHANGED,
+        "fields": ("attempts", "timeout_seconds"),
+    },
+    "instructions": {
+        "agent_id": "pricing_desk",
+        "change": InstructionsChange.EDITED,
+        "config_hash": "e" * 64,
+    },
+    "webhook": {"subscriber_id": "billing_bridge", "change": WebhookChange.SECRET_REPLACED},
 }
 
 

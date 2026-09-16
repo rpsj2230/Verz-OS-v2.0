@@ -43,7 +43,7 @@ import {
   NEVER_SUCCEEDED,
   NO_JOBS,
   NO_RUN_CAN_BE_STOPPED,
-  ONLY_THE_LAST_CHANGE_IS_KEPT,
+  EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL,
   READING_JOBS,
   readJobs,
   stateWords,
@@ -215,7 +215,9 @@ function JobList({ onDone }: { readonly onDone: (sentence: string) => void }) {
       <section className="card" aria-labelledby="jobs-cannot">
         <h2 id="jobs-cannot">{CANNOT_HEADING}</h2>
         {body.no_run_can_be_stopped === false ? null : <p>{NO_RUN_CAN_BE_STOPPED}</p>}
-        {body.only_the_last_change_is_kept === false ? null : <p>{ONLY_THE_LAST_CHANGE_IS_KEPT}</p>}
+        {body.every_change_is_in_the_audit_trail === false ? null : (
+          <p>{EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL}</p>
+        )}
       </section>
     </>
   );

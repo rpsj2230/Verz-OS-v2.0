@@ -50,9 +50,9 @@ export const SYSTEM_INSTRUCTIONS_ARE_PRODUCT_TEXT =
 export const NO_MODEL_IS_CALLED_YET =
   "Nothing in the platform sends a prompt to a model yet. An edit changes what an agent would be " +
   "given from the next request, and no answer anybody has received.";
-export const ONLY_THE_LAST_CHANGE_IS_KEPT =
-  "An agent keeps its current instructions and who set them, not the ones before. Editing writes " +
-  "no entry in the audit trail.";
+export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
+  "An agent keeps its current instructions and who set them, not the ones before. Every edit and " +
+  "give-back, and who made it, is kept in the audit trail, without the words.";
 export const EDITING_SWITCHED_OFF =
   "Editing instructions is switched off on this install. An administrator switches it on under " +
   "Install, Features. Instructions already changed can still be given back to their template.";

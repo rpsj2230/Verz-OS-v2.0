@@ -16,11 +16,11 @@ tick reads it with, `values_under` and `paused_in` or `requested_in`, and asks
 carries the row from the table to those functions, which is a select over one namespace and is
 what `tests/fixtures/setting_rows.py` answers.
 
-**What is not here, and why.** The audit entry. `ops.setting` has no audit trigger, which
-migration `0004` records as a gap rather than a decision: a switch is attributed only on its own
-row, by `updated_by` and `updated_at`, and the ledger has no subject kind for a setting.
-`docs/console-audit.md` lists these writes as unproved to the ledger for that reason, rather
-than a test here pretending otherwise.
+**What is not here, and where it is.** The audit entry, and the same presses against a real
+database. `0059` added a trigger on `ops.setting` that appends a `setting` entry for every press
+that moves a row, and `tests/unit/test_console_control_audit.py` presses these controls over HTTP
+against PostgreSQL and follows each to its row, its entry and the next tick. What this file adds is
+speed and no server: the join between the route and the tick, run on every machine.
 
 Task ids: M27.8.17
 """

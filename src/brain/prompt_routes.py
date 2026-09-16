@@ -43,10 +43,14 @@ who may not edit is one refusal, identical for an agent that does not exist.
 **Two administrators cannot overwrite each other in silence.** An edit names the effective hash
 the editor was shown, and the row is read under a lock and refused when the hash has moved.
 
-**Recorded on the install, not in the ledger.** The overlay's owner is who set the persona and
-when, and the previous override is replaced; the audit ledger has no action for an instruction
-edit. `AuditAction.PUBLISH` is the builder's for a published version, and `COMPOSE_CHANGE` is an
-attachment added or removed, and neither is this. The answer says so.
+**Recorded on the install, and in the ledger.** The overlay's owner is who set the persona and
+when, and the previous override is replaced; `0059`'s trigger on `agent.template_instance` appends
+an `instructions` entry about the agent for every edit and every give-back, with the digest of the
+configuration put in force and never the text. `AuditAction.PUBLISH` is the builder's for a
+published version, and `COMPOSE_CHANGE` is an attachment added or removed, and neither is this,
+which `brain.audit.ledger.AuditAction` argues. A give-back removes the overlay's owner, so the row
+no longer says who gave the instructions back: the route sets who, at what reach and for which
+request in the transaction before it writes, and the trigger reads them.
 
 Task ids: M27.8.9
 """
@@ -87,6 +91,7 @@ from brain.gate.prefix import HOUSE_RULES, UnshareablePrefixError, build_prefix
 from brain.ops.features import PROMPT_EDITING, is_on
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
+from brain.tables.audit import attributed_to
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 
 log = structlog.get_logger()
@@ -162,9 +167,9 @@ class PromptsPage(BaseModel):
     system_instructions_are_product_text: bool = True
     #: Nothing in the product sends a prompt to a model yet.
     no_model_is_called_yet: bool = True
-    #: The install keeps the current override and who set it, not the ones before it, and no
-    #: ledger entry is written.
-    only_the_last_change_is_kept: bool = True
+    #: The install keeps the current override and who set it, and every edit and give-back is an
+    #: entry in the audit trail, from `0059`'s trigger.
+    every_change_is_in_the_audit_trail: bool = True
 
 
 class InstructionsEdit(BaseModel):
@@ -208,13 +213,33 @@ def every_agent_with_install() -> Select[AgentWithInstall]:
     )
 
 
-def one_agent_locked(agent_id: str) -> Select[AgentWithInstall]:
-    """One agent, its install and its version, with the agent and install rows locked."""
+#: Why the install is locked by a statement of its own before the agent is read with it.
+THE_INSTALL_IS_LOCKED_BEFORE_IT_IS_READ: Final = (
+    "The install is the nullable side of the outer join that reads an agent with it, and "
+    "PostgreSQL refuses FOR UPDATE on the nullable side of an outer join, so locking both in the "
+    "joined read failed every edit and every give-back on a real database while every stub test "
+    "passed. Locking the agent alone in the join would not do instead: a read that waited for the "
+    "agent's lock re-reads the agent and not the install joined to it, so a second editor would "
+    "compare their hash with the install as it was before the first edit and overwrite it in "
+    "silence. So the install row is locked first, and the joined read that follows is a new "
+    "statement that sees whatever the edit it waited for committed."
+)
+
+
+def one_install_locked(agent_id: str) -> Select[tuple[str]]:
+    """The install row for one agent, locked. See `THE_INSTALL_IS_LOCKED_BEFORE_IT_IS_READ`."""
     return (
-        every_agent_with_install()
-        .where(AgentRow.id == agent_id)
-        .with_for_update(of=(AgentRow, TemplateInstanceRow))
+        select(TemplateInstanceRow.id).where(TemplateInstanceRow.id == agent_id).with_for_update()
     )
+
+
+def one_agent_locked(agent_id: str) -> Select[AgentWithInstall]:
+    """One agent, its install and its version, with the agent row locked.
+
+    Only the agent row, and the install is already held by `one_install_locked`: see
+    `THE_INSTALL_IS_LOCKED_BEFORE_IT_IS_READ` for why the join cannot lock it.
+    """
+    return every_agent_with_install().where(AgentRow.id == agent_id).with_for_update(of=AgentRow)
 
 
 def write_install(agent_id: str, row: Mapping[str, Any]) -> Any:
@@ -461,6 +486,7 @@ async def _editable_install(
     Every reason a caller may not edit is one refusal. A caller who may is told when the agent has
     no install, and when somebody else changed it since they opened it.
     """
+    await session.execute(one_install_locked(agent_id))
     found = (await session.execute(one_agent_locked(agent_id))).one_or_none()
     record = record_of(found[0]) if found is not None else None
     if (
@@ -482,6 +508,19 @@ async def _editable_install(
             "somebody changed this agent after you opened it; reload to see what is in force"
         )
     return record, install[0], install[1]
+
+
+async def _attribute(session: AsyncSession, asked: Asking) -> None:
+    """Who is changing the instructions, at what reach, for which request, for `0059`'s trigger.
+
+    A give-back leaves no owner on the row to name, so without these the entry would be attributed
+    to the database role and marked inferred.
+    """
+    trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
+    for statement in attributed_to(
+        actor_id=asked.caller.principal.id, ent_hash=asked.reach.ent_hash(), trace_id=trace_id
+    ):
+        await session.execute(statement)
 
 
 def _asked_to_edit(asked: Asking) -> None:
@@ -526,6 +565,7 @@ async def edit_instructions(
         except Absent:
             await session.rollback()
             raise
+        await _attribute(session, asked)
         await session.execute(write_install(agent_id, row))
         await session.execute(write_persona(agent_id, persona))
         await session.commit()
@@ -560,6 +600,7 @@ async def give_back_instructions(
             raise
         # Read for the answer's `editable` and never as a gate: see the module docstring.
         switched_on = await is_on(session, PROMPT_EDITING)
+        await _attribute(session, asked)
         await session.execute(write_install(agent_id, row))
         await session.execute(write_persona(agent_id, persona))
         await session.commit()

@@ -288,6 +288,10 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   legal_hold: "placed or lifted",
   skill: "added or decided about",
   connector: "connected or disconnected",
+  setting: "switched or set",
+  routing: "changed the routing rung",
+  instructions: "changed the instructions of",
+  webhook: "changed the webhook subscriber",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */

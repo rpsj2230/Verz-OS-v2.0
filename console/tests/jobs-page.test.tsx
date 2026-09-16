@@ -62,7 +62,7 @@ function page(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     controls_switched_on: true,
     may_control: true,
     no_run_can_be_stopped: true,
-    only_the_last_change_is_kept: true,
+    every_change_is_in_the_audit_trail: true,
     ...overrides,
   };
 }

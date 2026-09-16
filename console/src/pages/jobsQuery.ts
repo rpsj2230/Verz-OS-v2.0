@@ -60,9 +60,9 @@ export const CANNOT_HEADING = "What this screen cannot do";
 export const NO_RUN_CAN_BE_STOPPED =
   "A run that has started cannot be stopped from here, because nothing in the platform can stop " +
   "one. Pausing a job stops the schedule starting it again.";
-export const ONLY_THE_LAST_CHANGE_IS_KEPT =
-  "A pause and a request to run record who made them last and when, and nothing before that. " +
-  "Neither writes an entry in the audit trail.";
+export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
+  "A pause and a request to run show who made them last and when. Every pause, resume and run " +
+  "request, and who made it, is kept in the audit trail.";
 
 /** The outcome words, from `brain.tables.schedule.OUTCOMES`. */
 export const OUTCOME_WORDS: Readonly<Record<string, string>> = {

@@ -63,7 +63,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, Index, String, text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, Index, String, TextClause, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -138,6 +138,29 @@ PACK_ASSIGNMENT_ACTION = AuditAction.GRANT
 ACTOR_SETTING = "brain.actor_id"
 ENT_HASH_SETTING = "brain.ent_hash"
 TRACE_ID_SETTING = "brain.trace_id"
+
+
+def attributed_to(*, actor_id: str, ent_hash: str, trace_id: str) -> tuple[TextClause, ...]:
+    """The three statements that tell a trigger who is writing, at what reach, for which request.
+
+    `set_config(..., true)`, so each lasts for the transaction and no longer, which is what a
+    pooled connection needs: a setting that outlived its transaction would attribute the next
+    request's write to this one's caller. Executed in the transaction that makes the write, before
+    it.
+
+    Written once here on 2026-09-17, for the console routes `0059` records, rather than as another
+    copy of the two-line `_set_config` beside each store; the copies that exist are left where they
+    are, because each is exercised by its own store's tests and moving them buys nothing.
+    """
+    return tuple(
+        text("SELECT set_config(:name, :value, true)").bindparams(name=name, value=value)
+        for name, value in (
+            (ACTOR_SETTING, actor_id),
+            (ENT_HASH_SETTING, ent_hash),
+            (TRACE_ID_SETTING, trace_id),
+        )
+    )
+
 
 #: What `ent_hash` holds when the application did not supply one.
 #:

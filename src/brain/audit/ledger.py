@@ -118,6 +118,11 @@ SUBJECT_KINDS = frozenset(
         "legal_hold",
         # A skill in the library, since 2026-09-17. See SKILL below.
         "skill",
+        # A row of `ops.setting`, a rung of the routing matrix and a webhook subscriber, since
+        # 2026-09-17. See SETTING, ROUTING and WEBHOOK below.
+        "setting",
+        "routing",
+        "webhook",
     }
 )
 
@@ -336,6 +341,59 @@ class AuditAction(enum.StrEnum):
     `brain.identity.staff_sync.AUDIT_KIND_DECISIONS` already decides who reads it. One member for
     both directions, with the change in the details, for the reason SIGN_IN gives. Nine
     characters.
+
+    SETTING, ROUTING, INSTRUCTIONS and WEBHOOK were added on 2026-09-17, and they are the
+    nineteenth to the twenty-second. M27.8.17 follows every console write to the audit entry it
+    leaves, and five kinds of write left none: switching a feature, pausing, resuming or running a
+    scheduled job, editing an agent's instructions or giving them back, saving a rung of the
+    routing matrix, and registering a webhook subscriber, replacing its signing secret or
+    switching it off. Each was attributed on its own row and nowhere else, so "who switched
+    prompt editing on", "who paused the retention sweep" and "who pointed our identifiers at that
+    address" had a last answer and no history. `0004` had recorded the settings half as a gap for
+    want of exactly these two words. **Each is recorded by the database, from a trigger on the
+    row's own table**, `0059`'s, so a statement an operator types is recorded as well as a press in
+    the console.
+
+    Every existing member was tried, and one was tried for all five. GRANT and REVOKE are
+    capabilities, and none of these writes changes what anybody may do. COMPOSE_CHANGE is an
+    attachment added to or removed from an agent, and `brain.prompt_routes` already argued that an
+    instruction edit is not one: nothing is attached, the agent's own text changes. LEASH_CHANGE's
+    whole content is its two rungs, and a routing rung is a model deployment's place in a chain,
+    not an agent's autonomy, so filing one under the other would put model timeouts into every
+    answer to "who loosened this agent". CREDENTIAL was the near miss for a replaced webhook
+    secret, which is a vault write: it was rejected because the subscriber's change is what an
+    auditor of where identifiers are sent reads, and a credential entry beside it would be the same
+    event twice. CONNECTOR, added the same day, is a source this system reads from, and a
+    subscriber is somewhere it sends to; "who let us read the finance ledger" and "who pointed our
+    events at that address" are asked by different people. One member covering all five was
+    rejected for RETENTION and LEGAL_HOLD's reason: an auditor asking who pointed the company's
+    identifiers at an address should not read model timeouts, and one asking who edited what an
+    agent is told should not read job pauses.
+
+    **Why SETTING is one member for features, jobs and every other setting, rather than three.**
+    They are one table and one act, a knob turned, and the trigger that records them is one
+    function over `ops.setting` that cannot tell a feature from a pause without restating
+    `brain.ops.features` and `brain.ops.schedule_control` in SQL. The subject is the key, so
+    `setting:feature.prompt_editing` and `setting:schedule.paused.retention_sweep` say which knob,
+    and the change is `switched_on` or `switched_off` for a boolean and `set` for anything else,
+    because a boolean has two values and carries no content while every other value might. **Never
+    the value.** A run requested is `set` and not its instant, and a company name typed into the
+    wizard is `set` and not the name.
+
+    **INSTRUCTIONS is about the agent, under the `agent` kind, and needs no kind of its own**,
+    because an agent is exactly what `agent` names and a department's head already reads that kind
+    for the leash changes and compositions of their people. The change is `edited` or
+    `given_back`, and the digest of the configuration put in force rides in the details, which is
+    the hash the answer cache keys on, so the entry says which configuration without saying what
+    it says. ROUTING's subject is the rung, and its details name the columns that moved and never
+    their values. WEBHOOK's subject is the subscriber, and its change is
+    `brain.tables.webhook_change.WebhookChange`'s word. Seven, seven, twelve and seven characters.
+
+    **And three subject kinds.** `setting`, because no kind names a row of configuration;
+    `routing`, because a rung is neither an agent nor a connector; `webhook`, because a subscriber
+    is an address the company's identifiers are sent to and `connector`, the near miss, is a
+    source this system reads. `brain.identity.staff_sync.AUDIT_KIND_DECISIONS` decides for each
+    whether a department head reads it, and none of the three is a head's.
     """
 
     GRANT = "grant"
@@ -382,6 +440,19 @@ class AuditAction(enum.StrEnum):
     #: A source was connected from the console, or disconnected. Which is in the details, and
     #: never its settings or its key. Written by `0057`'s trigger on `ops.connector_connection`.
     CONNECTOR = "connector"
+    #: A row of `ops.setting` was switched, set or retired: a feature, a job's pause or run
+    #: request, or any other setting. Which is in the details, and never the value. Written by
+    #: `0059`'s trigger on `ops.setting`.
+    SETTING = "setting"
+    #: A rung of the routing matrix was added, changed or retired. The columns that moved are in the
+    #: details, and never their values. Written by `0059`'s trigger on `ops.routing_rung`.
+    ROUTING = "routing"
+    #: An agent's instructions were edited or given back to its template, with the digest of the
+    #: configuration put in force. Written by `0059`'s trigger on `agent.template_instance`.
+    INSTRUCTIONS = "instructions"
+    #: A webhook subscriber was registered, had its signing secret replaced, or was switched off.
+    #: Written by `0059`'s trigger on `ops.webhook_change`.
+    WEBHOOK = "webhook"
 
 
 # --------------------------------------------------------------------- redaction

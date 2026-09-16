@@ -328,6 +328,9 @@ def test_the_people_a_filter_offers_are_the_actors_on_the_rows_shown_and_nobody_
             "retention",
             "legal_hold",
             "skill",
+            "setting",
+            "routing",
+            "webhook",
         }
     )
 

@@ -12,11 +12,11 @@ secret and switching off are the three acts `brain.webhook_routes` performs, and
 "what happened to this subscriber, and who did it" reads one table in time order rather than
 joining a registration column, a deactivation instant and a vault's audit device.
 
-**It is not the audit ledger, and says so.** `brain.audit.ledger.AuditAction` has no member a
-subscriber change could honestly be recorded under, and `SUBJECT_KINDS` no kind a subscriber id
-fits, so no trigger here appends to `obs.audit_entry`. Adding both is the audit package's decision.
-When it is made, a trigger on this table is the whole of the wiring, which is the shape `0050` and
-`0052` already take: the row names its author, so the trigger has nothing to infer.
+**It is not the audit ledger, and it reaches it.** Until 2026-09-17 `brain.audit.ledger.AuditAction`
+had no member a subscriber change could honestly be recorded under, and `SUBJECT_KINDS` no kind a
+subscriber id fits. `0059` added `webhook` as both, and a trigger on this table that appends one
+entry per row, with the actor `changed_by` names and the change word and nothing else: the row
+names its author, so the trigger has nothing to infer, which is the shape `0050` and `0052` take.
 
 **No foreign key to `auth.principal` on `changed_by`**, for the reason `brain.tables.review`
 gives: a key into the principal table would make retiring a person refuse, or delete, the record of

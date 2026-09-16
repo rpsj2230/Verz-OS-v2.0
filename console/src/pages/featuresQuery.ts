@@ -55,9 +55,9 @@ export const COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE =
 export const PLUGINS_HAVE_NO_LOADER =
   "Plugins are not switched here. The platform records a plugin's state, and nothing loads a " +
   "plugin yet, so a switch for one would change nothing.";
-export const ONLY_THE_LAST_CHANGE_IS_KEPT =
-  "Each switch records who last turned it and when, and nothing before that. Switching a feature " +
-  "writes no entry in the audit trail.";
+export const EVERY_CHANGE_IS_IN_THE_AUDIT_TRAIL =
+  "Each switch shows who last turned it and when. Every change, and who made it, is kept in the " +
+  "audit trail.";
 
 /** The API route one switch is posted to. */
 export function switchPath(name: string): string {

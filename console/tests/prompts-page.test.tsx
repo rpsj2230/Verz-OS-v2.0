@@ -57,7 +57,7 @@ function page(overrides: Record<string, unknown> = {}): Record<string, unknown> 
     editing_switched_on: true,
     system_instructions_are_product_text: true,
     no_model_is_called_yet: true,
-    only_the_last_change_is_kept: true,
+    every_change_is_in_the_audit_trail: true,
     ...overrides,
   };
 }

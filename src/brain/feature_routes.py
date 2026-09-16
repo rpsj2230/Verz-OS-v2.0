@@ -26,6 +26,11 @@ boolean on the response rather than a sentence in the console, on
 `brain.operate_routes.LiveRunsView`'s argument: the day either stops being true, it goes false in
 the commit that makes it so.
 
+**Every switch that moves a feature is an entry in the audit ledger**, `setting` under the key's
+subject, appended by `0059`'s trigger on `ops.setting` in the transaction that writes the row. The
+route sets who, at what reach and for which request beforehand, so the entry names the request as
+well as the person; the row keeps only the last change, and the ledger keeps every one.
+
 **Not claimed: M27.8.10.** The leaf is feature and module enablement, and modules cannot be
 enabled from here, for the reason above. A leaf closed over a screen that switches half of what
 it names would be the tracker counting the half.
@@ -59,6 +64,7 @@ from brain.ops.features import (
 )
 from brain.ops.setting_store import SettingState
 from brain.routing_routes import sessions_of
+from brain.tables.audit import attributed_to
 
 log = structlog.get_logger()
 
@@ -103,9 +109,9 @@ class FeaturesPage(BaseModel):
     components_are_chosen_by_the_profile: bool = True
     #: Plugins have a lifecycle and nothing loads one, so no plugin switch is offered.
     plugins_have_no_loader: bool = True
-    #: A switch keeps its last change and nothing before it, and writes no ledger entry. See
-    #: `brain.ops.setting_store.A_SWITCH_RECORDS_ITS_LAST_CHANGE_AND_NOTHING_BEFORE_IT`.
-    only_the_last_change_is_kept: bool = True
+    #: A switch's row shows its last change, and every change is an entry in the audit trail. See
+    #: `brain.ops.setting_store.A_SWITCH_SHOWS_ITS_LAST_CHANGE_AND_THE_LEDGER_KEEPS_EVERY_ONE`.
+    every_change_is_in_the_audit_trail: bool = True
 
 
 class SwitchAsked(BaseModel):
@@ -140,6 +146,11 @@ def features_page(states: dict[str, SettingState]) -> FeaturesPage:
     return FeaturesPage(
         features=[feature_view(one, states.get(one.name), on=one.name in on) for one in FEATURES]
     )
+
+
+def _trace_id() -> str:
+    """The request's trace, for the ledger entry `0059`'s trigger appends beside the switch."""
+    return str(structlog.contextvars.get_contextvars().get("trace_id", ""))
 
 
 def _require_sessions(request: Request) -> async_sessionmaker[AsyncSession]:
@@ -193,6 +204,12 @@ async def switch_feature(
         raise _refused_because(f"{name!r} is not a feature this product declares") from None
 
     async with _require_sessions(request)() as session:
+        for statement in attributed_to(
+            actor_id=asked.caller.principal.id,
+            ent_hash=asked.reach.ent_hash(),
+            trace_id=_trace_id(),
+        ):
+            await session.execute(statement)
         await switch(session, one, on=body.on, by=asked.caller.principal.id)
         states = await switch_states(session)
         await session.commit()

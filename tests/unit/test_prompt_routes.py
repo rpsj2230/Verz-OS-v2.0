@@ -96,6 +96,10 @@ class Agents:
     def answer(self, statement: Any) -> Result | None:
         if isinstance(statement, Select):
             names = [one["name"] for one in statement.column_descriptions]
+            if names == ["id"] and "FOR UPDATE" in str(statement.compile(dialect=DIALECT)):
+                # `one_install_locked`, whose answer the route does not read.
+                (wanted,) = statement.compile().params.values()
+                return Result([(wanted,)] if self.rows.get(wanted, (None, None))[1] else [])
             if names != ["AgentRow", "TemplateInstanceRow", "TemplateVersionRow"]:
                 return None
             if "FOR UPDATE" not in str(statement.compile(dialect=DIALECT)):
@@ -259,6 +263,66 @@ def test_an_edit_is_written_to_the_install_and_changes_what_the_agent_is_given(
     assert NEW in prompt
     assert INSTALLED_PERSONA not in prompt
     assert prompt.startswith(HOUSE_RULES[0])
+
+
+def test_both_writes_lock_the_install_before_reading_it_and_name_who_is_writing_before_writing(
+    served: tuple[TestClient, Stub], agents: Agents, settings: SettingRows
+) -> None:
+    """The order of the statements an edit and a give-back send, which only a stub can see.
+
+    The install is locked by a statement of its own before the agent is read with it, for
+    `brain.prompt_routes.THE_INSTALL_IS_LOCKED_BEFORE_IT_IS_READ`; and who is writing is set in
+    the transaction before the install is written, so `0059`'s trigger names them. Delete this and
+    either can be dropped: the first is the silent overwrite that constant describes, which no
+    single-request test can observe, and the second is a give-back attributed to the database
+    role."""
+    client, stub = served
+    switched_on(settings)
+    before = listed(client, "u_admin")[COMPANY]
+    edited = post(
+        client,
+        "u_admin",
+        f"{PROMPTS}/{COMPANY}",
+        {"instructions": NEW, "expected_hash": before["effective_hash"]},
+    )
+    given_back = post(
+        client,
+        "u_admin",
+        f"{PROMPTS}/{COMPANY}/give-back",
+        {"expected_hash": edited.json()["effective_hash"]},
+    )
+
+    def shape(statement: Any) -> str:
+        text = str(statement.compile(dialect=DIALECT))
+        if text.startswith("SELECT set_config"):
+            return "attribution"
+        if text.startswith("SELECT agent.template_instance.id") and text.endswith("FOR UPDATE"):
+            return "install locked"
+        if "FOR UPDATE OF agent" in text:
+            return "agent read"
+        if text.startswith("UPDATE agent.template_instance"):
+            return "install written"
+        return "other"
+
+    order = [shape(one) for one in stub.statements]
+    assert (edited.status_code, given_back.status_code) == (200, 200)
+    for start in [i for i, one in enumerate(order) if one == "install locked"]:
+        following = [one for one in order[start:] if one != "other"]
+        assert following[:6] == [
+            "install locked",
+            "agent read",
+            "attribution",
+            "attribution",
+            "attribution",
+            "install written",
+        ]
+    assert order.count("install locked") == 2
+    assert stub.attributions[0] == ("brain.actor_id", "u_admin")
+    assert [name for name, _ in stub.attributions] == [
+        "brain.actor_id",
+        "brain.ent_hash",
+        "brain.trace_id",
+    ] * 2
 
 
 def test_giving_instructions_back_restores_the_templates_and_is_not_behind_the_feature(
