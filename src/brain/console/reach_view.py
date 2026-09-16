@@ -119,9 +119,11 @@ what the memory says. The owner's control is `brain.console.own_things.edit_own_
 the delete control and behind the same ownership check. This module still holds no write path,
 which is the half of the argument that stands.
 
-**And nothing here claims a screen exists.** There is no console screen behind any of this, in
-this repository or anywhere else; `brain.console.screens` says the same about its own registry
-and for the same reason. What is built is the domain layer four screens would read.
+**And nothing here claims a screen exists.** There was no console screen behind any of this
+when it was written; `brain.console.screens` said the same about its own registry and for the
+same reason. What is built is the domain layer four screens would read. Since 2026-09-16 the
+company console's memory screen reads `split_memory` and `revisions` through
+`brain.console.govern_estate.subject_memory`, which is why those two take `Remembered`.
 
 Task ids: M39.3.1.1, M39.3.1.2, M39.3.1.3, M39.3.1.4, M39.3.1.5
 Task ids: M39.3.2.1, M39.3.2.2, M39.3.2.3, M39.3.2.4, M39.3.2.5
@@ -137,7 +139,7 @@ import inspect
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
 from datetime import datetime
-from typing import Final
+from typing import Final, Protocol
 
 from brain.agents.model import (
     AUDIENCE_IS_NOT_AUTHORITY,
@@ -157,7 +159,7 @@ from brain.gate.invoke import Invocation, InvocationRefusedError, invoke
 from brain.gate.leash import Leash
 from brain.memory.correction import Correction, Demotion, Supersession
 from brain.memory.digest import Learning, MemoryItem, memory_item
-from brain.memory.formation import MemoryKind, Recollection, may_recall
+from brain.memory.formation import Formation, MemoryKind, Recollection, may_recall
 from brain.memory.signals import Signal
 from brain.memory.tiers import (
     PROMOTION_AGREEMENT,
@@ -886,6 +888,37 @@ class MemoryViewError(Exception):
     """A memory a viewer cannot honestly render."""
 
 
+class Remembered(Protocol):
+    """The four facts about a memory that the viewer below reads, and nothing else.
+
+    `brain.memory.digest.Learning` is one, and it was the only one until 2026-09-16, when the
+    company console's memory screen had to read `mem.persistent` and `mem.adaptive`. Those rows
+    hold a formation, a confidence and a statement, and they hold no `Proposal`: nothing stores
+    which kind of change a memory was or the tier it was proposed at. A `Learning` cannot be
+    built from one without inventing both, and an invented change kind is a flattering guess
+    sitting inside the process where the next caller to hand it to `tier_one_rows` would read
+    it as fact.
+
+    **Rejected: a `Learning` with a placeholder proposal.** It type checks, `readable`,
+    `split_memory` and `revisions` never read the proposal, and it would put a value nobody
+    recorded on the one record every learning surface shares. So these three functions take
+    what they actually read, and `Learning` satisfies it unchanged. What they decide does not
+    move: the recall verdict is still computed here, from the formation, and never accepted.
+    """
+
+    @property
+    def memory_id(self) -> str: ...
+
+    @property
+    def formation(self) -> Formation: ...
+
+    @property
+    def formed_confidence(self) -> float: ...
+
+    @property
+    def replaced_id(self) -> str | None: ...
+
+
 def provenance_of(kind: MemoryKind) -> Provenance:
     """Curated or extracted, refusing the kind that is neither (M39.4.1.2).
 
@@ -920,7 +953,7 @@ class MemoryText:
 
 
 def readable(
-    learning: Learning,
+    learning: Remembered,
     statement: str,
     reader: EntitlementSet,
     *,
@@ -979,7 +1012,7 @@ class SplitMemoryView:
 
 
 def split_memory(
-    entries: Sequence[tuple[Learning, str]],
+    entries: Sequence[tuple[Remembered, str]],
     reader: EntitlementSet,
     *,
     now: datetime,
@@ -1046,7 +1079,7 @@ def _diff_lines(before: str, after: str) -> tuple[str, ...]:
 
 
 def revisions(
-    chain: Sequence[tuple[Learning, str]],
+    chain: Sequence[tuple[Remembered, str]],
     reader: EntitlementSet,
     *,
     now: datetime,

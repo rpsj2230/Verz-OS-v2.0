@@ -68,6 +68,7 @@ from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
+from brain.estate_routes import router as estate_router
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
@@ -775,6 +776,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the four govern screens make, and refusing instead would let a caller read off whether
     # somebody else holds a capability. See `brain.staff_source_routes`.
     app.include_router(staff_source_router)
+    # The Knowledge, Learning and Memory screens. A router of its own because all three are the
+    # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store
+    # that is empty on every install today: each response says which of its facts has no source
+    # rather than drawing an empty table that reads as a company with nothing in it. No write.
+    # See `brain.estate_routes`.
+    app.include_router(estate_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

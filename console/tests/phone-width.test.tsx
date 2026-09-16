@@ -648,6 +648,101 @@ const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // Knowledge. The item reference is an identifier with no break in it, which is why the library
+  // table sits in `.grid__scroll`; the department name is a chip outside the table and has to be
+  // able to wrap. `truncated` is true so the full-page sentence is drawn as well.
+  "/library": {
+    address: "/library",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/library": {
+        items: [{ item_id: UNBROKEN, level: "department" }],
+        next_cursor: null,
+        total: null,
+        truncated: true,
+        departments: [UNBROKEN],
+        staleness: null,
+        only_existence_and_reach_are_shown: true,
+        freshness_and_use_are_not_measured: true,
+      },
+    },
+  },
+  // Learning. Recorded rather than not, so all three tier tables are drawn and a memory id, a
+  // department and a change kind each arrive unbroken; the change kind also sits in the four-tier
+  // card outside any table.
+  "/learning": {
+    address: "/learning",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/learning": {
+        basis: "everyone",
+        as_of: "2019-03-06T09:00:00Z",
+        tier_one: [
+          {
+            memory_id: UNBROKEN,
+            change: "preference",
+            control_writes: "demoted",
+            learned_at: "2019-03-05T09:00:00Z",
+          },
+        ],
+        tier_two: [
+          {
+            memory_id: `${UNBROKEN}2`,
+            change: "fast_path_rule",
+            evidence: [UNBROKEN],
+            promote_ready: false,
+            learned_at: "2019-03-05T09:00:00Z",
+          },
+        ],
+        tier_three: [{ memory_id: `${UNBROKEN}3`, department: UNBROKEN, back_to: UNBROKEN }],
+        tiers: [{ tier: 1, changes: [UNBROKEN] }],
+        learnings_are_not_recorded: false,
+        undo_is_not_writable: true,
+      },
+    },
+  },
+  // Memory with nobody named asks the API nothing, so it draws no value.
+  "/memory": { address: "/memory", signedIn: true, drawsValues: false, answers: {} },
+  // One person's memory. The address carries an ordinary reference, because `UNBROKEN` is longer
+  // than a principal id may be and the page refuses it before asking, which is correct. The API's
+  // own values are unbroken: the reference it echoes is drawn in the card's heading outside any
+  // table, a statement may be one unbroken word, and the history table holds a memory id and a
+  // diff line inside `.grid__scroll`.
+  "/memory/:subject": {
+    address: "/memory/u_subject",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/memory": {
+        subject_id: UNBROKEN,
+        curated: [
+          {
+            memory_id: UNBROKEN,
+            statement: UNBROKEN,
+            confidence: 0.9,
+            formed_at: "2019-03-05T09:00:00Z",
+          },
+        ],
+        extracted: [],
+        history: [
+          {
+            memory_id: UNBROKEN,
+            replaced_id: `${UNBROKEN}0`,
+            at: "2019-03-05T09:00:00Z",
+            diff: [`+${UNBROKEN}`],
+            trigger: null,
+            correction: null,
+          },
+        ],
+        considered_per_kind: 200,
+        staleness: null,
+        corrections_are_not_recorded: false,
+        edit_is_not_writable: true,
+      },
+    },
+  },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {
     address: `${CALLBACK_PATH}?code=X&state=Y`,

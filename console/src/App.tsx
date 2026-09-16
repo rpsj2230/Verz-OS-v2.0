@@ -54,6 +54,9 @@ import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
+import { Knowledge } from "./pages/Knowledge";
+import { Learning } from "./pages/Learning";
+import { Memory } from "./pages/Memory";
 import { StaffSources } from "./pages/StaffSources";
 import { Install } from "./pages/Install";
 import { Limits } from "./pages/Limits";
@@ -287,6 +290,18 @@ export const routes: RouteObject[] = [
       // its own. See `pages/Skills.tsx`. Eager rather than split, for `Roles`' reason.
       { path: "skills", element: <Skills /> },
       { path: "skills/:name", element: <Skills /> },
+      // Knowledge, SCREEN 7 of `docs/screens.html`, at the screen's own key in
+      // `brain.console.screens` so `brain.ops.console_screens.routed_screen_keys` matches this
+      // address. One path: an item has no page of its own, because this screen says an item
+      // exists and how widely it reaches and nothing more. Eager, for `Roles`' reason.
+      { path: "library", element: <Knowledge /> },
+      // Learning, SCREEN 8. One path: the review is one page and a learning has no address.
+      { path: "learning", element: <Learning /> },
+      // Memory, read one person at a time. The bare path asks for a reference and the segment is
+      // that person's memory, resolved by the API and never listed. A Govern screen rather than a
+      // tab inside an agent, although SCREEN 13 draws it there: see `pages/Memory.tsx`.
+      { path: "memory", element: <Memory /> },
+      { path: "memory/:subject", element: <Memory /> },
       { path: "capabilities", element: <Capabilities /> },
       { path: "scopes", element: <Scopes /> },
       { path: "*", element: <NotFound /> },

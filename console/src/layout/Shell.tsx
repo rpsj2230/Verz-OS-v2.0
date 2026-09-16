@@ -109,6 +109,12 @@ const GROUPS: readonly NavGroup[] = [
       // SCREEN 5 addresses the catalogue as "Skills & templates > Templates", a child of the
       // row above, so it sits directly beneath it.
       { to: "/agent-templates", label: "Agent templates" },
+      { to: "/library", label: "Knowledge" },
+      { to: "/learning", label: "Learning" },
+      // Memory is not in SCREEN 1's menu: the design draws it inside one agent. It is registered
+      // under Govern in `brain.console.screens` and is read per person, so it sits under the
+      // design's own Govern entries rather than inventing a place. See `pages/Memory.tsx`.
+      { to: "/memory", label: "Memory" },
       { to: "/classification", label: "Classification" },
     ],
   },

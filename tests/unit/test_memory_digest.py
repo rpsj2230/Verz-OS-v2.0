@@ -654,6 +654,13 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     in that module's words: narrowing a person's memory by an agent's ceiling would hide a
     memory from its own subject for a reason that has nothing to do with them.
 
+    **It stopped importing these shapes on 2026-09-16**, when `brain.estate_routes` put the
+    viewer behind a route. A stored memory row records no `Proposal`, so `subject_memory` and
+    the two `brain.console.reach_view` functions it calls now take `reach_view.Remembered`, the
+    four fields they read, rather than a `Learning` somebody would have to invent a change kind
+    for. The viewer still reads through `brain.console.reach_view`, which is still an importer,
+    and its sibling below still holds it to the caller's own reach.
+
     **`brain.member_activity` is the fourth importer and it arrived on 2026-09-08**, for
     M40.4.1.1 and M40.4.1.3, the member's own preferences page and the weekly digest delivered
     on their own channel. Its sibling is below and its argument is a fourth one, because the
@@ -667,7 +674,6 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     by somebody who saw that a caller already existed and assumed the question was settled."""
     assert _callers_of("brain.memory.review") == ["brain.console.own_things"]
     assert _callers_of("brain.memory.digest") == [
-        "brain.console.govern_estate",
         "brain.console.own_things",
         "brain.console.reach_view",
         "brain.member_activity",

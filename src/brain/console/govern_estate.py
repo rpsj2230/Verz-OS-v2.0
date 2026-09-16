@@ -94,9 +94,14 @@ Scope: domain logic. Nothing here renders, opens a connection or reads a clock; 
 parameter, as in every sibling in this package. Nothing writes: the undo control is a
 `Correction` the row already carries and pressing it is somebody else's module.
 
-**No console screen exists behind any of these six**, exactly as `brain.console.screens`,
-`brain.console.govern`, `brain.console.workspace` and `brain.console.agent_output` each say of
-their own. What is claimed is the widening decision, which is the half a screen cannot supply.
+**No console screen existed behind any of these six when they were written**, exactly as
+`brain.console.screens`, `brain.console.govern`, `brain.console.workspace` and
+`brain.console.agent_output` each said of their own. What is claimed is the widening decision,
+which is the half a screen cannot supply. Since 2026-09-16 `brain.skill_routes` serves the
+queue, and `brain.estate_routes` serves the library, the learning review and the memory viewer
+over HTTP, each calling the function here rather than restating it. `subject_memory` takes
+`brain.console.reach_view.Remembered` rather than `Learning` for that route's reason: a stored
+memory row records no proposal, and a `Learning` built from one would carry an invented one.
 
 Task ids: M27.3.12, M27.3.13, M27.3.14
 Task ids: M27.3.15, M27.3.16, M27.3.17
@@ -115,6 +120,7 @@ from brain.console.govern import Placed, _in_reach
 from brain.console.reach_view import (
     LeashMatrix,
     PromotionEvidence,
+    Remembered,
     Revision,
     RungChange,
     SplitMemoryView,
@@ -131,7 +137,6 @@ from brain.console.workspace import Basis
 from brain.core.entitlement import EntitlementSet
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.memory.correction import Demotion, Supersession
-from brain.memory.digest import Learning
 from brain.ops.jobs import hidden_count_fields
 from brain.tools.review import QueueEntry, QueueSummary, summarise
 
@@ -653,7 +658,7 @@ class SubjectMemory:
 def subject_memory(
     *,
     subject_id: str,
-    entries: Sequence[tuple[Learning, str]],
+    entries: Sequence[tuple[Remembered, str]],
     reader: EntitlementSet,
     now: datetime,
     supersessions: Iterable[Supersession] = (),
