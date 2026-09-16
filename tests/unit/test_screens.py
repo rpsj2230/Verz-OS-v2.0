@@ -723,7 +723,7 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         # made the difference visible: about forty screens closed, six pages in `console/src`.
         # These seven are not registry entries and never will be, so they are counted here and
         # excluded from the comparison below rather than left to make the registry look short.
-        "M27.7": 7,  # screens in the browser
+        "M27.7": 29,  # screens in the browser, one leaf per screen
     }
 
     every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}
