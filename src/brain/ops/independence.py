@@ -226,6 +226,11 @@ RESERVED_SUFFIXES: Final[tuple[str, ...]] = (
     "example.org",
     "example.net",
     "example.edu",
+    # GitHub's no-reply domain, which is where a workflow's own commit author lives.
+    # Reserved in the same sense as the entries above: GitHub owns it, mail to it goes
+    # nowhere, and no client can hold an address under it, so `anchor@users.noreply.
+    # github.com` names this repository's automation rather than a person at a company.
+    "users.noreply.github.com",
 )
 
 

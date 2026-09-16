@@ -798,3 +798,20 @@ def test_every_directory_a_walk_skips_is_one_git_already_refuses() -> None:
     assert ignored >= NOT_OF_THIS_REPOSITORY
     assert {"__pycache__", "node_modules", written} <= NOT_OF_THIS_REPOSITORY
     assert A_SKIPPED_DIRECTORY_IS_ONE_GIT_ALREADY_REFUSES
+
+
+def test_githubs_no_reply_domain_is_reserved_and_an_ordinary_company_address_is_not() -> None:
+    """`anchor.yml` commits as `anchor@users.noreply.github.com`, which is GitHub's own
+    reserved domain and the only address this repository's automation can have. Reading it as
+    one client's work address made the audit report a file that carries nothing, and a report
+    with a permanent entry in it is a report nobody reads.
+
+    The second assertion is the one that keeps this honest: the suffix is matched at the end of
+    a domain, so a company that registers `users.noreply.github.com.example` style lookalikes,
+    or simply has its own domain, is still a finding. Delete this and the suffix can be widened
+    to `github.com`, which would wave through every address at a company hosted there."""
+    from brain.ops.independence import is_reserved
+
+    assert is_reserved("users.noreply.github.com")
+    assert not is_reserved("acme-holdings.co")
+    assert not is_reserved("github.com")

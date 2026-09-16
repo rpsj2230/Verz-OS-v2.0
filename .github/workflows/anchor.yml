@@ -44,9 +44,18 @@ jobs:
       - name: Read the ledger head
         id: read
         env:
-          BRAIN_URL: ${{ vars.BRAIN_URL || 'https://brain.194.233.66.89.sslip.io' }}
+          BRAIN_URL: ${{ vars.BRAIN_URL }}
         run: |
           set -euo pipefail
+          # The address lives in the repository variable and nowhere in these files:
+          # a fallback here is one client's address inside the product's own history.
+          # No variable means no anchor, which is the same answer as a site that did
+          # not reply, and never a failed run for a repository nobody has deployed.
+          if [ -z "${BRAIN_URL:-}" ]; then
+            echo "no BRAIN_URL repository variable; no anchor this run"
+            echo "taken=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # --fail so a 502 is a failed step rather than an anchor file containing an
           # error page, which would verify against nothing and look like data.
           if ! curl --fail --silent --show-error --max-time 20 \

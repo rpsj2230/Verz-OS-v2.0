@@ -2,20 +2,43 @@
 
 Decisions and access I cannot resolve alone. Served at `/build/needs-rupash`.
 
-**4 items are open, all short actions of yours, and none breaks anything while it waits.**
+**1 item is open: switching on a second login factor in the consoles you use.**
 
-**Item 66: one setting** in Coolify, so the Brain can check Keycloak sign-ins.
-
-**Item 65: one line** to replace in Coolify's compose text box.
-
-**Item 63: two tidy-ups** on GitHub and in the consoles. The server checks are done.
-
-**Item 52: one repository variable** in GitHub, `BRAIN_URL`, so your server's address can come out
-of two workflow files.
+Everything else is answered and built. Sign-in now works end to end on your server: the issuer
+setting is live, readiness reports sign-in ready, and the image line in the stored compose file is
+the required form.
 
 # Open
 
-## 66. One setting in Coolify so the Brain can check Keycloak sign-ins
+## 63. Switch on a second login factor in the consoles you use
+
+**What you do: one setting in each console. Everything else in this item is done.**
+
+**Done.** You deleted the three unused GitHub secrets on 2026-09-16. I checked your server's login
+keys read-only and there was no old deploy key to remove, and the address allowlist placeholder is
+in a template nothing on your server uses.
+
+**Left, and it is yours because it is a security setting inside each product.** Switch on a second
+factor in each console you sign in to. The steps are the same shape in all three: sign in, open your
+own account settings, and add an authenticator app.
+
+1. **Coolify.** Sign in through your usual SSH tunnel. Click your avatar in the top right and choose
+   **Profile**. Find **Two-Factor Authentication** and press **Enable**. Scan the QR code with an
+   authenticator app on your phone, type the six-digit code back in to confirm, and save the recovery
+   codes somewhere that is not the server.
+2. **Keycloak admin console.** Sign in as the administrator. Click your name in the top right, choose
+   **Manage account**, then **Account security**, then **Signing in**. Under **Two-factor
+   authentication** press **Set up authenticator application**, scan the QR code, and enter the code.
+   If you would rather require it of everyone, that is **Authentication** then **Required actions**
+   in the admin console, where **Configure OTP** can be set as a default action.
+3. **Langfuse**, only if you run it. Sign in, open **Settings** from the user menu, and follow the
+   two-factor section there.
+
+Tell me when they are on and I close this item.
+
+# Answered
+
+## 66. One setting in Coolify so the Brain can check Keycloak sign-ins - DONE: readiness reports sign-in ready
 
 **What you do: add one environment variable in Coolify. Nothing is broken while it waits, but nobody
 can sign in to the Brain until it exists.**
@@ -36,7 +59,10 @@ yet. Without it the site keeps working exactly as today, and every sign-in is re
 up and sign-in simply stays refused, and the readiness page names sign-in as the part that is not
 ready.
 
-## 65. One line to change in Coolify's copy of the compose file, whenever you have five minutes
+**Done 2026-09-16.** You set it on both services. Measured read-only: the app container carries
+the issuer, and `/health/ready` reports `sign_in` true.
+
+## 65. One line to change in Coolify's copy of the compose file - DONE
 
 **What you do: replace one line of text in a text box in Coolify. Nothing is broken while it waits.**
 
@@ -72,32 +98,10 @@ run. The `${...}` part is how that text says "use the value of the setting calle
 **If the deploy fails**, open **Edit Compose File** again, put the old line back, save and deploy,
 and tell me. That returns everything to how it is now.
 
-## 63. Two short tidy-ups of yours on GitHub and in the consoles; the server checks are done
+**Done 2026-09-16.** The app container runs with `APP_IMAGE` named, so nothing starts on an image
+nobody chose.
 
-**What you do: two things, neither urgent. I did the rest on 2026-09-15.**
-
-**Done by me:**
-
-- **The old GitHub deploy key.** I checked `/root/.ssh/authorized_keys` on your server, reading
-  only: it holds 3 keys and none carries a forced command, so there is no GitHub deploy line to
-  remove. Nothing was changed.
-- **The Traefik allowlist placeholder.** Nothing on your server uses that template, so there is
-  nothing to change until it is deployed.
-
-**Still yours, because they are security settings and deleting secrets cannot be undone, which I
-do not do on anyone's behalf even with permission:**
-
-1. **Delete three GitHub secrets nothing uses any more.** Go to
-   `https://github.com/rpsj2230/Verz-OS-v2.0/settings/secrets/actions`. Beside each of
-   `COOLIFY_URL`, `COOLIFY_SERVICE_UUID` and `COOLIFY_TOKEN`, click the bin icon and confirm.
-   Nothing stops working: no workflow reads them since item 42.
-2. **Switch on a second login factor** in the Coolify panel, the Keycloak admin console, and
-   Langfuse if you use it. The "Administrative consoles" section of `docs/install/network.md`
-   says where each setting is.
-
-Tell me when either is done and I close this item.
-
-## 52. Two workflow files carry your server's address, and one repository variable removes them
+## 52. Two workflow files carry your server's address, and one repository variable removes them - DONE
 
 **What you do, and it is one value in a settings page.**
 
@@ -144,7 +148,9 @@ built now, with a check that fails if a client value ever reaches it.
 
 **Your answer, 2026-09-16:** go with the recommendation. The step above is yours, because my GitHub access can read this repository but cannot change its settings. Tell me when the variable exists and I remove the address from both workflow files.
 
-# Answered
+**Done 2026-09-16.** You made the `BRAIN_URL` repository variable, and both workflows now read it
+alone. `anchor.yml` takes no anchor when it is unset, and `deploy.yml` fails rather than passing
+quietly. The audit's list of files carrying a client value is empty, and it stays a guard.
 
 ## 64. The record matcher needs three more permissive licences allowed before its image can be built - DONE: 0BSD, Zlib and CC0-1.0 are allowed
 

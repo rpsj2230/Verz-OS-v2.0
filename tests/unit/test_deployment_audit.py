@@ -19,6 +19,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from brain.deployment.audit import (
     HISTORY_PATHS,
@@ -45,13 +46,16 @@ REPO = Path(__file__).resolve().parents[2]
 #: to open it. All eight were cleaned on 2026-09-09 and both areas are now inside
 #: `brain.ops.independence`, which is a hard gate, so they cannot come back quietly.
 #:
-#: What is left is the two workflows. They are this repository's own release pipeline rather
-#: than the product, which is an argument for a different fix and not for no fix, and neither
-#: is gated by anything today.
-CARRYING_A_CLIENT_VALUE: tuple[str, ...] = (
-    ".github/workflows/anchor.yml",
-    ".github/workflows/deploy.yml",
-)
+#: The last two were the workflows, cleaned on 2026-09-16 once the owner created the
+#: `BRAIN_URL` repository variable (docs/needs-rupash.md item 52). `anchor.yml` read the
+#: address as a fallback beside the variable and `deploy.yml` carried it outright; both now
+#: read the variable alone, and an empty one takes no anchor and fails the deploy check
+#: rather than passing quietly.
+#:
+#: **Empty is the answer, and it is the one worth defending.** A tuple that is allowed to
+#: grow again is how a client value returns quietly, so a new entry here is a commit to
+#: refuse rather than a list to update.
+CARRYING_A_CLIENT_VALUE: tuple[str, ...] = ()
 
 
 def a_repository(root: Path, files: dict[str, str]) -> Path:
@@ -98,15 +102,47 @@ def test_the_workflows_are_what_is_left_carrying_this_deployments_own_server() -
     scripts repeating the host as a shell default, and the runbooks naming it in prose. Those
     eight are fixed and both areas are inside `brain.ops.independence` now, which is a gate.
 
-    The two that remain are workflows, and they are pinned rather than waved through: a file
-    joining this list is a client value that has just been committed somewhere nothing gates.
+    The last two were the workflows, and they are clean since the owner made the `BRAIN_URL`
+    repository variable. The expected set is now empty, so this test has turned from a record
+    of what is left into a guard: any file that starts carrying a client value fails it, and
+    that is a client value committed somewhere nothing else gates.
 
-    This test is expected to fail as each file is cleaned, and that failure is the
-    notification. Delete it and the audit M42.4.1 asks for has nothing to report against."""
+    Delete this and the audit M42.4.1 asks for has nothing to report against."""
     found = files_with_client_values(REPO)
 
     assert found == CARRYING_A_CLIENT_VALUE, "the set of files carrying a client value moved"
     assert all(":" in one for one in configuration_gaps(REPO)), "a finding with no location"
+
+
+def test_both_workflows_take_the_address_from_the_repository_variable_and_nowhere_else() -> None:
+    """The audit only refuses an address it recognises as a client's, and a reserved one such as
+    `https://brain.example.com` passes every pattern it has. So a fallback written back into
+    either workflow, by a person or by a merge, would be invisible to the scan and the value
+    would be a client's again the moment somebody substituted a real host.
+
+    This holds the shape instead: each workflow reads its address from the `BRAIN_URL`
+    repository variable, written exactly, with nothing beside it. Delete this and
+    `BRAIN_URL: ${{ vars.BRAIN_URL || 'https://brain.example.com' }}` is a one-line change that
+    the audit reports as clean, which is how the address got into these files the first time."""
+    expected = "${{ vars.BRAIN_URL }}"
+    anchor = yaml.safe_load((REPO / ".github/workflows/anchor.yml").read_text(encoding="utf-8"))
+    deploy = yaml.safe_load((REPO / ".github/workflows/deploy.yml").read_text(encoding="utf-8"))
+
+    read = [
+        step["env"]["BRAIN_URL"]
+        for job in anchor["jobs"].values()
+        for step in job["steps"]
+        if "BRAIN_URL" in (step.get("env") or {})
+    ]
+    waited = [
+        step["env"]["SITE"]
+        for job in deploy["jobs"].values()
+        for step in job["steps"]
+        if "SITE" in (step.get("env") or {})
+    ]
+
+    assert read == [expected], read
+    assert waited == [expected], waited
 
 
 def test_a_configuration_area_with_nothing_in_it_is_reported_as_clean() -> None:

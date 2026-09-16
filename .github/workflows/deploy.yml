@@ -184,8 +184,15 @@ jobs:
         # that trains people to ignore the tab.
         env:
           SHA: ${{ needs.build.outputs.sha }}
-          SITE: https://brain.194.233.66.89.sslip.io
+          SITE: ${{ vars.BRAIN_URL }}
         run: |
+          # The address is the repository variable, never a line in this file. Empty is
+          # a failure rather than a skip: this step is the one check that the commit
+          # just built is the commit answering, and a silent skip would read as a pass.
+          if [ -z "${SITE:-}" ]; then
+            echo "set the BRAIN_URL repository variable to the address this install answers on" >&2
+            exit 1
+          fi
           # Eight minutes: the server checks for a new image every two, and a deploy that
           # recreates the app and waits for health takes about two more. Four would be
           # enough on a good day, which is the wrong thing to size a timeout against.
