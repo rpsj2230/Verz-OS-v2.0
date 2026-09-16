@@ -124,6 +124,15 @@ def test_a_job_whose_class_derives_another_queue_than_its_registration_is_refuse
         run(lambda: enqueue_job(an_app(), misrouted))
 
 
+def _released(names: frozenset[str]) -> Any:
+    """Stands in for `brain.ops.retention_store.released_controls`, which reads a table."""
+
+    async def released(_session: Any, *, now: datetime) -> frozenset[str]:
+        return names
+
+    return released
+
+
 def test_whether_a_queued_control_may_act_is_decided_when_it_runs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -140,6 +149,7 @@ def test_whether_a_queued_control_may_act_is_decided_when_it_runs(
         return ControlTick(name, Ticked.REFUSED if kwargs["report_only"] else Ticked.RAN)
 
     monkeypatch.setattr(worker, "start_owed", fake)
+    monkeypatch.setattr(worker, "released_controls", _released(frozenset()))
     run(lambda: run_control_job("retention_sweep", database_url=DIRECT))
     run(lambda: run_control_job("knowledge_reverification", database_url=DIRECT))
 
@@ -149,6 +159,27 @@ def test_whether_a_queued_control_may_act_is_decided_when_it_runs(
     }
     assert started["retention_sweep"] is True
     assert started["knowledge_reverification"] is False
+
+
+def test_a_queued_run_of_a_released_sweep_acts_as_a_scheduled_one_would(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive sibling. With the sweep released, a run somebody queued by hand is started
+    to act, because the release is read on the queue's path as the tick reads it.
+
+    Delete this and the queue's path could ignore the release, so a sweep an administrator
+    released would act on the schedule and report when run by hand, or the other way round."""
+    started: dict[str, bool] = {}
+
+    async def fake(_sessions: Any, name: str, **kwargs: Any) -> ControlTick:
+        started[name] = kwargs["report_only"]
+        return ControlTick(name, Ticked.RAN)
+
+    monkeypatch.setattr(worker, "start_owed", fake)
+    monkeypatch.setattr(worker, "released_controls", _released(frozenset({"retention_sweep"})))
+    run(lambda: run_control_job("retention_sweep", database_url=DIRECT))
+
+    assert started == {"retention_sweep": False}
 
 
 def test_a_queued_control_whose_runner_raised_fails_its_job(
@@ -163,6 +194,7 @@ def test_a_queued_control_whose_runner_raised_fails_its_job(
         return ControlTick(name, Ticked.FAILED, "RuntimeError: broke")
 
     monkeypatch.setattr(worker, "start_owed", failed)
+    monkeypatch.setattr(worker, "released_controls", _released(frozenset()))
 
     with pytest.raises(ControlRunError, match="broke"):
         run(lambda: run_control_job("knowledge_reverification", database_url=DIRECT))
@@ -179,7 +211,7 @@ def test_a_control_enqueued_on_the_queue_is_fetched_run_and_recorded_by_a_worker
     Delete this and every other test of the queue could pass with no job ever having been
     enqueued, fetched or run, which is the state the queue was in until this task existed."""
     from tests.fixtures.knowledge_items import a_person, a_reader, knowledge_items, nags, put
-    from tests.fixtures.scratch_postgres import sql
+    from tests.fixtures.scratch_postgres import RETENTION_TABLES, add_modelled, sql
 
     lapsed = datetime.now(tz=UTC) - timedelta(days=1)
     item = KnowledgeItem(
@@ -191,6 +223,8 @@ def test_a_control_enqueued_on_the_queue_is_fetched_run_and_recorded_by_a_worker
     ).verified(by="u_verifier", at=lapsed - timedelta(days=365), review_by=lapsed)
 
     with knowledge_items("brain_ctask_queue") as url:
+        # The queue's path reads the sweep's release since 0049, which this chain stops short of.
+        add_modelled(url, RETENTION_TABLES)
         a_person(url, "u_owner")
         a_reader(url, "u_owner", "web")
         put(url, item)

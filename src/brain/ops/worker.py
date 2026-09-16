@@ -205,6 +205,7 @@ from brain.ops.queue import (
     tasks_of_ours,
     worker_shards,
 )
+from brain.ops.retention_store import released_controls
 from brain.ops.schedule import report_only_now
 from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
@@ -1129,8 +1130,10 @@ async def tick_controls(
 
     The decision is `brain.ops.schedule_runner.due_now` over the two clocks
     `brain.ops.schedule_store.clocks` reads, and every interval in it is the registry's: this
-    function holds no cadence of its own. Nothing is released, so a destructive control runs in
-    report-only mode, which is `brain.ops.schedule.DESTRUCTIVE`'s rule.
+    function holds no cadence of its own. A destructive control runs in report-only mode until a
+    person has released it, which is `brain.ops.schedule.DESTRUCTIVE`'s rule, and the release is
+    read here from `brain.ops.retention_store.released_controls` at the tick's own instant, so a
+    release withdrawn a second before the tick is a report rather than a deletion.
 
     Each control gets its own transaction, because the lock lives exactly as long as one: the
     lock is tried, the start is written, the run happens in a thread, the finish is written,
@@ -1146,8 +1149,11 @@ async def tick_controls(
     """
     async with sessions() as session:
         attempts, successes = await clocks(session)
+        released = await released_controls(session, now=now)
     found: list[ControlTick] = []
-    for owed in due_now(now=now, last_attempt=attempts, last_success=successes):
+    for owed in due_now(
+        now=now, last_attempt=attempts, last_success=successes, released=sorted(released)
+    ):
         if runner_for(owed.name).run is None:
             found.append(ControlTick(owed.name, Ticked.NOTHING_TO_RUN))
             continue
@@ -1247,11 +1253,17 @@ async def run_control_job(
     control_job(name)
     engine = make_app_engine(database_url)
     try:
+        sessions = make_session_factory(engine)
+        now = clock()
+        # The release is read here as the tick reads it, so a run somebody queued by hand is
+        # released exactly when a scheduled one would be, and reports when it would report.
+        async with sessions() as session:
+            released = await released_controls(session, now=now)
         ticked = await start_owed(
-            make_session_factory(engine),
+            sessions,
             name,
-            report_only=name in report_only_now(),
-            now=clock(),
+            report_only=name in report_only_now(sorted(released)),
+            now=now,
             database_url=database_url,
             clock=clock,
         )

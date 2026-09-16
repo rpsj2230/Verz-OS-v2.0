@@ -64,13 +64,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from brain.channels.adapter import ChannelAdapter
+from brain.channels.adapter import ChannelAdapter, send_operation
 from brain.channels.cards import render_body
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import EntitlementSet
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
 from brain.ops.feedback import REFERENCE_MAX_LENGTH, FeedbackError, Flag, FlagReason, flag_answer
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why a correction is a reason and a reference, and a longer line is not one.
@@ -127,16 +129,29 @@ def correction_line(trace_ref: str) -> str:
 
 
 def send_with_correction(
-    adapter: ChannelAdapter, payload: ChannelPayload, *, to: str, trace_ref: str
-) -> None:
-    """Send an answer with the correction line under it, through any adapter at all.
+    adapter: ChannelAdapter,
+    payload: ChannelPayload,
+    *,
+    to: str,
+    trace_ref: str,
+    ledger: OperationLedger,
+    intent: Intent,
+) -> Issued:
+    """Send an answer with the correction line under it, through any adapter at all, once.
 
     The body is the payload's own rendering with the line appended, so the label
     `brain.channels.cards.render_body` puts first is still first, and the adapter's own
-    `assert_label_survives` check is what confirms it.
+    `assert_label_survives` check is what confirms it. The send goes through
+    `brain.ops.idempotency.issue_once`; see `brain.channels.adapter.send_operation`.
     """
     body = f"{render_body(payload)}\n\n{correction_line(trace_ref)}"
-    adapter.send(payload, to=to, body=body)
+
+    def send(_: Operation) -> CallOutcome:
+        adapter.send(payload, to=to, body=body)
+        return CallOutcome.OK
+
+    channel = adapter.capabilities().channel
+    return issue_once(ledger, send_operation(intent, channel=channel, to=to), send)
 
 
 @dataclass(frozen=True)
@@ -217,6 +232,18 @@ def file_correction(
         return None
 
 
-def acknowledge(adapter: ChannelAdapter, *, to: str) -> None:
-    """Tell the sender their correction arrived. No parameter says what became of it."""
-    adapter.send(ChannelPayload(), to=to, body=CORRECTION_ACKNOWLEDGEMENT)
+def acknowledge(
+    adapter: ChannelAdapter, *, to: str, ledger: OperationLedger, intent: Intent
+) -> Issued:
+    """Tell the sender their correction arrived, once. No parameter says what became of it.
+
+    The intent is the correction event's, so a correction delivered twice by its channel is
+    acknowledged once.
+    """
+
+    def send(_: Operation) -> CallOutcome:
+        adapter.send(ChannelPayload(), to=to, body=CORRECTION_ACKNOWLEDGEMENT)
+        return CallOutcome.OK
+
+    channel = adapter.capabilities().channel
+    return issue_once(ledger, send_operation(intent, channel=channel, to=to), send)

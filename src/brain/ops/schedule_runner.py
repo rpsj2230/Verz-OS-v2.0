@@ -118,14 +118,13 @@ A_RUNNER_IS_STARTED_BY_A_CALL_THE_REGISTRY_CAN_READ: Final = (
     "arms to the runners that can run, so the table and the dispatch cannot disagree."
 )
 
-#: Why the retention runner passes no legal holds.
-NOTHING_RECORDS_A_LEGAL_HOLD_YET: Final = (
-    "brain.ops.retention_store refuses a store whose rows a hold might cover and cannot match, "
-    "and brain.audit.ledger.LegalHold is the shape of a hold. Nothing in this repository writes "
-    "or reads one from storage, so the scheduled sweep is handed none. That is safe only "
-    "because the sweep is also in report-only mode until the installation releases it, and "
-    "the two have to be revisited together: a release before holds are recorded would delete "
-    "rows under a hold nobody could see."
+#: Why the retention runner is handed no legal holds and reads them itself.
+THE_SWEEP_READS_ITS_OWN_HOLDS: Final = (
+    "Holds live in obs.legal_hold and the release in ops.retention_release, both since 0049. "
+    "brain.ops.retention_store.run_retention_sweep reads the holds inside the transaction that "
+    "removes rows, so a hold committed before the run began is honoured by it, and a runner "
+    "handing holds in would read them in a different transaction from the removal and open a "
+    "window in which a hold placed between the two reads was a hold the sweep never saw."
 )
 
 #: Why the refresh does nothing in report-only mode.
@@ -206,7 +205,7 @@ class Runner:
 def retention_sweep(now: datetime, report_only: bool, database_url: str) -> str:
     """The retention sweep over PostgreSQL, for the stores it can count, as report lines.
 
-    Holds none. See `NOTHING_RECORDS_A_LEGAL_HOLD_YET`. `prepare_threshold=None` for the reason
+    Passes no holds. See `THE_SWEEP_READS_ITS_OWN_HOLDS`. `prepare_threshold=None` for the reason
     `brain.session.make_app_engine` gives: the URL is the application's, behind a transaction
     pooler, and a statement prepared on one server connection is executed on another.
     """
@@ -326,10 +325,11 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(
         name="side_effect_resume",
         needs=(
-            "the idempotency records `resume` reads. The queue half of this sentence was "
-            "answered by M32.4.1.1, and it mattered because a side effect cannot be resumed "
-            "before there is a queue that could have interrupted one. The records are what is "
-            "left, and nothing writes them"
+            "a tick that reads the records `resume` decides over, and a read-back to settle them. "
+            "The queue half of this sentence was answered by M32.4.1.1, and the records by "
+            "M17.3.1: `brain.ops.idempotency.issue_once` writes every side effect into "
+            "`ops.operation` since 0051. Nothing yet lists the records left sent, unknown or "
+            "verifying, and no connector's read-back is called by anything"
         ),
     ),
     Runner(

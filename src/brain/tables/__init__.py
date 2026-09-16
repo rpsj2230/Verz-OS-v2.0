@@ -76,6 +76,7 @@ from brain.tables.identity import (
 )
 from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
+from brain.tables.operation import OperationRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow
@@ -85,6 +86,7 @@ from brain.tables.resolution import (
     EntityIdentifierRow,
     EntityLinkRow,
 )
+from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionReportRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
@@ -204,6 +206,15 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0044_automation_owner. Points at nothing: the owner is a value, so what an automation
     # ran as outlives the person, and an automation whose owner has gone stays to be adopted.
     "gate.automation_owner",
+    # 0049_retention_enforcement. The release last, because it names the report a person read
+    # before releasing the sweep. A hold points at nothing: its subjects are values, so a hold
+    # outlives the people it holds data about.
+    "obs.legal_hold",
+    "ops.retention_report",
+    "ops.retention_release",
+    # 0051_operation_ledger. Points at nothing: the principal is a value and the key is a digest
+    # of the intent, so a record of an effect outlives everything it was about.
+    "ops.operation",
 )
 
 __all__ = [
@@ -230,9 +241,11 @@ __all__ = [
     "FieldPolicyRow",
     "GrantsVersionRow",
     "KnowledgeItemRow",
+    "LegalHoldRow",
     "MessageRole",
     "MessageRow",
     "ModelAttemptRow",
+    "OperationRow",
     "OutboxDeliveryRow",
     "OutboxEventRow",
     "PersistentMemoryRow",
@@ -245,6 +258,8 @@ __all__ = [
     "QuestionAskedRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
+    "RetentionReleaseRow",
+    "RetentionReportRow",
     "RoutingRungRow",
     "RoutingTierRow",
     "ScopeRow",

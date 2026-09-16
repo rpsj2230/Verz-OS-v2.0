@@ -83,17 +83,30 @@ binding that names nobody is refused by the database; a retirement that names no
 recorded as unattributed and never refused. See `A_WAY_IN_NAMES_WHO_MADE_IT` and
 `A_WAY_OUT_IS_NEVER_REFUSED_FOR_WANT_OF_A_NAME`.
 
-The two callers are `brain.sign_in_routes`: an administrator's route, and the setup wizard's
-finishing screen, which binds the first administrator's sign-in once and is the answer to how
-anybody signs in to bind anybody at all.
+**Unlinking the last administrator who can sign in is refused, and the count is taken under a
+lock.** M27.7.11 puts an unlink control on the Sign-in links screen. A binding is the only way
+into a principal, and binding one needs an administrator signed in, so retiring the last binding
+held by anybody who holds `SIGN_IN_AUTHORITY` over everything leaves an install nobody can sign
+in to in order to link anybody, the person who pressed it included, with the setup wizard's
+finishing screen long closed. `decide_unlink` is that rule and `SignInBindings.unlink` takes a
+transaction-scoped advisory lock before it counts, so two administrators unlinking each other at
+once are one unlink and one refusal rather than two unlinks and nobody. The count is
+`first_administrator.holds_everywhere` over the one resolver's answer for every principal with a
+live binding, which is `FirstAdministrators`' own argument for resolving rather than reading the
+grant table. See `THE_LAST_WAY_IN_FOR_AN_ADMINISTRATOR_IS_NOT_TAKEN_AWAY`.
 
-Task ids: M1.2.2
+The callers are `brain.sign_in_routes`: an administrator's route, and the setup wizard's
+finishing screen, which binds the first administrator's sign-in once and is the answer to how
+anybody signs in to bind anybody at all; and `brain.session_routes`, which lists the bindings on
+the Sign-in links screen and unlinks one.
+
+Task ids: M1.2.2, M27.7.11
 """
 
 from __future__ import annotations
 
 import enum
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
@@ -104,6 +117,8 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.principal import Principal
+from brain.gate.entitlement_store import entitlements_from
+from brain.identity.first_administrator import holds_everywhere
 from brain.identity.keycloak_tokens import jwks_url_for
 from brain.identity.principal_directory import SIGN_IN_CHANNEL, subject_digest
 from brain.identity.principal_store import COLUMNS, PRINCIPAL_SETTING, readable
@@ -186,6 +201,27 @@ A_WAY_OUT_IS_NEVER_REFUSED_FOR_WANT_OF_A_NAME: Final = (
 )
 
 
+#: Why an administrator's last way in is kept.
+THE_LAST_WAY_IN_FOR_AN_ADMINISTRATOR_IS_NOT_TAKEN_AWAY: Final = (
+    "A sign-in link is the only way into a principal, and making one needs an administrator "
+    "signed in. Unlinking the last administrator who can sign in leaves nobody able to sign in to "
+    "link anybody, including that administrator, and the setup wizard's finishing screen that "
+    "made the first link closed the moment it did. So it is refused, the refusal says so, and "
+    "the way round it is to link a second administrator first."
+)
+
+#: The advisory lock every unlink takes before it counts. Its own number, not the ledger's or
+#: first run's.
+UNLINK_LOCK: Final = 8274419102
+
+#: Every principal with a live sign-in link, and the one resolver's answer for each.
+_LINKED_REACHES: Final = text(
+    "SELECT pi.principal_id, gate.resolve_entitlements(pi.principal_id, :at) "
+    "FROM auth.principal_identity AS pi "
+    "WHERE pi.channel = :channel AND pi.deleted_at IS NULL"
+)
+
+
 class BindingRefusal(enum.StrEnum):
     """Why a binding was not written. For the administrator and the log, never for a token."""
 
@@ -247,6 +283,50 @@ def decide(
     if principal_signs_in:
         raise SignInBindingRefusedError(BindingRefusal.PRINCIPAL_ALREADY_SIGNS_IN, principal_id)
     return Binding.BOUND
+
+
+class Unlinked(enum.StrEnum):
+    """What asking to unlink a principal's sign-in came to."""
+
+    UNLINKED = "unlinked"
+    #: The principal holds no live sign-in link. Nothing written.
+    NOT_LINKED = "not_linked"
+    #: See `THE_LAST_WAY_IN_FOR_AN_ADMINISTRATOR_IS_NOT_TAKEN_AWAY`. Nothing written.
+    LAST_ADMINISTRATOR = "last_administrator"
+
+
+@dataclass(frozen=True)
+class SignInLink:
+    """One live sign-in link, as the Sign-in links screen lists it.
+
+    No subject and no digest. The subject is not stored, which is this module's first rule, and
+    the digest identifies nothing a person can check: it is a hash over the issuer and an
+    account id, so showing it would be a column of noise that reads as though it were the
+    account.
+    """
+
+    principal_id: str
+    display_name: str
+    department: str | None
+    bound_at: datetime
+
+
+def decide_unlink(
+    principal_id: str, *, linked: Iterable[str], administrators: Iterable[str]
+) -> Unlinked:
+    """Whether this principal's link may be retired, given who is linked and who administers.
+
+    `linked` is every principal with a live link and `administrators` those of them who hold
+    `SIGN_IN_AUTHORITY` over everything. Pure, and taken under `UNLINK_LOCK` by the caller.
+    A principal who is not linked is `NOT_LINKED` before anything else, so a stale press on a row
+    already unlinked is told nothing was there rather than told it is the last administrator.
+    """
+    if principal_id not in set(linked):
+        return Unlinked.NOT_LINKED
+    held = set(administrators)
+    if principal_id in held and not held - {principal_id}:
+        return Unlinked.LAST_ADMINISTRATOR
+    return Unlinked.UNLINKED
 
 
 def _set_config(name: str, value: str) -> Any:
@@ -352,6 +432,105 @@ class SignInBindings:
                     )
         log.info("sign_in.bound", principal=principal_id, bound_by=bound_by, outcome=outcome.value)
         return outcome
+
+    async def links(self, *, limit: int) -> tuple[tuple[SignInLink, ...], bool]:
+        """Every live sign-in link, by name, bounded, and whether the load came back full."""
+        query = (
+            select(
+                PrincipalIdentityRow.principal_id,
+                PrincipalRow.display_name,
+                PrincipalRow.primary_department,
+                PrincipalIdentityRow.bound_at,
+            )
+            .join(PrincipalRow, PrincipalRow.id == PrincipalIdentityRow.principal_id)
+            .where(
+                PrincipalIdentityRow.channel == SIGN_IN_CHANNEL.value,
+                PrincipalIdentityRow.deleted_at.is_(None),
+            )
+            .order_by(PrincipalRow.display_name, PrincipalIdentityRow.principal_id)
+            .limit(limit)
+        )
+        async with self.sessions() as session, session.begin():
+            rows = (await session.execute(query)).all()
+        return (
+            tuple(
+                SignInLink(
+                    principal_id=principal_id,
+                    display_name=display_name,
+                    department=department,
+                    bound_at=bound_at,
+                )
+                for principal_id, display_name, department, bound_at in rows
+            ),
+            len(rows) >= limit,
+        )
+
+    async def _linked_administrators(
+        self, session: AsyncSession, now: datetime
+    ) -> tuple[frozenset[str], frozenset[str]]:
+        """Every linked principal, and those of them who administer, from the one resolver."""
+        rows = (
+            await session.execute(_LINKED_REACHES, {"at": now, "channel": SIGN_IN_CHANNEL.value})
+        ).all()
+        linked = frozenset(principal_id for principal_id, _ in rows)
+        administrators = frozenset(
+            principal_id
+            for principal_id, payload in rows
+            if holds_everywhere(entitlements_from(payload), now)
+        )
+        return linked, administrators
+
+    async def administrators_linked(self, now: datetime) -> frozenset[str]:
+        """Who among the linked principals holds `SIGN_IN_AUTHORITY` over everything, now."""
+        async with self.sessions() as session, session.begin():
+            _, administrators = await self._linked_administrators(session, now)
+        return administrators
+
+    async def unlink(
+        self,
+        principal_id: str,
+        *,
+        unlinked_by: str,
+        now: datetime,
+        ent_hash: str = "",
+        trace_id: str = "",
+    ) -> Unlinked:
+        """Retire this principal's sign-in link, unless it is the last administrator's.
+
+        Counted and written in one transaction under `UNLINK_LOCK`; see
+        `THE_LAST_WAY_IN_FOR_AN_ADMINISTRATOR_IS_NOT_TAKEN_AWAY`. The actor, the reach's digest
+        and the trace id are set for `0047`'s trigger, which writes the `sign_in` entry with the
+        change `retired`. Stamped by the statement, for
+        `A_RETIREMENT_IS_STAMPED_BY_ITS_OWN_STATEMENT`.
+        """
+        async with self.sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, principal_id))
+            await session.execute(_set_config(ACTOR_SETTING, unlinked_by))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": UNLINK_LOCK})
+            linked, administrators = await self._linked_administrators(session, now)
+            outcome = decide_unlink(principal_id, linked=linked, administrators=administrators)
+            if outcome is not Unlinked.UNLINKED:
+                log.info("sign_in.unlink_refused", principal=principal_id, outcome=outcome.value)
+                return outcome
+            written = await session.execute(
+                update(PrincipalIdentityRow)
+                .where(
+                    PrincipalIdentityRow.channel == SIGN_IN_CHANNEL.value,
+                    PrincipalIdentityRow.principal_id == principal_id,
+                    PrincipalIdentityRow.deleted_at.is_(None),
+                )
+                .values(deleted_at=func.statement_timestamp())
+                .returning(PrincipalIdentityRow.id)
+            )
+            if written.first() is None:
+                # Unreachable while the count above ran under the lock in this transaction: a
+                # link it saw cannot have been retired by an unlink in between. A refusal rather
+                # than an assertion, so a change to the lock fails as nothing written.
+                return Unlinked.NOT_LINKED
+        log.info("sign_in.unlinked", principal=principal_id, unlinked_by=unlinked_by)
+        return Unlinked.UNLINKED
 
     async def retire(self, principal_id: str, *, retired_by: str) -> bool:
         """Retire this principal's sign-in binding, or return False when it has none.

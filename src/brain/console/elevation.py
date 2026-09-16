@@ -34,9 +34,10 @@ pointed at somebody with no reach to relabel. `ElevationLanding` carries three f
 **The authority to elevate somebody is the authority to grant.** A break-glass session is a
 grant with a clock on it, so inventing a capability for it would put a grant into the system
 from the console layer, where the administrator who reviews grants would never meet it. That
-is `brain.console.govern.SESSION_CONTROL`'s argument about ending a session, reached
-independently and answered the same way: `ELEVATION_CONTROL` is `approve:grant`, written out
-and pinned against the Access review screen by a test rather than derived from it, so
+was `brain.console.govern.SESSION_CONTROL`'s argument about ending a session until 2026-09-16,
+when that control became `admin:session` because nobody on a fresh install holds
+`approve:grant`; it is still the answer here: `ELEVATION_CONTROL` is `approve:grant`, written
+out and pinned against the Access review screen by a test rather than derived from it, so
 repointing either one fails.
 
 **A notice to the subject or to the authoriser tells nobody anything.**

@@ -97,6 +97,8 @@ MIGRATION_KNOWLEDGE_ITEM = VERSIONS / "0040_knowledge_item.py"
 MIGRATION_BROWSER_ENVELOPE = VERSIONS / "0041_browser_envelope.py"
 MIGRATION_SUSPENSION = VERSIONS / "0042_suspension.py"
 MIGRATION_AUTOMATION_OWNER = VERSIONS / "0044_automation_owner.py"
+MIGRATION_RETENTION = VERSIONS / "0049_retention_enforcement.py"
+MIGRATION_OPERATION = VERSIONS / "0051_operation_ledger.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -236,6 +238,16 @@ SUSPENSION_TABLES: tuple[str, ...] = ("gate.suspension",)
 #: And the one 0044 adds: who an automation runs as, its credential digest and its ceiling.
 AUTOMATION_OWNER_TABLES: tuple[str, ...] = ("gate.automation_owner",)
 
+#: And the three 0049 adds: legal holds, retention reports and the release of the sweep.
+RETENTION_TABLES: tuple[str, ...] = (
+    "obs.legal_hold",
+    "ops.retention_report",
+    "ops.retention_release",
+)
+
+#: And the one 0051 adds: every side-effecting operation, unique on its idempotency key.
+OPERATION_TABLES: tuple[str, ...] = ("ops.operation",)
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -262,6 +274,8 @@ ALL_TABLES = (
     + BROWSER_ENVELOPE_TABLES
     + SUSPENSION_TABLES
     + AUTOMATION_OWNER_TABLES
+    + RETENTION_TABLES
+    + OPERATION_TABLES
 )
 
 
@@ -969,6 +983,10 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert suspension.TABLES == SUSPENSION_TABLES
     automation_owner = migration_module(MIGRATION_AUTOMATION_OWNER)
     assert automation_owner.TABLES == AUTOMATION_OWNER_TABLES
+    retention = migration_module(MIGRATION_RETENTION)
+    assert retention.TABLES == RETENTION_TABLES
+    operation = migration_module(MIGRATION_OPERATION)
+    assert operation.TABLES == OPERATION_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1018,6 +1036,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(browser_envelope.TABLES)
         + tuple(suspension.TABLES)
         + tuple(automation_owner.TABLES)
+        + tuple(retention.TABLES)
+        + tuple(operation.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1048,6 +1068,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(browser_envelope.TABLES),
         set(suspension.TABLES),
         set(automation_owner.TABLES),
+        set(retention.TABLES),
+        set(operation.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

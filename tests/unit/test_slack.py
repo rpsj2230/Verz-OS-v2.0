@@ -60,6 +60,8 @@ from brain.core.scope import Scope
 from brain.gate.admission import CHANNEL_VERBS
 from brain.gate.context import Channel
 from brain.gate.ingress import Unrecognised, identity_hash
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
 STAMP = str(int(NOW.timestamp()))
@@ -74,6 +76,9 @@ DM = "D0PRIVATE"
 
 READ_NAME = "read:client.name"
 READ_MARGIN = "read:client.margin"
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 def _ents(*capabilities: str, principal_id: str = "u_asker") -> EntitlementSet:
@@ -818,7 +823,7 @@ def test_a_posting_cannot_be_delivered_to_a_reader_it_was_not_planned_for() -> N
     )
 
     with pytest.raises(SlackRefusedError, match="planned for somebody else"):
-        deliver(adapter, posting, to_user=OTHER_USER)
+        deliver(adapter, posting, to_user=OTHER_USER, ledger=MemoryLedger(), intent=INTENT)
 
     assert adapter.sent == [], "nothing reaches the wire when the reader disagrees"
 
@@ -837,7 +842,7 @@ def test_the_refusal_names_neither_the_user_id_nor_the_digest_it_expected() -> N
     )
 
     with pytest.raises(SlackRefusedError) as caught:
-        deliver(SlackAdapter(), posting, to_user=OTHER_USER)
+        deliver(SlackAdapter(), posting, to_user=OTHER_USER, ledger=MemoryLedger(), intent=INTENT)
 
     assert OTHER_USER not in str(caught.value)
     assert DIGEST not in str(caught.value)
@@ -858,8 +863,12 @@ def test_a_delivered_per_viewer_message_records_the_digest_and_never_the_user_id
         to_identity=DIGEST,
     )
 
-    deliver(adapter, posting, to_user=USER)
+    ledger = MemoryLedger()
+    first = deliver(adapter, posting, to_user=USER, ledger=ledger, intent=INTENT)
+    again = deliver(adapter, posting, to_user=USER, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
+    assert (first.issued, again.issued) == (True, False)
     assert len(adapter.sent) == 1
     assert adapter.sent[0].viewer == DIGEST
     assert adapter.sent[0].conversation == ROOM
@@ -881,7 +890,7 @@ def test_a_posting_the_conversation_reads_is_refused_a_user_id() -> None:
     )
 
     with pytest.raises(SlackRefusedError, match="confused"):
-        deliver(adapter, posting, to_user=USER)
+        deliver(adapter, posting, to_user=USER, ledger=MemoryLedger(), intent=INTENT)
 
     assert adapter.sent == []
 

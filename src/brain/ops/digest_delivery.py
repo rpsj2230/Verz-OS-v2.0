@@ -17,11 +17,19 @@ posted to whoever happened to ask for one would be a per-person message that say
 thing to everybody, which is a broadcast with extra steps and a per-viewer render nobody
 needs. `DigestChannel` names the chat once.
 
-**It is sent once per day and the day is the key.** A scheduler that fires twice, or is
-restarted, or has its timer edited, posts the digest again, and a channel with two identical
-digests in it is one people stop reading. `already_sent_today` is asked before the render
-rather than after, because rendering is where the work is and a second render is a second
-chance for the two to differ.
+**It is sent once per day and the day is the key, in the ledger every side effect uses.** A
+scheduler that fires twice, or is restarted, or has its timer edited, posts the digest again, and
+a channel with two identical digests in it is one people stop reading. The send goes through
+`brain.ops.idempotency.issue_once` under a key derived from the day and the room, so a second
+attempt finds the first's record and posts nothing. The render happens inside the effect, so a
+day already sent is not rendered again: rendering is where the work is and a second render is a
+second chance for the two to differ.
+
+**Until 2026-09-16 this asked a register before sending and the caller recorded after**, which
+was a key of its own with the crash window the idempotency module exists to close: a process
+dying between the send and the record posted the digest twice the next time. The register is
+gone rather than kept beside the ledger, because two mechanisms answering "was it sent" are two
+answers, and the wrong one is the one somebody reads.
 
 **A quiet day is still sent.** `digest.A_QUIET_DAY_IS_A_RESULT_AND_NOT_AN_ABSENT_MESSAGE`
 already argues this and it is worth restating at the boundary, because "nothing happened, do
@@ -37,7 +45,7 @@ against.
 Rejected: rendering here. `digest.render` already owns the wording, and a second renderer for
 "the Lark version" is how the message people read stops matching the one the tests check.
 
-Task ids: M38.3.3.1, M38.3.3.4
+Task ids: M38.3.3.1, M38.3.3.4, M17.3.1
 """
 
 from __future__ import annotations
@@ -47,9 +55,18 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Final, Protocol
 
+from brain.connectors.throttle import CallOutcome
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.ops.digest import DIGEST_CLASSIFICATION, DailyDigest, render
+from brain.ops.idempotency import (
+    Disposition,
+    Intent,
+    Operation,
+    OperationLedger,
+    issue_once,
+    operation_for,
+)
 
 #: Why the digest goes to a room rather than to people.
 A_DIGEST_IS_A_BROADCAST_AND_NOT_AN_ANSWER: Final = (
@@ -76,10 +93,11 @@ A_DIGEST_THAT_ONLY_ARRIVES_ON_BUSY_DAYS_CANNOT_REPORT_A_STALL: Final = (
 class DeliveryOutcome(enum.StrEnum):
     """What happened to one evening's digest. Closed, because each is acted on differently.
 
-    Three rather than two. "The channel refused it" and "it was already sent" are both
-    not-sent and they are not the same fact: one is an incident and the other is the
-    duplicate guard working, and a scheduler that treated them alike would either alert on
-    every restart or stay silent through a real outage.
+    Four rather than two. "The channel refused it", "it was already sent" and "an earlier
+    attempt may have sent it" are all not-sent and they are not the same fact: the first is an
+    incident, the second is the duplicate guard working, and the third is a question only the
+    room can answer. A scheduler that treated them alike would alert on every restart, stay
+    silent through a real outage, or post again over an attempt nobody knows the end of.
     """
 
     SENT = "sent"
@@ -87,6 +105,8 @@ class DeliveryOutcome(enum.StrEnum):
     ALREADY_SENT = "already_sent"
     #: The channel would not take it. The digest still exists; only the send failed.
     UNDELIVERED = "undelivered"
+    #: An earlier attempt was issued and nobody knows how it ended, so nothing is posted again.
+    UNSETTLED = "unsettled"
 
 
 @dataclass(frozen=True)
@@ -119,17 +139,6 @@ class DigestSender(Protocol):
     def send(self, payload: ChannelPayload, *, to: str) -> None: ...
 
 
-class SentRegister(Protocol):
-    """Whether a digest for this day already reached this chat.
-
-    Read-only here, and recorded by the caller after a successful send. A register this
-    module wrote to would make the send and the record one operation that can half-happen,
-    and the half that goes missing is the record, so the next run sends again.
-    """
-
-    def already_sent(self, *, day: date, chat_id: str) -> bool: ...
-
-
 @dataclass(frozen=True)
 class Delivery:
     """What was attempted and what came of it.
@@ -145,51 +154,94 @@ class Delivery:
     detail: str = ""
 
 
+#: The tool a digest's operation is recorded under.
+DIGEST_TOOL: Final = "digest.send"
+
+
+def digest_operation(
+    digest: DailyDigest, *, channel: DigestChannel, principal_id: str
+) -> Operation:
+    """The operation one evening's digest to one room is, keyed on the day and the room.
+
+    The day is the intent: the same day attempted again is the same digest, and tomorrow is a new
+    one. The room is an argument, because today's digest in a second room is a second message.
+    The principal is whoever runs the digest, handed in rather than assumed.
+    """
+    return operation_for(
+        Intent(principal_id=principal_id, intent_ref=f"digest.{digest.day.isoformat()}"),
+        connector=channel.channel.value,
+        tool=DIGEST_TOOL,
+        arguments={"chat_id": channel.chat_id},
+    )
+
+
 def deliver_digest(
     digest: DailyDigest,
     *,
     channel: DigestChannel,
     sender: DigestSender,
-    register: SentRegister,
+    ledger: OperationLedger,
+    principal_id: str,
 ) -> Delivery:
     """Send one evening's digest, once (M38.3.3.1, M38.3.3.4).
 
     Returns rather than raises on a transport failure. The digest is a record of what the
     plan did and it exists whether or not the channel accepted it; a scheduled job that dies
-    on a delivery error loses the computation as well as the send.
+    on a delivery error loses the computation as well as the send. A failure of the ledger
+    itself is raised: it is not the channel refusing, and reporting it as one would send
+    somebody to look at the wrong system.
 
-    The duplicate check happens before the render because rendering is where the work is,
-    and because two renders of one day are two chances for the text to differ.
+    The render is inside the effect, so a day already sent is never rendered again.
     """
-    if register.already_sent(day=digest.day, chat_id=channel.chat_id):
+    rendered: list[str] = []
+    refused: list[str] = []
+
+    def post(_: Operation) -> CallOutcome:
+        rendered.append(render(digest))
+        try:
+            sender.send(ChannelPayload(label=""), to=channel.chat_id)
+        except Exception as exc:
+            # The class name and never the message. A transport exception stringifies whatever
+            # it failed on, and what it failed on here is a message naming every open task.
+            refused.append(type(exc).__name__)
+            raise
+        return CallOutcome.OK
+
+    operation = digest_operation(digest, channel=channel, principal_id=principal_id)
+    try:
+        issued = issue_once(ledger, operation, post)
+    except Exception:
+        # Only the channel's own refusal becomes an outcome. Anything raised before the send was
+        # attempted, the ledger failing or a key held by another intent, carries on as itself.
+        if not refused:
+            raise
+        return Delivery(
+            outcome=DeliveryOutcome.UNDELIVERED,
+            day=digest.day,
+            chat_id=channel.chat_id,
+            body=rendered[-1],
+            detail=f"{channel.channel} refused the digest: {refused[0]}",
+        )
+
+    if issued.issued:
+        return Delivery(
+            outcome=DeliveryOutcome.SENT,
+            day=digest.day,
+            chat_id=channel.chat_id,
+            body=rendered[-1],
+        )
+    if issued.resumption is not None and issued.resumption.disposition is Disposition.DONE:
         return Delivery(
             outcome=DeliveryOutcome.ALREADY_SENT,
             day=digest.day,
             chat_id=channel.chat_id,
             detail=A_CHANNEL_WITH_TWO_IDENTICAL_DIGESTS_STOPS_BEING_READ,
         )
-
-    body = render(digest)
-    payload = ChannelPayload(label="")
-
-    try:
-        sender.send(payload, to=channel.chat_id)
-    except Exception as exc:
-        # The class name and never the message. A transport exception stringifies whatever
-        # it failed on, and what it failed on here is a message naming every open task.
-        return Delivery(
-            outcome=DeliveryOutcome.UNDELIVERED,
-            day=digest.day,
-            chat_id=channel.chat_id,
-            body=body,
-            detail=f"{channel.channel} refused the digest: {type(exc).__name__}",
-        )
-
     return Delivery(
-        outcome=DeliveryOutcome.SENT,
+        outcome=DeliveryOutcome.UNSETTLED,
         day=digest.day,
         chat_id=channel.chat_id,
-        body=body,
+        detail="" if issued.resumption is None else issued.resumption.reason,
     )
 
 

@@ -97,13 +97,20 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Final, assert_never
 
-from brain.channels.adapter import ChannelCapabilities, Feature, assert_can_send
+from brain.channels.adapter import (
+    ChannelCapabilities,
+    Feature,
+    assert_can_send,
+    send_operation,
+)
 from brain.channels.cards import assert_label_survives, render_body
+from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -774,8 +781,15 @@ class TelegramAdapter:
         return self.reachable
 
 
-def deliver(adapter: TelegramAdapter, plan: Answer | Notice, *, to_chat_id: int) -> None:
-    """Send one planned message, to the chat it was planned for (M10.5.4).
+def deliver(
+    adapter: TelegramAdapter,
+    plan: Answer | Notice,
+    *,
+    to_chat_id: int,
+    ledger: OperationLedger,
+    intent: Intent,
+) -> Issued:
+    """Send one planned message, to the chat it was planned for, once (M10.5.4, M17.3.1).
 
     The chat id arrives here and nowhere else. A plan holds a digest, so whoever resolved the
     binding supplies the destination at the wire and this checks that the two agree. See
@@ -805,12 +819,18 @@ def deliver(adapter: TelegramAdapter, plan: Answer | Notice, *, to_chat_id: int)
         # from here, and the pair of them is the directory this module declines to keep.
         msg = f"this message was planned for somewhere else. {A_PLAN_IS_BOUND_TO_ONE_CHAT}"
         raise TelegramRefusedError(msg)
-    match plan:
-        case Answer():
-            adapter.send(plan.payload, to=str(to_chat_id), body=plan.body)
-        case Notice():
-            # An empty payload rather than the plan's, because a `Notice` has none. Passed
-            # explicitly so the adapter's label check runs over the fixed words too.
-            adapter.send(ChannelPayload(), to=str(to_chat_id), body=plan.body)
-        case _:
-            assert_never(plan)
+
+    def send(_: Operation) -> CallOutcome:
+        match plan:
+            case Answer():
+                adapter.send(plan.payload, to=str(to_chat_id), body=plan.body)
+            case Notice():
+                # An empty payload rather than the plan's, because a `Notice` has none. Passed
+                # explicitly so the adapter's label check runs over the fixed words too.
+                adapter.send(ChannelPayload(), to=str(to_chat_id), body=plan.body)
+            case _:
+                assert_never(plan)
+        return CallOutcome.OK
+
+    operation = send_operation(intent, channel=Channel.TELEGRAM, to=str(to_chat_id))
+    return issue_once(ledger, operation, send)

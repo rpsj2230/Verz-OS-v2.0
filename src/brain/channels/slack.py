@@ -101,14 +101,21 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, assert_never
 
-from brain.channels.adapter import ChannelCapabilities, Feature, assert_can_send
+from brain.channels.adapter import (
+    ChannelCapabilities,
+    Feature,
+    assert_can_send,
+    send_operation,
+)
 from brain.channels.cards import assert_label_survives, render_body
 from brain.channels.room import Degradation, Member, plan
 from brain.channels.webhook import assert_raw_bytes
+from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -956,8 +963,15 @@ class SlackAdapter:
         return self.reachable
 
 
-def deliver(adapter: SlackAdapter, posting: Posting, *, to_user: str = "") -> None:
-    """Send one planned posting, to the reader it was planned for (M10.5.1).
+def deliver(
+    adapter: SlackAdapter,
+    posting: Posting,
+    *,
+    to_user: str = "",
+    ledger: OperationLedger,
+    intent: Intent,
+) -> Issued:
+    """Send one planned posting, to the reader it was planned for, once (M10.5.1, M17.3.1).
 
     The user id arrives here and nowhere else. A `Posting` holds a digest, so whoever resolved
     the binding supplies the id at the wire and this checks the two agree. See
@@ -985,20 +999,29 @@ def deliver(adapter: SlackAdapter, posting: Posting, *, to_user: str = "") -> No
                 "has confused a public posting with a private one"
             )
             raise SlackRefusedError(msg)
-        adapter.send(posting.payload, to=posting.conversation, body=posting.body)
-        return
-
-    if identity_hash(Channel.SLACK, to_user) != posting.to_identity:
+    elif identity_hash(Channel.SLACK, to_user) != posting.to_identity:
         # Names neither the user id nor the digest it was expected to match. Both reach a log
         # from here, and the pair of them is the directory this module declines to keep.
         msg = f"this posting was planned for somebody else. {A_PLAN_IS_BOUND_TO_ONE_VIEWER}"
         raise SlackRefusedError(msg)
 
     ephemeral = posting.visibility is Visibility.EPHEMERAL
-    adapter.send(
-        posting.payload,
-        to=posting.conversation,
-        body=posting.body,
-        viewer=to_user if ephemeral else "",
-        ephemeral=ephemeral,
+    viewer = to_user if ephemeral else ""
+
+    def send(_: Operation) -> CallOutcome:
+        if posting.visibility is Visibility.CHANNEL:
+            adapter.send(posting.payload, to=posting.conversation, body=posting.body)
+        else:
+            adapter.send(
+                posting.payload,
+                to=posting.conversation,
+                body=posting.body,
+                viewer=viewer,
+                ephemeral=ephemeral,
+            )
+        return CallOutcome.OK
+
+    operation = send_operation(
+        intent, channel=Channel.SLACK, to=posting.conversation, viewer=to_user
     )
+    return issue_once(ledger, operation, send)

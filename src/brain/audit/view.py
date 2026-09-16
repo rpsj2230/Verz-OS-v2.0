@@ -45,6 +45,15 @@ is interested in whom rather than a record of who authorised what. Its subject k
 `read:audit.principal` would have acquired the read log the day it shipped. `_may_see` asks
 `brain.audit.reads.may_read_a_read_entry` instead, and that module carries the argument.
 
+**Either direction, and the direction changes nothing about what is withheld.** A ledger is read
+oldest first when somebody is reconstructing what happened, and newest first when somebody is
+asking what just happened, which is what an auditor opening the console asks first. The second
+was added on 2026-09-16 for M27.7.13, and it is the same walk over the same visible entries in
+the other order: the cursor is the same position, the page is still filled to the limit from
+visible rows, and the byte-identical property holds in both directions because the order is a
+parameter of the walk rather than of the filter. Rejected: reversing a page at the screen, which
+turns the newest entries into the last page a reader reaches rather than the first.
+
 Scope: domain logic, like `brain.audit.ledger`. Nothing here opens a connection. It takes the
 entries it is given, which means whatever loads them still owes this view a window; see the
 report for what that costs.
@@ -265,13 +274,18 @@ class AuditView:
         *,
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
+        newest_first: bool = False,
     ) -> AuditPage:
-        """One page of the entries this reader may see, oldest first.
+        """One page of the entries this reader may see, oldest first unless asked otherwise.
 
         The page is filled from visible rows, so its length says nothing about what was
         withheld: a page shorter than `limit` means the reader has reached the end of what
         they may see. `next_cursor` is present exactly when at least one further visible row
         exists, which is a fact about their own view and not about anybody else's.
+
+        `newest_first` walks the same entries the other way, and a cursor continues in the
+        direction the page it came from was read in: past it towards older entries when newest
+        first, towards newer ones otherwise.
         """
         if not 1 <= limit <= MAX_PAGE_SIZE:
             # A caller error, raised identically whatever the ledger contains, so it cannot
@@ -284,8 +298,9 @@ class AuditView:
         last_key: tuple[datetime, str] | None = None
         more = False
 
-        for entry in self._visible(criteria or AuditFilter()):
-            if after is not None and _order(entry) <= after:
+        walk = reversed(self._entries) if newest_first else iter(self._entries)
+        for entry in self._visible(criteria or AuditFilter(), walk):
+            if after is not None and _already_read(entry, after, newest_first=newest_first):
                 continue
             if len(rows) == limit:
                 # One visible row beyond the page. Found rather than counted: the loop stops
@@ -299,7 +314,7 @@ class AuditView:
         next_cursor = _encode_cursor(last_key) if more and last_key is not None else None
         return AuditPage(rows=tuple(rows), next_cursor=next_cursor)
 
-    def _visible(self, criteria: AuditFilter) -> Iterator[AuditEntry]:
+    def _visible(self, criteria: AuditFilter, walk: Iterator[AuditEntry]) -> Iterator[AuditEntry]:
         """Every entry this reader may see, in view order.
 
         One pass, one predicate per entry, and no branch that does extra work for an entry
@@ -308,7 +323,7 @@ class AuditView:
         taken only on the denied path is a distinction that survives every test asserting the
         output is identical.
         """
-        for entry in self._entries:
+        for entry in walk:
             if not criteria.matches(entry):
                 continue
             if not self._may_see(entry):
@@ -371,6 +386,35 @@ class AuditView:
 
 def _order(entry: AuditEntry) -> tuple[datetime, str]:
     return (entry.at, entry.entry_hash)
+
+
+def _already_read(entry: AuditEntry, after: tuple[datetime, str], *, newest_first: bool) -> bool:
+    """Whether a page that ended at `after` has already been past this entry."""
+    if newest_first:
+        return _order(entry) >= after
+    return _order(entry) <= after
+
+
+def position_of(cursor: str) -> tuple[datetime, str]:
+    """The position a cursor names, for a loader that has to start reading there.
+
+    `brain.audit_routes` loads a window of `obs.audit_entry` beginning where the previous page
+    ended, and without this the only way to honour a cursor was to load the ledger from its newest
+    entry every time and let the view skip. The position is the last row's instant, which the
+    reader was shown, and its digest, which `_encode_cursor` argues discloses nothing on its own.
+    Raises `ValueError` on a malformed cursor, identically for every ledger.
+    """
+    return _decode_cursor(cursor)
+
+
+def cursor_after(entry: AuditEntry) -> str:
+    """A cursor that continues past this entry, whether or not the reader was shown it.
+
+    For a loader that stops reading before a page is full. Continuing past an entry the view
+    withheld skips nothing the reader may see, because the view already walked it, and the
+    cursor names a position rather than a row, so it says nothing about whether one was shown.
+    """
+    return _encode_cursor(_order(entry))
 
 
 def _row(entry: AuditEntry) -> AuditRow:

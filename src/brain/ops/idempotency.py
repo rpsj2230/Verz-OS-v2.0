@@ -57,10 +57,35 @@ terminal and means "definitely did not happen"; trying again is a new intent, ra
 whoever decided to try, with its own reference. The cost is a caller writing one more line.
 The cost of the other choice is paid once, by somebody's client, in a duplicated payment.
 
-Scope: domain logic. Nothing here opens a connection, reads a clock or stores a row. Where the
-records live is a table this module does not name and `src/brain/tables/` does not yet hold.
+**Every side effect goes through one door, `issue_once`, and the door checks a durable key
+before the effect rather than a flag after it (M17.3.1).** The record is claimed in a ledger
+whose key is unique, moved from `PENDING` to `SENT` by a statement that succeeds for exactly one
+caller, and only the caller that moved it issues. A second attempt at the same intent, whether a
+retry, a resumed run or a second worker racing the first, finds the record already claimed and
+issues nothing. That is the missing half `WHAT_THE_CRASH_MODEL_DOES_NOT_COVER` named: two workers
+that both read no record and both write one would both issue, and only a unique key and a
+conditional move stop that. `OperationLedger` is the shape and
+`brain.ops.operation_store.PostgresOperationLedger` is the ledger, over `ops.operation`.
 
-Task ids: M17.3.2, M17.3.4, M17.3.5
+**"Every" is read off the code rather than listed.** `brain.ops.effects` classifies every method
+of every protocol in `src/brain`, which is where this repository puts a door to the outside, and
+every called parameter typed as a callable over `brain.gate.leash.Action`, and finds every call to
+one classified as issuing a side effect. A call that is not inside the effect handed to
+`issue_once`, and not preceded by `assert_no_side_effect`, fails
+`tests/invariants/test_every_side_effect_is_keyed.py`, and so does a door nobody has classified.
+A new side effect therefore cannot arrive without its key. **One existing door is not yet through
+it and is named there**: `brain.gate.leash.run_real`, which runs an agent's action through the
+callable its caller hands in, for the reasons that test's `NOT_YET_THROUGH_THE_DOOR` gives.
+
+Rejected: a key per call site, with each module deduplicating in its own way. It is how this
+repository had it: `brain.ops.digest_delivery` asked a register before sending and recorded after,
+so a crash between the two posted the digest twice, and a channel send had nothing at all. Four
+mechanisms are four places for the one property to be subtly wrong.
+
+Scope: domain logic. Nothing here opens a connection, reads a clock or stores a row. The ledger
+is a protocol and the table is `ops.operation`, which this module does not name.
+
+Task ids: M17.3.1, M17.3.2, M17.3.4, M17.3.5
 """
 
 from __future__ import annotations
@@ -72,11 +97,11 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from types import MappingProxyType
-from typing import Final
+from typing import Final, Protocol
 
 from brain.connectors.manifest import DIGEST_CHARS, ConnectorManifest, ToolDeclaration
 from brain.connectors.throttle import CallOutcome
-from brain.core.envelope import SideEffect
+from brain.core.envelope import SideEffect, ToolDefinition
 
 # ------------------------------------------------------------------ written-down reasons
 #: Why the key is a function of the intent rather than a value minted per attempt.
@@ -574,17 +599,54 @@ def begin(
     `THE_RECORD_IS_WRITTEN_BEFORE_THE_CALL`.
     """
     declaration = declaration_for(manifest, tool)
-    return Operation(
-        key=derive_key(
-            principal_id=principal_id,
-            tool=declaration.name,
-            intent_ref=intent_ref,
-            arguments=arguments,
-        ),
+    return operation_for(
+        Intent(principal_id=principal_id, intent_ref=intent_ref),
         connector=manifest.name,
         tool=declaration.name,
-        principal_id=principal_id,
-        intent_ref=intent_ref,
+        arguments=arguments,
+    )
+
+
+@dataclass(frozen=True)
+class Intent:
+    """Who is acting, and which decision this is an attempt at.
+
+    The two parts of a key a call site cannot work out for itself. The tool and the arguments
+    are the call site's own; who asked and which turn, run or job asked are handed to it by
+    whatever decided the effect should happen, and that is the argument
+    `A_KEY_IS_DERIVED_NEVER_GENERATED` makes about `intent_ref` in both directions: stable across
+    every attempt at one decision, different between two decisions.
+    """
+
+    principal_id: str
+    intent_ref: str
+
+
+def operation_for(
+    intent: Intent,
+    *,
+    connector: str,
+    tool: str,
+    arguments: Mapping[str, str | int] = MappingProxyType({}),
+) -> Operation:
+    """The record of one intent, with its key derived. The one way an `Operation` is built.
+
+    `begin` calls this after resolving a connector tool against its manifest. A side effect that
+    is not a connector tool, a message to a channel or a digest to a room, calls it directly
+    with the channel as the connector and the send as the tool, so every effect in the system is
+    keyed by the same derivation and stored in the same ledger.
+    """
+    return Operation(
+        key=derive_key(
+            principal_id=intent.principal_id,
+            tool=tool,
+            intent_ref=intent.intent_ref,
+            arguments=arguments,
+        ),
+        connector=connector,
+        tool=tool,
+        principal_id=intent.principal_id,
+        intent_ref=intent.intent_ref,
     )
 
 
@@ -713,3 +775,123 @@ def resume(operation: Operation) -> Resumption:
         disposition=disposition,
         reason=_RESUME_REASONS[operation.state],
     )
+
+
+# ------------------------------------------------------------ the one door (M17.3.1)
+#: Why a ledger's claim and its move to SENT are two steps and not one.
+THE_KEY_IS_CLAIMED_AND_THEN_WON: Final = (
+    "Claiming inserts the record if its key is new and answers the record the key holds either "
+    "way, so a second attempt learns what the first did rather than failing on a duplicate. "
+    "Winning moves PENDING to SENT only where the record is still PENDING, and that statement "
+    "succeeds for one caller: two workers that both found the record pending both ask, and one of "
+    "them is told no. Only the caller that won issues. A single insert-or-fail would refuse the "
+    "second worker without telling it whether the first had issued, which is the one thing it "
+    "needs to know."
+)
+
+#: Why the effect's exception leaves the record UNKNOWN.
+AN_EFFECT_THAT_RAISED_MAY_HAVE_HAPPENED: Final = (
+    "An exception out of the effect is a request that may have left and an answer that did not "
+    "come back, which is UNKNOWN_IS_NOT_FAILED's case exactly. The record is moved to UNKNOWN "
+    "before the exception carries on, so the next attempt at the same intent verifies rather "
+    "than issuing again."
+)
+
+
+class OperationLedger(Protocol):
+    """Where operation records are kept, with the two properties `issue_once` rests on.
+
+    Every method commits before it returns. A ledger whose writes sat in the caller's open
+    transaction would be rolled back with it, and a record rolled back after the effect was
+    issued is the window `THE_RECORD_IS_WRITTEN_BEFORE_THE_CALL` exists to close.
+    """
+
+    def claim(self, operation: Operation) -> Operation:
+        """Record the intent if its key is new, and return the record the key holds either way."""
+        ...
+
+    def win(self, key: str) -> bool:
+        """Move the record from PENDING to SENT only if it is still PENDING; True if this did."""
+        ...
+
+    def settle(self, key: str, *, frm: OperationState, to: OperationState) -> Operation:
+        """Move the record from `frm` to `to`, refusing if it is not in `frm`, and return it."""
+        ...
+
+
+#: One side effect, handed the record it is issued under. Returns how the call ended.
+Effect = Callable[[Operation], CallOutcome]
+
+
+@dataclass(frozen=True)
+class Issued:
+    """What one pass through the door did.
+
+    `issued` is whether this call made the effect. When it did not, `resumption` says what the
+    record it found means and what may be done with it, which for a record in `SENT`, `UNKNOWN`
+    or `VERIFYING` is a read-back and never a second attempt.
+    """
+
+    operation: Operation
+    issued: bool
+    resumption: Resumption | None = None
+
+
+def issue_once(ledger: OperationLedger, operation: Operation, effect: Effect) -> Issued:
+    """Make a side effect at most once per key, however many times it is asked for.
+
+    Claim, win, issue, settle. See `THE_KEY_IS_CLAIMED_AND_THEN_WON` and
+    `AN_EFFECT_THAT_RAISED_MAY_HAVE_HAPPENED`. A record the key already holds for a different
+    intent is refused: the key is a digest of the intent, so two intents sharing one is a
+    collision or a forgery, and issuing under either is issuing under somebody else's record.
+    """
+    stored = ledger.claim(operation)
+    if (stored.connector, stored.tool, stored.principal_id, stored.intent_ref) != (
+        operation.connector,
+        operation.tool,
+        operation.principal_id,
+        operation.intent_ref,
+    ):
+        msg = (
+            f"the key {operation.key[:16]!r} is held by a record of a different intent, so "
+            "nothing is issued under it"
+        )
+        raise IdempotencyError(msg)
+    # No check of the stored state before the win: the win is conditional on the record being
+    # pending, so asking first was a second copy of the one guard, and a mutation removing it
+    # changed nothing any ledger can answer.
+    if not ledger.win(operation.key):
+        found = stored if stored.state is not OperationState.PENDING else ledger.claim(operation)
+        return Issued(operation=found, issued=False, resumption=resume(found))
+    sent = stored.advanced(OperationState.SENT)
+    try:
+        landed = state_after_call(effect(sent))
+    except BaseException:
+        ledger.settle(operation.key, frm=OperationState.SENT, to=OperationState.UNKNOWN)
+        raise
+    return Issued(
+        operation=ledger.settle(operation.key, frm=OperationState.SENT, to=landed), issued=True
+    )
+
+
+#: Why a tool with no side effect may be called outside the door.
+A_CALL_THAT_CANNOT_CHANGE_ANYTHING_NEEDS_NO_KEY: Final = (
+    "A key exists so that a repeat does not repeat an effect. A tool that declares no side effect "
+    "has none to repeat, so a path that only ever calls such tools needs no ledger, and says so "
+    "by refusing any other kind before it calls. That refusal is the second way past the "
+    "invariant in brain.ops.effects, and it is a refusal rather than an exemption: the day the "
+    "path is given a writing tool, it raises."
+)
+
+
+def assert_no_side_effect(tool: ToolDefinition) -> None:
+    """Refuse a tool that declares a side effect, on a path that has no ledger to key it with.
+
+    See `A_CALL_THAT_CANNOT_CHANGE_ANYTHING_NEEDS_NO_KEY`.
+    """
+    if tool.side_effect is not SideEffect.NONE:
+        msg = (
+            f"{tool.name!r} declares the side effect {tool.side_effect.value!r} and this path "
+            f"calls tools outside issue_once. {A_CALL_THAT_CANNOT_CHANGE_ANYTHING_NEEDS_NO_KEY}"
+        )
+        raise IdempotencyError(msg)

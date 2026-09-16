@@ -41,6 +41,18 @@ more standard mechanism and it is a number whose meaning is defined in the realm
 authentication flow, so the comparison would be correct only for as long as nobody edited
 that flow, and being wrong in the permissive direction is silent.
 
+**A token from a session an administrator ended is refused, and the check is here rather than
+at each route.** Revoking a grant does not close a sign-in, so M27.7.10 puts a control on the
+Sessions screen that ends one, and a control is only real if the next request made with that
+sign-in is refused. A bearer token is valid because of what is inside it, so nothing about ending
+a row changes a token already in somebody's hand; what does is this function asking the ledger of
+sessions, on every request that carries a `sid`, whether the session it names has been ended. The
+ledger is asked through the directory the authority already holds, because the directory is the
+store this object is built with and `brain.app.wirings_for` builds it once; a second store
+threaded through every construction of this object would be a wiring somebody forgets. A
+directory that keeps no ledger is asked nothing, which is every test double and no deployed
+process. See `AN_ENDED_SESSION_IS_REFUSED_ON_ITS_NEXT_REQUEST`.
+
 Rejected: middleware that authenticates every request and attaches a principal to the
 request state. It reads better at each route and it fails open in the one case that
 matters: a route mounted outside whatever path prefix the middleware matched on is a route
@@ -57,10 +69,11 @@ Task ids: M1.1.2
 from __future__ import annotations
 
 import asyncio
+import enum
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Final, Protocol
+from datetime import UTC, datetime, timedelta
+from typing import Final, Protocol, runtime_checkable
 
 import structlog
 
@@ -115,6 +128,17 @@ A_SECOND_FACTOR_IS_A_CLAIM_ABOUT_THIS_SESSION: Final = (
     "withhold from them."
 )
 
+#: Why a session ended from the console refuses the tokens it goes on minting.
+AN_ENDED_SESSION_IS_REFUSED_ON_ITS_NEXT_REQUEST: Final = (
+    "Ending a session from the console writes a row, and a row changes nothing about a bearer "
+    "token already in somebody's hand, which stays valid until it expires and is replaced by a "
+    "fresh one from the same session at the identity provider. So every request carrying a sid "
+    "asks the ledger of sessions about it, and one the ledger says was ended is refused with the "
+    "same sentence every refusal gets. The session is the unit, not the person: somebody whose "
+    "session was ended may sign in again, which opens another, and stopping that is the grant "
+    "decision or the sign-in link rather than this."
+)
+
 #: Why the key source is asked on a worker thread.
 A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP: Final = (
     "The route that authenticates is a coroutine on the event loop every request in the "
@@ -147,6 +171,56 @@ SECOND_FACTOR_METHODS: Final[frozenset[str]] = frozenset({"mfa", "otp", "hwk"})
 #: header's scheme token is case-insensitive by RFC 7235 and a client that sends `bearer` is
 #: correct.
 BEARER_PREFIX: Final = "bearer"
+
+
+class SessionStanding(enum.StrEnum):
+    """What the ledger of sign-in sessions says about the one a token came from."""
+
+    #: Recorded, belonging to this principal, and not ended. Recorded now if it was not.
+    OPEN = "open"
+    #: Ended before it lapsed: from the console, by a disable or by a retirement.
+    ENDED = "ended"
+    #: Recorded against a different principal. The catastrophic case, refused on one comparison,
+    #: which is `brain.identity.sessions.SessionRegistry.admit`'s own check.
+    SOMEBODY_ELSES = "somebody_elses"
+
+
+@runtime_checkable
+class SessionLedger(Protocol):
+    """The sign-in sessions this installation has seen. `brain.identity.session_store` holds it.
+
+    Asked of the directory rather than held beside it; see the module docstring. `started_at` is
+    `started_at_of` the token, and the ledger records it only when it has not seen the session.
+    """
+
+    async def standing(
+        self,
+        *,
+        session_id: str,
+        principal_id: str,
+        assurance: Assurance,
+        started_at: datetime,
+        now: datetime,
+    ) -> SessionStanding:
+        """Record the session if it is new, and say whether it may still be used."""
+        ...
+
+
+def started_at_of(claims: VerifiedClaims) -> datetime:
+    """When the session a token came from began, as well as the token can say.
+
+    `auth_time` when the token carries one that is a whole number of seconds no later than its
+    own issue time, and the issue time otherwise. A later `auth_time` than `iat` is a clock or a
+    realm misconfigured, and trusting it would record a session as starting after the token it
+    was read from; a boolean is refused because it is an `int` to Python and a session starting
+    one second after the epoch is not a fact.
+    """
+    raw = claims.claim("auth_time")
+    if isinstance(raw, int) and not isinstance(raw, bool):
+        began = datetime.fromtimestamp(raw, tz=UTC)
+        if began <= claims.issued_at:
+            return began
+    return claims.issued_at
 
 
 class KeySource(Protocol):
@@ -295,7 +369,21 @@ class TokenAuthority:
                 TokenRefusal.NO_PRINCIPAL, f"{claims.subject} at {claims.issuer}"
             )
 
-        return Caller(principal=found, claims=claims, assurance=assurance_from(claims))
+        assurance = assurance_from(claims)
+        if claims.session_id is not None and isinstance(self.directory, SessionLedger):
+            # See AN_ENDED_SESSION_IS_REFUSED_ON_ITS_NEXT_REQUEST.
+            standing = await self.directory.standing(
+                session_id=claims.session_id,
+                principal_id=found.id,
+                assurance=assurance,
+                started_at=started_at_of(claims),
+                now=now,
+            )
+            if standing is SessionStanding.ENDED:
+                raise TokenRefusedError(TokenRefusal.LOGGED_OUT, claims.session_id)
+            if standing is SessionStanding.SOMEBODY_ELSES:
+                raise TokenRefusedError(TokenRefusal.SESSION_MISMATCH, claims.session_id)
+        return Caller(principal=found, claims=claims, assurance=assurance)
 
     def _current_keys(self, kid: object, now: datetime) -> KeySet:
         """The key set to validate against, after warming it for the token's `kid`.

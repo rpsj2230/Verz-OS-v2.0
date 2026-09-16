@@ -64,13 +64,20 @@ from datetime import datetime
 from email.utils import parseaddr
 from typing import Final
 
-from brain.channels.adapter import ChannelCapabilities, Feature, assert_can_send
+from brain.channels.adapter import (
+    ChannelCapabilities,
+    Feature,
+    assert_can_send,
+    send_operation,
+)
 from brain.channels.cards import assert_label_survives, render_body
+from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -493,8 +500,15 @@ class EmailAdapter:
         return self.reachable
 
 
-def deliver(adapter: EmailAdapter, reply: Reply, *, to_address: str) -> None:
-    """Send one planned reply, to the address it was planned for (M10.5.6).
+def deliver(
+    adapter: EmailAdapter,
+    reply: Reply,
+    *,
+    to_address: str,
+    ledger: OperationLedger,
+    intent: Intent,
+) -> Issued:
+    """Send one planned reply, to the address it was planned for, once (M10.5.6, M17.3.1).
 
     The address arrives here and nowhere else. `Reply` holds a digest, so whoever resolved
     the binding supplies the address at the wire and this checks the two agree. Without it
@@ -510,4 +524,10 @@ def deliver(adapter: EmailAdapter, reply: Reply, *, to_address: str) -> None:
             f"{A_REPLY_IS_ADDRESSED_TO_THE_PERSON_THE_ANSWER_WAS_COMPUTED_FOR}"
         )
         raise EmailRefusedError(msg)
-    adapter.send(reply.payload, to=to_address, body=reply.body, subject=reply.subject)
+
+    def send(_: Operation) -> CallOutcome:
+        adapter.send(reply.payload, to=to_address, body=reply.body, subject=reply.subject)
+        return CallOutcome.OK
+
+    operation = send_operation(intent, channel=Channel.EMAIL, to=to_address)
+    return issue_once(ledger, operation, send)

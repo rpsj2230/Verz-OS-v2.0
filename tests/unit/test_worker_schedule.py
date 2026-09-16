@@ -53,7 +53,15 @@ from tests.fixtures.knowledge_items import (
     nags,
     put,
 )
-from tests.fixtures.scratch_postgres import drop, fresh, migrate, run, sql
+from tests.fixtures.scratch_postgres import (
+    RETENTION_TABLES,
+    add_modelled,
+    drop,
+    fresh,
+    migrate,
+    run,
+    sql,
+)
 
 NOW = datetime(2999, 3, 1, 9, 0, tzinfo=UTC)
 FINISHED = NOW + timedelta(seconds=7)
@@ -71,13 +79,15 @@ STARTED = [
 
 @contextmanager
 def control_runs(database: str) -> Iterator[str]:
-    """A database holding `ops.control_run` with the name constraint `0037` leaves."""
+    """A database holding `ops.control_run` with the name constraint `0037` leaves, and the
+    retention tables `0049` builds, which the tick reads the sweep's release from."""
     url = fresh(database)
     try:
         migrate(database, "stamp", "0024")
         migrate(database, "upgrade", "0025")
         migrate(database, "stamp", "0036")
         migrate(database, "upgrade", "0037")
+        add_modelled(url, RETENTION_TABLES)
         yield url
     finally:
         drop(database)
@@ -307,6 +317,38 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         )
 
 
+def test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report(starts: Starts) -> None:
+    """A release recorded after a report: the tick starts the sweep acting and records it as ok.
+    Withdrawn, the next due tick starts it reporting again.
+
+    Delete this and the tick could go on passing no release to `due_now`, which is the state the
+    sweep was in from 0037 until 0049: scheduled, and forbidden to act for ever."""
+    with control_runs("brain_worker_schedule_released") as url:
+        report = sql(
+            url,
+            "INSERT INTO ops.retention_report (at, report_only, complete, stores, holds, findings) "
+            "VALUES (%s, true, false, '[]', '[]', '[]') RETURNING id",
+            NOW - timedelta(days=2),
+        )[0][0]
+        sql(
+            url,
+            "INSERT INTO ops.retention_release (after_report, released_at, released_by) "
+            "VALUES (%s, %s, 'u_admin')",
+            report,
+            NOW - timedelta(days=1),
+        )
+        tick(url, at=NOW)
+        sql(
+            url,
+            "UPDATE ops.retention_release SET withdrawn_at = %s, withdrawn_by = 'u_admin'",
+            NOW + timedelta(hours=1),
+        )
+        tick(url, at=NOW + timedelta(days=1, minutes=1))
+
+    sweeps = [call for call in starts.calls if call[0] == "retention_sweep"]
+    assert sweeps == [("retention_sweep", False), ("retention_sweep", True)]
+
+
 def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_passed(
     starts: Starts,
 ) -> None:
@@ -401,6 +443,8 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     ).verified(by="u_verifier", at=lapsed - timedelta(days=365), review_by=lapsed)
 
     with knowledge_items("brain_kr_worker_tick") as url:
+        # The tick reads the sweep's release since 0049, which this chain stops short of.
+        add_modelled(url, RETENTION_TABLES)
         a_person(url, "u_owner")
         a_reader(url, "u_owner", "web")
         put(url, item)

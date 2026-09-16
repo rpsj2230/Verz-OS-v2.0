@@ -833,6 +833,10 @@ class StoreCensus:
     subject record is gone; for a derived store it is copies whose source is gone. Each is
     "things that should not still be here", which is the only number an enforcement run
     needs.
+
+    `queued` is the part of what is due that this executor may not remove itself, and
+    `queued_because` names the rule that does. See
+    `A_SWEEP_REMOVES_ONLY_WHAT_ITS_TABLE_LETS_IT_AND_QUEUES_THE_REST`.
     """
 
     store: Store
@@ -842,9 +846,13 @@ class StoreCensus:
     #: Age of the oldest item, where the store can say. Reported so a window that is not
     #: being applied at all is visible as an age rather than only as a count.
     oldest_days: int | None = None
+    #: How many due items sit in a table whose own rule removes them some other way.
+    queued: int = 0
+    #: That rule, in words. Set if and only if something is queued.
+    queued_because: str = ""
 
     def __post_init__(self) -> None:
-        if self.beyond_horizon < 0 or self.held < 0:
+        if self.beyond_horizon < 0 or self.held < 0 or self.queued < 0:
             msg = f"{self.store.value} reported a negative count"
             raise RetentionError(msg)
         if self.held > self.beyond_horizon:
@@ -853,14 +861,54 @@ class StoreCensus:
                 "past their horizon, which is more held than there are"
             )
             raise RetentionError(msg)
+        if self.queued > self.due:
+            msg = (
+                f"{self.store.value} reports {self.queued} queued out of {self.due} due, "
+                "which is more queued than there is to remove"
+            )
+            raise RetentionError(msg)
+        if (self.queued > 0) != bool(self.queued_because.strip()):
+            # The two readings a report must never be left to choose between: items queued
+            # for a removal nobody named, and a named removal with nothing waiting on it.
+            msg = (
+                f"{self.store.value} reports {self.queued} queued and a queueing reason of "
+                f"{self.queued_because!r}; one of those is not true"
+            )
+            raise RetentionError(msg)
         if self.oldest_days is not None and self.oldest_days < 0:
             msg = f"{self.store.value} reports an oldest item with a negative age"
             raise RetentionError(msg)
 
     @property
     def due(self) -> int:
-        """How many a sweep may actually remove. Held items are not due; they are held."""
+        """How many are past their horizon and not held. Held items are not due; they are held."""
         return self.beyond_horizon - self.held
+
+    @property
+    def removable(self) -> int:
+        """How many of the due items this executor may remove itself."""
+        return self.due - self.queued
+
+
+@dataclass(frozen=True)
+class CitedHold:
+    """A legal hold that was active when a run looked, as the report cites it.
+
+    The hold's own identifier and its reason code, which `brain.audit.ledger.LegalHold` keeps
+    to a field-name token precisely so that it can travel: a free-text reason is where the
+    parties' names end up. **Never the subjects.** Which people a hold covers is the fact a
+    report must not carry, for `A_RETENTION_REPORT_COUNTS_AND_NEVER_NAMES`' reason, so there is
+    no field for them and `company_wide` says only whether the hold covers everybody.
+    """
+
+    hold_id: str
+    reason_code: str
+    company_wide: bool
+
+    def __post_init__(self) -> None:
+        if not self.hold_id.strip() or not self.reason_code.strip():
+            msg = "a cited hold with no identifier or no reason explains nothing that was held"
+            raise RetentionError(msg)
 
 
 @dataclass(frozen=True)
@@ -869,7 +917,9 @@ class SweptStore:
 
     `reached` is the field the whole report is arranged around. A store that returned no
     census is not a store with nothing in it, and the two must not render the same way; see
-    `A_SWEEP_THAT_SKIPS_A_STORE_KEEPS_IT_FOREVER`.
+    `A_SWEEP_THAT_SKIPS_A_STORE_KEEPS_IT_FOREVER`. `unreached_because` is what would complete
+    the run, and `removed` and `queued` are what happened to what was due, so a report states
+    what a run did rather than only what it found.
     """
 
     store: Store
@@ -880,6 +930,13 @@ class SweptStore:
     beyond_horizon: int
     held: int
     oldest_days: int | None
+    #: How many this run removed.
+    removed: int = 0
+    #: How many were due and left for the rule that removes them. See `StoreCensus.queued`.
+    queued: int = 0
+    queued_because: str = ""
+    #: Why the store could not be counted, where it could not.
+    unreached_because: str = ""
 
     @property
     def due(self) -> int:
@@ -888,12 +945,14 @@ class SweptStore:
     def line(self) -> str:
         """One line, carrying no identifier. See `A_RETENTION_REPORT_COUNTS_AND_NEVER_NAMES`."""
         if not self.reached:
-            return f"{self.store.value}: not reached, so nothing in it was considered"
+            because = f", because {self.unreached_because}" if self.unreached_because else ""
+            return f"{self.store.value}: not reached, so nothing in it was considered{because}"
         window = f"{self.days}d" if self.days is not None else self.lifetime.value
         age = "" if self.oldest_days is None else f", oldest {self.oldest_days}d"
         return (
             f"{self.store.value} ({self.data_class.value}, {window}): "
-            f"{self.due} due, {self.held} held{age}"
+            f"{self.due} due, {self.held} held, {self.removed} removed, "
+            f"{self.queued} queued{age}"
         )
 
 
@@ -904,11 +963,18 @@ class RetentionReport:
     There is no subject anywhere on this model and no field that could hold one. The report
     goes to a dashboard and an alert, and both are read by people who run the estate rather
     than by people entitled to what is in it.
+
+    `report_only` is on the report rather than only on the run record, because a report showing
+    items due beside nothing removed reads as a sweep that failed unless it says it was not
+    allowed to act. `holds` is every hold active at `at`, which is the "why" beside each store's
+    held count.
     """
 
     at: datetime
     swept: tuple[SweptStore, ...]
     findings: tuple[str, ...]
+    report_only: bool = True
+    holds: tuple[CitedHold, ...] = ()
 
     @property
     def complete(self) -> bool:
@@ -920,12 +986,51 @@ class RetentionReport:
         """How many items across the estate a sweep may remove."""
         return sum(one.due for one in self.swept if one.reached)
 
+    @property
+    def removed(self) -> int:
+        """How many items this run removed, across every store."""
+        return sum(one.removed for one in self.swept)
+
     def unreached(self) -> tuple[Store, ...]:
         return tuple(one.store for one in self.swept if not one.reached)
+
+    def removed_by_class(self) -> tuple[tuple[DataClass, int], ...]:
+        """What was removed, per data class, in declaration order, for every class removed from.
+
+        By class rather than by store because the class is what the policy is written in: an
+        administrator asking whether the thirty-day window is being applied is asking about
+        payloads, not about which of the stores holding payloads a row happened to be in.
+        """
+        return _by_class(self.swept, lambda one: one.removed)
+
+    def held_by_class(self) -> tuple[tuple[DataClass, int], ...]:
+        """What was past its horizon and kept because a hold covered it, per data class."""
+        return _by_class(self.swept, lambda one: one.held)
+
+    def queued_by_class(self) -> tuple[tuple[DataClass, int], ...]:
+        """What was due and left for the rule that removes it, per data class."""
+        return _by_class(self.swept, lambda one: one.queued)
+
+    def failures(self) -> tuple[str, ...]:
+        """Every store this run could not count, with the reason, in declaration order."""
+        return tuple(
+            f"{one.store.value}: {one.unreached_because or 'no census'}"
+            for one in self.swept
+            if not one.reached
+        )
 
     def lines(self) -> tuple[str, ...]:
         """The report, one line per store, in a fixed order, followed by the findings."""
         return tuple(one.line() for one in self.swept) + self.findings
+
+
+def _by_class(
+    swept: Sequence[SweptStore], count: Callable[[SweptStore], int]
+) -> tuple[tuple[DataClass, int], ...]:
+    totals = dict.fromkeys(DataClass, 0)
+    for one in swept:
+        totals[one.data_class] += count(one)
+    return tuple((data_class, total) for data_class, total in totals.items() if total > 0)
 
 
 def enforcement_report(*, now: datetime, census: Sequence[StoreCensus]) -> RetentionReport:
@@ -965,6 +1070,8 @@ def enforcement_report(*, now: datetime, census: Sequence[StoreCensus]) -> Reten
                 beyond_horizon=0 if found is None else found.beyond_horizon,
                 held=0 if found is None else found.held,
                 oldest_days=None if found is None else found.oldest_days,
+                queued=0 if found is None else found.queued,
+                queued_because="" if found is None else found.queued_because,
             )
         )
     findings.extend(enforcement_gaps(census))
@@ -1016,7 +1123,24 @@ ONLY_A_CLOCK_IS_ENFORCED_BY_AGE = (
 )
 
 
-def sweep(sweeper: StoreSweeper, *, now: datetime, report_only: bool) -> RetentionReport:
+#: Why a sweep that finds items due does not always remove them itself.
+A_SWEEP_REMOVES_ONLY_WHAT_ITS_TABLE_LETS_IT_AND_QUEUES_THE_REST = (
+    "Nothing in this system hard-deletes a row whose table says it leaves some other way. The "
+    "metadata ledger leaves a partition at a time, and a table whose migration grants the "
+    "application no DELETE has argued, in that migration, for how its rows go. A sweep that "
+    "deleted from either on its own authority would be a second way out of a table that was "
+    "given exactly one, taken by the mechanism with the widest reach in the estate. So what "
+    "is due there is counted, reported as queued, and the rule that removes it is named."
+)
+
+
+def sweep(
+    sweeper: StoreSweeper,
+    *,
+    now: datetime,
+    report_only: bool,
+    holds: Sequence[CitedHold] = (),
+) -> RetentionReport:
     """One retention run over every store: count, report, and remove only what may go (M25.1.5).
 
     Every member of `Store` is asked, in declaration order. A store the sweeper refuses to count
@@ -1026,18 +1150,24 @@ def sweep(sweeper: StoreSweeper, *, now: datetime, report_only: bool) -> Retenti
 
     In report-only mode nothing is removed, and the report says so whenever anything was due,
     because a report showing items due beside no removal reads as a sweep that failed. Otherwise
-    each reached store with items due is expired, and only if its lifetime is a fixed window.
-    See `ONLY_A_CLOCK_IS_ENFORCED_BY_AGE`.
+    each reached store with items due is expired, only if its lifetime is a fixed window (see
+    `ONLY_A_CLOCK_IS_ENFORCED_BY_AGE`) and only for the part its tables let it remove (see
+    `A_SWEEP_REMOVES_ONLY_WHAT_ITS_TABLE_LETS_IT_AND_QUEUES_THE_REST`).
+
+    `holds` are cited on the report as they were handed in. Which rows they cover is the
+    sweeper's to decide, because only it can see a row; what the report adds is the reason a
+    held count is not zero.
     """
     census: list[StoreCensus] = []
-    refused: list[str] = []
+    refused: dict[Store, str] = {}
     for store in Store:
         try:
             census.append(sweeper.census(store, now))
         except RetentionError as why:
-            refused.append(f"{store.value}: not counted, because {why}")
+            refused[store] = str(why)
     report = enforcement_report(now=now, census=census)
     acted: list[str] = []
+    removed: dict[Store, int] = {}
     for entry in census:
         if entry.due < 1:
             continue
@@ -1050,14 +1180,38 @@ def sweep(sweeper: StoreSweeper, *, now: datetime, report_only: bool) -> Retenti
                 f"{ONLY_A_CLOCK_IS_ENFORCED_BY_AGE}"
             )
             continue
-        removed = sweeper.expire(entry.store, now)
-        acted.append(f"{entry.store.value}: {removed} removed")
-        if removed > entry.due:
+        if entry.queued > 0:
             acted.append(
-                f"{entry.store.value}: removed {removed} where the census counted {entry.due} "
-                "due, so the count and the removal disagree about what was past its window"
+                f"{entry.store.value}: {entry.queued} due and queued, because "
+                f"{entry.queued_because}"
             )
-    return replace(report, findings=report.findings + tuple(refused) + tuple(acted))
+        if entry.removable < 1:
+            continue
+        count = sweeper.expire(entry.store, now)
+        removed[entry.store] = count
+        acted.append(f"{entry.store.value}: {count} removed")
+        if count > entry.removable:
+            acted.append(
+                f"{entry.store.value}: removed {count} where the census counted "
+                f"{entry.removable} removable, so the count and the removal disagree about what "
+                "was past its window"
+            )
+    swept = tuple(
+        replace(
+            one,
+            removed=removed.get(one.store, 0),
+            unreached_because=refused.get(one.store, ""),
+        )
+        for one in report.swept
+    )
+    refusals = tuple(f"{store.value}: not counted, because {why}" for store, why in refused.items())
+    return replace(
+        report,
+        swept=swept,
+        findings=report.findings + refusals + tuple(acted),
+        report_only=report_only,
+        holds=tuple(holds),
+    )
 
 
 # ------------------------------------------------------- the absence of an override
@@ -1097,6 +1251,7 @@ POLICY_MODELS: Final[tuple[type, ...]] = (
     Horizon,
     StoreFacts,
     StoreCensus,
+    CitedHold,
     SweptStore,
     RetentionReport,
 )

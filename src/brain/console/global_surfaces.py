@@ -31,9 +31,13 @@ time.** Confirming a nomination writes a role grant. Disabling a principal delet
 they hold and ends the sessions those grants were read through. Both are the grant decision,
 which is the capability the Access review screen already requires, so inventing
 `admin:principal` for either would put a capability into the system from the rendering layer
-where the administrator reviewing grants would never meet it. That is
-`brain.console.govern.SESSION_CONTROL`'s argument, and `GOVERNANCE_CONTROL` is written out and
-pinned against that screen by test rather than derived from it, so repointing either fails.
+where the administrator reviewing grants would never meet it. That was
+`brain.console.govern.SESSION_CONTROL`'s argument too, until 2026-09-16 moved ending a session to
+`admin:session` on the measurement that nobody on a fresh install holds `approve:grant`. The same
+measurement applies to both controls here and is not acted on in this module: that is a decision
+about the first administrator's grants rather than about these surfaces. `GOVERNANCE_CONTROL` is
+written out and pinned against that screen by test rather than derived from it, so repointing
+either fails.
 
 **Confirming a nomination you made, or one of yourself, is one person passing a gate alone.**
 `brain.knowledge.visibility.approve_promotion` refuses the proposer, and

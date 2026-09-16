@@ -42,6 +42,13 @@ disabled or deleted principal whatever role read it.
 change. This read is how a request learns which principal it is, so there is nobody to name
 yet; see `THE_LOOKUP_THAT_FINDS_THE_PRINCIPAL_NAMES_NOBODY`.
 
+**It is also asked whether the session a token came from has been ended, and answers through
+`brain.identity.session_store`.** The token authority holds this directory and nothing else that
+reads a table, and `brain.app.wirings_for` builds it in one place, so the ledger of sessions is
+reached through it rather than threaded beside it into every construction of the authority. The
+SQL is that module's and the refusal is `brain.identity.bearer`'s; this only forwards. See
+`bearer.AN_ENDED_SESSION_IS_REFUSED_ON_ITS_NEXT_REQUEST`.
+
 Not built here: writing a binding. That is `brain.identity.sign_in_binding`, which binds a
 subject at the configured issuer to one live principal on an administrator's act and never
 moves an existing binding.
@@ -53,14 +60,18 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Final
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.core.principal import Principal
+from brain.gate.admission import Assurance
 from brain.gate.context import Channel
+from brain.identity.bearer import SessionStanding
 from brain.identity.principal_store import COLUMNS, readable
+from brain.identity.session_store import StoredSessions
 from brain.tables.identity import PrincipalIdentityRow, PrincipalRow
 
 # ------------------------------------------------------------ written-down reasons
@@ -123,3 +134,21 @@ class StoredDirectory:
             # binding per channel identity, so a second would be a fault and raises here.
             row = (await session.execute(query)).mappings().one_or_none()
         return None if row is None else readable(dict(row))
+
+    async def standing(
+        self,
+        *,
+        session_id: str,
+        principal_id: str,
+        assurance: Assurance,
+        started_at: datetime,
+        now: datetime,
+    ) -> SessionStanding:
+        """Implements `brain.identity.bearer.SessionLedger`, over these same sessions."""
+        return await StoredSessions(self.sessions).standing(
+            session_id=session_id,
+            principal_id=principal_id,
+            assurance=assurance,
+            started_at=started_at,
+            now=now,
+        )

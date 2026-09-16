@@ -116,8 +116,14 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final, assert_never
 
-from brain.channels.adapter import ChannelCapabilities, Feature, assert_can_send
+from brain.channels.adapter import (
+    ChannelCapabilities,
+    Feature,
+    assert_can_send,
+    send_operation,
+)
 from brain.channels.cards import assert_label_survives, render_body
+from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance
@@ -133,6 +139,7 @@ from brain.identity.oidc import (
     TokenRefusedError,
     parse_unverified,
 )
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -1134,8 +1141,15 @@ class TeamsAdapter:
         return self.reachable
 
 
-def deliver(adapter: TeamsAdapter, plan: Answer | Notice, *, to_conversation_id: str) -> None:
-    """Send one planned message, to the conversation it was planned for (M10.5.2).
+def deliver(
+    adapter: TeamsAdapter,
+    plan: Answer | Notice,
+    *,
+    to_conversation_id: str,
+    ledger: OperationLedger,
+    intent: Intent,
+) -> Issued:
+    """Send one planned message, to the conversation it was planned for, once (M10.5.2, M17.3.1).
 
     The conversation id arrives here and nowhere else. A plan holds a digest, so whoever
     resolved the destination supplies the address at the wire and this checks that the two
@@ -1166,12 +1180,18 @@ def deliver(adapter: TeamsAdapter, plan: Answer | Notice, *, to_conversation_id:
         # keep.
         msg = f"this message was planned for somewhere else. {A_PLAN_IS_BOUND_TO_ONE_CONVERSATION}"
         raise TeamsRefusedError(msg)
-    match plan:
-        case Answer():
-            adapter.send(plan.payload, to=to_conversation_id, body=plan.body)
-        case Notice():
-            # An empty payload rather than the plan's, because a `Notice` has none. Passed
-            # explicitly so the adapter's label check runs over the fixed words too.
-            adapter.send(ChannelPayload(), to=to_conversation_id, body=plan.body)
-        case _:
-            assert_never(plan)
+
+    def send(_: Operation) -> CallOutcome:
+        match plan:
+            case Answer():
+                adapter.send(plan.payload, to=to_conversation_id, body=plan.body)
+            case Notice():
+                # An empty payload rather than the plan's, because a `Notice` has none. Passed
+                # explicitly so the adapter's label check runs over the fixed words too.
+                adapter.send(ChannelPayload(), to=to_conversation_id, body=plan.body)
+            case _:
+                assert_never(plan)
+        return CallOutcome.OK
+
+    operation = send_operation(intent, channel=Channel.TEAMS, to=to_conversation_id)
+    return issue_once(ledger, operation, send)

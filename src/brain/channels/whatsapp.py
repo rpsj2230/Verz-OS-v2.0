@@ -66,13 +66,20 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
-from brain.channels.adapter import ChannelCapabilities, Feature, assert_can_send
+from brain.channels.adapter import (
+    ChannelCapabilities,
+    Feature,
+    assert_can_send,
+    send_operation,
+)
 from brain.channels.cards import assert_label_survives, render_body
+from brain.connectors.throttle import CallOutcome
 from brain.core.entitlement import EntitlementSet
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -723,8 +730,15 @@ class WhatsAppAdapter:
         return self.reachable
 
 
-def deliver(adapter: WhatsAppAdapter, send: Send, *, to_number: str) -> None:
-    """Send one planned message, to the number it was planned for (M10.5.3).
+def deliver(
+    adapter: WhatsAppAdapter,
+    send: Send,
+    *,
+    to_number: str,
+    ledger: OperationLedger,
+    intent: Intent,
+) -> Issued:
+    """Send one planned message, to the number it was planned for, once (M10.5.3, M17.3.1).
 
     The number arrives here and nowhere else. `Send` holds a digest, so whoever resolved the
     binding supplies the address at the wire, and this checks that the two agree. See
@@ -741,4 +755,10 @@ def deliver(adapter: WhatsAppAdapter, send: Send, *, to_number: str) -> None:
         # from here, and the pair of them is the phone book this module declines to keep.
         msg = f"this send was planned for somebody else. {A_PLAN_IS_BOUND_TO_ONE_RECIPIENT}"
         raise WhatsAppRefusedError(msg)
-    adapter.send(send.payload, to=to_number, body=send.body)
+
+    def post(_: Operation) -> CallOutcome:
+        adapter.send(send.payload, to=to_number, body=send.body)
+        return CallOutcome.OK
+
+    operation = send_operation(intent, channel=Channel.WHATSAPP, to=to_number)
+    return issue_once(ledger, operation, post)

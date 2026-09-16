@@ -50,6 +50,7 @@ from brain.ops.automation_piece import (
     resolve_step,
     run_step,
 )
+from brain.ops.idempotency import IdempotencyError
 from brain.tools.registry import ToolRegistry
 
 REPO = Path(__file__).resolve().parents[2]
@@ -726,6 +727,46 @@ def test_a_result_the_redactor_cannot_walk_never_reaches_the_canvas() -> None:
             policy=POLICY,
             now=NOW,
         )
+
+
+def test_a_writing_tool_is_refused_before_it_is_called_because_this_path_holds_no_key() -> None:
+    """A flow whose ceiling was raised to a sending tool is offered it, and running it is
+    refused before the tool caller is entered, while the reading tool beside it still runs.
+
+    This path has no operation ledger, so a sending step run through it would be a side effect
+    with no idempotency key, and a retried flow would send twice. Delete this and
+    `assert_no_side_effect` can be dropped from `run_step`, which `brain.ops.effects` would then
+    report as an unkeyed call, and which nothing here would show happening."""
+    holds_everything = _entitlement("read:client.name", "write:invoice.status")
+    raised = _plan(
+        caller=holds_everything,
+        flow_ceiling=holds_everything,
+        declared_tools=frozenset({"client.read_summary", "invoice.send_reminder"}),
+        max_side_effect=SideEffect.SEND,
+    )
+    recorder = _Recorder(_one_client_row())
+    reach = holds_everything.intersect(holds_everything)
+
+    with pytest.raises(IdempotencyError, match="send"):
+        _run_step(
+            PieceStep(tool="invoice.send_reminder"),
+            raised,
+            reach=reach,
+            tools=recorder,
+            policy=POLICY,
+            now=NOW,
+        )
+    assert recorder.calls == []
+
+    _run_step(
+        PieceStep(tool="client.read_summary"),
+        raised,
+        reach=reach,
+        tools=recorder,
+        policy=POLICY,
+        now=NOW,
+    )
+    assert [one["tool"].name for one in recorder.calls] == ["client.read_summary"]
 
 
 # ------------------------------------------------- finishing a call through gate.finish

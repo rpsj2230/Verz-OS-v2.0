@@ -436,8 +436,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=_DAILY,
         severity=Severity.RAISED,
         # Started by the worker's schedule since 2026-09-15. In report-only mode until the
-        # installation releases it, which is `brain.ops.schedule.DESTRUCTIVE`'s rule, and
-        # nothing in this repository records a release yet, so every run is a report.
+        # installation releases it, which is `brain.ops.schedule.DESTRUCTIVE`'s rule. Since 0049
+        # a release is a row an administrator writes through `brain.retention_routes` after
+        # reading a report, and the tick reads it; until one exists every run is a report.
         invoked_by=Invocation.IN_PROCESS,
     ),
     Control(

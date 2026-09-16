@@ -52,6 +52,7 @@ from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.audit.ledger import TRACE_ID
 from brain.audit.record import LedgerWriter
+from brain.audit_routes import router as audit_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
 from brain.cache import (
@@ -94,6 +95,7 @@ from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
 from brain.report_routes import router as report_router
+from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
 from brain.session import (
     check_reachable,
@@ -102,6 +104,7 @@ from brain.session import (
     make_app_engine,
     make_application_sessions,
 )
+from brain.session_routes import router as session_router
 
 # Re-exported, because tests, `console/scripts/export-openapi.py` and `brain.serve`'s history all
 # import it from here. It is defined in `brain.settings`, which builds nothing when imported; a
@@ -752,6 +755,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # row and a check here would be the first half of that predicate in a second copy. See
     # `brain.report_routes`.
     app.include_router(report_router)
+    # The retention report and the four writes that decide whether the sweep acts. A router of
+    # its own because two of its writes are the only way a deletion is approved or suspended:
+    # every write needs its authority over everything, and the report is shown whole to a
+    # company-wide reader and to nobody else. See `brain.retention_routes`.
+    app.include_router(retention_router)
     # The four Govern screens, and the two writes over a grant. A router of its own because
     # what it answers about is the permission system itself: whether a screen opens is
     # `brain.console.reads.permitted` rather than a bare capability, so an existence-only
@@ -776,6 +784,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the four govern screens make, and refusing instead would let a caller read off whether
     # somebody else holds a capability. See `brain.staff_source_routes`.
     app.include_router(staff_source_router)
+    # The Audit screen, the Govern section's last item in `docs/screens.html`. A router of its own
+    # because what it reads is the ledger, where every row is decided one at a time by
+    # `brain.audit.view.AuditView` and a page is filled from what survives. See
+    # `brain.audit_routes`.
+    app.include_router(audit_router)
+    # Sessions and sign-in links, beside People in Govern, and the two controls that end a session
+    # and unlink an account. See `brain.session_routes`.
+    app.include_router(session_router)
     # The Knowledge, Learning and Memory screens. A router of its own because all three are the
     # estate-wide reads `brain.console.govern_estate` decides, and all three stand on a store
     # that is empty on every install today: each response says which of its facts has no source

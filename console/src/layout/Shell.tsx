@@ -100,6 +100,8 @@ const GROUPS: readonly NavGroup[] = [
     heading: "Govern",
     sections: [
       { to: "/people", label: "People and grants" },
+      { to: "/sessions", label: "Sessions" },
+      { to: "/sign-in-links", label: "Sign-in links" },
       { to: "/staff_sources", label: "Staff sources" },
       { to: "/roles", label: "Roles" },
       { to: "/capabilities", label: "Capabilities" },
@@ -115,6 +117,7 @@ const GROUPS: readonly NavGroup[] = [
       // under Govern in `brain.console.screens` and is read per person, so it sits under the
       // design's own Govern entries rather than inventing a place. See `pages/Memory.tsx`.
       { to: "/memory", label: "Memory" },
+      { to: "/audit", label: "Audit" },
       { to: "/classification", label: "Classification" },
     ],
   },

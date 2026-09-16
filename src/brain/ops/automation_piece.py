@@ -144,6 +144,7 @@ from brain.gate.injection import RiskAssessment
 from brain.gate.invoke import Invocation, InvocationRefusedError, invoke
 from brain.gate.leash import Leash
 from brain.ops.automation import AutomationError, StepKind, flow_reach
+from brain.ops.idempotency import assert_no_side_effect
 from brain.tools.registry import ToolRegistry
 
 # ------------------------------------------------------------------ written-down reasons
@@ -509,6 +510,10 @@ async def run_step(
     """
     assert_same_reach(invocation, reach)
     definition = resolve_step(step, invocation)
+    # This path has no operation ledger, so it calls only tools that change nothing. A flow whose
+    # ceiling was raised to a writing tool is refused here rather than run without a key. See
+    # `brain.ops.idempotency.A_CALL_THAT_CANNOT_CHANGE_ANYTHING_NEEDS_NO_KEY`.
+    assert_no_side_effect(definition)
     returned = tools.call(
         tool=definition,
         arguments=step.arguments,

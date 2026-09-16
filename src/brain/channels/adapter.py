@@ -35,6 +35,7 @@ from brain.core.field_policy import Classification
 from brain.core.redaction import OPAQUE_LABEL, ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
+from brain.ops.idempotency import Intent, Operation, operation_for
 
 
 class DeliveryRefusedError(Exception):
@@ -192,3 +193,21 @@ def registered(adapters: dict[Channel, ChannelAdapter], now: datetime) -> dict[C
         except Exception:
             out[channel] = False
     return out
+
+
+def send_operation(intent: Intent, *, channel: Channel, to: str, viewer: str = "") -> Operation:
+    """The operation one message to one destination on one channel is (M17.3.1).
+
+    Every `deliver` in this package sends through `brain.ops.idempotency.issue_once` under this,
+    so a delivery retried, resumed or raced by a second worker posts once. The destination and
+    the viewer are arguments, because the same answer to two chats, or to two people in one, is
+    two messages; the body is not, because a retried turn may word its answer differently and is
+    still the same answer. Who is acting and which turn asked are the caller's, handed in as the
+    intent, for `brain.ops.idempotency.A_KEY_IS_DERIVED_NEVER_GENERATED`'s reason.
+    """
+    return operation_for(
+        intent,
+        connector=channel.value,
+        tool=f"{channel.value}.send",
+        arguments={"to": to, "viewer": viewer},
+    )

@@ -64,6 +64,8 @@ from brain.gate.ingress import (
     Unrecognised,
     identity_hash,
 )
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
 EPOCH_SECONDS = int(NOW.timestamp())
@@ -77,6 +79,9 @@ GROUP_ID = -1001234567890
 SECRET = "z8Qv3Lm1Rt7Yb2Nc5Hj9Kd4Ws6Px0Ae"[:31] + "Q"
 DIGEST = identity_hash(Channel.TELEGRAM, str(SENDER_ID))
 GROUP_DIGEST = identity_hash(Channel.TELEGRAM, str(GROUP_ID))
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 def _update(
@@ -577,10 +582,10 @@ def test_an_answer_cannot_be_delivered_to_a_chat_it_was_not_planned_for() -> Non
     answer = reply_privately(_message(), _payload())
 
     with pytest.raises(TelegramRefusedError, match="planned for somewhere else"):
-        deliver(adapter, answer, to_chat_id=OTHER_SENDER_ID)
+        deliver(adapter, answer, to_chat_id=OTHER_SENDER_ID, ledger=MemoryLedger(), intent=INTENT)
 
     with pytest.raises(TelegramRefusedError, match="planned for somewhere else"):
-        deliver(adapter, answer, to_chat_id=GROUP_ID)
+        deliver(adapter, answer, to_chat_id=GROUP_ID, ledger=MemoryLedger(), intent=INTENT)
 
     assert adapter.sent == [], "nothing reaches the wire when the destination disagrees"
 
@@ -592,7 +597,13 @@ def test_the_refusal_names_neither_the_chat_id_nor_the_digest_it_expected() -> N
     answer = reply_privately(_message(), _payload())
 
     with pytest.raises(TelegramRefusedError) as caught:
-        deliver(TelegramAdapter(), answer, to_chat_id=OTHER_SENDER_ID)
+        deliver(
+            TelegramAdapter(),
+            answer,
+            to_chat_id=OTHER_SENDER_ID,
+            ledger=MemoryLedger(),
+            intent=INTENT,
+        )
 
     assert str(OTHER_SENDER_ID) not in str(caught.value)
     assert DIGEST not in str(caught.value)
@@ -605,8 +616,12 @@ def test_a_delivered_message_records_the_digest_and_never_the_chat_id() -> None:
     adapter = TelegramAdapter()
     answer = reply_privately(_message(), _payload())
 
-    deliver(adapter, answer, to_chat_id=SENDER_ID)
+    ledger = MemoryLedger()
+    first = deliver(adapter, answer, to_chat_id=SENDER_ID, ledger=ledger, intent=INTENT)
+    again = deliver(adapter, answer, to_chat_id=SENDER_ID, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
+    assert (first.issued, again.issued) == (True, False)
     assert len(adapter.sent) == 1
     assert adapter.sent[0].to_identity == DIGEST
     assert str(SENDER_ID) not in adapter.sent[0].to_identity
@@ -619,8 +634,11 @@ def test_a_deflection_reaches_the_group_it_was_planned_for_and_carries_nothing()
     adapter = TelegramAdapter()
     notice = group_deflection(_message(chat_id=GROUP_ID, chat_type="supergroup"))
 
-    deliver(adapter, notice, to_chat_id=GROUP_ID)
+    ledger = MemoryLedger()
+    deliver(adapter, notice, to_chat_id=GROUP_ID, ledger=ledger, intent=INTENT)
+    deliver(adapter, notice, to_chat_id=GROUP_ID, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
     assert adapter.sent == [type(adapter.sent[0])(to_identity=GROUP_DIGEST, body=GROUP_DEFLECTION)]
 
 

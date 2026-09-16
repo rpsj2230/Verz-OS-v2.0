@@ -65,13 +65,16 @@ from brain.channels.adapter import (
     DeliveryRefusedError,
     Feature,
     assert_can_send,
+    send_operation,
 )
 from brain.channels.cards import assert_label_survives, render_body
 from brain.channels.room import Degradation, Member, plan
+from brain.connectors.throttle import CallOutcome
 from brain.core.field_policy import Classification
 from brain.core.redaction import ChannelPayload
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, identity_hash
+from brain.ops.idempotency import Intent, Issued, Operation, OperationLedger, issue_once
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -667,8 +670,10 @@ class LarkAdapter:
         return self.reachable
 
 
-def deliver(adapter: LarkAdapter, delivery: Delivery) -> None:
-    """Send one planned delivery.
+def deliver(
+    adapter: LarkAdapter, delivery: Delivery, *, ledger: OperationLedger, intent: Intent
+) -> Issued:
+    """Send one planned delivery, once (M17.3.1).
 
     The mapping from a `Visibility` to a send is here rather than on the adapter, so that
     `LarkAdapter.send` keeps the signature `redaction.assert_channel_adapter` can check: a
@@ -676,9 +681,11 @@ def deliver(adapter: LarkAdapter, delivery: Delivery) -> None:
     not be shown safe by reading it.
     """
     ephemeral = delivery.visibility is Visibility.EPHEMERAL
-    adapter.send(
-        delivery.payload,
-        to=delivery.chat_id,
-        viewer=delivery.to_identity if ephemeral else "",
-        ephemeral=ephemeral,
-    )
+    viewer = delivery.to_identity if ephemeral else ""
+
+    def send(_: Operation) -> CallOutcome:
+        adapter.send(delivery.payload, to=delivery.chat_id, viewer=viewer, ephemeral=ephemeral)
+        return CallOutcome.OK
+
+    operation = send_operation(intent, channel=Channel.LARK, to=delivery.chat_id, viewer=viewer)
+    return issue_once(ledger, operation, send)

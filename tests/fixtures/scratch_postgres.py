@@ -141,6 +141,33 @@ def modelled(database: str, qualified: Sequence[str]) -> Iterator[str]:
         drop(database)
 
 
+def add_modelled(url: str, qualified: Sequence[str]) -> None:
+    """These tables, built from the models, into a database that already exists.
+
+    For a test whose database was migrated to a head older than a table a code path it drives
+    now reads: `brain.ops.worker`'s tick reads `ops.retention_release` since `0049`, and a
+    scratch chain that stops at `0037` cannot run `0049` without everything between.
+    """
+    from sqlalchemy import create_engine
+
+    import brain.tables  # noqa: F401 - registers every table on the metadata
+    from brain.db import metadata, normalise_database_url
+
+    built = create_engine(normalise_database_url(url), poolclass=NullPool)
+    try:
+        metadata.create_all(built, tables=[metadata.tables[one] for one in qualified])
+    finally:
+        built.dispose()
+
+
+#: The retention tables a tick reads, for `add_modelled`.
+RETENTION_TABLES: tuple[str, ...] = (
+    "obs.legal_hold",
+    "ops.retention_report",
+    "ops.retention_release",
+)
+
+
 def sql(url: str, statement: str, *params: object) -> list[tuple[Any, ...]]:
     """One statement in its own autocommitted connection, as the superuser the URL names."""
     import psycopg

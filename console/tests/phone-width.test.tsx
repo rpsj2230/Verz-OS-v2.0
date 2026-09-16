@@ -216,6 +216,72 @@ const STAFF_SOURCES = {
  * A digest is sixty-four characters with nowhere to break and it is on every row of this
  * screen, which makes it the widest single value the console renders anywhere.
  */
+/**
+ * One ledger entry whose actor, subject and detail are unbreakable tokens, and the same actor
+ * offered in the Who filter, which is the one value on the page outside the table.
+ */
+const AUDIT = {
+  items: [
+    {
+      at: "2019-03-04T09:00:00Z",
+      action: "grant",
+      actor_id: UNBROKEN,
+      subject_kind: "principal",
+      subject_id: UNBROKEN,
+      details: { capability: UNBROKEN },
+    },
+  ],
+  next_cursor: null,
+  order: "newest",
+  actions: ["grant"],
+  subject_kinds: ["principal"],
+  actors: [UNBROKEN],
+};
+
+/**
+ * One session whose person, principal id and department are unbreakable, and the two sentences
+ * the API serves beside the list, which sit outside the table and must wrap.
+ */
+const SESSIONS = {
+  items: [
+    {
+      session_id: "kc-1",
+      principal_id: UNBROKEN,
+      display_name: UNBROKEN,
+      department: UNBROKEN,
+      second_factor: true,
+      signed_in_at: "2019-03-04T09:00:00Z",
+      lapses_at: "2019-03-04T19:00:00Z",
+      yours: false,
+      endable: true,
+    },
+  ],
+  truncated: false,
+  ending: UNBROKEN,
+  appears: UNBROKEN,
+};
+
+/**
+ * One link marked as the last administrator's, so the served sentence about it is drawn, and the
+ * sentence about where the account is kept, both outside the table.
+ */
+const SIGN_IN_LINKS = {
+  items: [
+    {
+      principal_id: UNBROKEN,
+      display_name: UNBROKEN,
+      department: UNBROKEN,
+      linked_at: "2019-03-04T09:00:00Z",
+      last_administrator: true,
+      yours: false,
+    },
+  ],
+  truncated: false,
+  account: UNBROKEN,
+  unlinking: UNBROKEN,
+  last_administrator: UNBROKEN,
+};
+
 const SKILLS = {
   items: [
     {
@@ -742,6 +808,31 @@ const PAGES: Readonly<Record<string, PageCase>> = {
         edit_is_not_writable: true,
       },
     },
+  },
+  // Sessions and sign-in links. Every identifier is in the table, which scrolls, and the served
+  // sentences are outside it, where they must wrap. No control is pressed here: the confirmation
+  // panel is held to the same rules in `tests/sessions-page.test.tsx` and
+  // `tests/sign-in-links-page.test.tsx`.
+  "/sessions": {
+    address: "/sessions",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/sessions": SESSIONS },
+  },
+  "/sign-in-links": {
+    address: "/sign-in-links",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/sign-ins": SIGN_IN_LINKS },
+  },
+  // Audit. The actor is drawn twice, in the table and as an option in the Who filter, and the
+  // option is the one outside anything that scrolls. The history card is not opened here; it is
+  // the same table shape and is held in `tests/audit-page.test.tsx`.
+  "/audit": {
+    address: "/audit",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/audit": AUDIT },
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {

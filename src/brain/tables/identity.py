@@ -138,6 +138,11 @@ class SessionEndReason(enum.StrEnum):
     #: offboarding and a temporary disable are different events, and the question asked
     #: afterwards ("was she still working here?") has different answers.
     PRINCIPAL_RETIRED = "principal_retired"
+    #: An administrator ended it from the Sessions screen (M27.7.10). Separate from the two
+    #: cascades because nothing about the principal changed: they may sign in again, and the
+    #: question asked afterwards is who decided this one sitting had to stop. Eighteen
+    #: characters, inside the column's twenty-four. Not `revoked`, for the reason above.
+    ENDED_FROM_CONSOLE = "ended_from_console"
 
 
 def one_of(column: str, values: Iterable[str]) -> str:

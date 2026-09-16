@@ -46,10 +46,15 @@ from brain.core.redaction import ChannelPayload
 from brain.core.scope import Scope
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
 NUMBER = "+6591234567"
 DIGEST = identity_hash(Channel.WHATSAPP, NUMBER)
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 def _ents(*capabilities: str, principal_id: str = "u_asker") -> EntitlementSet:
@@ -374,7 +379,7 @@ def test_a_plan_cannot_be_delivered_to_a_number_it_was_not_planned_for() -> None
     send = free_text(to_identity=DIGEST, payload=_payload(), now=NOW, sessions=windows)
 
     with pytest.raises(WhatsAppRefusedError, match="planned for somebody else"):
-        deliver(adapter, send, to_number="+6598765432")
+        deliver(adapter, send, to_number="+6598765432", ledger=MemoryLedger(), intent=INTENT)
 
     assert adapter.sent == [], "nothing reaches the wire when the recipient disagrees"
 
@@ -387,7 +392,9 @@ def test_the_refusal_names_neither_the_number_nor_the_digest_it_expected() -> No
     send = free_text(to_identity=DIGEST, payload=_payload(), now=NOW, sessions=windows)
 
     with pytest.raises(WhatsAppRefusedError) as caught:
-        deliver(WhatsAppAdapter(), send, to_number="+6598765432")
+        deliver(
+            WhatsAppAdapter(), send, to_number="+6598765432", ledger=MemoryLedger(), intent=INTENT
+        )
 
     assert "+6598765432" not in str(caught.value)
     assert DIGEST not in str(caught.value)
@@ -402,8 +409,12 @@ def test_a_delivered_message_records_the_digest_and_never_the_number() -> None:
     windows.note_inbound(_event())
     send = free_text(to_identity=DIGEST, payload=_payload(), now=NOW, sessions=windows)
 
-    deliver(adapter, send, to_number=NUMBER)
+    ledger = MemoryLedger()
+    first = deliver(adapter, send, to_number=NUMBER, ledger=ledger, intent=INTENT)
+    again = deliver(adapter, send, to_number=NUMBER, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
+    assert (first.issued, again.issued) == (True, False)
     assert len(adapter.sent) == 1
     assert adapter.sent[0].to_identity == DIGEST
     assert NUMBER not in adapter.sent[0].to_identity

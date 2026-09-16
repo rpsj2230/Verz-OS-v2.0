@@ -36,6 +36,8 @@ from brain.gate.compose import new_trace_ref
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent
 from brain.ops.feedback import FLAG_CAPABILITY, FlagReason
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 from tests.invariants.test_channel_adapter_invariants import ADAPTERS
 from tests.unit import test_lark_channel as lark_fixtures
 from tests.unit import test_slack as slack_fixtures
@@ -47,6 +49,9 @@ AT = datetime(2099, 1, 1, tzinfo=UTC)
 REF = new_trace_ref()
 PAYLOAD = ChannelPayload(records=({"invoice": "INV-1"},))
 SENDER = "someone@client.example"
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 def _lark(line: str) -> object:
@@ -147,8 +152,20 @@ def test_an_answer_sent_through_every_adapter_carries_the_correction_line(
     del module
     adapter = cls()
 
-    send_with_correction(adapter, PAYLOAD, to="recipient_1", trace_ref=REF)
+    ledger = MemoryLedger()
+    send_with_correction(
+        adapter, PAYLOAD, to="recipient_1", trace_ref=REF, ledger=ledger, intent=INTENT
+    )
+    send_with_correction(
+        adapter, PAYLOAD, to="recipient_1", trace_ref=REF, ledger=ledger, intent=INTENT
+    )
+    send_with_correction(
+        adapter, PAYLOAD, to="recipient_2", trace_ref=REF, ledger=ledger, intent=INTENT
+    )
 
+    # A second delivery under the same intent sends nothing, because every send is keyed
+    # (M17.3.1), and the same answer to a second recipient is a second message.
+    assert len(adapter.sent) == 2
     delivered = adapter.sent[-1].body
     assert delivered.startswith(render_body(PAYLOAD))
     assert delivered.endswith(correction_line(REF))
@@ -172,7 +189,9 @@ def test_no_adapter_lets_a_composed_body_drop_the_payloads_label(
         adapter.send(labelled, to="recipient_1", body="an answer with no label on it")
     assert adapter.sent == []
 
-    send_with_correction(adapter, labelled, to="recipient_1", trace_ref=REF)
+    send_with_correction(
+        adapter, labelled, to="recipient_1", trace_ref=REF, ledger=MemoryLedger(), intent=INTENT
+    )
     assert OPAQUE_LABEL in adapter.sent[-1].body
 
 
@@ -288,9 +307,27 @@ def test_every_outcome_is_acknowledged_with_one_identical_message() -> None:
     delivered = []
     for _ in outcomes:
         adapter = EmailAdapter()
-        acknowledge(adapter, to=SENDER)
+        acknowledge(adapter, to=SENDER, ledger=MemoryLedger(), intent=INTENT)
         delivered.append(adapter.sent[-1])
 
     assert [one is not None for one in outcomes] == [True, False, False]
     assert delivered[0] == delivered[1] == delivered[2]
     assert delivered[0].body == CORRECTION_ACKNOWLEDGEMENT
+
+
+def test_a_correction_its_channel_delivered_twice_is_acknowledged_once() -> None:
+    """Channels redeliver a webhook they were not sure landed, so the same correction arrives
+    twice under one intent. The sender is told once, and a second correction is told again.
+
+    Delete this and the acknowledgement could be sent outside the ledger, which every sender
+    whose channel retried would read twice (M17.3.1)."""
+    adapter = EmailAdapter()
+    ledger = MemoryLedger()
+
+    acknowledge(adapter, to=SENDER, ledger=ledger, intent=INTENT)
+    acknowledge(adapter, to=SENDER, ledger=ledger, intent=INTENT)
+    assert len(adapter.sent) == 1
+
+    later = Intent(principal_id=INTENT.principal_id, intent_ref="turn_2")
+    acknowledge(adapter, to=SENDER, ledger=ledger, intent=later)
+    assert len(adapter.sent) == 2

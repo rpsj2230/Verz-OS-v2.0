@@ -62,6 +62,7 @@ if TYPE_CHECKING:
     # gets updated is whichever the person was looking at.
     from brain.gate.injection import AutonomyTier
     from brain.identity.roles import BreakGlassReason
+    from brain.tables.identity import SessionEndReason
 
 
 class DenyReason(enum.StrEnum):
@@ -154,6 +155,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "approval": AuditAction.APPROVAL,
         "record_read": AuditAction.RECORD_READ,
         "sign_in": AuditAction.SIGN_IN,
+        "session_end": AuditAction.SESSION_END,
     }
 )
 
@@ -569,4 +571,24 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.SIGN_IN, subject("principal", principal_id), {"change": change.value}
+        )
+
+    def session_end(self, *, principal_id: str, reason: SessionEndReason) -> AuditEntry:
+        """Record that a sign-in session was ended before it lapsed, and why.
+
+        The entry a deployed database keeps is written by `0050`'s trigger on `auth.session`,
+        for the reason `sign_in` gives about `0047`: the disable cascade ends sessions from a
+        trigger of its own, and an entry written only by the console's route would leave every
+        one of those unrecorded. This is the same entry for a chain held anywhere else, and a
+        test holds its details to the trigger's.
+
+        The subject is the principal rather than the session, so the person whose sign-in was
+        ended reads it among the entries about them, which `brain.audit.view` already admits.
+        The session id is not recorded: it is not a field name, so `redact_details` would
+        store the marker, and a detail reading `<redacted>` says something was hidden when
+        nothing was. The reason is `SessionEndReason`'s own word, imported for typing only so
+        this package stays underneath the tables.
+        """
+        return self._write(
+            AuditAction.SESSION_END, subject("principal", principal_id), {"reason": reason.value}
         )

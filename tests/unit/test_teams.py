@@ -80,6 +80,8 @@ from brain.gate.ingress import (
     identity_hash,
 )
 from brain.identity.oidc import KeySet, SigningKey, parse_unverified
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
 TIMESTAMP = "2026-09-06T12:00:00.0000000Z"
@@ -101,6 +103,9 @@ ACTIVITY_ID = "1757160000000"
 
 DIGEST = identity_hash(Channel.TEAMS, PERSONAL)
 ROOM_DIGEST = identity_hash(Channel.TEAMS, ROOM)
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 # ------------------------------------------------------------------------ the fixtures
@@ -1081,10 +1086,12 @@ def test_a_plan_cannot_be_delivered_to_a_conversation_it_was_not_planned_for() -
     answer = reply_privately(_message(), _payload())
 
     with pytest.raises(TeamsRefusedError, match="planned for somewhere else"):
-        deliver(adapter, answer, to_conversation_id=OTHER_PERSONAL)
+        deliver(
+            adapter, answer, to_conversation_id=OTHER_PERSONAL, ledger=MemoryLedger(), intent=INTENT
+        )
 
     with pytest.raises(TeamsRefusedError, match="planned for somewhere else"):
-        deliver(adapter, answer, to_conversation_id=ROOM)
+        deliver(adapter, answer, to_conversation_id=ROOM, ledger=MemoryLedger(), intent=INTENT)
 
     assert adapter.sent == [], "nothing reaches the wire when the destination disagrees"
 
@@ -1096,7 +1103,13 @@ def test_the_refusal_names_neither_the_conversation_id_nor_the_digest_it_expecte
     answer = reply_privately(_message(), _payload())
 
     with pytest.raises(TeamsRefusedError) as caught:
-        deliver(TeamsAdapter(), answer, to_conversation_id=OTHER_PERSONAL)
+        deliver(
+            TeamsAdapter(),
+            answer,
+            to_conversation_id=OTHER_PERSONAL,
+            ledger=MemoryLedger(),
+            intent=INTENT,
+        )
 
     assert OTHER_PERSONAL not in str(caught.value)
     assert DIGEST not in str(caught.value)
@@ -1109,8 +1122,12 @@ def test_a_delivered_message_records_the_digest_and_never_the_conversation_id() 
     adapter = TeamsAdapter()
     answer = reply_privately(_message(), _payload())
 
-    deliver(adapter, answer, to_conversation_id=PERSONAL)
+    ledger = MemoryLedger()
+    first = deliver(adapter, answer, to_conversation_id=PERSONAL, ledger=ledger, intent=INTENT)
+    again = deliver(adapter, answer, to_conversation_id=PERSONAL, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
+    assert (first.issued, again.issued) == (True, False)
     assert len(adapter.sent) == 1
     assert adapter.sent[0].to_identity == DIGEST
     assert PERSONAL not in adapter.sent[0].to_identity
@@ -1123,8 +1140,11 @@ def test_a_deflection_reaches_the_room_it_was_planned_for_and_carries_nothing() 
     adapter = TeamsAdapter()
     notice = room_deflection(_message(conversation_id=ROOM, conversation_type="groupChat"))
 
-    deliver(adapter, notice, to_conversation_id=ROOM)
+    ledger = MemoryLedger()
+    deliver(adapter, notice, to_conversation_id=ROOM, ledger=ledger, intent=INTENT)
+    deliver(adapter, notice, to_conversation_id=ROOM, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
     assert adapter.sent == [type(adapter.sent[0])(to_identity=ROOM_DIGEST, body=ROOM_DEFLECTION)]
 
 

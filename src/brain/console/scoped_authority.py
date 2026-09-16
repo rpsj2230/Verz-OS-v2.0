@@ -41,8 +41,9 @@ clauses are not equal, so an admin narrowing a grant correctly would be refused 
 learn to write the wide one instead. A refusal people route around is worse than no refusal,
 because everybody believes the rule is being kept.
 
-**Rejected: a capability of this module's own for any of the five.** This is
-`brain.console.govern`'s argument about `SESSION_CONTROL` and it applies four more times.
+**Rejected: a capability of this module's own for any of the five.** This was
+`brain.console.govern`'s argument about `SESSION_CONTROL` until that control became an `admin:`
+capability the first administrator holds, and it applies four more times here.
 Inventing `admin:department_grant` from a console module puts a grant into the system from the
 rendering layer, where the administrator who reviews grants would never meet it. Two
 capabilities already exist over these acts and both are in the screen registry.
@@ -260,8 +261,9 @@ class AuthorityError(Exception):
 #:
 #: The Access review screen's own requirement, written out here rather than read off the
 #: registry so that a test can compare the two: derived, the comparison would be a constant
-#: against itself and repointing either would move both. `brain.console.govern.SESSION_CONTROL`
-#: is pinned the same way, against the same screen, and records the same argument.
+#: against itself and repointing either would move both. `brain.console.elevation.
+#: ELEVATION_CONTROL` is pinned the same way, against the same screen, and records the same
+#: argument.
 REACH_AUTHORITY: Final = Capability(value="approve:grant")
 
 #: The screen that requirement belongs to. Pinned beside it, so the pair can be checked.

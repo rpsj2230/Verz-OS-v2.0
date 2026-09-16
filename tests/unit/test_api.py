@@ -241,13 +241,20 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     first mounted that router. The exceptions are compared exactly, so a second one cannot arrive
     without an edit here, and a stale one fails too.
 
+    **Unlinking a sign-in is the second, for its 409.** `brain.session_routes` refuses to unlink the
+    last administrator who can sign in with an `UnlinkView` carrying the sentence saying why, which
+    is the one refusal on that route an administrator has to act on and which names nobody else.
+
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
     from brain.sign_in_routes import SIGN_INS_PATH
 
     app: FastAPI = create_app(Settings(env="development"))
     doc = app.openapi()
     ref = "#/components/schemas/ErrorBody"
-    own_shape = {(SIGN_INS_PATH, "409"): "#/components/schemas/SignInView"}
+    own_shape = {
+        (SIGN_INS_PATH, "409"): "#/components/schemas/SignInView",
+        (f"{API_PREFIX}/govern/sign-ins/unlink", "409"): "#/components/schemas/UnlinkView",
+    }
 
     checked = 0
     exceptions: dict[tuple[str, str], str] = {}

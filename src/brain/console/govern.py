@@ -81,14 +81,24 @@ both and it is a leaver transition rather than something an administrator reache
 screen. The control is therefore `SessionRegistry.end_session`, called and not reimplemented,
 and what is decided here is who may press it.
 
-**Rejected: a capability of this module's own for ending a session.** `read:session` is the
-only capability over that noun anywhere in this repository, and inventing a second one from a
-console module puts a grant into the system from the rendering layer, where the administrator
-who reviews grants would never meet it.
-The authority to end a session is the authority to remove the grant the session outlived, which
-is `approve:grant`, the capability the Access review screen already requires. `SESSION_CONTROL`
-is written out and pinned against that screen by a test rather than derived from it, so
-repointing either one fails.
+**The control is `admin:session`, and until 2026-09-16 it was `approve:grant`.** The argument
+then was that ending a session removes what a revoked grant left behind, which is the grant
+decision, and that a capability of this module's own would enter the system from the rendering
+layer where the administrator who reviews grants never meets it. Two facts measured on that day
+moved it. `brain.identity.first_administrator.ADMINISTRATION` is every `admin:` capability the
+source declares and nothing else, so on a fresh install nobody held `approve:grant` and nobody
+could end anybody's session, including a stolen one. And `docs/admin-console.md`, the owner's
+console standard, makes a sensitive operation an `admin:` capability, which `brain.gate.admission`
+withholds from a password-only session and a token with no session. The second half of the old
+worry is answered by the first fact: `tests/unit/test_first_administrator.py` reads every
+`admin:` capability in the source and requires the first administrator to hold it, so this one
+is met by the person who administers the install rather than by nobody. What that does not
+settle is the listing: the Sessions screen's read is still `read:session`, which the first
+administrator is not written, so on a fresh install the control is held by somebody who cannot yet
+open the screen it is on until a grant of that read is made. That is the same gap every `read:`
+screen has on a fresh install and is recorded rather than closed here. `SESSION_CONTROL` is written
+out and pinned by a test against the first administrator's list and against the Sessions screen's
+own read, so repointing it fails.
 
 **The control refuses identically whether the session is out of reach or not there.** A control
 that raised for one and returned nothing for the other would answer "does this session id
@@ -131,7 +141,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from brain.console.reads import permitted
 from brain.console.screens import SCREENS, Group, Screen, screen
@@ -910,21 +920,37 @@ def apply_round(
 # -------------------------------------------------------------------- sessions (M27.3.8)
 #: The capability that offers the control to end somebody else's session.
 #:
-#: The Access review screen's own requirement, written out here rather than derived from the
-#: registry so that a test can compare the two: derived, the comparison would be a constant
+#: Written out rather than derived, so a test can compare it with the first administrator's
+#: grants and with the Sessions screen's read: derived, the comparison would be a constant
 #: against itself and repointing either would move both. `brain.console.reach_view.
 #: CEILING_DISCLOSURE` is pinned the same way and records the same argument.
 #:
-#: See `REVOKING_A_GRANT_DOES_NOT_CLOSE_A_SESSION` for why this is the right capability and
-#: not one of this module's own.
-SESSION_CONTROL: Final = Capability(value="approve:grant")
+#: See the module docstring for why it is an `admin:` verb and was once `approve:grant`.
+SESSION_CONTROL: Final = Capability(value="admin:session")
 
 
-def open_sessions(
-    sessions: Sequence[Placed[Session]],
+class LiveSession(Protocol):
+    """What the Sessions screen decides over: a session with an id that can say it is live.
+
+    A protocol rather than `brain.identity.sessions.Session`, because the screen lists what
+    `auth.session` holds and that row carries no identity provider subject, which `Session`
+    requires. Filling one in to satisfy the type would put a made-up subject on a value somebody
+    reads later as a real one. `Session` satisfies this structurally, so `end_one` and the
+    in-memory registry are unchanged, and `brain.identity.session_store.StoredSession` satisfies
+    it as the row.
+    """
+
+    @property
+    def session_id(self) -> str: ...
+
+    def is_live(self, now: datetime) -> bool: ...
+
+
+def open_sessions[S: LiveSession](
+    sessions: Sequence[Placed[S]],
     entitlement: EntitlementSet,
     now: datetime,
-) -> tuple[Placed[Session], ...]:
+) -> tuple[Placed[S], ...]:
     """The sign-ins this reader may see, at this instant (M27.3.8).
 
     Live and in reach, and both are needed. `Session.is_live` is the single statement of
@@ -942,8 +968,8 @@ def open_sessions(
     )
 
 
-def may_end(
-    one: Placed[Session],
+def may_end[S: LiveSession](
+    one: Placed[S],
     entitlement: EntitlementSet,
     now: datetime | None = None,
 ) -> bool:

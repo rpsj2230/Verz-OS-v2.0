@@ -200,6 +200,23 @@ class AuditAction(enum.StrEnum):
     token is, and "what did this person gain" filled with rows about accounts breaks the
     query GRANT serves. One member for both directions, bound and retired, with the change
     in the details, for the reason APPROVAL carries its verdict there. Seven characters.
+
+    SESSION_END was added on 2026-09-16, and it is the twelfth. M27.7.10 puts a control on the
+    Sessions screen that ends somebody's sign-in, because revoking a grant does not close one,
+    and `auth.session` records when a session stopped and why but not who stopped it. "Who
+    ended her session, and when" had nowhere to be answered. **Recorded by the database, from
+    a trigger on `auth.session`, the way SIGN_IN is**, so the disable cascade `0003` runs is
+    recorded as well as a press of the console's control, and an operator ending one by hand
+    is recorded without having to remember to be.
+
+    Recording it as REVOKE was the tempting precedent and was rejected for COMPOSE_CHANGE's
+    reason: a revoke is a grant taken away, "what did this person lose" is the query it serves,
+    and ending a session takes away no grant at all, which is the whole reason the control
+    exists. SIGN_IN was rejected too: it is about which account is a person, and a session is
+    one sitting of that account. The subject is the principal, so the person whose session it
+    was can read that it was ended, and the reason rides in the details as a closed word. The
+    session id is not in the entry, because it is not a field name and would be stored as the
+    marker. Eleven characters.
     """
 
     GRANT = "grant"
@@ -223,6 +240,9 @@ class AuditAction(enum.StrEnum):
     #: A Keycloak subject was bound to a principal, or a binding was retired. Which of the two
     #: is in the details. Written by `0047`'s trigger on `auth.principal_identity`.
     SIGN_IN = "sign_in"
+    #: A sign-in session was ended before it lapsed: from the console, by a disable or by a
+    #: retirement. Why is in the details. Written by `0050`'s trigger on `auth.session`.
+    SESSION_END = "session_end"
 
 
 # --------------------------------------------------------------------- redaction

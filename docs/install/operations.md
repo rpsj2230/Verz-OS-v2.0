@@ -248,7 +248,12 @@ means no call site of any kind. `in_process` means another module calls it, and 
 says nothing about whether *that* module is ever reached. For `retention_sweep`,
 `knowledge_reverification` and `spend_report_refresh` it is: the general worker ticks the control
 schedule and starts all three. The sweep runs in report-only mode, deleting nothing, until the
-installation releases it. The re-verification nag records each nag in the webhook outbox, asks
+installation releases it: every run writes a report an administrator reads at
+`GET /api/v1/govern/retention`, and somebody holding `admin:retention` over everything releases
+the sweep after the newest report with `POST /api/v1/govern/retention/release`, or puts it back
+to reporting with `POST /api/v1/govern/retention/withdrawal`. A legal hold placed with
+`POST /api/v1/govern/legal-holds` by somebody holding `admin:legal_hold` keeps the rows it covers
+from the next run on. The re-verification nag records each nag in the webhook outbox, asks
 the owner only while the owner can still reach the document, and sends nothing yet, because
 nothing drains the outbox.
 For `spend_correction` it means a console screen nobody opens on a schedule, for

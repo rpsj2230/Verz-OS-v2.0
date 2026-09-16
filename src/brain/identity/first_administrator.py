@@ -181,10 +181,13 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:connector",
     "admin:field_classification",
     "admin:halt",
+    "admin:legal_hold",
     "admin:operations_alert",
     "admin:operations_incident",
     "admin:plugin",
+    "admin:retention",
     "admin:routing_matrix",
+    "admin:session",
     "admin:sign_in",
     "admin:webhook_subscriber",
 )

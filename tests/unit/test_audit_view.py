@@ -59,11 +59,14 @@ from brain.audit.view import (
     AuditPage,
     AuditRow,
     AuditView,
+    cursor_after,
+    position_of,
 )
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.injection import AutonomyTier
 from brain.identity.roles import BreakGlassReason
+from brain.tables.identity import SessionEndReason
 from tests.fixtures.company import CANARIES, NOW, person
 
 ENT = person("u_weiling").entitlement().ent_hash()
@@ -369,6 +372,7 @@ CALLS: dict[str, dict[str, object]] = {
         "agent_id": "hr_desk",
     },
     "sign_in": {"principal_id": "u_weiling", "change": SignInChange.BOUND},
+    "session_end": {"principal_id": "u_weiling", "reason": SessionEndReason.ENDED_FROM_CONSOLE},
 }
 
 
@@ -772,6 +776,58 @@ def test_a_page_carries_a_cursor_only_while_more_visible_rows_remain() -> None:
 
     assert view.page(limit=5).next_cursor is not None
     assert view.page(limit=6).next_cursor is None
+
+
+def test_newest_first_walks_the_same_visible_rows_the_other_way_and_pages_without_repeats() -> None:
+    """M27.7.13. Delete this and newest first can be a reversed page, so the newest entries are the
+    last page a reader reaches rather than the first; or a newest-first cursor can continue towards
+    newer entries, repeating the page it came from for ever."""
+    view = a_view(reader("u_auditor", "read:audit.*"))
+    forwards = view.page(limit=MAX_PAGE_SIZE).rows
+    seen: list[AuditRow] = []
+    cursor: str | None = None
+
+    while True:
+        page = view.page(limit=2, cursor=cursor, newest_first=True)
+        seen.extend(page.rows)
+        cursor = page.next_cursor
+        if cursor is None:
+            break
+
+    assert view.page(limit=2, newest_first=True).rows == tuple(reversed(forwards))[:2]
+    assert seen == list(reversed(forwards))
+
+
+def test_newest_first_is_byte_identical_whether_or_not_withheld_entries_were_written() -> None:
+    """M27.7.13, the view's strong form in the new direction. Delete this and the reversed walk can
+    count a withheld entry against the page limit or the cursor, which a reader measures as a short
+    page they cannot explain."""
+    everything = a_ledger().entries
+    theirs = [one for one in everything if one.subject.startswith("principal:")]
+    narrow = reader("u_auditor", "read:audit.principal")
+
+    with_withheld = a_view(narrow, everything).page(limit=1, newest_first=True)
+    without = a_view(narrow, theirs).page(limit=1, newest_first=True)
+
+    assert with_withheld.model_dump_json() == without.model_dump_json()
+
+
+def test_a_cursor_names_a_position_a_loader_can_start_from_and_one_can_be_made_past_any_entry() -> (
+    None
+):
+    """M27.7.13. Delete this and `brain.audit_routes` cannot honour a cursor without reading the
+    ledger from its newest entry every time, or its continuation past a withheld entry can skip or
+    repeat a row the reader may see."""
+    view = a_view(reader("u_auditor", "read:audit.*"))
+    entries = sorted(a_ledger().entries, key=lambda one: (one.at, one.entry_hash))
+    cursor = view.page(limit=2).next_cursor
+    assert cursor is not None
+
+    assert position_of(cursor) == (entries[1].at, entries[1].entry_hash)
+    assert position_of(cursor_after(entries[1])) == (entries[1].at, entries[1].entry_hash)
+    assert view.page(limit=1, cursor=cursor_after(entries[1])).rows[0].at == entries[2].at
+    with pytest.raises(ValueError, match="malformed cursor"):
+        position_of("not-a-cursor")
 
 
 def test_a_malformed_cursor_is_refused_without_touching_an_entry() -> None:

@@ -868,7 +868,7 @@ def test_revoking_a_grant_does_not_close_the_session_it_was_read_through() -> No
     assert registry.live_for("u_1", NOW) == (live.record,)
     assert registry.not_before_for("u_1") is None
 
-    admin = holding("read:session", "approve:grant", scope=Scope.department(MAINTENANCE))
+    admin = holding("read:session", "admin:session", scope=Scope.department(MAINTENANCE))
     ended = end_one(registry, "sess_1", sessions=[live], entitlement=admin, now=NOW)
 
     assert ended == live.record
@@ -876,13 +876,25 @@ def test_revoking_a_grant_does_not_close_the_session_it_was_read_through() -> No
     assert registry.not_before_for("u_1") == NOW
 
 
-def test_the_control_is_the_capability_that_takes_a_grant_away() -> None:
-    """M27.3.8. Delete this and `SESSION_CONTROL` can be repointed at the capability that
-    merely lists sessions, so anybody who could read the screen could end anybody's sign-in.
-    Compared against the Access review screen's own requirement, which lives outside this
-    module, rather than against itself."""
-    assert screen("access_review").read.requires == SESSION_CONTROL
+def test_the_control_is_an_administration_capability_the_first_administrator_holds() -> None:
+    """M27.3.8, M27.7.10. Delete this and `SESSION_CONTROL` can be repointed at the capability
+    that merely lists sessions, so anybody who could read the screen could end anybody's
+    sign-in; or at a verb `brain.gate.admission` lets a password-only session exercise; or at a
+    capability nobody on a fresh install holds, which is where it sat until 2026-09-16, when it
+    was `approve:grant` and the first administrator held only `admin:` grants.
+
+    Compared against three things outside this module rather than against itself: the Sessions
+    screen's own read, the verb admission withholds from a password-only session, and the list
+    of grants the first administrator is written."""
+    from brain.gate.admission import ASSURANCE_VERBS, Assurance
+    from brain.identity.first_administrator import ADMINISTRATION
+
+    verb = SESSION_CONTROL.value.split(":", 1)[0]
+
     assert screen("sessions").read.requires != SESSION_CONTROL
+    assert verb not in ASSURANCE_VERBS[Assurance.AUTHENTICATED]
+    assert verb in ASSURANCE_VERBS[Assurance.STRONG]
+    assert SESSION_CONTROL.value in ADMINISTRATION
 
 
 def test_a_reader_may_see_a_session_without_being_able_to_end_it() -> None:
@@ -906,7 +918,7 @@ def test_a_session_out_of_reach_and_a_session_that_is_not_there_are_one_answer()
     id that is refused differently from an id that is unknown answers the question for anybody
     who can type one, which is the deep-link oracle with a button instead of an address."""
     elsewhere = placed_session("sess_finance", principal_id="u_2", department=FINANCE)
-    admin = holding("read:session", "approve:grant", scope=Scope.department(MAINTENANCE))
+    admin = holding("read:session", "admin:session", scope=Scope.department(MAINTENANCE))
     registry = SessionRegistry()
     registry.register(elsewhere.record)
 
@@ -924,7 +936,7 @@ def test_a_lapsed_session_is_absent_from_the_listing_and_from_the_control() -> N
     """M27.3.8. Delete this and the screen lists a sign-in that admits nothing, with a control
     beside it that would end nothing, and a reader takes the list for who is working now."""
     lapsed = placed_session("sess_old", principal_id="u_1", opened_at=NOW - timedelta(hours=9))
-    admin = holding("read:session", "approve:grant", scope=Scope.department(MAINTENANCE))
+    admin = holding("read:session", "admin:session", scope=Scope.department(MAINTENANCE))
     registry = SessionRegistry()
     registry.register(lapsed.record)
 

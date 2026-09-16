@@ -47,10 +47,15 @@ from brain.core.redaction import ChannelPayload
 from brain.gate.admission import Assurance
 from brain.gate.context import Channel
 from brain.gate.ingress import ChannelEvent, Unrecognised, identity_hash
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 6, 12, 0, tzinfo=UTC)
 ADDRESS = "rupash@verzdesign.com"
 DIGEST = identity_hash(Channel.EMAIL, ADDRESS)
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 def _inbound(
@@ -287,7 +292,13 @@ def test_a_reply_cannot_be_delivered_to_an_address_it_was_not_planned_for() -> N
     reply = reply_to(normalise(_inbound()), _payload(), subject="s")
 
     with pytest.raises(EmailRefusedError, match="planned for somebody else"):
-        deliver(adapter, reply, to_address="someone.else@verzdesign.com")
+        deliver(
+            adapter,
+            reply,
+            to_address="someone.else@verzdesign.com",
+            ledger=MemoryLedger(),
+            intent=INTENT,
+        )
 
     assert adapter.sent == [], "nothing reaches the wire when the recipient disagrees"
 
@@ -298,7 +309,13 @@ def test_the_refusal_names_neither_the_address_nor_the_digest_it_expected() -> N
     reply = reply_to(normalise(_inbound()), _payload(), subject="s")
 
     with pytest.raises(EmailRefusedError) as caught:
-        deliver(EmailAdapter(), reply, to_address="someone.else@verzdesign.com")
+        deliver(
+            EmailAdapter(),
+            reply,
+            to_address="someone.else@verzdesign.com",
+            ledger=MemoryLedger(),
+            intent=INTENT,
+        )
 
     assert "someone.else@verzdesign.com" not in str(caught.value)
     assert DIGEST not in str(caught.value)
@@ -309,8 +326,12 @@ def test_a_delivered_reply_records_the_digest_and_never_the_address() -> None:
     adapter = EmailAdapter()
     reply = reply_to(normalise(_inbound()), _payload(), subject="Invoice question")
 
-    deliver(adapter, reply, to_address=ADDRESS)
+    ledger = MemoryLedger()
+    first = deliver(adapter, reply, to_address=ADDRESS, ledger=ledger, intent=INTENT)
+    again = deliver(adapter, reply, to_address=ADDRESS, ledger=ledger, intent=INTENT)
 
+    # A second delivery under the same intent sends nothing, because every send is keyed (M17.3.1).
+    assert (first.issued, again.issued) == (True, False)
     assert len(adapter.sent) == 1
     assert adapter.sent[0].to_identity == DIGEST
     assert ADDRESS not in adapter.sent[0].to_identity

@@ -44,6 +44,8 @@ from brain.core.redaction import OPAQUE_LABEL, ChannelPayload, assert_channel_ad
 from brain.core.scope import Scope
 from brain.gate.context import Channel
 from brain.gate.ingress import identity_hash
+from brain.ops.idempotency import Intent
+from tests.fixtures.operation_ledger import MemoryLedger
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
 CREATE_TIME = str(int(NOW.timestamp() * 1000))
@@ -55,6 +57,9 @@ BOT_OPEN_ID = "ou_brain_bot"
 BOT_IDENTITY = identity_hash(Channel.LARK, BOT_OPEN_ID)
 ASKER_OPEN_ID = "ou_asker"
 ASKER_IDENTITY = identity_hash(Channel.LARK, ASKER_OPEN_ID)
+
+#: Who a delivery is for and which turn asked, which every send is keyed by (M17.3.1).
+INTENT = Intent(principal_id="u_reader", intent_ref="turn_1")
 
 
 # ------------------------------------------------------------------------- builders
@@ -626,7 +631,7 @@ def test_an_ephemeral_send_to_an_installation_without_the_scope_is_refused() -> 
     )
 
     with pytest.raises(DeliveryRefusedError, match="per-viewer"):
-        deliver(adapter, delivery)
+        deliver(adapter, delivery, ledger=MemoryLedger(), intent=INTENT)
     assert adapter.sent == []
 
 
@@ -669,8 +674,12 @@ def test_a_planned_delivery_reaches_the_surface_with_its_audience_intact() -> No
         to_identity=ASKER_IDENTITY,
     )
 
-    deliver(adapter, room)
-    deliver(adapter, aside)
+    ledger = MemoryLedger()
+    deliver(adapter, room, ledger=ledger, intent=INTENT)
+    deliver(adapter, aside, ledger=ledger, intent=INTENT)
+    # The room and the aside are two messages under one intent, because the viewer is part of
+    # the key; the room delivered again under that intent is not a third (M17.3.1).
+    deliver(adapter, room, ledger=ledger, intent=INTENT)
 
     assert [m.viewer for m in adapter.sent] == ["", ASKER_IDENTITY]
     assert all(m.chat_id == "oc_1" for m in adapter.sent)

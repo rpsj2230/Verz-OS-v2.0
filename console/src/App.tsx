@@ -54,6 +54,9 @@ import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
+import { Audit } from "./pages/Audit";
+import { Sessions } from "./pages/Sessions";
+import { SignInLinks } from "./pages/SignInLinks";
 import { Knowledge } from "./pages/Knowledge";
 import { Learning } from "./pages/Learning";
 import { Memory } from "./pages/Memory";
@@ -283,6 +286,19 @@ export const routes: RouteObject[] = [
       // matches this address against the registry. One path and no parameter: a source is shown
       // whole, and the trial is a request this page makes rather than a thing somebody opens.
       { path: "staff_sources", element: <StaffSources /> },
+      // Sessions and sign-in links, beside People in Govern, which is where `docs/screens.html`
+      // SCREEN 10 puts what happens to a person's sign-ins. One path each and no parameter: a
+      // session and a link are each ended or unlinked from the listing rather than opened. The
+      // sessions path is the screen's key in `brain.console.screens`, so
+      // `brain.ops.console_screens.routed_screen_keys` matches it; sign-in links have no registry
+      // key, and the page cites `brain.console.sign_in_links` instead.
+      { path: "sessions", element: <Sessions /> },
+      { path: "sign-in-links", element: <SignInLinks /> },
+      // Audit, the last item of Govern in `docs/screens.html`. One path, with its filters and an
+      // open subject's history as query parameters of the address rather than path segments, so
+      // a colleague can be sent the view and the back button undoes a filter. The path is the
+      // screen's key in `brain.console.screens`.
+      { path: "audit", element: <Audit /> },
       { path: "roles", element: <Roles /> },
       // Skills, SCREEN 6 of `docs/screens.html`. Two paths and one component, at the address
       // one skill's page has: the bare path is where somebody arrives from the menu and the
