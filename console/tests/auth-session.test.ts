@@ -22,6 +22,7 @@ import {
   ISSUER,
   TOKEN_ENDPOINT,
   everythingInStorage,
+  fakeIdentityProvider,
   loadConsole,
   signIn,
 } from "./support/auth";
@@ -40,6 +41,13 @@ function s256(verifier: string): string {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
+}
+
+function jsonResponse(payload: unknown, status: number): Response {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 describe("leaving for the identity provider", () => {
@@ -336,6 +344,10 @@ describe("the callback", () => {
       );
 
       expect(landed).toBe("/");
+      // Nine sign-ins in one tab inside a minute, and the loop guard would stop the fourth.
+      // A real console's first request after landing is the API accepting the token, which
+      // is what ends a sign-in; see `A_SIGN_IN_ENDS_WHEN_THE_API_ACCEPTS_IT`.
+      loaded.session.sessionAccepted();
     }
   });
 
@@ -577,14 +589,62 @@ describe("the loop guard", () => {
     expect(loaded.constants.MAX_SIGN_IN_ATTEMPTS).toBeLessThanOrEqual(5);
   });
 
-  test("a completed sign-in clears the attempt counter", async () => {
+  test("a sign-in the API accepts clears the attempt counter", async () => {
     // What breaks if this is deleted: attempts accumulate across successful sign-ins, so a
     // person who signed in twice in a minute is refused the third time for a failure that
-    // never happened.
-    const loaded = await loadConsole();
+    // never happened. The counter is still held after the token exchange and gone after the
+    // API's first answer, because the exchange is not where a sign-in ends.
+    const idp = fakeIdentityProvider({
+      api: (url) => (url.startsWith("/api/") ? jsonResponse({ ok: true }, 200) : null),
+    });
+    const loaded = await loadConsole({ idp });
     await signIn(loaded);
+    expect(sessionStorage.getItem(loaded.constants.SIGN_IN_ATTEMPTS_KEY)).not.toBeNull();
 
+    const result = await loaded.client.request("/me");
+
+    expect(result.ok).toBe(true);
     expect(sessionStorage.getItem(loaded.constants.SIGN_IN_ATTEMPTS_KEY)).toBeNull();
+  });
+
+  test("a token the identity provider issues and the API refuses every time ends in a message", async () => {
+    // What breaks if this is deleted: the loop the owner watched on his own install on
+    // 2026-09-16. Keycloak knew him and this system had not bound him yet, so every token
+    // was issued, refused by the API with a 401, forgotten, and issued again by a live SSO
+    // session. The counter was cleared by each exchange and never reached its limit. Each
+    // round here is a fresh page load, as a real redirect is, and sessionStorage is the only
+    // thing that carries between them.
+    const idp = fakeIdentityProvider({
+      api: (url) =>
+        url.startsWith("/api/") ? jsonResponse({ message: "Sign in to continue." }, 401) : null,
+    });
+    let redirects = 0;
+    let last = await loadConsole({ idp });
+    const limit = last.constants.MAX_SIGN_IN_ATTEMPTS;
+
+    for (let round = 0; round < limit + 3; round += 1) {
+      last = await loadConsole({ idp });
+      last.idp.queueToken({
+        access_token: `ACCESS-TOKEN-${round}`,
+        refresh_token: "REFRESH-TOKEN",
+        id_token: "ID-TOKEN",
+        expires_in: 300,
+      });
+      await last.session.beginSignIn("/");
+      if (last.session.getSessionState().status === "failed") {
+        break;
+      }
+      redirects += last.location.assign.mock.calls.length;
+      const returnedState = last.location.lastAssigned().searchParams.get("state") ?? "";
+      await last.session.completeSignIn(
+        new URLSearchParams({ code: "AUTHORISATION-CODE", state: returnedState }),
+      );
+      await last.client.request("/me");
+    }
+
+    expect(redirects).toBe(limit);
+    expect(last.session.getSessionState().status).toBe("failed");
+    expect(last.session.getSessionState().message).toContain("added to this system");
   });
 });
 

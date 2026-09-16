@@ -39,7 +39,7 @@
  */
 
 import { config } from "../config";
-import { accessToken, forgetSession } from "../auth/session";
+import { accessToken, forgetSession, sessionAccepted } from "../auth/session";
 import { failureFrom, transportFailure, type ApiFailure } from "./errors";
 import { EVENT_STREAM, eventsOf, type AnswerEvent } from "./events";
 
@@ -124,6 +124,8 @@ export async function request<T>(
     // guard start a fresh sign-in, and the attempt counter turns a permanent cause into a
     // readable message rather than a redirect loop.
     forgetSession();
+  } else if (token && response.ok) {
+    sessionAccepted();
   }
 
   const payload: unknown = await response.json().catch(() => null);

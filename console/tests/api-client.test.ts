@@ -164,6 +164,20 @@ describe("a request", () => {
     expect(loaded.session.getSessionState().status).toBe("unknown");
   });
 
+  test("an answer that is not a success does not end a sign-in", async () => {
+    // What breaks if this is deleted: any answer other than a 401 starts clearing the loop
+    // guard. A 404 for a path no route serves is answered before any route reads the token,
+    // so it says nothing about whether this system accepted the person, and a console that
+    // treated it as acceptance could reset the counter between the 401s that make the loop.
+    const { idp } = withApi(() => json({ message: "I could not find that." }, 404));
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+
+    await loaded.client.request("/records/1");
+
+    expect(sessionStorage.getItem(loaded.constants.SIGN_IN_ATTEMPTS_KEY)).not.toBeNull();
+  });
+
   test("a 404 does not forget the session", async () => {
     // What breaks if this is deleted: every refusal signs the person out. A 404 is the
     // ordinary answer to a question about something the caller cannot reach, and treating

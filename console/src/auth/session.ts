@@ -205,8 +205,10 @@ export async function beginSignIn(returnTo = currentLocation()): Promise<void> {
       status: "failed",
       message:
         "Sign-in did not complete after several attempts, so the console stopped trying. " +
-        "Reload to try again, and if it keeps happening the redirect URI registered for " +
-        "this console probably does not match the address you are using.",
+        "If you reached your organisation's sign-in page and signed in, your account may " +
+        "not have been added to this system yet, and an administrator can check that. If " +
+        "you never saw the sign-in page, the redirect address registered for this console " +
+        "probably does not match the address you are using.",
     });
     return;
   }
@@ -329,7 +331,10 @@ async function exchangeCode(params: URLSearchParams): Promise<string> {
     code_verifier: pending.verifier,
   });
   tokens = await postToTokenEndpoint(body);
-  clearSignInAttempts();
+  // The attempt counter is deliberately not cleared here. A token from the identity provider
+  // proves Keycloak accepted the person, not that this system did; see
+  // `A_SIGN_IN_ENDS_WHEN_THE_API_ACCEPTS_IT`.
+  accepted = false;
   setState({ status: "authenticated", message: "" });
   return safeReturnTo(pending.returnTo);
 }
@@ -380,6 +385,36 @@ export async function accessToken(): Promise<string | null> {
     setState({ status: "unknown", message: "" });
     return null;
   }
+}
+
+/**
+ * Why the loop guard is reset by the API's answer and not by the token exchange.
+ *
+ * Until 2026-09-16 the counter was cleared the moment Keycloak returned a token. On the
+ * owner's own install a person Keycloak knew and this system had not yet bound was signed in
+ * by Keycloak, refused by the API with a 401, forgotten, and sent back to Keycloak, whose
+ * live session signed them straight in again and cleared the counter on the way. The guard
+ * never reached its limit, and the console redirected for as long as the tab stayed open.
+ */
+export const A_SIGN_IN_ENDS_WHEN_THE_API_ACCEPTS_IT =
+  "The identity provider issuing a token proves it knows the person, not that this system " +
+  "does. The attempt counter is cleared by the first answer the API gives a request carrying " +
+  "the token, so a token the API refuses every time is a loop the guard can still stop.";
+
+/** Whether the API has answered a request carrying the current token. */
+let accepted = false;
+
+/**
+ * The API answered a request that carried this session's token, so the sign-in is complete
+ * and a later genuine failure starts counting from zero. Idempotent per session, because
+ * every successful request calls it and the store needs writing once.
+ */
+export function sessionAccepted(): void {
+  if (accepted || tokens === null) {
+    return;
+  }
+  accepted = true;
+  clearSignInAttempts();
 }
 
 /** Whether a token is currently held. Not a permission check and not close to one. */
