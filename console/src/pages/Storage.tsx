@@ -1,12 +1,13 @@
 /**
  * File and object storage: the buckets this product keeps, how long each keeps what it holds and
- * why, where the store is, and what cannot be known from here.
+ * why, how much each holds now, where the store is, and what cannot be known from here.
  *
  * `docs/screens.html` does not draw storage. The owner's standard lists it, so the screen takes the
- * design's general shape and says in the API's words what is missing: nothing in the application
- * connects to the store yet, usage is not measured, object names are never listed, and a retention
- * changes in a release rather than from a browser. There is no control on this screen, and each of
- * those sentences is why.
+ * design's general shape and says in the API's words what it could and could not read: whether the
+ * application is connected to the store and why not, how much each bucket holds as a count the API
+ * took or the sentence saying why it was not counted, that object names are never listed, and that
+ * a retention changes in a release rather than from a browser. There is no control on this screen,
+ * and the last of those sentences is why.
  *
  * Task ids: M27.8.15
  */
@@ -15,13 +16,13 @@ import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
-import { STORAGE_API_PATH, keptFor, readStorage } from "./storageQuery";
+import { STORAGE_API_PATH, heldNow, keptFor, readStorage } from "./storageQuery";
 
 export const STORAGE_HEADING = "File and object storage";
 export const STORAGE_CRUMB = "Install › Storage";
 export const STORAGE_LEDE =
-  "The buckets this install keeps files in, how long each keeps them and why, and where the " +
-  "store is. Files are never listed by name.";
+  "The buckets this install keeps files in, how long each keeps them and why, how much each " +
+  "holds now, and where the store is. Files are never listed by name.";
 
 export const READING_STORAGE = "Reading how files are kept.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
@@ -78,6 +79,12 @@ function StorageBody() {
               <code>{page.endpoint.prefix}</code>
             </dd>
           </div>
+          <div className="fields__row">
+            <dt>Kind of store</dt>
+            <dd>
+              <code>{page.endpoint.backend}</code>
+            </dd>
+          </div>
         </dl>
         {page.endpoint.from_default ? <p className="note">{FROM_DEFAULT}</p> : null}
         <p className="note">{page.endpoint.told}</p>
@@ -95,6 +102,7 @@ function StorageBody() {
                 <tr>
                   <th scope="col">Bucket</th>
                   <th scope="col">Holds</th>
+                  <th scope="col">Holds now</th>
                   <th scope="col">Kept for</th>
                   <th scope="col">Why</th>
                   <th scope="col">Versioned</th>
@@ -111,6 +119,7 @@ function StorageBody() {
                       {bucket.holds}
                       {bucket.kinds.length === 0 ? null : <> ({bucket.kinds.join(", ")})</>}
                     </td>
+                    <td>{heldNow(bucket)}</td>
                     <td>{keptFor(bucket)}</td>
                     <td>{bucket.retention_reason}</td>
                     <td>{bucket.versioned ? "Yes" : "No"}</td>
@@ -128,13 +137,14 @@ function StorageBody() {
             ))}
           </ul>
         )}
+        <p className="note">{page.usage}</p>
         <p className="note">{page.retention}</p>
       </section>
 
       <section className="card">
-        <h2>What is not shown</h2>
-        <p>{page.usage}</p>
+        <h2>What is not shown or changed here</h2>
         <p>{page.names}</p>
+        <p>{page.manages}</p>
       </section>
     </>
   );

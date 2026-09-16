@@ -107,10 +107,12 @@ from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
 from brain.navigation_routes import router as navigation_router
 from brain.operate_routes import router as operate_router
+from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start
 from brain.ops.install_settings import refresh as refresh_install_settings
+from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
@@ -321,6 +323,19 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.credentials = app.state.credentials.recording_to(
         credential_writes_for(app.state.db_sessions)
     )
+    # The object store, connected once from the installation settings and the key in its backend's
+    # vault slot, or the sentence saying why not. After the database, because a wizard's saved
+    # answer outranks the environment file and is loaded above; in a thread, because the vault
+    # client blocks. The backup bucket's reader and the artifact store are built over it, and a
+    # process connected to nothing attaches no backup reader, which the recovery screen answers
+    # in words. See `brain.ops.object_store`.
+    app.state.object_store = await asyncio.to_thread(
+        object_store_at_start, settings.vault_address, settings.vault_token
+    )
+    connected = app.state.object_store.backend
+    app.state.backup_objects = None if connected is None else backup_objects(connected)
+    app.state.artifacts = artifacts_for(app.state.db_sessions, app.state.object_store)
+    app.state.artifact_source = None if app.state.artifacts is None else app.state.artifacts.every
 
     # Built and frozen here, and this is the first process that has ever built one. Every
     # rule in `brain.tools.registry` runs at registration and `freeze` runs the ones that
@@ -452,6 +467,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         console_reads = getattr(app.state, "console_reads", None)
         if console_reads is not None:
             await console_reads.close()
+        store = getattr(app.state, "object_store", None)
+        close_store = getattr(getattr(store, "backend", None), "close", None)
+        if callable(close_store):
+            close_store()
         await dispose(getattr(app.state, "db_engine", None))
 
 
@@ -637,6 +656,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.credentials = None
     # The same, for where a webhook subscriber's signing secret is kept. See `brain.webhook_routes`.
     app.state.signing_secrets = None
+    # The same, for the object store and what is built over it: the backup bucket's reader and the
+    # artifact store. A route reading None answers that nothing here looked. See
+    # `brain.ops.object_store`.
+    app.state.object_store = None
+    app.state.backup_objects = None
+    app.state.artifacts = None
+    app.state.artifact_source = None
 
     # Registered first, which makes it innermost: Starlette inserts each new middleware at
     # the front of the stack, so the last one registered runs outermost. Inside `trace`

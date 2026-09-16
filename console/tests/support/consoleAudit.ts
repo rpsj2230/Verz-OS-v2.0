@@ -345,7 +345,15 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/classifications*",
       "/api/v1/govern/artifacts",
     ],
-    tables: ["know.item", "know.chunk", "mem.adaptive", "mem.persistent", "gate.fast_path_rule", "gate.field_policy"],
+    tables: [
+      "know.item",
+      "know.chunk",
+      "mem.adaptive",
+      "mem.persistent",
+      "gate.fast_path_rule",
+      "gate.field_policy",
+      "agent.artifact",
+    ],
     installation: ["INSTALL_VECTOR_STORE"],
     gaps: [
       { what: "A document or a data source cannot be added from the console after setup.", leaf: "M42.5.9" },
@@ -363,7 +371,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     screens: ["/storage"],
     routes: ["/api/v1/storage"],
     tables: [],
-    installation: ["INSTALL_OBJECT_STORE_URL", "INSTALL_OBJECT_STORE_PREFIX"],
+    installation: ["INSTALL_OBJECT_STORE_URL", "INSTALL_OBJECT_STORE_PREFIX", "INSTALL_OBJECT_STORE_BACKEND"],
     gaps: [{ what: "A bucket's retention and the store's address are read and never changed.", leaf: "M27.8.15" }],
   },
   "Prompts and system instructions": {

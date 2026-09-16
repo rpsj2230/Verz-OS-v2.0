@@ -328,6 +328,16 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         default="brain",
     ),
     Setting(
+        name="INSTALL_OBJECT_STORE_BACKEND",
+        belongs=Belongs.STORAGE,
+        meaning=(
+            "Which kind of store that endpoint is: `seaweedfs`, `cloudflare_r2` or `aws_s3`. It "
+            "decides how a request is addressed and signed and which vault slot holds the key, "
+            "so it is said rather than guessed from the address."
+        ),
+        default="seaweedfs",
+    ),
+    Setting(
         name="INSTALL_VECTOR_STORE",
         belongs=Belongs.STORAGE,
         meaning=(

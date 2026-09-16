@@ -6,22 +6,22 @@ see agent by agent. Neither could be reached from a browser. This is the read th
 and nothing in it decides who may see anything: the route asks `brain.console.reads.permitted`
 whether the screen opens, hands the records to `artifact_estate`, and projects what comes back.
 
-**Nothing on any install records an artifact today, and the response says so rather than
-drawing an empty table.** `brain.console.agent_output.record` builds the record and no producer
-calls it, no table holds one, and the bytes would sit in a bucket nothing on this process can
-list. An empty list under the heading "artifacts produced" reads as an agent estate that has
-produced nothing, which is a statement about the company nobody established. So the records are
-read through a protocol on `app.state`, and while nothing is attached the answer is no list and
-a sentence. See `NOTHING_HERE_RECORDS_WHAT_AN_AGENT_PRODUCED`. That is
-`brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE` applied to a second screen, and it
-means the day a store is attached the rows appear with no line here changing.
+**The records are `agent.artifact`, read through a source on `app.state`, and a process with
+none says so rather than drawing an empty table.** `brain.ops.artifact_store.StoredArtifacts` is
+the one writer, putting the bytes in the object store and the record in the table, and `brain.app`
+attaches its reader whenever the process has a database. A process without one has no source,
+and an empty list under the heading "artifacts produced" would read as an agent estate that has
+produced nothing, which is a statement about the company nobody established. So the answer there
+is no list and a sentence. See `NOTHING_HERE_RECORDS_WHAT_AN_AGENT_PRODUCED`, which is
+`brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE` applied to a second screen.
 
-Rejected: a table for artifact records, written here. It is the obvious missing half and it
-would be a table no producer writes, with its schema, its clock and the store the retention
-sweep counts it under decided by a screen before anything produces the record. An artifact is
-also bytes, and `brain.ops.storage.StorageBackend` has no implementation, so a row could point
-at nothing. The record belongs beside whatever produces the first artifact, where those are one
-decision. See `A_TABLE_NOTHING_WRITES_IS_DECIDED_BY_THE_WRONG_AUTHOR`.
+**An empty list from an attached source is a true statement, and a thin one today.** Every
+artifact is recorded through `StoredArtifacts.keep`, so an empty table is an install where nothing
+was kept. Nothing in this release's runs calls `keep` yet, which `brain.ops.artifact_store` says
+where the call belongs.
+
+The table was built beside the writer, as
+`A_TABLE_NOTHING_WRITES_IS_DECIDED_BY_THE_WRONG_AUTHOR` asked, rather than by this screen.
 
 **Retention is on every row and the rule is on the response.** `Artifact.expiry` is
 `brain.ops.retention.expires_at` over the class `retention_class_for` chose, so a row says the
@@ -40,15 +40,15 @@ digests on a screen is a column nobody reads until it is quoted wrongly.
 **Nothing here computes a reach.** There is no `.intersect(` in this module, and
 `brain.console.workspace.intersections_in` is run over this source by its test.
 
-Scope: one read-only route. Nothing here writes, and no download is served: the bytes are not
-held anywhere this process reaches, and `may_download` is the question a download would ask.
+Scope: one read-only route. Nothing here writes, and no download is served: `may_download` is
+the question a download would ask, and serving bytes is its own review.
 
-Task ids: none
+Task ids: M27.7.23
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Awaitable, Iterable
 from typing import Final, Protocol, cast
 
 import structlog
@@ -82,11 +82,9 @@ THE_SCREEN: Final = ARTIFACTS_SCREEN
 #:
 #: Written for somebody with a browser and no source tree, which is why it names no module.
 NOTHING_HERE_RECORDS_WHAT_AN_AGENT_PRODUCED: Final = (
-    "Nothing on this install keeps a record of what an agent produced, so this page cannot list "
-    "any. It is not that nothing was produced: it is that no store of those records is attached "
-    "to this system. Until one is, a document, deck, report, export or image an agent made is "
-    "known only to the person who received it, and its retention is whatever the place it was "
-    "saved keeps it for."
+    "This process has no database attached, so it cannot read the record of what agents "
+    "produced, and this page cannot list any. It is not that nothing was produced: it is that "
+    "nothing here could look."
 )
 
 #: Why the missing record was not built as a table here.
@@ -109,12 +107,13 @@ KEPT_WITHOUT_A_CLOCK: Final = {
 class ArtifactSource(Protocol):
     """Every artifact record this install holds, newest first or in any order.
 
-    Read off `app.state` rather than passed, because there is nothing to pass: no producer writes
-    a record and no table holds one. `artifact_estate` does the narrowing, so a source hands over
+    Read off `app.state` rather than passed, because whether there is one is decided when the
+    process starts: `brain.app` attaches `StoredArtifacts.every` over its database. Awaited,
+    because the records are rows. `artifact_estate` does the narrowing, so a source hands over
     what is stored and never what it guesses a reader may see.
     """
 
-    def __call__(self) -> Iterable[Artifact]: ...
+    def __call__(self) -> Awaitable[Iterable[Artifact]]: ...
 
 
 def artifact_source_of(request: Request) -> ArtifactSource | None:
@@ -242,7 +241,7 @@ async def artifacts(request: Request, asked: Asked) -> ArtifactsView:
         rows = (await session.execute(every_agent())).scalars().all()
     records = [one for one in (record_of(row) for row in rows) if one is not None]
     shown = artifact_estate(
-        tuple(source()),
+        tuple(await source()),
         asked.reach,
         asked.now,
         visible_agents=visible_agent_ids(records, viewer_of(asked)),

@@ -36,7 +36,8 @@ counted, so a stray object in the bucket is a finding.
 
 Not built: the worker that holds the transcript while a run is in flight and calls `record` and
 `write` at its end, and a scheduled caller of `remove_expired`. Nothing here has written to an
-object store; `StorageBackend` has no implementation in this repository.
+object store; `brain.ops.object_store.S3Backend` implements `StorageBackend` and nothing hands
+it to this module yet.
 
 Task ids: M19.6.6
 """

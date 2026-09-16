@@ -41,16 +41,22 @@ nobody. So each surface that depends on something this process does not hold ans
 with the reason, the panel is absent rather than defaulted, and the screen renders the sentence.
 See `AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE`.
 
-**Two of the five are unread on every install today and the module says which and why.** The
-backup bucket has no reader: `brain.ops.storage.StorageBackend` is a protocol with no
-implementation anywhere in this repository, which `brain.ops.retention_store` already records
-about itself. The live rate-limit windows have no enumerator: `brain.ops.limit_store.
+**Two of the five depend on something this process may not hold, and the module says which and
+why.** The backup bucket is read through `brain.ops.object_store.backup_objects`, which
+`brain.app` attaches when the process connected to the object store at start; an install with no
+vault or no key in the store's slot has no reader, and the Storage screen says which of those it
+is. The live rate-limit windows have no enumerator on any install: `brain.ops.limit_store.
 ValkeyWindowStore` checks and records the keys it is handed and offers no way to ask which
 windows exist, so there is nothing to build a throttling list from. Both are read off
-`app.state` through a protocol, so the day somebody wires either one the sentence stops being
-returned without a line of this module changing. That is `brain.console.installation.
+`app.state` through a protocol, so the sentence stops being returned the day a reader is
+attached without a line of this module changing. That is `brain.console.installation.
 recovery_gaps`'s construction: a decision recorded as a check rather than as a sentence in a
 commit message nobody re-reads.
+
+**A bucket that does not answer is a sentence too, and never a panel of what was read before it
+stopped.** The listing is read once, in a worker thread because the client blocks, and a store
+that fails part way raises rather than handing over a partial listing, so the panel is either
+built from the whole bucket or not built. See `THE_BACKUP_BUCKET_DID_NOT_ANSWER`.
 
 **The migration level is answered as declared, and that is a choice with a cost.**
 `brain.migrate.pending_revisions` opens a synchronous engine of its own, outside the application
@@ -122,6 +128,7 @@ Task ids: M27.7.25, M27.7.27, M42.3.9
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from typing import Final, Protocol, cast
@@ -161,6 +168,7 @@ from brain.ops.recovery import DRILL_INTERVAL_DAYS
 from brain.ops.release_manifest import read_manifest
 from brain.ops.reliability import recovery_objective
 from brain.ops.retention import BACKUP_RETENTION_DAYS
+from brain.ops.storage import StoreUnansweredError
 from brain.settings import Settings
 
 log = structlog.get_logger()
@@ -257,9 +265,17 @@ CAPACITY_READ: Final[Capability] = screen("connections").read.requires
 NOTHING_HERE_READS_THE_BACKUP_BUCKET: Final = (
     "This process cannot read the place your copies and your rehearsal records are kept, so "
     "nothing on this screen is a statement about them. It is not that no copy exists and not "
-    "that no rehearsal has run: it is that nothing here has looked. Until that is wired, find "
-    "out by hand whether a restore has been rehearsed, and assume you cannot recover until one "
-    "has."
+    "that no rehearsal has run: it is that nothing here has looked. The Storage screen says why "
+    "this process is not connected to the store. Until it is, find out by hand whether a restore "
+    "has been rehearsed, and assume you cannot recover until one has."
+)
+
+#: What the recovery surface answers when the backup bucket was asked and did not answer.
+THE_BACKUP_BUCKET_DID_NOT_ANSWER: Final = (
+    "The place your copies and your rehearsal records are kept did not answer when this screen "
+    "was opened, so nothing on it is a statement about them. It is not that no copy exists: it is "
+    "that the store could not be read just now. Open the screen again, and if it still does not "
+    "answer, check the object store is running."
 )
 
 #: What the rate limits surface answers about the throttling half while nothing enumerates it.
@@ -285,8 +301,7 @@ NO_CONTROL_HERE_RUNS_A_REHEARSAL: Final = (
     "containers, checks the schema is complete, asks it a question you know the answer to and "
     "checks it still refuses what it should. It is done on the server by hand, following the "
     "restore drill page in the install documentation that came with this release. Its record is "
-    "written beside the copy it read, and that record is what this screen reads once this system "
-    "can read where your copies are kept."
+    "written beside the copy it read, and that record is what this screen reads."
 )
 
 
@@ -298,11 +313,10 @@ class BackupObjects(Protocol):
     about rehearsals and cautious about copies, which
     `brain.console.recovery_view.panel` names as the wrong way round.
 
-    A protocol read off `app.state` rather than a parameter, because there is nothing to pass:
-    `brain.ops.storage.StorageBackend` has no implementation in this repository and
-    `brain.ops.retention_store` already records that about itself. What this buys is that the
-    sentence above stops being returned on the day somebody attaches one, with nothing here
-    changing, which is the difference between a check and a comment.
+    A protocol read off `app.state` rather than a parameter, because whether there is one is
+    decided when the process starts: `brain.app` attaches `brain.ops.object_store.backup_objects`
+    over the store it connected to, and attaches nothing when it connected to none. A reader may
+    raise `brain.ops.storage.StoreUnansweredError`, and the route answers that in words.
     """
 
     def __call__(self) -> Iterable[tuple[str, str]]: ...
@@ -962,11 +976,12 @@ async def recovery(request: Request, asked: Asked) -> RecoveryView:
     observations answers that nothing has been copied, which is the alarming word for a fact
     nobody established, and it would be believed.
 
-    The reader is a protocol on `app.state`. Nothing attaches one today, so this answers the
-    sentence on every install, and the day something does the panel appears with no line here
-    changing. Both halves of the bucket go into one `unreadable` argument for the reason
-    `brain.console.recovery_view.panel` gives: a caller passing only the manifests would
-    produce a panel confident about rehearsals and cautious about copies.
+    The reader is a protocol on `app.state`, attached by the lifespan when the process connected to
+    the object store. It is asked once, in a worker thread, and a store that does not answer is
+    `THE_BACKUP_BUCKET_DID_NOT_ANSWER` rather than a panel over nothing. Both halves of the bucket
+    go into one `unreadable` argument for the reason `brain.console.recovery_view.panel` gives: a
+    caller passing only the manifests would produce a panel confident about rehearsals and
+    cautious about copies.
 
     There is no drill control here. M30.3.9 asks for one, it is a write, and
     `brain.console.recovery_view` declines the leaf in those words. What the screen gets instead
@@ -980,13 +995,20 @@ async def recovery(request: Request, asked: Asked) -> RecoveryView:
         return RecoveryView(
             panel=None, unread=NOTHING_HERE_READS_THE_BACKUP_BUCKET, rehearsal=rehearsal
         )
-    # Read twice rather than once into a list, because the two readers filter the bucket by
-    # different suffixes and a caller holding one listing would have to know that. Both halves
-    # are handed to the panel together for the reason `recovery_panel` gives about its own
-    # `unreadable` argument: a panel given only the manifests is confident about rehearsals and
-    # cautious about copies, which is the wrong way round.
-    backups, bad_manifests = read_manifests(objects())
-    verifications, bad_drills = read_drills(objects())
+    # Read once, because a read is a listing and a fetch per record over the network, and both
+    # readers select their own records by suffix from the same listing, so neither has to be told
+    # which is which. Both halves are handed to the panel together for the reason
+    # `recovery_panel` gives about its own `unreadable` argument: a panel given only the manifests
+    # is confident about rehearsals and cautious about copies, which is the wrong way round.
+    try:
+        listing = await asyncio.to_thread(lambda: tuple(objects()))
+    except StoreUnansweredError as exc:
+        log.warning("backup bucket did not answer", error=str(exc))
+        return RecoveryView(
+            panel=None, unread=THE_BACKUP_BUCKET_DID_NOT_ANSWER, rehearsal=rehearsal
+        )
+    backups, bad_manifests = read_manifests(listing)
+    verifications, bad_drills = read_drills(listing)
     return RecoveryView(
         panel=recovery_panel_view(
             recovery_panel(

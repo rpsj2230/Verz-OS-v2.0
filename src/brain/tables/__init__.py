@@ -49,6 +49,7 @@ from brain.knowledge import search as _search  # noqa: F401
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.agent_automation import AgentAutomationRow
+from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
 from brain.tables.browsing import BrowserEnvelopeRow
@@ -243,6 +244,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0057_connector_connection. Points at nothing: both actors are values, so the record of who
     # let this system read a source outlives them.
     "ops.connector_connection",
+    # 0058_artifact_store. Points at nothing: the agent, the run and the person are values, so the
+    # record of what was produced outlives all three.
+    "agent.artifact",
 )
 
 __all__ = [
@@ -250,6 +254,7 @@ __all__ = [
     "AdaptiveMemoryRow",
     "AgentAutomationRow",
     "AgentRow",
+    "ArtifactRow",
     "AuditEntryRow",
     "AutomationOwnerRow",
     "BrowserEnvelopeRow",

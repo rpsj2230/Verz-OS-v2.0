@@ -84,6 +84,12 @@ class ObjectKind(enum.StrEnum):
     #: original is not an attachment, so the day their retention differs the mismatch would
     #: have been the reason nobody noticed.
     KNOWLEDGE_ORIGINAL = "knowledge_original"
+    #: A document, deck, report, export or image an agent produced for somebody, recorded in
+    #: `agent.artifact`. Its own kind rather than `AGENT_ATTACHMENT`, for the reason
+    #: `KNOWLEDGE_ORIGINAL` is: an artifact carries a retention class decided per object by
+    #: `brain.console.agent_output.retention_class_for`, and a kind shared with something whose
+    #: window is the bucket's would hide the day the two stop agreeing.
+    AGENT_ARTIFACT = "agent_artifact"
     BROWSER_RUN_RECORDING = "browser_run_recording"
     COMPLIANCE_EXPORT = "compliance_export"
     DATABASE_DUMP = "database_dump"
@@ -194,7 +200,12 @@ def bucket_for(kind: ObjectKind) -> Bucket:
     would file it wherever the default pointed, and the default is always `assets`.
     """
     match kind:
-        case ObjectKind.CONSOLE_ASSET | ObjectKind.AGENT_ATTACHMENT | ObjectKind.KNOWLEDGE_ORIGINAL:
+        case (
+            ObjectKind.CONSOLE_ASSET
+            | ObjectKind.AGENT_ATTACHMENT
+            | ObjectKind.KNOWLEDGE_ORIGINAL
+            | ObjectKind.AGENT_ARTIFACT
+        ):
             return bucket("assets")
         case ObjectKind.BROWSER_RUN_RECORDING:
             return bucket("recordings")
@@ -345,6 +356,42 @@ def config_for(backend: Backend, *, endpoint_url: str, region: str | None = None
     )
 
 
+class StoreUnansweredError(StorageError):
+    """The store was asked and did not give an answer that could be read.
+
+    Beside the protocol rather than beside an implementation, so a caller holding a
+    `StorageBackend` can tell "the store did not answer" from a defect without importing the
+    client that happened to be attached. A screen that caught an implementation's own error
+    type would go back to a stack trace the day a second implementation arrived.
+    """
+
+
+@dataclass(frozen=True)
+class BucketUsage:
+    """What one bucket holds under one prefix, counted, never named.
+
+    Two figures and whether they are the whole of it. There is no field an object's name
+    could arrive in: `brain.storage_routes.OBJECT_NAMES_ARE_NOT_LISTED_HERE` is the rule, and
+    a usage type with a `largest` or an `oldest` member is where it would be broken for a
+    good reason.
+
+    `complete` is False when counting stopped at the implementation's ceiling, so the figures
+    are a floor. A floor drawn as a total is the one reading worse than no figure.
+    """
+
+    objects: int
+    bytes_stored: int
+    complete: bool
+
+    def __post_init__(self) -> None:
+        if self.objects < 0 or self.bytes_stored < 0:
+            msg = f"a bucket holds {self.objects} objects of {self.bytes_stored} bytes"
+            raise StorageError(msg)
+        if self.objects == 0 and self.bytes_stored > 0:
+            msg = f"no objects cannot occupy {self.bytes_stored} bytes"
+            raise StorageError(msg)
+
+
 class StorageBackend(Protocol):
     """What the rest of the system may ask of object storage, and nothing more.
 
@@ -366,3 +413,17 @@ class StorageBackend(Protocol):
     def delete_object(self, bucket_name: str, key: str) -> None: ...
 
     def list_objects(self, bucket_name: str, prefix: str) -> Iterator[str]: ...
+
+
+class BucketCounter(Protocol):
+    """How much a bucket holds under a prefix, asked of the store and answered without names.
+
+    Its own protocol rather than a fifth method on `StorageBackend`, for two reasons. The
+    caller wanting a total is a screen, and a screen handed `list_objects` would be handed
+    the names to count; the count is taken where the names already are and only the figures
+    leave. And every holder of a `StorageBackend`, the uploads and the recordings among them,
+    needs to put, get, delete and list, and none of them needs a total, so a protocol that
+    grew one would ask each of their implementations for a method nothing there calls.
+    """
+
+    def usage(self, bucket_name: str, prefix: str) -> BucketUsage: ...

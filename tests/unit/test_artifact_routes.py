@@ -171,7 +171,7 @@ class StubSession(AsyncSession):
 
 @pytest.fixture
 def client() -> Iterator[TestClient]:
-    """An install with nothing attached that records an artifact, which is every install."""
+    """A process with no database, so nothing attached that reads the artifact records."""
     app: FastAPI = create_app(Settings(env="development"))
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
@@ -184,7 +184,11 @@ def attached(*artifacts: Artifact, agents: Sequence[AgentRow] = ()) -> Iterator[
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         app.state.db_sessions = async_sessionmaker(class_=StubSession)
-        app.state.artifact_source = lambda: artifacts
+
+        async def source() -> tuple[Artifact, ...]:
+            return artifacts
+
+        app.state.artifact_source = source
         yield c
 
 
@@ -197,8 +201,8 @@ def get(c: TestClient, pid: str) -> Response:
 def test_an_install_recording_nothing_is_told_so_rather_than_shown_an_empty_list(
     client: TestClient,
 ) -> None:
-    """**The rule the screen turns on.** Nothing records an artifact, so there is no list and a
-    sentence, and the retention rule still travels.
+    """**The rule the screen turns on.** Nothing on this process reads the records, so there is no
+    list and a sentence, and the retention rule still travels.
 
     Delete this and the route may answer an empty list, which renders as an estate that produced
     nothing, a statement about the company nobody established."""

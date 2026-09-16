@@ -149,6 +149,37 @@ To let the application keep them, once per install that runs a vault:
 Until both are done, connecting a source is refused with a sentence saying the vault refused, and
 nothing is recorded as connected.
 
+## The object store's key
+
+The application reads and writes the object store with one key pair, read from the vault once when
+it starts. Nothing else gives it one: `brain.ops.object_store` signs every request with exactly the
+key it was handed, and deliberately uses no client library that would find a key in the
+environment. Until the slot holds a key, the Storage screen says the store is not connected and
+why, the Backup and recovery screen says nothing has looked in the backup bucket, and nothing can
+keep an artifact.
+
+The slot is the one for the backend `INSTALL_OBJECT_STORE_BACKEND` names, and it holds two fields,
+`access_key_id` and `secret_access_key`. The application's policy already reads
+`providers/data/+`, so no policy changes.
+
+| Slot | Backend | Holds | Deliberately NOT |
+|---|---|---|---|
+| `providers/seaweedfs` | the file store this product ships | the key pair of the `brain-application` identity in `ops/seaweedfs/s3.json`, which may read, write and list | an identity with `Admin`, which can delete a bucket |
+| `providers/cloudflare-r2` | Cloudflare R2 | an R2 API token's key pair scoped to this install's buckets, object read and write | an account-wide token |
+
+AWS S3 has no slot here. Its key is a lease from the vault's `aws` engine, and the application
+holds its store client for as long as it runs and renews nothing, so a client built from a lease
+would stop working when the lease ran out. The application refuses to connect to it and says so.
+
+Once per install that runs a vault, with a token that may write the slot:
+
+1. Put the same key pair in the file store's identities file, `/opt/brain/settings/seaweedfs/s3.json`,
+   in place of the two `REPLACE_AT_DEPLOY_FROM_OPENBAO` values, and restart the `seaweedfs` service.
+2. Write the two fields into the slot with the vault's command line, as a version 2 key-value
+   write to the slot above, typing both values at the prompt from where you generated them rather
+   than into a file or a command someone could read back from the shell history.
+3. Restart the application. Its log says `object store connected`, or the Storage screen says why not.
+
 ## Three things worth deciding before the keys are issued, not after
 
 **Xero's limit is per tenant and it is 5,000 a day.** That is a documented ceiling and it is

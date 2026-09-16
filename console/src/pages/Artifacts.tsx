@@ -7,13 +7,13 @@
  * `brain.console.screens` registers it, with the design's three columns first and the two the
  * leaf adds after them: how it was made and how long it is kept.
  *
- * **On every install today there is no list, and the page says why in the API's words.**
- * `brain.artifact_routes` answers a sentence while nothing records an artifact, and this page
- * draws the sentence under its own heading rather than an empty table, because an empty table
- * under this heading reads as an estate that produced nothing.
+ * **A process with no database has no list, and the page says why in the API's words.**
+ * `brain.artifact_routes` answers a sentence while nothing on the process reads `agent.artifact`,
+ * and this page draws the sentence under its own heading rather than an empty table, because an
+ * empty table under this heading reads as an estate that produced nothing.
  *
  * **What the design's hint becomes.** SCREEN 13 says re-downloading re-checks the requester. No
- * download is served here, because the files are held nowhere this system reads, so the hint
+ * download is served here, because serving the bytes is a review of its own, so the hint
  * keeps the half that is true and says what is not offered.
  *
  * **Nothing here decides who may see anything.** The request is identical for every caller, and a
