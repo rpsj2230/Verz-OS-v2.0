@@ -23,7 +23,7 @@
 
 import { Link } from "react-router-dom";
 import { useResource } from "../api/useResource";
-import { FailureNotice } from "./reportFailure";
+import { FailureNotice } from "../ui/FailureNotice";
 import { CONNECTORS_PATH, QUESTIONS_API_PATH, USAGE_PATH, readQuestions } from "./questionsQuery";
 
 /** The design's own label for this screen, which the navigation and this heading share. */

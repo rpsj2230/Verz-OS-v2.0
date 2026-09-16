@@ -37,8 +37,6 @@
 import { useState } from "react";
 import type { ApiFailure } from "../api/errors";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./DataTable";
 import { GraphCanvas } from "./GraphCanvas";
 import {
   ADDABLE_KINDS,
@@ -63,6 +61,7 @@ import {
   type DrawingPayload,
   type Step,
 } from "./procedure";
+import { FailureNotice } from "../ui/FailureNotice";
 
 interface ProcedureCanvasProps {
   /** What this procedure is, for a screen reader and for anybody reading it. */
@@ -302,9 +301,7 @@ export function ProcedureCanvas({
       )}
 
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
     </div>
   );

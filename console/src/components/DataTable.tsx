@@ -57,8 +57,8 @@ import {
 } from "@tanstack/react-table";
 import type { ApiFailure } from "../api/errors";
 import { Lock } from "../ui/Lock";
-import { Notice } from "../ui/Notice";
 import { filterValueBudget, lockedCellKey } from "./paging";
+import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 
 /**
  * Written down because a footer count is the single most natural addition to a table and
@@ -74,7 +74,7 @@ export const A_GRID_SHOWS_WHAT_IT_WAS_GIVEN =
 export const NOTHING_TO_SHOW = "Nothing to show.";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
-export const SOMETHING_DID_NOT_WORK = "That did not work";
+export const SOMETHING_DID_NOT_WORK = THAT_DID_NOT_WORK;
 
 /** Per-column settings this console adds. A type-only slot; it registers no feature. */
 export interface GridColumnMeta {
@@ -236,9 +236,7 @@ export function DataTable<T extends RowData>({
       </div>
 
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
 
       {/*

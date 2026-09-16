@@ -32,6 +32,8 @@ export const FEATURES_LEDE =
   "does and what reads the switch, and an administrator turns it on here.";
 
 export const READING_FEATURES = "Reading which features are switched on.";
+/** An install that declares no feature to switch, which is a sentence rather than an empty page. */
+export const NO_FEATURES = "This install declares no feature that can be switched.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 export const UNREADABLE_ANSWER =
   "The API answered in a shape this console does not read, so no feature is listed. The console " +

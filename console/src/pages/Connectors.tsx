@@ -46,6 +46,7 @@ import {
   type Connectors as ConnectorsBody,
   type Trust,
 } from "./connectorsQuery";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
 export const SOMETHING_DID_NOT_WORK = "That did not work";
@@ -100,9 +101,7 @@ export function Connectors() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         </section>
       ) : null}
 

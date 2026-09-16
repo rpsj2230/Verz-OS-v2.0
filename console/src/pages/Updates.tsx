@@ -40,8 +40,8 @@
 import { useResource } from "../api/useResource";
 import { Facts } from "../components/Facts";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
 import { UPDATES_API_PATH, type Updates as UpdatesPanel } from "./installQuery";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
 export const SOMETHING_DID_NOT_WORK = "That did not work";
@@ -72,9 +72,7 @@ export function Updates() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         </section>
       ) : null}
 

@@ -32,7 +32,6 @@
 
 import { useResource } from "../api/useResource";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
 import {
   LEARNING_API_PATH,
   RECENT_DAYS,
@@ -41,7 +40,7 @@ import {
   readLearningPage,
   type LearningPage,
 } from "./learningQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The design's own label for this screen. */
 export const LEARNING_HEADING = "Learning";
@@ -171,9 +170,7 @@ function LearningAnswerView() {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

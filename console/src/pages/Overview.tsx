@@ -38,7 +38,7 @@
 import { useResource } from "../api/useResource";
 import type { components } from "../api/schema";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
+import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 
 type CallerView = components["schemas"]["CallerView"];
 
@@ -46,7 +46,7 @@ type CallerView = components["schemas"]["CallerView"];
 export const ME_PATH = "/me";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
-export const SOMETHING_DID_NOT_WORK = "That did not work";
+export const SOMETHING_DID_NOT_WORK = THAT_DID_NOT_WORK;
 
 /**
  * How each fact on the response is shown.
@@ -100,9 +100,7 @@ export function Overview() {
         <h2>You</h2>
 
         {caller.failure ? (
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={caller.failure.traceId}>
-            <p>{caller.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={caller.failure} />
         ) : null}
 
         {caller.busy ? (

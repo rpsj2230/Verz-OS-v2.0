@@ -26,9 +26,8 @@
  */
 
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
 import { readTemplates, TEMPLATES_API_PATH } from "./agentTemplatesQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The page's heading, in the design's own words. */
 export const TEMPLATES_HEADING = "Agent Templates";
@@ -109,9 +108,7 @@ function TemplatesAnswerView() {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

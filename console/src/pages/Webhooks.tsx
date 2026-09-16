@@ -20,7 +20,7 @@
  * **Nothing here decides who may change a subscriber.** `manageable` only decides whether a control
  * is drawn, and the route decides again.
  *
- * Task ids: M27.8.12
+ * Task ids: M27.8.12, M27.8.5
  */
 
 import { useCallback, useState, type FormEvent } from "react";
@@ -37,6 +37,8 @@ import {
   STATE_FILTER_LABELS,
   WEBHOOKS_API_PATH,
   narrowed,
+  blankRegistrationProblems,
+  blankSecretProblems,
   problemsFor,
   readProblems,
   readWebhooks,
@@ -236,6 +238,12 @@ function WebhookPage({
   function register(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFailure(null);
+    // Blank fields are said beside their fields before anything is confirmed or sent.
+    const blank = blankRegistrationProblems(id, endpoint, kinds, secret);
+    setProblems(blank);
+    if (blank.length > 0) {
+      return;
+    }
     setPending({ kind: "register", id, endpoint, kinds, secret });
   }
 
@@ -420,6 +428,11 @@ function WebhookPage({
             onSubmit={(event) => {
               event.preventDefault();
               setFailure(null);
+              const blank = blankSecretProblems(rotation);
+              setProblems(blank);
+              if (blank.length > 0) {
+                return;
+              }
               setPending({ kind: "replace", id: rotating, secret: rotation });
             }}
           >

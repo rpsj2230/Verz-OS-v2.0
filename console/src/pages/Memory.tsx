@@ -36,7 +36,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
 import {
   dayOf,
   kilobytes,
@@ -47,7 +46,7 @@ import {
   referenceProblem,
   type RememberedText,
 } from "./memoryQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The design's own label for this screen. */
 export const MEMORY_HEADING = "Memory";
@@ -137,9 +136,7 @@ function MemoryAnswerView({ subject }: { readonly subject: string }) {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

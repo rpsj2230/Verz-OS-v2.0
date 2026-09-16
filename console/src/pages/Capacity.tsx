@@ -30,12 +30,16 @@
 import { useResource } from "../api/useResource";
 import { Notice } from "../ui/Notice";
 import { CAPACITY_API_PATH, CONNECTION_COLUMNS, type Capacity as CapacityBody } from "./installQuery";
+import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
-export const SOMETHING_DID_NOT_WORK = "That did not work";
+export const SOMETHING_DID_NOT_WORK = THAT_DID_NOT_WORK;
 
 /** The heading over the budget findings, when there are any. */
 export const WHAT_DOES_NOT_ADD_UP = "What does not add up";
+
+/** No database budget declared, which is a sentence rather than a table with no rows. */
+export const NO_CONNECTIONS = "No database is declared, so there are no connections to weigh.";
 
 export function Capacity() {
   const answer = useResource<CapacityBody>(CAPACITY_API_PATH);
@@ -51,9 +55,7 @@ export function Capacity() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         </section>
       ) : null}
 
@@ -114,31 +116,35 @@ export function Capacity() {
              * does not break inside a word, so without a scrolling parent the document takes the
              * overflow and the navigation goes off the side of a phone.
              */}
-            <div className="grid__scroll">
-              <table className="grid__table">
-                <caption className="grid__caption">
-                  What each database will admit, what the declared clients want, and what is left
-                </caption>
-                <thead>
-                  <tr>
-                    {CONNECTION_COLUMNS.map((column) => (
-                      <th scope="col" key={column}>
-                        {column}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {body.connections.map((one) => (
-                    <tr key={one.database}>
+            {body.connections.length === 0 ? (
+              <p className="note">{NO_CONNECTIONS}</p>
+            ) : (
+              <div className="grid__scroll">
+                <table className="grid__table">
+                  <caption className="grid__caption">
+                    What each database will admit, what the declared clients want, and what is left
+                  </caption>
+                  <thead>
+                    <tr>
                       {CONNECTION_COLUMNS.map((column) => (
-                        <td key={column}>{String(one[column])}</td>
+                        <th scope="col" key={column}>
+                          {column}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {body.connections.map((one) => (
+                      <tr key={one.database}>
+                        {CONNECTION_COLUMNS.map((column) => (
+                          <td key={column}>{String(one[column])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </section>
         </>
       ) : null}

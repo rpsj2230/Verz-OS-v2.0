@@ -47,7 +47,7 @@
  * including a person who only opens the overview. `App.tsx` loads this route on demand and
  * `tests/bundle-split.test.ts` walks the static import graph to prove it.
  *
- * Task ids: M5.3.3
+ * Task ids: M5.3.3, M27.8.4
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -68,8 +68,10 @@ import {
   rungApiPath,
   rungById,
   submittedEdit,
+  type RungEdit,
   type RungRow,
 } from "./matrixQuery";
+import { ConfirmAction } from "../components/ConfirmAction";
 
 /**
  * What is said when the page came back full.
@@ -92,6 +94,34 @@ const THERE_IS_MORE = "This page came back full, so there are more rungs than it
  */
 const NO_SUCH_RUNG = "No rung on this page has that id.";
 
+/** The confirmation's two buttons. */
+export const SAVE_RUNG = "Save these numbers";
+export const KEEP_RUNG = "Keep the rung as it is";
+
+/** The question a save asks, naming the rung by its place in the matrix and what it runs. */
+export function saveRungQuestion(rung: RungRow): string {
+  return `Save new numbers to the ${rung.tier} tier's rung at position ${String(rung.position)} (${rung.provider} ${rung.model})?`;
+}
+
+/**
+ * What a save does, in words that are true on every install today.
+ *
+ * **It writes the row, and it does not change how a question is routed.** Nothing on the answer
+ * path reads `ops.routing_rung` yet: the chain a request runs through is `brain.models.routing.
+ * seed_chain`, which `brain.tables.routing` calls the runtime source of truth for want of anywhere
+ * else to be. A confirmation promising that the next question would wait twelve seconds would be
+ * a person agreeing to something the system will not do, which is the one thing a confirmation
+ * may not be. `docs/console-audit.md` lists the gap, and this sentence changes on the day it closes.
+ */
+export function saveRungConsequence(edit: RungEdit): string {
+  return (
+    `The rung's row will hold ${String(edit.attempts)} attempt${edit.attempts === 1 ? "" : "s"}, ` +
+    `a ${String(edit.timeout_seconds)} second timeout and at most ${String(edit.max_concurrency)} at once, ` +
+    `and will be switched ${edit.enabled ? "on" : "off"}. Questions are routed by the chain this ` +
+    "release carries, which does not read that row yet, so no answer changes until it does."
+  );
+}
+
 /**
  * One rung's editor.
  *
@@ -109,16 +139,24 @@ function RungEditor({
 }) {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
+  // The edit waiting on its confirmation. A save overwrites what the rung holds, so the form's
+  // submit asks first and only the confirmation sends: `tests/destructive-confirmed.test.ts`.
+  const [pending, setPending] = useState<RungEdit | null>(null);
+
+  const ask = useCallback((submitted: unknown) => {
+    const edit = submittedEdit(submitted);
+    if (edit === null) {
+      // Not an edit this screen recognises. Doing nothing is the answer: a PATCH built out
+      // of values nobody read is a write nobody meant to make, and this is the one screen
+      // here where a wrong request changes something.
+      return;
+    }
+    setFailure(null);
+    setPending(edit);
+  }, []);
 
   const save = useCallback(
-    (submitted: unknown) => {
-      const edit = submittedEdit(submitted);
-      if (edit === null) {
-        // Not an edit this screen recognises. Doing nothing is the answer: a PATCH built out
-        // of values nobody read is a write nobody meant to make, and this is the one screen
-        // here where a wrong request changes something.
-        return;
-      }
+    (edit: RungEdit) => {
       setBusy(true);
       void (async () => {
         const result = await request<unknown>(rungApiPath(rung.id), {
@@ -126,6 +164,7 @@ function RungEditor({
           body: edit,
         });
         setBusy(false);
+        setPending(null);
         if (!result.ok) {
           setFailure(result.failure);
           return;
@@ -149,9 +188,24 @@ function RungEditor({
         uiSchema={RUNG_EDIT_UI}
         formData={editableDefaults(rung)}
         failure={failure}
-        busy={busy}
-        onSubmit={save}
+        busy={busy || pending !== null}
+        onSubmit={ask}
       />
+      {pending === null ? null : (
+        <ConfirmAction
+          question={saveRungQuestion(rung)}
+          consequence={saveRungConsequence(pending)}
+          confirmLabel={SAVE_RUNG}
+          cancelLabel={KEEP_RUNG}
+          busy={busy}
+          onConfirm={() => {
+            save(pending);
+          }}
+          onCancel={() => {
+            setPending(null);
+          }}
+        />
+      )}
     </section>
   );
 }

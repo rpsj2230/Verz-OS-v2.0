@@ -20,10 +20,9 @@
  */
 
 import type { ApiFailure } from "../api/errors";
-import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./DataTable";
 import { sectionData, type ManifestSection } from "./manifestSections";
 import { SchemaForm } from "./SchemaForm";
+import { FailureNotice } from "../ui/FailureNotice";
 
 interface ManifestFormProps {
   /** What is being built, for a screen reader and for anybody reading it. */
@@ -66,9 +65,7 @@ export function ManifestForm({
       ))}
 
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
     </div>
   );

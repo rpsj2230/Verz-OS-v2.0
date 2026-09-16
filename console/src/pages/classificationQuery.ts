@@ -419,6 +419,13 @@ export function derivationOptions(
  * There is no `entity` and no `column`, and both are absent for the reason
  * `brain.classification_routes` gives: they are path segments, a value that arrives twice is
  * a value two readers disagree about, and `ColumnEdit` forbids both keys as well.
+ *
+ * **A document with one column has nothing to derive from, and the schema says so rather than
+ * failing to compile.** JSON Schema refuses an `enum` with no members, so the form built for such a
+ * document answered every submission with "schema is invalid" and the ajv path of the refusal,
+ * which says nothing a person can act on. `tests/validated-before-write.test.tsx` submitted the
+ * review blank on a one-column fixture and read that sentence back. With no other column the
+ * derivation list is held to no items instead, which is the same rule stated validly.
  */
 export function columnEditSchema(options: readonly string[]): RJSFSchema {
   return {
@@ -440,9 +447,9 @@ export function columnEditSchema(options: readonly string[]): RJSFSchema {
       derived_from: {
         type: "array",
         title: "derived_from",
-        maxItems: MAX_DERIVED_FROM,
+        maxItems: options.length === 0 ? 0 : MAX_DERIVED_FROM,
         uniqueItems: true,
-        items: { type: "string", enum: [...options] },
+        items: options.length === 0 ? { type: "string" } : { type: "string", enum: [...options] },
       },
     },
   };

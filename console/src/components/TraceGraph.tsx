@@ -40,10 +40,10 @@
  */
 
 import type { ApiFailure } from "../api/errors";
-import { Notice } from "../ui/Notice";
-import { NOTHING_TO_SHOW, SOMETHING_DID_NOT_WORK } from "./DataTable";
+import { NOTHING_TO_SHOW } from "./DataTable";
 import { GraphCanvas } from "./GraphCanvas";
 import type { CompletedRun } from "./graph";
+import { FailureNotice } from "../ui/FailureNotice";
 
 interface TraceGraphProps {
   /** What this trace is, for a screen reader and for anybody reading it. */
@@ -64,9 +64,7 @@ export function TraceGraph({ caption, run, failure = null, busy = false }: Trace
       <p className="graph__caption">{caption}</p>
 
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
 
       {/*

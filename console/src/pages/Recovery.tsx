@@ -60,9 +60,10 @@ import {
   type Recovery as RecoveryBody,
   type Rehearsal,
 } from "./installQuery";
+import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
-export const SOMETHING_DID_NOT_WORK = "That did not work";
+export const SOMETHING_DID_NOT_WORK = THAT_DID_NOT_WORK;
 
 /** The heading over the state where this install could not look at its own copies. */
 export const NOTHING_LOOKED = "Nothing here has looked at your copies";
@@ -72,6 +73,9 @@ export const RECORDS_THAT_COULD_NOT_BE_READ = "Records that could not be read";
 
 /** The heading over how a rehearsal is done here. */
 export const REHEARSING_A_RESTORE = "Rehearsing a restore";
+
+/** A profile that takes no copies, said rather than left as no cards at all. */
+export const NO_COPIES = "This profile takes no copies, so there is nothing to recover from.";
 
 /** The rehearsal card: figures read off the modules that decide them, and why there is no button. */
 function RehearsalCard({ rehearsal }: { readonly rehearsal: Rehearsal }) {
@@ -122,9 +126,7 @@ export function Recovery() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         </section>
       ) : null}
 
@@ -197,6 +199,11 @@ export function Recovery() {
             </dl>
           </section>
 
+          {read.panel.copies.length === 0 ? (
+            <section className="card">
+              <p className="note">{NO_COPIES}</p>
+            </section>
+          ) : null}
           {read.panel.copies.map((copy) => (
             <section className="card" key={copy.coverage}>
               <h2>{copy.coverage}</h2>

@@ -53,7 +53,7 @@ import {
   notFoundIsNotAGap,
 } from "../src/pages/Questions";
 import { QUESTIONS_API_PATH, readQuestions } from "../src/pages/questionsQuery";
-import { COULD_NOT_REACH_THE_BRAIN } from "../src/pages/reportFailure";
+import { THE_BRAIN_COULD_NOT_BE_REACHED as COULD_NOT_REACH_THE_BRAIN } from "../src/ui/FailureNotice";
 import {
   NOBODY_ASKED,
   NOTHING_TO_SHOW,

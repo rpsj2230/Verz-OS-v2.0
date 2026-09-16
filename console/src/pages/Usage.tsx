@@ -20,7 +20,7 @@
  * open, so no page is ever a list the total fails to describe.
  *
  * **Four states, four sentences.** Loading says so; a request that never reached the API and one
- * the API answered with a fault have different headings, from `reportFailure.tsx`; and a reader
+ * the API answered with a fault have different headings, from `ui/FailureNotice.tsx`; and a reader
  * shown no table is told there is nothing to show here, which is the same sentence whether they
  * hold no usage grant or the install has no directory, because the API sends the same body.
  *
@@ -35,7 +35,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../api/useResource";
-import { FailureNotice } from "./reportFailure";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   EVERYBODY,
   PERIODS,

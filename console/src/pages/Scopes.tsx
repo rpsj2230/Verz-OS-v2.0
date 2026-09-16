@@ -31,10 +31,9 @@
  */
 
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
 import { readScopesPage, scopesApiPath } from "./governQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { scopeLines } from "./scopeText";
+import { FailureNotice } from "../ui/FailureNotice";
 
 export const SCOPES_HEADING = "Scopes and departments";
 
@@ -67,9 +66,7 @@ function ScopesAnswerView() {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

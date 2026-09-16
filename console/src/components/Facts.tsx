@@ -27,6 +27,12 @@
  * `tests/phone-width.test.tsx` holds to a phone's width: the label sits above the value below
  * 48rem and beside it above, and the value may break inside a word. A layout of its own here
  * would be a sixth thing to keep narrow.
+ *
+ * **No facts is a sentence, not an empty list.** A screen handed nothing to state would otherwise
+ * draw a labelled list with no rows in it, which reads the same as a screen still asking.
+ * `tests/screen-states.test.tsx` holds every install screen to an empty sentence of its own.
+ *
+ * Task ids: M27.8.3
  */
 
 import { Chip } from "../ui/Chip";
@@ -39,7 +45,13 @@ interface FactsProps {
   readonly label: string;
 }
 
+/** What a list with nothing in it says. */
+export const NO_FACTS = "Nothing was reported here.";
+
 export function Facts({ facts, label }: FactsProps) {
+  if (facts.length === 0) {
+    return <p className="note">{NO_FACTS}</p>;
+  }
   return (
     <dl className="fields" aria-label={label}>
       {facts.map((fact) => (

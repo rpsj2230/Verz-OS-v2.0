@@ -27,6 +27,8 @@ export const READING_STORAGE = "Reading how files are kept.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 export const NOT_A_READABLE_ADDRESS = "The address set for the store is not one this screen can show.";
 export const FROM_DEFAULT = "This is the address a new install starts with; nobody has set another.";
+/** A store with no bucket declared, which is a sentence rather than a table with no rows. */
+export const NO_BUCKETS = "This install declares no bucket to keep files in.";
 
 function Failure({ failure }: { readonly failure: ApiFailure }) {
   return (
@@ -84,37 +86,41 @@ function StorageBody() {
 
       <section className="card">
         <h2>Buckets</h2>
-        <div className="grid__scroll">
-          <table className="grid__table" aria-label="Buckets">
-            <thead>
-              <tr>
-                <th scope="col">Bucket</th>
-                <th scope="col">Holds</th>
-                <th scope="col">Kept for</th>
-                <th scope="col">Why</th>
-                <th scope="col">Versioned</th>
-                <th scope="col">Readable without signing in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.buckets.map((bucket) => (
-                <tr key={bucket.name}>
-                  <td>
-                    <code>{bucket.name}</code>
-                  </td>
-                  <td>
-                    {bucket.holds}
-                    {bucket.kinds.length === 0 ? null : <> ({bucket.kinds.join(", ")})</>}
-                  </td>
-                  <td>{keptFor(bucket)}</td>
-                  <td>{bucket.retention_reason}</td>
-                  <td>{bucket.versioned ? "Yes" : "No"}</td>
-                  <td>{bucket.public_read ? "Yes" : "No"}</td>
+        {page.buckets.length === 0 ? (
+          <p className="note">{NO_BUCKETS}</p>
+        ) : (
+          <div className="grid__scroll">
+            <table className="grid__table" aria-label="Buckets">
+              <thead>
+                <tr>
+                  <th scope="col">Bucket</th>
+                  <th scope="col">Holds</th>
+                  <th scope="col">Kept for</th>
+                  <th scope="col">Why</th>
+                  <th scope="col">Versioned</th>
+                  <th scope="col">Readable without signing in</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {page.buckets.map((bucket) => (
+                  <tr key={bucket.name}>
+                    <td>
+                      <code>{bucket.name}</code>
+                    </td>
+                    <td>
+                      {bucket.holds}
+                      {bucket.kinds.length === 0 ? null : <> ({bucket.kinds.join(", ")})</>}
+                    </td>
+                    <td>{keptFor(bucket)}</td>
+                    <td>{bucket.retention_reason}</td>
+                    <td>{bucket.versioned ? "Yes" : "No"}</td>
+                    <td>{bucket.public_read ? "Yes" : "No"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
         {page.findings.length === 0 ? null : (
           <ul aria-label="Findings about the buckets">
             {page.findings.map((one) => (

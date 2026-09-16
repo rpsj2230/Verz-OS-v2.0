@@ -43,7 +43,7 @@
  * opens the overview. `App.tsx` loads this route on demand and `tests/bundle-split.test.ts`
  * walks the static import graph to prove it.
  *
- * Task ids: M27.7.3, M27.7.7
+ * Task ids: M27.7.3, M27.7.7, M27.8.4
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -51,8 +51,8 @@ import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { SchemaForm } from "../components/SchemaForm";
-import { Notice } from "../ui/Notice";
 import {
   GRANTS_API_PATH,
   PROPOSAL_UI,
@@ -68,7 +68,7 @@ import {
   submittedProposal,
   type PersonRow,
 } from "./governQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 export const PEOPLE_HEADING = "People and grants";
 
@@ -117,6 +117,23 @@ export function removeLabel(capability: string): string {
   return `Remove ${capability}`;
 }
 
+/** The removal's confirmation, naming the capability and the subject it is taken from. */
+export function removeQuestion(subject: string, capability: string): string {
+  return `Remove ${capability} from ${subject}?`;
+}
+
+/**
+ * What a removal does. The route retires the grant row rather than deleting it, and the resolver
+ * answers from live rows, so the next request is the first one answered without it.
+ */
+export const REMOVAL_CONSEQUENCE =
+  "The grant is retired, so the next request this subject makes is answered without it. The " +
+  "retired row is kept, and writing the grant again is how it is given back.";
+
+/** The confirmation's two buttons. */
+export const REMOVE_GRANT = "Remove the grant";
+export const KEEP_GRANT = "Keep it";
+
 /**
  * One subject's capabilities, each with the control that takes it away.
  *
@@ -142,6 +159,10 @@ function HeldCapabilities({
 }) {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
+  // The capability whose removal is waiting on its confirmation. Taking a grant away ends what it
+  // reached, so the button asks and only the confirmation sends: see
+  // `tests/destructive-confirmed.test.ts`.
+  const [asking, setAsking] = useState<string | null>(null);
   // Two different absences and they are kept apart. A subject that is not a person is a fact
   // about the row and is said out loud, because a reader looking for the button deserves to
   // know why there is none; a caller who may not write is a fact about them, and nothing is
@@ -162,6 +183,7 @@ function HeldCapabilities({
           body: { principal_id: removable, capability },
         });
         setBusy(false);
+        setAsking(null);
         if (!result.ok) {
           setFailure(result.failure);
           return;
@@ -182,9 +204,22 @@ function HeldCapabilities({
   return (
     <>
       {failure === null ? null : (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
+      )}
+      {asking === null ? null : (
+        <ConfirmAction
+          question={removeQuestion(person.subject, asking)}
+          consequence={REMOVAL_CONSEQUENCE}
+          confirmLabel={REMOVE_GRANT}
+          cancelLabel={KEEP_GRANT}
+          busy={busy}
+          onConfirm={() => {
+            take(asking);
+          }}
+          onCancel={() => {
+            setAsking(null);
+          }}
+        />
       )}
       <ul className="roster" aria-label={HELD_LIST_LABEL}>
         {person.capabilities.map((capability) => (
@@ -194,9 +229,10 @@ function HeldCapabilities({
               <button
                 type="button"
                 className="button"
-                disabled={busy}
+                disabled={busy || asking !== null}
                 onClick={() => {
-                  take(capability);
+                  setFailure(null);
+                  setAsking(capability);
                 }}
               >
                 {removeLabel(capability)}
@@ -296,9 +332,7 @@ function PeopleRows({
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

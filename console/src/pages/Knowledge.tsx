@@ -36,7 +36,6 @@
 import { useState } from "react";
 import { useResource } from "../api/useResource";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
 import {
   EVERY_ROW,
   LEVELS,
@@ -47,7 +46,7 @@ import {
   type Level,
   type LibraryView,
 } from "./knowledgeQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The design's own label for this screen, which the navigation and this heading share. */
 export const KNOWLEDGE_HEADING = "Knowledge";
@@ -177,9 +176,7 @@ function KnowledgeAnswerView() {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

@@ -27,8 +27,8 @@
 
 import { useResource } from "../api/useResource";
 import { Facts } from "../components/Facts";
-import { Notice } from "../ui/Notice";
 import { factsOf, INSTALL_API_PATH, type InstallFacts } from "./installQuery";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure. The API's own sentence goes underneath it. */
 export const SOMETHING_DID_NOT_WORK = "That did not work";
@@ -48,9 +48,7 @@ export function Install() {
         <h2>What is running</h2>
 
         {answer.failure ? (
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         ) : null}
 
         {answer.busy ? (
@@ -59,7 +57,7 @@ export function Install() {
           </p>
         ) : null}
 
-        {facts.length > 0 ? <Facts facts={facts} label="What is running" /> : null}
+        {answer.busy || answer.failure !== null ? null : <Facts facts={facts} label="What is running" />}
       </section>
     </article>
   );

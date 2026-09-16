@@ -33,6 +33,7 @@ import {
   FEATURES_LEDE,
   KEEP_IT,
   NEVER_CHANGED,
+  NO_FEATURES,
   OFF,
   ON,
   ONLY_THE_LAST_CHANGE_IS_KEPT,
@@ -130,6 +131,7 @@ function FeatureList({ onSwitched }: { readonly onSwitched: (sentence: string) =
           }}
         />
       )}
+      {body.features.length === 0 ? <p className="note">{NO_FEATURES}</p> : null}
       {body.features.map((row) => (
         <section className="card" key={row.name} aria-labelledby={`feature-${row.name}`}>
           <h2 id={`feature-${row.name}`}>

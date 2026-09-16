@@ -83,6 +83,7 @@ import {
   withEvent,
   type AnswerView,
 } from "./askQuery";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The console address of this screen. */
 export const ASK_ADDRESS = "/ask";
@@ -97,6 +98,15 @@ export const ASK_LEDE = "Ask a question. The answer is computed for what you are
 export const QUESTION_LABEL = "Your question";
 export const ASK_LABEL = "Ask";
 export const PROGRESS_LABEL = "While the answer is being made";
+
+/**
+ * What the progress region says before the first step has arrived.
+ *
+ * The steps are the lane's own sentences and the first can take a moment to come, so without this
+ * the region is an empty list for that moment, and a question still being asked reads the same as
+ * one nobody asked. `tests/screen-states.test.tsx` holds the page to a loading sentence of its own.
+ */
+export const ASKING = "Asking.";
 
 /** The heading over what the answer stands on. Never a count, and never a source list. */
 export const BASED_ON = "What this is based on";
@@ -270,6 +280,7 @@ export function Ask() {
 
       {busy ? (
         <section className="ask__progress" role="status" aria-label={PROGRESS_LABEL}>
+          {view.steps.length === 0 ? <p className="note">{ASKING}</p> : null}
           <ul className="ask__steps">
             {view.steps.map((step, at) => (
               // Keyed by position because a step is a sentence from a closed vocabulary and
@@ -311,9 +322,7 @@ export function Ask() {
       ) : null}
 
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
 
       {!busy && !asked && failure === null ? <p className="note">{NOTHING_ASKED_YET}</p> : null}

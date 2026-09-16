@@ -43,7 +43,6 @@ import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
 import {
   approvalApiPath,
   approvalDecisionApiPath,
@@ -56,7 +55,7 @@ import {
   type ApprovalCardView,
   type Decision,
 } from "./approvalsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** Written down because a button that turns green on click is the easy version of this page. */
 export const A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT =
@@ -241,9 +240,7 @@ export function DecisionControls({
         {REJECT_LABEL}
       </button>
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
     </div>
   );
@@ -261,9 +258,7 @@ function QueueRows({ onDecided }: { readonly onDecided: (verdict: Verdict) => vo
   const answer = useResource<unknown>(APPROVALS_API_PATH);
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {
@@ -346,9 +341,7 @@ function OneView({ suspensionId }: { readonly suspensionId: string }) {
   useConfirmationInView(sentence, decided === null ? 0 : 1);
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

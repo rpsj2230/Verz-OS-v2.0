@@ -50,10 +50,9 @@ import { AgentCapabilities, AgentFiguresView } from "../components/AgentAssembly
 import { AgentWorkspace } from "../components/AgentWorkspace";
 import { AutomationGallery } from "../components/AutomationGallery";
 import { CompositionDiff } from "../components/CompositionDiff";
-import { Notice } from "../ui/Notice";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "./agentQuery";
 import { AUTOMATIONS_TAB, automationGalleryApiPath } from "./automationGalleryQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The page's own heading. The agent's name is the workspace's heading, beneath it. */
 export const AGENT_HEADING = "Agent";
@@ -112,9 +111,7 @@ function AgentAnswer({
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

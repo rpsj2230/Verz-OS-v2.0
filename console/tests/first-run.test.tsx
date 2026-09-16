@@ -20,7 +20,7 @@
  */
 
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
-import { fireEvent, render, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import {
   APPOINTMENT_PATH,
@@ -40,9 +40,11 @@ import {
   KEY_KEPT_SENTENCES,
   NOT_CONTINUED_TITLE,
   OPEN_CONSOLE,
+  SENDING_SETUP,
   UNKEPT_SENTENCES,
   UNKEPT_TITLE,
 } from "../src/pages/FirstRun";
+import { THE_BRAIN_COULD_NOT_BE_REACHED } from "../src/ui/FailureNotice";
 import { CONSOLE_ORIGIN, everythingInStorage, fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
   declaredPropertyNames,
@@ -512,6 +514,48 @@ describe("what a refusal is drawn as", () => {
 
     await waitFor(() => expect(container.querySelector(".notice")).not.toBeNull());
     expect(container.querySelector(".notice__title")?.textContent).toBe(NOT_CONTINUED_TITLE);
+  });
+
+  test("a setup still being sent, one that cannot reach the API and one the API failed are three different sentences", async () => {
+    // What breaks if this is deleted: the wizard drawing "not continued" over a laptop that lost its
+    // network, which reads as the server having refused the installer, or drawing nothing but two
+    // greyed-out buttons while the answers are on their way. `tests/screen-states.test.tsx` excuses
+    // this page from its loop because it asks nothing on arrival, and points here.
+    const sending = standIn({ appointment: () => json({}, 500) });
+    const hanging = {
+      ...sending.idp,
+      fetch: vi.fn(async (input: unknown, init?: RequestInit) =>
+        new URL(String(input), CONSOLE_ORIGIN).pathname === APPOINTMENT_PATH
+          ? await new Promise<Response>(() => undefined)
+          : ((await sending.idp.fetch(input, init)) as Response),
+      ),
+    };
+    const opened = await openFirstRun(hanging);
+    await answerEverything(opened.container, true);
+    press(opened.container, "Set up this system");
+    await waitFor(() => expect(opened.container.querySelector('[role="status"]')?.textContent).toBe(SENDING_SETUP));
+    expect(opened.container.querySelector(".notice")).toBeNull();
+    cleanup();
+    sessionStorage.clear();
+
+    const headings: string[] = [];
+    for (const appointment of [
+      (): Response => {
+        throw new TypeError("Failed to fetch");
+      },
+      (): Response => json({ message: "MESSAGE-SENTINEL" }, 500),
+    ]) {
+      const { idp } = standIn({ appointment });
+      const { container } = await openFirstRun(idp);
+      await answerEverything(container, true);
+      press(container, "Set up this system");
+      await waitFor(() => expect(container.querySelector(".notice")).not.toBeNull());
+      headings.push(container.querySelector(".notice__title")?.textContent ?? "");
+      cleanup();
+      sessionStorage.clear();
+    }
+    expect(headings).toEqual([THE_BRAIN_COULD_NOT_BE_REACHED, NOT_CONTINUED_TITLE]);
+    expect(THE_BRAIN_COULD_NOT_BE_REACHED).not.toBe(NOT_CONTINUED_TITLE);
   });
 
   test("every refusal before the answers is one sentence that gives no reason", async () => {

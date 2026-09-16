@@ -29,8 +29,6 @@
  */
 
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
   milliseconds,
   ratePercent,
@@ -38,6 +36,7 @@ import {
   serviceLevelsApiPath,
   type LaneReadingRow,
 } from "./serviceLevelsQuery";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The page's heading. */
 export const SERVICE_LEVELS_HEADING = "Service levels";
@@ -85,9 +84,7 @@ function ReadingView() {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

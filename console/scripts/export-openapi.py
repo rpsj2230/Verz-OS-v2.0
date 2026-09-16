@@ -36,6 +36,15 @@ changes a response model without rerunning this, and from that moment the consol
 against an API that no longer exists while every check stays green. Regenerating needs no
 server and no network, so keeping a stale copy buys nothing.
 
+**It also writes what the API document cannot say: every table and every installation value.**
+`tests/console-audit.test.ts` compares what an administrator would need to manage with what the
+console serves, and two of its lists are facts only the Python can state exactly. The tables are
+`brain.db.Base.metadata` once the application has imported every module that declares one, which
+is not the same as the files under `brain/tables`: `know.chunk` is declared in
+`brain.knowledge.search`, deliberately, and a reading of that directory misses it. The
+installation values are `brain.install.INSTALLATION`. Both go into `inventory.json` beside the
+schema, generated and uncommitted for the schema's reason.
+
 Run it from anywhere:
 
     uv run python console/scripts/export-openapi.py
@@ -58,6 +67,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONSOLE_ROOT = REPO_ROOT / "console"
 OUT_DIR = CONSOLE_ROOT / "src" / "api" / "generated"
 SCHEMA_PATH = OUT_DIR / "openapi.internal.json"
+INVENTORY_PATH = OUT_DIR / "inventory.json"
 
 #: Where the console's copy of the lock text lives, and the exact shape it must have.
 #: Anchored to the export statement so that renaming the constant fails this check loudly
@@ -111,6 +121,8 @@ def main() -> None:
 
     from brain.app import Settings, create_app
     from brain.core.redaction import LOCK_TEXT
+    from brain.db import Base
+    from brain.install import INSTALLATION
     from brain.openapi import Audience, document
 
     check_lock_text(LOCK_TEXT)
@@ -127,6 +139,16 @@ def main() -> None:
     # newline="\n" is not decoration on this machine: the default rewrites every line
     # ending to CRLF on Windows, which makes a regenerated file differ from itself.
     SCHEMA_PATH.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8", newline="\n")
+    inventory = {
+        "tables": sorted(Base.metadata.tables),
+        "installation": [
+            {"name": one.name, "belongs": one.belongs.value, "required": one.required}
+            for one in INSTALLATION
+        ],
+    }
+    INVENTORY_PATH.write_text(
+        json.dumps(inventory, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
     versioned = sorted(p for p in paths if p.startswith(API_PREFIX))
     print(f"wrote {SCHEMA_PATH.relative_to(REPO_ROOT)} with {len(paths)} paths")

@@ -83,6 +83,7 @@ import {
   type SignInView,
   type StepKey,
 } from "../setup/wizard";
+import { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 
 /** Why this page signs in before it asks for anything. */
@@ -152,6 +153,9 @@ function keptSentence(kept: ProviderKeyKept): string | null {
 
 /** The heading over a refusal. The same for every refusal, so it says nothing either. */
 export const NOT_CONTINUED_TITLE = "Setup did not continue";
+
+/** While the appointment is on its way, which is a sentence rather than two greyed-out buttons. */
+export const SENDING_SETUP = "Sending your answers.";
 
 /** Every screen the wizard counts, including the review and the finish, which ask nothing. */
 const TOTAL_STEPS = SCREENS.length + 2;
@@ -435,6 +439,11 @@ function Wizard() {
             </button>
           </section>
         ))}
+        {busy ? (
+          <p className="note" role="status">
+            {SENDING_SETUP}
+          </p>
+        ) : null}
         <ToldNotice told={told} />
         <div className="form-actions">
           <button
@@ -614,8 +623,13 @@ function ToldNotice({ told }: { readonly told: Told }) {
         </Notice>
       );
     case "failure":
+      // A setup that never reached the API is told so under its own heading: the person's network
+      // is the thing to fix, and "not continued" over it reads as the server having refused them.
       return (
-        <Notice title={NOT_CONTINUED_TITLE} traceId={told.failure.traceId}>
+        <Notice
+          title={told.failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : NOT_CONTINUED_TITLE}
+          traceId={told.failure.traceId}
+        >
           <p>{told.failure.message}</p>
         </Notice>
       );

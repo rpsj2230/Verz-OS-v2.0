@@ -55,7 +55,9 @@ import {
   NO_PEOPLE,
   NO_SUCH_SUBJECT,
   ONLY_A_PERSONS_GRANT_CAN_BE_REMOVED_HERE,
+  REMOVE_GRANT,
   removeLabel,
+  removeQuestion,
 } from "../src/pages/People";
 import { HOLDERS_ARE_NOT_RECORDED, NO_ROLES } from "../src/pages/Roles";
 import { NO_CAPABILITIES } from "../src/pages/Capabilities";
@@ -396,10 +398,11 @@ describe("what the people screen offers", () => {
     ).not.toContain(removeLabel("read:client.name"));
   });
 
-  test("removing a capability posts the subject and the capability and asks again", async () => {
-    // What breaks if this is deleted: the removal sends something else, or the console patches
-    // its own list instead of re-asking. The second matters because what a person now reaches
-    // is the resolver's answer rather than this page's arithmetic.
+  test("removing a capability asks first, then posts the subject and the capability and asks again", async () => {
+    // What breaks if this is deleted: the removal sends something else, sends on the first press
+    // with nothing between a stray tap and a grant taken away, or the console patches its own list
+    // instead of re-asking. The last matters because what a person now reaches is the resolver's
+    // answer rather than this page's arithmetic.
     const open = `/people/${encodeURIComponent("principal:u_1")}`;
     const { container, idp } = await consoleAt(open, {
       people: peoplePage([{ subject: "principal:u_1", capabilities: ["read:client.name"] }], {
@@ -424,6 +427,18 @@ describe("what the people screen offers", () => {
     );
     expect(button).toBeDefined();
     fireEvent.click(button as HTMLButtonElement);
+
+    // The press opens a confirmation naming the capability and the subject, and sends nothing.
+    await waitFor(() => expect(container.querySelector(".confirm")).not.toBeNull());
+    expect(writes(idp)).toEqual([]);
+    expect(container.querySelector(".confirm__question")?.textContent).toBe(
+      removeQuestion("principal:u_1", "read:client.name"),
+    );
+    const confirm = [...container.querySelectorAll(".confirm button")].find(
+      (one) => one.textContent === REMOVE_GRANT,
+    );
+    expect(confirm).toBeDefined();
+    fireEvent.click(confirm as HTMLButtonElement);
 
     await waitFor(() => {
       expect(writes(idp).length).toBeGreaterThan(0);

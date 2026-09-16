@@ -39,7 +39,6 @@
 
 import { Link, useParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
 import {
   driftingRows,
   readSkillsPage,
@@ -48,7 +47,7 @@ import {
   skillsApiPath,
   type SkillLibraryRow,
 } from "./skillsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 export const SKILLS_HEADING = "Skills";
 
@@ -138,9 +137,7 @@ function SkillsAnswerView({ openName }: { readonly openName: string | undefined 
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {

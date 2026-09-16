@@ -64,6 +64,7 @@ import type { ApiFailure } from "../api/errors";
 import { Lock } from "../ui/Lock";
 import { Notice } from "../ui/Notice";
 import { formShape, LOCK_FIELD, withoutWithheld } from "./formSchema";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure a form reports. The API's own sentence goes underneath. */
 export const SOMETHING_DID_NOT_WORK = "That did not work";
@@ -217,9 +218,7 @@ export function SchemaForm({
       />
 
       {failure ? (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       ) : null}
     </div>
   );

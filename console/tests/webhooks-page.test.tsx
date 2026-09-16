@@ -26,7 +26,8 @@ import {
   REPLACE_LABEL,
   SWITCH_OFF_LABEL,
 } from "../src/pages/Webhooks";
-import type { SubscriberRow, WebhooksBody } from "../src/pages/webhooksQuery";
+import { BLANK_SENTENCES, type SubscriberRow, type WebhooksBody } from "../src/pages/webhooksQuery";
+import { readRepoFile } from "./support/repo";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredRequestBodySchema } from "./support/openapi";
@@ -265,6 +266,38 @@ describe("what the webhooks screen does", () => {
     expect(container.innerHTML).not.toContain(SECRET);
   });
 
+  test("a registration with a blank field says what to fill in beside each one, and asks and sends nothing", async () => {
+    // What breaks if this is deleted: a registration with no id, no address, no kind and no secret
+    // opening a confirmation a person can agree to, and being refused only after they have.
+    const { container, idp } = await mount((url) => (url.pathname === LISTING ? json(page()) : null));
+
+    fireEvent.click(button(container, REGISTER_LABEL));
+
+    expect(container.querySelector(".confirm")).toBeNull();
+    expect(posts(idp)).toEqual([]);
+    for (const [name, sentence] of Object.entries(BLANK_SENTENCES)) {
+      expect(container.querySelector(`[aria-label="Problems with ${name}"]`)?.textContent, name).toBe(sentence);
+    }
+
+    fireEvent.change(field(container, "Id"), { target: { value: "new_bridge" } });
+    fireEvent.change(field(container, "Address it is told at"), { target: { value: "https://hooks.example.test/new" } });
+    fireEvent.click(field(container, "operation.settled"));
+    fireEvent.change(field(container, "Signing secret"), { target: { value: SECRET } });
+    fireEvent.click(button(container, REGISTER_LABEL));
+    expect(container.querySelector(".confirm")).not.toBeNull();
+    expect(container.querySelector('[aria-label^="Problems with"]')).toBeNull();
+  });
+
+  test("the sentences for a blank field are the API's own", () => {
+    // What breaks if this is deleted: the console's copy of the four sentences drifting from the
+    // ones the route answers with, so the same blank field is described two ways depending on which
+    // side noticed it. Read from the Python, with its implicitly joined literals joined.
+    const python = readRepoFile("src/brain/ops/webhook_admin.py").replace(/"\s+"/g, "");
+    for (const [name, sentence] of Object.entries(BLANK_SENTENCES)) {
+      expect(python, name).toContain(`"${sentence}"`);
+    }
+  });
+
   test("a refused registration shows each problem beside its field and keeps the secret out of the page", async () => {
     // What breaks if this is deleted: a 422 reads as a generic failure, or the secret stays in the
     // field for the next person at the screen.
@@ -283,6 +316,8 @@ describe("what the webhooks screen does", () => {
       return url.pathname === LISTING ? json(page()) : null;
     });
     fireEvent.change(field(container, "Id"), { target: { value: "billing_bridge" } });
+    fireEvent.change(field(container, "Address it is told at"), { target: { value: "https://hooks.example.test/new" } });
+    fireEvent.click(field(container, "operation.settled"));
     fireEvent.change(field(container, "Signing secret"), { target: { value: "short-SENTINEL" } });
     fireEvent.click(button(container, REGISTER_LABEL));
     fireEvent.click(confirmButton(container, REGISTER_CONFIRM));

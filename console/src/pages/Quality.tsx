@@ -23,7 +23,7 @@
  */
 
 import { useResource } from "../api/useResource";
-import { FailureNotice } from "./reportFailure";
+import { FailureNotice } from "../ui/FailureNotice";
 import { QUALITY_API_PATH, cadence, readQuality, runLine } from "./qualityQuery";
 
 /** The design's own label for this screen, which the navigation and this heading share. */

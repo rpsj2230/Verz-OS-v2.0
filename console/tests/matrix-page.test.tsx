@@ -47,7 +47,7 @@ import {
   submittedEdit,
   type RungRow,
 } from "../src/pages/matrixQuery";
-import { NO_SUCH_RUNG, THERE_IS_MORE } from "../src/pages/Matrix";
+import { NO_SUCH_RUNG, SAVE_RUNG, THERE_IS_MORE } from "../src/pages/Matrix";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredParameterSchema, declaredQueryParameters, declaredRequestBodySchema } from "./support/openapi";
 import { backendRoutingRungColumns, backendRungEditFields, backendRungViewFields } from "./support/python";
@@ -475,6 +475,20 @@ describe("what the screen shows", () => {
   });
 });
 
+/** Press the confirmation a save asks for, once the form's submit has opened it. */
+async function confirmSave(container: HTMLElement): Promise<void> {
+  const button = await waitFor(() => {
+    const found = [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === SAVE_RUNG);
+    if (found === undefined) {
+      throw new Error("the confirmation has not opened");
+    }
+    return found;
+  });
+  await act(async () => {
+    fireEvent.click(button);
+  });
+}
+
 describe("saving one rung", () => {
   test("a save is a PATCH to the rung in the address, carrying the four dials", async () => {
     // What breaks if this is deleted: the write. Both halves are checked because either alone
@@ -490,6 +504,10 @@ describe("saving one rung", () => {
     await act(async () => {
       fireEvent.click(submit as HTMLElement);
     });
+    // The submit asks first; nothing is sent until the confirmation is pressed.
+    expect(writes(idp)).toHaveLength(0);
+    expect(container.querySelector(".confirm")?.textContent).toContain("rung at position 0");
+    await confirmSave(container);
     await waitFor(() => expect(writes(idp)).toHaveLength(1));
 
     const sent = writes(idp)[0];
@@ -512,6 +530,7 @@ describe("saving one rung", () => {
     await act(async () => {
       fireEvent.click(container.querySelector(".form button[type=submit]") as HTMLElement);
     });
+    await confirmSave(container);
 
     await waitFor(() =>
       expect(
@@ -533,6 +552,7 @@ describe("saving one rung", () => {
     await act(async () => {
       fireEvent.click(container.querySelector(".form button[type=submit]") as HTMLElement);
     });
+    await confirmSave(container);
     await waitFor(() => expect(writes(idp)).toHaveLength(1));
     await waitFor(() => {
       if (!container.querySelector(".form .notice__body")) {

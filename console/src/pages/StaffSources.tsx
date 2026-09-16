@@ -56,7 +56,6 @@ import { useResource } from "../api/useResource";
 import { Badge } from "../ui/Badge";
 import { Chip } from "../ui/Chip";
 import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
   readStaffSources,
   readTrial,
@@ -68,6 +67,7 @@ import {
   type TrialAnswer,
   type TrialRun,
 } from "./staffSourcesQuery";
+import { FailureNotice } from "../ui/FailureNotice";
 
 export const STAFF_SOURCES_HEADING = "Staff sources";
 
@@ -286,9 +286,7 @@ function Trial() {
         </p>
       ) : null}
       {failure === null ? null : (
-        <Notice title={SOMETHING_DID_NOT_WORK} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
+        <FailureNotice failure={failure} />
       )}
       {read === null ? null : wasRead(read) ? (
         <Plan run={read.panel} />
@@ -312,9 +310,7 @@ export function StaffSources() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         </section>
       ) : null}
 
@@ -324,57 +320,67 @@ export function StaffSources() {
         </p>
       ) : null}
 
-      {page.selection === null || page.selection === undefined ? null : (
-        <section className="card">
-          <h2>{WHAT_THIS_INSTALL_READS}</h2>
-          <p>
-            <Chip label={page.selection.name} />
-          </p>
-          {page.selection.meaning === "" ? null : <p>{page.selection.meaning}</p>}
-          {/*
-           * The refusal is the API's own sentence, carried whole. It is
-           * `brain.identity.staff_source.selected_source`'s message and it names the settings
-           * nobody supplied, which is what somebody reading this screen has to act on; a
-           * console that summarised it would be a second account of a configuration.
-           */}
-          {page.selection.ready ? null : (
-            <Notice title={THE_SOURCE_REFUSED}>
-              <p>{page.selection.refusal}</p>
-            </Notice>
+      {/*
+       * What the API answered, drawn only once it has answered. Read from a request still in
+       * flight or one that failed, the reader returns no options, and the page used to say there
+       * were no staff sources under a loading sentence and under a failure: three states, one
+       * sentence. `tests/screen-states.test.tsx` found it.
+       */}
+      {answer.busy || answer.failure !== null ? null : (
+        <>
+          {page.selection === null || page.selection === undefined ? null : (
+            <section className="card">
+              <h2>{WHAT_THIS_INSTALL_READS}</h2>
+              <p>
+                <Chip label={page.selection.name} />
+              </p>
+              {page.selection.meaning === "" ? null : <p>{page.selection.meaning}</p>}
+              {/*
+               * The refusal is the API's own sentence, carried whole. It is
+               * `brain.identity.staff_source.selected_source`'s message and it names the settings
+               * nobody supplied, which is what somebody reading this screen has to act on; a
+               * console that summarised it would be a second account of a configuration.
+               */}
+              {page.selection.ready ? null : (
+                <Notice title={THE_SOURCE_REFUSED}>
+                  <p>{page.selection.refusal}</p>
+                </Notice>
+              )}
+              {page.selection.unsupplied.length === 0 ? null : (
+                <dl className="fields" aria-label={STILL_TO_SET}>
+                  <div className="fields__row">
+                    <dt>{STILL_TO_SET}</dt>
+                    <dd>
+                      {page.selection.unsupplied.map((name) => (
+                        <Chip key={name} label={name} />
+                      ))}
+                    </dd>
+                  </div>
+                </dl>
+              )}
+            </section>
           )}
-          {page.selection.unsupplied.length === 0 ? null : (
-            <dl className="fields" aria-label={STILL_TO_SET}>
-              <div className="fields__row">
-                <dt>{STILL_TO_SET}</dt>
-                <dd>
-                  {page.selection.unsupplied.map((name) => (
-                    <Chip key={name} label={name} />
-                  ))}
-                </dd>
-              </div>
-            </dl>
+
+          <section className="card">
+            <h2>{WHAT_IT_COULD_READ}</h2>
+            {page.options.length === 0 ? (
+              <p className="note">{NO_SOURCES}</p>
+            ) : (
+              <ul className="roster" aria-label={SOURCES_LIST_LABEL}>
+                {page.options.map((option) => (
+                  <Option key={option.name} option={option} />
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {page.not_written_here === "" ? null : (
+            <section className="card">
+              <h2>{WHERE_THE_CHOICE_IS_MADE}</h2>
+              <p>{page.not_written_here}</p>
+            </section>
           )}
-        </section>
-      )}
-
-      <section className="card">
-        <h2>{WHAT_IT_COULD_READ}</h2>
-        {page.options.length === 0 ? (
-          <p className="note">{NO_SOURCES}</p>
-        ) : (
-          <ul className="roster" aria-label={SOURCES_LIST_LABEL}>
-            {page.options.map((option) => (
-              <Option key={option.name} option={option} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {page.not_written_here === "" ? null : (
-        <section className="card">
-          <h2>{WHERE_THE_CHOICE_IS_MADE}</h2>
-          <p>{page.not_written_here}</p>
-        </section>
+        </>
       )}
 
       <section className="card">

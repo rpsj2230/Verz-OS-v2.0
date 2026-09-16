@@ -37,6 +37,8 @@ export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 /** A body that is not the landing. The fourth state, and a different sentence from the other three. */
 export const NOT_A_LANDING = "The answer about elevations could not be read.";
 export const YOU_HOLD_THE_AUTHORITY = "You hold that authority.";
+/** No reason is accepted, so the row says that rather than standing empty. */
+export const NO_REASON_IS_ACCEPTED = "No reason is accepted, so no elevation can be opened.";
 
 function Failure({ failure }: { readonly failure: ApiFailure }) {
   return (
@@ -85,7 +87,7 @@ function Landing() {
         <dl className="fields" aria-label="The rules an elevation is held to">
           <div className="fields__row">
             <dt>Reasons it may be opened for</dt>
-            <dd>{landing.reasons.map(reasonWords).join(", ")}</dd>
+            <dd>{landing.reasons.length === 0 ? NO_REASON_IS_ACCEPTED : landing.reasons.map(reasonWords).join(", ")}</dd>
           </div>
           <div className="fields__row">
             <dt>Longest it may run</dt>

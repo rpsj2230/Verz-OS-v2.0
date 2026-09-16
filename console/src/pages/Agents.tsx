@@ -26,9 +26,8 @@
 import { Link } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { AGENT_ADDRESS_PREFIX } from "../components/agentWorkspaceState";
-import { Notice } from "../ui/Notice";
 import { readRoster, ROSTER_API_PATH } from "./agentsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 
 /** The page's heading. */
 export const ROSTER_HEADING = "Agents";
@@ -78,9 +77,7 @@ function RosterAnswerView() {
 
   if (answer.failure) {
     return (
-      <Notice title={SOMETHING_DID_NOT_WORK} traceId={answer.failure.traceId}>
-        <p>{answer.failure.message}</p>
-      </Notice>
+      <FailureNotice failure={answer.failure} />
     );
   }
   if (answer.busy) {
