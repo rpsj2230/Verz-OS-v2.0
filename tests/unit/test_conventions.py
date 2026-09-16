@@ -9,7 +9,7 @@ The second half is the unusual one, and it is here because those files fail sile
 CODEOWNERS line deleted in a merge does not break a build; it just stops requiring a
 review, and the first anybody knows is a permission change that went in unread.
 
-Task ids: M38.1.1.1, M38.1.1.2, M38.1.1.4, M38.1.1.5
+Task ids: M38.1.1.1, M38.1.1.2, M38.1.1.4, M38.1.1.5, M42.6.8
 """
 
 from __future__ import annotations
@@ -23,6 +23,8 @@ from brain.ops.conventions import (
     check_branch_name,
     check_commit_message,
     leaf_ids_in,
+    main,
+    unmarked_install_finding,
 )
 from brain.status import closed_task_ids
 
@@ -206,3 +208,86 @@ def test_the_commit_hook_calls_the_tested_rule_rather_than_repeating_it() -> Non
     # No second copy of the rule. A hook that grepped for `Closes:` itself would drift
     # from the module the moment either changed, and the hook is the copy nobody tests.
     assert "Closes:" not in hook.replace("`Closes:` line", "")
+
+
+# ------------------------------------------ a finding from an install (M42.6.8)
+def test_a_finding_from_an_install_that_says_why_its_fix_is_generic_is_accepted() -> None:
+    """The sibling of the refusal below. If this fails, every commit that honestly answers a
+    staging finding is refused, and the trailers stop being written at all."""
+    message = (
+        "Mint the subject from the realm's own scope\n\n"
+        "Found-on: staging\n"
+        "Generic-because: every full import discards the built-in scope, not only this one\n"
+    )
+    assert check_commit_message(message) is None
+
+
+@pytest.mark.parametrize(
+    "reason_line",
+    ["", "Generic-because:\n", "Generic-because:   \n"],
+    ids=["no reason line", "empty reason", "blank reason"],
+)
+def test_a_finding_from_an_install_that_does_not_say_why_its_fix_is_generic_is_refused(
+    reason_line: str,
+) -> None:
+    """The rule. Delete this and `Found-on:` becomes a label, the question of whether a company
+    nobody here has met would hit the same fault goes unasked, and one install's repair ships
+    to every company looking like a product fix. A blank reason is refused as firmly as a
+    missing one, because a colon with nothing after it is the cheapest way to satisfy the
+    letter of the rule."""
+    message = f"Fix the sign-in\n\nFound-on: staging\n{reason_line}"
+    refusal = check_commit_message(message)
+    assert refusal is not None
+    assert "Generic-because" in refusal.reason
+    assert refusal.subject == "Fix the sign-in"
+
+
+def test_a_message_that_talks_about_an_install_without_the_trailer_gets_a_note() -> None:
+    """The advisory half. Delete this and the note can go quiet for every message, and a
+    commit answering a staging finding with no trailer is indistinguishable from a product
+    change nobody saw on an install."""
+    assert unmarked_install_finding("Fix the loop the owner hit on his staging install")
+    assert unmarked_install_finding("Redirect loop seen on his server after first run")
+    assert unmarked_install_finding("Seen on the owner's own install")
+
+
+def test_an_ordinary_message_or_one_carrying_the_trailer_gets_no_note() -> None:
+    """The positive sibling. A note that fires on every commit is a note nobody reads, so it
+    must stay silent on an ordinary product change and on a message that already answered
+    the question it asks."""
+    assert not unmarked_install_finding("Add the skills screen\n\nCloses: M42.6.4")
+    assert not unmarked_install_finding(
+        "Fix the loop seen on staging\n\nFound-on: staging\nGeneric-because: every install\n"
+    )
+
+
+def test_the_note_is_printed_and_does_not_refuse(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The hook's own behaviour, through `main`. Delete this and the note can be computed and
+    never shown, or shown with a non-zero exit, and the second is a refusal on a guess."""
+    message_file = tmp_path / "COMMIT_EDITMSG"
+    message_file.write_text("Fix the loop on the staging install\n", encoding="utf-8")
+
+    assert main([str(message_file)]) == 0
+    assert "Found-on:" in capsys.readouterr().err
+
+
+def test_the_repository_instructions_carry_the_rule_and_its_worked_examples() -> None:
+    """The rule is only half code. The other half is the table of findings in `CLAUDE.md`
+    that says, for each, what belonged to the install and what belonged to the product.
+    Delete this and the section can be trimmed to a sentence, which is the version an agent
+    reads before fixing only the half in front of it."""
+    text = (REPO / "CLAUDE.md").read_text(encoding="utf-8")
+    heading = "## A problem found on an install: is the fix the product's or that install's?"
+    assert text.count(heading) == 1
+    section = text.split(heading, 1)[1].split("\n## ", 1)[0]
+    rows = [
+        line
+        for line in section.splitlines()
+        if line.startswith("| ") and "install's half" not in line
+    ]
+    assert len(rows) >= 5, rows
+    assert all(line.count(" | ") == 2 for line in rows), rows
+    assert "\nFound-on: " in section
+    assert "\nGeneric-because: " in section

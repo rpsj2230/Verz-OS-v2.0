@@ -42,6 +42,45 @@ company nobody here has met?** If not, it is configuration and belongs in the se
 
 ---
 
+## A problem found on an install: is the fix the product's or that install's?
+
+The owner runs an install of this product as a staging server, and problems found there arrive
+in conversation, often with a hand repair already applied on that server. Every one of them
+is two questions and they have different homes. **Would the same fault happen on a fresh
+install for a company nobody here has met?** If yes, the product is wrong: fix it here, with a
+test, and it reaches every install, staging included, through the normal release. If no, the
+install is wrong: repair it on that server, write the steps where its owner can repeat them,
+and commit none of its values.
+
+Most real findings are both, and the mistake to avoid is fixing only the half that was in
+front of you. Worked examples, all from the first week on the owner's staging install:
+
+| What was seen on the install | The install's half | The product's half |
+| --- | --- | --- |
+| Keycloak refused every sign-in with "Unexpected error" | a required action re-registered by hand with `kcadm` | `ops/keycloak/realm-export.json` named no `providerId` for it, so every import had the fault (61009b6) |
+| Tokens carried no `sub`, so every request was refused | a mapper added by hand on that realm | Keycloak 25 moved `sub` into a scope a full import discards, so the realm's own scope mints it now (6a8c47e) |
+| The wizard refused the model provider step | the provider key set in that server's environment | the wizard should store the key it asks for, rather than require it to be set somewhere else first (open) |
+| Signed in as the first administrator, then redirected for ever | the sign-in binding row inserted by hand | the loop guard was reset by every token exchange, so a refused account looped (d68b361) |
+| The server's address appeared in two workflow files | a repository variable holding that address | the workflows read the variable and nothing else, and an audit keeps a client value out (f43c5bc) |
+| The stored compose file named no image | one line changed in Coolify's copy | none: that copy belongs to the install, and the product's compose file already required it |
+
+**What never happens:** a migration, a seed, a default or a test fixture that carries one
+install's rows or values; a branch or flag for one company; a hand repair left as the only
+record that the product was wrong.
+
+**A commit that came from a problem found on an install says so, and says why its fix is
+generic.** Two trailers, and `brain.ops.conventions` refuses the first without the second:
+
+```
+Found-on: staging
+Generic-because: every realm import drops a required action with no providerId, not only this one
+```
+
+A message that talks about an install and carries neither trailer gets a note rather than a
+refusal, because the words alone cannot tell a finding from a mention.
+
+---
+
 ## The one invariant everything else serves
 
 ```

@@ -18,12 +18,21 @@ close a task would mark work done that nobody did. This is the rule that most wa
 enforcing, because writing `Closes: M12` is the natural thing to type and it is always
 wrong.
 
+**A fix for a problem found on an install says why it is the product's fix.** The owner runs
+an install as a staging server, and a finding there arrives with a hand repair already on
+that server. The commit that answers it carries `Found-on:` and `Generic-because:`, and the
+second is what makes the author ask whether a company nobody here has met would have hit the
+same fault. A `Found-on:` line without its reason is refused. A message that merely talks
+about an install gets a note, because words cannot tell a finding from a mention and a rule
+that refused on a guess would be switched off. See `AN_INSTALL_IS_NOT_THE_PRODUCT` and the
+section of `CLAUDE.md` it names.
+
 Rejected: enforcing any of this in CI alone. CI runs after the commit exists, so the
 message is already written and the fix is a rebase. A hook that refuses at commit time
 costs one retry; the same rule in CI costs a rewrite of history or a second commit
 apologising for the first.
 
-Task ids: M38.1.1.1, M38.1.1.2
+Task ids: M38.1.1.1, M38.1.1.2, M42.6.8
 """
 
 from __future__ import annotations
@@ -53,6 +62,26 @@ CLOSES_LINE_RE = re.compile(r"^\s*Closes:\s*(.+)$", re.M)
 #: `<module-id>/<short-name>`, e.g. `M12/tool-registry`. The module id first so the
 #: branch list sorts by module rather than by whoever named theirs "fix".
 BRANCH_RE = re.compile(r"^M\d+(?:\.\d+)*/[a-z][a-z0-9-]*$")
+
+#: Why a finding from an install has to say its fix is generic.
+AN_INSTALL_IS_NOT_THE_PRODUCT = (
+    "A problem seen on one install is two questions: what that install needs, and whether "
+    "the product is wrong for every install. A commit answering a finding from an install "
+    "says why its fix is generic, or it is one company's repair shipped to every company."
+)
+
+#: The trailer naming where a problem was found. Any value: `staging`, `first install`.
+FOUND_ON_RE = re.compile(r"^\s*Found-on:[ \t]*(.*)$", re.M)
+
+#: The trailer saying why the fix belongs to every install. It needs words after the colon.
+GENERIC_BECAUSE_RE = re.compile(r"^\s*Generic-because:[ \t]*(\S.*)$", re.M)
+
+#: Phrases that usually mean a message is answering something seen on a live install.
+#: Deliberately short: a note that fires on every commit is a note nobody reads.
+INSTALL_MENTION_RE = re.compile(
+    r"\bstaging\b|\b(?:own|live) install\b|\bon (?:his|her|their|the owner's) server\b",
+    re.I,
+)
 
 #: Branches that exist for reasons other than a track. `main` is the trunk; the rest are
 #: what a person types when they are about to throw the branch away, and refusing those
@@ -99,6 +128,13 @@ def check_commit_message(message: str) -> Refusal | None:
     subject = message.strip().splitlines()[0] if message.strip() else ""
     if not subject:
         return Refusal("a commit message needs a subject line", "(empty)")
+
+    if FOUND_ON_RE.search(message) and not GENERIC_BECAUSE_RE.search(message):
+        return Refusal(
+            "a commit with a Found-on: line says why its fix belongs to every install, on a "
+            "Generic-because: line. " + AN_INSTALL_IS_NOT_THE_PRODUCT,
+            subject,
+        )
 
     claimed = leaf_ids_in(message)
     if not claimed:
@@ -152,6 +188,16 @@ def already_closed(message: str, repo: Path) -> tuple[str, ...]:
     return tuple(sorted(claimed & closed))
 
 
+def unmarked_install_finding(message: str) -> bool:
+    """Whether a message talks about an install and carries no `Found-on:` line.
+
+    A note and never a refusal. "Staging" in a message may be a finding, a mention of the
+    deploy chain or a sentence about why something was not done, and only the author knows
+    which. The note asks the question; the trailer is how the answer gets written down.
+    """
+    return bool(INSTALL_MENTION_RE.search(message)) and not FOUND_ON_RE.search(message)
+
+
 def check_branch_name(name: str) -> Refusal | None:
     """None if the branch may exist, a Refusal otherwise."""
     if name in EXEMPT_BRANCHES:
@@ -190,6 +236,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"note: already closed by an earlier commit: {', '.join(repeats)}\n"
             "      Fine if you are adding the test that proves it. The count will not move.",
+            file=sys.stderr,
+        )
+    if unmarked_install_finding(message):
+        print(
+            "note: this message talks about an install. If the commit answers a problem found\n"
+            "      there, add Found-on: and Generic-because: lines; see CLAUDE.md.",
             file=sys.stderr,
         )
     return 0
