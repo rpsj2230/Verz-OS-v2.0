@@ -12,7 +12,7 @@ claims are about which request gets which file. What Vite emits is `console/test
 check, and that the image builds it at all is `test_the_image_builds_the_console` further
 down.
 
-Task ids: M32.5.1.1, M32.5.1.2, M42.5.14
+Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1
 """
 
 from __future__ import annotations

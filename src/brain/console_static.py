@@ -64,7 +64,7 @@ provider. The issuer and the client id now arrive at runtime from `brain.install
 the document this module serves, and the API base is `brain.api.API_PREFIX` because the two
 share an origin. See `NO_INSTALLS_VALUES_ARE_BUILT_INTO_THE_BUNDLE`.
 
-Task ids: M32.5.1.1, M32.5.1.2, M42.5.14
+Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1
 """
 
 from __future__ import annotations
