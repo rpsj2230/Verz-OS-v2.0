@@ -21,17 +21,27 @@ wrong, expired or missing code, an install with no setup code at all and an appo
 because another landed first are one 404 with one body. See
 `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER`.
 
-**Settings are confirmed, not written, because nothing in this process can write them.** An
-installation value is read from this process's environment through `brain.install.value_of`,
-that environment is the install's environment file, the installer fills it from the variables
-repository, and the application container has no mount onto it. The provider key's home is the
-vault, and `brain.ops.openbao` reads a static slot and writes none. Appointing over values that
-were collected and then kept nowhere closes the wizard on an install configured differently
-from what its installer approved on the review screen, which is the failure
-`APPOINTING_IS_THE_LAST_WRITE` names. So the step that e81c8b9 called writing the settings is,
-today, confirming that the running install already carries each one, and a setting it does not
-carry is named back and nobody is appointed. See
-`A_SETTING_THIS_PROCESS_CANNOT_WRITE_IS_CONFIRMED_BEFORE_THE_DOOR_CLOSES`.
+**The settings are saved, and the 409 is now about the one answer that cannot be.** Until this
+change every value the person typed had to already equal what `brain.install.value_of` read
+from the process environment, and a difference was a 409 naming the settings to go and set by
+hand. That made the wizard a form for confirming a file somebody had already edited. The
+answers now go into `ops.setting` in the same transaction as the appointment, through
+`Appointer.appoint`, and `brain.install.value_of` resolves a saved value ahead of the
+environment, so a fresh install needs no hand-edited environment file for anything the wizard
+collects. `brain.ops.install_settings` argues the mechanism, the order and what still has to be
+in the file.
+
+**A provider key is still confirmed rather than kept, and it is the only thing left in the
+409.** Its home is the vault, `brain.ops.openbao` reads a static slot and writes none, and
+`brain.tables.config` refuses a credential in a table the application role can select from. So
+a hosted install's key must already be the one loaded from its slot, compared with
+`hmac.compare_digest`, and what comes back is the slot's path and never a value. See
+`THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT`.
+
+**The appointing process reads its own answers back without restarting**, because it holds what
+it wrote rather than re-reading the table it just wrote to. Which processes that reaches, and
+which it does not, is
+`brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
 
 **The server chooses the administrator's principal id.** See
 `THE_SERVER_CHOOSES_WHO_IS_APPOINTED`.
@@ -43,9 +53,16 @@ beside `app.state.sign_in_bindings` rather than beside the database alone.
 Rejected: writing `/opt/brain/.env` from the application. The container has no mount onto it,
 and a process that rewrites its own configuration file is a second writer beside the variables
 repository M42.1.1 makes the record of an install, whose next deploy would silently undo it.
+That argument has not changed, and it is why the values go to a table instead.
 
-Rejected: a table of installation values. It needs a migration and a second reader beside
-`value_of`, which is `brain.install.ONE_READER_OR_TWO_DEFAULTS` exactly.
+**82afbfb rejected a table here in these words: "it needs a migration and a second reader
+beside `value_of`, which is `brain.install.ONE_READER_OR_TWO_DEFAULTS` exactly." Both halves
+were wrong, and measurably so.** The table already exists, `ops.setting` from `0004`, with
+row-level security, its constraints and a partial unique index, so there is no migration. And
+the saved values are resolved inside `value_of` rather than beside it, so there is still one
+reader and one order. What the sentence had actually found was that nothing under `src` reads
+or writes `ops.setting` at all, which made a table that shipped in September look like a table
+that would have to be built.
 
 Rejected: appointing and discarding the settings. It is what a route reaching for `appoint`
 would do first, and it is the door closed before the settings are written.
@@ -72,7 +89,7 @@ from brain.core.errors import Absent, BrainError, Failed
 from brain.firstrun import Enrolment
 from brain.identity.first_administrator import FirstAdministratorRefusedError
 from brain.identity.roles import RoleGrant
-from brain.install import InstallError, value_of
+from brain.install import hold_saved, saved_values
 from brain.ops.provider_keys import PROVIDER_SLOTS
 from brain.settings import process_environment
 from brain.setup_wizard import (
@@ -116,14 +133,15 @@ EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER: Final = (
     "accepted, and the reason for a refusal goes to the log."
 )
 
-#: Why the settings are confirmed rather than written.
-A_SETTING_THIS_PROCESS_CANNOT_WRITE_IS_CONFIRMED_BEFORE_THE_DOOR_CLOSES: Final = (
-    "An installation value is this process's environment, which the installer fills from the "
-    "variables repository and which the application cannot write, and a provider key lives in a "
-    "vault this process only reads. An answer appointed over and kept nowhere is lost when the "
-    "wizard closes. So each setting the draft sets must already be what the running install "
-    "carries, and a provider key must already be the one loaded from its slot, or the names of "
-    "the ones that are not are told back and nobody is appointed. Names, never values."
+#: Why the settings are saved and the provider key is not.
+THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT: Final = (
+    "An installation value is now kept in ops.setting, written in the appointment's own "
+    "transaction and resolved by value_of ahead of the environment, so an answer is no longer "
+    "lost when the wizard closes. A provider key cannot follow it: it is a standing credential "
+    "whose home is the vault, the vault this repository talks to reads a static slot and writes "
+    "none, and a table the application role can select from is the one place a credential must "
+    "not be. So a hosted install's key must already be the one loaded from its slot, or the "
+    "slot's path is told back and nobody is appointed. A path, never a value."
 )
 
 #: Why the principal id is not taken from the request.
@@ -167,8 +185,21 @@ class Appointer(Protocol):
         """How many administrators this install has."""
         ...
 
-    async def appoint(self, grant: RoleGrant, *, display_name: str, trace_id: str = "") -> None:
-        """Write the first administrator, or raise `FirstAdministratorRefusedError`."""
+    async def appoint(
+        self,
+        grant: RoleGrant,
+        *,
+        display_name: str,
+        trace_id: str = "",
+        settings: Mapping[str, str] | None = None,
+        # `Protocol` does not carry a default's value into the implementation, so this says
+        # what an implementation must accept and never what it must do without one.
+    ) -> None:
+        """Write the first administrator and the install's settings, or raise.
+
+        One call rather than two, because the rows and the grants have to commit together. See
+        `brain.identity.first_administrator.THE_SETTINGS_AND_THE_DOOR_CLOSE_IN_ONE_TRANSACTION`.
+        """
         ...
 
 
@@ -204,7 +235,13 @@ class ProblemsView(BaseModel):
 
 
 class UnkeptView(BaseModel):
-    """The settings the running install does not carry, by name. Nobody was appointed."""
+    """What the running install does not carry, by name. Nobody was appointed.
+
+    One vault slot path today, because a provider key is the only answer this process cannot
+    keep. The field keeps the name and the shape 82afbfb gave it, and the console draws it
+    unchanged: a narrower body would be an API change for a screen that already renders a list
+    of names and nothing else.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -292,28 +329,23 @@ def draft_of(
 
 
 def unkept(applied: Applied, env: Mapping[str, str] | None = None) -> tuple[str, ...]:
-    """Every setting and provider slot `applied` carries that the running install does not.
+    """Every slot `applied` carries a key for that the running install has not loaded.
 
-    Names only. A setting this process cannot read is not carried, and a provider key is carried
-    only when its slot's key is loaded and is the same key, compared in constant time. See
-    `A_SETTING_THIS_PROCESS_CANNOT_WRITE_IS_CONFIRMED_BEFORE_THE_DOOR_CLOSES`. `env` is for tests.
+    Paths only, and a provider key is carried only when its slot's key is loaded and is the
+    same key, compared in constant time. The settings are not checked here at all any more
+    because they are written rather than confirmed. See
+    `THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT`. `env` is for tests.
     """
+    if not applied.provider:
+        return ()
+    source = process_environment() if env is None else env
     names: list[str] = []
-    for name, wanted in sorted(applied.settings.items()):
-        try:
-            running = value_of(name, env)
-        except InstallError:
-            running = ""
-        if running != wanted:
-            names.append(name)
-    if applied.provider:
-        source = process_environment() if env is None else env
-        for slot in PROVIDER_SLOTS:
-            if slot.slug != applied.provider:
-                continue
-            loaded = source.get(slot.env_var, "")
-            if not loaded or not hmac.compare_digest(loaded, applied.provider_key):
-                names.append(slot.path)
+    for slot in PROVIDER_SLOTS:
+        if slot.slug != applied.provider:
+            continue
+        loaded = source.get(slot.env_var, "")
+        if not loaded or not hmac.compare_digest(loaded, applied.provider_key):
+            names.append(slot.path)
     return tuple(names)
 
 
@@ -331,7 +363,7 @@ async def appoint_first_administrator(
 
     See `THE_APPOINTMENT_RUNS_IN_THE_ORDER_THAT_KEEPS_AN_INSTALL_FINISHABLE`. Raises
     `_nothing_to_appoint` for every refusal in `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER`,
-    and returns problems or unkept settings, with nobody appointed, for the rest.
+    and returns problems, or what is not carried, with nobody appointed, for the rest.
     """
     if enrolment is None:
         log.info("appointment refused", reason="no_setup_code")
@@ -356,17 +388,21 @@ async def appoint_first_administrator(
         raise _nothing_to_appoint() from refused
     missing = unkept(applied, env)
     if missing:
-        log.info("appointment refused", reason="settings_unkept", settings=list(missing))
+        log.info("appointment refused", reason="not_carried", names=list(missing))
         return Appointment(unkept=missing)
     try:
         await appointer.appoint(
             applied.grant,
             display_name=draft.values_for(StepId.ADMINISTRATOR)["full_name"],
             trace_id=trace_id,
+            settings=applied.settings,
         )
     except FirstAdministratorRefusedError as refused:
         log.info("appointment refused", reason=refused.reason.value)
         raise _nothing_to_appoint() from refused
+    # Held from what was written rather than read back, so this process answers with the
+    # install's own values on the very next request. See the module note.
+    hold_saved({**saved_values(), **applied.settings})
     return Appointment(principal_id=principal_id)
 
 
@@ -388,7 +424,7 @@ router = APIRouter(tags=["setup"])
 
 _TOLD: Final[dict[int | str, dict[str, object]]] = {
     **COMMON_RESPONSES,
-    409: {"model": UnkeptView, "description": "Settings the running install does not carry."},
+    409: {"model": UnkeptView, "description": "What the running install does not carry."},
     422: {"model": ProblemsView, "description": "What is wrong with the answers, by field."},
 }
 

@@ -66,10 +66,18 @@ whether the named principal is an administrator, would be answered yes by the ac
 The finishing screen stays the one that verifies, and this stays the one that appoints.
 
 So it runs at the appointment, where `apply_install` spends the enrolment and returns the grant:
-the caller counts `administrators`, passes the count to `apply_install`, writes the settings and
-the provider key the result carries, and calls `appoint` last. Last because appointing closes
-the wizard, and a door closed before the settings are written is an install that can neither
-be finished nor started again. See `APPOINTING_IS_THE_LAST_WRITE`.
+the caller counts `administrators`, passes the count to `apply_install`, and calls `appoint`
+last. Last because appointing closes the wizard, and a door closed before the settings are
+written is an install that can neither be finished nor started again. See
+`APPOINTING_IS_THE_LAST_WRITE`.
+
+**The settings the same wizard produced are written here, in this transaction**, rather than by
+the caller before it. That is the only arrangement where the door and the configuration cannot
+come apart: a separate write can fail after the wizard has closed, and an appointment that
+commits alone closes it over answers kept nowhere. `brain.ops.install_settings` decides what a
+row looks like and this module holds the transaction it lands in, which is the same split
+`brain.ops.limits` and `brain.ops.limit_store` make. See
+`THE_SETTINGS_AND_THE_DOOR_CLOSE_IN_ONE_TRANSACTION`.
 
 **A principal the directory already holds is appointed in place.** The id is inserted with ON
 CONFLICT DO NOTHING and read back under a row lock, so a principal the sync created before the
@@ -85,6 +93,7 @@ Task ids: M42.5.6, M41.2.4
 from __future__ import annotations
 
 import enum
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final
@@ -101,6 +110,7 @@ from brain.firstrun import GRANT_REASON, GRANTED_BY
 from brain.gate.entitlement_store import entitlements_from
 from brain.identity.principal_store import COLUMNS, PRINCIPAL_SETTING, readable
 from brain.identity.roles import IdentityError, Role, RoleGrant
+from brain.ops.install_settings import save as save_settings
 from brain.tables.audit import ACTOR_SETTING, TRACE_ID_SETTING
 from brain.tables.gate import CapabilityGrantRow
 from brain.tables.identity import PrincipalRow
@@ -140,6 +150,16 @@ APPOINTING_IS_THE_LAST_WRITE: Final = (
     "settings and the provider key, a failure between the two leaves an install the wizard "
     "refuses to reopen and nothing configured, so the caller writes everything apply_install "
     "returns first and appoints last."
+)
+
+#: Why the wizard's settings are written by this transaction and not beside it.
+THE_SETTINGS_AND_THE_DOOR_CLOSE_IN_ONE_TRANSACTION: Final = (
+    "Appointing closes the wizard on every screen, so settings written in a transaction of "
+    "their own can fail after the door has shut, leaving an install that can neither be "
+    "finished nor started again, and an appointment that commits alone closes the wizard over "
+    "answers kept nowhere. Both halves of that are APPOINTING_IS_THE_LAST_WRITE, and one "
+    "transaction is the only arrangement where neither can happen: the rows and the grants "
+    "commit together or neither does."
 )
 
 #: Why a refusal names nobody.
@@ -234,12 +254,25 @@ class FirstAdministrators:
         async with self.sessions() as session, session.begin():
             return await self._count(session, now)
 
-    async def appoint(self, grant: RoleGrant, *, display_name: str, trace_id: str = "") -> None:
+    async def appoint(
+        self,
+        grant: RoleGrant,
+        *,
+        display_name: str,
+        trace_id: str = "",
+        settings: Mapping[str, str] | None = None,
+    ) -> None:
         """Write the first administrator the wizard's grant names, or raise why not.
 
         `grant` is `Applied.grant` from `apply_install`, and its `granted_at` is the instant the
         appointment is judged at. `display_name` is the name the administrator screen collected.
         See `APPOINTING_IS_THE_LAST_WRITE` for when to call it.
+
+        `settings` are the installation values the same wizard produced, written into
+        `ops.setting` inside this transaction so that the door and the configuration close
+        together. See `THE_SETTINGS_AND_THE_DOOR_CLOSE_IN_ONE_TRANSACTION`. None means write
+        none, which is what a caller with nothing to save passes and what every existing caller
+        gets: the settings are the wizard's, and nothing else appoints.
         """
         assert_bought_by_first_run(grant)
         now = grant.granted_at
@@ -283,6 +316,9 @@ class FirstAdministrators:
             principal = None if row is None else readable(dict(row))
             if principal is None or not principal.is_active(now):
                 raise FirstAdministratorRefusedError(AppointmentRefusal.NO_LIVE_PRINCIPAL)
+            # After the last refusal and before the grants, so a refused appointment leaves no
+            # configuration behind and an appointed one cannot be missing it.
+            kept = await save_settings(session, settings or {}, updated_by=principal_id)
             everything = Scope.unrestricted().model_dump(mode="json")
             await session.execute(
                 insert(CapabilityGrantRow).values(
@@ -298,4 +334,4 @@ class FirstAdministrators:
                     ]
                 )
             )
-        log.info("first_administrator.appointed", principal=principal_id)
+        log.info("first_administrator.appointed", principal=principal_id, settings=kept)

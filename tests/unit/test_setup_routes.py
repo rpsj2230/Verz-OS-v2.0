@@ -1,11 +1,16 @@
 """The setup wizard's appointment route appoints the first administrator once, in e81c8b9's order,
 and a fresh install then reaches a signed-in administrator through HTTP alone.
 
-Three halves. The route through `TestClient` with an in-memory store, the settings confirmation
+Three halves. The route through `TestClient` with an in-memory store, the one confirmation left
 without a server, and the lifespan's wiring against a realm over a mock transport. Then one test
 on a real database, skipped without `DATABASE_URL`, that goes appointment, `/setup/sign-in` with a
 token signed by the test key through the lifespan's own key set client, and `/me`, driven through
 `httpx.ASGITransport` for the reason `tests/unit/test_app_wiring.py` gives.
+
+**The `carried` fixture removes every setting the wizard collects from the environment**, so the
+whole file now runs against an install that carries none of them. Before 2026-09-16 it set them
+all, because the route refused an appointment whose answers the environment did not already
+match. What replaced that is in `brain.ops.install_settings`.
 
 The setup code is minted five minutes before the wall clock, because both setup routes read it
 and the window is an hour.
@@ -35,14 +40,19 @@ from brain.identity.first_administrator import (
     FirstAdministrators,
 )
 from brain.identity.roles import Role, RoleGrant
+from brain.install import BY_NAME, hold_saved, saved_values, value_of
+from brain.ops.install_settings import key_for
+from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.leases import SealedSecret
 from brain.ops.provider_keys import PROVIDER_SLOTS
+from brain.session import make_session_factory
 from brain.setup_routes import APPOINTMENT_PATH, NOT_GIVEN, PRINCIPAL_PREFIX, unkept
 from brain.setup_wizard import StepId, apply_install, settings_from, step_for
 from brain.sign_in_routes import FINISH_PATH
 from tests.fixtures.http_client import Response
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_app_wiring import Realm, wired_app
+from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_keycloak_tokens import ISSUER, token
 from tests.unit.test_setup_wizard import (
     ADMIN_ANSWERS,
@@ -71,20 +81,34 @@ EVERY_SCREEN: Mapping[StepId, Mapping[str, str]] = {
 
 @dataclass
 class Store:
-    """An `Appointer` in memory: counts what it has appointed, and can lose a race."""
+    """An `Appointer` in memory: counts what it has appointed, and can lose a race.
+
+    It keeps the settings it was handed as well, because the route's job is now to hand them
+    over rather than to compare them, and a store that dropped them would let a route that
+    never passed them pass every test here.
+    """
 
     held: int = 0
     beaten: bool = False
     appointed: list[tuple[RoleGrant, str, str]] = field(default_factory=list)
+    kept: list[Mapping[str, str]] = field(default_factory=list)
 
     async def administrators(self, now: datetime) -> int:
         del now
         return self.held
 
-    async def appoint(self, grant: RoleGrant, *, display_name: str, trace_id: str = "") -> None:
+    async def appoint(
+        self,
+        grant: RoleGrant,
+        *,
+        display_name: str,
+        trace_id: str = "",
+        settings: Mapping[str, str] | None = None,
+    ) -> None:
         if self.beaten or self.held:
             raise FirstAdministratorRefusedError(AppointmentRefusal.ALREADY_ADMINISTERED)
         self.appointed.append((grant, display_name, trace_id))
+        self.kept.append(dict(settings or {}))
         self.held += 1
 
 
@@ -103,13 +127,22 @@ def body(
     }
 
 
-@pytest.fixture
-def carried(monkeypatch: pytest.MonkeyPatch) -> Mapping[str, str]:
-    """The running install carrying exactly what the answered draft sets."""
+@pytest.fixture(autouse=True)
+def carried(monkeypatch: pytest.MonkeyPatch) -> Iterator[Mapping[str, str]]:
+    """An install carrying **none** of the wizard's settings, in the environment or saved.
+
+    The opposite of what this fixture was before 2026-09-16, and the change is the point of it.
+    The route used to require the running install to already carry every value the person typed,
+    so every test here had to set them first; the route now writes them, so the fixture's job is
+    to prove there was nothing there to read. It also puts `brain.install`'s saved values back,
+    because those live on the module and a test that left one set would configure the next.
+    """
     values = settings_from(answered())
-    for name, value in values.items():
-        monkeypatch.setenv(name, value)
-    return values
+    for name in values:
+        monkeypatch.delenv(name, raising=False)
+    before = hold_saved({})
+    yield values
+    hold_saved(before)
 
 
 def minted_settings(**more: Any) -> Settings:
@@ -153,13 +186,22 @@ def nothing_here() -> dict[str, Any]:
 def test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish(
     carried: Mapping[str, str],
 ) -> None:
-    """The positive case the refusals below need. Delete this and a route that refuses everybody
-    passes every other test here, and no install ever gets an administrator."""
-    del carried
+    """The positive case the refusals below need, over an install whose environment carries none
+    of these settings: the appointment lands, the answers are handed to the store to write beside
+    it, and this process resolves them afterwards without being restarted.
+
+    Delete this and a route that refuses everybody passes every other test here, and no install
+    ever gets an administrator."""
     store = Store()
     with serving(store) as c:
+        before = value_of("INSTALL_COMPANY_NAME")
         answer = appointing(c, body())
+        after = value_of("INSTALL_COMPANY_NAME")
 
+    assert before == BY_NAME["INSTALL_COMPANY_NAME"].default
+    assert after == COMPANY_ANSWERS["company_name"]
+    assert store.kept == [dict(carried)]
+    assert dict(saved_values()) == dict(carried)
     assert answer.status_code == 200
     view = answer.json()
     assert view["finish_path"] == FINISH_PATH
@@ -280,25 +322,45 @@ def test_problems_with_the_answers_are_told_by_screen_and_field_and_appoint_nobo
     assert store.appointed == []
 
 
-def test_a_setting_the_running_install_does_not_carry_is_named_and_appoints_nobody(
-    carried: Mapping[str, str], monkeypatch: pytest.MonkeyPatch
+def test_a_provider_key_the_vault_has_not_loaded_is_named_by_its_slot_and_appoints_nobody(
+    carried: Mapping[str, str],
 ) -> None:
-    """A company name the environment file does not carry, and a required setting it does not set
-    at all, are named back and nobody is appointed. Delete this and the wizard closes over answers
-    kept nowhere, which is `APPOINTING_IS_THE_LAST_WRITE`'s failure."""
+    """The one 409 left. A hosted install whose key is not the one this process loaded from its
+    slot is refused by the slot's path, the key is nowhere in the answer, and nobody is appointed.
+
+    Delete this and an install is appointed over a provider key nothing will ever reach, which is
+    the belief `THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT` is about."""
     del carried
     store = Store()
+    slot = next(one for one in PROVIDER_SLOTS if one.slug == HOSTED_ANSWERS["model_provider"])
+    hosted = {**EVERY_SCREEN, StepId.MODEL_PROVIDER: HOSTED_ANSWERS}
+    with serving(store) as c:
+        answer = appointing(c, body(answers=hosted))
+
+    assert (answer.status_code, answer.json()) == (409, {"unkept": [slot.path]})
+    assert HOSTED_ANSWERS["provider_key"] not in answer.text
+    assert store.appointed == []
+    assert dict(saved_values()) == {}
+
+
+def test_a_setting_the_environment_does_not_carry_no_longer_refuses_the_appointment(
+    carried: Mapping[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sibling of the 409, and the whole point of this change. An environment that carries a
+    different company name and no redirect URI at all was a 409 until 2026-09-16; it is now an
+    appointment, and the saved answers win over the file afterwards.
+
+    Delete this and the settings can go back to being confirmed against the environment, with the
+    positive test above still green because its fixture leaves the environment empty."""
+    store = Store()
     monkeypatch.setenv("INSTALL_COMPANY_NAME", "Another Company")
-    monkeypatch.delenv("INSTALL_OIDC_REDIRECT_URIS")
     with serving(store) as c:
         answer = appointing(c, body())
+        resolved = value_of("INSTALL_COMPANY_NAME")
 
-    assert (answer.status_code, answer.json()) == (
-        409,
-        {"unkept": ["INSTALL_COMPANY_NAME", "INSTALL_OIDC_REDIRECT_URIS"]},
-    )
-    assert "Another Company" not in answer.text
-    assert store.appointed == []
+    assert answer.status_code == 200
+    assert resolved == COMPANY_ANSWERS["company_name"]
+    assert store.kept == [dict(carried)]
 
 
 def test_a_principal_named_in_the_request_is_refused_and_appoints_nobody(
@@ -350,19 +412,19 @@ def test_a_provider_key_is_carried_only_when_its_slot_holds_that_same_key() -> N
     assert all(HOSTED_ANSWERS["provider_key"] not in name for name in (*unloaded, *other))
 
 
-def test_a_local_install_is_carried_when_every_setting_matches_and_not_when_one_differs() -> None:
-    """The settings half on its own: a match is nothing unkept, one difference is exactly that
-    name. Delete this and the confirmation can pass everything or refuse everything with the route
-    tests still green on their one environment."""
+def test_a_local_install_has_nothing_left_to_confirm_whatever_its_environment_says() -> None:
+    """The sibling: an install that keeps every question on its own hardware carries no key, so
+    there is nothing this process cannot keep and the environment is not consulted at all.
+
+    Delete this and the settings can be compared again here, which would refuse an install whose
+    environment differs from its own wizard, which is exactly what was being fixed."""
     applied = apply_install(
         answered(), an_enrolment(), SECRET, principal_id="u_first", administrators=0, now=INSIDE
     )
-    running = dict(applied.settings)
 
-    assert unkept(applied, running) == ()
-    assert unkept(applied, {**running, "INSTALL_PRODUCT_NAME": "Other"}) == (
-        "INSTALL_PRODUCT_NAME",
-    )
+    assert applied.settings
+    assert unkept(applied, {}) == ()
+    assert unkept(applied, {"INSTALL_PRODUCT_NAME": "Other"}) == ()
 
 
 # ------------------------------------------------------------------------------ the wiring
@@ -414,6 +476,23 @@ def test_the_lifespan_builds_the_store_only_where_the_finishing_screen_is_built(
 # ------------------------------------------------------------------------------ end to end
 
 
+def read_back(url: str) -> dict[str, str]:
+    """What a process that never served the appointment loads from this install's table.
+
+    Its own engine and its own session factory, which is what makes it evidence about a
+    different process rather than about the one that has the values in memory already.
+    """
+
+    async def go() -> dict[str, str]:
+        engine = app_engine(url)
+        try:
+            return dict(await refresh_install_settings(make_session_factory(engine)))
+        finally:
+            await engine.dispose()
+
+    return run(go)
+
+
 def signed(subject: str) -> dict[str, str]:
     issued = int(time.time())
     return {
@@ -430,10 +509,16 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     token is refused at `/me`; the appointment route appoints; a second appointment is refused;
     `/setup/sign-in` binds the installer's token, verified against the key set the lifespan
     fetched, to the principal the appointment returned; and `/me` then answers 200 as that
-    administrator, who holds every administration capability and no other. Delete this and the
-    three routes can each pass alone while an install still cannot get from the wizard to a
-    signed-in person, which is where every real install was before this route."""
-    del carried
+    administrator, who holds every administration capability and no other.
+
+    **And the wizard is completed with values the environment does not carry**, which is the half
+    added on 2026-09-16: `carried` removes every one of them, the appointment is not refused for
+    it, the answers are in `ops.setting` afterwards, and a session factory that never saw the
+    write loads them back and resolves them through `value_of`.
+
+    Delete this and the three routes can each pass alone while an install still cannot get from
+    the wizard to a signed-in person, which is where every real install was before this route,
+    or the settings can be written to a table nothing reads."""
     served = Realm()
     monkeypatch.setenv("INSTALL_OIDC_ISSUER", ISSUER)
     monkeypatch.setattr("brain.app.key_set_client", served.client)
@@ -471,8 +556,14 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
             " ORDER BY capability",
             walked["principal_id"],
         )
+        keys = sql(url, "SELECT key FROM ops.setting WHERE deleted_at IS NULL ORDER BY key")
+        hold_saved({})
+        elsewhere = read_back(url)
 
     assert (walked["before"], walked["appointed"], walked["again"]) == (401, 200, 404)
     assert walked["finished"] == (200, "bound")
     assert walked["me"] == (200, walked["principal_id"])
     assert [str(row[0]) for row in granted] == sorted(ADMINISTRATION)
+    assert [str(row[0]) for row in keys] == sorted(key_for(name) for name in carried)
+    assert elsewhere == dict(carried)
+    assert value_of("INSTALL_COMPANY_NAME", {}) == COMPANY_ANSWERS["company_name"]

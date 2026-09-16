@@ -29,6 +29,16 @@ looked at. The rule is narrow on purpose: this is not a ban on reading the envir
 `ops.worker` and `ops.schema_check` legitimately do for operational settings. It is a ban on a
 second module deciding what this client is called.
 
+**There are now two sources and still one reader, and the order between them is decided here.**
+The setup wizard saves what it collects into `ops.setting` rather than asking somebody to hand-
+edit an environment file, so an installation value can come from the database as well as from
+the environment. `value_of` resolves a saved value first, the environment second and the
+declared default last, everywhere, because a saved value exists only where somebody answered
+and an environment line is whatever the template left behind. See
+`A_SAVED_ANSWER_OUTRANKS_THE_TEMPLATE_THE_INSTALLER_COPIED`. This module opens nothing and
+knows no table: `brain.ops.install_settings` reads the rows and hands them here through
+`hold_saved`, which is the same split `brain.ops.limits` and `brain.ops.limit_store` make.
+
 **What a refusal costs, and why some values still have none.** A value with no safe default
 refuses at startup rather than defaulting, because `KEYCLOAK_ISSUER` guessed wrong is a
 sign-in page that redirects to somebody else's identity provider, and an empty string is a
@@ -43,6 +53,7 @@ from __future__ import annotations
 import enum
 from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 from brain.settings import process_environment
@@ -69,6 +80,17 @@ A_GUESSED_IDENTITY_PROVIDER_IS_WORSE_THAN_A_STOPPED_ONE: Final = (
     "provider, and an empty string is a perfectly valid string, so the failure is a login "
     "screen that works and authenticates against nothing this install controls. There is no "
     "safe default for that, and refusing to start is the smallest failure available."
+)
+
+#: Why a value saved by the setup wizard beats the same name in the environment.
+A_SAVED_ANSWER_OUTRANKS_THE_TEMPLATE_THE_INSTALLER_COPIED: Final = (
+    "A saved value exists only because somebody answered the setup wizard. An environment line "
+    "is whatever the template left behind, and env_example writes every neutral default out as "
+    "a literal, so a copied .env carries INSTALL_COMPANY_NAME=Your Company explicitly. On the "
+    "environment-first order the wizard would save the company's real name and the screens "
+    "would go on reading the template's, with nothing anywhere saying why. Retiring the row is "
+    "how an install goes back to its environment and then to the default, which is the rule "
+    "brain.tables.config already states: an absent row means the compiled default."
 )
 
 
@@ -362,10 +384,48 @@ class InstallError(Exception):
     """Raised when this installation has not said who it is."""
 
 
-def value_of(name: str, env: Mapping[str, str] | None = None) -> str:
+#: What this process last loaded out of `ops.setting`, by declared name. Empty until something
+#: loads it, which is the honest state of a process with no database: every value then resolves
+#: exactly as it did before this table had a reader.
+_SAVED: dict[str, str] = {}
+
+
+def saved_values() -> Mapping[str, str]:
+    """The installation values this process last loaded from the database.
+
+    The default behind every `saved` parameter here, written once, for the reason
+    `brain.settings.process_environment` is the default behind every `env` one.
+    """
+    return MappingProxyType(dict(_SAVED))
+
+
+def hold_saved(values: Mapping[str, str]) -> Mapping[str, str]:
+    """Hold these as this process's saved values, and return the ones they replaced.
+
+    The one writer of that state, and it takes the whole mapping rather than one name: a
+    partial update would make "this install has no saved company name" and "nobody has loaded
+    the table yet" the same thing. Returning what it replaced is what lets a test put it back,
+    because this is process state and a test that leaves it set would configure the next one.
+
+    Values whose names are not declared settings are dropped here rather than at the reader, so
+    there is one place a row nothing declares stops being configuration.
+    """
+    before = dict(_SAVED)
+    _SAVED.clear()
+    _SAVED.update({name: value for name, value in values.items() if name in BY_NAME})
+    return MappingProxyType(before)
+
+
+def value_of(
+    name: str, env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> str:
     """The one place an installation value is read. See `ONE_READER_OR_TWO_DEFAULTS`.
 
-    `env` is a parameter defaulting to the real environment for the reason
+    Saved, then the environment, then the declared default, and that order is the whole of it:
+    see `A_SAVED_ANSWER_OUTRANKS_THE_TEMPLATE_THE_INSTALLER_COPIED`. A required setting refuses
+    only when neither source carries it.
+
+    `env` and `saved` are parameters defaulting to this process's own for the reason
     `brain.ops.admission` takes `now` rather than reading a clock: a value read through a
     module-level import cannot be tested at more than one setting.
     """
@@ -377,6 +437,9 @@ def value_of(name: str, env: Mapping[str, str] | None = None) -> str:
         )
         raise InstallError(msg)
 
+    answered = (saved_values() if saved is None else saved).get(name, "").strip()
+    if answered:
+        return answered
     supplied = (process_environment() if env is None else env).get(name, "").strip()
     if supplied:
         return supplied
@@ -398,7 +461,9 @@ def installed_name(env: Mapping[str, str] | None = None) -> str:
     return f"{value_of('INSTALL_COMPANY_NAME', env)} {value_of('INSTALL_PRODUCT_NAME', env)}"
 
 
-def belonging_to(group: Belongs, env: Mapping[str, str] | None = None) -> dict[str, str]:
+def belonging_to(
+    group: Belongs, env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> dict[str, str]:
     """Every value for one surface, resolved.
 
     Grouped because these are handed over by different people on install day: branding by
@@ -408,18 +473,32 @@ def belonging_to(group: Belongs, env: Mapping[str, str] | None = None) -> dict[s
     A required value that is unset raises rather than being omitted, because a branding map
     missing a key and a branding map with an empty one are the same to a template.
     """
-    return {one.name: value_of(one.name, env) for one in INSTALLATION if one.belongs is group}
+    return {
+        one.name: value_of(one.name, env, saved) for one in INSTALLATION if one.belongs is group
+    }
 
 
-def missing(env: Mapping[str, str] | None = None) -> tuple[str, ...]:
-    """The required settings this environment has not supplied, all of them.
+def missing(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> tuple[str, ...]:
+    """The required settings this install has not supplied, all of them.
 
     All rather than the first, matching `brain.ops.worker.preflight`: an install missing two
     values has two problems, and fixing one produces a configuration that still refuses.
+
+    It asks both sources, in the same order `value_of` does, because a required setting the
+    wizard saved is supplied. A copy of that order here that read only the environment would
+    report a value as missing that every reader resolves happily, which is the second-reader
+    failure `ONE_READER_OR_TWO_DEFAULTS` describes arriving through the back door.
     """
     source = process_environment() if env is None else env
+    answered = saved_values() if saved is None else saved
     return tuple(
-        one.name for one in INSTALLATION if one.required and not source.get(one.name, "").strip()
+        one.name
+        for one in INSTALLATION
+        if one.required
+        and not answered.get(one.name, "").strip()
+        and not source.get(one.name, "").strip()
     )
 
 
