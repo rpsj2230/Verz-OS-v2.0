@@ -40,7 +40,8 @@ const SECRET = "whsec-SIGNING-SENTINEL-0123456789abcdefABCDEF";
 const REGISTERING = "The subscriber is told, at this address, whenever one of the chosen kinds happens.";
 const REPLACING = "The new secret signs every request from now on.";
 const SWITCHING_OFF = "The subscriber is told nothing more. This cannot be undone.";
-const DELIVERY = "Nothing on this install sends a webhook yet.";
+const DELIVERY = "The worker sends what is due every minute.";
+const DISPATCH_TOLD = "The dispatch runs every minute, and its last run is shown here.";
 
 beforeAll(async () => {
   await import("../src/pages/Webhooks");
@@ -66,6 +67,7 @@ function subscriber(overrides: Partial<SubscriberRow> = {}): SubscriberRow {
         occurred_at: "2019-03-04T09:10:00Z",
         last_attempt_at: null,
         reason: "not sent: refused",
+        next_attempt_at: null,
       },
     ],
     changes: [
@@ -89,8 +91,20 @@ function page(overrides: Partial<WebhooksBody> = {}): WebhooksBody {
     findings: [],
     kinds: ["automation.run_finished", "operation.settled", "connector.health_changed", "approval.requested"],
     delivery: DELIVERY,
+    dispatcher: {
+      runs_here: true,
+      paused: false,
+      last_started_at: "2019-03-04T09:20:00Z",
+      last_finished_at: "2019-03-04T09:20:01Z",
+      last_outcome: "ok",
+      last_report: "1 delivered, 0 to be tried again later, 0 set aside for a person",
+      told: DISPATCH_TOLD,
+    },
     inbound: {
-      channels: ["email", "slack"],
+      channels: [
+        { channel: "lark", verification: "not_written", check: "", how: "Nothing here checks either yet." },
+        { channel: "slack", verification: "written", check: "brain.channels.slack:verify", how: "Slack signs each request." },
+      ],
       channels_told: "No channel on this install receives a webhook.",
       automation_path: "/api/v1/automation/tool-call",
       automation_told: "An automation calls this system with a credential of its own.",
@@ -182,6 +196,75 @@ describe("what the webhooks screen shows", () => {
     expect(container.textContent).toContain("not sent: refused");
     expect(container.textContent).toContain(DELIVERY);
     expect(container.textContent).toContain("No channel on this install receives a webhook.");
+  });
+
+  test("what the dispatch last did is shown beside the deliveries, with when each waits to be tried", async () => {
+    // What breaks if this is deleted: an administrator is told how delivery works and never whether
+    // it is happening, and a pending delivery reads as stuck with no time it will be tried again.
+    const waiting = subscriber({
+      deliveries: [
+        {
+          kind: "approval.requested",
+          state: "pending",
+          attempts: 2,
+          occurred_at: "2019-03-04T09:10:00Z",
+          last_attempt_at: "2019-03-04T09:11:00Z",
+          reason: "attempt 2 of 8 came back unavailable; next in 120s",
+          next_attempt_at: "2019-03-04T09:13:00Z",
+        },
+      ],
+    });
+    const { container } = await mount((url) =>
+      url.pathname === LISTING ? json(page({ subscribers: [waiting] })) : null,
+    );
+    expect(container.textContent).toContain(DISPATCH_TOLD);
+    const run = container.querySelector('[aria-label="The last run"]')?.textContent ?? "";
+    expect(run).toContain("Finished at 2019-03-04 09:20");
+    expect(run).toContain("1 delivered, 0 to be tried again later, 0 set aside for a person");
+    const deliveries = container.querySelector('[aria-label="Recent deliveries to billing_bridge"]');
+    expect(deliveries?.textContent).toContain("2019-03-04 09:13");
+  });
+
+  test("a reader shown no dispatcher sees no sentence about it, and a failed run says it failed", async () => {
+    // What breaks if this is deleted: the page draws a dispatch state the API did not send, or a
+    // failed run reads as a finished one.
+    const hidden = await mount((url) =>
+      url.pathname === LISTING ? json(page({ manageable: false, subscribers: [], dispatcher: null })) : null,
+    );
+    expect(hidden.container.textContent).not.toContain(DISPATCH_TOLD);
+    const failed = await mount((url) =>
+      url.pathname === LISTING
+        ? json(
+            page({
+              dispatcher: {
+                runs_here: true,
+                paused: false,
+                last_started_at: "2019-03-04T09:20:00Z",
+                last_finished_at: "2019-03-04T09:20:01Z",
+                last_outcome: "failed",
+                last_report: "The run failed with OutboxStoreError.",
+                told: "The dispatch's last run failed.",
+              },
+            }),
+          )
+        : null,
+    );
+    const run = failed.container.querySelector('[aria-label="The last run"]')?.textContent ?? "";
+    expect(run).toContain("Failed at 2019-03-04 09:20");
+    expect(run).toContain("The run failed with OutboxStoreError.");
+  });
+
+  test("each arriving channel says whether its check is written and names it when it is", async () => {
+    // What breaks if this is deleted: a channel with no check reads the same as one with a check.
+    const { container } = await mount((url) => (url.pathname === LISTING ? json(page()) : null));
+    const rows = [...(container.querySelector('[aria-label="Channels"]')?.querySelectorAll("tbody tr") ?? [])].map(
+      (row) => row.textContent ?? "",
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain("lark");
+    expect(rows[0]).toContain("Not written");
+    expect(rows[1]).toContain("Written");
+    expect(rows[1]).toContain("brain.channels.slack:verify");
   });
 
   test("a reader who may not manage sees no list and no control, and is told why", async () => {

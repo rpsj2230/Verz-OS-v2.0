@@ -75,6 +75,7 @@ WIRED = [one.name for one in RUNNERS if one.run is not None]
 STARTED = [
     ("retention_sweep", True),
     ("knowledge_reverification", False),
+    ("outbox_dispatch", False),
     ("spend_report_refresh", False),
     ("erasure_queue", False),
 ]
@@ -145,14 +146,17 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_four_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_five_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
-    Delete this and every assertion below that names the four could be satisfied by a table
+    The webhook dispatch and the erasure queue joined on 2026-09-17.
+
+    Delete this and every assertion below that names the five could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
         "knowledge_reverification",
+        "outbox_dispatch",
         "spend_report_refresh",
         "erasure_queue",
     ]
@@ -313,6 +317,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
+            ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
         ]
@@ -322,6 +327,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert by_name["retention_sweep"] is Ticked.REFUSED
         assert by_name["knowledge_reverification"] is Ticked.RAN
         assert by_name["spend_report_refresh"] is Ticked.RAN
+        assert by_name["outbox_dispatch"] is Ticked.RAN
         unwired = {one.name for one in schedulable()} - set(WIRED)
         assert {name for name, ticked in by_name.items() if ticked is Ticked.NOTHING_TO_RUN} == (
             unwired
@@ -363,22 +369,23 @@ def test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report(starts
 def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_passed(
     starts: Starts,
 ) -> None:
-    """A second tick a minute later starts nothing and records nothing; a tick a day and a minute
-    after the first starts every wired control again.
+    """A second tick thirty seconds later starts nothing and records nothing; a tick a day and a
+    minute after the first starts every wired control again. Thirty seconds rather than a minute
+    since the webhook dispatch, whose cadence is a minute, joined the schedule.
 
     Delete this and the loop could restart every wired control on every thirty-second tick, which
     is a retention sweep two thousand eight hundred and eighty times a day."""
     with control_runs("brain_worker_schedule_cadence") as url:
         tick(url, at=NOW)
-        later = tick(url, at=NOW + timedelta(minutes=1))
+        later = tick(url, at=NOW + timedelta(seconds=30))
 
         assert starts.calls == STARTED
-        assert len(recorded(url)) == 4
+        assert len(recorded(url)) == 5
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 8
-        assert len(recorded(url)) == 8
+        assert len(starts.calls) == 10
+        assert len(recorded(url)) == 10
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
@@ -395,10 +402,11 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:2], STARTED[3]]
+        assert starts.calls == [*STARTED[:3], STARTED[4]]
         assert [row[0] for row in recorded(url)] == [
             "erasure_queue",
             "knowledge_reverification",
+            "outbox_dispatch",
             "retention_sweep",
         ]
         assert {one.name: one.ticked for one in found}["spend_report_refresh"] is (
@@ -423,6 +431,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
+            ("outbox_dispatch", "ok", "outbox_dispatch ran"),
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
         ]
@@ -481,6 +490,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     ]
     assert others.calls == [
         ("retention_sweep", True),
+        ("outbox_dispatch", False),
         ("spend_report_refresh", False),
         ("erasure_queue", False),
     ]

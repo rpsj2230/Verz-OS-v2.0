@@ -44,6 +44,11 @@ closed enum and two check constraints to state a fact the existing kind already 
 **Nothing sends a nag yet.** See `NOTHING_SENDS_A_NAG_YET`, which the run's summary carries so
 that nobody reading a successful control run takes it for an owner having been told.
 
+**An administrator can switch the nag off, and a run asks before it records anything.**
+`brain.ops.notices.notice_is_on` is read at the start of the run, in its transaction, so a switch
+turned before the run is honoured by it and no event is recorded for any subscriber. The run's
+summary says it was switched off, so a quiet run and a silenced one are not one sentence.
+
 Rejected: reading items through the model as the application role. `know.item`'s policy is the
 corpus's reach and the sweep has no principal, so it would see company items only and record a
 successful run over none of the rest. `know.items_for_review` is the one read past the policy,
@@ -84,6 +89,7 @@ from brain.knowledge.verification import (
     open_reverification_tasks,
 )
 from brain.knowledge.visibility import Visibility
+from brain.ops.notices import NoticeKind, notice_is_on
 from brain.ops.outbox import EventKind, OutboxEvent
 from brain.ops.outbox_store import record_event, subscribers
 from brain.session import make_app_engine, make_session_factory
@@ -140,11 +146,11 @@ A_GRANT_THE_DOCUMENT_PLANE_CANNOT_READ_REACHES_NOTHING_HERE: Final = (
 
 #: What does not happen yet, carried in every run's summary.
 NOTHING_SENDS_A_NAG_YET: Final = (
-    "Nothing sends a nag yet. Each is recorded as an outbox event, with a delivery for every "
-    "subscriber that takes approval requests, and nothing drains the outbox: outbox_dispatch has "
-    "no caller and no sender is implemented. No channel composes the sentence an owner would "
-    "read, so no owner has been told anything by this, and whatever sends one has to ask the "
-    "owner's reach again when it does."
+    "Nothing sends a nag to a person yet. Each is recorded as an outbox event, with a delivery "
+    "for every subscriber that takes approval requests, and the worker's outbox dispatch sends "
+    "those to the subscribing systems, which are told an identifier and never a title. No channel "
+    "composes the sentence an owner would read, so no owner has been told anything by this, and "
+    "whatever sends one has to ask the owner's reach again when it does."
 )
 
 #: Why a personal item's owner and its row's owner must be one person.
@@ -239,9 +245,15 @@ class NagRun:
     recorded: bool = False
     held: bool = False
     more_waiting: bool = False
+    switched_off: bool = False
 
     def summary(self, now: datetime) -> str:
         """The run's sentence for `ops.control_run.detail`. No title, no owner and no number."""
+        if self.switched_off:
+            return (
+                f"knowledge re-verification at {now.isoformat()}: nothing was recorded, because "
+                "an administrator has switched this notice off on the Notifications screen."
+            )
         return (
             f"knowledge re-verification at {now.isoformat()}: "
             f"a nag was recorded: {_said(self.recorded)}; "
@@ -452,9 +464,13 @@ async def run_reverification(
 ) -> NagRun:
     """One pass: read what is due, open what the log has not, route each, record the routed.
 
+    Nothing at all when an administrator has switched the notice off, asked first.
+
     Does not commit. The events and their deliveries are written in the caller's transaction,
     which is the one the schedule's lock lives in.
     """
+    if not await notice_is_on(session, NoticeKind.REVERIFICATION_REQUEST):
+        return NagRun(switched_off=True)
     items = await items_for_review(session, by=now + lead_time)
     log = await opened_reviews(session, (one.item_id for one in items))
     run = open_reverification_tasks(items, now=now, log=log, lead_time=lead_time)

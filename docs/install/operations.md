@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Eight of the fifteen mechanisms are started by nothing
+## Seven of the fifteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -305,7 +305,8 @@ became true on 2026-09-11, when the console page that lets somebody choose a sta
 test it before it runs became the first caller of the roster dry run. Nine became true on
 2026-09-15, when the general worker began ticking the control schedule and the retention
 sweep was the first of these it started. Eight became true the same day, when the schedule began
-starting the re-verification nag.
+starting the re-verification nag. Seven became true on 2026-09-17, when the schedule began
+starting the webhook dispatch.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
@@ -324,23 +325,27 @@ starting the re-verification nag.
 | `audit_anchor` | that entries removed from the end of the audit ledger are detectable rather than silent | `on_a_route` |
 | `model_health_probes` | that a provider which has stopped answering is found by asking it rather than by a person's question failing | `nothing` |
 | `spend_correction` | that the cost estimator every budget decision is taken against stays anchored to what actually ran | `in_process` |
-| `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `nothing` |
+| `outbox_dispatch` | that a webhook subscriber is told about the events it asked for, retried while it is down | `in_process` |
 | `spend_report_refresh` | that the spend report a reader is shown is rebuilt daily from what runs actually cost | `in_process` |
 | `erasure_queue` | that a request to erase somebody's data, once filed, is carried out and what it did is written down | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`,
-`knowledge_reverification`, `spend_report_refresh` and `erasure_queue` it is: the general worker
-ticks the control schedule and starts all four. The sweep runs in report-only mode, deleting nothing, until the
+`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh` and `erasure_queue` it is: the general worker
+ticks the control schedule and starts all five. The sweep runs in report-only mode, deleting nothing, until the
 installation releases it: every run writes a report an administrator reads at
 `GET /api/v1/govern/retention`, and somebody holding `admin:retention` over everything releases
 the sweep after the newest report with `POST /api/v1/govern/retention/release`, or puts it back
 to reporting with `POST /api/v1/govern/retention/withdrawal`. A legal hold placed with
 `POST /api/v1/govern/legal-holds` by somebody holding `admin:legal_hold` keeps the rows it covers
-from the next run on. The re-verification nag records each nag in the webhook outbox, asks
-the owner only while the owner can still reach the document, and sends nothing yet, because
-nothing drains the outbox. The erasure queue carries out every request somebody holding
+from the next run on. The re-verification nag records each nag in the webhook outbox and asks
+the owner only while the owner can still reach the document; no person is sent it yet. The webhook
+dispatch sends what is due every minute, signed with each subscriber's secret, which the worker
+reads from the vault under its own policy: a worker with no `BRAIN_VAULT_ADDRESS` and
+`BRAIN_VAULT_TOKEN` sends nothing and its every run fails saying so. An administrator stops a
+subscriber on the console's Webhooks screen, and pauses the dispatch as a whole on the Scheduled
+jobs screen. The erasure queue carries out every request somebody holding
 `admin:erasure` over everything filed with `POST /api/v1/govern/erasures`, on its next run, which
 comes round every quarter of an hour, on the worker's own database connection: a legal hold over the person
 stops it and it is recorded as held, and otherwise each store in PostgreSQL is erased, retired or

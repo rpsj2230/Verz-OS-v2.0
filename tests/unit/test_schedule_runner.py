@@ -21,6 +21,7 @@ from brain.ops.controls import CONTROLS, Control, Invocation
 from brain.ops.retention import Store
 from brain.ops.schedule import TICK, schedulable
 from brain.ops.schedule_runner import (
+    A_DISPATCH_IN_REPORT_ONLY_MODE_SENDS_NOTHING,
     A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING,
     A_REFRESH_IN_REPORT_ONLY_MODE_REBUILDS_NOTHING,
     RUNNERS,
@@ -246,10 +247,14 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Eleven later the same day**, when `knowledge_reverification` was given the store its
     sentence here said it waited for, and a runner that reads it.
 
+    **Ten on 2026-09-17**, when `outbox_dispatch` was given the sender, the resolver and the
+    worker's reader of signing secrets its sentence here said nothing implemented.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 11
+    assert len(found) == 10
+    assert not any("outbox_dispatch" in one for one in found)
     assert all("cannot be started yet: it needs" in one for one in found)
     assert not any("retention_sweep" in one for one in found)
     assert not any("spend_report_refresh" in one for one in found)
@@ -402,12 +407,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And sixteen controls on 2026-09-17, with eight orphans still.** `erasure_queue` arrived
     already wired, the way `spend_report_refresh` did, so the control count rose and the orphan
     count did not.
+    **And to seven on 2026-09-17, for the same reason.** `start_control` calls the webhook
+    dispatch runner, so `outbox_dispatch` left the list.
 
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 8
+    assert len(orphans()) == 7
+    assert "outbox_dispatch" not in {one.name for one in orphans()}
     assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
@@ -437,6 +445,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "retention_sweep",
         "knowledge_reverification",
         "spend_report_refresh",
+        "outbox_dispatch",
         "erasure_queue",
     }
 
@@ -456,6 +465,23 @@ def test_the_nag_runner_asked_for_a_report_records_nothing_and_reaches_no_databa
 
     assert said.startswith("report only: no re-verification nag was recorded.")
     assert A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING in said
+
+
+def test_the_dispatch_runner_asked_for_a_report_sends_nothing_and_reaches_no_database() -> None:
+    """Report-only mode for the webhook dispatch: declined before any database or vault is asked,
+    which is why a URL that points nowhere is enough here.
+
+    Delete this and the dispatch runner could ignore the mode it was handed, which is the property
+    a destructive control's safety rests on being true of every runner."""
+    said = start_control(
+        "outbox_dispatch",
+        now=NOW,
+        report_only=True,
+        database_url="postgresql://nobody@127.0.0.1:1/none",
+    )
+
+    assert said.startswith("report only: no webhook delivery was sent.")
+    assert A_DISPATCH_IN_REPORT_ONLY_MODE_SENDS_NOTHING in said
 
 
 def test_a_control_with_nothing_to_run_is_refused_by_name_with_what_it_needs() -> None:

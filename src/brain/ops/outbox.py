@@ -160,9 +160,9 @@ THE_CONSOLE_SCREEN_IS_NOT_BUILT = (
     "address rule is. The table is brain.tables.outbox and the screen's decisions are "
     "brain.console.subscribers: list subscribers, show which kinds each takes and when it "
     "last delivered, register and deactivate. Since 2026-09-16 brain.webhook_routes serves "
-    "them with the console's Webhooks screen, and what is still not built is anything that "
-    "delivers. Every change needs MANAGE_SUBSCRIBERS, which is why the capability is named "
-    "here rather than invented by whoever builds the screen."
+    "them with the console's Webhooks screen, and since 2026-09-17 the worker delivers through "
+    "brain.ops.webhook_delivery. Every change needs MANAGE_SUBSCRIBERS, which is why the "
+    "capability is named here rather than invented by whoever builds the screen."
 )
 
 

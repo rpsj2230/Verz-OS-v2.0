@@ -300,6 +300,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
         "brain.ops.webhook_store:WebhookRecords.switch_off": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.webhook_store:WebhookRecords.dispatcher": Repeat.READS,
         # The Connectors screen. A connection is this system's own row in one transaction, with the
         # key written inside it through `CredentialVault.write_static_kv`, classified above; a
         # repeat finds the source already connected and is refused before its key is written. A
@@ -354,7 +355,14 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.limit_store:WindowPipeline.expire": Repeat.DERIVED_STATE,
         "brain.ops.limit_store:WindowClient.pipeline": Repeat.READS,
         "brain.ops.object_store:StaticKvReader.read_static_kv": Repeat.READS,
-        "brain.ops.outbox_store:Sender.send": Repeat.KEYED_BY_THE_RECEIVER,
+        # A delivery is a request somebody else's server acts on, so every one is made inside
+        # `issue_once` under a key per attempt, and the receiver's duty to drop a repeated event
+        # id covers the one repeat the ledger cannot: a request that left and was never answered.
+        "brain.ops.outbox_store:Sender.send": Repeat.ISSUES,
+        "brain.ops.outbox_store:SigningKeys.signing_secret": Repeat.READS,
+        # Email. A message to a relay is read by a person, so every one is made inside
+        # `issue_once`; see `brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION`.
+        "brain.ops.mail:MailTransport.send": Repeat.ISSUES,
         "brain.ops.queue:QueueDriver.enqueue": Repeat.ENQUEUES_WORK,
         "brain.ops.queue:QueueDriver.fetch": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.queue:QueueDriver.complete": Repeat.WRITES_THIS_SYSTEMS_DATABASE,

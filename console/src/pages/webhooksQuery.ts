@@ -26,6 +26,8 @@ export type WebhooksBody = components["schemas"]["WebhooksView"];
 export type SubscriberRow = components["schemas"]["WebhookSubscriberView"];
 export type DeliveryRow = components["schemas"]["DeliveryView"];
 export type ChangeRow = components["schemas"]["ChangeView"];
+export type DispatcherBody = components["schemas"]["DispatcherView"];
+export type InboundChannelRow = components["schemas"]["InboundChannelView"];
 export type RegistrationBody = components["schemas"]["RegistrationAsked"];
 export type SecretBody = components["schemas"]["SecretAsked"];
 
@@ -44,6 +46,24 @@ export function switchOffApiPath(subscriberId: string): string {
 /** The console address and the menu's label. */
 export const WEBHOOKS_PATH = "/webhooks";
 export const WEBHOOKS_LABEL = "Webhooks";
+
+/** What each state of an arriving channel's check is called on the screen. */
+export const VERIFICATION_LABELS: Record<InboundChannelRow["verification"], string> = {
+  written: "Written",
+  not_written: "Not written",
+  not_a_webhook: "Not a webhook",
+};
+
+/** How the dispatch's last run ended, in words: finished, failed, or still going. */
+export function dispatcherOutcome(dispatcher: DispatcherBody): string {
+  if (dispatcher.last_finished_at === null) {
+    return "Still running, or stopped without recording an end";
+  }
+  if (dispatcher.last_outcome === "failed") {
+    return `Failed at ${when(dispatcher.last_finished_at)}`;
+  }
+  return `Finished at ${when(dispatcher.last_finished_at)}`;
+}
 
 /** Read `WebhooksView` out of a response body, or null when it is not one. */
 export function readWebhooks(payload: unknown): WebhooksBody | null {

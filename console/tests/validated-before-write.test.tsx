@@ -57,6 +57,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
   "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 0, writes: true }],
+  "src/pages/Notifications.tsx": [
+    { pattern: "/notifications", index: 0, writes: true },
+    { pattern: "/notifications", index: 1, writes: true },
+    { pattern: "/notifications", index: 2, writes: true },
+  ],
   "src/pages/People.tsx": [{ pattern: "/people/:subject", index: 0, writes: true }],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
   "src/pages/Retention.tsx": [

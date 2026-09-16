@@ -64,6 +64,12 @@ import { TRIAL_API_PATH } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
 import {
+  PASSWORD_API_PATH as RELAY_PASSWORD_API_PATH,
+  RELAY_API_PATH,
+  TRIAL_API_PATH as RELAY_TRIAL_API_PATH,
+  noticeApiPath,
+} from "../../src/pages/notificationsQuery";
+import {
   REGISTRATION_PATH as STAFF_LIST_REGISTRATION_PATH,
   SIGN_IN_PATH as STAFF_LIST_SIGN_IN_PATH,
   TRIAL_PATH as STAFF_LIST_TRIAL_PATH,
@@ -417,11 +423,21 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "Notifications and email": {
-    screens: ["/subscribers"],
-    routes: ["/api/v1/govern/subscribers"],
+    screens: ["/subscribers", "/notifications"],
+    routes: ["/api/v1/govern/subscribers", "/api/v1/notifications*"],
     tables: ["ops.outbox_event", "ops.outbox_delivery"],
     installation: ["INSTALL_SENDER_ADDRESS"],
-    gaps: [{ what: "Who is told what, and the sending address, are read and never changed.", leaf: "M27.8.11" }],
+    gaps: [
+      {
+        what: "No notice is sent to a person yet.",
+        because:
+          "Every notice but the re-verification request is composed and called by nothing, and that one reaches webhook subscribers; the Notifications screen says so per notice from brain.ops.notices, and a sender added for any of them asks its switch.",
+      },
+      {
+        what: "INSTALL_SENDER_ADDRESS is read by nothing that sends.",
+        because: "The relay's sender address is saved on the Notifications screen, and the install value is only shown on the Install screen.",
+      },
+    ],
   },
   Webhooks: {
     screens: ["/webhooks"],
@@ -430,8 +446,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "A registered subscriber is never sent anything.",
-        because: "Nothing on an install delivers a webhook yet, which the Webhooks screen says in the API's words.",
+        what: "No platform's webhook is received.",
+        because:
+          "No route receives one, and the WhatsApp and Lark checks are not written; the Webhooks screen lists each channel's check from brain.ops.inbound_webhooks.",
       },
     ],
   },
@@ -625,6 +642,16 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Webhooks.tsx switchOffApiPath(asked.id)": [
     at("POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off", "switchOffApiPath", switchOffApiPath("billing_bridge")),
   ],
+  "src/pages/Notifications.tsx noticeApiPath(asked.row.kind)": [
+    at("POST /api/v1/notifications/notices/{kind}", "noticeApiPath", noticeApiPath("evening_digest")),
+  ],
+  "src/pages/Notifications.tsx RELAY_API_PATH": [at("POST /api/v1/notifications/relay", "RELAY_API_PATH", RELAY_API_PATH)],
+  "src/pages/Notifications.tsx PASSWORD_API_PATH": [
+    at("POST /api/v1/notifications/relay/password", "PASSWORD_API_PATH", RELAY_PASSWORD_API_PATH),
+  ],
+  "src/pages/Notifications.tsx TRIAL_API_PATH": [
+    at("POST /api/v1/notifications/relay/test", "TRIAL_API_PATH", RELAY_TRIAL_API_PATH),
+  ],
   "src/pages/Skills.tsx SKILLS_API_PATH": [at("POST /api/v1/skills", "SKILLS_API_PATH", SKILLS_API_PATH)],
   "src/pages/Skills.tsx reviewPath(one.digest)": [
     at("POST /api/v1/skills/{digest}/review", "reviewPath", reviewPath("d".repeat(64))),
@@ -667,9 +694,16 @@ const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back
 const GRANTS_PRESSED = audited("test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach");
 const WEBHOOK_LEDGER = audited("test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author");
 const HOLDS_SWEPT = audited("test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them");
-const NOTHING_SENDS_A_WEBHOOK: Proof = {
-  none: "Nothing on an install delivers a webhook yet, so no behaviour follows from a subscriber or its secret.",
-  leaf: "M27.8.12",
+const A_WEBHOOK_IS_DELIVERED = t(
+  "test_webhook_delivery",
+  "test_a_due_event_is_signed_received_verified_and_recorded_delivered",
+  true,
+);
+const NO_TRIAL_LEDGER: Proof = {
+  none: "A test message is recorded in ops.operation under its key, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION.",
+};
+const A_SETTING_ENTRY_NO_TEST_FOLLOWS: Proof = {
+  none: "The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry.",
 };
 
 const CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER = t(
@@ -874,17 +908,37 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/webhooks/subscribers": {
     row: t("test_webhook_routes", "test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept"),
     audit: WEBHOOK_LEDGER,
-    behaviour: NOTHING_SENDS_A_WEBHOOK,
+    behaviour: A_WEBHOOK_IS_DELIVERED,
   },
   "POST /api/v1/webhooks/subscribers/{subscriber_id}/secret": {
     row: t("test_webhook_routes", "test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused"),
     audit: WEBHOOK_LEDGER,
-    behaviour: NOTHING_SENDS_A_WEBHOOK,
+    behaviour: t("test_webhook_delivery", "test_the_worker_reads_the_secret_at_the_path_the_console_writes_it_to"),
   },
   "POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off": {
     row: t("test_webhook_routes", "test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused"),
     audit: WEBHOOK_LEDGER,
     behaviour: t("test_webhook_store", "test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out", true),
+  },
+  "POST /api/v1/notifications/notices/{kind}": {
+    row: t("test_notification_routes", "test_switching_a_notice_off_writes_its_row_with_the_writer_and_the_next_read_sees_it"),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_notices", "test_switched_off_a_re_verification_run_records_nothing_and_switched_on_it_does", true),
+  },
+  "POST /api/v1/notifications/relay": {
+    row: t("test_notification_routes", "test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured"),
+    audit: A_SETTING_ENTRY_NO_TEST_FOLLOWS,
+    behaviour: t("test_notification_routes", "test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password"),
+  },
+  "POST /api/v1/notifications/relay/password": {
+    row: t("test_notification_routes", "test_a_password_is_kept_at_its_slot_recorded_and_never_answered"),
+    audit: t("test_notification_routes", "test_a_password_is_kept_at_its_slot_recorded_and_never_answered"),
+    behaviour: t("test_notification_routes", "test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password"),
+  },
+  "POST /api/v1/notifications/relay/test": {
+    row: t("test_mail", "test_pressing_the_test_button_twice_sends_one_message"),
+    audit: NO_TRIAL_LEDGER,
+    behaviour: t("test_notification_routes", "test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password"),
   },
   "POST /api/v1/skills": {
     row: t("test_skill_store", "test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store", true),

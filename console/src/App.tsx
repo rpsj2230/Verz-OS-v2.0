@@ -91,6 +91,7 @@ import { Overview } from "./pages/Overview";
 import { DataTransfer } from "./pages/DataTransfer";
 import { Storage } from "./pages/Storage";
 import { Webhooks } from "./pages/Webhooks";
+import { Notifications } from "./pages/Notifications";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
@@ -285,6 +286,10 @@ export const routes: RouteObject[] = [
       // One path and no parameter: a subscriber is changed from the listing rather than opened.
       // Eager rather than split: it mounts neither heavy library and no stylesheet of its own.
       { path: "webhooks", element: <Webhooks /> },
+      // Notifications and email, under Operate beside Webhooks: who this install tells what, the
+      // switch that stops a notice, and the email relay with its password and a test message,
+      // each a confirmed write. One path and no parameter. Eager for the same reason.
+      { path: "notifications", element: <Notifications /> },
       // Storage, under Install: the buckets, each one's retention and why, and where the store
       // is. One path, no parameter, no control. Eager for the same reason.
       { path: "storage", element: <Storage /> },

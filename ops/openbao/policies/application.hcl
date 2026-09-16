@@ -41,6 +41,9 @@ path "sys/leases/renew" {
 # until the first restart and never again. One path segment and one engine, `providers`,
 # so nothing in `connectors/` is writable or readable this way. No delete and no list: a
 # slot is replaced, never removed from here, and the slots are a closed list in the code.
+# The mail relay's password is kept here too, at providers/mail_relay, for the same reasons: a
+# relay's operator issues it, nothing can mint one per message, and the application is the process
+# that sends mail with it. See brain.ops.mail.A_RELAY_CREDENTIAL_IS_A_PROVIDER_CREDENTIAL.
 path "providers/data/+" {
   capabilities = ["create", "update", "read"]
 }
@@ -59,10 +62,9 @@ path "providers/metadata/+" {
 # brain.ops.openbao.A_SIGNING_KEY_EVERY_RECEIVER_CHECKS_CANNOT_BE_MINTED and brain.ops.webhook_admin.
 #
 # create and update, so an administrator registers a subscriber and rotates its secret from the
-# console. No read: the application writes these and never signs with them. The process that
-# delivers will read them under its own policy when a dispatcher exists, and until then nothing
-# anywhere holds a read on this engine. Metadata read only, for the reason given above for
-# providers: it is how the console says a secret is held without reading it back.
+# console. No read: the application writes these and never signs with them. The worker delivers,
+# and reads them under its own policy (worker.hcl). Metadata read only, for the reason given above
+# for providers: it is how the console says a secret is held without reading it back.
 path "webhooks/data/+" {
   capabilities = ["create", "update"]
 }

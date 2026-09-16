@@ -33,6 +33,7 @@ from brain.ops.webhook_admin import TOLD, SigningSecrets, signing_secret_ref
 from brain.ops.webhook_store import (
     ChangeLine,
     DeliveryLine,
+    DispatcherLine,
     NoActiveSubscriberError,
     Registered,
     SubscriberTakenError,
@@ -135,6 +136,7 @@ class Records:
         self.writes: list[tuple[str, str, str]] = []
         self.taken = False
         self.secret_times: list[datetime | None] = []
+        self.line = DispatcherLine(None, None, None, None, paused=False)
 
     async def registered(self) -> tuple[Registered, ...]:
         self.asked += 1
@@ -202,6 +204,10 @@ class Records:
                 self.writes.append(("switch_off", subscriber_id, actor))
                 return
         raise NoActiveSubscriberError(subscriber_id)
+
+    async def dispatcher(self) -> DispatcherLine:
+        self.asked += 1
+        return self.line
 
 
 def a_registered(subscriber_id: str = "billing_bridge") -> Registered:
@@ -368,11 +374,13 @@ def test_a_manager_sees_where_each_subscriber_points_whether_its_secret_is_held_
         "occurred_at",
         "last_attempt_at",
         "reason",
+        "next_attempt_at",
     }
     assert [c["change"] for c in one["changes"]] == ["registered"]
     assert body["vault"] == VaultState.READY.value
     assert body["kinds"] == [kind.value for kind in EventKind]
-    assert body["inbound"]["channels"] and body["inbound"]["automation_path"].startswith(API_PREFIX)
+    assert body["inbound"]["automation_path"].startswith(API_PREFIX)
+    assert {one["channel"] for one in body["inbound"]["channels"]} >= {"slack", "whatsapp"}
     assert "secret_path" not in json.dumps(body) and "webhooks/" not in json.dumps(body)
 
 
@@ -538,3 +546,127 @@ def test_no_response_body_and_no_log_line_carries_the_secret(
         assert SECRET not in answered.text
         assert SECRET not in json.dumps(dict(answered.headers))
     assert SECRET not in out.out + out.err + caplog.text
+
+
+# ------------------------------------------------------------------- what delivery says
+
+
+def test_the_dispatcher_is_shown_to_a_manager_and_nothing_about_it_to_anybody_else(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A reader who may not manage is shown no dispatcher and the store is not asked; a manager is
+    shown one. Delete this and the dispatch's state, which says whether events leave this install,
+    is served to anybody who can open the page."""
+    from brain.webhook_routes import NO_WORKER_ON_THIS_PROFILE
+
+    records = Records((a_registered(),))
+    attach(app, records, Vault(version=StaticVersion(written_at=AT)))
+
+    stranger = client.get(LISTING, headers=headers("u_none")).json()
+    assert stranger["dispatcher"] is None
+    assert records.asked == 0
+
+    managed = client.get(LISTING, headers=headers("u_admin")).json()
+    assert managed["dispatcher"]["runs_here"] is False
+    assert managed["dispatcher"]["told"] == NO_WORKER_ON_THIS_PROFILE
+
+
+def test_the_delivery_sentence_carries_the_figures_the_retry_rule_uses() -> None:
+    """The attempt count and the longest wait are the code's, so the sentence moves when they do.
+
+    Delete this and the screen goes on promising eight attempts after somebody sets the cap to
+    three."""
+    from brain.ops.limits import MAX_BACKOFF_SECONDS
+    from brain.ops.outbox import MAX_DELIVERY_ATTEMPTS, retry_window_seconds
+    from brain.ops.webhook_admin import how_delivery_works
+
+    said = how_delivery_works()
+    assert f"{MAX_DELIVERY_ATTEMPTS} attempts" in said
+    assert f"at most {round(retry_window_seconds() / 60)} minutes" in said
+    assert f"up to {round(MAX_BACKOFF_SECONDS / 60)} minutes" in said
+
+
+def _line(**changed: object) -> DispatcherLine:
+    base: dict[str, object] = {
+        "started_at": LONG_AGO,
+        "finished_at": LONG_AGO,
+        "outcome": "ok",
+        "detail": "1 delivered, 0 to be tried again later, 0 set aside for a person",
+        "paused": False,
+    }
+    base.update(changed)
+    return DispatcherLine(**base)  # type: ignore[arg-type]
+
+
+def test_what_the_dispatch_is_said_to_be_follows_the_profile_then_a_pause_then_its_runs() -> None:
+    """Five states, in the order a person should hear them: no worker on this profile outranks
+    everything, a pause outranks the record, a dispatch never run says so, a failed run says so,
+    and a working one is shown its counts.
+
+    Delete this and an install with no worker is told the dispatch runs every minute, or a paused
+    dispatch reads as a quiet one."""
+    from brain.webhook_routes import (
+        LAST_RUN_FAILED,
+        NO_WORKER_ON_THIS_PROFILE,
+        NOT_RUN_YET,
+        PAUSED,
+        RUNNING,
+        dispatcher_told,
+        runs_the_dispatch,
+    )
+
+    assert runs_the_dispatch("lite") is False
+    assert runs_the_dispatch("standard") is True
+    assert dispatcher_told(_line(paused=True), runs_here=False) == NO_WORKER_ON_THIS_PROFILE
+    assert dispatcher_told(_line(paused=True, outcome="failed"), runs_here=True) == PAUSED
+    assert dispatcher_told(_line(started_at=None, outcome=None), runs_here=True) == NOT_RUN_YET
+    assert dispatcher_told(_line(outcome="failed"), runs_here=True) == LAST_RUN_FAILED
+    assert dispatcher_told(_line(), runs_here=True) == RUNNING
+
+
+def test_a_failed_run_is_shown_by_its_type_and_a_worker_with_no_vault_by_its_own_sentence() -> None:
+    """A failure's message is a value until shown otherwise, so only its type is served; the one
+    message served whole is this product's sentence about a worker with no vault, which says
+    what to set. Delete this and an exception quoting an endpoint or a key rides out on the
+    Webhooks page."""
+    from brain.ops.webhook_delivery import NO_VAULT_ON_THIS_WORKER
+    from brain.webhook_routes import last_report
+
+    leaked = _line(outcome="failed", detail="OutboxStoreError: https://hooks.example.test/private")
+    assert last_report(leaked) == "The run failed with OutboxStoreError."
+    no_vault = _line(outcome="failed", detail=f"SecretsUnavailableError: {NO_VAULT_ON_THIS_WORKER}")
+    assert last_report(no_vault) == NO_VAULT_ON_THIS_WORKER
+    assert (
+        last_report(_line()) == "1 delivered, 0 to be tried again later, 0 set aside for a person"
+    )
+    assert last_report(_line(outcome=None, detail=None, finished_at=None)) is None
+    assert last_report(_line(outcome="failed", detail="not a type at all")) is None
+
+
+def test_the_component_that_delivers_is_the_worker_that_ticks_the_schedule() -> None:
+    """Held equal rather than imported, for the reason `DELIVERING_COMPONENT` gives.
+
+    Delete this and a renamed worker leaves every install told it runs no worker while it does."""
+    from brain.ops.worker import DEFAULT_WORKER_COMPONENT, schedules_here
+    from brain.webhook_routes import DELIVERING_COMPONENT
+
+    assert DELIVERING_COMPONENT == DEFAULT_WORKER_COMPONENT
+    assert schedules_here(DELIVERING_COMPONENT)
+
+
+def test_a_manager_on_a_profile_with_a_worker_is_shown_the_last_run_and_its_counts(
+    client: TestClient, app: FastAPI
+) -> None:
+    """Through the route, with the settings' profile deciding `runs_here`. Delete this and the
+    route could pass the wrong profile, or none, and every install would read as having no
+    worker."""
+    from brain.webhook_routes import RUNNING
+
+    app.state.settings = Settings(env="development", profile="standard")
+    records = Records((a_registered(),))
+    records.line = _line()
+    attach(app, records, Vault(version=StaticVersion(written_at=AT)))
+
+    shown = client.get(LISTING, headers=headers("u_admin")).json()["dispatcher"]
+    assert (shown["runs_here"], shown["told"], shown["last_outcome"]) == (True, RUNNING, "ok")
+    assert shown["last_report"].startswith("1 delivered")

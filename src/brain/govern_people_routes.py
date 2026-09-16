@@ -50,9 +50,10 @@ side ending it. The listing is `requests_shown`: a requester's own and those the
 the lapse.
 
 **One of the four still says more about what is missing than about what is there, and that is the
-design rather than an apology.** Switching a webhook subscriber off has no ledger member to be
-recorded under and no audit subject a subscriber id fits, so the Subscribers screen lists who is
-told what and says how that stops, without a button whose press nobody could later attribute. Its
+design rather than an apology.** The Subscribers screen lists who is told what and says
+how that stops, pointing at the two screens that stop it rather than offering a second button for
+the same write: a subscriber is switched off on the Webhooks screen, which the audit ledger records
+under its `webhook` action, and a notice to people on the Notifications and email screen. Its
 sentences travel on the response, for `brain.skill_routes`' reason: the day a fact changes, the
 sentence changes in the same commit, which is what happened to the Elevation screen's.
 
@@ -216,17 +217,17 @@ WHAT_A_REVIEW_SHOWS: Final = (
 )
 
 #: What the subscribers screen cannot do, served beside it.
-SWITCHING_A_SUBSCRIBER_OFF_IS_NOT_ON_THIS_SCREEN_YET: Final = (
-    "Switching a subscriber off is not on this screen yet. The change itself is one statement, "
-    "and the audit ledger has nothing it could be recorded under, so a control here would stop "
-    "deliveries with nobody able to read afterwards who stopped them. Until it is, an operator "
-    "switches one off at the database. A subscriber switched off is never switched back on: it "
-    "is registered again under a new id."
+HOW_TO_STOP_BEING_TOLD: Final = (
+    "A subscriber is switched off on the Webhooks screen, which records who switched it off in "
+    "the audit ledger and sends nothing more to it, including deliveries already waiting. A "
+    "subscriber switched off is never switched back on: it is registered again under a new id. "
+    "A notice to people is switched off on the Notifications and email screen, except a notice "
+    "that exists to report misuse or a mechanism that stopped running, which has no switch."
 )
 ONLY_WEBHOOK_SUBSCRIBERS_ARE_LISTED: Final = (
-    "Only webhook subscribers are listed. The evening digest goes to one room named in this "
-    "install's configuration, and alerts go to whoever a grant makes responsible at the moment "
-    "they fire, so neither has a stored list of recipients to show."
+    "Only webhook subscribers are listed here. Every notice this install composes for people, "
+    "who each is told to, how, and whether anything sends it yet, is on the Notifications and "
+    "email screen."
 )
 A_SUBSCRIBER_IS_TOLD_IDENTIFIERS: Final = (
     "A subscriber is told that something happened and the identifiers of what it happened to, "
@@ -517,7 +518,7 @@ class SubscribersPage(BaseModel):
     #: Every kind of event there is to be told about. The product's closed vocabulary.
     kinds: list[str]
     staleness: StalenessBanner | None = None
-    stopping: str = SWITCHING_A_SUBSCRIBER_OFF_IS_NOT_ON_THIS_SCREEN_YET
+    stopping: str = HOW_TO_STOP_BEING_TOLD
     scope: str = ONLY_WEBHOOK_SUBSCRIBERS_ARE_LISTED
     told: str = A_SUBSCRIBER_IS_TOLD_IDENTIFIERS
 

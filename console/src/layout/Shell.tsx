@@ -114,6 +114,7 @@ const GROUPS: readonly NavGroup[] = [
       { to: "/models", label: "Models and health" },
       { to: "/connectors", label: "Connectors" },
       { to: "/webhooks", label: "Webhooks" },
+      { to: "/notifications", label: "Notifications and email" },
       { to: "/routing", label: "Routing" },
     ],
   },

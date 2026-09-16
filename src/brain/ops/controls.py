@@ -572,8 +572,8 @@ CONTROLS: Final[tuple[Control, ...]] = (
         cadence_from="brain.knowledge.verification:DEFAULT_CADENCE",
         severity=Severity.NOTICED,
         # Started by the worker's schedule since 2026-09-15. It records a nag as an outbox
-        # event and sends nothing, because nothing drains the outbox:
-        # `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` is that sentence.
+        # event, which `outbox_dispatch` sends to subscribing systems since 2026-09-17, and no
+        # person is told: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` is that sentence.
         invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
@@ -697,11 +697,20 @@ CONTROLS: Final[tuple[Control, ...]] = (
     Control(
         name="outbox_dispatch",
         # Added on 2026-09-15 with `brain.ops.outbox_store`. `dispatch_due` claims what is due
-        # through `claim_due` and sends it, and nothing calls `dispatch_due`: no worker loop,
-        # no route and no timer. The events are written with the change that caused them and
-        # stay pending until something drains them, which is why this is a control and not a
-        # helper, and why it joins the orphan list the day it is written.
-        symbols=("brain.ops.outbox_store:claim_due", "brain.ops.outbox_store:dispatch_due"),
+        # through `claim_due` and sends it. The events are written with the change that caused
+        # them and stay pending until something drains them, which is why this is a control and
+        # not a helper. It joined the orphan list the day it was written and left it on
+        # 2026-09-17, when `brain.ops.webhook_delivery.run_dispatch_now` became the caller the
+        # worker's schedule starts, with a sender, a resolver and the worker's own reader of
+        # signing secrets. `run_dispatch_now` joined the symbols the same day, and the worker's
+        # module calls `claim_due` and hands what it claimed to `dispatch_due`, because the call
+        # index counts no call a module makes to its own function: a claim made inside
+        # `dispatch_due` would have measured this control as unwired for as long as it is wired.
+        symbols=(
+            "brain.ops.outbox_store:claim_due",
+            "brain.ops.outbox_store:dispatch_due",
+            "brain.ops.webhook_delivery:run_dispatch_now",
+        ),
         guards=(
             "that a subscriber is told about an event it asked for, retried with backoff while "
             "it is down and set aside for a person once the attempts run out"
@@ -716,7 +725,7 @@ CONTROLS: Final[tuple[Control, ...]] = (
         # retries after that wait for `brain.connectors.throttle.retry_delay`, not for this.
         every=timedelta(minutes=1),
         severity=Severity.RAISED,
-        invoked_by=Invocation.NOTHING,
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="spend_report_refresh",

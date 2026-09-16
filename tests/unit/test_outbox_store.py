@@ -2,7 +2,8 @@
 
 Two halves, drawn where `tests/unit/test_delegation_sql.py` draws them. The first needs no
 server: what one attempt does with a subscriber that has gone away, an address that resolves
-inside, a vault that is down and a sender that says nothing, and what is written back. The
+inside, a vault that is down, a sender that says nothing and a key the operation ledger already
+holds, and what is written back. The
 second runs `0030` for real in a database this file creates, and asks PostgreSQL what the claim
 does with two workers and what the policies do with the application role.
 
@@ -13,12 +14,13 @@ neither waits and neither takes the other's.
 The database is built by `tests/fixtures/scratch_postgres.py`, which says why it is stamped
 at `0029` rather than built from empty.
 
-Task ids: M17.5.1, M17.5.3
+Task ids: M17.5.1, M17.5.3, M27.8.12
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -28,6 +30,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.throttle import CallOutcome, classify
+from brain.ops.idempotency import OperationState
 from brain.ops.outbox import (
     Attempt,
     Delivery,
@@ -38,12 +41,18 @@ from brain.ops.outbox import (
     Subscriber,
 )
 from brain.ops.outbox_store import (
+    A_REDIRECT_IS_NOT_A_DELIVERY,
+    DELIVERY_CONNECTOR,
+    DELIVERY_TOOL,
     Claimed,
     OutboxStoreError,
     SendResult,
+    SigningSecretAbsentError,
     attempt_one,
     claim_due,
     deactivate_subscriber,
+    delivery_operation,
+    delivery_outcome,
     dispatch_due,
     last_delivered,
     record_attempt,
@@ -52,8 +61,9 @@ from brain.ops.outbox_store import (
     subscriber_from,
     subscribers,
 )
-from brain.ops.secrets import Lease, SecretRef, SecretsUnavailableError, VaultRole
+from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.tables.outbox import WebhookSubscriberRow
+from tests.fixtures.operation_ledger import MemoryLedger
 from tests.fixtures.scratch_postgres import (
     built,
     engine,
@@ -69,8 +79,8 @@ from tests.fixtures.scratch_postgres import (
 #: Far outside any plausible wall clock. `tests/unit/test_scope_and_capability.py` records why a
 #: fixture dated near today is a clock that goes off.
 NOW = datetime(2999, 6, 1, 12, 0, tzinfo=UTC)
-SECRET_REF = SecretRef(path="webhooks/creds/finance", role=VaultRole.APPLICATION)
-SHARED_SECRET = "s_not_a_real_one"
+SECRET_REF = SecretRef(path="webhooks/sub_finance", role=VaultRole.WORKER)
+SHARED_SECRET = "s_not_a_real_one_but_long_enough_to_be_one"
 ENDPOINT = "https://hooks.example.com/brain"
 
 
@@ -88,28 +98,22 @@ PUBLIC = _Resolver("93.184.216.34")
 INTERNAL = _Resolver("169.254.169.254")
 
 
-class _Vault:
-    """Issues one lease and records the order of everything it is asked to do."""
+class _Keys:
+    """Hands out one signing secret and records the order of everything it is asked to do."""
 
-    def __init__(self, events: list[str], *, down: bool = False) -> None:
+    def __init__(self, events: list[str], *, down: bool = False, empty: bool = False) -> None:
         self.events = events
         self._down = down
+        self._empty = empty
 
-    def issue(self, ref: SecretRef, ttl: timedelta) -> Lease:
+    def signing_secret(self, ref: SecretRef) -> str:
         if self._down:
             msg = "the vault is not answering"
             raise SecretsUnavailableError(msg)
-        self.events.append("issue")
-        return Lease(
-            lease_id="lease_1",
-            ref=ref,
-            secret=SHARED_SECRET,
-            issued_at=NOW,
-            expires_at=NOW + ttl,
-        )
-
-    def revoke(self, lease_id: str) -> None:
-        self.events.append("revoke")
+        self.events.append("read")
+        if self._empty:
+            raise SigningSecretAbsentError(ref.path)
+        return SHARED_SECRET
 
 
 class _Sender:
@@ -120,7 +124,7 @@ class _Sender:
         self.events = events
         self.requests: list[SignedRequest] = []
 
-    async def send(self, request: SignedRequest) -> SendResult:
+    def send(self, request: SignedRequest) -> SendResult:
         self.events.append("send")
         self.requests.append(request)
         return self.result
@@ -161,16 +165,20 @@ def attempt(
     active: bool = True,
     resolver: _Resolver = PUBLIC,
     down: bool = False,
+    empty: bool = False,
+    attempts: int = 0,
+    ledger: MemoryLedger | None = None,
 ) -> tuple[Attempt, list[str], _Sender]:
     events: list[str] = []
     sender = _Sender(result, events)
     made = run(
         lambda: attempt_one(
-            claimed(active=active),
+            claimed(active=active, attempts=attempts),
             now=NOW,
             sender=sender,
-            vault=_Vault(events, down=down),
+            signing_keys=_Keys(events, down=down, empty=empty),
             resolver=resolver,
+            ledger=MemoryLedger() if ledger is None else ledger,
         )
     )
     return made, events, sender
@@ -212,7 +220,7 @@ def test_an_accepted_request_is_delivered_on_its_first_attempt() -> None:
     assert made.delivery.attempts == 1
     assert len(sender.requests) == 1
     assert sender.requests[0].address == "93.184.216.34"
-    assert events == ["issue", "revoke", "send"]
+    assert events == ["read", "send"]
 
 
 def test_a_server_error_is_retried_later_with_one_attempt_counted() -> None:
@@ -293,17 +301,179 @@ def test_an_address_that_resolves_inside_the_network_is_parked_and_nothing_is_se
     assert made.delivery.state is DeliveryState.EXHAUSTED
     assert made.delivery.attempts == 0
     assert sender.requests == []
-    assert "issue" not in events
+    assert "read" not in events
 
 
-def test_the_lease_is_returned_before_the_request_leaves() -> None:
-    """The order is the property: issue, revoke, then send.
+def test_the_secret_is_read_before_the_request_leaves_and_nothing_sent_carries_it() -> None:
+    """The order is read then send, and the request the sender is handed holds a signature and
+    never the secret it was computed with, in its body or in any header.
 
-    Delete this and moving the send inside the `borrow` block keeps a live credential in the
-    process for as long as the slowest subscriber takes to answer."""
-    _, events, _ = attempt(SendResult(status=200))
+    Delete this and a sender handed the secret beside the request holds a live credential for as
+    long as the slowest subscriber takes to answer."""
+    _, events, sender = attempt(SendResult(status=200))
 
-    assert events.index("revoke") < events.index("send")
+    assert events.index("read") < events.index("send")
+    sent = sender.requests[0]
+    assert SHARED_SECRET.encode() not in sent.body
+    assert all(SHARED_SECRET not in value for value in sent.headers.values())
+
+
+def test_a_subscriber_whose_secret_the_vault_does_not_hold_is_parked_and_nothing_is_sent() -> None:
+    """The vault answered that this one slot is empty: that subscriber's fault, parked with no
+    attempt counted, and a sentence saying where to fix it.
+
+    Delete this and one subscriber registered before its secret was written stops every other
+    subscriber's delivery, because the absence would stop the batch as an outage does."""
+    made, _, sender = attempt(SendResult(status=200), empty=True)
+
+    assert made.delivery.state is DeliveryState.EXHAUSTED
+    assert made.delivery.attempts == 0
+    assert sender.requests == []
+    assert "Webhooks screen" in made.reason
+
+
+def test_a_redirect_is_a_refusal_and_not_an_acceptance() -> None:
+    """A 3xx exhausts the delivery. `classify` reads it as OK, asserted here as the outside fact
+    the refusal exists for, so the test is held to the classifier rather than to its own constant.
+
+    Delete this and a subscriber whose server redirects is marked delivered for every event it
+    never received."""
+    assert classify(status=302) is CallOutcome.OK
+    assert delivery_outcome(SendResult(status=302)) is CallOutcome.REJECTED
+    assert delivery_outcome(SendResult(status=299)) is CallOutcome.OK
+    assert delivery_outcome(SendResult(status=400)) is CallOutcome.REJECTED
+    assert "redirect" in A_REDIRECT_IS_NOT_A_DELIVERY
+
+    made, _, _ = attempt(SendResult(status=308))
+    assert made.delivery.state is DeliveryState.EXHAUSTED
+
+
+# -------------------------------------------------------- the door every request goes through
+def test_every_request_is_made_through_the_operation_ledger_and_settled_there() -> None:
+    """One attempt, one record, moved to sent before the request and to succeeded after it.
+
+    Delete this and a dispatcher that called the sender beside the ledger rather than inside
+    `issue_once` would still deliver, and a worker dying after the subscriber accepted would send
+    the event again with nothing recording that the first request had left."""
+    ledger = MemoryLedger()
+    made, _, sender = attempt(SendResult(status=200), ledger=ledger)
+
+    key = delivery_operation(claimed().delivery, a_subscriber()).key
+    assert made.delivery.state is DeliveryState.DELIVERED
+    assert len(sender.requests) == 1
+    assert ledger.moves == [(key, OperationState.SENT), (key, OperationState.SUCCEEDED)]
+    record = ledger.records[key]
+    assert (record.connector, record.tool) == (DELIVERY_CONNECTOR, DELIVERY_TOOL)
+    assert record.principal_id == a_subscriber().created_by
+
+
+def test_an_attempt_an_earlier_worker_sent_and_the_subscriber_accepted_is_not_sent_again() -> None:
+    """**The duplicate this side can avoid.** A worker died after the ledger recorded the
+    acceptance and before the delivery row committed, so the row is still pending at the same
+    count. The next worker finds the attempt's key succeeded, records the delivery and sends
+    nothing.
+
+    Delete this and every crash in that window is a second copy of an event the subscriber
+    already has, which the ledger knew and was not asked."""
+    ledger = MemoryLedger()
+    key = delivery_operation(claimed().delivery, a_subscriber()).key
+    attempt(SendResult(status=200), ledger=ledger)
+    assert ledger.records[key].state is OperationState.SUCCEEDED
+
+    made, events, sender = attempt(SendResult(status=200), ledger=ledger)
+
+    assert sender.requests == []
+    assert "send" not in events
+    assert made.delivery.state is DeliveryState.DELIVERED
+    assert made.delivery.attempts == 1
+    assert "nothing was sent again" in made.reason
+
+
+def test_an_attempt_sent_and_never_settled_counts_and_the_next_goes_under_its_own_key() -> None:
+    """A worker died between the request leaving and the answer being recorded. This pass sends
+    nothing under that key, counts the attempt as unanswered and leaves the delivery pending, and
+    the attempt after it is a key the ledger has never seen, so it is sent.
+
+    Delete this and either the unknown attempt is sent again under its own key, which is the
+    door refusing nothing, or the delivery is stuck for ever on a key that can never be won."""
+    ledger = MemoryLedger()
+    first = delivery_operation(claimed().delivery, a_subscriber())
+    ledger.claim(first)
+    ledger.win(first.key)
+
+    made, _, sender = attempt(SendResult(status=200), ledger=ledger)
+
+    assert sender.requests == []
+    assert made.delivery.state is DeliveryState.PENDING
+    assert made.delivery.attempts == 1
+    assert made.delay_seconds > 0
+
+    retried, _, again = attempt(SendResult(status=200), ledger=ledger, attempts=1)
+    assert len(again.requests) == 1
+    assert retried.delivery.state is DeliveryState.DELIVERED
+
+
+def test_a_retry_after_a_server_error_is_sent_again_under_a_key_of_its_own() -> None:
+    """Attempt one answered 503 and settled its key; attempt two is a new key and is sent.
+
+    Delete this and a key per delivery rather than per attempt passes every other test here, and
+    the first 503 any subscriber returns is the last request it is ever sent."""
+    ledger = MemoryLedger()
+    first, _, sent_first = attempt(SendResult(status=503), ledger=ledger)
+    second, _, sent_second = attempt(SendResult(status=200), ledger=ledger, attempts=1)
+
+    assert len(sent_first.requests) == 1
+    assert len(sent_second.requests) == 1
+    assert first.delivery.state is DeliveryState.PENDING
+    assert second.delivery.state is DeliveryState.DELIVERED
+    assert len(ledger.records) == 2
+
+
+def test_one_event_to_two_subscribers_is_two_keys_and_both_are_sent() -> None:
+    """The subscriber is part of the key, so the second subscriber's first attempt is not the
+    first subscriber's.
+
+    Delete this and a key built from the event alone delivers each event to whichever subscriber
+    the claim happened to reach first, and to nobody else."""
+    ledger = MemoryLedger()
+    events: list[str] = []
+    sender = _Sender(SendResult(status=200), events)
+
+    async def both() -> None:
+        for subscriber_id in ("sub_finance", "sub_sales"):
+            subscriber = replace(a_subscriber(), subscriber_id=subscriber_id)
+            await attempt_one(
+                Claimed(
+                    delivery=Delivery(event_id="ev_1", subscriber_id=subscriber_id),
+                    event=an_event(),
+                    subscriber=subscriber,
+                ),
+                now=NOW,
+                sender=sender,
+                signing_keys=_Keys(events),
+                resolver=PUBLIC,
+                ledger=ledger,
+            )
+
+    run(both)
+
+    assert len(sender.requests) == 2
+    assert len(ledger.records) == 2
+
+
+def test_the_same_attempt_derives_the_same_key_and_the_next_attempt_another() -> None:
+    """Derived from the row, never minted: the key for an attempt is a function of the event, the
+    subscriber, who set it up and the attempt number.
+
+    Delete this and a key that drew on anything else would be a new key on every pass, which is
+    the door letting through exactly the repeat it exists to stop."""
+    first = Delivery(event_id="ev_1", subscriber_id="sub_finance")
+    one = delivery_operation(first, a_subscriber())
+    two = delivery_operation(first, a_subscriber())
+    later = delivery_operation(replace(first, attempts=1), a_subscriber())
+
+    assert one.key == two.key
+    assert later.key != one.key
 
 
 def test_a_vault_that_cannot_issue_stops_the_batch_rather_than_parking_the_delivery() -> None:
@@ -317,7 +487,12 @@ def test_a_vault_that_cannot_issue_stops_the_batch_rather_than_parking_the_deliv
     with pytest.raises(SecretsUnavailableError):
         run(
             lambda: attempt_one(
-                claimed(), now=NOW, sender=sender, vault=_Vault(events, down=True), resolver=PUBLIC
+                claimed(),
+                now=NOW,
+                sender=sender,
+                signing_keys=_Keys(events, down=True),
+                resolver=PUBLIC,
+                ledger=MemoryLedger(),
             )
         )
     assert sender.requests == []
@@ -342,6 +517,32 @@ def test_a_subscriber_row_is_active_exactly_when_it_has_no_deactivation_instant(
 
     row.deactivated_at = NOW
     assert not subscriber_from(row).active
+
+
+def test_an_event_read_in_another_time_zone_is_the_same_bytes_as_the_one_written() -> None:
+    """The producer, from a raw row whose instant came back in a session zone eight hours east:
+    the event it reads serialises exactly as the event that was written.
+
+    Delete this and one event is different bytes on two workers whose database sessions have
+    different time zones, which a receiver comparing or storing bodies sees as two events."""
+    from datetime import timedelta as hours
+    from datetime import timezone
+
+    from brain.ops.outbox import serialise
+    from brain.ops.outbox_store import event_from
+    from brain.tables.outbox import OutboxEventRow
+
+    east = timezone(hours(hours=8))
+    row = OutboxEventRow(
+        event_id="ev_1",
+        kind=EventKind.AUTOMATION_RUN_FINISHED.value,
+        entity="automation_run",
+        record_id="run_1",
+        occurred_at=NOW.astimezone(east),
+        attributes={},
+    )
+
+    assert serialise(event_from(row)) == serialise(an_event())
 
 
 # ----------------------------------------------------------- refusals before the SQL
@@ -604,11 +805,12 @@ def test_a_dispatched_delivery_is_written_back_with_its_attempt(empty: str) -> N
                 await session.execute(text("SET LOCAL ROLE brain_app"))
                 settled = await dispatch_due(
                     session,
+                    await claim_due(session, now=NOW, limit=10),
                     now=NOW,
-                    limit=10,
                     sender=_Sender(SendResult(status=202), events),
-                    vault=_Vault(events),
+                    signing_keys=_Keys(events),
                     resolver=PUBLIC,
+                    ledger=MemoryLedger(),
                 )
             async with maker() as session:
                 return settled, await last_delivered(session)

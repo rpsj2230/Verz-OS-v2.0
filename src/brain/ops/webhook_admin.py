@@ -30,12 +30,17 @@ metadata, which carries no field of the secret. The paste is judged by
 copy", and additionally for length, because a signing secret a person could type is a secret
 somebody could guess. See `A_SIGNING_KEY_A_PERSON_COULD_TYPE_IS_ONE_SOMEBODY_COULD_GUESS`.
 
-**What this cannot make true, said where a person reads it.** No dispatcher runs on any install,
-so a registered subscriber is written into the fan-out and nothing is sent to it; no channel has a
-route that receives a webhook; and an automation calls in with a credential of its own that
-nothing lists. Each is a sentence served beside the screen rather than a control that renders and
-reaches nothing. See `NOTHING_IS_DELIVERED_YET`, `NO_CHANNEL_RECEIVES_A_WEBHOOK` and
-`AN_AUTOMATION_CALLS_IN_WITH_ITS_OWN_CREDENTIAL`.
+**What this cannot make true, said where a person reads it.** Delivery happens in the general
+worker, so an install whose profile runs none sends nothing; no channel has a route that receives
+a webhook, and two channels have no check for one written at all; and an automation calls in with
+a credential of its own that nothing lists. Each is a sentence served beside the screen rather
+than a control that renders and reaches nothing. See `how_delivery_works`,
+`brain.ops.inbound_webhooks` and `AN_AUTOMATION_CALLS_IN_WITH_ITS_OWN_CREDENTIAL`.
+
+**Until 2026-09-17 the delivery sentence said nothing on any install sends a webhook**, which was
+true, and was served as a constant beside a table that had no way to change. The worker's schedule
+starts the dispatch now, so the sentence says how delivery works and the screen says beside it what
+the dispatch last did, from the schedule's own record.
 
 Rejected: generating the secret here and showing it once. It is what several products do, and it
 is a response that carries a credential, which `brain.credential_routes` refuses for every route
@@ -58,12 +63,13 @@ from typing import Final
 import structlog
 
 from brain.ops.credentials import CredentialVault, VaultState, problems_with
+from brain.ops.limits import MAX_BACKOFF_SECONDS
 from brain.ops.openbao import (
     SIGNING_PREFIX,
     OpenBaoVault,
     VaultUnreachableError,
 )
-from brain.ops.outbox import EventKind
+from brain.ops.outbox import MAX_DELIVERY_ATTEMPTS, EventKind, retry_window_seconds
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.tables.outbox import ENDPOINT_CHARS
 from brain.tools.fetch import UnsafeAddressError, assert_fetchable
@@ -89,20 +95,32 @@ A_SIGNING_KEY_A_PERSON_COULD_TYPE_IS_ONE_SOMEBODY_COULD_GUESS: Final = (
     "its own shared secret to, for the same reason."
 )
 
-#: What a person is told about delivery, beside the list.
-NOTHING_IS_DELIVERED_YET: Final = (
-    "Nothing on this install sends a webhook yet. A registered subscriber is included when an "
-    "event is written, and each delivery waits as pending, because no dispatcher runs to send "
-    "it. The delivery outcomes below are what the table records, which on every install today is "
-    "nothing sent."
+#: What a person is told about inbound webhooks, above the list of channels.
+NO_CHANNEL_RECEIVES_A_WEBHOOK: Final = (
+    "No channel on this install receives a webhook: none has an address a platform could send to, "
+    "and no secret is held for any of them. Below is each channel a platform would call in on, "
+    "and whether the check that a request really came from that platform is written yet."
 )
 
-#: What a person is told about inbound webhooks.
-NO_CHANNEL_RECEIVES_A_WEBHOOK: Final = (
-    "No channel on this install receives a webhook. Each channel below has its way of checking "
-    "that a request came from its platform written and tested, and none has an address a platform "
-    "could send to, so there is nothing registered to show and no secret to hold."
-)
+
+def how_delivery_works() -> str:
+    """What a person is told about delivery, beside the list, with the figures the code uses.
+
+    A function rather than a constant, so the attempt count and the longest wait are read from
+    `brain.ops.outbox` and `brain.ops.limits` instead of being typed again into a sentence that
+    would stay true of an old figure.
+    """
+    minutes = round(retry_window_seconds() / 60)
+    longest = round(MAX_BACKOFF_SECONDS / 60)
+    return (
+        "The worker sends what is due every minute, signed with each subscriber's secret, with the "
+        "identifiers of what happened and never its content. A delivery that is refused for a "
+        "moment or not answered is tried again after a growing wait of up to "
+        f"{longest} minutes, {MAX_DELIVERY_ATTEMPTS} attempts over at most {minutes} minutes, "
+        "and is then set aside with its reason. A subscriber that refuses outright, or a redirect, "
+        "is set aside at once. Switching a subscriber off stops everything waiting for it."
+    )
+
 
 #: What a person is told about the one inbound door that exists.
 AN_AUTOMATION_CALLS_IN_WITH_ITS_OWN_CREDENTIAL: Final = (

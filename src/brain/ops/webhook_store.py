@@ -22,6 +22,12 @@ reach digest are set as transaction settings beside it, where `0059`'s trigger r
 accepted leaves a secret at a path no subscriber names; registering that id again replaces it,
 because the path is the id.
 
+**What the dispatcher last did is read beside them, from the schedule's own record.** The worker
+writes a row in `ops.control_run` for every run of `outbox_dispatch`, and the newest is what the
+screen says about delivery as a whole: when it last ran, how it ended, and whether a person has
+paused it. No second record of a run is kept here, because two records of one run are two answers
+to whether it happened.
+
 **Recent outcomes are read per subscriber, newest first, a few each.** A window function numbers
 each subscriber's deliveries, so one subscriber with a thousand parked deliveries does not crowd
 every other subscriber off the screen. No event's record id is read: what a delivery was about is
@@ -42,7 +48,7 @@ from sqlalchemy import Select, func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.ops.outbox import EventKind, Subscriber
+from brain.ops.outbox import DeliveryState, EventKind, Subscriber
 from brain.ops.outbox_store import (
     OutboxStoreError,
     deactivate_subscriber,
@@ -50,8 +56,10 @@ from brain.ops.outbox_store import (
     register_subscriber,
     subscriber_from,
 )
+from brain.ops.schedule_control import paused_controls
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
+from brain.tables.schedule import ControlRunRow
 from brain.tables.webhook_change import WebhookChange, WebhookChangeRow
 
 # ------------------------------------------------------------ written-down reasons
@@ -79,6 +87,9 @@ A_CHANGE_IS_ATTRIBUTED_HERE_AND_CHAINED_BY_A_TRIGGER: Final = (
 #: How many recent deliveries and changes the screen reads for each subscriber.
 RECENT_PER_SUBSCRIBER: Final = 5
 
+#: The control whose runs are delivery, by the registry's name for it.
+DISPATCH_CONTROL: Final = "outbox_dispatch"
+
 
 class SubscriberTakenError(Exception):
     """A subscriber with this id is already registered, switched on or off."""
@@ -101,6 +112,23 @@ class DeliveryLine:
     occurred_at: datetime
     last_attempt_at: datetime | None
     reason: str | None
+    #: When a pending delivery is next tried. None once it is delivered or set aside.
+    next_attempt_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class DispatcherLine:
+    """The newest run of the dispatch, as the schedule recorded it, and whether it is paused.
+
+    Every field but `paused` is None when the dispatch has never been started on this install.
+    `detail` is what the run recorded, which for a failed run begins with the exception's type.
+    """
+
+    started_at: datetime | None
+    finished_at: datetime | None
+    outcome: str | None
+    detail: str | None
+    paused: bool
 
 
 @dataclass(frozen=True)
@@ -163,6 +191,10 @@ class WebhookRecords(Protocol):
         """Switch an active subscriber off and record who did, or nothing."""
         ...
 
+    async def dispatcher(self) -> DispatcherLine:
+        """The newest run of the dispatch and whether a person has paused it."""
+        ...
+
 
 # ------------------------------------------------------------------- the statements
 
@@ -177,6 +209,7 @@ def _recent_deliveries(ids: Sequence[str], limit: int) -> Select[Any]:
             OutboxEventRow.occurred_at,
             OutboxDeliveryRow.last_attempt_at,
             OutboxDeliveryRow.last_reason,
+            OutboxDeliveryRow.due_at,
             func.row_number()
             .over(
                 partition_by=OutboxDeliveryRow.subscriber_id,
@@ -288,6 +321,9 @@ class StoredWebhooks:
                         occurred_at=one["occurred_at"],
                         last_attempt_at=one["last_attempt_at"],
                         reason=one["last_reason"],
+                        next_attempt_at=(
+                            one["due_at"] if one["state"] == DeliveryState.PENDING.value else None
+                        ),
                     )
                 )
             changes: dict[str, list[ChangeLine]] = {}
@@ -375,3 +411,24 @@ class StoredWebhooks:
                 raise NoActiveSubscriberError(subscriber_id) from already
             session.add(_change(subscriber_id, WebhookChange.SWITCHED_OFF, actor, at, None))
             await session.flush()
+
+    async def dispatcher(self) -> DispatcherLine:
+        async with self._sessions() as session, session.begin():
+            newest = (
+                await session.execute(
+                    select(
+                        ControlRunRow.started_at,
+                        ControlRunRow.finished_at,
+                        ControlRunRow.outcome,
+                        ControlRunRow.detail,
+                    )
+                    .where(ControlRunRow.name == DISPATCH_CONTROL)
+                    .order_by(ControlRunRow.started_at.desc())
+                    .limit(1)
+                )
+            ).first()
+            paused = DISPATCH_CONTROL in await paused_controls(session)
+        if newest is None:
+            return DispatcherLine(None, None, None, None, paused=paused)
+        started_at, finished_at, outcome, detail = newest
+        return DispatcherLine(started_at, finished_at, outcome, detail, paused=paused)

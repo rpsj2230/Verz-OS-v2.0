@@ -31,10 +31,11 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Four controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
-`knowledge_reverification`, `spend_report_refresh` and `erasure_queue` have a runner that gathers
-what they need, and `brain.ops.worker` starts them on the schedule through `start_control`. Every
-other control entry point is a policy function that takes its inputs: `retention.enforcement_report`
+**Five controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh` and `erasure_queue` have
+a runner that gathers what they need, and `brain.ops.worker` starts them on the schedule
+through `start_control`. Every other control entry point is a policy function that takes its
+inputs: `retention.enforcement_report`
 takes a census "the executor saw", `denial_alerts.digest` takes patterns and recipients,
 `recovery.alerts` takes backups and verifications. None of them gathers anything. So the
 registry's orphans are not mechanisms waiting for a timer, they are mechanisms whose policy is
@@ -61,7 +62,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3, M34.2.1.3
+Task ids: M37.5.1.3, M34.2.1.3, M27.8.12
 """
 
 from __future__ import annotations
@@ -82,6 +83,8 @@ from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
 from brain.ops.spend_store import refresh_spend_daily_now
+from brain.ops.webhook_delivery import run_dispatch_now
+from brain.settings import process_environment, settings_from
 
 #: Why the two questions are two columns.
 TRIED_RECENTLY_AND_WORKING_ARE_DIFFERENT_CLOCKS: Final = (
@@ -245,6 +248,43 @@ def spend_report_refresh(now: datetime, report_only: bool, database_url: str) ->
     )
 
 
+#: Why the dispatch sends nothing in report-only mode.
+A_DISPATCH_IN_REPORT_ONLY_MODE_SENDS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and a delivery removes nothing, so "
+    "brain.ops.schedule never asks for it. A runner that sent anyway when asked would be a runner "
+    "that ignores the mode it was given, which is the property every runner has to keep for the "
+    "one control whose safety rests on it."
+)
+
+
+def outbox_dispatch(now: datetime, report_only: bool, database_url: str) -> str:
+    """Send what is due to webhook subscribers, and say what the run came to in counts.
+
+    `brain.ops.webhook_delivery.run_dispatch_now` claims, signs, sends through `issue_once` and
+    records; this is the literal call the registry reads. The vault is the worker's own, read
+    from this process's settings, because the worker is the one process that signs: see
+    `brain.ops.webhook_delivery.THE_PROCESS_THAT_SIGNS_READS_THE_KEY_AND_NO_OTHER_DOES`.
+    Declines in report-only mode, see `A_DISPATCH_IN_REPORT_ONLY_MODE_SENDS_NOTHING`, and takes
+    the worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: no webhook delivery was sent. "
+            f"{A_DISPATCH_IN_REPORT_ONLY_MODE_SENDS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    ran = run_dispatch_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+    return ran.summary()
+
+
 def knowledge_reverification(now: datetime, report_only: bool, database_url: str) -> str:
     """Record the re-verification nags owed at `now`, and say what the run did.
 
@@ -277,7 +317,7 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
 
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Two with a `run` since 2026-09-15, which the worker's schedule starts, and the rest saying what
+#: Five with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
 #: they wait for, which is the point of the module header. Each sentence is a piece of work
 #: somebody can pick up, written from reading the entry point's own signature rather than from a
 #: guess about it.
@@ -370,15 +410,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
             "and nothing assembles on a schedule"
         ),
     ),
-    Runner(
-        name="outbox_dispatch",
-        needs=(
-            "a `Sender` that puts a signed request on the wire, a `Vault` issuing the "
-            "subscribers' secrets and a `Resolver`, none of which this repository implements. "
-            "`brain.ops.outbox_store.dispatch_due` takes all three as parameters and the store "
-            "itself is written and tested against a real database"
-        ),
-    ),
+    # Wired on 2026-09-17, with the sender, the worker's reader of signing secrets and the
+    # resolver `brain.ops.webhook_delivery` implements.
+    Runner(name="outbox_dispatch", run=outbox_dispatch),
     Runner(name="spend_report_refresh", run=spend_report_refresh),
     # Wired on 2026-09-17 with `ops.erasure_request`. See `brain.ops.erasure_store`.
     Runner(name="erasure_queue", run=erasure_queue),
@@ -414,6 +448,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return knowledge_reverification(now, report_only, database_url)
         case "spend_report_refresh":
             return spend_report_refresh(now, report_only, database_url)
+        case "outbox_dispatch":
+            return outbox_dispatch(now, report_only, database_url)
         case "erasure_queue":
             return erasure_queue(now, report_only, database_url)
         case _:

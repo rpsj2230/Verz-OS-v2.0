@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2
+# Task ids: M31.3.2.2, M27.8.12
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -23,6 +23,15 @@ path "connectors/creds/lark_base" {
 }
 
 path "connectors/creds/laravel_readonly" {
+  capabilities = ["read"]
+}
+
+# Webhook subscribers' signing secrets, read to sign a delivery and for nothing else. The worker is
+# the one process that signs (brain.ops.webhook_delivery), so it is the one policy that reads
+# these; the application writes them from the console and reads only their metadata. Read and
+# nothing more: no create, update or delete, because a process nobody watches must not be able to
+# replace the key every receiver checks. No metadata, because the worker has no screen to tell.
+path "webhooks/data/+" {
   capabilities = ["read"]
 }
 

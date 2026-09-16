@@ -1077,7 +1077,8 @@ def test_a_manager_sees_who_is_told_what_with_no_vault_path_and_the_findings(wir
     assert body["items"][1]["active"] is False
     assert body["findings"] != []
     assert body["kinds"] == [one.value for one in EventKind]
-    assert body["stopping"] == routes.SWITCHING_A_SUBSCRIBER_OFF_IS_NOT_ON_THIS_SCREEN_YET
+    assert body["stopping"] == routes.HOW_TO_STOP_BEING_TOLD
+    assert "Webhooks screen" in body["stopping"] and "Notifications" in body["stopping"]
     assert "webhooks/signing" not in str(body)
     assert not keys_in(body) & {"secret_ref", "secret_path", "path"}
 

@@ -25,7 +25,17 @@ from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.item_store import NAG_ENTITY, put_item
 from brain.knowledge.search import KNOWLEDGE_READ
 from brain.session import make_app_engine, make_session_factory
-from tests.fixtures.scratch_postgres import ROOT, STAMPED_AT, drop, fresh, migrate, run, sql
+from tests.fixtures.scratch_postgres import (
+    ROOT,
+    SCHEDULE_CONTROL_TABLES,
+    STAMPED_AT,
+    add_modelled,
+    drop,
+    fresh,
+    migrate,
+    run,
+    sql,
+)
 
 ITEM_MIGRATION = ROOT / "migrations" / "versions" / "0040_knowledge_item.py"
 
@@ -54,6 +64,9 @@ def knowledge_items(database: str) -> Iterator[str]:
         migrate(database, "upgrade", "0037")
         migrate(database, "stamp", predecessor())
         migrate(database, "upgrade", "0040")
+        # `ops.setting`, which `0004` builds and this chain stamps past: the sweep asks whether an
+        # administrator switched the request off before it records anything.
+        add_modelled(scratch, SCHEDULE_CONTROL_TABLES)
         yield scratch
     finally:
         drop(database)

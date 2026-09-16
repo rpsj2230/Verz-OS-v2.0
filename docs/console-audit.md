@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 69 tables, from `brain.db.Base.metadata`.
 - 22 installation values, from `brain.install.INSTALLATION`.
-- 101 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 64 console addresses, from the route table in `console/src/App.tsx`.
-- 33 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 40 routes.
-- 34 gaps recorded, and 3 routes no screen calls.
+- 106 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 65 console addresses, from the route table in `console/src/App.tsx`.
+- 37 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 44 routes.
+- 35 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
 
@@ -242,15 +242,21 @@ No gap recorded.
 
 ### Notifications and email
 
-- **Screens:** `/subscribers`
+- **Screens:** `/subscribers`, `/notifications`
 - **Tables:** `ops.outbox_event`, `ops.outbox_delivery`
 - **Installation values:** `INSTALL_SENDER_ADDRESS`
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/govern/subscribers` | `/subscribers` |
+| `GET /api/v1/notifications` | `/notifications` |
+| `POST /api/v1/notifications/notices/{kind}` | `/notifications` |
+| `POST /api/v1/notifications/relay` | `/notifications` |
+| `POST /api/v1/notifications/relay/password` | `/notifications` |
+| `POST /api/v1/notifications/relay/test` | `/notifications` |
 
-- **Gap.** Who is told what, and the sending address, are read and never changed. Open leaf `M27.8.11`.
+- **Gap.** No notice is sent to a person yet. Recorded: Every notice but the re-verification request is composed and called by nothing, and that one reaches webhook subscribers; the Notifications screen says so per notice from brain.ops.notices, and a sender added for any of them asks its switch.
+- **Gap.** INSTALL_SENDER_ADDRESS is read by nothing that sends. Recorded: The relay's sender address is saved on the Notifications screen, and the install value is only shown on the Install screen.
 
 ### Webhooks
 
@@ -265,7 +271,7 @@ No gap recorded.
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` |
 
-- **Gap.** A registered subscriber is never sent anything. Recorded: Nothing on an install delivers a webhook yet, which the Webhooks screen says in the API's words.
+- **Gap.** No platform's webhook is received. Recorded: No route receives one, and the WhatsApp and Lark checks are not written; the Webhooks screen lists each channel's check from brain.ops.inbound_webhooks.
 
 ### Scheduled jobs and background work
 
@@ -395,7 +401,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 34 of 40 write routes have all three proved or not applicable, 4 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 37 of 44 write routes have all three proved or not applicable, 5 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -428,12 +434,16 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/resume` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/run` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_run_asked_for_from_the_screen_is_started_by_the_next_tick_even_while_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
+| `POST /api/v1/notifications/notices/{kind}` | `/notifications` | `test_switching_a_notice_off_writes_its_row_with_the_writer_and_the_next_read_sees_it` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switched_off_a_re_verification_run_records_nothing_and_switched_on_it_does` in `tests/unit/test_notices.py` (database, in CI) |
+| `POST /api/v1/notifications/relay` | `/notifications` | `test_a_relay_is_saved_as_five_rows_with_its_writer_and_read_back_configured` in `tests/unit/test_notification_routes.py` | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
+| `POST /api/v1/notifications/relay/password` | `/notifications` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_password_is_kept_at_its_slot_recorded_and_never_answered` in `tests/unit/test_notification_routes.py` | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
+| `POST /api/v1/notifications/relay/test` | `/notifications` | `test_pressing_the_test_button_twice_sends_one_message` in `tests/unit/test_mail.py` | **None.** A test message is recorded in ops.operation under its key, and the audit ledger has no action for a message sent: brain.ops.mail.A_TEST_IS_ONE_MESSAGE_PER_CONFIGURATION. | `test_a_test_message_reaches_the_saved_relay_once_with_the_kept_password` in `tests/unit/test_notification_routes.py` |
 | `POST /api/v1/sign-ins` | `/sign-in-links` | `test_binding_the_same_subject_twice_writes_one_row` in `tests/unit/test_sign_in_binding.py` (database, in CI) | `test_an_administrators_binding_is_in_the_ledger_naming_them_their_reach_and_the_request` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_valid_token_is_refused_until_its_subject_is_bound_and_accepted_after` in `tests/unit/test_sign_in_binding.py` (database, in CI) |
 | `POST /api/v1/skills` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/{digest}/assignments` | `/skills`, `/skills/:name` | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` | `test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobody_approved` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
 | `POST /api/v1/skills/{digest}/review` | `/skills`, `/skills/:name` | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_import_and_a_decision_each_write_one_row_and_one_entry_through_the_store` in `tests/unit/test_skill_store.py` (database, in CI) | `test_an_administrator_adds_a_skill_a_second_person_approves_it_and_it_is_assigned_to_an_agent` in `tests/unit/test_skill_routes.py` |
-| `POST /api/v1/webhooks/subscribers` | `/webhooks` | `test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | **None.** Nothing on an install delivers a webhook yet, so no behaviour follows from a subscriber or its secret. Leaf `M27.8.12`. |
-| `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` | `test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | **None.** Nothing on an install delivers a webhook yet, so no behaviour follows from a subscriber or its secret. Leaf `M27.8.12`. |
+| `POST /api/v1/webhooks/subscribers` | `/webhooks` | `test_a_registration_is_written_with_the_reader_as_its_creator_and_its_secret_kept` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_due_event_is_signed_received_verified_and_recorded_delivered` in `tests/unit/test_webhook_delivery.py` (database, in CI) |
+| `POST /api/v1/webhooks/subscribers/{subscriber_id}/secret` | `/webhooks` | `test_replacing_a_secret_writes_the_new_one_and_a_switched_off_subscriber_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_the_worker_reads_the_secret_at_the_path_the_console_writes_it_to` in `tests/unit/test_webhook_delivery.py` |
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` | `test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused` in `tests/unit/test_webhook_routes.py` | `test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out` in `tests/unit/test_webhook_store.py` (database, in CI) |
 | `POST /setup/appointment` | `/first-run` | `test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish` in `tests/unit/test_setup_routes.py` | `test_the_first_administrator_is_a_live_person_holding_administration_everywhere` in `tests/unit/test_first_administrator.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |

@@ -3,9 +3,10 @@
  * whether its signing secret is held, what happened to its deliveries, and the three controls.
  *
  * `docs/screens.html` does not draw this screen, so it takes the design's general shape and says
- * in words what the platform cannot do yet: nothing delivers, no channel receives a webhook, and an
- * automation's inbound credential is listed nowhere. Each of those sentences is the API's, so the
- * day one changes the screen changes with it.
+ * in words what the platform does and cannot do yet: how delivery works and what the dispatch last
+ * did, which channel's check for an arriving webhook is written, and that an automation's inbound
+ * credential is listed nowhere. Each of those sentences is the API's, so the day one changes the
+ * screen changes with it.
  *
  * **Every write is confirmed, and the confirmation says what happens in the API's words.**
  * Registering, replacing a secret and switching off each open `ConfirmAction` with the sentence the
@@ -35,10 +36,12 @@ import {
   REGISTER_API_PATH,
   STATE_FILTERS,
   STATE_FILTER_LABELS,
+  VERIFICATION_LABELS,
   WEBHOOKS_API_PATH,
   narrowed,
   blankRegistrationProblems,
   blankSecretProblems,
+  dispatcherOutcome,
   problemsFor,
   readProblems,
   readWebhooks,
@@ -49,6 +52,7 @@ import {
   stateSentence,
   switchOffApiPath,
   when,
+  type DispatcherBody,
   type Problem,
   type StateFilter,
   type SubscriberRow,
@@ -114,6 +118,28 @@ function readTold(payload: unknown): string {
   return typeof told === "string" ? told : "";
 }
 
+function Dispatcher({ dispatcher }: { readonly dispatcher: DispatcherBody }) {
+  return (
+    <div>
+      <p className="note">{dispatcher.told}</p>
+      {dispatcher.last_started_at === null ? null : (
+        <dl className="fields" aria-label="The last run">
+          <dt>Last run started</dt>
+          <dd>{when(dispatcher.last_started_at)}</dd>
+          <dt>How it ended</dt>
+          <dd>{dispatcherOutcome(dispatcher)}</dd>
+          {dispatcher.last_report === null ? null : (
+            <>
+              <dt>What it did</dt>
+              <dd>{dispatcher.last_report}</dd>
+            </>
+          )}
+        </dl>
+      )}
+    </div>
+  );
+}
+
 function SubscriberDetail({ row }: { readonly row: SubscriberRow }) {
   if (row.deliveries.length === 0 && row.changes.length === 0) {
     return null;
@@ -132,6 +158,7 @@ function SubscriberDetail({ row }: { readonly row: SubscriberRow }) {
                 <th scope="col">Where it got to</th>
                 <th scope="col">Attempts</th>
                 <th scope="col">Last attempt</th>
+                <th scope="col">Next try</th>
                 <th scope="col">Why</th>
               </tr>
             </thead>
@@ -142,6 +169,7 @@ function SubscriberDetail({ row }: { readonly row: SubscriberRow }) {
                   <td>{one.state}</td>
                   <td>{one.attempts}</td>
                   <td>{when(one.last_attempt_at)}</td>
+                  <td>{when(one.next_attempt_at)}</td>
                   <td>{one.reason ?? ""}</td>
                 </tr>
               ))}
@@ -300,6 +328,7 @@ function WebhookPage({
       <section className="card">
         <h2>Subscribers</h2>
         <p className="note">{page.delivery}</p>
+        {page.dispatcher === null ? null : <Dispatcher dispatcher={page.dispatcher} />}
         {!page.manageable ? (
           <p className="note">{NOT_MANAGEABLE}</p>
         ) : (
@@ -554,11 +583,34 @@ function WebhookPage({
       <section className="card">
         <h2>Arriving from outside</h2>
         <p>{page.inbound.channels_told}</p>
-        <ul aria-label="Channels">
-          {page.inbound.channels.map((one) => (
-            <li key={one}>{one}</li>
-          ))}
-        </ul>
+        <div className="grid__scroll">
+          <table className="grid__table" aria-label="Channels">
+            <thead>
+              <tr>
+                <th scope="col">Channel</th>
+                <th scope="col">Check that it came from the platform</th>
+                <th scope="col">How</th>
+              </tr>
+            </thead>
+            <tbody>
+              {page.inbound.channels.map((one) => (
+                <tr key={one.channel}>
+                  <td>{one.channel}</td>
+                  <td>
+                    {VERIFICATION_LABELS[one.verification]}
+                    {one.check === "" ? null : (
+                      <>
+                        {" "}
+                        <code>{one.check}</code>
+                      </>
+                    )}
+                  </td>
+                  <td>{one.how}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p>
           {page.inbound.automation_told} <code>{page.inbound.automation_path}</code>
         </p>

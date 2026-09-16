@@ -237,6 +237,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:halt` | running the system |
 | `admin:learning` | running the system |
 | `admin:legal_hold` | running the system |
+| `admin:notification` | running the system |
 | `admin:operations_alert` | running the system |
 | `admin:operations_incident` | running the system |
 | `admin:plugin` | running the system |

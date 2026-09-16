@@ -483,6 +483,7 @@ const WEBHOOKS = {
           occurred_at: "2019-03-04T09:00:00Z",
           last_attempt_at: null,
           reason: UNBROKEN,
+          next_attempt_at: "2019-03-04T09:05:00Z",
         },
       ],
       changes: [
@@ -498,8 +499,20 @@ const WEBHOOKS = {
   findings: [UNBROKEN],
   kinds: ["automation.run_finished", "operation.settled", "connector.health_changed", "approval.requested"],
   delivery: UNBROKEN,
+  dispatcher: {
+    runs_here: true,
+    paused: false,
+    last_started_at: "2019-03-04T09:00:00Z",
+    last_finished_at: "2019-03-04T09:00:01Z",
+    last_outcome: "ok",
+    last_report: UNBROKEN,
+    told: UNBROKEN,
+  },
   inbound: {
-    channels: ["email", "slack"],
+    channels: [
+      { channel: "slack", verification: "written", check: `brain.channels.${UNBROKEN}:verify`, how: UNBROKEN },
+      { channel: "lark", verification: "not_written", check: "", how: UNBROKEN },
+    ],
     channels_told: UNBROKEN,
     automation_path: `/api/v1/${UNBROKEN}`,
     automation_told: UNBROKEN,
@@ -508,6 +521,59 @@ const WEBHOOKS = {
   replacing: UNBROKEN,
   switching_off: UNBROKEN,
   secret_minimum: 32,
+};
+
+const NOTIFICATIONS = {
+  notices: [
+    {
+      kind: "reverification_request",
+      title: UNBROKEN,
+      told: UNBROKEN,
+      about: UNBROKEN,
+      how: UNBROKEN,
+      sent: true,
+      switchable: true,
+      fixed_because: "",
+      on: false,
+      changed_by: UNBROKEN,
+      changed_at: "2019-03-04T09:00:00Z",
+    },
+    {
+      kind: "emergency_access",
+      title: UNBROKEN,
+      told: UNBROKEN,
+      about: UNBROKEN,
+      how: UNBROKEN,
+      sent: false,
+      switchable: false,
+      fixed_because: UNBROKEN,
+      on: true,
+      changed_by: null,
+      changed_at: null,
+    },
+  ],
+  email: {
+    configured: true,
+    host: `${UNBROKEN}.example.test`,
+    port: 587,
+    security: "starttls",
+    sender: `${UNBROKEN}@example.test`,
+    username: UNBROKEN,
+    changed_by: UNBROKEN,
+    changed_at: "2019-03-04T09:00:00Z",
+    password: { held: null, written_at: null, vault: "unreachable", vault_told: UNBROKEN },
+  },
+  securities: ["starttls", "tls"],
+  email_used_for: UNBROKEN,
+  subscribers: UNBROKEN,
+  ships_on: UNBROKEN,
+  only_the_last_change_is_kept: UNBROKEN,
+  switching_off: UNBROKEN,
+  switching_on: UNBROKEN,
+  saving_email: UNBROKEN,
+  keeping_password: UNBROKEN,
+  sending_trial: UNBROKEN,
+  plain_smtp_refused: UNBROKEN,
 };
 
 const STORAGE = {
@@ -1577,6 +1643,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/webhooks": WEBHOOKS },
+  },
+  // Notifications and email. The notice table scrolls; the relay's facts, the password line and
+  // the sentences wrap. No control is pressed here: `tests/notifications-page.test.tsx` holds them.
+  "/notifications": {
+    address: "/notifications",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/notifications": NOTIFICATIONS },
   },
   // Storage. The bucket table scrolls; the address, the prefix and the sentences wrap.
   "/storage": {

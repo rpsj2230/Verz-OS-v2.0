@@ -106,6 +106,7 @@ from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
 from brain.navigation_routes import router as navigation_router
+from brain.notification_routes import router as notification_router
 from brain.operate_routes import router as operate_router
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
@@ -953,6 +954,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # `admin:webhook_subscriber`. Built on `NoEchoRoute`, because two of its writes carry a
     # secret. See `brain.webhook_routes`.
     app.include_router(webhook_router)
+    # Notifications: every notice this product composes, who is told what and whether anything
+    # sends it, the switch that stops one, and the email relay with its password in the vault and
+    # a test message, behind `admin:notification` over everything. See
+    # `brain.notification_routes`.
+    app.include_router(notification_router)
     # Storage: the buckets the product keeps, each one's retention and why, and where the store
     # is, behind `admin:storage` over everything. Never an object's name. See
     # `brain.storage_routes`.

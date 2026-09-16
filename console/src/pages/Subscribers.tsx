@@ -11,10 +11,11 @@
  * cannot tell them apart. The vault path a subscriber's signature is read from is not on the answer
  * and is not drawn.
  *
- * **How to stop one is a sentence and not a button, and the sentence says why.** Switching a
- * subscriber off has no audit entry it could be recorded under yet, and a control whose press nobody
- * could later attribute is the control `docs/admin-console.md` refuses. The API sends that sentence,
- * so the day the control exists the sentence and this page change together.
+ * **How to stop one is a sentence and not a button, and the sentence names the screens that do
+ * it.** A subscriber is switched off on the Webhooks screen and a notice on the Notifications and
+ * email screen, each a confirmed write the audit reads; a second button here for the same write
+ * would be a second place for its confirmation and its refusals to drift. The API sends the
+ * sentence, so the day either screen moves the sentence and this page change together.
  *
  * Task ids: M27.7.12
  */

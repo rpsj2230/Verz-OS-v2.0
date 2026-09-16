@@ -13,8 +13,8 @@ were written by somebody who found it in their own module and wrote it down. Thi
 first thing in the tree that asks the question of every module at once.
 
 **What this asserts is that the registry and the source agree, not that everything is
-wired.** Eight of the fifteen controls have no caller of any kind today, three have a caller
-nothing runs on a schedule, three are started by the worker's schedule, and one is on a route. A
+wired.** Seven of the sixteen controls have no caller of any kind today, three have a caller
+nothing runs on a schedule, five are started by the worker's schedule, and one is on a route. A
 test asserting that they do would be red on arrival, and
 `brain.ops.sweeps.sweep_house_style` records at length what happens to a check that is red the
 day it lands. So the assertion is agreement in
@@ -69,10 +69,8 @@ KNOWN_ORPHANS = frozenset(
         "queue_redrive",
         "side_effect_resume",
         "model_health_probes",
-        # Joined on 2026-09-15, the day it was written. `brain.ops.outbox_store` claims
-        # and sends due deliveries and nothing calls `dispatch_due`: no worker loop, route
-        # or timer, and no sender, vault or resolver this repository implements.
-        "outbox_dispatch",
+        # `outbox_dispatch` joined on 2026-09-15, the day it was written, and left on
+        # 2026-09-17: the worker's schedule starts it. See `SCHEDULED_BY_THE_WORKER`.
     }
 )
 
@@ -107,8 +105,17 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #: `knowledge_reverification` joined later that day from `KNOWN_ORPHANS`, recording nags that
 #: nothing sends yet: `brain.knowledge.item_store.NOTHING_SENDS_A_NAG_YET` says so.
 #: `erasure_queue` joined on 2026-09-17 the day it was registered, draining `ops.erasure_request`.
+#:
+#: `outbox_dispatch` joined on 2026-09-17 from `KNOWN_ORPHANS`, when `brain.ops.webhook_delivery`
+#: gave `dispatch_due` a sender, a resolver and the worker's reader of signing secrets.
 SCHEDULED_BY_THE_WORKER = frozenset(
-    {"retention_sweep", "knowledge_reverification", "spend_report_refresh", "erasure_queue"}
+    {
+        "retention_sweep",
+        "knowledge_reverification",
+        "spend_report_refresh",
+        "outbox_dispatch",
+        "erasure_queue",
+    }
 )
 
 #: Controls whose caller is itself imported by nothing, named rather than counted.

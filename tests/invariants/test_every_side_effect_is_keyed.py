@@ -52,6 +52,8 @@ ISSUING: frozenset[str] = frozenset(
         "brain.channels.adapter:ChannelAdapter.send",
         "brain.ops.automation_piece:ToolCaller.call",
         "brain.ops.digest_delivery:DigestSender.send",
+        "brain.ops.mail:MailTransport.send",
+        "brain.ops.outbox_store:Sender.send",
     }
 )
 
@@ -67,6 +69,10 @@ DELIVERS_THROUGH_THE_DOOR: frozenset[str] = frozenset(
         "brain.channels.telegram",
         "brain.channels.whatsapp",
         "brain.ops.digest_delivery",
+        # A test message to the email relay, keyed on the configuration it tests.
+        "brain.ops.mail",
+        # A webhook delivery, keyed per attempt since 2026-09-17.
+        "brain.ops.outbox_store",
         # Not a delivery: an agent's approved or autonomous action, run by `run_real`.
         "brain.gate.leash",
         # Not a delivery: a click or a keystroke on somebody else's page, inside a runner.

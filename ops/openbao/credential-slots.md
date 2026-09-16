@@ -104,6 +104,22 @@ step 5 is made in that copy: add the two variables to the `app` service's `envir
 at the bottom of the file as `external: true` with `name: brain-vault`, set both values in the
 panel's environment variables, and redeploy.
 
+## The mail relay's password
+
+Email is sent through a relay an administrator configures on the console's Notifications screen:
+its host, port, whether the connection starts in TLS or is upgraded with STARTTLS, the sender
+address and a user name are saved there, and a relay that offers neither form of TLS is refused.
+The password is written from the same screen into `providers/mail_relay`, under the field
+`password`, and is never shown again; the screen says whether one is held and when it was written.
+The write is recorded as a `credential` entry in the audit ledger, as every credential written
+from the console is.
+
+It sits in the providers engine because it is the same kind of thing: issued by whoever runs the
+relay, valid until they revoke it, and read by the application, which is the process that sends.
+The application's policy already grants that engine create, update and read, so nothing more is
+loaded for it. A test message on the same screen proves the relay, the password and the sender
+together, and is sent once for each saved configuration.
+
 ## Webhook signing secrets
 
 A webhook subscriber is told when something happens here, and every request it receives is
@@ -115,14 +131,19 @@ a subscriber on the console's Webhooks screen and replaces it there when rotatin
 says whether one is held and when it was written, and never shows it.
 
 The application's policy may create and update `webhooks/data/+` and read `webhooks/metadata/+`,
-and nothing else there. It never reads a signing secret back. Nothing on an install delivers to a
-subscriber yet, and when a dispatcher is built it reads the secret under the worker's policy,
-which does not name this engine today.
+and nothing else there. It never reads a signing secret back. The general worker delivers every
+minute and reads each subscriber's secret under the worker's policy, which may read
+`webhooks/data/+` and nothing else under that engine. A worker is given the vault the way the
+application is: `BRAIN_VAULT_ADDRESS`, and a `BRAIN_VAULT_TOKEN` minted against the worker policy
+rather than the application's. A worker without them sends nothing, and every dispatch run fails
+naming the two settings, which the Webhooks screen shows.
 
 To let the application keep them, once per install that runs a vault:
 
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=webhooks kv-v2`.
 2. Load the policies: `sh ops/openbao/load-policies.sh`.
+3. Mint the worker's token against its policy: `bao token create -orphan -policy=worker -period=768h`, and set
+   it as `BRAIN_VAULT_TOKEN` in the worker's environment, with `BRAIN_VAULT_ADDRESS` beside it.
 
 ## A connected source's key
 
