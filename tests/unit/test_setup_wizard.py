@@ -111,7 +111,9 @@ COMPANY_ANSWERS = MappingProxyType(
 ADMIN_ANSWERS = MappingProxyType(
     {"full_name": "A Person", "work_address": "a.person@company.internal"}
 )
-SOURCE_ANSWERS = MappingProxyType({"staff_source": "google_workspace"})
+SOURCE_ANSWERS = MappingProxyType(
+    {"staff_source": "google_workspace", "staff_source_location": "company.internal"}
+)
 LOCAL_ANSWERS = MappingProxyType({"model_profile": "local"})
 HOSTED_ANSWERS = MappingProxyType(
     {"model_profile": "hosted", "model_provider": "anthropic", "provider_key": "k" * 40}

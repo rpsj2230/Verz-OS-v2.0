@@ -9,9 +9,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 61 tables, from `brain.db.Base.metadata`.
 - 21 installation values, from `brain.install.INSTALLATION`.
-- 88 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 63 console addresses, from the route table in `console/src/App.tsx`.
-- 25 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 30 routes.
+- 91 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 64 console addresses, from the route table in `console/src/App.tsx`.
+- 27 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 32 routes.
 - 33 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
@@ -64,7 +64,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 ### System settings and application configuration
 
-- **Screens:** `/install`, `/limits`, `/connections`, `/first-run`
+- **Screens:** `/install`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
 - **Tables:** `ops.setting`, `ops.budget_version`
 - **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`
 
@@ -73,8 +73,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/install` | `/install` |
 | `GET /api/v1/install/capacity` | `/connections` |
 | `GET /api/v1/install/limits` | `/limits` |
+| `GET /setup/staff-source/registration` | `/first-run` |
 | `POST /setup/appointment` | `/first-run` |
 | `POST /setup/sign-in` | `/first-run` |
+| `POST /setup/staff-source/sign-in` | `/first-run` |
+| `POST /setup/staff-source/trial` | `/first-run` |
 
 - **Gap.** Languages, currency and time zone cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** Limits and budgets are read and never changed. Recorded: No route writes ops.budget_version or a ceiling; a limit is a release today.
@@ -380,7 +383,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 15 of 30 write routes have all three proved or not applicable, 2 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 17 of 32 write routes have all three proved or not applicable, 4 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -414,6 +417,8 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/webhooks/subscribers/{subscriber_id}/switch-off` | `/webhooks` | `test_switching_off_records_who_did_it_and_a_second_switch_off_is_refused` in `tests/unit/test_webhook_routes.py` | **None.** A webhook change is attributed in ops.webhook_change and not chained into the ledger: brain.ops.webhook_store.A_CHANGE_IS_ATTRIBUTED_HERE_AND_NOT_YET_CHAINED. | `test_registering_replacing_and_switching_off_reach_the_rows_and_the_fan_out` in `tests/unit/test_webhook_store.py` (database, in CI) |
 | `POST /setup/appointment` | `/first-run` | `test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish` in `tests/unit/test_setup_routes.py` | `test_the_first_administrator_is_a_live_person_holding_administration_everywhere` in `tests/unit/test_first_administrator.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
+| `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
+| `POST /setup/staff-source/trial` | `/first-run` | Not applicable: A read of a staff list writes nothing: nobody is added, and the client secret it signs in with is not kept. | Not applicable: A read changes nothing an administrator manages, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 
 ## The rules every screen is held to
 

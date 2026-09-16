@@ -1,11 +1,12 @@
 # Installing this system
 
-Twelve pages, written for somebody who has never met anybody who built this and is standing in
+Thirteen pages, written for somebody who has never met anybody who built this and is standing in
 front of a bare server. Nothing in them names another company's installation.
 
 | Page | What it covers |
 | --- | --- |
 | [install.md](install.md) | The whole install, step by step, from a clean server |
+| [windows.md](windows.md) | The same install from a Windows computer, for somebody who does not use a terminal |
 | [network.md](network.md) | Domain, DNS, reverse proxy, TLS and firewall |
 | [configuration.md](configuration.md) | Every value you have to set, in one table |
 | [integrations.md](integrations.md) | Each connector, and what it is trusted to read |
@@ -87,7 +88,7 @@ takes a backup and the one that proves a backup can be restored. See operations.
 **No update and no rollback has ever been performed on an install of this product.** See
 update-and-rollback.md.
 
-**Three of the twelve pages here do not claim their leaf.** install.md, operations.md and
+**Three of the thirteen pages here do not claim their leaf.** install.md, operations.md and
 update-and-rollback.md each say why at the foot of the page. They are worth reading anyway; they
 are not worth relying on as finished.
 

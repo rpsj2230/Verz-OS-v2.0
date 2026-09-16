@@ -135,6 +135,7 @@ from brain.session_routes import router as session_router
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
 from brain.setup_routes import router as setup_router
+from brain.setup_staff_routes import router as setup_staff_router
 from brain.sign_in_routes import router as sign_in_router
 from brain.skill_routes import router as skill_router
 from brain.staff_source_routes import router as staff_source_router
@@ -823,6 +824,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # administrator the finishing screen above then signs in. An eighth router because its caller
     # holds the setup code and no token at all. See `brain.setup_routes`.
     app.include_router(setup_router)
+    # The wizard's staff list screen: what to register, where to sign in, and one read of the
+    # list, each behind the setup code the appointment asks for. See `brain.setup_staff_routes`.
+    app.include_router(setup_staff_router)
     # Setting a credential, and seeing which are held. Beside the wizard because the wizard's
     # provider key is kept through the same store, and a router of its own because its subject is
     # the one value no other route may carry: it writes into the vault, answers that a secret is

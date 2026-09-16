@@ -86,10 +86,12 @@ import { ServiceLevels } from "./pages/ServiceLevels";
 import { Spend } from "./pages/Spend";
 import { NotFound } from "./pages/NotFound";
 import { FirstRun } from "./pages/FirstRun";
+import { StaffListSignedIn } from "./pages/StaffListSignedIn";
 import { Overview } from "./pages/Overview";
 import { DataTransfer } from "./pages/DataTransfer";
 import { Storage } from "./pages/Storage";
 import { Webhooks } from "./pages/Webhooks";
+import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "./setup/staffList";
 import { FIRST_RUN_PATH } from "./setup/wizard";
 import { Notice } from "./ui/Notice";
 
@@ -219,6 +221,9 @@ export const routes: RouteObject[] = [
   // nobody, which on a fresh install is every sign-in. The page signs in itself, first. See
   // `pages/FirstRun.tsx`.
   { path: FIRST_RUN_PATH, element: <FirstRun />, errorElement: <RouteError /> },
+  // Where a directory returns the staff list screen's sign-in window, outside the guard for the
+  // same reason: nobody holding it is signed in to this console. See `setup/staffList.ts`.
+  { path: STAFF_LIST_RETURN_PATH, element: <StaffListSignedIn />, errorElement: <RouteError /> },
   {
     path: "/",
     element: (

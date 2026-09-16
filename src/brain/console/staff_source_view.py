@@ -549,6 +549,35 @@ def trial(
     """
     if not _may_read(TRIAL_READ, entitlement, now):
         return None
+    return rehearse(
+        source,
+        known=known,
+        last_applied=last_applied,
+        rules=rules,
+        held=held,
+        env=env,
+        sources=sources,
+    )
+
+
+def rehearse(
+    source: StaffSource,
+    *,
+    known: Mapping[str, str],
+    last_applied: datetime | None,
+    rules: Sequence[GroupRule] = (),
+    held: Iterable[DirectoryAssertion] = (),
+    env: Mapping[str, str] | None = None,
+    sources: Sequence[SelectableSource] = SELECTABLE,
+) -> Trial:
+    """The trial's work with no reader asked: the choice, the roster, and the dry run.
+
+    Split out of `trial` so the setup wizard's staff source screen runs the same three steps,
+    `selected_source`, `roster_from` and `dry_run`, rather than a copy of them. That screen has
+    no entitlement to ask about, because nobody exists yet: what stands in front of it is the
+    setup code, asked by `brain.setup_staff_routes` before this is reached. Every caller with a
+    reader goes through `trial`, which asks `TRIAL_READ` first.
+    """
     try:
         chosen = selected_source(env, sources=sources)
     except StaffSourceError as why:

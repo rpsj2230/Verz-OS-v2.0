@@ -44,6 +44,11 @@ NOT_A_CONNECTOR = frozenset(
         "backfill",
         "change_signal",
         "write_verification",
+        # Signing in to a staff directory at first run. Its vendors are where a roster comes
+        # from rather than business sources, and `tests/fixtures/roster_payloads.py` opens by
+        # arguing why a roster's shapes are a second file rather than recordings in this corpus.
+        # `tests/unit/test_staff_directories.py` drives it against that file.
+        "staff_directories",
     }
 )
 

@@ -14,6 +14,7 @@ import { fireEvent } from "@testing-library/react";
 import { expect } from "vitest";
 import { transportFailure } from "../../src/api/errors";
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
+import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./navigation";
 import { PAGES } from "./pageCases";
@@ -39,6 +40,10 @@ export const ASKS_NOTHING_ON_ARRIVAL: Readonly<Record<string, string>> = {
   [FIRST_RUN_PATH]:
     "The first-run wizard asks nothing until its last step has been filled in. What it says when " +
     "that write is refused, fails, or cannot reach the API is held in tests/first-run.test.tsx.",
+  [STAFF_LIST_RETURN_PATH]:
+    "The page a directory returns the staff list sign-in window to posts that answer to the tab " +
+    "that opened it and closes, and never calls the API. What it posts is held in " +
+    "tests/first-run-staff-list.test.tsx.",
   "/records":
     "The bare address is a form that names a record type and opens /records/:entity, which asks " +
     "and is held here.",

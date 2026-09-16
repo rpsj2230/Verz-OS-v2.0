@@ -58,7 +58,7 @@ function screens(): Map<string, string> {
   for (const found of app.matchAll(/const (\w+) = lazy\([^;]*?import\("\.\/pages\/(\w+)"\)/gs)) {
     fileOf.set(found[1] as string, `src/pages/${found[2] as string}.tsx`);
   }
-  const constants: Record<string, string> = { CALLBACK_PATH: "/auth/callback", SIGNED_OUT_PATH: "/signed-out", FIRST_RUN_PATH: "/first-run" };
+  const constants: Record<string, string> = { CALLBACK_PATH: "/auth/callback", SIGNED_OUT_PATH: "/signed-out", FIRST_RUN_PATH: "/first-run", STAFF_LIST_RETURN_PATH: "/first-run/staff-list" };
   const drawn = new Map<string, string>();
   for (const found of app.matchAll(/\{\s*(?:path: ("[^"]*"|\w+)|index: true), element: \(?\s*<(\w+)/g)) {
     const raw = found[1];
@@ -221,7 +221,8 @@ describe("the console audit", () => {
     const document = apiDocument();
     const drawn = screens();
     for (const [route, read] of Object.entries(READ_AFTER_AN_ACTION)) {
-      expect(`GET ${templateOf(document, `/api/v1${read.built}`) ?? ""}`, route).toBe(route);
+      const address = read.versioned === false ? read.built : `/api/v1${read.built}`;
+      expect(`GET ${templateOf(document, address) ?? ""}`, route).toBe(route);
       const page = drawn.get(read.screen) ?? "";
       const uses = [page, ...consoleSourcePaths("src/components").filter((one) => readConsoleFile(page).includes(`/components/${one.split("/").at(-1)?.replace(/\.tsx?$/, "") ?? ""}"`))];
       const word = new RegExp(`\\b${read.spelled}\\b`);

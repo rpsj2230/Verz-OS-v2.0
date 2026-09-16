@@ -345,7 +345,7 @@ describe("the whole of first run", () => {
       answers: {
         company: { company_name: COMPANY, product_name: "", web_address: WEB, logo_url: "" },
         administrator: { full_name: "NAME-SENTINEL", work_address: "first@example.invalid" },
-        staff_source: { staff_source: "spreadsheet" },
+        staff_source: { staff_source: "spreadsheet", staff_source_location: "" },
         model_provider: { model_profile: "local", model_provider: "", provider_key: "" },
       },
       skipped: ["connections"],

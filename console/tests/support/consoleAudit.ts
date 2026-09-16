@@ -49,6 +49,11 @@ import { END_SESSION_API_PATH } from "../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../src/pages/signInLinksQuery";
 import { TRIAL_API_PATH } from "../../src/pages/staffSourcesQuery";
 import { REGISTER_API_PATH, secretApiPath, switchOffApiPath } from "../../src/pages/webhooksQuery";
+import {
+  REGISTRATION_PATH as STAFF_LIST_REGISTRATION_PATH,
+  SIGN_IN_PATH as STAFF_LIST_SIGN_IN_PATH,
+  TRIAL_PATH as STAFF_LIST_TRIAL_PATH,
+} from "../../src/setup/staffList";
 import { APPOINTMENT_PATH, FINISH_PATH } from "../../src/setup/wizard";
 import { CONSOLE_ROOT, readRepoFile } from "./repo";
 
@@ -207,7 +212,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "System settings and application configuration": {
-    screens: ["/install", "/limits", "/connections", "/first-run"],
+    screens: ["/install", "/limits", "/connections", "/first-run", "/first-run/staff-list"],
     routes: ["/api/v1/install", "/api/v1/install/limits", "/api/v1/install/capacity", "/setup/*"],
     tables: ["ops.setting", "ops.budget_version"],
     installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
@@ -477,9 +482,18 @@ export const NOT_ADMINISTERED: Readonly<Record<string, string>> = {
  * Reads a screen makes only once a person has done something, which opening the page does not
  * show: a subject's history, a staff source's trial run and an automation's preview.
  */
-export const READ_AFTER_AN_ACTION: Readonly<Record<string, { readonly screen: string; readonly spelled: string; readonly built: string }>> = {
+/** `versioned` is false for a read served at the root, as the setup routes are, rather than under `/api/v1`. */
+export const READ_AFTER_AN_ACTION: Readonly<
+  Record<string, { readonly screen: string; readonly spelled: string; readonly built: string; readonly versioned?: boolean }>
+> = {
   "GET /api/v1/audit/history": { screen: "/audit", spelled: "historyApiPath", built: historyApiPath("principal", "u_1").split("?")[0] ?? "" },
   "GET /api/v1/govern/staff_sources/trial": { screen: "/staff_sources", spelled: "TRIAL_API_PATH", built: TRIAL_API_PATH },
+  "GET /setup/staff-source/registration": {
+    screen: "/first-run",
+    spelled: "REGISTRATION_PATH",
+    built: STAFF_LIST_REGISTRATION_PATH,
+    versioned: false,
+  },
   "GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview": {
     screen: "/agents/:agentId/:tab",
     spelled: "automationPreviewApiPath",
@@ -518,6 +532,12 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
+  "src/components/StaffListCheck.tsx SIGN_IN_PATH": [
+    at("POST /setup/staff-source/sign-in", "SIGN_IN_PATH", STAFF_LIST_SIGN_IN_PATH, false),
+  ],
+  "src/components/StaffListCheck.tsx TRIAL_PATH": [
+    at("POST /setup/staff-source/trial", "TRIAL_PATH", STAFF_LIST_TRIAL_PATH, false),
+  ],
   "src/pages/Jobs.tsx actionPath(asked.action, asked.row.control)": [
     at("POST /api/v1/jobs/{name}/pause", "actionPath", actionPath("pause", "spend_report_refresh")),
     at("POST /api/v1/jobs/{name}/resume", "actionPath", actionPath("resume", "spend_report_refresh")),
@@ -634,6 +654,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_setup_routes", "test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish"),
     audit: t("test_first_administrator", "test_the_first_administrator_is_a_live_person_holding_administration_everywhere", true),
     behaviour: t("test_setup_routes", "test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone", true),
+  },
+  "POST /setup/staff-source/sign-in": {
+    row: { notApplicable: "It answers the directory's own sign-in page for the setup code's holder and writes nothing." },
+    audit: { notApplicable: "Nothing changes when a sign-in page is asked for, so there is nothing to record." },
+    behaviour: t("test_setup_staff_routes", "test_a_directory_is_chosen_signed_in_to_and_its_list_pulled"),
+  },
+  "POST /setup/staff-source/trial": {
+    row: { notApplicable: "A read of a staff list writes nothing: nobody is added, and the client secret it signs in with is not kept." },
+    audit: { notApplicable: "A read changes nothing an administrator manages, so there is nothing to record." },
+    behaviour: t("test_setup_staff_routes", "test_a_directory_is_chosen_signed_in_to_and_its_list_pulled"),
   },
   "POST /api/v1/jobs/{name}/pause": {
     row: t("test_jobs_routes", "test_pausing_writes_the_row_the_tick_reads_and_the_list_says_who_paused_it"),

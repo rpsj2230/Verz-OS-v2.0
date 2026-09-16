@@ -143,6 +143,9 @@ export const SCREENS: readonly Screen[] = Object.freeze([
       question("staff_source", "Where your staff list comes from", {
         choices: ["google_workspace", "microsoft_entra", "lark", "spreadsheet"],
       }),
+      question("staff_source_location", "Where that list is: your domain, your tenant, or which Lark", {
+        required: false,
+      }),
     ],
     skippable: false,
   },
@@ -194,6 +197,9 @@ export const MESSAGES: Readonly<Record<string, string>> = Object.freeze({
   "setup.error.provider_needed":
     "Choose which provider answers questions, or keep them on your own hardware",
   "setup.error.key_needed": "This provider needs a key from your own account with them",
+  "setup.error.location_needed": "Say where this list is, so it can be read",
+  "setup.error.location_unusable": "Enter only the domain, the tenant ID, or larksuite.com or feishu.cn",
+  "setup.error.location_not_wanted": "A spreadsheet is read from the file itself, so leave this empty",
   "setup.error.key_not_wanted":
     "Nothing would use a key here, because questions stay on your own hardware",
   "setup.error.refused": "That code was not accepted. Check the line the installer printed",

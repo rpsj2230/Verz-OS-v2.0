@@ -569,6 +569,10 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
         "en": "Where your staff list comes from",
         "zh-Hans": "员工名单来源",
     },
+    "field.staff_source_location.label": {
+        "en": "Where that list is: your domain, your tenant, or which Lark",
+        "zh-Hans": "名单所在位置 贵公司的域名 租户 或所用的飞书版本",
+    },
     "field.model_profile.label": {
         "en": "Where questions are answered",
         "zh-Hans": "提问在何处解答",
@@ -613,6 +617,18 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
     "setup.error.key_needed": {
         "en": "This provider needs a key from your own account with them",
         "zh-Hans": "该服务商需要贵公司自有账户下的密钥",
+    },
+    "setup.error.location_needed": {
+        "en": "Say where this list is, so it can be read",
+        "zh-Hans": "请说明该名单所在位置 以便读取",
+    },
+    "setup.error.location_unusable": {
+        "en": "Enter only the domain, the tenant ID, or larksuite.com or feishu.cn",
+        "zh-Hans": "请仅填写域名 租户编号 或 larksuite.com 或 feishu.cn",
+    },
+    "setup.error.location_not_wanted": {
+        "en": "A spreadsheet is read from the file itself, so leave this empty",
+        "zh-Hans": "电子表格直接从文件读取 此处请留空",
     },
     "setup.error.key_not_wanted": {
         "en": "Nothing would use a key here, because questions stay on your own hardware",

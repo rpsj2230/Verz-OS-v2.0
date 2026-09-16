@@ -17,6 +17,9 @@ sudo BRAIN_RELEASE_URL=<where the release archive is> bash install.sh \
   --release <tag> --profile lite --console-address https://brain.example.invalid
 ```
 
+**Not somebody who uses a terminal?** [windows.md](windows.md) is the same command run for you
+from a Windows computer: a file you double-click asks five questions and runs it over SSH.
+
 Downloaded, read, then run. Never piped straight into a shell: it is a script that installs
 packages as root on your server, and you are entitled to read it first. It is also the only
 file you receive before you receive the release, because running it is what fetches the

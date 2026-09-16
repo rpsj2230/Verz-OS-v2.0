@@ -237,6 +237,11 @@ jobs:
         # had moved. Absent, the release is still publishable and still installable by hand
         # from the guide the archive carries, and the summary says so rather than the person
         # finding out at the terminal.
+        #
+        # The Windows helper and its launcher go beside it for the same reason: they are how a
+        # person who does not use a terminal runs the installer, so they are needed before the
+        # archive too. Found in the same list, and absent is not a failure for the same reason.
+        # See brain.deployment.windows_helper.
         run: |
           script=$(grep -E '(^|/)install\.sh$' "$RUNNER_TEMP/files.txt" | head -n 1 || true)
           set -- "$RUNNER_TEMP/brain-$TAG.tar.gz"
@@ -249,5 +254,9 @@ jobs:
             echo "in the install guide this archive carries, followed by hand." \
               >> "$GITHUB_STEP_SUMMARY"
           fi
+          helpers=$(grep -E '(^|/)install-from-windows\.(ps1|cmd)$' "$RUNNER_TEMP/files.txt" || true)
+          for helper in $helpers; do
+            set -- "$@" "$helper"
+          done
           gh release create "$TAG" --verify-tag --title "$TAG" \
             --notes-file "$RUNNER_TEMP/notes.md" "$@"

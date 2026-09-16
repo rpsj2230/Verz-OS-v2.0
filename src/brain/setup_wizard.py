@@ -140,9 +140,15 @@ from types import MappingProxyType
 from typing import Any, Final
 from urllib.parse import urlsplit
 
+from brain.connectors.staff_directories import location_problem
 from brain.firstrun import Enrolment, claim, first_administrator, is_open
 from brain.identity.roles import RoleGrant
-from brain.identity.staff_source import StaffRecord
+from brain.identity.staff_source import (
+    SELECTABLE_BY_NAME,
+    STAFF_SOURCE_LOCATION_SETTING,
+    STAFF_SOURCE_SETTING,
+    StaffRecord,
+)
 from brain.install import BY_NAME
 from brain.locale import MESSAGES, FieldError, FormField, form_gaps
 from brain.ops.provider_keys import PROVIDER_SLOTS
@@ -518,6 +524,38 @@ def _provider_rule(values: Mapping[str, str]) -> tuple[FieldError, ...]:
     return tuple(found)
 
 
+def _staff_source_rule(values: Mapping[str, str]) -> tuple[FieldError, ...]:
+    """What the staff source screen needs beyond each answer being well formed.
+
+    Both directions, for the provider screen's reason. A directory chosen and pointed nowhere
+    is what `staff_source.A_SOURCE_NOBODY_POINTED_ANYWHERE_ANSWERS_WITH_AN_EMPTY_COMPANY` refuses
+    on every read after install, so it is refused here, beside the box, instead. A location
+    given for a spreadsheet is a value written into `INSTALL_STAFF_SOURCE_LOCATION` that nothing
+    will ever read, and a person who typed it believes something reads it.
+
+    Whether a source needs a location is asked of `SelectableSource.needs` rather than listed
+    here, and what a usable location looks like is asked of
+    `brain.connectors.staff_directories.location_problem`, which is the module that builds an
+    address out of it. A source that is not one of the choices produces nothing: its own
+    question already refuses it.
+    """
+    named = values.get("staff_source", "").strip()
+    if named not in STAFF_SOURCE_BROKERS:
+        return ()
+    chosen = SELECTABLE_BY_NAME[named]
+    location = values.get("staff_source_location", "").strip()
+    field_name = "staff_source_location"
+    if STAFF_SOURCE_LOCATION_SETTING not in chosen.needs:
+        if location:
+            return (FieldError(field=field_name, key="setup.error.location_not_wanted"),)
+        return ()
+    if not location:
+        return (FieldError(field=field_name, key="setup.error.location_needed"),)
+    if location_problem(chosen.name, location):
+        return (FieldError(field=field_name, key="setup.error.location_unusable"),)
+    return ()
+
+
 @dataclass(frozen=True)
 class Step:
     """One screen: what it asks, whether it may be skipped, and its cross-field rule.
@@ -675,8 +713,23 @@ WIZARD: Final[tuple[Step, ...]] = (
                 "staff_source",
                 errors=_errors(BLANK, TOO_LONG, UNKNOWN),
                 check=_one_of(tuple(STAFF_SOURCE_BROKERS)),
+                setting=STAFF_SOURCE_SETTING,
+            ),
+            _q(
+                "staff_source_location",
+                errors=_errors(
+                    TOO_LONG,
+                    {
+                        "location_needed": "setup.error.location_needed",
+                        "location_unusable": "setup.error.location_unusable",
+                        "location_not_wanted": "setup.error.location_not_wanted",
+                    },
+                ),
+                required=False,
+                setting=STAFF_SOURCE_LOCATION_SETTING,
             ),
         ),
+        also=_staff_source_rule,
     ),
     Step(
         key=StepId.MODEL_PROVIDER,

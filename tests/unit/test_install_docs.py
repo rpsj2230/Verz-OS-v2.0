@@ -384,6 +384,8 @@ def test_the_wizard_register_names_only_the_settings_a_screen_stores() -> None:
             "INSTALL_PRODUCT_NAME",
             "INSTALL_LOGO_URL",
             "INSTALL_MODEL_PROFILE",
+            "INSTALL_STAFF_SOURCE",
+            "INSTALL_STAFF_SOURCE_LOCATION",
         }
     )
 
@@ -956,6 +958,7 @@ def test_the_documents_the_checks_read_are_all_present() -> None:
     expected = {
         "README.md",
         "install.md",
+        "windows.md",
         "network.md",
         "configuration.md",
         "integrations.md",

@@ -16,6 +16,9 @@
 *.json text eol=lf
 *.py text eol=lf
 *.md text eol=lf
+# A batch file a person double-clicks on Windows. cmd.exe mis-reads labels and long lines in
+# a file with bare line feeds, so this one kind is the other way round.
+*.cmd text eol=crlf
 *.png binary
 *.jpg binary
 *.ico binary

@@ -16,6 +16,7 @@
  */
 
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
+import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
 import { NAVIGATION_ADDRESS, departmentConsole } from "./navigation";
 
@@ -1491,4 +1492,10 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
   },
   [SIGNED_OUT_PATH]: { address: SIGNED_OUT_PATH, signedIn: false, drawsValues: false, answers: {} },
   [FIRST_RUN_PATH]: { address: FIRST_RUN_PATH, signedIn: false, drawsValues: false, answers: {} },
+  [STAFF_LIST_RETURN_PATH]: {
+    address: `${STAFF_LIST_RETURN_PATH}?code=X&state=Y`,
+    signedIn: false,
+    drawsValues: false,
+    answers: {},
+  },
 };

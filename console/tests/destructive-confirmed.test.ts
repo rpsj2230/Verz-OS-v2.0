@@ -57,6 +57,12 @@ const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
   "src/pages/FirstRun.tsx APPOINTMENT_PATH":
     "Appoints the first administrator of an install that has none. The wizard's review screen is " +
     "the statement of everything sent, and nothing existing is ended or replaced.",
+  "src/components/StaffListCheck.tsx SIGN_IN_PATH":
+    "Asks for the directory's sign-in page during first run. It writes nothing anywhere, so there " +
+    "is nothing for it to end or replace.",
+  "src/components/StaffListCheck.tsx TRIAL_PATH":
+    "Reads the chosen staff list once during first run and shows who it names. Nobody is added " +
+    "and nothing is stored, which tests/unit/test_setup_staff_routes.py holds.",
   "src/pages/People.tsx GRANTS_API_PATH":
     "Writes a new grant. Entitlements are additive only, a grant replaces nothing, and taking one " +
     "back is the removal beside it, which is confirmed.",

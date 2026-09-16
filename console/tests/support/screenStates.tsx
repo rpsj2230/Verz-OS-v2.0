@@ -27,6 +27,7 @@ import { createMemoryRouter, RouterProvider, type RouteObject } from "react-rout
 import { cleanup, render } from "@testing-library/react";
 import { vi } from "vitest";
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
+import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
 import { fakeIdentityProvider, ISSUER, loadConsole, signIn } from "./auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./navigation";
@@ -86,7 +87,12 @@ export function patternsOf(routes: readonly RouteObject[], parent = ""): string[
 }
 
 /** Patterns outside the session guard, which mount without anybody signed in. */
-export const UNGUARDED: ReadonlySet<string> = new Set([CALLBACK_PATH, SIGNED_OUT_PATH, FIRST_RUN_PATH]);
+export const UNGUARDED: ReadonlySet<string> = new Set([
+  CALLBACK_PATH,
+  SIGNED_OUT_PATH,
+  FIRST_RUN_PATH,
+  STAFF_LIST_RETURN_PATH,
+]);
 
 export function collapse(text: string): string {
   return text.replace(/\s+/g, " ").trim();

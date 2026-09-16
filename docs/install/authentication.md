@@ -47,6 +47,49 @@ console, because neither is one a person picks on the first afternoon without he
 | A Google Sheet | as above | no, add it later |
 | LDAP | LDAP | no, add it later |
 
+## Reading the staff list on the wizard's screen
+
+The staff list screen asks two things and writes both when you send the review:
+**where the list comes from**, and **where that list is**. For Google Workspace, where it is is
+your primary domain; for Microsoft Entra, your tenant ID or your tenant's domain; for Lark,
+`larksuite.com` or `feishu.cn`, whichever your company signs in to. A spreadsheet has no
+location, and the screen refuses one, because it would be written into a setting nothing reads.
+
+Under those two questions is a check you can run before anything is written. It reads the list
+once and shows the people a first run would add. Nobody is added and nothing is stored. You do
+not have to run it to finish setup.
+
+**A spreadsheet** is read from a file you choose. Save it as CSV first. The columns it looks for
+are an address (`Work Email`, `Email`) and a name (`Full Name`, `Name`); a department, groups and a
+column saying somebody has left are read if they are there.
+
+**Google Workspace, Microsoft Entra and Lark need an application your company registers with
+them before anybody can sign in.** This is not something the product can do for you. A directory
+only sends a person back to an address registered on the application they signed in to, and your
+install has its own address, so the application has to be yours. The screen shows the return
+address to register, which is your web address followed by `/first-run/staff-list`.
+
+| Directory | What to register | What to grant it |
+| --- | --- | --- |
+| Google Workspace | In Google Cloud console, in a project belonging to your company, an OAuth client of the type Web application, with the return address as an authorised redirect URI. Enable the Admin SDK API in the same project. | Nothing on the client. Sign in with a Workspace administrator's account, which is what lets it read the user directory. |
+| Microsoft Entra | In the Microsoft Entra admin centre, an application registration with a Web platform, the return address as a redirect URI, and a client secret. | The delegated Microsoft Graph permission `User.Read.All`, with admin consent granted for your organisation. |
+| Lark | In the Lark developer console, a custom app with the return address as a redirect URL under Security settings. Copy its App ID and App Secret. | The contact permissions to read users, their email addresses, their departments and department names; a contact range covering everyone who should be listed; and a published version. |
+
+Then paste the application's client ID and secret on the screen and press **Sign in and read the
+list**. The directory's own sign-in page opens in a second window, because the setup code lives
+in the setup page's memory and leaving that page would lose it. Allow pop-ups for your web
+address if the window does not open.
+
+**The secret is used for that one read and is not kept.** It is sent once, to the directory, to
+exchange for a sign-in, and nothing on your server stores it. That is deliberate rather than
+unfinished work: nothing in this product reads a directory on a schedule yet, and a secret kept
+for a job nobody runs is a standing credential with nothing using it. When the scheduled sync
+exists, it will ask for a credential it can keep in the vault.
+
+**What has never happened.** The sign-in and the read are written from each directory's own
+documentation and tested against a stand-in; none of them has been run against a real Google,
+Microsoft or Lark tenant. The first company to register an application is the first real run.
+
 ## What each source is trusted to say, and why it matters
 
 A roster source can assert three things, and no more. It can say **that somebody exists**, with
@@ -161,9 +204,11 @@ than thirty. A slow start beats a container that never becomes ready.
 | That two Super Admins is the floor | the same test |
 | What each source is trusted to assert | `test_staff_source.py`, against the trust table |
 | Which four sources the wizard offers | `test_setup_wizard.py`, against the wizard's own question |
+| That a directory is chosen, signed in to and read, and a spreadsheet chosen and read, before anything is written | `test_setup_staff_routes.py`, against a stand-in directory |
+| What to register at each directory, as the screen shows it | **nobody. The table above is kept true by hand against `brain.connectors.staff_directories.REGISTRATION`.** |
 | The four identity settings and their defaults | `test_install_docs.py`, through the configuration guide |
 | **Everything else on this page** | **nobody. Prose, kept true by hand.** |
 
 ## Task ids
 
-M42.2.7
+M42.2.7, M42.5.7

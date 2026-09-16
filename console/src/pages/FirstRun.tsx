@@ -51,7 +51,11 @@
  * not be: that is the fact `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER` hides. The install
  * page tells the person holding the code which address to open.
  *
- * Task ids: M42.5.14, M27.8.7
+ * **The staff list screen carries a check under its questions**, drawn by `components/StaffListCheck.tsx`,
+ * which reads the chosen list once and holds what it needs in its own state, so nothing it asks
+ * for is an answer, in the review or in the appointment.
+ *
+ * Task ids: M42.5.14, M27.8.7, M42.5.7
  */
 
 import { useState, useSyncExternalStore } from "react";
@@ -85,6 +89,7 @@ import {
 } from "../setup/wizard";
 import { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
+import { StaffListCheck } from "../components/StaffListCheck";
 
 /** Why this page signs in before it asks for anything. */
 export const SIGN_IN_COMES_BEFORE_THE_CODE =
@@ -509,6 +514,13 @@ function Wizard() {
           </button>
         </div>
       </form>
+      {screen.key === "staff_source" ? (
+        <StaffListCheck
+          setupCode={code}
+          source={answers.staff_source?.["staff_source"] ?? ""}
+          location={answers.staff_source?.["staff_source_location"] ?? ""}
+        />
+      ) : null}
     </main>
   );
 }
