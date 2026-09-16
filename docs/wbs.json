@@ -1664,7 +1664,14 @@
     "M27.6.1",
     "M27.6.2",
     "M27.6.3",
-    "M27.6.4"
+    "M27.6.4",
+    "M27.7.1",
+    "M27.7.2",
+    "M27.7.3",
+    "M27.7.4",
+    "M27.7.5",
+    "M27.7.6",
+    "M27.7.7"
    ],
    "leaf_texts": [
     "Trace id minted at ingress before identify",
@@ -1716,7 +1723,14 @@
     "This install: release, migration level, profile and the features it turns on",
     "Backup, last verified restore and the recovery drill",
     "Rate limits and what is currently being throttled",
-    "Capacity: connections, memory and pool sizes against what is deployed"
+    "Capacity: connections, memory and pool sizes against what is deployed",
+    "Every console read module has a screen in the browser or a written reason it has none, listed on every run, because a read nobody can open is a screen nobody has",
+    "Operate screens in the browser: the overview, the day, what is waiting and what went wrong",
+    "Govern screens in the browser: people, departments, roles, the capability catalogue, granting and removing, access review, sessions and sign-in links",
+    "Knowledge, memory and learning screens in the browser, each showing what a reader may see and never a count of what they may not",
+    "Report screens in the browser: questions and gaps, usage, budgets and spend, quality and canaries",
+    "Install screens in the browser: this install and its release, backup and recovery, rate limits and capacity",
+    "The same screens at department scope, proved by a department-scoped person opening them and seeing less, with no screen whose subject is the installation offered at all"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
