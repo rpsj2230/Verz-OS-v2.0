@@ -45,6 +45,7 @@ import {
   pageQuery,
   readPage,
 } from "../src/components/paging";
+import { ISSUER, stubServedConfig } from "./support/auth";
 import {
   backendFilterGrammar,
   backendLockedFieldFields,
@@ -90,7 +91,7 @@ interface StandInApi {
  */
 async function standInApi(): Promise<StandInApi> {
   vi.resetModules();
-  vi.stubEnv("VITE_KEYCLOAK_ISSUER", "https://idp.test/realms/brain");
+  stubServedConfig({ issuer: ISSUER });
   const urls: string[] = [];
   const queued: Response[] = [];
   vi.stubGlobal(

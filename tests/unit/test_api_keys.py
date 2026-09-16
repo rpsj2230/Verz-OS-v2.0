@@ -396,7 +396,14 @@ def test_no_rest_api_is_served_and_the_module_says_so() -> None:
         "/admin",
         "/me",
     )
-    unexpected = sorted(p for p in served if not p.startswith(expected_prefixes))
+    # The console's two, matched exactly rather than as prefixes. `/` as a prefix would match
+    # every path there is and turn this whole test off, which is the trap in adding it to the
+    # tuple above. Neither is a REST API: one serves the built console's entry document and the
+    # other serves the installation's issuer and client id to it. See `brain.console_static`.
+    console_exactly = {"/", "/api/console.js"}
+    unexpected = sorted(
+        p for p in served if p not in console_exactly and not p.startswith(expected_prefixes)
+    )
 
     assert not unexpected, (
         f"a route appeared that is not health, docs or a build page: {unexpected}. If this is "

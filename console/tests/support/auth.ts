@@ -21,11 +21,48 @@
 
 import { vi } from "vitest";
 
+import { CONFIG_GLOBAL } from "../../src/config";
+
 export const ISSUER = "https://idp.test/realms/brain";
 export const AUTHORIZATION_ENDPOINT = `${ISSUER}/protocol/openid-connect/auth`;
 export const TOKEN_ENDPOINT = `${ISSUER}/protocol/openid-connect/token`;
 export const END_SESSION_ENDPOINT = `${ISSUER}/protocol/openid-connect/logout`;
 export const CONSOLE_ORIGIN = "https://console.test";
+
+/**
+ * Put the installation's configuration where the served document puts it.
+ *
+ * The console reads `window.__BRAIN_CONFIG__`, assigned by the blocking script `index.html`
+ * loads from `/api/console.js`. Every test that used `vi.stubEnv("VITE_KEYCLOAK_ISSUER", ...)`
+ * calls this instead, because the value stopped being a build-time one: see `src/config.ts`.
+ *
+ * Absent fields are omitted rather than set empty, so a test can ask for a document that is
+ * missing a value and get the same shape the application would.
+ */
+export function stubServedConfig(values: ServedValues = {}): void {
+  const payload: Record<string, string> = {};
+  if (values.apiBaseUrl !== undefined) {
+    payload.apiBaseUrl = values.apiBaseUrl;
+  }
+  if (values.issuer !== undefined) {
+    payload.issuer = values.issuer;
+  }
+  if (values.clientId !== undefined) {
+    payload.clientId = values.clientId;
+  }
+  vi.stubGlobal(CONFIG_GLOBAL, Object.freeze(payload));
+}
+
+/** Remove the document entirely, which is what a console nothing serves the script to sees. */
+export function stubNoServedConfig(): void {
+  vi.stubGlobal(CONFIG_GLOBAL, undefined);
+}
+
+export interface ServedValues {
+  readonly apiBaseUrl?: string;
+  readonly issuer?: string;
+  readonly clientId?: string;
+}
 
 function json(payload: unknown, status: number, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(payload), {
@@ -187,7 +224,7 @@ export interface LoadOptions {
 /** A fresh copy of the sign-in modules, wired to a stand-in provider and location. */
 export async function loadConsole(options: LoadOptions = {}): Promise<LoadedConsole> {
   vi.resetModules();
-  vi.stubEnv("VITE_KEYCLOAK_ISSUER", options.issuer ?? ISSUER);
+  stubServedConfig({ issuer: options.issuer ?? ISSUER });
   const location = stubLocation(options.path ?? "/");
   const idp = options.idp ?? fakeIdentityProvider();
   vi.stubGlobal("fetch", idp.fetch);

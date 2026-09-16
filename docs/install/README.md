@@ -70,7 +70,10 @@ has been tagged, so there is nothing at that address yet. A workflow that exists
 archive that exists. See install.md.
 
 **After a complete install the console is reachable from nowhere.** Nothing publishes a port,
-and no compose file in this product declares a reverse proxy. See network.md.
+and no compose file in this product declares a reverse proxy. What the console no longer needs
+is anything beyond that proxy: it ships inside the application's image and is served at the
+root of the same address as the API, so there is no second service and nothing to upload. See
+network.md.
 
 **Only `lite` can start today**, and `lite` deploys no identity provider, so it points at one
 you already run. `standard` and `full` both compose an inference server whose image is required

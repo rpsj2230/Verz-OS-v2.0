@@ -34,13 +34,13 @@
 
 import {
   CALLBACK_PATH,
-  KEYCLOAK_CLIENT_ID,
   MAX_SIGN_IN_ATTEMPTS,
   PKCE_CHALLENGE_METHOD,
   REFRESH_SKEW_SECONDS,
   RESPONSE_TYPE,
   SIGNED_OUT_PATH,
 } from "./constants";
+import { config } from "../config";
 import { endpoints } from "./discovery";
 import {
   challengeFor,
@@ -219,7 +219,7 @@ export async function beginSignIn(returnTo = currentLocation()): Promise<void> {
     putPending({ verifier, state: signInState, returnTo });
 
     const url = new URL(authorization);
-    url.searchParams.set("client_id", KEYCLOAK_CLIENT_ID);
+    url.searchParams.set("client_id", config.clientId);
     url.searchParams.set("response_type", RESPONSE_TYPE);
     url.searchParams.set("redirect_uri", redirectUri());
     url.searchParams.set("scope", REQUESTED_SCOPE);
@@ -325,7 +325,7 @@ async function exchangeCode(params: URLSearchParams): Promise<string> {
     grant_type: "authorization_code",
     code,
     redirect_uri: redirectUri(),
-    client_id: KEYCLOAK_CLIENT_ID,
+    client_id: config.clientId,
     code_verifier: pending.verifier,
   });
   tokens = await postToTokenEndpoint(body);
@@ -344,7 +344,7 @@ async function refresh(current: Tokens): Promise<Tokens> {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: current.refreshToken,
-    client_id: KEYCLOAK_CLIENT_ID,
+    client_id: config.clientId,
   });
   const next = await postToTokenEndpoint(body);
   tokens = next;
@@ -432,7 +432,7 @@ export async function signOut(): Promise<void> {
   if (held?.idToken) {
     url.searchParams.set("id_token_hint", held.idToken);
   } else {
-    url.searchParams.set("client_id", KEYCLOAK_CLIENT_ID);
+    url.searchParams.set("client_id", config.clientId);
   }
   globalThis.location.assign(url.toString());
 }

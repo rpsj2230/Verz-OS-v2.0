@@ -9,7 +9,7 @@
  */
 
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { fakeIdentityProvider, ISSUER, stubLocation } from "./support/auth";
+import { fakeIdentityProvider, ISSUER, stubLocation, stubServedConfig } from "./support/auth";
 
 /**
  * Start the application the way the browser does: a `#root` element in the document, the
@@ -17,7 +17,7 @@ import { fakeIdentityProvider, ISSUER, stubLocation } from "./support/auth";
  */
 async function start(): Promise<void> {
   vi.resetModules();
-  vi.stubEnv("VITE_KEYCLOAK_ISSUER", ISSUER);
+  stubServedConfig({ issuer: ISSUER });
   stubLocation("/");
   vi.stubGlobal("fetch", fakeIdentityProvider().fetch);
   await import("../src/main");

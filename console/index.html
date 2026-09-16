@@ -62,6 +62,28 @@
         }
       })();
     </script>
+    <!--
+      Which installation this console belongs to: the identity provider's issuer, the realm
+      client and where the API is. Served by the application at request time from
+      `brain.console_static`, never compiled in, because Vite inlines a build-time value as
+      plain text and a bundle carrying one client's issuer is a bundle only that client can
+      install. One image ships to every company or it is not a product.
+
+      A blocking script rather than a fetch, and it has to stay above the module below.
+      `src/config.ts` reads the global at module load and every consumer of it is
+      synchronous, so an asynchronous document would mean rendering once with nothing
+      configured and again with it, on every load. Two hundred bytes, uncached.
+
+      `npm run dev` reaches the same document: `/api` is proxied to the application, and the
+      application serves this path whether or not it carries a built bundle.
+
+      The build prints `<script src="/api/console.js"> in "/index.html" can't be bundled
+      without type="module" attribute`, and that is the correct outcome rather than a warning
+      to clear. It is saying it has left the tag alone, which is the whole point: this file
+      does not exist at build time and must not be resolved then. Adding `type="module"` would
+      make Vite try to bundle a path that is served at runtime, and the build would fail.
+    -->
+    <script src="/api/console.js"></script>
   </head>
   <body>
     <div id="root"></div>

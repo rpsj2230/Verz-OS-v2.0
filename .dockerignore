@@ -1,5 +1,13 @@
 .git
 .venv
+# Installed inside the build from the lockfile, never copied in. Without this the console's
+# host `node_modules` travels into the build context, which is hundreds of megabytes of files
+# the build immediately overwrites, and any native module in it is built for the wrong
+# platform.
+**/node_modules
+# Built inside the build too. A host bundle copied in would be overwritten by `npm run build`
+# in the console stage, and silently shipped by anything that ever skipped that step.
+console/dist
 __pycache__
 .pytest_cache
 .mypy_cache

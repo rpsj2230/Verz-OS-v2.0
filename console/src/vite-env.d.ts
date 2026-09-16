@@ -1,24 +1,18 @@
 /// <reference types="vite/client" />
 
 /**
- * The environment variables this console reads, declared so that the set is written down
- * somewhere a reader can find it and so that each one has a type at the point of use.
+ * The bundler's ambient types, for the CSS imports in `main.tsx` and the components, and
+ * for nothing else.
  *
- * **This does not catch a typo, and it would be comfortable to pretend otherwise.** Vite's
- * own `ImportMetaEnv` carries a string index signature, so `import.meta.env.VITE_ISUER`
- * type-checks as `any` no matter what is declared here. The thing that actually contains
- * the risk is that both names are read in exactly one file, `src/config.ts`, which
- * validates them and refuses to start when they are wrong.
+ * This file used to declare the two build-time settings the console read. It declares none
+ * now, because the console reads none: Vite compiles such a value into the bundle as plain
+ * text, and this product ships one image to every company that installs it, so a compiled-in
+ * issuer is an image only the company it was built for can use. The issuer, the client id
+ * and the API base arrive at runtime from `/api/console.js`; see `src/config.ts` and
+ * `src/brain/console_static.py`.
  *
- * Only `VITE_`-prefixed names appear, because only those exist in the browser. Anything
- * else read through `import.meta.env` is undefined however carefully it was set in the
- * shell, and the resulting bug looks like a deployment problem rather than a naming one.
+ * The reference above stays because the stylesheet imports need it. Removing the
+ * declarations rather than emptying them is deliberate: an empty interface reads as a list
+ * somebody is meant to add to, and `tests/config.test.tsx` refuses the whole mechanism
+ * across `src/` rather than trusting a declaration to be kept in step.
  */
-interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL?: string;
-  readonly VITE_KEYCLOAK_ISSUER?: string;
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv;
-}

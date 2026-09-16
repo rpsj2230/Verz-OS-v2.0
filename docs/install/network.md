@@ -40,6 +40,49 @@ and the trace ledger's own console (`LANGFUSE_PUBLIC_URL`).
 Point each of them at the server with an A record, or an AAAA record if the server has an IPv6
 address. Nothing here needs a wildcard.
 
+## Where the console comes from, and how your staff reach it
+
+**The console is inside the application's own image and is served by it.** There is no second
+container, no static host and no bucket, and nothing for you to upload. The image the deploy
+pulls carries the built console, and the application serves it at the **root of the console
+address** you pointed at the app service on port 8000. So a proxy configured as the section
+above describes, sending everything for that address to the application, is the whole of it:
+
+- `https://<your console address>/` is the console.
+- `https://<your console address>/first-run` is the install wizard, which is where the
+  installer sends you and the one address a fresh install cannot work without.
+- `https://<your console address>/auth/callback` is where sign-in returns to. This is the
+  value `INSTALL_OIDC_REDIRECT_URIS` has to hold, and the wizard derives it for you.
+- `https://<your console address>/api/v1/...` is the API, on the same address on purpose.
+- `https://<your console address>/build` is the build status page, which used to be at the
+  root and moved here when the console took it. Every link on it already pointed here.
+
+**Do not route parts of that address to different places.** The console signs in with PKCE and
+keeps its token in memory, and it calls the API on its own origin: that is why no CORS policy
+has to be configured for a normal install and why `BRAIN_CORS_ORIGINS` is empty. Splitting
+`/api` off onto a second host makes every console request cross-origin and needs both a CORS
+allow list here and a web origin added to the realm, neither of which fails loudly on its own.
+
+**The console learns which installation it belongs to at runtime, not at build time.** It reads
+`/api/console.js`, which the application serves from `INSTALL_OIDC_ISSUER`,
+`INSTALL_OIDC_CLIENT_ID` and the API's own prefix. Nothing about your company is compiled into
+the JavaScript, which is what makes one published image installable by every client. A proxy
+that does not pass `/api/` through therefore breaks sign-in with a message on the screen saying
+so, rather than silently.
+
+**What you must add to Keycloak yourself.** The realm import registers what
+`INSTALL_OIDC_REDIRECT_URIS` names, so on a standard install you set that value and the import
+does the rest. If you are pointing this at a Keycloak you already run, add to the
+`brain-console` client:
+
+- a valid redirect URI of `https://<your console address>/auth/callback`,
+- a valid post-logout redirect URI of `https://<your console address>/signed-out`,
+- and a web origin of `https://<your console address>`.
+
+All three are exact matches. A trailing slash, `http` instead of `https`, or the address of the
+identity provider instead of the console will each produce a Keycloak error page that names
+none of the settings involved.
+
 ## TLS
 
 Terminate it at the proxy, on 443, and redirect port 80 to it.

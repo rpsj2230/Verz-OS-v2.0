@@ -181,9 +181,14 @@ read back against Keycloak 26.0 on 2026-09-06.
 The client id is a constant rather than an environment variable, and that is the decision
 in this file most likely to be undone by somebody being helpful. A client id is not a
 deployment detail; it is a reference to a specific set of flow settings. Pointing this
-console at a different client with `VITE_KEYCLOAK_CLIENT_ID` would silently move it to a
+console at a different client with a browser-side setting would silently move it to a
 client that may have implicit enabled or a direct grant, and nothing in the browser can
 tell the difference, because the browser is not the thing being protected.
+
+What the console does take from the deployment is `INSTALL_OIDC_CLIENT_ID`, served in the
+runtime document described below and defaulting to the client the shipped realm defines. That
+is a different thing from a browser-side setting: it is the same register the realm import
+reads, so the client the console asks for and the client the realm creates cannot disagree.
 
 ### Tokens live in memory
 
@@ -307,13 +312,31 @@ route here is client-side. Without that fallback a deep link 404s, and so does
 `/auth/callback`, which means sign-in completes at Keycloak and lands on a page that does
 not exist.
 
-The console is assumed to be served from the same origin as the API: the realm registers
-`https://brain.example.invalid/auth/callback`, and the API serves `/api/v1` on that host.
-That is why `VITE_API_BASE_URL` is a path and why `BRAIN_CORS_ORIGINS` can stay empty. The
-dev server proxies `/api` to reproduce the same shape locally rather than making every
-laptop the only place cross-origin behaviour is ever exercised. Splitting the two in a
-deployment means changing `BRAIN_CORS_ORIGINS` on the API **and** `webOrigins` in the
-realm, neither of which fails loudly on its own.
+**What serves them is the application itself**, at the root of the install's web address.
+`src/brain/console_static.py` copies this directory's `dist/` into the application image and
+serves it, with the fallback above, as the router's "nothing matched" handler. That module
+carries the argument for one image rather than a static container beside it; the short version
+is that one origin is the security design here rather than a convenience.
+
+The console and the API therefore share an origin by construction: the realm registers
+`https://<the web address>/auth/callback`, and the API serves `/api/v1` on that same host.
+That is why the API base is a path and why `BRAIN_CORS_ORIGINS` can stay empty. The dev server
+proxies `/api` to reproduce the same shape locally rather than making every laptop the only
+place cross-origin behaviour is ever exercised. Splitting the two in a deployment means
+changing `BRAIN_CORS_ORIGINS` on the API **and** `webOrigins` in the realm, neither of which
+fails loudly on its own.
+
+### Configuration arrives at runtime, not at build time
+
+The issuer, the client id and the API base come from `/api/console.js`, a two-hundred-byte
+document the application serves from `brain.install`, loaded by a blocking script in
+`index.html` before the bundle. Nothing about a company is compiled into the JavaScript.
+
+That is not tidiness. Vite inlines every `VITE_`-prefixed value as plain text, so a bundle
+built with an issuer set is a bundle only the company owning that issuer can install, and this
+product publishes one image for every client. `tests/config.test.tsx` refuses
+`import.meta.env` anywhere under `src/`, and `tests/unit/test_console_served.py` refuses it
+again from the suite that gates a deploy.
 
 **The navigation is identical for every session, and that is a rule rather than an
 omission.** Reading roles out of the token and hiding sections would be one line and would
@@ -614,10 +637,13 @@ constant builds to 0.17 kB, so the grid is tree-shaken away.
 - **No CI job, and `.github/` was not touched.** Whether this repository grows a JavaScript
   pipeline is a decision that has not been made, and making it by adding a workflow file
   would be making it quietly.
-- **Not in the Dockerfile and not in any compose file.** The image copies `src`,
-  `migrations`, `docs` and `alembic.ini` by name, so nothing here reaches it. How the built
-  assets are served, and from what origin, is undecided, and it interacts with the realm's
-  registered redirect URI.
+- ~~**Not in the Dockerfile and not in any compose file.**~~ Done. The Dockerfile builds this
+  directory in its own Node stage on the Node major CI checks it with, and the runtime image
+  carries `dist/`. `brain.console_static` serves it at the root of the install's web address,
+  which is the origin the realm's registered redirect URI is derived from, so the two cannot
+  disagree. No compose file changed and no service was added: see that module for why one
+  image rather than a static container beside it, and `tests/unit/test_console_served.py` for
+  what is held.
 - **No Content-Security-Policy.** A meta tag cannot express `frame-ancestors` and cannot be
   templated per deployment without failing open when the variable is missing, so the policy
   belongs on the response headers of whatever serves these files. A starting point:
@@ -759,7 +785,11 @@ was; items 1, 2, 4 and 5 of the original eight are now verified and are recorded
    again afterwards: if it signs in with no prompt, the sign-out did not work).
 6. That nothing in `src/` reads a token's contents. The boundary check covers the obvious
    spellings and cannot cover an inventive one.
-7. That the deployment serves `index.html` for unknown paths, over HTTPS, with a CSP.
+7. That the deployment serves this over HTTPS with a CSP. The `index.html` fallback is no
+   longer a deployment question: the application serves it, and `tests/unit/test_console_served.py`
+   holds that a deep link, `/first-run` and `/auth/callback` all reach it while no API path or
+   method is shadowed. **A CSP is still nobody's**, and the note above about the ajv validator
+   needing `unsafe-eval` still applies.
 
 ---
 

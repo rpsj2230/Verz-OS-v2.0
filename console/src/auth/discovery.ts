@@ -55,7 +55,7 @@ async function fetchEndpoints(): Promise<Endpoints> {
   if (!response.ok) {
     throw new Error(
       `The identity provider at ${config.issuer} did not return its configuration ` +
-        `(${response.status}). Check VITE_KEYCLOAK_ISSUER.`,
+        `(${response.status}). Check INSTALL_OIDC_ISSUER on the installation.`,
     );
   }
   const document: unknown = await response.json();

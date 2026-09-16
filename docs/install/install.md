@@ -111,9 +111,10 @@ So: read the code off the terminal and open `/first-run` on your console's addre
 `https://brain.example.invalid/first-run`. Open that address, not the console's front page. The
 front page signs you in and then refuses you, because nobody is an administrator yet, and the
 console has deliberately no way to notice that the install is unfinished: a page that could
-tell would tell whoever found the address the same thing. Whatever serves the console has to
-send `/setup/` to the application exactly as it sends `/api/`, because the two requests first
-run makes are served there.
+tell would tell whoever found the address the same thing. The console and the two routes first
+run posts to are served by the same application on the same address, so a proxy that sends that
+address to the app service needs nothing further: see
+[Where the console comes from](network.md#where-the-console-comes-from-and-how-your-staff-reach-it).
 
 First run is these screens, in this order.
 
@@ -195,7 +196,9 @@ is a table a person follows rather than one command.
 **After a complete install, the console is reachable from nowhere.** No service in any profile
 publishes a port to the host. That is right for the database, the cache and the pooler, and it
 means the reverse proxy holding your certificate is part of the install rather than an optional
-extra. No compose file declares one. See [network.md](network.md).
+extra. No compose file declares one. The console itself needs nothing beyond that proxy: it
+ships inside the application's image and is served at the root of the same address as the API.
+See [network.md](network.md).
 
 `standard` and `full` have further blockers of their own, and they are computed rather than
 listed here: `brain.deployment.installer.one_command_blockers` reports them per profile. Today

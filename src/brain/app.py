@@ -64,6 +64,7 @@ from brain.cache import (
     make_async_client,
 )
 from brain.classification_routes import router as classification_router
+from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import BrainError, Outcome, to_public
 from brain.docs_routes import router as docs_router
 from brain.gate.entitlement_store import StoredEntitlements
@@ -676,6 +677,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             status_code=401, content=body.model_dump(), headers=dict(refusal_headers())
         )
 
+    # The console, in two halves, and the order of the two calls is the whole of the design.
+    # This one claims the root before `docs_router` registers its own `/`, because Starlette
+    # takes the first route that matches; the other is at the bottom of this function. It
+    # claims the root only when this tree carries a built bundle, so an image without one
+    # keeps the build tracker's landing page and every behaviour it had. The runtime
+    # configuration document is registered either way, because `npm run dev` proxies `/api`
+    # to an application running from a checkout and a console that cannot read its issuer
+    # cannot sign anybody in. These two lines are the only change in this file.
+    # See `brain.console_static` for the argument for one image rather than two.
+    mount_console_entry(app)
+
     app.include_router(docs_router)
     # Mounted here and nowhere else. An unmounted router is the failure this repository keeps
     # finding, and the timeout middleware three paragraphs up is the most recent one.
@@ -736,6 +748,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             checks=checks,
             reported=reported,
         )
+
+    # The console's other half: the handler Starlette calls once the whole routing table has
+    # been tried and nothing matched. It replaces `app.router.default` rather than registering
+    # a route, and the difference is a method rather than a path: a catch-all route is a full
+    # match for every GET, which beats the partial match that would have answered 405, so it
+    # turned `GET /api/v1/answer?question=...` from refused into answered. Last, and not a
+    # route: see `THE_FALLBACK_IS_REGISTERED_LAST_SO_IT_CANNOT_SHADOW_A_ROUTE`.
+    mount_console_fallback(app)
 
     return app
 
