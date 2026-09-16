@@ -179,6 +179,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.session_routes:SignInLinkStore.links": Repeat.READS,
         "brain.session_routes:SignInLinkStore.administrators_linked": Repeat.READS,
         "brain.session_routes:SignInLinkStore.unlink": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The vault's key slots. A write puts the same key at the same path, so a repeat leaves
+        # the slot as the first write left it apart from its version counter; reading the
+        # version reads metadata only.
+        "brain.ops.credentials:CredentialVault.static_kv_version": Repeat.READS,
+        "brain.ops.credentials:CredentialVault.write_static_kv": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The cache.
         "brain.cache:ValkeyClient.get": Repeat.READS,
         "brain.cache:ValkeyClient.setex": Repeat.DERIVED_STATE,

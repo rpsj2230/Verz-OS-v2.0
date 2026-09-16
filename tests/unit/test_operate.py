@@ -75,10 +75,12 @@ from brain.console.operate import (
     WAITING,
     Attribution,
     ConnectorRow,
+    ControlRun,
     CoverageRow,
     Gap,
     OperateError,
     Overview,
+    OwedControl,
     Panel,
     RunRow,
     Tile,
@@ -93,6 +95,7 @@ from brain.console.operate import (
     gaps,
     incidents,
     may_watch,
+    may_watch_unattended,
     operate_gaps,
     overview,
     panel,
@@ -103,6 +106,8 @@ from brain.console.operate import (
     stop_is_unknown,
     stopped_for,
     tile,
+    unattended_running,
+    unattended_waiting,
     usage_gaps,
     visible_questions,
     visible_runs,
@@ -130,6 +135,7 @@ from brain.ops.jobs import (
     hidden_count_fields,
 )
 from brain.ops.queue import Job
+from brain.ops.schedule import Owed
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.ops.spend import LADDER, Refusal
 
@@ -957,6 +963,176 @@ def test_the_oldest_waiting_job_is_the_oldest_one_this_reader_may_see():
     )
 
     assert queue_summary([mine, older], holding(), NOW).oldest_at == NOW - timedelta(hours=1)
+
+
+# -------------------------------------------- runs nobody asked for (M27.2.2, M27.2.6)
+def test_a_run_nobody_asked_for_is_seen_through_the_screens_whole_read_and_nothing_else():
+    """The reader's own identity opens nothing, the capability without the console plane opens
+    nothing, and the capability with the plane opens the row.
+
+    Deleting this lets a default show the system's own runs to everybody, or lets a bare
+    capability check through, and either is a way onto the screen nobody was granted."""
+    assert may_watch_unattended("denial_digest", JobState.RUNNING, holding(), NOW) is False
+    assert may_watch_unattended("denial_digest", JobState.RUNNING, holding(RUN_READ), NOW) is True
+    existence_only = holding(RUN_READ, planes=(Plane.EXISTENCE,))
+    assert may_watch_unattended("denial_digest", JobState.RUNNING, existence_only, NOW) is False
+    no_plane = holding(RUN_READ, planes=())
+    assert may_watch_unattended("denial_digest", JobState.RUNNING, no_plane, NOW) is False
+
+
+def test_a_grant_scoped_to_a_department_or_a_person_matches_no_run_nobody_asked_for():
+    """A scope on the department or on the person fails closed, because the row carries neither;
+    a scope on the task, the traffic class or the state is honoured both ways.
+
+    Deleting this lets a department administrator watch the system's runs through a grant that
+    was written to show them their own department, or lets a scope on the task be ignored."""
+
+    def scoped(field: str, value: str) -> EntitlementSet:
+        return holding(RUN_READ, scope=Scope(clauses=(Clause(field=field, op=Op.EQ, value=value),)))
+
+    watch = may_watch_unattended
+    assert watch("denial_digest", JobState.RUNNING, scoped(DEPARTMENT_FIELD, FINANCE), NOW) is False
+    assert watch("denial_digest", JobState.RUNNING, scoped(ATTRIBUTION_FIELD, READER), NOW) is False
+    assert watch("denial_digest", JobState.RUNNING, scoped("task", "denial_digest"), NOW) is True
+    assert watch("canary_run", JobState.RUNNING, scoped("task", "denial_digest"), NOW) is False
+    assert watch("canary_run", JobState.RUNNING, scoped("traffic_class", "system"), NOW) is True
+    human = scoped("traffic_class", TrafficClass.HUMAN_INTERACTIVE.value)
+    assert watch("canary_run", JobState.RUNNING, human, NOW) is False
+    assert watch("canary_run", JobState.RUNNING, scoped("state", "running"), NOW) is True
+    assert watch("canary_run", JobState.QUEUED, scoped("state", "running"), NOW) is False
+
+
+def test_a_run_nobody_asked_for_is_behind_the_grant_of_the_screen_it_is_on():
+    """A queue grant reaches an owed control and not a running one, and a runs grant the reverse.
+
+    Deleting this lets one grant govern both screens, so somebody given the queue is watching
+    what the system is doing minute by minute."""
+    runs, queue = holding(RUN_READ), holding(QUEUE_READ)
+
+    assert may_watch_unattended("canary_run", JobState.RUNNING, runs, NOW) is True
+    assert may_watch_unattended("canary_run", JobState.RUNNING, queue, NOW) is False
+    on_queue = "queue"
+    assert may_watch_unattended("canary_run", JobState.QUEUED, queue, NOW, screen_key=on_queue)
+    assert not may_watch_unattended("canary_run", JobState.QUEUED, runs, NOW, screen_key=on_queue)
+
+
+def test_the_running_controls_are_oldest_first_and_carry_the_stall_they_were_handed():
+    """Sorted by start with the name breaking a tie, every mode kept, and `stalled` exactly the
+    names handed in.
+
+    Deleting this puts the run that has been going longest wherever the database returned it,
+    and lets a stall be computed here against a second threshold."""
+    started = [
+        ("denial_digest", NOW - timedelta(minutes=1), False),
+        ("retention_sweep", NOW - timedelta(minutes=30), True),
+        ("canary_run", NOW - timedelta(minutes=30), False),
+    ]
+
+    rows = unattended_running(started, ("retention_sweep",), holding(RUN_READ), NOW)
+
+    assert [one.control for one in rows] == ["canary_run", "retention_sweep", "denial_digest"]
+    assert [one.stalled for one in rows] == [False, True, False]
+    assert [one.report_only for one in rows] == [False, True, False]
+    assert rows[0].started_at == NOW - timedelta(minutes=30)
+
+
+def test_the_running_controls_for_a_reader_without_the_grant_are_those_of_an_idle_install():
+    """Filtering happens before anything is built, so a reader refused every row gets what an
+    install running nothing gives.
+
+    Deleting this permits a list that keeps its length and drops its names, which is a count of
+    the system's runs published to somebody who may not see them."""
+    started = [("denial_digest", NOW, False), ("canary_run", NOW, False)]
+
+    assert unattended_running(started, (), holding(), NOW) == ()
+    assert unattended_running([], (), holding(RUN_READ), NOW) == ()
+    assert unattended_waiting([], holding(QUEUE_READ), NOW) == ()
+
+
+def test_an_owed_control_keeps_the_schedules_order_and_leaves_its_mode_behind():
+    """The order `owed` gave, the due instant, the lateness and whether it is a first run, and no
+    report-only flag, for a reader holding the queue's grant.
+
+    Deleting this lets a mode computed without the installation's release reach a screen as the
+    mode the control will run in, which is the flattering half of that decision."""
+    owed = [
+        Owed(
+            name="canary_run",
+            due_since=NOW - timedelta(hours=2),
+            late_by=timedelta(hours=2),
+            first_run=False,
+            report_only=False,
+        ),
+        Owed(
+            name="retention_sweep",
+            due_since=NOW,
+            late_by=timedelta(0),
+            first_run=True,
+            report_only=True,
+        ),
+    ]
+
+    rows = unattended_waiting(owed, holding(QUEUE_READ), NOW)
+
+    assert [one.control for one in rows] == ["canary_run", "retention_sweep"]
+    assert rows[0].late_by == timedelta(hours=2)
+    assert rows[0].first_run is False
+    assert rows[1].due_since == NOW
+    assert rows[1].first_run is True
+    assert {one.name for one in fields(OwedControl)} == {
+        "control",
+        "due_since",
+        "late_by",
+        "first_run",
+    }
+    assert unattended_waiting(owed, holding(RUN_READ), NOW) == ()
+
+
+def test_each_list_asks_the_scope_about_the_state_its_rows_are_in():
+    """A grant scoped to running work sees a running control and no owed one, and a grant scoped
+    to queued work the reverse.
+
+    Deleting this lets either list ask about the wrong state, after which a grant an administrator
+    wrote for the queue alone shows nothing on the queue and everything on live runs."""
+    running_only = Scope(clauses=(Clause(field="state", op=Op.EQ, value="running"),))
+    queued_only = Scope(clauses=(Clause(field="state", op=Op.EQ, value="queued"),))
+    started = [("canary_run", NOW, False)]
+    owed = [
+        Owed(
+            name="canary_run",
+            due_since=NOW,
+            late_by=timedelta(0),
+            first_run=True,
+            report_only=False,
+        )
+    ]
+
+    assert [
+        one.control
+        for one in unattended_running(started, (), holding(RUN_READ, scope=running_only), NOW)
+    ] == ["canary_run"]
+    assert unattended_running(started, (), holding(RUN_READ, scope=queued_only), NOW) == ()
+    assert [
+        one.control for one in unattended_waiting(owed, holding(QUEUE_READ, scope=queued_only), NOW)
+    ] == ["canary_run"]
+    assert unattended_waiting(owed, holding(QUEUE_READ, scope=running_only), NOW) == ()
+
+
+def test_a_control_run_row_names_no_person_no_agent_and_no_argument():
+    """The two row types carry a control's name and times and nothing that names anybody, and
+    both are on the surface the hidden-count check is run over.
+
+    Deleting this lets a later field put the principal a queued control was enqueued by on a
+    screen whose rows belong to nobody."""
+    assert {one.name for one in fields(ControlRun)} == {
+        "control",
+        "started_at",
+        "report_only",
+        "stalled",
+    }
+    assert ControlRun in OPERATE_ROWS
+    assert OwedControl in OPERATE_ROWS
+    assert hidden_count_fields((ControlRun, OwedControl)) == ()
 
 
 # ------------------------------------------------------- connector health (M27.2.4)

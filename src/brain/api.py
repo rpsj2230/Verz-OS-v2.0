@@ -15,7 +15,10 @@ stable order.
 seconds is slow; a request that takes ninety seconds is a held connection, and behind a
 pooler with two hundred client slots, enough of those is an outage.
 
-Task ids: M31.1.2.4, M31.1.4.1, M31.1.4.3, M31.1.4.4
+**And one refusal of a body that never repeats it**, for the routes that take a secret. See
+`A_REFUSED_BODY_IS_NOT_ECHOED`.
+
+Task ids: M31.1.2.4, M31.1.4.1, M31.1.4.3, M31.1.4.4, M27.8.7
 """
 
 from __future__ import annotations
@@ -25,12 +28,14 @@ import base64
 import binascii
 import json
 import time
-from collections.abc import Awaitable, Callable
-from typing import Any
+from collections.abc import Awaitable, Callable, Coroutine
+from typing import Any, Final
 
 import structlog
 from fastapi import Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 log = structlog.get_logger()
@@ -200,3 +205,43 @@ COMMON_RESPONSES: dict[int | str, dict[str, Any]] = {
         "description": "A source was unreachable. No stale value was substituted.",
     },
 }
+
+
+#: Why a refused request body is never repeated back to whoever sent it.
+A_REFUSED_BODY_IS_NOT_ECHOED: Final = (
+    "FastAPI answers a body its model refuses with a 422 whose every error carries the input it "
+    "refused, so a setup code one character too long, or a credential posted in the wrong "
+    "shape, comes straight back in the response and into whatever logs responses. A route that "
+    "receives a secret is built on NoEchoRoute, which keeps the location, the type and the "
+    "message of each error and drops the input and its context. The location names a field the "
+    "sender already knows; the input is the one thing the sender may not have meant to send."
+)
+
+#: The keys of one validation error that are kept. Everything else is dropped, including any
+#: key a later FastAPI adds, which is the direction to fail in.
+KEPT_ERROR_KEYS: Final = ("type", "loc", "msg")
+
+
+class NoEchoRoute(APIRoute):
+    """A route whose 422 names what was wrong and never repeats what was sent.
+
+    A route class rather than an exception handler, because a handler is registered on the
+    whole application and this is a property of the routers that take secrets: changing the
+    body every other route's clients already read is a different decision with a different
+    owner. See `A_REFUSED_BODY_IS_NOT_ECHOED`.
+    """
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        handler = super().get_route_handler()
+
+        async def without_echo(request: Request) -> Response:
+            try:
+                return await handler(request)
+            except RequestValidationError as refused:
+                kept = [
+                    {key: error[key] for key in KEPT_ERROR_KEYS if key in error}
+                    for error in refused.errors()
+                ]
+                return JSONResponse(status_code=422, content={"detail": kept})
+
+        return without_echo

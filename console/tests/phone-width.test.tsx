@@ -282,6 +282,84 @@ const SIGN_IN_LINKS = {
   last_administrator: UNBROKEN,
 };
 
+/**
+ * What the live runs screen is answered: one control running and one owed, each with a name and a
+ * sentence that are unbreakable tokens. No refusal, because a `Notice` carries `role="status"` and
+ * `mount` reads that as a page still asking.
+ */
+const LIVE_RUNS = {
+  as_of: "2019-03-04T09:00:00Z",
+  running: [
+    {
+      control: UNBROKEN,
+      keeps_true: UNBROKEN,
+      started_at: "2019-03-04T07:00:00Z",
+      report_only: true,
+      stalled: true,
+    },
+  ],
+  waiting: [
+    {
+      control: UNBROKEN,
+      keeps_true: UNBROKEN,
+      due_since: "2019-03-04T06:00:00Z",
+      late_by_seconds: 10800,
+      first_run: false,
+    },
+  ],
+  stalled_after_seconds: 600,
+  requests_in_flight_are_not_recorded: true,
+  queue_is_not_readable: true,
+  no_run_can_be_stopped: true,
+};
+
+/**
+ * The models screen's four answers. Its own route's tiers, providers and unmeasured sentences
+ * carry unbreakable tokens, the chain is `MATRIX`, and the spend line's department is one too,
+ * because a department key sits in a `.fields__row` label rather than in a scrolling table.
+ */
+const MODELS_AND_HEALTH = {
+  "/api/v1/operate/models": {
+    start: "2019-02-25T09:00:00Z",
+    end: "2019-03-04T09:00:00Z",
+    tiers: [{ tier: "main", handles: UNBROKEN }],
+    lanes: [
+      { lane: "fast", requests: 3 },
+      { lane: "answer", requests: 7 },
+    ],
+    providers: [{ provider: UNBROKEN, description: UNBROKEN }],
+    unmeasured: [{ measure: UNBROKEN, because: UNBROKEN }],
+    breaker_state_is_not_recorded: true,
+    key_status_is_not_served: true,
+  },
+  "/api/v1/routing/rungs": MATRIX,
+  "/api/v1/report/service-levels": {
+    start: "2019-02-25T09:00:00Z",
+    end: "2019-03-04T09:00:00Z",
+    lanes: [
+      {
+        lane: "answer",
+        objective_p95_ms: 8000,
+        objective_success_rate: 0.99,
+        p95_ms: 4100,
+        success_rate: 1,
+        requests: 7,
+        met: true,
+        shortfalls: [],
+      },
+    ],
+  },
+  "/api/v1/report/spend": {
+    dimension: "department",
+    built: true,
+    lines: [{ key: UNBROKEN, cost_minor: 700 }],
+    machine_included: false,
+    total_minor: 700,
+    as_of: "2019-03-04T09:00:00Z",
+    freshness: "live",
+  },
+};
+
 const SKILLS = {
   items: [
     {
@@ -833,6 +911,18 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/audit": AUDIT },
+  },
+  "/runs": {
+    address: "/runs",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/operate/runs": LIVE_RUNS },
+  },
+  "/models": {
+    address: "/models",
+    signedIn: true,
+    drawsValues: true,
+    answers: MODELS_AND_HEALTH,
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {

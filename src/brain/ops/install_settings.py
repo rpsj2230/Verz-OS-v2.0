@@ -31,13 +31,15 @@ default, and no wizard screen asks for it, because an issuer guessed from the we
 a sign-in page pointing at somebody else's identity provider. The installer sets it where the
 realm is created. Nothing here refuses to save it; there is simply nothing that collects it.
 
-**The provider key is still not saved, and that refusal is the reason the 409 survives.** A
-model provider's API key is a standing credential, `brain.ops.provider_keys` argues at length
+**The provider key is never saved here, and since 2026-09-16 it is kept anyway, in the vault.**
+A model provider's API key is a standing credential, `brain.ops.provider_keys` argues at length
 that its home is the vault and the process environment and never a table the application role
-can select from, and `brain.tables.config` refuses secrets in this table in its own words. The
-vault this repository talks to reads a static slot and writes none, so a hosted install's key
-genuinely cannot be kept by this process, and `brain.setup_routes.unkept` now names that slot
-and nothing else. See `THE_ONE_ANSWER_THIS_PROCESS_STILL_CANNOT_KEEP`.
+can select from, and `brain.tables.config` refuses secrets in this table in its own words. Until
+that date the vault client read a static slot and wrote none, so a hosted install's key could
+not be kept by this process at all and the wizard refused it unless the environment already
+carried it. `brain.ops.credentials` is the write now, `brain.setup_routes.keep_provider_key`
+calls it, and what is left of the 409 is an install that names no vault. See
+`THE_ONE_ANSWER_THIS_TABLE_WILL_NEVER_KEEP`.
 
 **A saved value reaches the process that saved it and every process started after it, and not
 a sibling worker that is still running.** `A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`
@@ -107,13 +109,14 @@ A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER: Final = (
     "argument is made here for the same cost, with the gap written down rather than implied."
 )
 
-#: Why the 409 outlives the settings it was built for.
-THE_ONE_ANSWER_THIS_PROCESS_STILL_CANNOT_KEEP: Final = (
+#: Why the provider key goes to the vault and never to this table, vault or no vault.
+THE_ONE_ANSWER_THIS_TABLE_WILL_NEVER_KEEP: Final = (
     "A provider API key is a standing credential with no lease and no expiry, its home is the "
-    "vault, the vault this repository talks to reads a static slot and writes none, and "
-    "ops.setting refuses secrets in its own docstring because a credential the application "
-    "role can select is a credential in the ordinary query path. So a hosted install's key is "
-    "still confirmed rather than kept, and the refusal names the slot's path and never a value."
+    "vault, and ops.setting refuses secrets in its own docstring because a credential the "
+    "application role can select is a credential in the ordinary query path. So the wizard's "
+    "key is written to the vault by brain.ops.credentials, and an install that names no vault "
+    "keeps it nowhere: the refusal names the slot's path, the variable and the reason, and "
+    "never a value, and nothing falls back to a row here."
 )
 
 # --------------------------------------------------------------------- the figures

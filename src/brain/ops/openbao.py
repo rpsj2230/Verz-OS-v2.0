@@ -25,7 +25,24 @@ will revoke, because the lease id we would need in order to revoke them came bac
 the response we did not get. `revoke` is different and does retry, because a failed
 revocation leaves a live credential and that is the failure worth being noisy about.
 
-Task ids: M31.3.2.3
+**It writes under the static prefix, and reads that prefix's metadata, and neither is a way
+back to a value.** Until 2026-09-16 this class could issue, read `providers/` and revoke, so
+a provider key could only reach the vault through somebody at the server with a root token.
+`write_static_kv` puts one slot's fields in and returns the version time the vault stamped;
+`static_kv_version` reads the slot's metadata, which carries versions and times and no
+field of the secret at all. The prefix refusal is the same one the read has and lives here
+for the same reason: a writer that could put a value at `connectors/creds/xero` would be
+writing over a path the leasing design says is minted, not stored. Why the application may
+hold write at all is argued in `brain.ops.credentials`.
+
+**A refusal and a silence are two types now**, `VaultRefusedError` and
+`VaultUnreachableError`, both still `SecretsUnavailableError` so every existing handler
+catches them unchanged. The difference is what a person is told to do: a vault that did not
+answer is sealed, stopped or unreachable, and one that answered no is a token, a policy or an
+engine that is not there. Reading the status out of a message string would work until
+somebody reworded the message.
+
+Task ids: M31.3.2.3, M27.8.7
 """
 
 from __future__ import annotations
@@ -33,6 +50,8 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -50,6 +69,51 @@ DYNAMIC_MOUNTS = ("database/", "aws/", "gcp/", "azure/", "consul/")
 
 #: The one prefix `read_static_kv` may read. Everything else in the vault is leased.
 STATIC_PREFIX = "providers/"
+
+
+class VaultRefusedError(SecretsUnavailableError):
+    """The vault answered, and the answer was no. `status` is the HTTP status it gave.
+
+    A subclass rather than a flag on the parent, so every `except SecretsUnavailableError`
+    already written keeps catching it. 404 is among these: on a kv engine it is a slot never
+    written, and on a write it is an engine that is not mounted at that prefix.
+    """
+
+    def __init__(self, message: str, *, status: int) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+class VaultUnreachableError(SecretsUnavailableError):
+    """The vault did not answer inside `TIMEOUT_SECONDS`, or could not be connected to at all."""
+
+
+@dataclass(frozen=True)
+class StaticVersion:
+    """A kv slot's current version, as its metadata describes it: when it was written, if the
+    vault said in a form this could read. No field could hold the secret, because metadata
+    carries none."""
+
+    written_at: datetime | None
+
+
+def _instant(stamp: object) -> datetime | None:
+    """An RFC 3339 time as the vault writes it, or None for anything else.
+
+    kv v2 stamps nanoseconds and a `Z`; `datetime.fromisoformat` reads both on the interpreter
+    this ships on. A value that does not parse is None rather than an exception, because the
+    caller has already written the secret by the time it reads this and must not report a
+    write that happened as one that failed. An empty string is not checked for separately: it
+    does not parse, which is the same answer, and a mutation showed the second check changed
+    nothing a caller could see.
+    """
+    if not isinstance(stamp, str):
+        return None
+    try:
+        found = datetime.fromisoformat(stamp)
+    except ValueError:
+        return None
+    return found if found.tzinfo is not None else found.replace(tzinfo=UTC)
 
 
 def assert_static_path(path: str) -> None:
@@ -112,10 +176,10 @@ class OpenBaoVault:
             # quote the path that failed, and a path names which credential was being
             # borrowed - which is exactly the fact the audit log takes care to hash.
             msg = f"vault refused {method} on a {self._mount_of(path)} path: HTTP {exc.code}"
-            raise SecretsUnavailableError(msg) from exc
+            raise VaultRefusedError(msg, status=exc.code) from exc
         except (urllib.error.URLError, TimeoutError) as exc:
             msg = f"vault at {self._address} did not answer within {TIMEOUT_SECONDS}s"
-            raise SecretsUnavailableError(msg) from exc
+            raise VaultUnreachableError(msg) from exc
 
         if not raw:
             return {}
@@ -221,6 +285,57 @@ class OpenBaoVault:
                 # kv v2 nests twice: {"data": {"data": {...}, "metadata": {...}}}.
                 return inner
         return data if isinstance(data, dict) else {}
+
+    def write_static_kv(self, path: str, fields: Mapping[str, str]) -> datetime | None:
+        """Put one slot's fields into the kv engine, under `STATIC_PREFIX` only.
+
+        Returns the time the vault stamped on the version it made, or None when its answer
+        carried no time it could read. Never returns anything it was handed: the one caller
+        that holds the value is the one that passed it in.
+
+        **Not retried**, for `issue`'s reason turned round: a write that timed out may have
+        landed, and a second write of the same value makes a second version whose time is not
+        the time the person pressed save. The caller reports the silence and the person decides.
+
+        The prefix refusal is `assert_static_path`, the read's own, because a writer that could
+        reach `connectors/creds/xero` would be storing a value over a path the leasing design
+        says the vault mints. kv version 2 takes writes on `<mount>/data/<rest>` and wraps the
+        fields in `data`, which is the shape `read_static_kv` unwraps.
+        """
+        assert_static_path(path)
+        mount, _, rest = path.partition("/")
+        payload = self._call("POST", f"{mount}/data/{rest}", {"data": dict(fields)})
+        data = payload.get("data")
+        return _instant(data.get("created_time")) if isinstance(data, dict) else None
+
+    def static_kv_version(self, path: str) -> StaticVersion | None:
+        """The slot's current version, or None when it holds nothing.
+
+        Read from `<mount>/metadata/<rest>`, which carries version numbers, times and deletion
+        marks and **no field of the secret**, so the policy that lets the application ask this
+        does not let it read a value. A slot never written answers 404 and is None; so is one
+        whose current version was deleted or destroyed, because a version that cannot be read
+        is not a key anything holds. A version whose time does not parse is still held, with
+        no time: saying a written key is absent would send somebody to write it again.
+        """
+        assert_static_path(path)
+        mount, _, rest = path.partition("/")
+        try:
+            payload = self._call("GET", f"{mount}/metadata/{rest}")
+        except VaultRefusedError as refused:
+            if refused.status == 404:
+                return None
+            raise
+        data = payload.get("data")
+        versions = data.get("versions") if isinstance(data, dict) else None
+        current = data.get("current_version") if isinstance(data, dict) else None
+        found = versions.get(str(current)) if isinstance(versions, dict) else None
+        if not isinstance(found, dict):
+            return None
+        gone = bool(found.get("destroyed")) or bool(found.get("deletion_time"))
+        if gone:
+            return None
+        return StaticVersion(written_at=_instant(found.get("created_time")))
 
     def revoke(self, lease_id: str) -> None:
         """Give the credential back. Retries, unlike `issue`.

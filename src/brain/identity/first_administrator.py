@@ -179,6 +179,7 @@ SIGN_IN_AUTHORITY: Final = Capability(value="admin:sign_in")
 ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:budget",
     "admin:connector",
+    "admin:credential",
     "admin:field_classification",
     "admin:halt",
     "admin:legal_hold",

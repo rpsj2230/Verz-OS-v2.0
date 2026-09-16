@@ -31,17 +31,35 @@ environment, so a fresh install needs no hand-edited environment file for anythi
 collects. `brain.ops.install_settings` argues the mechanism, the order and what still has to be
 in the file.
 
-**A provider key is still confirmed rather than kept, and it is the only thing left in the
-409.** Its home is the vault, `brain.ops.openbao` reads a static slot and writes none, and
-`brain.tables.config` refuses a credential in a table the application role can select from. So
-a hosted install's key must already be the one loaded from its slot, compared with
-`hmac.compare_digest`, and what comes back is the slot's path and never a value. See
-`THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT`.
+**A provider key is kept in the vault now, before anybody is appointed, and the 409 is only
+for an install that cannot keep one.** Until 2026-09-16 the vault client read a static slot and
+wrote none, so a hosted install's key had to be the one already in the process environment and
+anything else was a 409 naming `providers/anthropic`; on the owner's staging install that meant
+a hand edit of the server's environment. `brain.ops.credentials.Credentials.keep` is the write,
+the same one the console's credential route makes, and it runs after `apply_install` and before
+`appoint`, which is the order `THE_APPOINTMENT_RUNS_IN_THE_ORDER_THAT_KEEPS_AN_INSTALL_FINISHABLE`
+already argues: a vault that refuses leaves the wizard open to try again. The 409 remains for
+an install that names no vault, whose key is still accepted when the environment already
+carries that same key, compared with `hmac.compare_digest`; for a vault that did not answer or
+refused; and for a key with a space inside it. Each says which, by `NotKeptReason`, and never
+by a value. `brain.tables.config` still refuses a credential in a table, and nothing here falls
+back to one. See `A_PROVIDER_KEY_IS_KEPT_BEFORE_THE_DOOR_CLOSES`.
+
+**The finishing screen is told which processes use the key**, as `ProviderKeyKept`: in use by
+the process that appointed and by every other from its next start, or outranked by a variable
+the environment file sets. That is
+`brain.ops.credentials.A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`, and it is on the response
+because the person who typed the key is about to ask the system a question.
 
 **The appointing process reads its own answers back without restarting**, because it holds what
 it wrote rather than re-reading the table it just wrote to. Which processes that reaches, and
 which it does not, is
 `brain.ops.install_settings.A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`.
+
+**No refused body is repeated.** The appointment carries the setup code and the provider key,
+and FastAPI's own 422 for a body in the wrong shape quotes the input it refused, so the router is
+built on `brain.api.NoEchoRoute`. Before 2026-09-16 a setup code over the length cap came back
+in the response that refused it.
 
 **The server chooses the administrator's principal id.** See
 `THE_SERVER_CHOOSES_WHO_IS_APPOINTED`.
@@ -67,11 +85,13 @@ that would have to be built.
 Rejected: appointing and discarding the settings. It is what a route reaching for `appoint`
 would do first, and it is the door closed before the settings are written.
 
-Task ids: M42.5.6, M42.5.10, M42.5.14
+Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7
 """
 
 from __future__ import annotations
 
+import asyncio
+import enum
 import hmac
 import uuid
 from collections.abc import Mapping
@@ -84,13 +104,21 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from brain.api import COMMON_RESPONSES
+from brain.api import COMMON_RESPONSES, NoEchoRoute
 from brain.core.errors import Absent, BrainError, Failed
-from brain.firstrun import Enrolment
+from brain.firstrun import GRANTED_BY, Enrolment
 from brain.identity.first_administrator import FirstAdministratorRefusedError
 from brain.identity.roles import RoleGrant
 from brain.install import hold_saved, saved_values
-from brain.ops.provider_keys import PROVIDER_SLOTS
+from brain.ops.credentials import (
+    SLOTS,
+    CredentialProblemError,
+    Credentials,
+    CredentialSlot,
+    CredentialsUnavailableError,
+    InUse,
+    VaultState,
+)
 from brain.settings import process_environment
 from brain.setup_wizard import (
     MAX_ANSWER_CHARS,
@@ -133,15 +161,15 @@ EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER: Final = (
     "accepted, and the reason for a refusal goes to the log."
 )
 
-#: Why the settings are saved and the provider key is not.
-THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT: Final = (
-    "An installation value is now kept in ops.setting, written in the appointment's own "
-    "transaction and resolved by value_of ahead of the environment, so an answer is no longer "
-    "lost when the wizard closes. A provider key cannot follow it: it is a standing credential "
-    "whose home is the vault, the vault this repository talks to reads a static slot and writes "
-    "none, and a table the application role can select from is the one place a credential must "
-    "not be. So a hosted install's key must already be the one loaded from its slot, or the "
-    "slot's path is told back and nobody is appointed. A path, never a value."
+#: Why the provider key is written before the appointment, and what happens without a vault.
+A_PROVIDER_KEY_IS_KEPT_BEFORE_THE_DOOR_CLOSES: Final = (
+    "An installation value is kept in ops.setting in the appointment's own transaction. A "
+    "provider key cannot follow it into a table, so it is written to the vault, through the same "
+    "store the console's credential route uses, after apply_install and before appoint: a vault "
+    "that is missing, silent or refusing leaves nobody appointed and the wizard open to try "
+    "again. An install that names no vault still finishes when its environment already carries "
+    "that same key. Otherwise the slot's path, the variable it would be read as and the reason "
+    "are told back. A path, a name and a reason, never a value."
 )
 
 #: Why the principal id is not taken from the request.
@@ -172,6 +200,46 @@ PRINCIPAL_PREFIX: Final = "u_"
 
 #: What a screen that was never finished is told as, in the review screen's own words.
 NOT_GIVEN: Final = REVIEW_STATES["not_given"]
+
+
+class NotKeptReason(enum.StrEnum):
+    """Why a provider key was not kept, so the screen can say what to do. Nobody was appointed."""
+
+    #: The install names no vault, and its environment does not already carry this key.
+    NO_VAULT = "no_vault"
+    #: The vault did not answer.
+    VAULT_UNREACHABLE = "vault_unreachable"
+    #: The vault answered and refused.
+    VAULT_REFUSED = "vault_refused"
+    #: What was given has a space or a character a key cannot hold inside it.
+    NOT_A_KEY = "not_a_key"
+
+
+#: The reason a vault's state is told as. `VaultState.READY` is never raised, so it has no row.
+NOT_KEPT_BECAUSE: Final[Mapping[VaultState, NotKeptReason]] = {
+    VaultState.ABSENT: NotKeptReason.NO_VAULT,
+    VaultState.UNREACHABLE: NotKeptReason.VAULT_UNREACHABLE,
+    VaultState.REFUSED: NotKeptReason.VAULT_REFUSED,
+}
+
+
+class ProviderKeyKept(enum.StrEnum):
+    """What became of the wizard's provider key, told to the finishing screen."""
+
+    #: The install keeps questions on its own hardware, so no key was asked for.
+    NOT_ASKED = "not_asked"
+    #: Kept in the vault, and in use by the process that appointed; the others from their start.
+    IN_USE = "in_use"
+    #: Kept in the vault, and the environment file sets the same variable, which wins on start.
+    OUTRANKED = "outranked"
+    #: The install names no vault, and its environment already carries this same key.
+    FROM_ENVIRONMENT = "from_environment"
+
+
+#: Every provider key's slot, by the provider's slug as the wizard names it.
+SLOT_BY_PROVIDER: Final[Mapping[str, CredentialSlot]] = {
+    one.provider.slug: one for one in SLOTS.values()
+}
 
 
 # ------------------------------------------------------------------------ the store
@@ -235,26 +303,29 @@ class ProblemsView(BaseModel):
 
 
 class UnkeptView(BaseModel):
-    """What the running install does not carry, by name. Nobody was appointed.
+    """What this install could not keep, by name, and why. Nobody was appointed.
 
-    One vault slot path today, because a provider key is the only answer this process cannot
-    keep. The field keeps the name and the shape 82afbfb gave it, and the console draws it
-    unchanged: a narrower body would be an API change for a screen that already renders a list
-    of names and nothing else.
+    `unkept` is the vault slot's path and `variables` the environment variable the key would be
+    read as, one each, because a provider key is the only answer that can fail to be kept.
+    `unkept` keeps the name 82afbfb gave it. `reason` is what makes the screen able to say what
+    to do: set up a vault, start or unseal it, load its policy, or paste the key again.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     unkept: tuple[str, ...]
+    variables: tuple[str, ...]
+    reason: NotKeptReason
 
 
 class AppointedView(BaseModel):
-    """Who was appointed, and the screen that signs them in."""
+    """Who was appointed, the screen that signs them in, and what became of the provider key."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     principal_id: str
     finish_path: str
+    provider_key: ProviderKeyKept
 
 
 @dataclass(frozen=True)
@@ -264,6 +335,9 @@ class Appointment:
     principal_id: str = ""
     problems: tuple[ProblemView, ...] = ()
     unkept: tuple[str, ...] = ()
+    variables: tuple[str, ...] = ()
+    reason: NotKeptReason | None = None
+    provider_key: ProviderKeyKept = ProviderKeyKept.NOT_ASKED
 
 
 # ------------------------------------------------------------------------ the decisions
@@ -328,25 +402,62 @@ def draft_of(
     return draft, tuple(found)
 
 
-def unkept(applied: Applied, env: Mapping[str, str] | None = None) -> tuple[str, ...]:
-    """Every slot `applied` carries a key for that the running install has not loaded.
+def slot_for(applied: Applied) -> CredentialSlot | None:
+    """The slot `applied`'s provider key goes into, or None when it carries no key.
 
-    Paths only, and a provider key is carried only when its slot's key is loaded and is the
-    same key, compared in constant time. The settings are not checked here at all any more
-    because they are written rather than confirmed. See
-    `THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT`. `env` is for tests.
+    A provider the wizard accepted is one of `PROVIDER_SLOTS`' slugs by its own check, so a
+    lookup that misses raises rather than dropping a key nothing would then keep.
     """
-    if not applied.provider:
-        return ()
-    source = process_environment() if env is None else env
-    names: list[str] = []
-    for slot in PROVIDER_SLOTS:
-        if slot.slug != applied.provider:
-            continue
-        loaded = source.get(slot.env_var, "")
-        if not loaded or not hmac.compare_digest(loaded, applied.provider_key):
-            names.append(slot.path)
-    return tuple(names)
+    return SLOT_BY_PROVIDER[applied.provider] if applied.provider else None
+
+
+async def keep_provider_key(
+    slot: CredentialSlot,
+    applied: Applied,
+    credentials: Credentials,
+    *,
+    trace_id: str,
+    env: Mapping[str, str] | None = None,
+) -> NotKeptReason | None:
+    """Keep `applied`'s key in `slot`, before anybody is appointed. None when it is kept.
+
+    With a vault, the key is written through `Credentials.keep`, attributed to first run, and
+    a vault that is silent or refuses, or a key with a space inside it, is the reason told back.
+    With none, the key is accepted only when the environment already carries that same key,
+    compared in constant time, because that install will read it from there on every start;
+    anything else is `NotKeptReason.NO_VAULT`. See `A_PROVIDER_KEY_IS_KEPT_BEFORE_THE_DOOR_CLOSES`.
+    `env` is for tests.
+    """
+    if not credentials.configured:
+        source = process_environment() if env is None else env
+        loaded = source.get(slot.provider.env_var, "")
+        carried = hmac.compare_digest(loaded, applied.provider_key)
+        return None if carried else NotKeptReason.NO_VAULT
+    try:
+        await asyncio.to_thread(
+            credentials.keep, slot, applied.provider_key, actor=GRANTED_BY, trace_id=trace_id
+        )
+    except CredentialProblemError:
+        return NotKeptReason.NOT_A_KEY
+    except CredentialsUnavailableError as unavailable:
+        return NOT_KEPT_BECAUSE[unavailable.state]
+    return None
+
+
+def put_provider_key_to_use(
+    slot: CredentialSlot | None, applied: Applied, credentials: Credentials
+) -> ProviderKeyKept:
+    """Hand a key kept by this appointment to this process, and say which processes use it.
+
+    After `appoint`, never before: a key handed to this process by an appointment that was then
+    refused would be a key nobody appointed choosing what every question is sent with.
+    """
+    if slot is None:
+        return ProviderKeyKept.NOT_ASKED
+    if not credentials.configured:
+        return ProviderKeyKept.FROM_ENVIRONMENT
+    in_use = credentials.put_to_use(slot, applied.provider_key)
+    return ProviderKeyKept.IN_USE if in_use is InUse.HERE else ProviderKeyKept.OUTRANKED
 
 
 async def appoint_first_administrator(
@@ -357,14 +468,17 @@ async def appoint_first_administrator(
     principal_id: str,
     trace_id: str,
     now: datetime,
+    credentials: Credentials | None = None,
     env: Mapping[str, str] | None = None,
 ) -> Appointment:
     """Run the appointment in its order, or refuse before the answers in one way.
 
     See `THE_APPOINTMENT_RUNS_IN_THE_ORDER_THAT_KEEPS_AN_INSTALL_FINISHABLE`. Raises
     `_nothing_to_appoint` for every refusal in `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER`,
-    and returns problems, or what is not carried, with nobody appointed, for the rest.
+    and returns problems, or the key that could not be kept, with nobody appointed, for the
+    rest. `credentials` None is an install with no vault.
     """
+    store = credentials if credentials is not None else Credentials(None)
     if enrolment is None:
         log.info("appointment refused", reason="no_setup_code")
         raise _nothing_to_appoint()
@@ -386,10 +500,12 @@ async def appoint_first_administrator(
     except (WizardClosedError, WizardLockedError) as refused:
         log.info("appointment refused", reason=type(refused).__name__)
         raise _nothing_to_appoint() from refused
-    missing = unkept(applied, env)
-    if missing:
-        log.info("appointment refused", reason="not_carried", names=list(missing))
-        return Appointment(unkept=missing)
+    slot = slot_for(applied)
+    if slot is not None:
+        why = await keep_provider_key(slot, applied, store, trace_id=trace_id, env=env)
+        if why is not None:
+            log.info("appointment refused", reason="not_kept", names=[slot.path], why=why)
+            return Appointment(unkept=(slot.path,), variables=(slot.provider.env_var,), reason=why)
     try:
         await appointer.appoint(
             applied.grant,
@@ -403,7 +519,10 @@ async def appoint_first_administrator(
     # Held from what was written rather than read back, so this process answers with the
     # install's own values on the very next request. See the module note.
     hold_saved({**saved_values(), **applied.settings})
-    return Appointment(principal_id=principal_id)
+    return Appointment(
+        principal_id=principal_id,
+        provider_key=put_provider_key_to_use(slot, applied, store),
+    )
 
 
 # ------------------------------------------------------------------------- the wiring
@@ -415,16 +534,22 @@ def appointer_of(request: Request) -> Appointer | None:
     return found if isinstance(found, Appointer) else None
 
 
+def credentials_of(request: Request) -> Credentials | None:
+    """Where this process keeps a credential, or None, which is an install with no vault."""
+    found = getattr(request.app.state, "credentials", None)
+    return found if isinstance(found, Credentials) else None
+
+
 def _trace_id() -> str:
     # The id the trace middleware vouched for or minted, as `brain.sign_in_routes` reads it.
     return str(structlog.contextvars.get_contextvars().get("trace_id", ""))
 
 
-router = APIRouter(tags=["setup"])
+router = APIRouter(tags=["setup"], route_class=NoEchoRoute)
 
 _TOLD: Final[dict[int | str, dict[str, object]]] = {
     **COMMON_RESPONSES,
-    409: {"model": UnkeptView, "description": "What the running install does not carry."},
+    409: {"model": UnkeptView, "description": "The provider key this install could not keep."},
     422: {"model": ProblemsView, "description": "What is wrong with the answers, by field."},
 }
 
@@ -444,6 +569,7 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
             principal_id=new_principal_id(),
             trace_id=_trace_id(),
             now=now,
+            credentials=credentials_of(request),
         )
     except BrainError:
         raise
@@ -453,9 +579,12 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
     if result.problems:
         told = ProblemsView(problems=result.problems)
         return JSONResponse(status_code=422, content=told.model_dump(mode="json"))
-    if result.unkept:
-        return JSONResponse(
-            status_code=409, content=UnkeptView(unkept=result.unkept).model_dump(mode="json")
-        )
-    view = AppointedView(principal_id=result.principal_id, finish_path=FINISH_PATH)
+    if result.reason is not None:
+        unkept = UnkeptView(unkept=result.unkept, variables=result.variables, reason=result.reason)
+        return JSONResponse(status_code=409, content=unkept.model_dump(mode="json"))
+    view = AppointedView(
+        principal_id=result.principal_id,
+        finish_path=FINISH_PATH,
+        provider_key=result.provider_key,
+    )
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))

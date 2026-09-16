@@ -186,6 +186,14 @@ class Settings(BaseSettings):
     #: and the appended line is the one a reader of the finished file gets.
     setup_secret: Annotated[SealedSecret | None, BeforeValidator(sealed_setup_secret)] = None
     setup_issued_at: datetime | None = None
+    #: Where this install's secrets vault answers, and the token the application presents to
+    #: it. Both empty, the default, is an install with no vault, which is every install until
+    #: its owner runs one: `brain.ops.credentials` then keeps no credential and says so in
+    #: words rather than falling back to a table. The token is kept out of `repr` for the
+    #: reason `app_role_password` is. Read here and handed on, because nothing else reads the
+    #: environment; see `brain.ops.credentials.credentials_at_start`.
+    vault_address: str = ""
+    vault_token: str = Field(default="", repr=False)
 
     def setup_enrolment(self) -> Enrolment | None:
         """The one enrolment this installation's environment file describes, or none.

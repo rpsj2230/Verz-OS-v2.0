@@ -241,18 +241,29 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     first mounted that router. The exceptions are compared exactly, so a second one cannot arrive
     without an edit here, and a stale one fails too.
 
-    **Unlinking a sign-in is the second, for its 409.** `brain.session_routes` refuses to unlink the
+    **The credential write is the second, for its 409 and its 503.** `brain.credential_routes`
+    answers a key it could not keep with `CredentialNotKeptView`, which is `ErrorBody` with the
+    slot and the vault's state added, so a console drawing any failure still reads its message
+    and trace id; documenting it as bare `ErrorBody` would hide the two fields a screen needs to
+    say which vault problem to fix.
+
+    **Unlinking a sign-in is the third, for its 409.** `brain.session_routes` refuses to unlink the
     last administrator who can sign in with an `UnlinkView` carrying the sentence saying why, which
     is the one refusal on that route an administrator has to act on and which names nobody else.
 
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
+    from brain.credential_routes import CREDENTIALS_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
 
     app: FastAPI = create_app(Settings(env="development"))
     doc = app.openapi()
     ref = "#/components/schemas/ErrorBody"
+    credential = f"{API_PREFIX}{CREDENTIALS_PATH}/{{family}}/{{name}}"
+    not_kept = "#/components/schemas/CredentialNotKeptView"
     own_shape = {
         (SIGN_INS_PATH, "409"): "#/components/schemas/SignInView",
+        (credential, "409"): not_kept,
+        (credential, "503"): not_kept,
         (f"{API_PREFIX}/govern/sign-ins/unlink", "409"): "#/components/schemas/UnlinkView",
     }
 

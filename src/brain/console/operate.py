@@ -69,6 +69,16 @@ arguments: `Job.args` holds identifiers of records, so a row showing them names 
 reader may hold nothing over, on a screen whose whole content is supposed to be the question
 rather than the answer.
 
+**A run nobody asked for has one way in, not two.** `JobRecord` is the shape of a job and no
+table holds one, so the runs a browser can actually be shown today are the scheduled controls
+`ops.control_run` records, and a control is nobody's work. `may_watch`'s first way in is closed
+for it rather than defaulted open, and `may_watch_unattended` is the second way on its own: the
+screen's whole read, capability and console plane, in a scope that matches a row carrying no
+person and no department. See `A_RUN_NOBODY_ASKED_FOR_IS_SEEN_THROUGH_THE_SCREEN_OR_NOT_AT_ALL`.
+Rejected: building a `JobRecord` for a control with the system as its principal. It would pass
+the constructor's refusal of a row naming nobody by naming somebody who does not exist, and the
+first way in would then open for any reader whose identifier happened to match.
+
 **Connector health.** `brain.connectors.federation.NAMING_A_SOURCE_IS_A_DISCLOSURE` is already
 the rule, and this is it applied to a list rather than to a sentence. The connectors a reader
 may be shown are the ones `brain.console.screens.offerable` admits, so a source that is down
@@ -147,9 +157,9 @@ from __future__ import annotations
 import enum
 import importlib
 import inspect
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType
 from typing import Any, Final, get_type_hints
 
@@ -158,6 +168,7 @@ from brain.connectors.contract import ConnectorHealth
 from brain.connectors.manifest import ConnectorManifest
 from brain.connectors.registry import RegisteredConnector
 from brain.console.agent_output import basis_over
+from brain.console.reads import permitted
 from brain.console.screens import (
     SCREENS,
     WITHHELD_AT_DEPARTMENT_SCOPE,
@@ -174,6 +185,7 @@ from brain.core.department import DEPARTMENT_FIELD
 from brain.core.entitlement import EntitlementSet
 from brain.core.scope import Scope
 from brain.gate.abstain import Abstention, AbstentionReason
+from brain.gate.context import TrafficClass
 from brain.gate.provenance import DEFAULT_HORIZON, Freshness, StalenessHorizon, assess_freshness
 from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.search import Reach, reach_for
@@ -181,6 +193,7 @@ from brain.ops.budgets import Allowance, BudgetLevel, BudgetRow
 from brain.ops.canaries import CanaryFinding
 from brain.ops.halt import Halt, HaltScope, HaltState
 from brain.ops.jobs import JobRecord, JobState, hidden_count_fields
+from brain.ops.schedule import Owed
 from brain.ops.spend import LADDER, Refusal, Rung
 
 # ----------------------------------------------------------------- written-down reasons
@@ -250,6 +263,17 @@ AN_ARGUMENT_IS_A_REFERENCE_TO_A_RECORD_THE_READER_MAY_HOLD_NOTHING_OVER: Final =
     "reading task=export_invoice client=447 tells the reader that client 447 exists and is "
     "being worked on. The screen's own purpose says configuration and not content, the "
     "question and not the answer, and an argument is halfway to the answer."
+)
+
+#: Why a scheduled control is shown through the screen's grant and through nothing else.
+A_RUN_NOBODY_ASKED_FOR_IS_SEEN_THROUGH_THE_SCREEN_OR_NOT_AT_ALL: Final = (
+    "may_watch has two ways in: the work is the reader's own, or a grant covers it in a scope "
+    "matching the row. A scheduled control is nobody's work, so the first way is closed for it, "
+    "and a default opening it (the system's own runs are harmless, show them to everybody) "
+    "would be a third way in that no administrator granted and no review would find. What is "
+    "left is the screen's whole read, the tool's capability and the console plane together, "
+    "held in a scope the row satisfies. The row carries no person and no department, so a "
+    "grant scoped to either matches nothing and fails closed."
 )
 
 #: Why a connector list is filtered the way a dropdown is.
@@ -964,6 +988,133 @@ def queue_summary(
     )
 
 
+# ------------------------------------------------- runs nobody asked for (M27.2.2, M27.2.6)
+#: The traffic class a scheduled control runs under, which is what its row says.
+#:
+#: `brain.ops.worker` registers the control task under this class and the scheduler starts a
+#: control with nobody waiting on it, so there is one honest value. It is on the row so a grant
+#: scoped to a traffic class, which `_run_row` already lets an administrator write, means the
+#: same thing for a control as it means for a job.
+UNATTENDED_TRAFFIC: Final = TrafficClass.SYSTEM
+
+
+def _unattended_row(task: str, state: JobState) -> dict[str, str]:
+    """The fields a run grant's scope may be written against, for a run belonging to nobody.
+
+    `_run_row`'s fields less the person, which this row does not have. Not an empty string in
+    its place: a scope clause comparing `principal_id` with an empty value would then match a
+    row belonging to nobody, and the absence of the key is what makes a person-scoped grant
+    fail closed here.
+    """
+    return {"task": task, "traffic_class": UNATTENDED_TRAFFIC.value, "state": state.value}
+
+
+def may_watch_unattended(
+    task: str,
+    state: JobState,
+    reader: EntitlementSet,
+    now: datetime | None = None,
+    *,
+    screen_key: str = RUNS_SCREEN,
+) -> bool:
+    """Whether this reader may see a run nobody asked for. One way in (M27.2.2, M27.2.6).
+
+    The screen's own read, asked through `brain.console.reads.permitted` so the console plane is
+    part of it, and the capability's scope matched against the row. See
+    `A_RUN_NOBODY_ASKED_FOR_IS_SEEN_THROUGH_THE_SCREEN_OR_NOT_AT_ALL` for why `may_watch`'s
+    first way in has no counterpart here.
+
+    The plane is asked here and not in `may_watch`, and the difference is the subject rather
+    than an inconsistency: somebody watching their own job is shown their own work whatever
+    planes they hold, and a run belonging to nobody is only ever reached through the screen, so
+    the screen's whole read is the door.
+    """
+    read = screen(screen_key).read
+    where: Scope | None = reader.scope_for(read.requires, now)
+    # For the type and not for an answer: `permitted` asks this same `scope_for` first and is
+    # False whenever it is None, so this line cannot change what is returned. A mutation making
+    # it `if False` survived both test files on 2026-09-16, which is that equivalence measured.
+    if where is None:
+        return False
+    return permitted(read, reader, now) and where.matches(_unattended_row(task, state))
+
+
+@dataclass(frozen=True)
+class ControlRun:
+    """One scheduled control that has started and has not recorded finishing (M27.2.2).
+
+    No person and no agent, because a control has neither, and no arguments, because it takes
+    none. `stalled` is `brain.ops.schedule_runner.stalled_runs`' answer handed in rather than a
+    threshold applied here: a row that began long ago and never finished is either still going
+    or a process that died holding it, this module cannot tell which, and a second threshold
+    would be a second answer to how long is too long.
+    """
+
+    control: str
+    started_at: datetime
+    #: The control was reached in report-only mode and may only say what it would do.
+    report_only: bool
+    #: Started longer ago than the scheduler's own line for asking whether it is still alive.
+    stalled: bool
+
+
+@dataclass(frozen=True)
+class OwedControl:
+    """One scheduled control owed a run and not yet started (M27.2.6).
+
+    `brain.ops.schedule.Owed` less `report_only`. That flag is computed from which destructive
+    controls an installation has released, and the release is read from a store this screen does
+    not read; a mode shown from the other half of that decision would be the flattering half.
+    """
+
+    control: str
+    due_since: datetime
+    late_by: timedelta
+    first_run: bool
+
+
+def unattended_running(
+    started: Sequence[tuple[str, datetime, bool]],
+    stalled: Collection[str],
+    reader: EntitlementSet,
+    now: datetime | None = None,
+) -> tuple[ControlRun, ...]:
+    """The controls running now that this reader may see, oldest first (M27.2.2).
+
+    `started` is each control's newest run where it has not recorded finishing, as name, start
+    and mode. Filtered by `may_watch_unattended` against the live runs screen before anything
+    else, so there is no point here at which a row the reader may not see exists to be kept.
+    Oldest first because the run that has been going longest is the one an operator is looking
+    for, and a list in the order the database returned it would put it wherever that was.
+    """
+    return tuple(
+        ControlRun(control=name, started_at=at, report_only=report_only, stalled=name in stalled)
+        for name, at, report_only in sorted(started, key=lambda one: (one[1], one[0]))
+        if may_watch_unattended(name, JobState.RUNNING, reader, now, screen_key=RUNS_SCREEN)
+    )
+
+
+def unattended_waiting(
+    owed: Sequence[Owed], reader: EntitlementSet, now: datetime | None = None
+) -> tuple[OwedControl, ...]:
+    """The controls owed a run that this reader may see, in the order owed (M27.2.6).
+
+    Behind the queue screen's grant and not the live runs screen's, which is
+    `QUEUE_SCREEN`'s argument: one grant for both would let somebody given the queue watch
+    what is running. The order is `brain.ops.schedule.owed`'s, which is the registry's.
+    """
+    return tuple(
+        OwedControl(
+            control=one.name,
+            due_since=one.due_since,
+            late_by=one.late_by,
+            first_run=one.first_run,
+        )
+        for one in owed
+        if may_watch_unattended(one.name, JobState.QUEUED, reader, now, screen_key=QUEUE_SCREEN)
+    )
+
+
 # ------------------------------------------------------------- connector health (M27.2.4)
 def reachable_connectors(
     registry: Sequence[RegisteredConnector], reachable: Iterable[str]
@@ -1441,6 +1592,8 @@ OPERATE_ROWS: Final[tuple[type, ...]] = (
     Overview,
     RunRow,
     QueueSummary,
+    ControlRun,
+    OwedControl,
     ConnectorRow,
     CoverageRow,
     Incident,

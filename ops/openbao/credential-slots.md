@@ -44,12 +44,47 @@ costs three minutes here.
 | `providers/openai` | OpenAI | `OPENAI_API_KEY` | Embeddings, and a fallback for completion |
 | `providers/moonshot` | Moonshot | `MOONSHOT_API_KEY` | The cheaper reasoner; the v1 system routes here by default |
 
+Since 2026-09-16 a provider key is **put in from the browser**: the setup wizard keeps the key
+it asks for, and an administrator holding `admin:credential` sets or replaces one from the
+console through `PUT /api/v1/credentials/providers/<provider>`. Both write the slot, both
+answer that a key is held and when it was written, and neither ever answers with the key.
+`brain.ops.credentials` argues why the application's policy may create and update these
+slots, and the policy file says what it still refuses.
+
 `providers/` is the **only** prefix the static read will touch, and the refusal lives on
 `OpenBaoVault.read_static_kv` rather than on its caller. That placement matters: a guard on
 the caller is a guard somebody bypasses by calling the other thing. Reading
 `connectors/creds/xero` this way would work perfectly, hand out a standing credential with
 nothing to revoke and no record of which run held it, and nobody would see the difference
 until an audit asked.
+
+## Letting the application keep a provider key
+
+Done once on each install that runs a vault, by whoever holds a token that may write policy,
+which during first setup is the root token before `UNSEAL.md` step 6 revokes it. No value in
+these steps belongs to any particular install, and none is written into this repository.
+
+1. Enable a version 2 kv engine at the prefix the code reads: `bao secrets enable -path=providers kv-v2`.
+2. Load the policies, which now include the provider slots in `application.hcl`:
+   `sh ops/openbao/load-policies.sh`.
+3. Mint the application's token against that policy alone, as an orphan with a period, and
+   read it once from the terminal: `bao token create -orphan -policy=application -period=768h`.
+   Nothing in the application renews this token yet, so a process that outlives the period is
+   refused by the vault and says so; restarting the application does not renew it either.
+4. Put the vault's address as the application container reaches it, and that token, into the
+   install's environment file as `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN`.
+5. Make sure the application container is on the vault's network and receives those two
+   variables. No compose file in this repository does either yet: see "What is not built" below.
+6. Remove any `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `MOONSHOT_API_KEY` line from the
+   environment file once the vault holds that key. A variable the environment sets outranks the
+   vault on every start, so a key replaced from the console would otherwise not be the one in use.
+7. Restart the application, and turn on the audit device if it is not on (`enable-audit.sh`),
+   because the vault's log is the one record of each write by path until the ledger has one.
+
+**What is not built.** The compose files pass the application an explicit list of variables and
+join it to no network the vault is on, so steps 4 and 5 need an override on the server today, and
+the update script recreates the container without one. The product's half is an overlay composed
+in when the environment file names a vault, as `docker-compose.tunnel.yml` is for the tunnel.
 
 ## Three things worth deciding before the keys are issued, not after
 

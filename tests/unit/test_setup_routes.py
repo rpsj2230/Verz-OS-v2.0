@@ -7,6 +7,10 @@ on a real database, skipped without `DATABASE_URL`, that goes appointment, `/set
 token signed by the test key through the lifespan's own key set client, and `/me`, driven through
 `httpx.ASGITransport` for the reason `tests/unit/test_app_wiring.py` gives.
 
+**The provider key is kept in the vault now**, through `tests/unit/test_credentials.Vault`
+attached as the process's store, and M27.8.7's half on this route is
+`test_no_appointment_answer_and_no_log_line_carries_the_provider_key_or_the_setup_code`.
+
 **The `carried` fixture removes every setting the wizard collects from the environment**, so the
 whole file now runs against an install that carries none of them. Before 2026-09-16 it set them
 all, because the route refused an appointment whose answers the environment did not already
@@ -15,11 +19,12 @@ match. What replaced that is in `brain.ops.install_settings`.
 The setup code is minted five minutes before the wall clock, because both setup routes read it
 and the window is an hour.
 
-Task ids: M42.5.6, M42.5.10, M42.5.14
+Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7
 """
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
@@ -41,18 +46,28 @@ from brain.identity.first_administrator import (
 )
 from brain.identity.roles import Role, RoleGrant
 from brain.install import BY_NAME, hold_saved, saved_values, value_of
+from brain.ops.credentials import KEY_FIELD, Credentials
 from brain.ops.install_settings import key_for
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.leases import SealedSecret
-from brain.ops.provider_keys import PROVIDER_SLOTS
+from brain.ops.openbao import VaultRefusedError, VaultUnreachableError
 from brain.session import make_session_factory
-from brain.setup_routes import APPOINTMENT_PATH, NOT_GIVEN, PRINCIPAL_PREFIX, unkept
+from brain.setup_routes import (
+    APPOINTMENT_PATH,
+    NOT_GIVEN,
+    PRINCIPAL_PREFIX,
+    NotKeptReason,
+    ProviderKeyKept,
+    keep_provider_key,
+    slot_for,
+)
 from brain.setup_wizard import StepId, apply_install, settings_from, step_for
 from brain.sign_in_routes import FINISH_PATH
 from tests.fixtures.http_client import Response
 from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_app_wiring import Realm, wired_app
 from tests.unit.test_automation_owner_store import app_engine
+from tests.unit.test_credentials import KEY, Vault
 from tests.unit.test_keycloak_tokens import ISSUER, token
 from tests.unit.test_setup_wizard import (
     ADMIN_ANSWERS,
@@ -77,6 +92,15 @@ EVERY_SCREEN: Mapping[StepId, Mapping[str, str]] = {
     StepId.STAFF_SOURCE: SOURCE_ANSWERS,
     StepId.MODEL_PROVIDER: LOCAL_ANSWERS,
 }
+
+#: Every screen, with a hosted provider whose key is the sentinel nothing else could contain.
+HOSTED: Mapping[StepId, Mapping[str, str]] = {
+    **EVERY_SCREEN,
+    StepId.MODEL_PROVIDER: {**HOSTED_ANSWERS, "provider_key": KEY},
+}
+
+#: The variable the hosted provider's key is read as, from the slot rather than a literal.
+VARIABLE = "ANTHROPIC_API_KEY"
 
 
 @dataclass
@@ -140,6 +164,9 @@ def carried(monkeypatch: pytest.MonkeyPatch) -> Iterator[Mapping[str, str]]:
     values = settings_from(answered())
     for name in values:
         monkeypatch.delenv(name, raising=False)
+    # And the provider key, so a key in the shell running the suite cannot carry an appointment
+    # that the install under test does not.
+    monkeypatch.delenv(VARIABLE, raising=False)
     before = hold_saved({})
     yield values
     hold_saved(before)
@@ -154,11 +181,36 @@ def minted_settings(**more: Any) -> Settings:
 
 
 @contextmanager
-def serving(store: Store | None, *, with_code: bool = True) -> Iterator[TestClient]:
+def serving(
+    store: Store | None, *, with_code: bool = True, credentials: Credentials | None = None
+) -> Iterator[TestClient]:
     app = create_app(minted_settings() if with_code else Settings(env="development"))
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.first_administrators = store
+        if credentials is not None:
+            app.state.credentials = credentials
         yield c
+
+
+@dataclass
+class Watching(Store):
+    """A `Store` that records what the vault held at the moment it was asked to appoint."""
+
+    vault: Vault = field(default_factory=Vault)
+    held_when_appointed: list[list[tuple[str, dict[str, str]]]] = field(default_factory=list)
+
+    async def appoint(
+        self,
+        grant: RoleGrant,
+        *,
+        display_name: str,
+        trace_id: str = "",
+        settings: Mapping[str, str] | None = None,
+    ) -> None:
+        self.held_when_appointed.append(list(self.vault.written))
+        await super().appoint(
+            grant, display_name=display_name, trace_id=trace_id, settings=settings
+        )
 
 
 def appointing(c: TestClient, sent: Mapping[str, Any]) -> Response:
@@ -205,6 +257,7 @@ def test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_f
     assert answer.status_code == 200
     view = answer.json()
     assert view["finish_path"] == FINISH_PATH
+    assert view["provider_key"] == ProviderKeyKept.NOT_ASKED
     assert view["principal_id"].startswith(PRINCIPAL_PREFIX)
     assert len(view["principal_id"]) > len(PRINCIPAL_PREFIX) + 16
     [(grant, name, trace_id)] = store.appointed
@@ -322,25 +375,213 @@ def test_problems_with_the_answers_are_told_by_screen_and_field_and_appoint_nobo
     assert store.appointed == []
 
 
-def test_a_provider_key_the_vault_has_not_loaded_is_named_by_its_slot_and_appoints_nobody(
+def test_a_hosted_install_with_a_vault_keeps_the_key_before_anybody_is_appointed(
     carried: Mapping[str, str],
 ) -> None:
-    """The one 409 left. A hosted install whose key is not the one this process loaded from its
-    slot is refused by the slot's path, the key is nowhere in the answer, and nobody is appointed.
+    """The case the old 409 stood in for. The key is written to its slot under the field start-up
+    reads, the vault already holds it at the moment `appoint` is called, this process is handed it
+    afterwards, and the finishing screen is told it is in use. Nothing had to be set in the
+    environment first.
 
-    Delete this and an install is appointed over a provider key nothing will ever reach, which is
-    the belief `THE_ONLY_ANSWER_LEFT_TO_CONFIRM_IS_THE_ONE_THAT_BELONGS_IN_A_VAULT` is about."""
+    Delete this and the wizard can go back to refusing a key the environment does not carry, or
+    write the key after the door has closed, where a vault that refuses leaves an install nobody
+    can finish."""
+    del carried
+    env: dict[str, str] = {}
+    store = Watching()
+    with serving(store, credentials=Credentials(store.vault, environ=env)) as c:
+        answer = appointing(c, body(answers=HOSTED))
+
+    assert answer.status_code == 200
+    assert answer.json()["provider_key"] == ProviderKeyKept.IN_USE
+    assert store.vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
+    assert store.held_when_appointed == [[("providers/anthropic", {KEY_FIELD: KEY})]]
+    assert env == {VARIABLE: KEY}
+    assert len(store.appointed) == 1
+
+
+def test_a_key_the_environment_file_outranks_is_kept_and_the_finish_is_told_so(
+    carried: Mapping[str, str],
+) -> None:
+    """The owner's staging install, where the key was set in the environment by hand. It is written
+    to the vault all the same, this process is not handed it, and the finishing screen is told the
+    file's value wins until its line is removed. Delete this and that install finishes believing
+    the key it typed is the one in use."""
+    del carried
+    env = {VARIABLE: "sk-set-by-hand"}
+    vault = Vault()
+    outranked = Credentials(vault, outranking=frozenset({VARIABLE}), environ=env)
+    with serving(Store(), credentials=outranked) as c:
+        answer = appointing(c, body(answers=HOSTED))
+
+    assert (answer.status_code, answer.json()["provider_key"]) == (200, ProviderKeyKept.OUTRANKED)
+    assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
+    assert env == {VARIABLE: "sk-set-by-hand"}
+
+
+@pytest.mark.parametrize(
+    ("raised", "reason"),
+    [
+        (VaultUnreachableError("did not answer"), NotKeptReason.VAULT_UNREACHABLE),
+        (VaultRefusedError("refused", status=403), NotKeptReason.VAULT_REFUSED),
+    ],
+)
+def test_a_vault_that_is_silent_or_refuses_appoints_nobody_and_says_which(
+    carried: Mapping[str, str], raised: Exception, reason: NotKeptReason
+) -> None:
+    """Nobody is appointed, so the wizard stays open to be sent again once the vault is fixed, and
+    the reason says which fix. Delete this and a key that was never stored is followed by a closed
+    wizard and an install that cannot answer a question."""
+    del carried
+    env: dict[str, str] = {}
+    store = Store()
+    with serving(store, credentials=Credentials(Vault(fail=raised), environ=env)) as c:
+        answer = appointing(c, body(answers=HOSTED))
+
+    assert (answer.status_code, answer.json()) == (
+        409,
+        {"unkept": ["providers/anthropic"], "variables": [VARIABLE], "reason": reason},
+    )
+    assert store.appointed == []
+    assert env == {}
+    assert dict(saved_values()) == {}
+
+
+def test_a_key_with_a_space_inside_it_appoints_nobody_and_nothing_reaches_the_vault(
+    carried: Mapping[str, str],
+) -> None:
+    """The store judges the paste before it writes, and the wizard's own checks do not look inside
+    a key, so this is where a bad copy is caught. Delete this and a broken key is written, the
+    install is appointed over it, and the first question fails as unauthenticated."""
+    del carried
+    vault = Vault()
+    store = Store()
+    spaced = {**HOSTED, StepId.MODEL_PROVIDER: {**HOSTED_ANSWERS, "provider_key": f"{KEY} {KEY}"}}
+    with serving(store, credentials=Credentials(vault, environ={})) as c:
+        answer = appointing(c, body(answers=spaced))
+
+    assert (answer.status_code, answer.json()["reason"]) == (409, NotKeptReason.NOT_A_KEY)
+    assert vault.written == []
+    assert store.appointed == []
+
+
+def test_an_install_with_no_vault_is_told_so_and_appoints_nobody(
+    carried: Mapping[str, str],
+) -> None:
+    """The 409 that is left, named by the slot's path, the variable and the reason, and never by
+    the key. Delete this and an install with no vault is appointed over a key nothing will ever
+    read, which is the belief `A_PROVIDER_KEY_IS_KEPT_BEFORE_THE_DOOR_CLOSES` is about."""
     del carried
     store = Store()
-    slot = next(one for one in PROVIDER_SLOTS if one.slug == HOSTED_ANSWERS["model_provider"])
-    hosted = {**EVERY_SCREEN, StepId.MODEL_PROVIDER: HOSTED_ANSWERS}
     with serving(store) as c:
-        answer = appointing(c, body(answers=hosted))
+        answer = appointing(c, body(answers=HOSTED))
 
-    assert (answer.status_code, answer.json()) == (409, {"unkept": [slot.path]})
-    assert HOSTED_ANSWERS["provider_key"] not in answer.text
+    assert (answer.status_code, answer.json()) == (
+        409,
+        {
+            "unkept": ["providers/anthropic"],
+            "variables": [VARIABLE],
+            "reason": NotKeptReason.NO_VAULT,
+        },
+    )
+    assert KEY not in answer.text
     assert store.appointed == []
     assert dict(saved_values()) == {}
+
+
+def test_an_install_with_no_vault_finishes_when_its_environment_already_carries_that_key(
+    carried: Mapping[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sibling of the 409, and how an install that runs no vault still finishes: its
+    environment already carries the same key, which it will read on every start. Delete this and
+    such an install can never be appointed, because nothing else could keep the key for it."""
+    del carried
+    monkeypatch.setenv(VARIABLE, KEY)
+    store = Store()
+    with serving(store) as c:
+        answer = appointing(c, body(answers=HOSTED))
+
+    assert answer.status_code == 200
+    assert answer.json()["provider_key"] == ProviderKeyKept.FROM_ENVIRONMENT
+    assert len(store.appointed) == 1
+
+
+def test_a_key_is_not_handed_to_this_process_by_an_appointment_that_was_refused(
+    carried: Mapping[str, str],
+) -> None:
+    """The key is written before `appoint`, which is the order that keeps a refused vault from
+    closing the wizard. The cost is stated in the route: an appointment that then loses the race
+    has written a key. What it must not do is hand that key to this process, where it would be a
+    key nobody was appointed to choose. Delete this and the hand-over can move above `appoint`."""
+    del carried
+    env: dict[str, str] = {}
+    vault = Vault()
+    with serving(Store(beaten=True), credentials=Credentials(vault, environ=env)) as c:
+        lost = appointing(c, body(answers=HOSTED))
+
+    assert (lost.status_code, refusal(lost)) == (404, nothing_here())
+    assert vault.written == [("providers/anthropic", {KEY_FIELD: KEY})]
+    assert env == {}
+
+
+def test_no_appointment_answer_and_no_log_line_carries_the_provider_key_or_the_setup_code(
+    carried: Mapping[str, str],
+    capsys: pytest.CaptureFixture[str],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """M27.8.7 on the wizard's path. Every answer the appointment gives a hosted install, driven
+    with the sentinel key: kept, outranked, silent, refusing, no vault, a bad paste, a key over the
+    wizard's length cap, a body in the wrong shape carrying the key, and a setup code over its cap.
+    Every body and header is searched, and so is standard output and the standard library's log.
+
+    **The positive half:** the vault holds the key afterwards, the kept line and the refusals were
+    logged. And the setup code is searched for too, because before `NoEchoRoute` a code over its
+    cap came back in the 422 that refused it. Delete this and a leak in the answer nobody looked at
+    ships, on the one screen a stranger with the address can reach."""
+    del carried
+    caplog.set_level(logging.DEBUG)
+    capsys.readouterr()
+    seen: list[str] = []
+
+    def record(response: Response) -> int:
+        seen.append(response.text)
+        seen.extend(f"{name}: {value}" for name, value in response.headers.items())
+        return response.status_code
+
+    kept = Vault()
+    too_long = {
+        **HOSTED,
+        StepId.MODEL_PROVIDER: {**HOSTED_ANSWERS, "provider_key": KEY + "k" * 1000},
+    }
+    wrong_shape = body(answers=HOSTED)
+    wrong_shape["answers"]["model_provider"] = KEY
+    long_code = f"{SECRET}{KEY}{'c' * 200}"
+
+    with serving(Store(), credentials=Credentials(kept, environ={})) as c:
+        assert record(appointing(c, body(answers=HOSTED))) == 200
+    outranked = Credentials(Vault(), outranking=frozenset({VARIABLE}), environ={})
+    with serving(Store(), credentials=outranked) as c:
+        assert record(appointing(c, body(answers=HOSTED))) == 200
+    for failing in (VaultUnreachableError("x"), VaultRefusedError("x", status=403)):
+        with serving(Store(), credentials=Credentials(Vault(fail=failing), environ={})) as c:
+            assert record(appointing(c, body(answers=HOSTED))) == 409
+    with serving(Store()) as c:
+        assert record(appointing(c, body(answers=HOSTED))) == 409
+    spaced = {**HOSTED, StepId.MODEL_PROVIDER: {**HOSTED_ANSWERS, "provider_key": f"{KEY} x"}}
+    with serving(Store(), credentials=Credentials(Vault(), environ={})) as c:
+        assert record(appointing(c, body(answers=spaced))) == 409
+        assert record(appointing(c, body(answers=too_long))) == 422
+        assert record(appointing(c, wrong_shape)) == 422
+        assert record(appointing(c, body(answers=HOSTED, code=long_code))) == 422
+
+    written = capsys.readouterr()
+    logged = "\n".join([written.out, written.err, caplog.text])
+    everything = "\n".join([*seen, logged])
+    assert KEY not in everything
+    assert SECRET not in everything
+    assert kept.written == [("providers/anthropic", {KEY_FIELD: KEY})]
+    assert "credential kept" in logged
+    assert "appointment refused" in logged
 
 
 def test_a_setting_the_environment_does_not_carry_no_longer_refuses_the_appointment(
@@ -393,38 +634,41 @@ def test_a_process_with_no_first_administrator_store_refuses_every_caller_alike(
 # ----------------------------------------------------------------- the settings, no server
 
 
-def test_a_provider_key_is_carried_only_when_its_slot_holds_that_same_key() -> None:
-    """A hosted install's key is kept only when the key loaded from its slot is the same one; an
-    unloaded slot and a different key are both named by the slot's path, never by the key. Delete
-    this and an install is appointed over a provider key nothing will ever use."""
+def test_with_no_vault_a_key_is_accepted_only_when_the_environment_carries_that_same_key() -> None:
+    """Compared in constant time, and an unset variable and a different key are both the same
+    refusal. Held on the function rather than through the route, so the three environments are
+    asked of one draft. Delete this and an install with no vault is appointed over a key nothing
+    will ever use, or refused over the one its environment does carry."""
     draft = answered(hosted=True)
     applied = apply_install(
         draft, an_enrolment(), SECRET, principal_id="u_first", administrators=0, now=INSIDE
     )
-    slot = next(one for one in PROVIDER_SLOTS if one.slug == HOSTED_ANSWERS["model_provider"])
-    running = dict(applied.settings)
+    slot = slot_for(applied)
+    assert slot is not None
+    none = Credentials(None)
 
-    unloaded = unkept(applied, running)
-    other = unkept(applied, {**running, slot.env_var: "j" * 40})
-    same = unkept(applied, {**running, slot.env_var: HOSTED_ANSWERS["provider_key"]})
+    async def ask(env: Mapping[str, str]) -> NotKeptReason | None:
+        return await keep_provider_key(slot, applied, none, trace_id="t", env=env)
 
-    assert (unloaded, other, same) == ((slot.path,), (slot.path,), ())
-    assert all(HOSTED_ANSWERS["provider_key"] not in name for name in (*unloaded, *other))
+    unset = run(lambda: ask({}))
+    other = run(lambda: ask({VARIABLE: "j" * 40}))
+    same = run(lambda: ask({VARIABLE: HOSTED_ANSWERS["provider_key"]}))
+
+    assert (slot.path, slot.provider.env_var) == ("providers/anthropic", VARIABLE)
+    assert (unset, other, same) == (NotKeptReason.NO_VAULT, NotKeptReason.NO_VAULT, None)
 
 
-def test_a_local_install_has_nothing_left_to_confirm_whatever_its_environment_says() -> None:
+def test_a_local_install_has_no_key_to_keep_whatever_its_environment_or_vault_say() -> None:
     """The sibling: an install that keeps every question on its own hardware carries no key, so
-    there is nothing this process cannot keep and the environment is not consulted at all.
+    there is no slot, the vault is never asked, and the finish is told nothing was asked for.
 
-    Delete this and the settings can be compared again here, which would refuse an install whose
-    environment differs from its own wizard, which is exactly what was being fixed."""
+    Delete this and a local install can be refused for a vault it does not need."""
     applied = apply_install(
         answered(), an_enrolment(), SECRET, principal_id="u_first", administrators=0, now=INSIDE
     )
 
     assert applied.settings
-    assert unkept(applied, {}) == ()
-    assert unkept(applied, {"INSTALL_PRODUCT_NAME": "Other"}) == ()
+    assert slot_for(applied) is None
 
 
 # ------------------------------------------------------------------------------ the wiring

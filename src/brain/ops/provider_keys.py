@@ -30,23 +30,38 @@ and cannot be in an exception the adapter builds. This module therefore never re
 value to application code at all - `load_into_environment` sets it and returns only the
 names it set.
 
-**Rotation is a restart.** A key changed in the vault does not reach a running process, and
-this does not poll for one. Polling would mean holding a re-read loop over a value that must
-not be logged, for a change that happens perhaps twice a year; a restart is cheap here and
-the deploy path already does one in three minutes.
+**Rotation is a restart, except in the process that did the rotating.** A key changed in the
+vault does not reach a running process, and this does not poll for one. Polling would mean
+holding a re-read loop over a value that must not be logged, for a change that happens
+perhaps twice a year; a restart is cheap here and the deploy path already does one in three
+minutes. The one process that does not need the restart is the one an administrator's write
+went through, because it is already holding the value it was handed: `put_into_environment`
+sets it there, so the process that answered "saved" is not also the one still using the old
+key. Siblings are told about in `brain.ops.credentials`.
 
-Task ids: M5.1.2
+**A value that was in the environment before the vault was asked outranks the vault, on
+every start.** That is `load_into_environment`'s rule and it is kept: a developer's shell key
+means it. `names_in_environment` is how a process remembers which names that was true of, so
+a key written from the console into a slot the environment file also sets can be reported as
+outranked rather than as in use.
+
+Task ids: M5.1.2, M27.8.7
 """
 
 from __future__ import annotations
 
 import re
-from collections.abc import MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
 
-from brain.ops.openbao import STATIC_PREFIX, OpenBaoVault, assert_static_path
+from brain.ops.openbao import (
+    STATIC_PREFIX,
+    OpenBaoVault,
+    VaultUnreachableError,
+    assert_static_path,
+)
 from brain.ops.secrets import SecretsUnavailableError
-from brain.settings import writable_process_environment
+from brain.settings import process_environment, writable_process_environment
 
 __all__ = [
     "PROVIDER_SLOTS",
@@ -54,6 +69,8 @@ __all__ = [
     "ProviderSlot",
     "assert_static_path",
     "load_into_environment",
+    "names_in_environment",
+    "put_into_environment",
     "read_static",
 ]
 
@@ -140,7 +157,7 @@ def load_into_environment(
     vault: OpenBaoVault,
     slots: tuple[ProviderSlot, ...] = PROVIDER_SLOTS,
     *,
-    environ: dict[str, str] | None = None,
+    environ: MutableMapping[str, str] | None = None,
     required: frozenset[str] = frozenset(),
 ) -> tuple[str, ...]:
     """Set each provider's environment variable from the vault. Returns the names set.
@@ -164,6 +181,7 @@ def load_into_environment(
     )
     loaded: list[str] = []
     missing: list[str] = []
+    silent = False
 
     for slot in slots:
         if env.get(slot.env_var):
@@ -171,8 +189,17 @@ def load_into_environment(
             # explicit local key silently ineffective, which is a confusing hour.
             loaded.append(slot.env_var)
             continue
+        if silent:
+            # A vault that did not answer for one slot will not answer for the next inside the
+            # same second, and each asking costs `TIMEOUT_SECONDS` of a process that is starting.
+            missing.append(slot.slug)
+            continue
         try:
             env[slot.env_var] = read_static(vault, slot.path)
+        except VaultUnreachableError:
+            silent = True
+            missing.append(slot.slug)
+            continue
         except SecretsUnavailableError:
             # Not re-raised, and the message is not logged here: it names the path, and a
             # path names which provider is unconfigured, which is fine - but the caller
@@ -190,3 +217,33 @@ def load_into_environment(
         )
         raise SecretsUnavailableError(msg)
     return tuple(loaded)
+
+
+def names_in_environment(
+    slots: Iterable[ProviderSlot] = PROVIDER_SLOTS, *, environ: Mapping[str, str] | None = None
+) -> frozenset[str]:
+    """Which of these slots' variables the environment sets right now. Names, never values.
+
+    Asked once, before `load_into_environment`, by whoever needs to know which keys came from
+    somewhere other than the vault and will again on the next start.
+    """
+    env = process_environment() if environ is None else environ
+    return frozenset(slot.env_var for slot in slots if env.get(slot.env_var))
+
+
+def put_into_environment(
+    slot: ProviderSlot, value: str, *, environ: MutableMapping[str, str] | None = None
+) -> None:
+    """Hand a key just written to the vault to this process's provider SDK. Returns nothing.
+
+    The one other writer of the process environment beside `load_into_environment`, and in
+    this module for the reason that one is: `brain.settings.writable_process_environment`
+    exists for provider keys alone. Overwrites, unlike the start-up load, because the value in
+    hand is the one an administrator has just chosen; whether this process should use it at all
+    is the caller's decision, which is `brain.ops.credentials.Credentials.put_to_use`.
+    """
+    if not value.strip():
+        msg = f"refusing to hand {slot.env_var} an empty key; the vault would hold one it cannot"
+        raise SecretsUnavailableError(msg)
+    env = writable_process_environment() if environ is None else environ
+    env[slot.env_var] = value

@@ -31,23 +31,34 @@
  * `autoComplete="off"` so the browser does not keep the code in its own form history.
  *
  * **What a refusal is drawn as.** A 422 carries problems by step and field, and each is drawn
- * beside the input it names, in the catalogue's words. A 409 carries setting names and is drawn
- * as those names and nothing else, because the server compares against the running environment
- * and never sends a value. A 404 is one constant sentence whatever its body said: see
- * `A_SETUP_REFUSAL_NAMES_NO_REASON`.
+ * beside the input it names, in the catalogue's words. A 409 is the provider key the install
+ * could not keep: its reason picks one sentence saying what to do, and for an install with no
+ * vault the variable the key would be read as is named beside it. Nothing the person typed is
+ * drawn, because the server sends a path, a name and a reason and never a value. A 404 is one
+ * constant sentence whatever its body said: see `A_SETUP_REFUSAL_NAMES_NO_REASON`.
+ *
+ * **The finishing screen says which processes use the key.** Until 2026-09-16 the key had to be
+ * in the server's environment before the wizard would go on, so there was nothing to say. It is
+ * kept in the vault now, and the process that appointed uses it at once while every other server
+ * process uses it from its next start, or not at all while the environment file sets the same
+ * variable. So an appointment that kept a key stops on a sentence and a button rather than
+ * landing on the console, because the person is about to ask a question and the answer to "why
+ * did that fail" is the sentence. A local install, which kept no key, lands as it always did.
+ * See `brain.ops.credentials.A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`.
  *
  * **Nothing sends a person here.** The root address does not detect an unfinished install and
  * redirect, because there is no route that says whether an install is finished, and there must
  * not be: that is the fact `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER` hides. The install
  * page tells the person holding the code which address to open.
  *
- * Task ids: M42.5.14
+ * Task ids: M42.5.14, M27.8.7
  */
 
 import { useState, useSyncExternalStore } from "react";
 import { useNavigate } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
+import type { components } from "../api/schema";
 import { clearSignInAttempts } from "../auth/pkce";
 import { accessToken, beginSignIn, getSessionState, subscribe } from "../auth/session";
 import {
@@ -81,8 +92,63 @@ export const SIGN_IN_COMES_BEFORE_THE_CODE =
   "screen inside one page lifetime, and a sign-in that cannot work fails before anything is " +
   "written.";
 
-/** The heading over the setting names a 409 carries. */
-export const UNKEPT_TITLE = "Set these in your environment";
+/** Why the install could not keep the provider key: `brain.setup_routes.NotKeptReason`. */
+export type NotKeptReason = components["schemas"]["NotKeptReason"];
+
+/** What became of the provider key: `brain.setup_routes.ProviderKeyKept`. */
+export type ProviderKeyKept = components["schemas"]["ProviderKeyKept"];
+
+/** The heading over a 409. */
+export const UNKEPT_TITLE = "The provider key was not kept";
+
+/** What to do, for each reason a key was not kept. Every member, checked against the server's. */
+export const UNKEPT_SENTENCES: Readonly<Record<NotKeptReason, string>> = Object.freeze({
+  no_vault:
+    "This install runs no secrets vault, so the key could not be stored and nobody was appointed. " +
+    "Give the install a vault and restart it (ops/openbao/credential-slots.md has the steps), or " +
+    "set the variable named below to this key in the server's environment file and restart the " +
+    "system. Then send this screen again.",
+  vault_unreachable:
+    "The secrets vault did not answer, so the key was not stored and nobody was appointed. Check " +
+    "that the vault is running and unsealed, then send this screen again.",
+  vault_refused:
+    "The secrets vault refused to store the key, so nobody was appointed. Its token may have " +
+    "expired, or the application policy or the providers engine may not be loaded " +
+    "(ops/openbao/credential-slots.md has the steps). Then send this screen again.",
+  not_a_key:
+    "The key has a space or a character a key cannot hold inside it, so it was not stored and " +
+    "nobody was appointed. Go back to the provider screen, paste the key again, and send this " +
+    "screen again.",
+});
+
+/** What the finishing screen says about a kept key. `not_asked` lands on the console instead. */
+export const KEY_KEPT_SENTENCES: Readonly<Record<Exclude<ProviderKeyKept, "not_asked">, string>> =
+  Object.freeze({
+    in_use:
+      "Your provider key is held in the secrets vault and in use by the server process that set " +
+      "you up. If this server runs more than one process, the others use it from their next " +
+      "start, so restart the system before relying on every question reaching the provider.",
+    outranked:
+      "Your provider key is held in the secrets vault, and it is not in use yet: the server's " +
+      "environment file sets the same key variable, and that value wins every time the system " +
+      "starts. Remove that line from the environment file and restart the system.",
+    from_environment:
+      "This install runs no secrets vault, so your provider key is the one the server's " +
+      "environment file already carries. It stays there, and changing it means editing that " +
+      "file and restarting the system.",
+  });
+
+/** The button on the finishing screen when a key was kept. */
+export const OPEN_CONSOLE = "Open the console";
+
+/** The finishing sentence for what became of the key, or null when there is none to say. */
+function keptSentence(kept: ProviderKeyKept): string | null {
+  // `in` rather than a comparison with "not_asked", so a value this page was not built for lands
+  // on the console as a local install does instead of drawing an empty paragraph.
+  return kept in KEY_KEPT_SENTENCES
+    ? KEY_KEPT_SENTENCES[kept as Exclude<ProviderKeyKept, "not_asked">]
+    : null;
+}
 
 /** The heading over a refusal. The same for every refusal, so it says nothing either. */
 export const NOT_CONTINUED_TITLE = "Setup did not continue";
@@ -94,7 +160,7 @@ const NO_PROBLEMS: Placed = Object.freeze({ byField: {}, byStep: {} });
 
 type Told =
   | { readonly kind: "refused" }
-  | { readonly kind: "unkept"; readonly names: readonly string[] }
+  | { readonly kind: "unkept"; readonly reason: NotKeptReason; readonly variables: readonly string[] }
   | { readonly kind: "failure"; readonly failure: ApiFailure }
   | { readonly kind: "session_ended" }
   | null;
@@ -117,14 +183,20 @@ function problemsIn(body: unknown): ProblemsView["problems"] | null {
   );
 }
 
-/** The setting names a 409 carries, or null when the body is not that document. */
-function unkeptIn(body: unknown): string[] | null {
-  // The same boundary cast, narrowed the same way.
-  const found = typeof body === "object" && body !== null ? (body as { unkept?: unknown }).unkept : undefined;
-  if (!Array.isArray(found)) {
+/** The reason and the variable names a 409 carries, or null when the body is not that document. */
+function unkeptIn(body: unknown): { reason: NotKeptReason; variables: string[] } | null {
+  // The same boundary cast, narrowed the same way, and a reason this page has no sentence for is
+  // not that document: drawn as the generic failure rather than as a blank notice.
+  const found = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const reason = found["reason"];
+  const variables = found["variables"];
+  if (typeof reason !== "string" || !(reason in UNKEPT_SENTENCES) || !Array.isArray(variables)) {
     return null;
   }
-  return found.filter((one): one is string => typeof one === "string");
+  return {
+    reason: reason as NotKeptReason,
+    variables: variables.filter((one): one is string => typeof one === "string"),
+  };
 }
 
 export function FirstRun() {
@@ -187,7 +259,9 @@ function Wizard() {
   const [told, setTold] = useState<Told>(null);
   const [busy, setBusy] = useState(false);
   const [appointed, setAppointed] = useState("");
+  const [keyKept, setKeyKept] = useState<ProviderKeyKept>("not_asked");
   const [finishing, setFinishing] = useState(false);
+  const [finished, setFinished] = useState(false);
 
   function valueOf(screen: Screen, question: Question): string {
     if (screen.key === "setup_code") {
@@ -221,7 +295,7 @@ function Wizard() {
     setAt(at + 1);
   }
 
-  async function finish(principalId: string): Promise<void> {
+  async function finish(principalId: string, kept: ProviderKeyKept): Promise<void> {
     setBusy(true);
     setFinishing(true);
     setTold(null);
@@ -237,7 +311,12 @@ function Wizard() {
       return;
     }
     setCode("");
-    navigate("/", { replace: true });
+    if (keptSentence(kept) === null) {
+      navigate("/", { replace: true });
+      return;
+    }
+    // Stopped on a sentence rather than sent on: see the module note on the finishing screen.
+    setFinished(true);
   }
 
   async function submit(): Promise<void> {
@@ -258,7 +337,8 @@ function Wizard() {
     if (result.ok) {
       setPlaced(NO_PROBLEMS);
       setAppointed(result.data.principal_id);
-      await finish(result.data.principal_id);
+      setKeyKept(result.data.provider_key);
+      await finish(result.data.principal_id, result.data.provider_key);
       return;
     }
     setBusy(false);
@@ -278,11 +358,26 @@ function Wizard() {
       if (first >= 0) {
         setAt(first);
       }
-    } else if (unkept && unkept.length > 0) {
-      setTold({ kind: "unkept", names: unkept });
+    } else if (unkept) {
+      setTold({ kind: "unkept", reason: unkept.reason, variables: unkept.variables });
     } else {
       setTold({ kind: "failure", failure: result.failure });
     }
+  }
+
+  const kept = keptSentence(keyKept);
+  if (finished && kept !== null) {
+    return (
+      <main className="first-run">
+        <h1>{FINISH_TITLE}</h1>
+        <p>{kept}</p>
+        <div className="form-actions">
+          <button type="button" className="button" onClick={() => navigate("/", { replace: true })}>
+            {OPEN_CONSOLE}
+          </button>
+        </div>
+      </main>
+    );
   }
 
   if (finishing) {
@@ -351,7 +446,7 @@ function Wizard() {
             Back
           </button>
           {appointed ? (
-            <button type="button" className="button" disabled={busy} onClick={() => void finish(appointed)}>
+            <button type="button" className="button" disabled={busy} onClick={() => void finish(appointed, keyKept)}>
               Sign in again
             </button>
           ) : (
@@ -497,18 +592,16 @@ function ToldNotice({ told }: { readonly told: Told }) {
     case "unkept":
       return (
         <Notice title={UNKEPT_TITLE}>
-          <p>
-            The running install does not carry these as you answered them, so nobody was
-            appointed. Set each one in the install&rsquo;s environment file, restart the system,
-            and send this screen again.
-          </p>
-          <ul className="first-run__names">
-            {told.names.map((name) => (
-              <li key={name}>
-                <code>{name}</code>
-              </li>
-            ))}
-          </ul>
+          <p>{UNKEPT_SENTENCES[told.reason]}</p>
+          {told.reason === "no_vault" && told.variables.length > 0 ? (
+            <ul className="first-run__names">
+              {told.variables.map((name) => (
+                <li key={name}>
+                  <code>{name}</code>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </Notice>
       );
     case "session_ended":

@@ -92,6 +92,8 @@ const GROUPS: readonly NavGroup[] = [
     heading: "Operate",
     sections: [
       { to: "/", label: "Overview" },
+      { to: "/runs", label: "Live runs" },
+      { to: "/models", label: "Models and health" },
       { to: "/connectors", label: "Connectors" },
       { to: "/routing", label: "Routing" },
     ],

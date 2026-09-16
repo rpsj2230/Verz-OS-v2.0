@@ -1,14 +1,14 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2
+# Task ids: M31.3.2.2, M27.8.7
 #
 # The application answers questions. It borrows connector credentials for the length of one
-# request and gives them back, which is why every rule below is about *creating and
-# revoking a lease* and none is about reading a stored secret.
+# request and gives them back, which is why most rules below are about *creating and
+# revoking a lease*.
 #
-# It cannot read a static secret at all. That is the point of the split: a role that can
-# read `connectors/xero` holds Xero's key for as long as the process lives, and every leak
-# after that is a copy of a key nobody can rotate without noticing what broke.
+# It cannot read a connector's stored secret at all. That is the point of the split: a role
+# that can read `connectors/xero` holds Xero's key for as long as the process lives, and
+# every leak after that is a copy of a key nobody can rotate without noticing what broke.
 
 # Ask for a lease against a dynamic role. The credential the vault mints is scoped and
 # expires; the application never sees the underlying key.
@@ -31,10 +31,35 @@ path "sys/leases/renew" {
   capabilities = ["update"]
 }
 
+# Model provider keys, the one category nothing can lease. See brain.ops.provider_keys and
+# brain.ops.credentials, which argue both grants at length.
+#
+# create and update, so an administrator can put a key in from the console and the setup
+# wizard can keep the one it asked for, instead of somebody at the server holding a root
+# token. read, because the process that uses a key reads it once at start into its own
+# environment, where the provider SDK finds it; without it a key written here would work
+# until the first restart and never again. One path segment and one engine, `providers`,
+# so nothing in `connectors/` is writable or readable this way. No delete and no list: a
+# slot is replaced, never removed from here, and the slots are a closed list in the code.
+path "providers/data/+" {
+  capabilities = ["create", "update", "read"]
+}
+
+# When a slot was written, and whether its current version still exists. Metadata carries
+# version numbers, times and deletion marks and no field of the secret, which is what lets
+# the console say a key is held without reading it back. Read only: update on metadata sets
+# how many versions are kept and when they are deleted, which is a way to erase a key's
+# history, and custom metadata is not needed for anything here.
+path "providers/metadata/+" {
+  capabilities = ["read"]
+}
+
 # Deny by omission is the default here, so the following are listed only to say they were
 # considered and refused rather than forgotten:
 #
-#   sys/policy*   changing its own policy is the escalation this file exists to prevent
-#   sys/unseal    the application is not the operator
-#   auth/*        minting tokens for other roles
-#   secret/data/* static secrets, for the reason at the top
+#   sys/policy*          changing its own policy is the escalation this file exists to prevent
+#   sys/unseal           the application is not the operator
+#   auth/*               minting tokens for other roles
+#   secret/data/*        static secrets, for the reason at the top
+#   providers/metadata/* update or delete: see above
+#   providers/delete/*   and destroy/*: removing a provider key is done at the server

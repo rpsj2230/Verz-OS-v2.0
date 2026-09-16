@@ -18,7 +18,7 @@ is that the repository declares a policy for every role the code can ask as, a s
 every connector and provider the code knows about, and nothing in either that looks like a
 secret.
 
-Task ids: M31.3.2.2, M38.4.1.3
+Task ids: M31.3.2.2, M38.4.1.3, M27.8.7
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from pathlib import Path
 
 import pytest
 
+from brain.ops.credentials import SLOTS
 from brain.ops.limits import SOURCE_CEILINGS
 from brain.ops.provider_keys import PROVIDER_SLOTS, ProviderSlot
 from brain.ops.secrets import VaultRole
@@ -103,7 +104,7 @@ def test_the_three_policies_are_three_different_policies() -> None:
     """One file copied to three names passes the test above and grants every role the widest
     of the three. The point of a policy per role is that they differ, and the differences are
     the whole design: the worker may renew and the browser runner may not, the browser runner
-    gets no database credential, the application gets no static secret.
+    gets no database credential, the application reads no connector's stored secret.
 
     Compared as parsed rules rather than as file text, so a difference that is only a comment
     does not count as a difference.
@@ -234,3 +235,56 @@ def test_the_document_says_which_scopes_were_refused_and_not_only_which_were_ask
         line for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines() if "| Slot |" in line
     )
     assert "NOT requested" in header, "the refused-scopes column is gone from the slot table"
+
+
+# ------------------------------------------ the provider slots the application writes (M27.8.7)
+def _matches(rule: str, path: str) -> bool:
+    """Whether a policy path with `+` segments names `path`, as OpenBao reads `+`: one segment."""
+    pattern = "/".join("[^/]+" if part == "+" else re.escape(part) for part in rule.split("/"))
+    return re.fullmatch(pattern, path) is not None
+
+
+def test_the_application_may_create_update_and_read_provider_keys_and_nothing_more_there() -> None:
+    """Exactly two rules under the provider engine, with exactly these capabilities. Create and
+    update so a key can be put in from the console and the wizard; read so start-up can load it;
+    metadata read so a screen can say it is held. No delete, no list, no metadata write, which is a
+    way to erase a key's history. `brain.ops.credentials` argues the grant.
+
+    Delete this and the rule can widen to `providers/*` or gain `delete` in a debugging session,
+    and nothing else in the repository reads the policy."""
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    providers = {
+        path: sorted(caps) for path, caps in granted.items() if path.startswith("providers")
+    }
+    assert providers == {
+        "providers/data/+": ["create", "read", "update"],
+        "providers/metadata/+": ["read"],
+    }
+
+
+def test_no_other_role_reaches_the_provider_engine() -> None:
+    """The worker runs with nobody watching and the browser runner executes pages it did not write.
+    Neither uses a provider key through the vault, and either holding write would be a way to swap
+    the key every question is sent with. Delete this and a copy of the application's rule into
+    another policy reads as consistency."""
+    for role in (VaultRole.WORKER, VaultRole.BROWSER_RUNNER):
+        granted = _granted_paths(_policy_file(role).read_text(encoding="utf-8"))
+        assert not [path for path in granted if path.startswith("providers")], role
+
+
+def test_every_slot_the_code_writes_is_a_path_the_application_policy_grants() -> None:
+    """Held against the paths `OpenBaoVault` actually calls, built from each slot the store knows,
+    rather than against the words in the policy. Delete this and a slot whose name has a second
+    segment passes every unit test and is refused by the vault on the first install that uses it."""
+    granted = _granted_paths(_policy_file(VaultRole.APPLICATION).read_text(encoding="utf-8"))
+    assert SLOTS
+    for slot in SLOTS.values():
+        mount, _, rest = slot.path.partition("/")
+        for called, needed in (
+            (f"{mount}/data/{rest}", "update"),
+            (f"{mount}/metadata/{rest}", "read"),
+        ):
+            rules = [caps for rule, caps in granted.items() if _matches(rule, called)]
+            assert rules, f"no rule in application.hcl names {called}"
+            assert any(needed in caps for caps in rules), f"{called} is not granted {needed}"
+    assert not _matches("providers/data/+", "providers/data/a/b")

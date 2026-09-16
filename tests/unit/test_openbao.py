@@ -4,18 +4,23 @@ the run that borrowed it, or a way a secret reaches somewhere it should not.
 No real vault is contacted. The HTTP call is replaced at the one seam that makes it, so
 these test what this module does with an answer rather than testing that OpenBao works.
 
-Task ids: M31.3.2.3
+Task ids: M31.3.2.3, M27.8.7
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from email.message import Message
 from typing import Any
 
 import pytest
 
-from brain.ops.openbao import OpenBaoVault
+from brain.ops.openbao import (
+    OpenBaoVault,
+    VaultRefusedError,
+    VaultUnreachableError,
+    _instant,
+)
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole, borrow
 
 REF = SecretRef(path="database/creds/xero-reader", role=VaultRole.APPLICATION)
@@ -240,3 +245,202 @@ def test_borrowing_revokes_even_when_the_body_raises() -> None:
         raise RuntimeError("the work failed")
     methods = [m for m, _ in v.calls]
     assert methods == ["GET", "PUT"], v.calls
+
+
+# ------------------------------------------------- writing a slot, and reading its metadata
+KEY = "sk-OPENBAO-SENTINEL-0123456789"
+
+
+class Recording(OpenBaoVault):
+    """The real class with its one network call replaced, keeping every body it was handed.
+
+    A second fake beside `FakeVault` because a write's body is the thing under test and
+    `FakeVault` records a method and a path. Answers are keyed by path, and a path with no
+    answer raises what `fail` says, so a test states exactly what the vault would do.
+    """
+
+    def __init__(
+        self, answers: dict[str, dict[str, Any]] | None = None, *, fail: Exception | None = None
+    ) -> None:
+        super().__init__("http://vault:8200", "a-token")
+        self.sent: list[tuple[str, str, dict[str, Any] | None]] = []
+        self._answers = answers or {}
+        self._fail = fail
+
+    def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.sent.append((method, path, body))
+        if path in self._answers:
+            return self._answers[path]
+        if self._fail is not None:
+            raise self._fail
+        return {}
+
+
+def _metadata(current: int, versions: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """kv v2's metadata answer, with the versions keyed by their number as strings."""
+    return {"data": {"current_version": current, "versions": versions}}
+
+
+def test_a_write_goes_to_the_kv_data_path_wrapped_once_and_answers_the_version_time() -> None:
+    """kv version 2 takes a write on `<mount>/data/<rest>` with the fields under `data`, which is
+    the shape `read_static_kv` unwraps. A write to the logical path is a 404 that reads as a
+    missing engine, and fields not wrapped are stored one level off, which start-up then reads as
+    a slot holding nothing it recognises.
+
+    Delete this and either mistake ships, and the first install to set a key from the console
+    finds it gone after its next restart."""
+    stamped = "2026-09-16T08:30:05.123456789Z"
+    v = Recording({"providers/data/anthropic": {"data": {"created_time": stamped, "version": 3}}})
+
+    written = v.write_static_kv("providers/anthropic", {"api_key": KEY})
+
+    assert v.sent == [("POST", "providers/data/anthropic", {"data": {"api_key": KEY}})]
+    assert written == datetime(2026, 9, 16, 8, 30, 5, 123456, tzinfo=UTC)
+
+
+def test_a_write_outside_the_provider_prefix_is_refused_before_anything_is_sent() -> None:
+    """The write has the read's refusal, on the same object. A writer that could put a value at
+    `connectors/creds/xero` would be storing a standing credential over a path the leasing design
+    says the vault mints per run. Delete this and the one guard that keeps the new write narrow is
+    gone, with every provider test still green."""
+    v = Recording()
+    with pytest.raises(SecretsUnavailableError, match="leased"):
+        v.write_static_kv("connectors/creds/xero", {"api_key": KEY})
+    assert v.sent == []
+
+
+@pytest.mark.parametrize(
+    "answer", [{}, {"data": "not a mapping"}, {"data": {"created_time": "yesterday"}}]
+)
+def test_a_write_the_vault_accepted_without_a_readable_time_still_returns(
+    answer: dict[str, Any],
+) -> None:
+    """The value is already written when the answer is read, so an answer with no time, or one
+    that does not parse, is None rather than an exception. Delete this and a key that is held is
+    reported as a failed write, and the person pastes it again into a second version."""
+    v = Recording({"providers/data/openai": answer})
+    assert v.write_static_kv("providers/openai", {"api_key": KEY}) is None
+
+
+def test_a_slot_s_metadata_says_when_its_current_version_was_written() -> None:
+    """The positive case the refusals below need. Two versions, and the current one is the second:
+    a reader taking the first would report when the old key was set.
+
+    Delete this and `static_kv_version` can answer for every slot from a metadata shape nobody
+    checked, which is the only way the console can say a key is held."""
+    versions = {
+        "1": {"created_time": "2026-01-01T00:00:00Z", "deletion_time": ""},
+        "2": {"created_time": "2026-09-16T09:00:00Z", "deletion_time": ""},
+    }
+    v = Recording({"providers/metadata/anthropic": _metadata(2, versions)})
+
+    version = v.static_kv_version("providers/anthropic")
+
+    assert v.sent == [("GET", "providers/metadata/anthropic", None)]
+    assert version is not None
+    assert version.written_at == datetime(2026, 9, 16, 9, 0, tzinfo=UTC)
+
+
+def test_a_slot_never_written_holds_nothing_and_any_other_refusal_is_raised() -> None:
+    """A kv slot nobody wrote answers 404, which is an empty slot and not a failure. Anything else
+    is a failure: 403 is a token or a policy, and reading it as "not held" would send somebody to
+    paste a key into a vault that will refuse it again. Both directions, so neither half can be
+    satisfied by treating every refusal the same way."""
+    empty = Recording(fail=VaultRefusedError("vault refused GET", status=404))
+    forbidden = Recording(fail=VaultRefusedError("vault refused GET", status=403))
+
+    assert empty.static_kv_version("providers/moonshot") is None
+    with pytest.raises(VaultRefusedError) as refused:
+        forbidden.static_kv_version("providers/moonshot")
+    assert refused.value.status == 403
+
+
+@pytest.mark.parametrize("gone", [{"deletion_time": "2026-09-01T00:00:00Z"}, {"destroyed": True}])
+def test_a_deleted_or_destroyed_current_version_is_not_a_held_key(gone: dict[str, Any]) -> None:
+    """kv keeps a deleted version's metadata. A console that said such a slot was held would be
+    reporting a key nothing can read, and the provider calls would fail as unauthenticated with
+    the screen saying all is well. Delete this and that is what a deleted key looks like."""
+    held = {"created_time": "2026-08-01T00:00:00Z", "deletion_time": "", "destroyed": False}
+    v = Recording({"providers/metadata/openai": _metadata(1, {"1": {**held, **gone}})})
+    assert v.static_kv_version("providers/openai") is None
+
+
+def test_a_current_version_whose_time_does_not_parse_is_still_held() -> None:
+    """Held with no time, rather than not held. Saying a written key is absent would send
+    somebody to write it again. Delete this and an unparseable stamp becomes a missing key."""
+    v = Recording({"providers/metadata/openai": _metadata(1, {"1": {"created_time": "soon"}})})
+    version = v.static_kv_version("providers/openai")
+    assert version is not None
+    assert version.written_at is None
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {},
+        {"data": "not a mapping"},
+        {"data": {"current_version": 1}},
+        _metadata(2, {"1": {"created_time": "2026-01-01T00:00:00Z"}}),
+        {"data": {"current_version": 1, "versions": {"1": "not a mapping"}}},
+    ],
+)
+def test_metadata_this_does_not_recognise_holds_nothing(answer: dict[str, Any]) -> None:
+    """A shape with no current version this can find is not a held key. Each row removes one thing
+    the positive test relies on, so a reader that skipped a check still answers None for the right
+    reason. Delete this and a malformed answer raises inside a console read."""
+    v = Recording({"providers/metadata/openai": answer})
+    assert v.static_kv_version("providers/openai") is None
+
+
+def test_reading_metadata_outside_the_provider_prefix_is_refused_before_anything_is_sent() -> None:
+    """The metadata read carries the prefix refusal too, so it cannot become a way to learn which
+    connector credentials exist. Delete this and the one method the console calls on every visit
+    can be pointed anywhere in the vault."""
+    v = Recording()
+    with pytest.raises(SecretsUnavailableError, match="leased"):
+        v.static_kv_version("connectors/creds/xero")
+    assert v.sent == []
+
+
+def test_a_refusal_and_a_silence_are_two_types_and_both_still_a_secrets_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What a person is told to do differs: a silent vault is sealed, stopped or unreachable, and
+    a refusing one is a token, a policy or an engine. Both stay `SecretsUnavailableError`, so every
+    handler written before the split still catches them. Delete this and the split can collapse
+    back into one type with every existing test green."""
+    import urllib.error
+
+    def refused(*_a: object, **_k: object) -> None:
+        raise urllib.error.HTTPError(
+            "http://vault:8200/v1/providers/data/anthropic", 403, "Forbidden", Message(), None
+        )
+
+    def silent(*_a: object, **_k: object) -> None:
+        raise urllib.error.URLError("connection refused")
+
+    v = OpenBaoVault("http://vault:8200", "a-token")
+    monkeypatch.setattr("urllib.request.urlopen", refused)
+    with pytest.raises(VaultRefusedError) as no:
+        v.write_static_kv("providers/anthropic", {"api_key": KEY})
+    monkeypatch.setattr("urllib.request.urlopen", silent)
+    with pytest.raises(VaultUnreachableError) as nothing:
+        v.write_static_kv("providers/anthropic", {"api_key": KEY})
+
+    assert no.value.status == 403
+    assert isinstance(no.value, SecretsUnavailableError)
+    assert isinstance(nothing.value, SecretsUnavailableError)
+    assert not isinstance(nothing.value, VaultRefusedError)
+    assert KEY not in f"{no.value} {nothing.value}"
+
+
+def test_a_vault_time_is_read_with_its_zone_and_anything_else_is_none() -> None:
+    """kv stamps nanoseconds and a `Z`. A time with no zone is read as UTC rather than as the
+    server's local time, and anything that is not a time is None. Delete this and a stamp read as
+    naive compares wrongly against every aware time in the system."""
+    assert _instant("2026-09-16T08:30:05.123456789Z") == datetime(
+        2026, 9, 16, 8, 30, 5, 123456, tzinfo=UTC
+    )
+    assert _instant("2026-09-16T08:30:05") == datetime(2026, 9, 16, 8, 30, 5, tzinfo=UTC)
+    assert _instant("2026-09-16T08:30:05+08:00") == datetime(2026, 9, 16, 0, 30, 5, tzinfo=UTC)
+    assert [_instant(None), _instant(""), _instant(20260916), _instant("soon")] == [None] * 4

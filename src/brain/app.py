@@ -68,6 +68,7 @@ from brain.classification_routes import router as classification_router
 from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import BrainError, Outcome, to_public
+from brain.credential_routes import router as credential_router
 from brain.docs_routes import router as docs_router
 from brain.estate_routes import router as estate_router
 from brain.gate.entitlement_store import StoredEntitlements
@@ -88,7 +89,9 @@ from brain.install import InstallError, installed_name
 from brain.install_routes import router as install_router
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
+from brain.operate_routes import router as operate_router
 from brain.ops.automation_owner_store import StoredAutomations
+from brain.ops.credentials import credentials_at_start
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
@@ -200,6 +203,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ready = {}
     # Named on readiness and never counted. See SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS.
     app.state.reported = {}
+    # The secrets vault, and every provider key it holds loaded into this process's environment
+    # before anything could call a model. In a thread, because the client blocks, and before the
+    # database, because a key does not depend on one. With no vault named this asks nobody. See
+    # `brain.ops.credentials`.
+    app.state.credentials = await asyncio.to_thread(
+        credentials_at_start, settings.vault_address, settings.vault_token
+    )
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -561,6 +571,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # The same, for an automation's registration and its owner's standing. Built beside `gate`
     # and never without it: see `wirings_for`.
     app.state.automation = None
+    # The same, for where a credential is kept. `lifespan` builds it from the vault settings, and
+    # a route reading None answers as an install with no vault. See `brain.credential_routes`.
+    app.state.credentials = None
 
     # Registered first, which makes it innermost: Starlette inserts each new middleware at
     # the front of the stack, so the last one registered runs outermost. Inside `trace`
@@ -744,6 +757,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # administrator the finishing screen above then signs in. An eighth router because its caller
     # holds the setup code and no token at all. See `brain.setup_routes`.
     app.include_router(setup_router)
+    # Setting a credential, and seeing which are held. Beside the wizard because the wizard's
+    # provider key is kept through the same store, and a router of its own because its subject is
+    # the one value no other route may carry: it writes into the vault, answers that a secret is
+    # held and when, and is built on `brain.api.NoEchoRoute` so not even a refused body is
+    # repeated. See `brain.credential_routes`.
+    app.include_router(credential_router)
     # The five install screens. A ninth router because what it answers about is the deployment
     # rather than the company's data: no name to guess, no row belonging to anybody, and no
     # session on four of the five. The same `asking` dependency, imported. See
@@ -798,6 +817,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # rather than drawing an empty table that reads as a company with nothing in it. No write.
     # See `brain.estate_routes`.
     app.include_router(estate_router)
+    # Live runs and Models and health, the two Operate screens `docs/screens.html` draws beside
+    # the overview. A router of its own because its two refusals differ from every router above:
+    # live runs narrows row by row and refuses nobody, and the models answer is whole-install and
+    # refuses a reader who could not see everybody's. See `brain.operate_routes`.
+    app.include_router(operate_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

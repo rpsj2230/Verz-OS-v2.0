@@ -1,7 +1,7 @@
 """Provider API keys out of the vault. Every test is a way a key leaks or a way leasing
 gets routed around.
 
-Task ids: M5.1.2
+Task ids: M5.1.2, M27.8.7
 """
 
 from __future__ import annotations
@@ -10,13 +10,15 @@ from typing import Any
 
 import pytest
 
-from brain.ops.openbao import OpenBaoVault
+from brain.ops.openbao import OpenBaoVault, VaultUnreachableError
 from brain.ops.provider_keys import (
     PROVIDER_SLOTS,
     STATIC_PREFIX,
     ProviderSlot,
     assert_static_path,
     load_into_environment,
+    names_in_environment,
+    put_into_environment,
     read_static,
 )
 from brain.ops.secrets import SecretsUnavailableError
@@ -204,3 +206,76 @@ def test_a_slug_that_is_not_a_slug_is_refused(bad: str) -> None:
 def test_an_environment_variable_name_that_is_not_one_is_refused(bad: str) -> None:
     with pytest.raises(ValueError, match="environment variable"):
         ProviderSlot(slug="anthropic", env_var=bad)
+
+
+# ---------------------------------------------- a vault that is silent, and a key just written
+class Silent(FakeVault):
+    """A vault that never answers, counting how often it was asked."""
+
+    def _call(self, method: str, path: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+        self.paths.append(path)
+        raise VaultUnreachableError("vault at http://vault:8200 did not answer within 5.0s")
+
+
+def test_a_silent_vault_is_asked_once_at_start_and_every_slot_is_then_missing() -> None:
+    """Each asking costs the client's whole timeout, and a vault that did not answer for one slot
+    will not answer for the next inside the same second, so start-up asks once. The slots after it
+    are still counted as missing, so a required one still stops the process. Delete this and a
+    stopped vault adds its timeout once per provider to every start."""
+    v = Silent()
+    env: dict[str, str] = {}
+
+    loaded = load_into_environment(v, PROVIDER_SLOTS, environ=env)
+
+    assert v.paths == ["providers/data/anthropic"]
+    assert (loaded, env) == ((), {})
+    with pytest.raises(SecretsUnavailableError, match="moonshot"):
+        load_into_environment(
+            Silent(), PROVIDER_SLOTS, environ={}, required=frozenset({"moonshot"})
+        )
+
+
+def test_a_refusing_vault_is_asked_about_every_slot() -> None:
+    """The sibling: a refusal is about one slot, a policy or an empty path, and the next slot can
+    still be there. Delete this and the short cut for silence can widen to every failure, and one
+    empty slot hides every key after it."""
+    v = FakeVault({"providers/data/moonshot": {"api_key": KEY}})
+    env: dict[str, str] = {}
+
+    loaded = load_into_environment(v, PROVIDER_SLOTS, environ=env)
+
+    assert v.paths == [
+        slot.path.replace("providers/", "providers/data/") for slot in PROVIDER_SLOTS
+    ]
+    assert loaded == ("MOONSHOT_API_KEY",)
+
+
+def test_the_names_the_environment_sets_are_named_and_never_valued() -> None:
+    """Asked before anything is loaded, so what it names is what outranks the vault on every start.
+    A blank variable is not set. Delete this and a key written from the console into a slot the
+    environment file also sets is reported as in use when the file's key is the one being used."""
+    env = {"ANTHROPIC_API_KEY": KEY, "OPENAI_API_KEY": "", "UNRELATED": "x"}
+    named = names_in_environment(PROVIDER_SLOTS, environ=env)
+    assert named == frozenset({"ANTHROPIC_API_KEY"})
+    assert KEY not in repr(named)
+
+
+def test_a_key_just_written_is_handed_to_this_process_and_replaces_what_was_there() -> None:
+    """Unlike the start-up load, which leaves an existing value alone, this overwrites: the value
+    in hand is the one an administrator chose a moment ago. Whether it should be handed over at all
+    is decided by the caller. Delete this and the process that answered "saved" keeps the old
+    key."""
+    slot = PROVIDER_SLOTS[0]
+    env = {slot.env_var: "sk-the-old-one"}
+
+    put_into_environment(slot, KEY, environ=env)
+    assert env == {slot.env_var: KEY}
+
+
+def test_an_empty_key_is_never_handed_to_a_provider_sdk() -> None:
+    """An empty key reaches the provider as an unauthenticated call that reads as a bad key.
+    Delete this and a blank written by mistake silently replaces a working key in this process."""
+    env = {"ANTHROPIC_API_KEY": KEY}
+    with pytest.raises(SecretsUnavailableError, match="empty"):
+        put_into_environment(PROVIDER_SLOTS[0], "   ", environ=env)
+    assert env == {"ANTHROPIC_API_KEY": KEY}

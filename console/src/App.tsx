@@ -54,6 +54,8 @@ import { Connectors } from "./pages/Connectors";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
+import { LiveRuns } from "./pages/LiveRuns";
+import { Models } from "./pages/Models";
 import { Audit } from "./pages/Audit";
 import { Sessions } from "./pages/Sessions";
 import { SignInLinks } from "./pages/SignInLinks";
@@ -209,6 +211,15 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Overview /> },
+      // Live runs, SCREEN 1's second Operate item. One path and no parameter: a run is a row
+      // with nothing to open, and the path is the screen's key in `brain.console.screens`, which
+      // is what `brain.ops.console_screens.routed_screen_keys` matches. Eager rather than split,
+      // for the install screens' reason: it mounts neither heavy library and no stylesheet.
+      { path: "runs", element: <LiveRuns /> },
+      // Models and health, SCREEN 11. One path and no parameter, at the screen's key. Its Edit
+      // routing action is a link to `routing` below, where the chain's numbers are edited behind
+      // the matrix's own grant, rather than a second editor here. Eager, for the same reason.
+      { path: "models", element: <Models /> },
       // One path and no parameter, which is the whole of what this route has to get right. A
       // question is not a segment and not a query: it is the most sensitive value in the
       // request and it travels in a POST body, so there is no address here that could carry

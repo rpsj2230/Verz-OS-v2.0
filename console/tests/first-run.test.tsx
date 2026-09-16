@@ -12,7 +12,11 @@
  * and the two setup routes and `/api/v1/me` answer from the same stand-in, so what is asserted
  * is what left the browser and what was drawn.
  *
- * Task ids: M42.5.14
+ * **The provider key is searched for as well as the setup code.** A hosted install's key travels
+ * in the same body, and the finishing screen that follows a kept key is drawn from a reason and
+ * an outcome, never from what was typed.
+ *
+ * Task ids: M42.5.14, M27.8.7
  */
 
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
@@ -32,17 +36,27 @@ import {
   appointmentBody,
   finishBody,
 } from "../src/setup/wizard";
+import {
+  KEY_KEPT_SENTENCES,
+  NOT_CONTINUED_TITLE,
+  OPEN_CONSOLE,
+  UNKEPT_SENTENCES,
+  UNKEPT_TITLE,
+} from "../src/pages/FirstRun";
 import { CONSOLE_ORIGIN, everythingInStorage, fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import {
   declaredPropertyNames,
   declaredRequestBodySchema,
   declaredResponseSchema,
 } from "./support/openapi";
+import { backendEnumMembers } from "./support/python";
 import { backendWizard, catalogueEnglish, catalogueKeys } from "./support/wizard";
 
 /** A code nothing else on the page could contain, so finding it anywhere is a leak. */
 const CODE = `CODE-SENTINEL-${"c".repeat(50)}`;
 const PRINCIPAL = "u_PRINCIPAL-SENTINEL";
+/** A provider key nothing else could contain, searched for wherever the setup code is. */
+const KEY = "sk-KEY-SENTINEL-4d7e1b";
 const COMPANY = "COMPANY-SENTINEL";
 const WEB = "https://brain.example.invalid";
 
@@ -149,7 +163,7 @@ async function openFirstRun(idp: ReturnType<typeof fakeIdentityProvider>) {
 }
 
 /** Every screen answered, the data sources skipped, ending on the review. */
-async function answerEverything(container: HTMLElement): Promise<void> {
+async function answerEverything(container: HTMLElement, hosted = false): Promise<void> {
   give(container, "setup_code", "setup_code", CODE);
   press(container, "Continue");
   await arriveAt(container, "Your company");
@@ -164,7 +178,13 @@ async function answerEverything(container: HTMLElement): Promise<void> {
   give(container, "staff_source", "staff_source", "spreadsheet");
   press(container, "Continue");
   await arriveAt(container, "How questions are answered");
-  give(container, "model_provider", "model_profile", "local");
+  if (hosted) {
+    give(container, "model_provider", "model_profile", "hosted");
+    give(container, "model_provider", "model_provider", "anthropic");
+    give(container, "model_provider", "provider_key", KEY);
+  } else {
+    give(container, "model_provider", "model_profile", "local");
+  }
   press(container, "Continue");
   await arriveAt(container, "Data sources");
   press(container, "Skip this screen");
@@ -248,8 +268,26 @@ describe("the console's copy of the wizard", () => {
       "problems",
     ]);
     expect(declaredPropertyNames(declaredResponseSchema(APPOINTMENT_PATH, "post", "409"))).toEqual([
+      "reason",
       "unkept",
+      "variables",
     ]);
+    expect(declaredPropertyNames(declaredResponseSchema(APPOINTMENT_PATH, "post"))).toContain(
+      "provider_key",
+    );
+  });
+
+  test("every reason a key is not kept, and every outcome of keeping one, has its sentence here", () => {
+    // What breaks if this is deleted: a reason or an outcome added to `brain.setup_routes` and not
+    // here. A 409 with a reason this page has no sentence for is drawn as the generic failure, and a
+    // kept key with an outcome it does not know lands on the console with nothing said, which is
+    // the one moment the person needed to be told a restart is due.
+    const reasons = Object.values(backendEnumMembers("src/brain/setup_routes.py", "NotKeptReason"));
+    const outcomes = Object.values(backendEnumMembers("src/brain/setup_routes.py", "ProviderKeyKept"));
+    expect(Object.keys(UNKEPT_SENTENCES).sort()).toEqual([...reasons].sort());
+    expect([...Object.keys(KEY_KEPT_SENTENCES), "not_asked"].sort()).toEqual([...outcomes].sort());
+    expect(new Set(Object.values(UNKEPT_SENTENCES)).size).toBe(reasons.length);
+    expect(new Set(Object.values(KEY_KEPT_SENTENCES)).size).toBe(outcomes.length - 1);
   });
 });
 
@@ -284,7 +322,7 @@ describe("the whole of first run", () => {
     // and the person must end on the overview signed in rather than on a page asking them to
     // do something else.
     const { idp, seen } = standIn({
-      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH }),
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
     });
     const { container, router, landed } = await openFirstRun(idp);
     expect(landed).toBe(FIRST_RUN_PATH);
@@ -324,7 +362,7 @@ describe("the whole of first run", () => {
     // held or was sent to.
     const writes = vi.spyOn(Storage.prototype, "setItem");
     const { idp } = standIn({
-      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH }),
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
     });
     const { container, router, loaded } = await openFirstRun(idp);
     const addresses: string[] = [];
@@ -349,6 +387,44 @@ describe("the whole of first run", () => {
     );
     expect(container.querySelector("form")).toBeNull();
   });
+  test.each(["in_use", "outranked", "from_environment"] as const)(
+    "a key kept as %s stops the finish on what the person must know, then opens the console",
+    async (outcome) => {
+      // What breaks if this is deleted: the honesty of the finishing screen. A key kept in the vault
+      // is in use by one server process at once, or by none while the environment file outranks it,
+      // and a person landed straight on the console asks a question that fails with no idea why.
+      // The local install's test above is the sibling that still lands at once.
+      const writes = vi.spyOn(Storage.prototype, "setItem");
+      const { idp, seen } = standIn({
+        appointment: () =>
+          json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: outcome }),
+      });
+      const { container, router } = await openFirstRun(idp);
+      await answerEverything(container, true);
+      press(container, "Set up this system");
+
+      await waitFor(() => expect(container.textContent).toContain(KEY_KEPT_SENTENCES[outcome]));
+      expect(headingOf(container)).toBe(FINISH_TITLE);
+      expect(router.state.location.pathname).toBe(FIRST_RUN_PATH);
+      expect(callsTo(seen, APPOINTMENT_PATH)[0]?.body).toMatchObject({
+        answers: {
+          model_provider: { model_profile: "hosted", model_provider: "anthropic", provider_key: KEY },
+        },
+      });
+      expect(callsTo(seen, FINISH_PATH)).toHaveLength(1);
+      expect(container.textContent).not.toContain(KEY);
+      for (const call of writes.mock.calls) {
+        expect(String(call[1])).not.toContain(KEY);
+      }
+      const stored = everythingInStorage();
+      expect([...stored.keys, ...stored.values].join("\n")).not.toContain(KEY);
+
+      press(container, OPEN_CONSOLE);
+      await arriveAt(container, "Overview");
+      expect(router.state.location.pathname).toBe("/");
+      writes.mockRestore();
+    },
+  );
 });
 
 describe("what a refusal is drawn as", () => {
@@ -393,29 +469,49 @@ describe("what a refusal is drawn as", () => {
     expect(callsTo(seen, FINISH_PATH)).toEqual([]);
   });
 
-  test("settings the install does not carry are named, and only named", async () => {
-    // What breaks if this is deleted: the one thing a person can do about a 409, which is set
-    // those names in the environment file. A console that dropped the list would say setup
-    // failed with no way forward, and one that echoed what was typed would put an answer
-    // beside a setting name as though it were the value to set.
-    const { idp, seen } = standIn({
-      appointment: () => json({ unkept: ["INSTALL_COMPANY_NAME", "INSTALL_OIDC_REDIRECT_URIS"] }, 409),
+  test.each(["no_vault", "vault_unreachable", "vault_refused", "not_a_key"] as const)(
+    "a key not kept for %s is told by its reason, and only a vaultless install is shown a variable",
+    async (reason) => {
+      // What breaks if this is deleted: the one thing a person can do about a 409, which differs by
+      // reason. An install with no vault is told to set up a vault or set the named variable; a
+      // silent vault to start it; a refusing one to load its policy; a bad paste to paste again. A
+      // console that drew the variable for every reason would send somebody with a vault to edit
+      // an environment file, and one that echoed the key would put a credential on the screen.
+      const { idp, seen } = standIn({
+        appointment: () =>
+          json({ unkept: ["providers/anthropic"], variables: ["ANTHROPIC_API_KEY"], reason }, 409),
+      });
+      const { container } = await openFirstRun(idp);
+      await answerEverything(container, true);
+      press(container, "Set up this system");
+
+      await waitFor(() => expect(container.querySelector(".notice")).not.toBeNull());
+      const notice = container.querySelector(".notice");
+      expect(notice?.querySelector(".notice__title")?.textContent).toBe(UNKEPT_TITLE);
+      expect(notice?.querySelector(".notice__body p")?.textContent).toBe(UNKEPT_SENTENCES[reason]);
+      const names = [...(notice?.querySelectorAll(".first-run__names li") ?? [])].map(
+        (one) => one.textContent,
+      );
+      expect(names).toEqual(reason === "no_vault" ? ["ANTHROPIC_API_KEY"] : []);
+      expect(container.textContent).not.toContain(KEY);
+      expect(headingOf(container)).toBe(REVIEW_TITLE);
+      expect(callsTo(seen, FINISH_PATH)).toEqual([]);
+    },
+  );
+
+  test("a 409 whose reason this page does not know is drawn as a failure and not as an empty notice", async () => {
+    // What breaks if this is deleted: the sibling of the test above. A reason the server gained and
+    // this page did not would be drawn under the key heading with no sentence at all, which tells the
+    // person something went wrong with their key and nothing about what.
+    const { idp } = standIn({
+      appointment: () => json({ unkept: ["providers/anthropic"], variables: [], reason: "new_reason" }, 409),
     });
     const { container } = await openFirstRun(idp);
-    await answerEverything(container);
+    await answerEverything(container, true);
     press(container, "Set up this system");
 
-    await waitFor(() => expect(container.querySelector(".first-run__names")).not.toBeNull());
-    const notice = container.querySelector(".notice");
-    expect(notice?.querySelector(".notice__title")?.textContent).toBe("Set these in your environment");
-    expect([...(notice?.querySelectorAll(".first-run__names li") ?? [])].map((one) => one.textContent)).toEqual([
-      "INSTALL_COMPANY_NAME",
-      "INSTALL_OIDC_REDIRECT_URIS",
-    ]);
-    expect(notice?.textContent).not.toContain(COMPANY);
-    expect(notice?.textContent).not.toContain(WEB);
-    expect(headingOf(container)).toBe(REVIEW_TITLE);
-    expect(callsTo(seen, FINISH_PATH)).toEqual([]);
+    await waitFor(() => expect(container.querySelector(".notice")).not.toBeNull());
+    expect(container.querySelector(".notice__title")?.textContent).toBe(NOT_CONTINUED_TITLE);
   });
 
   test("every refusal before the answers is one sentence that gives no reason", async () => {
