@@ -84,6 +84,7 @@ from brain.install import InstallError, installed_name
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.automation_owner_store import StoredAutomations
+from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
@@ -224,6 +225,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # `brain.session.THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`.
         app.state.db_sessions = make_application_sessions(app.state.db_engine)
         app.state.ready["database"] = await check_reachable(app.state.db_engine)
+        # Before anything reads an installation value, because the setup wizard's answers
+        # live in `ops.setting` and `brain.install.value_of` resolves them ahead of the
+        # environment. A database that refuses is not a reason to stop: the values resolve
+        # from the environment and then from their declared defaults exactly as they did
+        # before the table had a reader. See `brain.ops.install_settings`.
+        try:
+            await refresh_install_settings(app.state.db_sessions)
+        except Exception:
+            log.exception("installation settings could not be loaded")
     else:
         app.state.db_engine = None
         app.state.db_sessions = None
