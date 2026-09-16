@@ -104,6 +104,7 @@ from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
+from brain.navigation_routes import router as navigation_router
 from brain.operate_routes import router as operate_router
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
@@ -917,6 +918,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # audit trail export, recorded in the ledger before the document is handed over. See
     # `brain.data_transfer_routes`.
     app.include_router(data_transfer_router)
+    # Which console a reader is given: the company console, or a department's with the menu
+    # SCREEN 2 draws narrowed to what they hold. Decided from grants at the admitted reach, so
+    # the shell renders an answer rather than a permission check of its own. See
+    # `brain.navigation_routes`.
+    app.include_router(navigation_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

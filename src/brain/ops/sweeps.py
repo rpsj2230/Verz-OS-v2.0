@@ -451,6 +451,12 @@ def sweep_traceability() -> None:
             f"note: {len(unbuilt)} navigation item(s) the design names are not in the console: "
             + ", ".join(one.line for one in unbuilt)
         )
+    unbuilt_here = console_design.department_navigation_gaps(REPO)
+    if unbuilt_here:
+        print(
+            f"note: {len(unbuilt_here)} navigation item(s) the design names are not in the "
+            "department console: " + ", ".join(one.line for one in unbuilt_here)
+        )
     others = console_design.unmeasured_navigations(REPO)
     if others:
         print(

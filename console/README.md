@@ -36,8 +36,9 @@ Concretely, in this codebase:
 
 - Nothing reads the contents of a token. Not for a name, not for a role, not for an expiry.
   The console holds an opaque string, sends it, and does what the API answers.
-- The navigation lists every section to everybody. Filtering it by role would mean reading
-  a token to decide what exists. `src/layout/Shell.tsx` argues this at length.
+- The navigation is whichever console the API says this reader is given, and the browser
+  never filters it. Filtering it by role would mean reading a token to decide what exists.
+  `src/layout/Shell.tsx` argues this at length.
 - `src/api/client.ts` has no allow-list of paths and no check of anything about the caller.
 - A 404 is rendered with the API's own words and no interpretation. `handle_brain_error`
   maps DENIED and ABSENT to the same status with the same body, deliberately, and the way
@@ -338,12 +339,14 @@ product publishes one image for every client. `tests/config.test.tsx` refuses
 `import.meta.env` anywhere under `src/`, and `tests/unit/test_console_served.py` refuses it
 again from the suite that gates a deploy.
 
-**The navigation is identical for every session, and that is a rule rather than an
-omission.** Reading roles out of the token and hiding sections would be one line and would
-put a permission model in the browser, and a menu that shrinks is itself a disclosure: a
-person who sees two sections and a person who sees three have learned something about each
-other. `tests/shell-navigation.test.tsx` mounts the navigation with no session and with two
-different ones and asserts the markup is one string.
+**The navigation is the API's answer, and never the token's.** Reading roles out of the token
+and hiding sections would be one line and would put a permission model in the browser. Since
+2026-09-17 the shell asks `GET /api/v1/console/navigation` which console a reader is given: the
+company console, whose menu is the shell's own constant, or a department's, whose menu the API
+sends narrowed to what the reader holds. Until the answer arrives, and if it fails, only the
+reader's own work is listed. `tests/shell-navigation.test.tsx` mounts two sessions with
+different tokens and one answer and asserts the markup is one string, and
+`tests/department-console.test.tsx` holds the department's menu and the fallback.
 
 ---
 
@@ -816,7 +819,7 @@ by a function that refuses everything.
 | `tests/auth-session.test.ts` | No token in any store, `state` verified, single-flight refresh, the return-address guard, the loop guard, sign-out. |
 | `tests/api-errors.test.tsx` | The fallback sentences against `brain.core.errors`, and that nothing is added to a 404 on the way to the screen. |
 | `tests/api-client.test.ts` | The bearer token, no cookies, no allow-list, a refusal as a value, and what a 401 does. |
-| `tests/shell-navigation.test.tsx` | The navigation is identical for every session, on every page, and names nobody. |
+| `tests/shell-navigation.test.tsx` | The navigation is identical for every session the API gives one answer, on every page, and names nobody. |
 | `tests/routing.test.tsx` | Deep links, the console's own 404, and the two routes that must stay outside the guard. |
 | `tests/config.test.tsx` | The issuer rules, and that a misconfigured console names the variable on the screen. |
 | `tests/startup.test.ts` | `src/main.tsx`, which nothing else reaches: the theme applied before the first render, and the contract with `index.html`. |

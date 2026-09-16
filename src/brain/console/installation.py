@@ -64,8 +64,12 @@ M27.5.10: there is no `company_wide` field on a `Screen` any more and there is d
 parameter for one, and `NOT_AT_DEPARTMENT_SCOPE` withholds only the screen whose rows are
 people. A screen that renders empty at a department's scope has said the rows this reader may
 see are none, which is what every scoped surface here does, and taking it out of the menu
-instead is the subtraction disclosure. So This install, Backup and recovery and Capacity are
-all offered to a department admin, and only the throttling list is not.
+instead is the subtraction disclosure. So This install, Backup and recovery and Capacity were
+offered to a department admin from 2026-09-10, and only the throttling list was not. Since
+2026-09-17 none of them is: M27.7.29 takes the Install group out of a department's menu whole,
+on the ground that its subject is the deployment rather than on any disclosure, which
+`brain.console.screens.A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL`
+argues. Nothing in this module changed, because nothing here decides a menu.
 
 **Nothing here reads the environment.** `brain.install.value_of` is the one reader of an
 installation value and `brain.ops.independence.second_readers` refuses a second, so the

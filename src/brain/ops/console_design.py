@@ -26,9 +26,15 @@ SCREEN 11 is a member's own workspace and SCREEN 12 is the menu inside one agent
 console's "Department", "Gaps" and "Usage" and the agent's "Leash history" and "Settings" were
 reported as missing from the company console, which is a screen none of them belongs to. Seven
 of nineteen reported gaps were that. Each navigation is now read under the screen that draws
-it, the company console is compared with the shell, and the other three are named as not
-measured, because none of them has a shell of its own yet to compare with. See
-`ONE_PAGE_FOUR_NAVIGATIONS`.
+it, the company console is compared with the shell, and the ones with nothing to compare with
+are named as not measured. See `ONE_PAGE_FOUR_NAVIGATIONS`.
+
+**The department console is measured too, since 2026-09-17, and against Python rather than the
+shell.** Its menu is narrowed per reader, so the API serves it and the shell renders what it is
+sent; the labels live in `brain.console.department_console.DEPARTMENT_NAVIGATION` and nowhere in
+the browser. `department_navigation_gaps` compares that declaration with SCREEN 2 by the same
+rules as the company console, group and label, and the sweep prints both. See
+`A_SERVED_MENU_IS_MEASURED_WHERE_IT_IS_DECLARED`.
 
 **An item is found only in the group the design puts it in.** Until the console grouped its
 navigation this compared labels alone, which was all a flat list could be compared on. The
@@ -42,25 +48,32 @@ it means what the mockup means, and whether the wording matches. Those are read 
 against the page. This reads the navigation, which is the half a machine can hold: every item
 the design names, in the section it names, reachable in the browser.
 
-Task ids: M27.8.2
+Task ids: M27.8.2, M27.7.29
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from brain.console.department_console import DEPARTMENT_NAVIGATION, Section
+
 __all__ = [
     "A_DESIGN_NOTHING_MEASURES_IS_A_PICTURE",
     "A_SCREEN_IN_THE_WRONG_GROUP_IS_NOT_FOUND",
+    "A_SERVED_MENU_IS_MEASURED_WHERE_IT_IS_DECLARED",
     "COMPANY_CONSOLE",
+    "DEPARTMENT_CONSOLE",
     "DESIGN_PAGE",
     "ONE_PAGE_FOUR_NAVIGATIONS",
     "Unbuilt",
     "console_labels",
     "console_navigation",
+    "department_console_navigation",
+    "department_navigation_gaps",
     "design_navigation",
     "design_navigations",
     "navigation_gaps",
@@ -99,6 +112,18 @@ A_SCREEN_IN_THE_WRONG_GROUP_IS_NOT_FOUND: Final = (
 
 #: The screen whose navigation the administrative shell is compared with.
 COMPANY_CONSOLE: Final = "Company Overview"
+
+#: The screen whose navigation `brain.console.department_console` declares and the API serves.
+DEPARTMENT_CONSOLE: Final = "Department Console"
+
+#: Why the department console is compared with a Python declaration rather than the shell.
+A_SERVED_MENU_IS_MEASURED_WHERE_IT_IS_DECLARED: Final = (
+    "The department console's menu is narrowed per reader, so it is served by the API and the "
+    "shell holds none of its labels. Comparing SCREEN 2 with the shell would report every item "
+    "as missing on the day the console was built, so the comparison reads the declaration the "
+    "route serves, with the same rules as the company console: every item the design draws, "
+    "under the heading it draws it."
+)
 
 _SCREEN = re.compile(r'<section class="scr">')
 _TITLE = re.compile(r"<h2>([^<]+)</h2>")
@@ -170,7 +195,8 @@ def design_navigation(repo: Path) -> dict[str, tuple[str, ...]]:
 
 def unmeasured_navigations(repo: Path) -> tuple[str, ...]:
     """The titles of the other navigations the design draws, which nothing here compares yet."""
-    return tuple(title for title in design_navigations(repo) if title != COMPANY_CONSOLE)
+    measured = {COMPANY_CONSOLE, DEPARTMENT_CONSOLE}
+    return tuple(title for title in design_navigations(repo) if title not in measured)
 
 
 def console_labels(repo: Path) -> tuple[str, ...]:
@@ -196,6 +222,17 @@ def console_navigation(repo: Path) -> dict[str, tuple[str, ...]]:
     return grouped
 
 
+def department_console_navigation(
+    offered: Sequence[Section] = DEPARTMENT_NAVIGATION,
+) -> dict[str, tuple[str, ...]]:
+    """The department console's labels, by the heading of the section each sits under."""
+    grouped: dict[str, tuple[str, ...]] = {}
+    for section in offered:
+        labels = tuple(one.label for one in section.entries)
+        grouped[section.heading] = grouped.get(section.heading, ()) + labels
+    return grouped
+
+
 def navigation_gaps(repo: Path) -> tuple[Unbuilt, ...]:
     """Every item the design names that the console does not offer in the same group.
 
@@ -204,13 +241,31 @@ def navigation_gaps(repo: Path) -> tuple[Unbuilt, ...]:
     somebody following the design cannot find. An item offered under another group is reported
     with that group named.
     """
-    grouped = console_navigation(repo)
+    return _gaps(design_navigation(repo), console_navigation(repo))
+
+
+def department_navigation_gaps(
+    repo: Path, offered: Sequence[Section] = DEPARTMENT_NAVIGATION
+) -> tuple[Unbuilt, ...]:
+    """Every item SCREEN 2 names that the department console does not offer in the same group.
+
+    The same comparison as `navigation_gaps`, against the declaration the API serves rather than
+    the shell. See `A_SERVED_MENU_IS_MEASURED_WHERE_IT_IS_DECLARED`.
+    """
+    designed = design_navigations(repo).get(DEPARTMENT_CONSOLE, {})
+    return _gaps(designed, department_console_navigation(offered))
+
+
+def _gaps(
+    designed: Mapping[str, tuple[str, ...]], grouped: Mapping[str, tuple[str, ...]]
+) -> tuple[Unbuilt, ...]:
+    """Every designed item not offered under its own heading, with where it was offered instead."""
     found_under: dict[str, str] = {}
     for heading, labels in grouped.items():
         for label in labels:
             found_under.setdefault(_comparable(label), heading)
     missing: list[Unbuilt] = []
-    for section, items in design_navigation(repo).items():
+    for section, items in designed.items():
         offered = {_comparable(one) for one in grouped.get(section, ())}
         for label in items:
             if _comparable(label) in offered:

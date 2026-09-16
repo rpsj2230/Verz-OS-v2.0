@@ -31,6 +31,7 @@ import {
 } from "../src/pages/Agents";
 import { readRoster } from "../src/pages/agentsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
+import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, departmentConsole } from "./support/navigation";
 import { asPythonName, backendDeepLinkPrefix, backendHiddenCountNames, membersOf } from "./support/agentWorkspace";
 import { declaredProperty, declaredPropertyNames, declaredResponseSchema } from "./support/openapi";
 import { backendPublicMessages } from "./support/python";
@@ -386,19 +387,31 @@ describe("the way back from a workspace", () => {
 
   test("the roster is in the navigation, for everybody, at the address the way back uses", async () => {
     // What breaks if this is deleted: a roster reachable only from inside a workspace, which
-    // is a page nobody finds without first knowing an agent's slug.
-    const { container } = await consoleAt("/", answers);
-    const nav = [...container.querySelectorAll("nav a")].map((link) => [
-      link.textContent ?? "",
-      link.getAttribute("href") ?? "",
-    ]);
+    // is a page nobody finds without first knowing an agent's slug. "For everybody" is both
+    // consoles the API gives: the company's menu and a department's.
+    for (const given of [COMPANY_CONSOLE, departmentConsole()]) {
+      const { container } = await consoleAt("/", {
+        ...answers,
+        [NAVIGATION_ADDRESS]: { body: given },
+      });
+      await waitFor(() => {
+        if (container.querySelector('nav [role="status"]')) {
+          throw new Error("the menu has not been answered yet");
+        }
+      });
+      const nav = [...container.querySelectorAll("nav a")].map((link) => [
+        link.textContent ?? "",
+        link.getAttribute("href") ?? "",
+      ]);
 
-    // The address rather than the label, and then the label separately: the menu says what
-    // `docs/screens.html` calls this section, which is "Agents and leashes", and
-    // `brain.ops.console_design.navigation_gaps` is what holds the two together. What this
-    // test is for is that the section is there at all and lands where the way back does.
-    const entry = nav.find(([, href]) => href === ROSTER_ADDRESS);
-    expect(entry).toBeDefined();
-    expect(entry?.[0]).toContain(ROSTER_HEADING);
+      // The address rather than the label, and then the label separately: the menu says what
+      // `docs/screens.html` calls this section, which is "Agents and leashes", and
+      // `brain.ops.console_design.navigation_gaps` is what holds the two together. What this
+      // test is for is that the section is there at all and lands where the way back does.
+      const entry = nav.find(([, href]) => href === ROSTER_ADDRESS);
+      expect(entry).toBeDefined();
+      expect(entry?.[0]).toContain(ROSTER_HEADING);
+      container.remove();
+    }
   });
 });

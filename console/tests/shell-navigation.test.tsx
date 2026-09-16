@@ -1,26 +1,41 @@
 /**
- * The navigation, which is the same for everybody.
+ * The navigation, which is the API's answer and never the token's.
  *
  * **This is the positive statement of the rule that the console does not decide what
  * exists.** The obvious alternative is to read the roles out of the token and show each
  * person only the sections they can use. That is one line, it works, and it puts a
  * permission model in the browser: the console would be deciding what exists, from a copy
  * of the rules nobody keeps in step, computed from a token this code has no business
- * reading. And a menu that shrinks is itself a disclosure: a person who can see six
- * sections and a person who can see four have learned something about each other.
+ * reading.
  *
- * A section somebody cannot use answers with the API's own refusal, which is the same
- * answer they would get for a section that does not exist.
+ * Since 2026-09-17 the shell asks `GET /api/v1/console/navigation` which console a reader is
+ * given, so the menu is no longer identical for everybody: it is identical for everybody the API
+ * gives the same answer, whatever their token says. The company console's menu is still the
+ * shell's constant, and a section somebody cannot use answers with the API's own refusal, which
+ * is the same answer they would get for a section that does not exist. The department console
+ * and the menu before an answer arrives are held in `tests/department-console.test.tsx`.
  *
  * Task ids: M32.5.1.2
  */
 
 import { MemoryRouter } from "react-router-dom";
-import { render } from "@testing-library/react";
+import { render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import { loadConsole, signIn, type LoadedConsole } from "./support/auth";
+import { fakeIdentityProvider, loadConsole, signIn, type LoadedConsole } from "./support/auth";
+import { answerNavigation, COMPANY_CONSOLE } from "./support/navigation";
 
-/** The navigation landmark's markup, from a shell rendered at one address. */
+/** A signed-in console whose stand-in API answers the navigation with `body`. */
+async function consoleAnswering(
+  body: unknown = COMPANY_CONSOLE,
+  tokens?: Parameters<typeof signIn>[1],
+): Promise<LoadedConsole> {
+  const idp = fakeIdentityProvider({ api: (url) => answerNavigation(url, body) });
+  const loaded = await loadConsole({ idp });
+  await signIn(loaded, tokens);
+  return loaded;
+}
+
+/** The navigation landmark's markup, from a shell rendered at one address, once it has answered. */
 async function navigationAt(path: string): Promise<string> {
   const { Shell } = await import("../src/layout/Shell");
   const { container } = render(
@@ -32,6 +47,11 @@ async function navigationAt(path: string): Promise<string> {
   if (!nav) {
     throw new Error("The shell rendered no navigation landmark, so there is nothing to compare.");
   }
+  await waitFor(() => {
+    if (nav.querySelector('[role="status"]')) {
+      throw new Error("the menu has not been answered yet");
+    }
+  });
   return nav.outerHTML;
 }
 
@@ -46,23 +66,20 @@ function targets(navMarkup: string): { href: string; label: string }[] {
 }
 
 describe("the navigation", () => {
-  test("the navigation is identical for every session", async () => {
+  test("the navigation is identical for every session the API gives the same answer", async () => {
     // What breaks if this is deleted: the rule that this console does not decide what
     // exists. A filter here would need a token to be read, would be a second permission
     // model computed in the one place an attacker can edit, and would leak by omission:
-    // the shape of the menu would tell each person what they are not allowed to see.
+    // the shape of the menu would tell each person what they are not allowed to see. Two
+    // sessions with different tokens and one answer must draw one menu, and that menu must be
+    // the company console's whole, install screens included, so this is not passing because
+    // both sessions were shown only their own work.
     const seen = new Set<string>();
 
-    const noSession = await loadConsole();
-    seen.add(await navigationAt("/"));
-    expect(noSession.session.isSignedIn()).toBe(false);
-
-    const first = await loadConsole();
-    await signIn(first, { accessToken: "TOKEN-FOR-ONE-PERSON", idToken: "ID-ONE" });
+    await consoleAnswering(COMPANY_CONSOLE, { accessToken: "TOKEN-FOR-ONE-PERSON", idToken: "ID-ONE" });
     seen.add(await navigationAt("/"));
 
-    const second = await loadConsole();
-    await signIn(second, {
+    await consoleAnswering(COMPANY_CONSOLE, {
       accessToken: "A-DIFFERENT-TOKEN-ENTIRELY",
       idToken: "ID-TWO",
       expiresIn: 900,
@@ -70,6 +87,7 @@ describe("the navigation", () => {
     seen.add(await navigationAt("/"));
 
     expect([...seen]).toHaveLength(1);
+    expect(targets([...seen][0] ?? "").map((one) => one.href)).toContain("/install");
   });
 
   test("the navigation lists the same sections on every page", async () => {
@@ -77,7 +95,7 @@ describe("the navigation", () => {
     // it, which is the same disclosure by a slower route. Where the links point is
     // compared rather than the whole markup, because the current entry is legitimately
     // marked and that mark is the one thing that should differ.
-    await loadConsole();
+    await consoleAnswering();
     const onOverview = targets(await navigationAt("/"));
     const onRecords = targets(await navigationAt("/records"));
 
@@ -93,7 +111,7 @@ describe("the navigation", () => {
     // Report in that order. Each list is asserted to be named by its own heading, because a
     // heading beside a list that nothing ties to it reads as grouped and is announced as one
     // long list.
-    await loadConsole();
+    await consoleAnswering();
     const holder = document.createElement("div");
     holder.innerHTML = await navigationAt("/");
 
@@ -122,7 +140,7 @@ describe("the navigation", () => {
     // What breaks if this is deleted: the only signal of where you are becomes a colour,
     // which is invisible to a screen reader and to anyone who cannot distinguish the two
     // shades. This is the accessibility half of the same list.
-    await loadConsole();
+    await consoleAnswering();
     const holder = document.createElement("div");
     holder.innerHTML = await navigationAt("/records");
     const current = [...holder.querySelectorAll("a")].filter(
@@ -139,7 +157,7 @@ describe("the navigation", () => {
     // exact matching, because a prefix match on "/" would otherwise mark it everywhere. The
     // address below is a real one: the entity is a path segment on the records route, so
     // this is where a person spends most of their time rather than an invented depth.
-    await loadConsole();
+    await consoleAnswering();
     const holder = document.createElement("div");
     holder.innerHTML = await navigationAt("/records/clients");
     const current = [...holder.querySelectorAll("a")].filter(

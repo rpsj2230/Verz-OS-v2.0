@@ -42,6 +42,7 @@ import {
 import { NO_RELEASE_NAMED, READ_ITS_NOTES } from "../src/pages/Updates";
 import { STATE_TONES } from "../src/ui/Status";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { answerNavigation, COMPANY_CONSOLE } from "./support/navigation";
 import { backendEnumMembers, backendModelFields } from "./support/python";
 import { readConsoleFile } from "./support/repo";
 
@@ -690,13 +691,22 @@ describe("reaching the install screens from the keyboard", () => {
     // What breaks if this is deleted: a section is added as a div with a click handler, which is
     // focusable by nothing and announced as nothing, and looks identical in review to the person
     // who wrote it. `scripts/check-boundaries.mjs` refuses the source pattern; this asks the
-    // rendered question, which is what actually takes focus.
+    // rendered question, which is what actually takes focus. The install screens are on the
+    // company console only, so the stand-in API gives that console; a department's offers none,
+    // which `tests/department-console.test.tsx` holds.
+    const idp = fakeIdentityProvider({ api: (url) => answerNavigation(url, COMPANY_CONSOLE) });
+    await signIn(await loadConsole({ idp }));
     const { Shell } = await import("../src/layout/Shell");
     const { container } = render(
       <MemoryRouter initialEntries={["/"]}>
         <Shell />
       </MemoryRouter>,
     );
+    await waitFor(() => {
+      if (container.querySelector('nav [role="status"]')) {
+        throw new Error("the menu has not been answered yet");
+      }
+    });
 
     const nav = container.querySelector("nav");
     const links = [...(nav?.querySelectorAll("a") ?? [])];

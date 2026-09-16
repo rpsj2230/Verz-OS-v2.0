@@ -52,6 +52,7 @@ import {
   type OrderedRule,
 } from "./support/cascade";
 import { parseCss } from "./support/css";
+import { COMPANY_CONSOLE, NAVIGATION_ADDRESS, departmentConsole } from "./support/navigation";
 import { readConsoleFile } from "./support/repo";
 
 const CONSOLE_ORIGIN = "https://console.test";
@@ -579,6 +580,37 @@ const PAGES: Readonly<Record<string, PageCase>> = {
         assurance: "aal2",
         channel: "web",
         ent_hash: "f".repeat(64),
+      },
+    },
+  },
+  // Department, SCREEN 2's overview, mounted as a department admin would open it: the stand-in API
+  // gives a department's console, so the menu drawn above it is that console's and not the
+  // company's, and the department's name is an unbroken value in the header and on the page. The
+  // three cards each draw a value the API sent: a count, an agent's name, and the sentence every
+  // asker is told.
+  "/department": {
+    address: "/department",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      [NAVIGATION_ADDRESS]: departmentConsole(UNBROKEN),
+      "/api/v1/report/usage": {
+        start: "2019-02-26T09:00:00Z",
+        end: "2019-03-05T09:00:00Z",
+        departments: [{ department: UNBROKEN, questions: 3, people: 1 }],
+        people: [{ person: UNBROKEN, questions: 3 }],
+        questions: 3,
+        machine_included: false,
+        not_measured: ["tokens", "model", "agent"],
+      },
+      "/api/v1/agents": {
+        items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN }],
+      },
+      "/api/v1/report/questions": {
+        nothing_connected: true,
+        answered_when_nothing_connected: UNBROKEN,
+        answered_when_nothing_found: UNBROKEN,
+        unanswered_are_recorded: false,
       },
     },
   },
@@ -1539,13 +1571,20 @@ async function mount(pattern: string): Promise<HTMLElement> {
   if (page === undefined) {
     throw new Error(`${pattern} has no page case.`);
   }
+  // Every page sits inside the shell, and the shell asks which console it is. The company console
+  // unless the page case says otherwise, because that is the menu the navigation test below holds
+  // every page to.
+  const answers: Readonly<Record<string, unknown>> = {
+    [NAVIGATION_ADDRESS]: COMPANY_CONSOLE,
+    ...page.answers,
+  };
   const idp = fakeIdentityProvider({
     api(url) {
       const asked = new URL(url, CONSOLE_ORIGIN).pathname;
-      if (!(asked in page.answers)) {
+      if (!(asked in answers)) {
         return null;
       }
-      return new Response(JSON.stringify(page.answers[asked]), {
+      return new Response(JSON.stringify(answers[asked]), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -1724,8 +1763,17 @@ describe("every registered page at a phone's width", () => {
         expect(declared(at, "visibility", RULES, PHONE_PX), named(at)).not.toBe("hidden");
       }
 
+      // The company console lists every section the route table has except Department, which is
+      // the department console's overview; the Department case is mounted as a department admin,
+      // so its menu is the one the API sent for that console, followed by the reader's own work.
       const links = [...(nav as Element).querySelectorAll("a")];
-      const sections = SHELL_PATTERNS.filter((one) => !one.includes(":") && !one.includes("*"));
+      const everySection = SHELL_PATTERNS.filter((one) => !one.includes(":") && !one.includes("*"));
+      const departments = departmentConsole(UNBROKEN).sections as { entries: { to: string }[] }[];
+      const ownWork = ["/ask", "/me", "/approvals", "/records"];
+      const sections =
+        pattern === "/department"
+          ? [...departments.flatMap((one) => one.entries.map((entry) => entry.to)), ...ownWork]
+          : everySection.filter((one) => one !== "/department");
       expect(links.map((link) => link.getAttribute("href")).sort()).toEqual([...sections].sort());
       for (const link of links) {
         const height = pixels(resolved(declared(link, "min-height", RULES, PHONE_PX)));

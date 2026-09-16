@@ -2,60 +2,77 @@
  * The frame every signed-in page renders inside: a header, a navigation list, and the
  * page itself.
  *
- * **The navigation is the same for everybody, and that is a decision rather than an
- * omission.** The obvious alternative is to read the roles out of the token and show each
- * person only the sections they can use. That is one line, it works, and it puts a
- * permission model in the browser: the console would then be deciding what exists, using a
- * copy of the rules that nobody keeps in step with the real ones, computed from a token
- * this code has no business reading. When the two disagree, the browser's copy is the one
- * an attacker edits and the one a support conversation trusts.
+ * **Which menu is drawn is the API's answer, and this file makes no permission decision.** The
+ * obvious way to give a department admin a smaller menu is to read the roles out of the token and
+ * show each person only the sections they can use. That is one line, it works, and it puts a
+ * permission model in the browser: the console would then be deciding what exists, using a copy
+ * of the rules that nobody keeps in step with the real ones, computed from a token this code has
+ * no business reading. When the two disagree, the browser's copy is the one an attacker edits and
+ * the one a support conversation trusts. `scripts/check-boundaries.mjs` refuses the names such a
+ * check is usually given.
  *
- * So every section is listed, and a person who opens one they cannot use gets the API's
- * answer to that question, which is the same answer they would get for a section that does
- * not exist. Nothing is disclosed by the list itself: it names the console's own pages,
- * not the company's data, and it is identical in every deployment.
+ * So the shell asks. `GET /api/v1/console/navigation` is `brain.navigation_routes`, which serves
+ * `brain.console.department_console.console_for`: the company console for a reader who holds some
+ * screen across the whole install, and a department's console, with `docs/screens.html` SCREEN 2's
+ * menu narrowed to what they hold, for everybody else. This note said until 2026-09-17 that the
+ * navigation was the same for everybody because the API's half was not served; it is served now,
+ * and the answer replaces the list rather than filtering it here.
  *
- * When hiding a section is genuinely worth it, the way to do it is to ask the API which
- * surfaces are available and render what it says. That keeps the decision on the side that
- * owns it. What must never happen is a role check in this file, computed here from a
- * token; `scripts/check-boundaries.mjs` refuses the names such a check is usually given.
+ * **The company console's menu is still a constant, and it is the same for everybody given it.**
+ * `GROUPS` below is SCREEN 1's menu, `brain.ops.console_design` compares it with the design, and a
+ * person who opens a section they cannot use gets the API's answer to that question, which is the
+ * same answer a section that does not exist gets. The department console's menu is not written
+ * here at all: it is narrowed per reader, so it arrives in the answer, and its labels live in
+ * `brain.console.department_console.DEPARTMENT_NAVIGATION`.
  *
- * **The API's half of that already exists and is not served.** `brain.console.screens.
- * navigation` takes an `EntitlementSet` and nothing else, returns the screens and no count of
- * what it withheld, and is reachable from no route: `brain.launch` reads it and no request
- * does. So the menu a browser can compute from grants today is none, and a section added here
- * is added to a list rather than to a registry. When that navigation is served, this constant
- * is what the route's answer replaces, and the argument above is why it is a replacement
- * rather than a filter applied here.
+ * **Until the answer arrives, and if it fails, the menu is the reader's own work and nothing
+ * else.** Use is on every console, so it is drawn at once; the rest waits. Drawing the company
+ * console while waiting would offer a department admin every screen about this server for as
+ * long as the request took, and for good if it failed. See
+ * `navigationQuery.A_MENU_NOBODY_ANSWERED_OFFERS_ONLY_YOUR_OWN_WORK`.
  *
  * The skip link is first in the DOM on purpose. Without one, reaching the page content
  * from the keyboard means tabbing through every navigation item on every page.
  *
  * **The suspense boundary is around the page and not around the frame.** A route whose code
- * arrives on demand has to suspend somewhere, and putting the boundary outside the header
- * would mean the navigation itself waited for a network response. A menu that appears late
- * is a menu whose contents could in principle depend on what came back, and this file's
- * whole claim is that they cannot: the list is a constant, it renders before anything is
- * fetched, and it is the same list whether the page inside it ever loads or not.
+ * arrives on demand has to suspend somewhere, and putting the boundary outside the header would
+ * make the frame wait for a chunk. The menu's own request is separate from the page's, so the
+ * page inside the frame renders whether the menu has answered or not.
  */
 
 import { Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { useResource } from "../api/useResource";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
 import { INSTALL_SECTIONS } from "../pages/installQuery";
+import { Chip } from "../ui/Chip";
+import { NAVIGATION_API_PATH, menuFor, readNavigation, type NavGroup } from "./navigationQuery";
 
-/** One entry in the menu. */
-interface NavSection {
-  readonly to: string;
-  readonly label: string;
-}
+/** Said in the menu while the API has not answered which console this is. */
+export const MENU_LOADING = "Loading the rest of the menu.";
 
-/** A heading in the menu and the sections under it. */
-interface NavGroup {
-  readonly heading: string;
-  readonly sections: readonly NavSection[];
-}
+/** Said in the menu when the API's answer could not be had or could not be read. */
+export const MENU_UNAVAILABLE =
+  "The rest of the menu could not be loaded, so only the screens about your own work are listed.";
+
+/**
+ * The screens a person works in rather than administers, on every console.
+ *
+ * Written once and used by both menus, and drawn before the API has answered, because asking,
+ * deciding an approval and reading records are the reader's own work whichever console they are
+ * given. The design gives these to a member's own workspace, and an administrator of a company or
+ * of a department also needs them.
+ */
+export const USE: NavGroup = {
+  heading: "Use",
+  sections: [
+    { to: "/ask", label: "Ask" },
+    { to: "/me", label: "My workspace" },
+    { to: "/approvals", label: "Approvals" },
+    { to: "/records", label: "Records" },
+  ],
+};
 
 /**
  * Every section, for everyone, grouped by what the person opening it is trying to do. See the
@@ -75,17 +92,16 @@ interface NavGroup {
  * the check reads the rows in this file. The install group is spread, and is the one group the
  * design does not draw, so there is nothing for it to be compared with.
  *
- * **Two groups the design does not draw, and why they exist.** Use holds the screens a person
- * works in rather than administers (asking, deciding an approval, reading records), which the
- * design gives a member's own workspace and which an administrator also needs. Install holds the
- * screens about this server, which the owner's standard lists (version, backup, limits) and the
- * design predates. Both come after the design's three, so the design's reading order is the
- * menu's reading order.
+ * **Two groups the design does not draw, and why they exist.** Use, which is `USE` above. Install
+ * holds the screens about this server, which the owner's standard lists (version, backup, limits)
+ * and the design predates, and it is on this console only: a department's console offers no
+ * screen whose subject is the installation. Both come after the design's three, so the design's
+ * reading order is the menu's reading order.
  *
  * **No count badges.** The design draws a number beside several entries. A badge is a figure
- * from a request, this list is a constant that renders before anything is fetched, and a menu
- * whose contents depend on a response is the shape the note above says it may not have. Each
- * number is on its screen instead, beside the entries it counts.
+ * from a second request per entry, and a number beside an entry is the one place a count of
+ * something the reader may not open could reach the frame of every page. Each number is on its
+ * screen instead, beside the entries it counts.
  */
 const GROUPS: readonly NavGroup[] = [
   {
@@ -148,15 +164,7 @@ const GROUPS: readonly NavGroup[] = [
       { to: "/adoption", label: "Adoption" },
     ],
   },
-  {
-    heading: "Use",
-    sections: [
-      { to: "/ask", label: "Ask" },
-      { to: "/me", label: "My workspace" },
-      { to: "/approvals", label: "Approvals" },
-      { to: "/records", label: "Records" },
-    ],
-  },
+  USE,
   {
     heading: "Install",
     sections: [...INSTALL_SECTIONS, { to: "/storage", label: "Storage" }],
@@ -169,6 +177,11 @@ function headingId(heading: string): string {
 }
 
 export function Shell() {
+  const answer = useResource<unknown>(NAVIGATION_API_PATH);
+  const given = answer.data === null ? null : readNavigation(answer.data);
+  const groups = menuFor(given, GROUPS, USE);
+  const departments = given?.console === "department" ? given.departments : [];
+
   return (
     <div className="shell">
       <a className="skip-link" href="#main">
@@ -176,7 +189,15 @@ export function Shell() {
       </a>
 
       <header className="shell__header">
-        <span className="shell__brand">Company Brain</span>
+        <span className="shell__brand">
+          Company Brain
+          {departments.length > 0 ? (
+            <>
+              {" "}
+              <Chip label={departments.join(", ")} />
+            </>
+          ) : null}
+        </span>
         <div className="shell__header-actions">
           <ThemeControl />
           <button
@@ -193,7 +214,13 @@ export function Shell() {
 
       <div className="shell__body">
         <nav className="shell__nav" aria-label="Sections">
-          {GROUPS.map((group) => (
+          {answer.busy ? (
+            <p className="note" role="status">
+              {MENU_LOADING}
+            </p>
+          ) : null}
+          {!answer.busy && given === null ? <p className="note">{MENU_UNAVAILABLE}</p> : null}
+          {groups.map((group) => (
             <div key={group.heading} className="shell__nav-group">
               <h2 id={headingId(group.heading)} className="shell__nav-heading">
                 {group.heading}

@@ -51,6 +51,7 @@ import { Ask } from "./pages/Ask";
 import { Capabilities } from "./pages/Capabilities";
 import { Capacity } from "./pages/Capacity";
 import { Connectors } from "./pages/Connectors";
+import { Department } from "./pages/Department";
 import { Errors } from "./pages/Errors";
 import { Features } from "./pages/Features";
 import { Jobs } from "./pages/Jobs";
@@ -228,6 +229,12 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Overview /> },
+      // Department, SCREEN 2's overview, which a department's console offers where the company's
+      // offers Overview. One path and no parameter: the department is the reader's own grants,
+      // decided by the API, so there is no segment that could name somebody else's. The registry
+      // key it opens is the overview, which the index route above already routes. Eager, for
+      // `Roles`' reason. See `pages/Department.tsx`.
+      { path: "department", element: <Department /> },
       // Live runs, SCREEN 1's second Operate item. One path and no parameter: a run is a row
       // with nothing to open, and the path is the screen's key in `brain.console.screens`, which
       // is what `brain.ops.console_screens.routed_screen_keys` matches. Eager rather than split,

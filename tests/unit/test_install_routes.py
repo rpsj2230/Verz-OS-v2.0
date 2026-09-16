@@ -19,10 +19,11 @@ proving it does not answer an empty panel instead. A route that always returned 
 would pass half of this file.
 
 **The department-scoped case is a reading and not a refusal, and that is the decision under
-test.** `brain.console.screens.for_department` withholds Rate limits from a department admin's
-menu and offers the other four install screens, which `tests/unit/test_screens.py::
-test_a_department_admin_is_offered_every_screen_but_the_one_that_would_disclose` pins as
-M27.5.10 and argues at length. That is a menu decision rather than an authorisation, so the
+test.** `brain.console.screens.for_department` withholds all five install screens from a
+department admin's menu as a group since 2026-09-17, and Rate limits on its own account as a
+disclosure besides, which `tests/unit/test_screens.py::
+test_a_department_admin_is_offered_every_screen_but_the_install_group_and_the_disclosures` pins.
+That is a menu decision rather than an authorisation, so the
 route refuses nobody for it: what happens at a department's scope is that
 `brain.console.installation.throttled_now` matches no row and the list comes back empty with no
 count of what was dropped. Both halves are asserted here.
@@ -590,21 +591,22 @@ def test_a_department_scoped_reader_is_answered_no_throttling_rows_and_no_count_
     assert set(theirs.json()) == {"ceilings", "throttled", "unread"}
 
 
-def test_rate_limits_is_the_one_install_screen_a_department_admin_is_not_offered() -> None:
+def test_no_install_screen_is_offered_to_a_department_admin_and_rate_limits_also_discloses() -> (
+    None
+):
     """Where the rule this router honours actually lives, asserted rather than cited.
 
     The five screens this router serves are `install`, `updates`, `recovery`, `limits` and
-    `connections`. Of those, `for_department` drops exactly one, and the argument for dropping
-    it is a `Disclosure` naming what a department-scoped reader would learn, the row form that
-    cannot carry a department, and what would have to change. The other four are offered,
-    deliberately, and `tests/unit/test_screens.py::
-    test_a_department_admin_is_offered_every_screen_but_the_one_that_would_disclose` is where
-    that decision is argued: a screen that renders empty at a department's scope has said the
-    rows this reader may see are none, and withholding it instead is the subtraction disclosure.
+    `connections`. `for_department` drops all five, because M27.7.29 offers a department admin
+    no screen whose subject is the installation; see `brain.console.screens.
+    A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL`. Rate limits also
+    carries a `Disclosure`, naming what a department-scoped reader would learn, the row form
+    that cannot carry a department, and what would have to change, and that argument stands on
+    its own: it is why the route answers such a reader an empty list rather than everybody.
 
-    Asserted here as well as there because this is the file somebody opens when they add a sixth
-    install screen, and the failure to avoid is a screen about the deployment being withheld by
-    habit, or a screen listing people being offered by habit.
+    Asserted here as well as in `tests/unit/test_screens.py` because this is the file somebody
+    opens when they add a sixth install screen, and the failure to avoid is a screen about the
+    deployment being offered to a department by habit.
 
     Delete this and either mistake can be made with nothing between the two lists comparing
     them."""
@@ -627,7 +629,7 @@ def test_rate_limits_is_the_one_install_screen_a_department_admin_is_not_offered
     theirs = {one.key for one in for_department(everything)}
 
     assert ours == {"install", "updates", "recovery", "limits", "connections"}
-    assert ours - theirs == {"limits"}
+    assert theirs == set()
     assert "limits" in {one.screen for one in NOT_AT_DEPARTMENT_SCOPE}
 
 

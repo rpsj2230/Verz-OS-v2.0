@@ -51,13 +51,29 @@ offers a grant's scope `{scope, subject}` and nothing else, and `Clause.matches`
 field a row does not have, so a department-scoped `read:rate_limit` grant matches no row at
 all while an unrestricted one matches every row in the company. "Who is currently being
 throttled" is a list of who is busy with a number beside each name, and there is no third
-answer at a department's scope. The other four are offered: what release is running, when the
-last backup was and how much memory the profile wants are the same facts for everybody on the
-install, and where the staff list is linked from renders empty at a department's scope, which
+answer at a department's scope. Where the staff list is linked from renders empty at a
+department's scope, which
 `brain.console.govern_surfaces.A_ROSTER_IS_THE_WHOLE_COMPANYS_LIST_AND_SITS_IN_NO_DEPARTMENT`
-already argues is the correct answer rather than a gap.
+already argues is the correct answer rather than a gap, so it is offered.
 
-**Service levels is the second, and it differs from the four offered ones in one fact.** What
+**And no screen whose subject is the installation is offered at all, which is a different rule
+from the disclosures and says so.** This module offered four Install screens to a
+department admin from 2026-09-10 until 2026-09-17, on the argument that what release is
+running, when the last backup was and how much memory the profile wants are the same facts for
+everybody, so nothing is disclosed. That is true and it answers the wrong question. M27.7.29 asks
+for "the same screens at department scope ... with no screen whose subject is the installation
+offered at all", and `docs/screens.html` SCREEN 2 draws a department's console with no Install
+section. Nothing on those screens is the department's to act on: upgrading, restoring and sizing
+the server belong to whoever runs the install, and a department admin is offered the work in the
+install and not the install. The empty-screen argument does not reach this either, because it is
+about a screen whose rows narrow to nothing; an Install screen's rows do not narrow at all. What a
+missing Install heading tells a department admin is that the product has screens about its
+server, which is printed in its own design and identical on every install, and is not a fact
+about any company's data. So `for_department` drops `Group.INSTALL` as a group, beside the
+disclosures and not as one of them. See
+`A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL`.
+
+**Service levels is the second disclosure, and differs from the Install screens in one fact.** What
 release is running is the same for everybody on the install and is nobody's activity. A
 service level reading is a sum of everybody's activity: `obs.request_telemetry` carries no
 department, so the reading cannot be narrowed, and shown whole to a reader whose usage grant
@@ -160,6 +176,16 @@ AN_EMPTY_SCREEN_IS_AN_ANSWER_AND_ONLY_A_LEAK_IS_A_REASON_TO_WITHHOLD_ONE: Final 
     "a leak and is the only case that survives. So a department admin is offered every "
     "screen unless a Disclosure names what they would learn, which row form cannot carry a "
     "department, and what would have to change for the screen to be offered."
+)
+
+#: Why a department's menu has no Install screen, which is not a disclosure and not argued as one.
+A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL: Final = (
+    "An Install screen's subject is the deployment: its release, its backups, its ceilings and "
+    "its capacity. Its rows do not narrow to a department, so it is neither empty nor a leak at "
+    "that scope, and nothing on it is a department's to act on. M27.7.29 asks for no screen whose "
+    "subject is the installation at a department's scope and docs/screens.html SCREEN 2 draws "
+    "none, so for_department drops the Install group whole. A missing Install heading discloses "
+    "that the product has screens about its server, which its own design prints for everybody."
 )
 
 #: Why the withheld list is three sentences per screen rather than a boolean.
@@ -874,18 +900,24 @@ def navigation(entitlement: EntitlementSet, now: Any = None) -> tuple[Screen, ..
 def for_department(entitlement: EntitlementSet, now: Any = None) -> tuple[Screen, ...]:
     """The menu for somebody administering one department rather than the install.
 
-    The grant check is the same one, and everything it admits is offered except the screens
-    `NOT_AT_DEPARTMENT_SCOPE` names. See
-    `AN_EMPTY_SCREEN_IS_AN_ANSWER_AND_ONLY_A_LEAK_IS_A_REASON_TO_WITHHOLD_ONE` for why the
-    subtraction is that small, and `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT`
-    for why it is a list of arguments rather than a field on the screen.
+    The grant check is the same one, and everything it admits is offered except two kinds of
+    screen: the ones `NOT_AT_DEPARTMENT_SCOPE` names, and every screen in `Group.INSTALL`. See
+    `AN_EMPTY_SCREEN_IS_AN_ANSWER_AND_ONLY_A_LEAK_IS_A_REASON_TO_WITHHOLD_ONE` for why the first
+    subtraction is that small, `A_FLAG_CAN_BE_SET_WHILE_TIDYING_AND_THREE_SENTENCES_CANNOT` for
+    why it is a list of arguments rather than a field on the screen, and
+    `A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL` for why the second is
+    a group rather than a disclosure.
 
     Note what this is not: it is not an authorisation. A caller holding `read:rate_limit`
     reaches that screen by its address whatever this returns, because the tool decides that,
     and `brain.console.installation.throttled_now` narrows the rows it returns by the reader's
     own grant. This decides what is worth putting in a menu.
     """
-    return tuple(one for one in navigation(entitlement, now) if one.key not in _WITHHELD_KEYS)
+    return tuple(
+        one
+        for one in navigation(entitlement, now)
+        if one.key not in _WITHHELD_KEYS and one.group is not Group.INSTALL
+    )
 
 
 def grouped(screens: Sequence[Screen]) -> tuple[tuple[Group, tuple[Screen, ...]], ...]:
@@ -1030,10 +1062,10 @@ SCREEN_COUNT: Final = 36
 
 #: The screens a department admin is not offered, in registry order.
 #:
-#: Derived from `NOT_AT_DEPARTMENT_SCOPE` rather than written out again, so a screen can be
-#: withheld in one place only and the argument travels with the key. Registry order rather
-#: than declaration order, so a reader comparing this against a menu is comparing two lists in
-#: the same order.
+#: Derived from `NOT_AT_DEPARTMENT_SCOPE` and the Install group rather than written out again,
+#: so a screen can be withheld in one place only and the argument travels with the key. Registry
+#: order rather than declaration order, so a reader comparing this against a menu is comparing
+#: two lists in the same order.
 WITHHELD_AT_DEPARTMENT_SCOPE: Final[tuple[str, ...]] = tuple(
-    one.key for one in SCREENS if one.key in _WITHHELD_KEYS
+    one.key for one in SCREENS if one.key in _WITHHELD_KEYS or one.group is Group.INSTALL
 )

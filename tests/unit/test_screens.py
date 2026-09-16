@@ -353,16 +353,22 @@ def test_a_department_menu_carries_no_heading_for_the_screens_it_leaves_out() ->
     withheld from a department's menu cannot leave a heading behind announcing the screens
     under it.
 
-    A department admin now reaches all four headings, because three of the four Install screens
-    are theirs. The discriminating case is therefore a caller whose only Install grant is the
-    one withheld screen: their department menu has no Install heading, and their general menu
-    does.
+    A department admin reaches three of the four headings: since 2026-09-17 no Install screen is
+    theirs, so a caller holding every capability has an Install heading in their general menu
+    and none in their department's. The narrow case is a caller whose only grant is one withheld
+    screen: their department menu is empty, with no heading left behind, and their general menu
+    has the Install heading.
 
     Delete this and the department console grows a heading with nothing under it, which is the
     count of hidden things written as a word instead of as a number."""
     everything = every_capability()
 
-    assert [group for group, _ in grouped(for_department(everything))] == list(Group)
+    assert [group for group, _ in grouped(for_department(everything))] == [
+        Group.OPERATE,
+        Group.GOVERN,
+        Group.REPORT,
+    ]
+    assert [group for group, _ in grouped(navigation(everything))] == list(Group)
 
     only_the_withheld = holding("read:rate_limit")
 
@@ -521,7 +527,9 @@ def test_screen_gaps_reports_a_screen_registered_under_a_key_another_already_hol
 # --- a screen leaves a department's menu only with an argument (M27.5.10) --------------------
 
 
-def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_disclose() -> None:
+def test_a_department_admin_is_offered_every_screen_but_the_install_group_and_the_disclosures() -> (
+    None
+):
     """**M27.5.10, as the owner decided it on 2026-09-09.** The leaf says screens whose subject
     is the installation are not offered at department scope, and the reading that put five
     screens behind it conflated "empty at that scope" with "a leak at that scope". Only the
@@ -541,25 +549,28 @@ def test_a_department_admin_is_offered_every_screen_but_the_one_that_would_discl
     is a sum over every department's traffic that no department-scoped grant can narrow, so
     beside a department's own usage it is a subtraction.
 
-    **Version and updates is offered, and it is the screen that tests the rule rather than the
-    flag.** It is an Install screen added on 2026-09-11 and every earlier Install screen was
-    withheld under the reading the owner overruled. What it shows at a department's scope is
-    which release this deployment is on, which is one fact about the install and the same fact
-    for everybody on it, so there is nothing a department-scoped reader would learn that is not
-    theirs and no `Disclosure` could be written for it.
+    **And since 2026-09-17 no Install screen is offered, as a group rather than as a
+    disclosure.** M27.7.29 asks for a department's screens "with no screen whose subject is the
+    installation offered at all", and SCREEN 2 draws none. The five Install keys are written out
+    here rather than read off `Group.INSTALL`, so a screen moved into or out of the group is a
+    change this test sees. Version and updates was the screen that tested the old reading, and it
+    is withheld now for the group's reason and not for a disclosure: `NOT_AT_DEPARTMENT_SCOPE`
+    still names only the two screens whose rows would be somebody else's.
 
-    Delete this and the four screens the owner asked for go back behind a flag, or the one that
-    cannot be rendered at that scope joins them with no argument written down."""
+    Delete this and an Install screen can return to a department's menu, or a Govern screen that
+    renders empty at that scope can leave it, with nothing between the two lists comparing them."""
     everything = every_capability()
 
     ours = {one.key for one in navigation(everything)}
     theirs = {one.key for one in for_department(everything)}
+    install = {"install", "updates", "recovery", "limits", "connections"}
 
-    assert ours - theirs == {"limits", "service_levels"}
+    assert ours - theirs == {"service_levels"} | install
     assert set(WITHHELD_AT_DEPARTMENT_SCOPE) == ours - theirs
-    assert len(theirs) == 34
-    assert {"install", "recovery", "connections", "staff_sources", "updates"} <= theirs
-    assert {"people", "usage", "halt", "audit", "agents"} <= theirs
+    assert len(theirs) == 30
+    assert not install & theirs
+    assert {"staff_sources", "people", "usage", "halt", "audit", "agents"} <= theirs
+    assert {one.key for one in SCREENS if one.group is Group.INSTALL} == install
 
 
 def test_for_department_can_only_narrow_the_menu_navigation_gave_it() -> None:
@@ -579,7 +590,9 @@ def test_for_department_can_only_narrow_the_menu_navigation_gave_it() -> None:
     assert for_department(holding("read:rate_limit")) == ()
     assert [one.key for one in navigation(holding("read:rate_limit"))] == ["limits"]
 
-    assert [one.key for one in for_department(holding("read:backup"))] == ["recovery"]
+    assert for_department(holding("read:backup")) == ()
+    assert [one.key for one in navigation(holding("read:backup"))] == ["recovery"]
+    assert [one.key for one in for_department(holding("read:grant"))] == ["people"]
 
 
 def test_a_screen_is_withheld_only_by_naming_the_disclosure_the_row_form_and_the_fix() -> None:

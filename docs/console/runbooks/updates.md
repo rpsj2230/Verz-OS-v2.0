@@ -13,7 +13,7 @@ Which release this install is on, whether a newer one has been published, and ho
 | Needs | `read:release` |
 | Console plane | `read:console.configuration` |
 | Narrowed by | `department, person` |
-| Offered to a department admin | `yes` |
+| Offered to a department admin | `no` |
 | Designed for | `super_admin` |
 | Can be opened today | `no` |
 
@@ -25,7 +25,7 @@ Which release this install is on, whether a newer one has been published, and ho
 
 ## Who may see it
 
-Opening it needs `read:release` and `read:console.configuration`, both, and a role on its own confers neither. A department admin is offered it, and sees it narrowed to their own scope.
+Opening it needs `read:release` and `read:console.configuration`, both, and a role on its own confers neither. A department admin is not offered it in their menu, because its subject is the installation rather than any department's work, and anybody holding the capability still reaches it by its address.
 
 The same for everybody who opens it. It shares `read:release` with This install, because both are statements about which release is running.
 

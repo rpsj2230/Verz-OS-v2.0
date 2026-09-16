@@ -46,6 +46,7 @@ import {
   specificity,
   type OrderedRule,
 } from "./support/cascade";
+import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./support/navigation";
 import { backendPublicMessages } from "./support/python";
 import { readConsoleFile } from "./support/repo";
 
@@ -83,11 +84,21 @@ interface Answer {
   readonly body: unknown;
 }
 
-/** The console at one address; a list of answers is given in order and its last repeated. */
+/**
+ * The console at one address; a list of answers is given in order and its last repeated.
+ *
+ * The shell asks which console it is before it draws more than the reader's own work, so the
+ * stand-in API gives the company console unless a test says otherwise, and the mount waits for
+ * that answer as well as for the card: the frame's tests below are about the whole menu.
+ */
 async function consoleAt(
   path: string,
-  answers: Readonly<Record<string, Answer | readonly Answer[]>>,
+  given: Readonly<Record<string, Answer | readonly Answer[]>>,
 ): Promise<HTMLElement> {
+  const answers: Readonly<Record<string, Answer | readonly Answer[]>> = {
+    [NAVIGATION_ADDRESS]: { body: COMPANY_CONSOLE },
+    ...given,
+  };
   const asked: Record<string, number> = {};
   const idp = fakeIdentityProvider({
     api(url) {
@@ -114,6 +125,9 @@ async function consoleAt(
   await waitFor(() => {
     if (!container.querySelector("article.approval-card")) {
       throw new Error("the card has not arrived");
+    }
+    if (container.querySelector('nav [role="status"]')) {
+      throw new Error("the menu has not been answered yet");
     }
   });
   return container;

@@ -75,11 +75,11 @@ the tool decides that. What narrows the answer is
 `brain.console.installation.throttled_now`, which matches each row against the scope the
 reader's own grant carries: `_limit_row` offers `{scope, subject}`, `Clause.matches` refuses a
 field the row does not have, so a department-scoped grant matches no row and the list is empty
-with no count of what was dropped. The other four screens in this group are offered at a
-department's scope, deliberately, and
-`tests/unit/test_screens.py::test_a_department_admin_is_offered_every_screen_but_the_one_that_
-would_disclose` is where that decision is pinned. See
-`AN_INSTALL_SCREEN_IS_THE_SAME_FACT_FOR_EVERYBODY_AND_A_THROTTLING_LIST_IS_NOT`.
+with no count of what was dropped. Since 2026-09-17 the other four are not offered at a
+department's scope either, as a group rather than as disclosures: M27.7.29 offers a department
+admin no screen whose subject is the installation, and
+`brain.console.screens.A_DEPARTMENT_ADMINISTERS_THE_WORK_IN_THE_INSTALL_AND_NOT_THE_INSTALL`
+argues it. See `AN_INSTALL_SCREEN_IS_THE_SAME_FACT_FOR_EVERYBODY_AND_A_THROTTLING_LIST_IS_NOT`.
 
 **No count of anything, and no total on any of these.** The throttling list is the one
 collection here a reader's grant narrows, so it is the one where a number would be a
@@ -209,10 +209,11 @@ AN_INSTALL_SCREEN_IS_THE_SAME_FACT_FOR_EVERYBODY_AND_A_THROTTLING_LIST_IS_NOT: F
     "not theirs. Who is currently being throttled is a list of people with a number beside "
     "each name, and brain.ops.limits.LimitScope has no department member, so a grant narrowed "
     "to one department matches no throttling row and an unrestricted one matches every row in "
-    "the company. That is why brain.console.screens withholds exactly one of these five from a "
-    "department admin's menu, and why this router refuses none of them: the menu is a menu, "
-    "the rows are narrowed by the reader's own grant, and the answer at a department's scope "
-    "is a page with nothing on it and no count of what was left off."
+    "the company. That is why brain.console.screens argues a disclosure for the throttling list "
+    "on its own account, beside dropping all five from a department admin's menu as the Install "
+    "group, and why this router refuses none of them: the menu is a menu, the rows are narrowed "
+    "by the reader's own grant, and the answer at a department's scope is a page with nothing on "
+    "it and no count of what was left off."
 )
 
 #: Why the migration level on this screen is declared rather than measured.

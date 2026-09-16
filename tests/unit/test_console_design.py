@@ -10,12 +10,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from brain.console.department_console import DEPARTMENT_NAVIGATION, Entry, Section
 from brain.ops.console_design import (
     COMPANY_CONSOLE,
+    DEPARTMENT_CONSOLE,
     Unbuilt,
     console_labels,
     console_navigation,
+    department_console_navigation,
+    department_navigation_gaps,
     design_navigation,
+    design_navigations,
     navigation_gaps,
     unmeasured_navigations,
 )
@@ -184,19 +189,48 @@ def test_another_screens_navigation_is_not_the_company_consoles_gap(
 def test_the_other_navigations_are_named_as_not_measured_rather_than_dropped(
     tmp_path: Path,
 ) -> None:
-    """The sibling of the test above, and the reason reading one screen is not a silence. The
-    department console and a member's workspace are designed and nothing compares them with
-    anything yet, because neither has a shell of its own. Naming them is what keeps that a
-    known gap. A screen that draws no navigation is not a navigation to measure, and a frame
-    with no title has no screen to be read under, so it is left out rather than named as an
-    empty string or allowed to stop the sweep.
+    """The sibling of the test above, and the reason reading one screen is not a silence. A
+    member's workspace is designed and nothing compares it with anything yet, because it has no
+    shell of its own. Naming it is what keeps that a known gap. The department console was named
+    here until 2026-09-17 and is measured now, so it leaves the list rather than being dropped
+    from it. A screen that draws no navigation is not a navigation to measure, and a frame with
+    no title has no screen to be read under, so it is left out rather than named as an empty
+    string or allowed to stop the sweep.
 
     Delete this and those navigations can simply stop being read, and the note that says the
     console matches its design says so about one of the four menus it was given."""
     repo = _tree(tmp_path, _DESIGN, _SHELL)
 
-    assert unmeasured_navigations(repo) == ("Department Console", "My Workspace")
+    assert unmeasured_navigations(repo) == ("My Workspace",)
     assert COMPANY_CONSOLE not in unmeasured_navigations(repo)
+    assert DEPARTMENT_CONSOLE in design_navigations(repo)
+
+
+def test_an_item_the_department_design_names_and_its_menu_does_not_offer_is_reported(
+    tmp_path: Path,
+) -> None:
+    """M27.7.29's half of this module. The fixture design draws `Department` under Operate and
+    `Gaps` under Report; a department menu offering only `Department` reports `Gaps` missing, and
+    one offering `Gaps` under Operate reports it with the heading it was put under. The real
+    declaration offers both where they are drawn.
+
+    Delete this and `department_navigation_gaps` can return nothing for any menu, and the
+    department console drifts from SCREEN 2 exactly as the company console did from SCREEN 1."""
+    repo = _tree(tmp_path, _DESIGN, _SHELL)
+    department = Entry(label="Department", key="overview", to="/department")
+    gaps = Entry(label="Gaps", key="questions", to="/questions")
+
+    only_the_overview = (Section(heading="Operate", entries=(department,)),)
+    misfiled = (Section(heading="Operate", entries=(department, gaps)),)
+
+    assert department_navigation_gaps(repo, only_the_overview) == (
+        Unbuilt(section="Report", label="Gaps"),
+    )
+    assert department_navigation_gaps(repo, misfiled) == (
+        Unbuilt(section="Report", label="Gaps", placed_under="Operate"),
+    )
+    assert department_navigation_gaps(repo) == ()
+    assert department_console_navigation(misfiled) == {"Operate": ("Department", "Gaps")}
 
 
 def test_the_design_and_the_console_are_read_out_of_the_real_files() -> None:
@@ -216,7 +250,10 @@ def test_the_design_and_the_console_are_read_out_of_the_real_files() -> None:
 
     assert set(sections) == {"Operate", "Govern", "Report"}, sorted(sections)
     assert "Department" not in sections["Operate"]
-    assert "Department Console" in unmeasured_navigations(REPO)
+    assert "Department Console" not in unmeasured_navigations(REPO)
+    assert set(design_navigations(REPO)[DEPARTMENT_CONSOLE]) == {"Operate", "Govern", "Report"}
+    assert department_navigation_gaps(REPO) == ()
+    assert department_console_navigation() == department_console_navigation(DEPARTMENT_NAVIGATION)
     assert "Overview" in labels
     assert set(sections) <= set(grouped), sorted(grouped)
     assert not [one for one in navigation_gaps(REPO) if one.placed_under], navigation_gaps(REPO)

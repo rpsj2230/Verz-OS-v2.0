@@ -13,7 +13,7 @@ What is actually running: the release, the migration level, the profile and the 
 | Needs | `read:release` |
 | Console plane | `read:console.configuration` |
 | Narrowed by | `department, person` |
-| Offered to a department admin | `yes` |
+| Offered to a department admin | `no` |
 | Designed for | `super_admin` |
 | Can be opened today | `no` |
 
@@ -25,7 +25,7 @@ What is actually running: the profile, the release and when it was built, the mi
 
 ## Who may see it
 
-Opening it needs `read:release` and `read:console.configuration`, both, and a role on its own confers neither. A department admin is offered it, and sees it narrowed to their own scope.
+Opening it needs `read:release` and `read:console.configuration`, both, and a role on its own confers neither. A department admin is not offered it in their menu, because its subject is the installation rather than any department's work, and anybody holding the capability still reaches it by its address.
 
 The facts are the same for everybody who opens it. Identity settings are deliberately never shown.
 

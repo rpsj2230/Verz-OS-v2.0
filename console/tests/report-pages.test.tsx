@@ -38,6 +38,7 @@ import { spendApiPath } from "../src/pages/spendQuery";
 import { NO_LANES, SERVICE_LEVELS_HEADING } from "../src/pages/ServiceLevels";
 import { ratePercent, serviceLevelsApiPath } from "../src/pages/serviceLevelsQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
+import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./support/navigation";
 import { declaredQueryParameters } from "./support/openapi";
 
 const CONSOLE_ORIGIN = "https://console.test";
@@ -374,9 +375,11 @@ describe("the adoption screen", () => {
 describe("getting round the report screens without a mouse", () => {
   test("each screen is reachable from the navigation as a link the tab key stops on", async () => {
     // What breaks if this is deleted: a section is added to the shell as something that is not
-    // an anchor, and a person on a keyboard cannot reach the screen at all.
+    // an anchor, and a person on a keyboard cannot reach the screen at all. These three are on the
+    // company console's menu, so the stand-in API gives that console.
     const { container } = await consoleAt(SERVICE_LEVELS_ADDRESS, {
       [SERVICE_LEVELS_API]: reading([]),
+      [NAVIGATION_ADDRESS]: COMPANY_CONSOLE,
     });
     const addresses = [...container.querySelectorAll("nav.shell__nav a")].map((link) =>
       link.getAttribute("href"),
