@@ -385,7 +385,16 @@ def is_reserved_range(text: str) -> bool:
 #: Where a vendor endpoint may be declared. `channels` as well as `connectors`, because a
 #: channel adapter reaches a vendor for the same reason a connector does: `BOT_FRAMEWORK_ISSUER`
 #: in `channels/teams.py` is where Microsoft is, for every client this system will ever have.
-DECLARING_AREAS: Final[tuple[str, ...]] = ("connectors", "channels")
+#:
+#: `deployment` is the third, and it is the same fact one layer down. The installer installs
+#: Docker by the route Docker documents, so `download.docker.com` is where Docker's packages
+#: are for every client this system will ever have, in exactly the register `ghcr.io` is
+#: already allowed in. Adding it here rather than two names to `ALLOWED_HOSTS` keeps the rule a
+#: rule: the endpoint has to be declared at the top of the file, once, and a URL buried in a
+#: function body is still refused. That half is what caught the first draft of
+#: `brain.deployment.install_script`, which had the address written out three times inside the
+#: function that renders the Docker step.
+DECLARING_AREAS: Final[tuple[str, ...]] = ("connectors", "channels", "deployment")
 
 #: What a constant naming a vendor endpoint is called. A rule rather than a list of hosts: the
 #: sweep is satisfied by declaring where the vendor is, at the top of the file, once. A URL

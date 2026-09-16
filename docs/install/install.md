@@ -5,8 +5,69 @@ setup code. It assumes you have never seen this system before and it names nobod
 installation.
 
 **Read the two paragraphs under "What you cannot do today" before you start.** One step of
-this sequence has nothing to fetch, and knowing that first saves you the twenty minutes it
+this install has nothing to fetch, and knowing that first saves you the twenty minutes it
 takes to find out.
+
+## Run this one command
+
+```
+curl -fsSL <where install.sh is published for your release> -o install.sh
+less install.sh
+sudo BRAIN_RELEASE_URL=<where the release archive is> bash install.sh \
+  --release <tag> --profile lite --console-address https://brain.example.invalid
+```
+
+Downloaded, read, then run. Never piped straight into a shell: it is a script that installs
+packages as root on your server, and you are entitled to read it first. It is also the only
+file you receive before you receive the release, because running it is what fetches the
+archive, and the copy inside the archive is therefore a record of what was run rather than the
+way anybody gets it.
+
+Both addresses are deliberately left as angle brackets here rather than written out: nothing has
+been published yet, and a page that printed a real-looking URL would be a page somebody pastes.
+See "What you cannot do today".
+
+`BRAIN_RELEASE_URL` is where your release archive is, and the script refuses to start without
+it. Three things it takes on the command line:
+
+| Flag | What it is | If you leave it out |
+| --- | --- | --- |
+| `--release` | the release tag to install | It stops. There is deliberately no default: a default of `latest` is an install whose version changes on the next pull with nobody deciding anything. `latest` is refused if you pass it. |
+| `--profile` | `lite`, `standard` or `full` | It asks, if you are at a terminal. If you are not, it stops and names the flag. There is no default profile, because a default profile is a machine size nobody chose. |
+| `--console-address` | the address your reverse proxy will serve the console on | It asks, if you are at a terminal, and blank is a fine answer. Nothing in this deployment publishes a port, so this address is a fact about the proxy in front of the server and the script has no way to discover it. Given none, the last line tells you what the address depends on rather than inventing one. |
+
+There is also `--no-install-docker`, which is the flag for a server where you would rather
+install Docker yourself, and `--help`.
+
+**It is safe to run twice.** Every step that writes something can say when it has already been
+done, and a second run prints `already done, skipping` for each one rather than repeating it.
+That matters most for the step that mints your credentials: re-running the installer does not
+mint a second set, because a second database password written beside a volume that still holds
+the first is a stack that comes up unable to authenticate to its own data. See "Why the
+credentials are minted here".
+
+**What it does, in order.** It checks the machine against every requirement below and reports
+all of them at once rather than one per run; installs Docker by the route Docker documents for
+your distribution, or tells you exactly what to install when it does not recognise it; fetches
+one release archive at your tag and unpacks it; writes the environment file from the template;
+pins the image; mints this installation's credentials under `umask 077`; starts the stack;
+waits for it to report ready; and prints your setup code and where to enter it.
+
+The table further down is the middle of that list: it is the install itself, which the script
+and the sequence by hand share exactly, because the script is a printout of that plan rather
+than a second implementation of it. What the script wraps around it is the three steps at the
+front, which are about the machine rather than about the install, and the handover at the end
+that tells you where to enter the code.
+
+**When it refuses your machine, nothing has been written**, and the sequence by hand below is
+the fallback. That is also the answer for a machine with no `bash`: the script is bash rather
+than POSIX `sh`, because `set -o pipefail` is the only thing that stops one step of the plan
+reporting success after doing nothing, and a machine without bash cannot run it at all.
+
+The script is `ops/install/install.sh`. It is generated from the install plan by
+`brain.deployment.install_script.render_install`, and `tests/unit/test_install_script.py` holds
+the committed file byte-identical to what that function produces, so the script cannot drift
+away from the plan the tests are written against.
 
 ## Before you start
 
@@ -51,7 +112,12 @@ under load and a figure invented to look precise is worse than one that admits w
 `lite` is what a company without background automation runs, and it is not a cut-down or a
 development configuration.
 
-## The install, step by step
+## The install by hand, which is the fallback
+
+**Follow this when the script refuses your machine, or when you would rather do it yourself.**
+It is the same list of steps in the same order, because the script is a printout of this plan
+rather than a second implementation of it. What the script adds around these steps is the
+machine checks, installing Docker, and the handover at the end.
 
 Each step either checks something or writes something, each one that writes something can say
 when it has already been done, and **the whole sequence is safe to run twice**: a second run
@@ -189,9 +255,12 @@ to reach `/opt/brain` some other way. And **the workflow has never run**: it is 
 tested against the declaration it builds from, and it has not been executed once, which is not
 the same as a release somebody has installed from.
 
-**There is no rendered `install.sh` either.** The script is produced by a function from the
-plan, and no build step writes its output anywhere a client could fetch. That is why this page
-is a table a person follows rather than one command.
+**`install.sh` exists and has never been run on a server.** It is rendered from the install
+plan and checked in, a test holds it byte-identical to what the renderer produces, a shell
+parses it and every claim on this page about what it checks and what it guards is asserted
+against the file itself. None of that is the same as an install: there is no Docker on the
+machine those tests run on, so nothing has ever installed a package, pulled an image, started a
+container or minted a credential from it. Treat the first run of it as the first run of it.
 
 **After a complete install, the console is reachable from nowhere.** No service in any profile
 publishes a port to the host. That is right for the database, the cache and the pooler, and it
@@ -210,6 +279,11 @@ bodies that disagree, and two services pointed at a database nothing creates.
 | Claim | Held by |
 | --- | --- |
 | The step list, and the order | `test_install_docs.py`, against the install plan |
+| That `install.sh` is what the plan renders, and has not drifted from it | `test_install_script.py` |
+| That the script asks for every requirement below, with the reason each is on the list | `test_install_script.py`, against `RUNTIME_REQUIREMENTS` |
+| That every step of the script that writes something can say when it is already done | `test_install_script.py`, by reading the guards |
+| That the script prints exactly one credential, which is the setup code | `test_install_script.py` |
+| **That the script installs anything, because one has ever been run on a server** | **nobody. There is no Docker on the machine its tests run on.** |
 | The sizing table | `test_deployment_requirements.py`, against the compose files |
 | The requirements list | `test_deployment_requirements.py` |
 | That the archive carries every file the install reads, and none it must not | `test_deployment_release.py`, and the release workflow refuses to publish without it |
@@ -219,6 +293,10 @@ bodies that disagree, and two services pointed at a database nothing creates.
 
 ## Task ids
 
-M42.2.3 is not claimed. See "What you cannot do today": the fourth step fetches an archive that
-is now built by a workflow and has still never been published, so nobody can follow this page
-to a working install yet.
+M42.5.1 is claimed for `install.sh`: it is rendered from the plan, held byte-identical to its
+renderer, idempotent step by step and asserted to be so by reading its own guards. It has never
+been run on a server, which is stated above rather than left to be discovered.
+
+M42.2.3 is not claimed. See "What you cannot do today": the step that fetches the archive is
+pointed at one that is now built by a workflow and has still never been published, so nobody
+can follow this page, or run that script, to a working install yet.
