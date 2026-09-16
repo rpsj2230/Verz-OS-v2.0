@@ -55,6 +55,7 @@ from tests.fixtures.knowledge_items import (
 )
 from tests.fixtures.scratch_postgres import (
     RETENTION_TABLES,
+    SCHEDULE_CONTROL_TABLES,
     add_modelled,
     drop,
     fresh,
@@ -79,15 +80,16 @@ STARTED = [
 
 @contextmanager
 def control_runs(database: str) -> Iterator[str]:
-    """A database holding `ops.control_run` with the name constraint `0037` leaves, and the
-    retention tables `0049` builds, which the tick reads the sweep's release from."""
+    """A database holding `ops.control_run` with the name constraint `0037` leaves, the
+    retention tables `0049` builds, which the tick reads the sweep's release from, and
+    `ops.setting`, which it reads a person's pauses and run requests from."""
     url = fresh(database)
     try:
         migrate(database, "stamp", "0024")
         migrate(database, "upgrade", "0025")
         migrate(database, "stamp", "0036")
         migrate(database, "upgrade", "0037")
-        add_modelled(url, RETENTION_TABLES)
+        add_modelled(url, (*RETENTION_TABLES, *SCHEDULE_CONTROL_TABLES))
         yield url
     finally:
         drop(database)
@@ -443,8 +445,9 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     ).verified(by="u_verifier", at=lapsed - timedelta(days=365), review_by=lapsed)
 
     with knowledge_items("brain_kr_worker_tick") as url:
-        # The tick reads the sweep's release since 0049, which this chain stops short of.
-        add_modelled(url, RETENTION_TABLES)
+        # The tick reads the sweep's release since 0049, which this chain stops short of, and a
+        # person's pauses from `ops.setting`, which is created only when missing.
+        add_modelled(url, (*RETENTION_TABLES, *SCHEDULE_CONTROL_TABLES))
         a_person(url, "u_owner")
         a_reader(url, "u_owner", "web")
         put(url, item)

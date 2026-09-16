@@ -818,6 +818,138 @@ const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // Scheduled jobs. The control name, the sentence, the report and the person who paused are
+  // drawn inside the scrolling table; the switched-off sentence is outside it.
+  "/jobs": {
+    address: "/jobs",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/jobs": {
+        as_of: "2019-03-06T09:00:00Z",
+        jobs: [
+          {
+            control: UNBROKEN,
+            keeps_true: UNBROKEN,
+            every_seconds: 3600,
+            destructive: false,
+            report_only: true,
+            runnable: true,
+            needs: null,
+            last_started_at: "2019-03-06T08:00:00Z",
+            last_finished_at: "2019-03-06T08:00:02Z",
+            last_outcome: "ok",
+            last_report: UNBROKEN,
+            last_failure_kind: null,
+            last_succeeded_at: "2019-03-06T08:00:02Z",
+            owed: true,
+            late_by_seconds: 7200,
+            paused: true,
+            pause_changed_by: UNBROKEN,
+            pause_changed_at: "2019-03-06T08:30:00Z",
+            run_requested_at: "2019-03-06T08:40:00Z",
+            run_requested_by: UNBROKEN,
+            run_pending: true,
+          },
+        ],
+        controls_switched_on: false,
+        may_control: true,
+        no_run_can_be_stopped: true,
+        only_the_last_change_is_kept: true,
+      },
+    },
+  },
+  "/errors": {
+    address: "/errors",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/errors": {
+        start: "2019-02-27T09:00:00Z",
+        end: "2019-03-06T09:00:00Z",
+        jobs: [
+          {
+            control: UNBROKEN,
+            started_at: "2019-03-06T08:00:00Z",
+            finished_at: "2019-03-06T08:00:02Z",
+            kind: UNBROKEN,
+          },
+        ],
+        jobs_truncated: true,
+        requests: [
+          {
+            reference: UNBROKEN,
+            received_at: "2019-03-06T08:30:00Z",
+            lane: "model",
+            status: "degraded",
+            duration_ms: 812.4,
+          },
+        ],
+        requests_truncated: true,
+        process_log_is_not_kept: true,
+        failure_messages_stay_on_the_server: true,
+      },
+    },
+  },
+  // Prompts. Instructions are drawn a paragraph per line, outside any table, so an unbroken
+  // line is the case that would overflow a phone.
+  "/prompts": {
+    address: "/prompts",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/prompts": {
+        house_rules: [UNBROKEN],
+        output_lengths: [{ name: "brief", instruction: UNBROKEN }],
+        agents: [
+          {
+            agent_id: UNBROKEN,
+            display_name: UNBROKEN,
+            department: UNBROKEN,
+            instructions: `${UNBROKEN}\n${UNBROKEN}`,
+            template_id: UNBROKEN,
+            template_version: 3,
+            template_instructions: UNBROKEN,
+            overridden: true,
+            set_by: UNBROKEN,
+            set_at: "2019-03-05T09:00:00Z",
+            effective_hash: "a".repeat(64),
+            installed: true,
+            editable: true,
+          },
+        ],
+        max_chars: 2000,
+        editing_switched_on: true,
+        system_instructions_are_product_text: true,
+        no_model_is_called_yet: true,
+        only_the_last_change_is_kept: true,
+      },
+    },
+  },
+  "/features": {
+    address: "/features",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install/features": {
+        features: [
+          {
+            name: "schedule_control",
+            title: UNBROKEN,
+            what: UNBROKEN,
+            while_off: UNBROKEN,
+            on: true,
+            read_by: [UNBROKEN],
+            changed_by: UNBROKEN,
+            changed_at: "2019-03-04T09:00:00Z",
+          },
+        ],
+        components_are_chosen_by_the_profile: true,
+        plugins_have_no_loader: true,
+        only_the_last_change_is_kept: true,
+      },
+    },
+  },
   "/connections": {
     address: "/connections",
     signedIn: true,

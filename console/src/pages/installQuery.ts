@@ -137,6 +137,7 @@ export const INSTALL_SECTIONS: readonly { readonly to: string; readonly label: s
   { to: RECOVERY_PATH, label: "Backup and recovery" },
   { to: LIMITS_PATH, label: "Rate limits" },
   { to: CAPACITY_PATH, label: "Capacity" },
+  { to: "/features", label: "Features" },
 ];
 
 // ------------------------------------------------------------------------ reading a fact

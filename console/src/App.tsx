@@ -51,6 +51,10 @@ import { Ask } from "./pages/Ask";
 import { Capabilities } from "./pages/Capabilities";
 import { Capacity } from "./pages/Capacity";
 import { Connectors } from "./pages/Connectors";
+import { Errors } from "./pages/Errors";
+import { Features } from "./pages/Features";
+import { Jobs } from "./pages/Jobs";
+import { Prompts } from "./pages/Prompts";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
 import { Skills } from "./pages/Skills";
@@ -226,6 +230,12 @@ export const routes: RouteObject[] = [
       // is what `brain.ops.console_screens.routed_screen_keys` matches. Eager rather than split,
       // for the install screens' reason: it mounts neither heavy library and no stylesheet.
       { path: "runs", element: <LiveRuns /> },
+      // Scheduled jobs: every job the worker's schedule starts, how it last went, and pause,
+      // resume and run now as rows the worker's tick reads. See `brain.jobs_routes`.
+      { path: "jobs", element: <Jobs /> },
+      // Errors: failed jobs by kind and failed questions by reference, and a sentence saying the
+      // process log is kept nowhere the console can read. See `brain.error_routes`.
+      { path: "errors", element: <Errors /> },
       // Models and health, SCREEN 11. One path and no parameter, at the screen's key. Its Edit
       // routing action is a link to `routing` below, where the chain's numbers are edited behind
       // the matrix's own grant, rather than a second editor here. Eager, for the same reason.
@@ -272,6 +282,10 @@ export const routes: RouteObject[] = [
       // slug is a path segment there and a template is not an agent: `agents/templates` would
       // be the workspace of an agent called templates on the day somebody names one that.
       { path: "agent-templates", element: <AgentTemplates /> },
+      // Prompts: the house rules every agent opens with, shown and never editable, and each
+      // agent's own instructions, edited as a local change to its template. See
+      // `brain.prompt_routes`.
+      { path: "prompts", element: <Prompts /> },
       // Two paths and one component, at the address `brain.console.workspace.deep_link`
       // spells: an agent, and one tab of it. The bare agent opens the first tab its strip
       // holds, and so does a tab the strip does not hold, because `resolve` gives those one
@@ -293,6 +307,9 @@ export const routes: RouteObject[] = [
       { path: "recovery", element: <Recovery /> },
       { path: "limits", element: <Limits /> },
       { path: "connections", element: <Capacity /> },
+      // Features: which genuinely new features this install has switched on, and the switch.
+      // See `brain.feature_routes`.
+      { path: "features", element: <Features /> },
       // The design's own Report section, SCREEN 1 of `docs/screens.html`: Questions and gaps,
       // Usage and cost, and Quality and canaries, in that order. Each path is the screen's key in
       // `brain.console.screens`, which `brain.ops.console_screens.routed_screen_keys` matches the

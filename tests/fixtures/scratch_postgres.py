@@ -167,6 +167,10 @@ RETENTION_TABLES: tuple[str, ...] = (
     "ops.retention_release",
 )
 
+#: The table a tick reads a person's pauses and run requests from, for `add_modelled`. Built from
+#: the model because the scratch chains that exercise the tick stamp past `0004`, which made it.
+SCHEDULE_CONTROL_TABLES: tuple[str, ...] = ("ops.setting",)
+
 
 def sql(url: str, statement: str, *params: object) -> list[tuple[Any, ...]]:
     """One statement in its own autocommitted connection, as the superuser the URL names."""

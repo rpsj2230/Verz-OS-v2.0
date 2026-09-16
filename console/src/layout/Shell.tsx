@@ -93,6 +93,8 @@ const GROUPS: readonly NavGroup[] = [
     sections: [
       { to: "/", label: "Overview" },
       { to: "/runs", label: "Live runs" },
+      { to: "/jobs", label: "Scheduled jobs" },
+      { to: "/errors", label: "Errors" },
       { to: "/models", label: "Models and health" },
       { to: "/connectors", label: "Connectors" },
       { to: "/routing", label: "Routing" },
@@ -118,6 +120,8 @@ const GROUPS: readonly NavGroup[] = [
       // SCREEN 5 addresses the catalogue as "Skills & templates > Templates", a child of the
       // row above, so it sits directly beneath it.
       { to: "/agent-templates", label: "Agent templates" },
+      // An agent's instructions are part of what an agent is, so they sit under the agent rows.
+      { to: "/prompts", label: "Prompts" },
       { to: "/library", label: "Knowledge" },
       { to: "/learning", label: "Learning" },
       // Memory is not in SCREEN 1's menu: the design draws it inside one agent. It is registered

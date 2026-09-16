@@ -72,7 +72,9 @@ from brain.core.errors import BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
 from brain.docs_routes import router as docs_router
 from brain.erasure_routes import router as erasure_router
+from brain.error_routes import router as error_router
 from brain.estate_routes import router as estate_router
+from brain.feature_routes import router as feature_router
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
@@ -90,6 +92,7 @@ from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name
 from brain.install_routes import router as install_router
+from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
@@ -101,6 +104,7 @@ from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
+from brain.prompt_routes import router as prompt_router
 from brain.report_routes import router as report_router
 from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
@@ -841,6 +845,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # and two of its screens say what the install does not store rather than drawing an empty
     # list. See `brain.govern_people_routes`.
     app.include_router(govern_people_router)
+    # Scheduled jobs beside Live runs: how each job last went, and pause, resume and run now as
+    # rows the worker's tick reads. Read for everybody and narrowed per job; the controls need
+    # `admin:schedule` over everything and the `schedule_control` feature. See `brain.jobs_routes`.
+    app.include_router(jobs_router)
+    # Errors: the failed jobs and failed requests the database keeps, each behind the decision
+    # that already says who may see it, and a field saying the process log is kept nowhere the
+    # console can read. See `brain.error_routes`.
+    app.include_router(error_router)
+    # Features: which genuinely new features this install has switched on, and the switch, behind
+    # `admin:feature` over everything. See `brain.feature_routes` and `brain.ops.features`.
+    app.include_router(feature_router)
+    # Prompts: the system instructions every agent is given, shown and never edited, and each
+    # agent's own instructions, edited as a local change to its template. See
+    # `brain.prompt_routes`.
+    app.include_router(prompt_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

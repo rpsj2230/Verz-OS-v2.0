@@ -207,6 +207,7 @@ from brain.ops.queue import (
 )
 from brain.ops.retention_store import released_controls
 from brain.ops.schedule import report_only_now
+from brain.ops.schedule_control import chosen_this_tick, paused_controls, run_requests
 from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.wiring import WiringError, component
@@ -1099,6 +1100,9 @@ class Ticked(enum.StrEnum):
     LOCKED_ELSEWHERE = "locked_elsewhere"
     #: Owed, and no runner can start it yet. Not recorded.
     NOTHING_TO_RUN = "nothing_to_run"
+    #: Owed, and a person paused it. Not started and not recorded, and still owed, so its lateness
+    #: goes on growing. See `brain.ops.schedule_control.A_PAUSED_CONTROL_IS_LATE_AND_SAYS_WHY`.
+    PAUSED = "paused"
 
 
 @dataclass(frozen=True)
@@ -1146,22 +1150,41 @@ async def tick_controls(
 
     `clock` is when a run finished, and a parameter for the reason `now` is: a finish read off
     the wall clock inside a test is a fixture that goes off.
+
+    A person's pause and a person's request to run now are read in the same transaction as the
+    clocks, and `brain.ops.schedule_control.chosen_this_tick` decides what they change: a paused
+    owed control is reported `PAUSED` and not started, and a run asked for since the control last
+    started is started whether or not the schedule owed it, through `start_owed` like any other.
     """
     async with sessions() as session:
         attempts, successes = await clocks(session)
         released = await released_controls(session, now=now)
-    found: list[ControlTick] = []
-    for owed in due_now(
+        paused = await paused_controls(session)
+        requested = await run_requests(session)
+    owed = due_now(
         now=now, last_attempt=attempts, last_success=successes, released=sorted(released)
-    ):
-        if runner_for(owed.name).run is None:
-            found.append(ControlTick(owed.name, Ticked.NOTHING_TO_RUN))
+    )
+    chosen = chosen_this_tick(
+        owed,
+        now=now,
+        paused=paused,
+        requested=requested,
+        last_attempt=attempts,
+        released=sorted(released),
+    )
+    starting = {one.name for one in chosen}
+    found: list[ControlTick] = [
+        ControlTick(one.name, Ticked.PAUSED) for one in owed if one.name not in starting
+    ]
+    for one in chosen:
+        if runner_for(one.name).run is None:
+            found.append(ControlTick(one.name, Ticked.NOTHING_TO_RUN))
             continue
         found.append(
             await start_owed(
                 sessions,
-                owed.name,
-                report_only=owed.report_only,
+                one.name,
+                report_only=one.report_only,
                 now=now,
                 database_url=database_url,
                 clock=clock,
