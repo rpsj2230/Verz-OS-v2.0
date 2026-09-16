@@ -719,7 +719,9 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
     `setting`, `routing` and `webhook`, a switch, a rung and a subscriber, each the install's and
     each changed only by an authority over everything; and
     `erasure`, a request to erase somebody's data, filed only by somebody holding
-    `admin:erasure` over everything.
+    `admin:erasure` over everything; and
+    `memory`, a correction naming a memory, whose existence is recall's to disclose and never an
+    actor-scoped audit grant's.
 
     Delete this and the set can be widened one kind at a time by whoever finds a page thin,
     and the widening is invisible because every other test here is about the shape of a grant
@@ -735,6 +737,7 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
         "erasure",
         "grant",
         "legal_hold",
+        "memory",
         "retention",
         "routing",
         "session",

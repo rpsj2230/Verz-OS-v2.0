@@ -251,6 +251,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:export",
     "admin:field_classification",
     "admin:halt",
+    "admin:learning",
     "admin:legal_hold",
     "admin:operations_alert",
     "admin:operations_incident",
@@ -332,6 +333,11 @@ AUDIT_KINDS_WITHHELD: Final[dict[str, str]] = {
     "artifact": (
         "A publish entry names an artefact id, and who may see an artefact is decided by "
         "brain.console.agent_output over what it was built from, which an audit grant never asks."
+    ),
+    "memory": (
+        "A correction entry names a memory id, and who may know a memory exists is decided by "
+        "brain.memory.formation.may_recall over the capabilities it was formed under, which an "
+        "audit grant never asks."
     ),
 }
 

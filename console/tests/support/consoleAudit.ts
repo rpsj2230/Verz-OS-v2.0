@@ -35,6 +35,7 @@ import { ANSWER_API_PATH } from "../../src/pages/askQuery";
 import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath } from "../../src/pages/auditQuery";
+import { UNDO_API_PATH } from "../../src/pages/learningQuery";
 import { reviewApiPath } from "../../src/pages/classificationQuery";
 import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
@@ -346,6 +347,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
     routes: [
       "/api/v1/govern/library",
       "/api/v1/govern/learning",
+      "/api/v1/govern/learning/undo",
       "/api/v1/govern/memory",
       "/api/v1/records/{entity}",
       "/api/v1/classifications*",
@@ -356,6 +358,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "know.chunk",
       "mem.adaptive",
       "mem.persistent",
+      "mem.learning",
+      "mem.correction",
       "gate.fast_path_rule",
       "gate.field_policy",
       "agent.artifact",
@@ -364,8 +368,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
     gaps: [
       { what: "A document or a data source cannot be added from the console after setup.", leaf: "M42.5.9" },
       {
-        what: "A learning cannot be undone and a memory cannot be corrected.",
-        because: "The routes say undo_is_not_writable and edit_is_not_writable on every answer: brain.estate_routes serves the reads and no write exists.",
+        what: "A memory cannot be edited from a screen, and a tier-two rule cannot be promoted nor a tier-three change decided.",
+        because:
+          "brain.ops.memory_store writes an edit and no route offers one: the control belongs on a person's own memory tab, and the Memory screen says edit_is_not_writable. Nothing records agreement or a decision, which the Learning screen says in place of Promote and Decide.",
       },
       {
         what: "A column's classification cannot be changed; a proposed change is reviewed and not applied.",
@@ -544,6 +549,7 @@ function at(route: string, spelled: string, built: string, versioned = true): Wr
 }
 
 export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
+  "src/pages/Learning.tsx UNDO_API_PATH": [at("POST /api/v1/govern/learning/undo", "UNDO_API_PATH", UNDO_API_PATH)],
   "src/pages/AccessReview.tsx REVIEW_DECISION_API_PATH": [
     at("POST /api/v1/govern/access-review/decision", "REVIEW_DECISION_API_PATH", REVIEW_DECISION_API_PATH),
   ],
@@ -650,8 +656,22 @@ const NOTHING_READS_A_CONNECTED_SOURCE: Proof = {
     "No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET.",
 };
 
+const UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL = t(
+  "test_memory_store",
+  "test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next",
+  true,
+);
+
 /** Every write route a screen sends, followed to the system. */
 export const PROOFS: Readonly<Record<string, Proofs>> = {
+  "POST /api/v1/govern/learning/undo": {
+    row: UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL,
+    audit: UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL,
+    behaviour: t(
+      "test_estate_routes",
+      "test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning",
+    ),
+  },
   "POST /api/v1/connectors": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,

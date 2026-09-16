@@ -169,6 +169,13 @@ THE_REQUEST_IS_THE_PROOF_AND_IS_KEPT: Final = (
     "it would remove the only proof that the person's right was honoured"
 )
 
+#: Why a learning and a correction are kept by the erasure of the person whose memory they name.
+A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK: Final = (
+    "a learning and a correction name a memory by its id and hold neither the person nor anything "
+    "anybody said; the memory is the person's and leaves by its own table's rule, and removing a "
+    "correction while the memory it marked is kept would put what was corrected back into recall"
+)
+
 # ---------------------------------------------------------------------------- figures
 #: The name the queue finishes a request under, which `0060`'s trigger writes as the actor.
 ERASURE_QUEUE_ACTOR: Final = "erasure-queue"
@@ -272,7 +279,11 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
 
 #: Tables an erasure keeps on purpose, and why.
 RETAINED: Final[Mapping[str, str]] = MappingProxyType(
-    {"ops.erasure_request": THE_REQUEST_IS_THE_PROOF_AND_IS_KEPT}
+    {
+        "mem.correction": A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK,
+        "mem.learning": A_CORRECTION_OUTLIVES_ITS_MEMORY_OR_THE_MEMORY_COMES_BACK,
+        "ops.erasure_request": THE_REQUEST_IS_THE_PROOF_AND_IS_KEPT,
+    }
 )
 
 

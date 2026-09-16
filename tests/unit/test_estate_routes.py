@@ -9,10 +9,14 @@ readers are entitlement sets, and nothing in this file restates what those decis
 **Every refusal has a sibling proving the permitted case is answered**, because a route that
 refused everybody would satisfy every refusal and none of the positives.
 
-**Two claims are held against something outside the module under test.** That there is no
-write on these three screens is read off the application's own OpenAPI document, and that
-nothing stores a correction is read off the migrations directory, so the flag saying so goes
-red the day a migration creates one.
+**Two claims are held against something outside the module under test.** That the undo is the
+only write on these three screens is read off the application's own OpenAPI document, and that
+the review and the viewer read tables a migration creates is read off the migrations directory.
+
+**The undo is driven through the real store over the stub session**, so what a test sees written
+is the statement `brain.ops.memory_store` sends, and what the next reading shows is the stub
+answering with the row that statement wrote. The ledger entry that insert leaves is a trigger's,
+and `tests/unit/test_memory_store.py` follows it through a real database.
 
 **The disclosure properties are compared byte for byte.** A reader who may not see an item or
 recall a memory is shown the same response as a reader asking about something that was never
@@ -30,7 +34,7 @@ from __future__ import annotations
 
 import inspect
 import re
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,14 +44,17 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
-from sqlalchemy import create_engine
+from sqlalchemy import Insert, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
+from sqlalchemy.sql import operators
+from sqlalchemy.sql.elements import BooleanClauseList
 
 from brain import estate_routes
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
+from brain.console.govern_estate import UNDO_AUTHORITY
 from brain.console.reach_view import Revision
 from brain.console.reads import Plane, plane_capability
 from brain.console.screens import screen
@@ -56,8 +63,12 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.estate_routes import (
     MAX_ITEMS_CONSIDERED,
+    MAX_LEARNINGS_CONSIDERED,
     MAX_MEMORIES_CONSIDERED,
+    UNDO_PATH,
+    UNDO_SAYS,
     LearningReviewView,
+    LearningUndoneView,
     LibraryPage,
     LibraryRowView,
     MemoryTextView,
@@ -67,9 +78,8 @@ from brain.estate_routes import (
     TierRuleView,
     TierThreeView,
     TierTwoView,
+    UndoAsked,
     inferred_about,
-    recorded_corrections,
-    recorded_learnings,
     retrievable_items,
     revision_view,
     stated_about,
@@ -82,9 +92,12 @@ from brain.memory.formation import RECALL_FLOOR, MemoryKind
 from brain.memory.signals import Signal
 from brain.memory.tiers import CHANGES_WHAT_ANYBODY_MAY_SEE, Change
 from brain.ops.jobs import NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT
+from brain.tables.agent import AgentRow
 from brain.tables.knowledge import KnowledgeItemRow
+from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from tests.fixtures.http_client import Response
+from tests.unit.test_agent_routes import agent_row
 from tests.unit.test_api_routes import (
     AUDIENCE,
     ISSUER,
@@ -98,6 +111,7 @@ from tests.unit.test_api_routes import (
 
 LIBRARY = f"{API_PREFIX}/govern/library"
 LEARNING = f"{API_PREFIX}/govern/learning"
+UNDO = f"{API_PREFIX}{UNDO_PATH}"
 MEMORY = f"{API_PREFIX}/govern/memory"
 
 #: A PostgreSQL dialect to compile statements against, from an engine that never connects.
@@ -127,7 +141,10 @@ def _everywhere(*capabilities: Capability) -> tuple[Grant, ...]:
 #: `u_admin` holds every screen here, the Scopes screen and every plane, company-wide, and the
 #: capability the memories were formed under: the widest reader. `u_narrow` holds the three
 #: screens with the library scoped to web, the planes they need and nothing else, so the
-#: grouping is withheld and no memory is recalled. `u_prefix` holds all three screens with only
+#: grouping is withheld and no memory is recalled. `u_admin` also holds the undo authority
+#: everywhere, and `u_elsewhere` holds the two content screens and the memories' capability
+#: everywhere with the undo authority in finance only, which is a reader who sees a learning formed
+#: in web and may not undo it. `u_prefix` holds all three screens with only
 #: the existence plane, which is the reader a bare capability check would let into a content
 #: screen. `u_wide` holds the library and the Scopes screen with the second scoped to web, which
 #: is a grant that passes `permitted` and still may not group. `u_none` holds nothing.
@@ -141,6 +158,7 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
         EXISTENCE,
         CONFIGURATION,
         CONTENT,
+        UNDO_AUTHORITY,
     ),
     "u_narrow": (
         Grant(capability=DOCUMENT_READ, scope=Scope.department("web")),
@@ -152,7 +170,10 @@ GRANTS: Mapping[str, tuple[Grant, ...]] = {
         *_everywhere(DOCUMENT_READ, EXISTENCE, CONFIGURATION),
     ),
     "u_none": (),
-    "u_elsewhere": (),
+    "u_elsewhere": (
+        *_everywhere(LEARNING_READ, MEMORY_READ, CONTENT, CLIENT_NAME),
+        Grant(capability=UNDO_AUTHORITY, scope=Scope.department("finance")),
+    ),
 }
 
 
@@ -201,6 +222,7 @@ def stated(
     tags: tuple[str, ...] = (CLIENT_NAME.value,),
     kind: str = MemoryKind.PERSISTENT.value,
     formed_at: datetime | None = None,
+    scope: Scope | None = None,
 ) -> PersistentMemoryRow:
     """One `mem.persistent` row: something a person stated."""
     return PersistentMemoryRow(
@@ -208,7 +230,7 @@ def stated(
         principal_id=subject,
         statement=statement,
         capability_tags=list(tags),
-        scope=Scope.unrestricted().model_dump(mode="json"),
+        scope=(scope or Scope.unrestricted()).model_dump(mode="json"),
         ent_hash="e" * 32,
         kind=kind,
         formed_at=formed_at or ago(hours=1),
@@ -222,6 +244,7 @@ def inferred(
     subject: str = "u_subject",
     confidence: float = 0.9,
     formed_at: datetime | None = None,
+    scope: Scope | None = None,
 ) -> AdaptiveMemoryRow:
     """One `mem.adaptive` row: something the system inferred, with the confidence it had."""
     return AdaptiveMemoryRow(
@@ -229,7 +252,7 @@ def inferred(
         principal_id=subject,
         statement=statement,
         capability_tags=[CLIENT_NAME.value],
-        scope=Scope.unrestricted().model_dump(mode="json"),
+        scope=(scope or Scope.unrestricted()).model_dump(mode="json"),
         ent_hash="e" * 32,
         kind=MemoryKind.ADAPTIVE.value,
         formed_confidence=confidence,
@@ -240,6 +263,47 @@ def inferred(
 # ------------------------------------------------------------------- the stub session
 
 
+def learnt(
+    memory_id: str,
+    *,
+    change: Change = Change.PREFERENCE,
+    tier: int = 1,
+    agent_id: str | None = "desk",
+    replaced_id: str | None = None,
+    recorded_at: datetime | None = None,
+) -> LearningRow:
+    """One `mem.learning` row: what a memory proposed, under which agent, and what it replaced."""
+    return LearningRow(
+        memory_id=memory_id,
+        change=change.value,
+        tier=tier,
+        subject="answer.length",
+        agent_id=agent_id,
+        replaced_id=replaced_id,
+        evidence=["reasked"],
+        recorded_at=recorded_at or ago(minutes=30),
+    )
+
+
+def marked(
+    memory_id: str,
+    *,
+    by_id: str | None,
+    prompted_by: Signal | None = Signal.CONTRADICTED,
+    at: datetime | None = None,
+) -> CorrectionRow:
+    """One `mem.correction` row: a supersession when `by_id` names a memory, else a demotion."""
+    return CorrectionRow(
+        memory_id=memory_id,
+        correction="superseded" if by_id is not None else "demoted",
+        by_id=by_id,
+        prompted_by=None if by_id is None or prompted_by is None else prompted_by.value,
+        field=None if by_id is not None else "answer.length",
+        recorded_by="u_seed",
+        at=at or ago(minutes=20),
+    )
+
+
 class Stored:
     """What the stub database holds, and every statement it was asked."""
 
@@ -247,6 +311,9 @@ class Stored:
         self.items: list[KnowledgeItemRow] = []
         self.stated: list[PersistentMemoryRow] = []
         self.inferred: list[AdaptiveMemoryRow] = []
+        self.agents: list[AgentRow] = []
+        self.learnings: list[LearningRow] = []
+        self.corrections: list[CorrectionRow] = []
         self.statements: list[Any] = []
 
 
@@ -263,6 +330,29 @@ class StubResult:
     def all(self) -> list[Any]:
         return list(self._rows)
 
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+    def scalar_one(self) -> Any:
+        return self._rows[0]
+
+
+def _holds(clause: Any, row: Any) -> bool:
+    """Whether a row satisfies a WHERE clause, read off the clause: equality, IN, AND and OR.
+
+    Read rather than assumed, so a route that stopped narrowing a load is answered rows it did not
+    ask for and a test sees them. A clause of any other shape is a statement nothing here expects.
+    """
+    if isinstance(clause, BooleanClauseList):
+        found = [_holds(one, row) for one in clause.clauses]
+        return any(found) if clause.operator is operators.or_ else all(found)
+    value = getattr(row, clause.left.name)
+    if clause.operator is operators.eq:
+        return bool(value == clause.right.value)
+    if clause.operator is operators.in_op:
+        return value in clause.right.value
+    raise AssertionError(f"a clause nothing here expects: {clause}")
+
 
 def _bound(statement: Any, rows: list[Any]) -> list[Any]:
     """The rows a real database would return for a statement's `LIMIT`, honoured here.
@@ -274,35 +364,45 @@ def _bound(statement: Any, rows: list[Any]) -> list[Any]:
     return rows if limit is None else rows[:limit]
 
 
-class StubSession(AsyncSession):
-    """An `AsyncSession` answering the three loads these routes make, and no other.
+#: Each table the stub answers, where its rows are held and the order a load reads them in.
+_ORDERS: dict[type, tuple[str, Any]] = {
+    KnowledgeItemRow: ("items", lambda one: one.item_id),
+    PersistentMemoryRow: ("stated", lambda one: (-one.formed_at.timestamp(), one.id)),
+    AdaptiveMemoryRow: ("inferred", lambda one: (-one.formed_at.timestamp(), one.id)),
+    AgentRow: ("agents", lambda one: one.id),
+    LearningRow: ("learnings", lambda one: (-one.recorded_at.timestamp(), one.memory_id)),
+    CorrectionRow: ("corrections", lambda one: one.at),
+}
 
-    Each load is told apart by the table it selects from. The WHERE clause is read off the
-    statement rather than assumed: the library's states and the memory loads' subject are
-    applied here, so a route that stopped narrowing its load would be answered rows it did not
-    ask for and a test below would see them.
+
+class StubSession(AsyncSession):
+    """An `AsyncSession` answering the loads and the one write these routes make, and no other.
+
+    Each load is told apart by the table it selects from and narrowed by its own WHERE clause. An
+    insert into `mem.correction` is kept, so the next load reads the row the store wrote; the
+    database's clock is the wall clock, for the module docstring's reason.
     """
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _STORED.statements.append(statement)
-        if not hasattr(statement, "column_descriptions"):
-            # `brain.ops.replica_store` opens every console read with `SET TRANSACTION READ
-            # ONLY`, which selects nothing.
+        if isinstance(statement, Insert):
+            assert getattr(statement.table, "fullname", None) == "mem.correction", statement
+            _STORED.corrections.append(CorrectionRow(**statement.compile().params))
             return StubResult([])
-        table = statement.column_descriptions[0]["entity"]
-        if table is KnowledgeItemRow:
-            states = set(statement.whereclause.right.value)
-            rows = sorted(
-                (one for one in _STORED.items if one.state in states), key=lambda one: one.item_id
-            )
-            return StubResult(_bound(statement, rows))
-        subject = statement.whereclause.right.value
-        held: list[Any] = _STORED.stated if table is PersistentMemoryRow else _STORED.inferred
-        remembered = sorted(
-            (one for one in held if one.principal_id == subject),
-            key=lambda one: (-one.formed_at.timestamp(), one.id),
+        if not hasattr(statement, "column_descriptions"):
+            # `SET TRANSACTION READ ONLY`, the revision lock and the trace settings select nothing.
+            return StubResult([])
+        table = statement.column_descriptions[0].get("entity")
+        if table is None:
+            # The store's `SELECT now()`.
+            return StubResult([datetime.now(UTC)])
+        held, order = _ORDERS[table]
+        where = statement.whereclause
+        rows = sorted(
+            (one for one in getattr(_STORED, held) if where is None or _holds(where, one)),
+            key=order,
         )
-        return StubResult(_bound(statement, remembered))
+        return StubResult(_bound(statement, rows))
 
     async def close(self) -> None:
         return None
@@ -353,11 +453,46 @@ def unwired(stored: Stored) -> Iterator[TestClient]:
         yield c
 
 
+#: An `amr` a session carries when a second factor was used. An `admin:` capability is admitted
+#: to a request only at that assurance, so the undo is exercised with it and refused without it.
+SECOND_FACTOR: Mapping[str, object] = {"amr": ["otp"]}
+
+
 def get(c: TestClient, pid: str, path: str, **params: Any) -> Response:
     response: Response = c.get(
         path, headers={"authorization": f"Bearer {token_for(pid)}"}, params=params or {}
     )
     return response
+
+
+def get_strongly(c: TestClient, pid: str, path: str) -> Response:
+    """A read by somebody signed in with a second factor, which is when an undo can be offered."""
+    response: Response = c.get(
+        path, headers={"authorization": f"Bearer {token_for(pid, claims=SECOND_FACTOR)}"}
+    )
+    return response
+
+
+def post(
+    c: TestClient,
+    pid: str,
+    path: str,
+    body: Mapping[str, Any],
+    claims: Mapping[str, object] = SECOND_FACTOR,
+) -> Response:
+    response: Response = c.post(
+        path, headers={"authorization": f"Bearer {token_for(pid, claims=claims)}"}, json=dict(body)
+    )
+    return response
+
+
+def writes(stored: Stored) -> list[Any]:
+    """Every insert a test's requests sent, in order."""
+    return [one for one in stored.statements if isinstance(one, Insert)]
+
+
+def ids(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    return [one["memory_id"] for one in rows]
 
 
 def item_ids(response: Response) -> list[str]:
@@ -534,11 +669,12 @@ def test_the_library_asks_for_no_more_than_its_bound(client: TestClient, stored:
 # ------------------------------------------------------- the learning review (M27.7.21)
 
 
-def test_the_learning_review_answers_three_empty_tiers_and_says_nothing_is_recorded(
+def test_the_learning_review_answers_three_empty_tiers_on_an_install_that_has_learnt_nothing(
     client: TestClient,
 ) -> None:
-    """The positive case: a reader who may open the screen is answered the three tiers apart,
-    the vocabulary that sorts them, and the two sentences about what this install stores.
+    """The positive case over an empty store: a reader who may open the screen is answered the
+    three tiers apart, the vocabulary that sorts them, the bound the load reads, and what an undo
+    would write in each case.
 
     Delete this and every refusal below is satisfied by a route that refuses everybody."""
     response = get(client, "u_admin", LEARNING)
@@ -549,8 +685,9 @@ def test_the_learning_review_answers_three_empty_tiers_and_says_nothing_is_recor
     assert body["tier_two"] == []
     assert body["tier_three"] == []
     assert body["basis"] == "everyone"
-    assert body["learnings_are_not_recorded"] is True
-    assert body["undo_is_not_writable"] is True
+    assert body["considered"] == MAX_LEARNINGS_CONSIDERED
+    assert body["undo_says"] == {one.value: said for one, said in UNDO_SAYS.items()}
+    assert set(body["undo_says"]) == {one.value for one in Correction}
 
 
 def test_tier_three_is_null_for_a_reader_who_may_not_be_grouped_by_department(
@@ -591,31 +728,279 @@ def test_the_tier_vocabulary_puts_every_change_once_at_the_tier_its_reach_needs(
     assert "preference" in tiers[1]["changes"]
 
 
-def test_the_flag_saying_no_correction_is_stored_agrees_with_the_migrations() -> None:
-    """No migration creates a table for a supersession, a demotion or a learning's tier, and the
-    route says so; `recorded_learnings` and `recorded_corrections` are empty.
+def test_the_review_and_the_viewer_read_tables_a_migration_creates() -> None:
+    """A migration creates `mem.learning` and `mem.correction`, and the memory tables the viewer
+    reads.
 
-    Held against the migrations directory rather than against the constant, so the day a
-    migration creates a correction table this goes red and whoever wrote it has to decide what
-    the undo control and the history's diffs now say. Delete this and the page keeps telling an
-    administrator that nothing is recorded after something is."""
+    Held against the migrations directory rather than against the models, so a route reading a
+    table no migration builds goes red here rather than on the first request after a deploy. Delete
+    this and the review can be written against a model nothing ever created."""
     created = [
         found.group(1)
         for path in sorted((REPO / "migrations" / "versions").glob("*.py"))
         for found in re.finditer(r'create_table\(\s*"([a-z_]+)"', path.read_text(encoding="utf-8"))
     ]
-    about_learning = [
-        one for one in created if re.search(r"correction|supersession|demotion|learning", one)
+
+    assert {"learning", "correction", "adaptive", "persistent"} <= set(created)
+
+
+def test_a_visible_agents_tier_one_learning_is_listed_with_its_undo_offered_to_its_administrator(
+    client: TestClient, stored: Stored
+) -> None:
+    """The positive case over stored rows: a tier-one learning of an agent every reader may see,
+    formed from a memory the reader may recall, is listed in tier one, in effect, with its undo
+    offered and saying it would restore the memory it replaced; a tier-two learning of the same
+    agent is in tier two.
+
+    Delete this and every refusal below is satisfied by a review that lists nothing, which is the
+    screen as it was before a learning could be stored."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.stated = [stated("m_before", "Prefers the long answer", formed_at=ago(hours=3))]
+    stored.inferred = [
+        inferred("m_learnt", "Prefers the short answer", formed_at=ago(hours=1)),
+        inferred("m_rule", "Asks renewals by product", formed_at=ago(hours=2)),
+    ]
+    stored.learnings = [
+        learnt("m_learnt", replaced_id="m_before"),
+        learnt("m_rule", change=Change.FAST_PATH_RULE, tier=2),
     ]
 
-    assert about_learning == []
-    assert "adaptive" in created
-    recorded = recorded_learnings()
-    assert recorded.visible == ()
-    assert dict(recorded.tier_one) == {}
-    assert dict(recorded.tier_two) == {}
-    assert dict(recorded.tier_three) == {}
-    assert recorded_corrections() == ((), ())
+    body = get_strongly(client, "u_admin", LEARNING).json()
+    weak = get(client, "u_admin", LEARNING).json()
+
+    assert [one["undo_offered"] for one in weak["tier_one"]] == [False]
+    assert body["tier_one"] == [
+        {
+            "memory_id": "m_learnt",
+            "change": "preference",
+            "control_writes": "superseded",
+            "learned_at": body["tier_one"][0]["learned_at"],
+            "in_effect": True,
+            "undo_offered": True,
+        }
+    ]
+    assert ids(body["tier_two"]) == ["m_rule"]
+    assert body["tier_three"] == []
+
+
+def test_a_learning_the_reader_may_not_recall_is_absent_from_the_review_and_cannot_be_undone(
+    client: TestClient, stored: Stored
+) -> None:
+    """A reader who holds the screen and not the capability the memory was formed under is shown
+    the same bytes as for a review with nothing in it, and an undo of that memory is refused in the
+    words an undo of a memory that does not exist is refused in.
+
+    Delete this and the review lists a learning formed from a conversation the reader could not
+    have read, which is the per-agent tab with its lens taken off."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.inferred = [inferred("m_learnt", "Prefers the short answer")]
+    stored.learnings = [learnt("m_learnt")]
+
+    remembered = get(client, "u_narrow", LEARNING)
+    refused = post(client, "u_narrow", UNDO, {"memory_id": "m_learnt"})
+    stored.learnings = []
+    absent = get(client, "u_narrow", LEARNING)
+    missing = post(client, "u_narrow", UNDO, {"memory_id": "m_nothing"})
+
+    assert remembered.status_code == absent.status_code == 200
+    assert remembered.json()["tier_one"] == absent.json()["tier_one"] == []
+    assert {k: v for k, v in remembered.json().items() if k != "as_of"} == {
+        k: v for k, v in absent.json().items() if k != "as_of"
+    }
+    assert refused.status_code == missing.status_code == 404
+    assert refused.json()["message"] == missing.json()["message"]
+    assert writes(stored) == []
+
+
+def test_a_learning_the_agents_ceiling_does_not_reach_is_absent_even_to_a_reader_who_may_recall_it(
+    client: TestClient, stored: Stored
+) -> None:
+    """The learning is listed through an agent whose ceiling holds the memory's capability and
+    absent through one whose ceiling does not, for the same reader.
+
+    Delete this and the review is read at the caller's own reach rather than at their run of the
+    agent, which is the lens this system never lets an agent drop."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,)), agent_row("blind")]
+    stored.inferred = [
+        inferred("m_through_desk", "Prefers the short answer"),
+        inferred("m_through_blind", "Prefers email"),
+    ]
+    stored.learnings = [learnt("m_through_desk"), learnt("m_through_blind", agent_id="blind")]
+
+    body = get(client, "u_admin", LEARNING).json()
+
+    assert ids(body["tier_one"]) == ["m_through_desk"]
+    assert post(client, "u_admin", UNDO, {"memory_id": "m_through_blind"}).status_code == 404
+
+
+def test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The leaf's sentence, followed through the route.** Before: the learnt memory is what the
+    viewer shows as remembered, and the memory it replaced is not. The undo answers what it wrote,
+    and the store's insert names the learning, the memory it restores, a person's refusal and who
+    pressed it. After: the viewer shows the memory put back and not the learnt one, its history has
+    the step with its diff and its trigger, and the review says the change is no longer in effect
+    and offers no undo. A second undo writes nothing.
+
+    Delete this and an undo can answer success for a row the viewer never reads, which is the
+    control that renders and reaches nothing. The ledger entry the insert leaves is followed through
+    a real database by `tests/unit/test_memory_store.py`."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.stated = [stated("m_before", "Prefers the long answer", formed_at=ago(hours=3))]
+    stored.inferred = [inferred("m_learnt", "Prefers the short answer", formed_at=ago(hours=1))]
+    stored.learnings = [learnt("m_learnt", replaced_id="m_before")]
+    stored.corrections = [marked("m_before", by_id="m_learnt", at=ago(hours=1))]
+    before = get(client, "u_admin", MEMORY, subject="u_subject").json()
+
+    undone = post(client, "u_admin", UNDO, {"memory_id": "m_learnt"})
+
+    assert undone.status_code == 200, undone.text
+    assert undone.json()["took_effect"] is True
+    assert undone.json()["correction"] == "superseded"
+    [insert] = writes(stored)
+    assert {key: value for key, value in insert.compile().params.items() if key != "at"} == {
+        "memory_id": "m_learnt",
+        "correction": "superseded",
+        "by_id": "m_before",
+        "prompted_by": "rejected",
+        "field": None,
+        "recorded_by": "u_admin",
+    }
+    after = get(client, "u_admin", MEMORY, subject="u_subject").json()
+    review = get_strongly(client, "u_admin", LEARNING).json()
+    again = post(client, "u_admin", UNDO, {"memory_id": "m_learnt"})
+
+    assert (ids(before["curated"]), ids(before["extracted"])) == ([], ["m_learnt"])
+    assert (ids(after["curated"]), ids(after["extracted"])) == (["m_before"], [])
+    restored = after["history"][-1]
+    assert (restored["memory_id"], restored["replaced_id"]) == ("m_before", "m_learnt")
+    assert (restored["trigger"], restored["correction"]) == ("rejected", "superseded")
+    assert "-Prefers the short answer" in restored["diff"]
+    assert "+Prefers the long answer" in restored["diff"]
+    assert [(one["in_effect"], one["undo_offered"]) for one in review["tier_one"]] == [
+        (False, False)
+    ]
+    assert again.status_code == 200
+    assert again.json()["took_effect"] is False
+    assert len(writes(stored)) == 1
+
+
+def test_an_undo_of_a_learning_that_replaced_nothing_writes_a_demotion(
+    client: TestClient, stored: Stored
+) -> None:
+    """The other half of `digest.undo`: nothing to restore, so the memory is demoted and the viewer
+    stops showing it. Delete this and the route can offer only the restoring half, after which every
+    learning formed from nothing is a learning nobody can undo."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.inferred = [inferred("m_alone", "Asks on Mondays")]
+    stored.learnings = [learnt("m_alone")]
+
+    undone = post(client, "u_admin", UNDO, {"memory_id": "m_alone"})
+    after = get(client, "u_admin", MEMORY, subject="u_subject").json()
+
+    assert undone.json()["correction"] == "demoted"
+    assert [one.compile().params["correction"] for one in writes(stored)] == ["demoted"]
+    assert after["extracted"] == []
+    assert [(one["memory_id"], one["correction"]) for one in after["history"]] == [
+        ("m_alone", "demoted")
+    ]
+
+
+def test_the_undo_authority_is_matched_against_where_the_memory_was_formed(
+    client: TestClient, stored: Stored
+) -> None:
+    """A reader holding the undo authority in finance and every read is offered the undo on a
+    learning formed in finance and undoes it, and is shown a learning formed in web without the
+    control and refused its undo.
+
+    Delete this and `admin:learning` held anywhere undoes everything the reader can see, which puts
+    one department's administrator in charge of what the system recalls for every other."""
+    finance, web = Scope.department("finance"), Scope.department("web")
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.inferred = [
+        inferred("m_finance", "Prefers invoices by post", scope=finance),
+        inferred("m_web", "Prefers the short answer", scope=web),
+    ]
+    stored.learnings = [learnt("m_finance"), learnt("m_web")]
+
+    rows = {
+        one["memory_id"]: one
+        for one in get_strongly(client, "u_elsewhere", LEARNING).json()["tier_one"]
+    }
+    refused = post(client, "u_elsewhere", UNDO, {"memory_id": "m_web"})
+    undone = post(client, "u_elsewhere", UNDO, {"memory_id": "m_finance"})
+
+    assert (rows["m_finance"]["undo_offered"], rows["m_web"]["undo_offered"]) == (True, False)
+    assert refused.status_code == 404
+    assert undone.status_code == 200, undone.text
+    assert [one.compile().params["memory_id"] for one in writes(stored)] == ["m_finance"]
+
+
+def test_an_undo_is_refused_before_anything_is_read_to_a_caller_without_the_screen_or_the_authority(
+    client: TestClient, unwired: TestClient, stored: Stored
+) -> None:
+    """A caller with no grant, a caller with the learning screen and no undo authority, the
+    administrator signed in without a second factor, and a caller with no grant on an instance with
+    no database are refused alike before a session is reached for; the administrator on that
+    instance is told it is broken.
+
+    Delete this and the order of the questions can move, after which a refusal on one instance and
+    a fault on another is the deployment's state readable by anybody who can reach the port."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.inferred = [inferred("m_learnt", "Prefers the short answer")]
+    stored.learnings = [learnt("m_learnt")]
+
+    nobody = post(client, "u_none", UNDO, {"memory_id": "m_learnt"})
+    reader = post(client, "u_narrow", UNDO, {"memory_id": "m_learnt"})
+    password_only = post(
+        client, "u_admin", UNDO, {"memory_id": "m_learnt"}, claims={"amr": ["pwd"]}
+    )
+    bare = post(unwired, "u_none", UNDO, {"memory_id": "m_learnt"})
+    fault = post(unwired, "u_admin", UNDO, {"memory_id": "m_learnt"})
+
+    assert {
+        nobody.status_code,
+        reader.status_code,
+        password_only.status_code,
+        bare.status_code,
+    } == {404}
+    assert (
+        nobody.json()["message"]
+        == reader.json()["message"]
+        == password_only.json()["message"]
+        == bare.json()["message"]
+    )
+    assert stored.statements == []
+    assert fault.status_code == 500
+    assert set(fault.json()) >= {"message", "trace_id"}
+
+
+def test_a_tier_two_learning_is_not_undone_from_the_review(
+    client: TestClient, stored: Stored
+) -> None:
+    """A rule proving itself in shadow is promoted by agreement, not undone by a click. Delete this
+    and the undo can mark a tier-two learning, which the review shows with no undo control, so the
+    write arrives from a request no screen sends."""
+    stored.agents = [agent_row("desk", capabilities=(CLIENT_NAME,))]
+    stored.inferred = [inferred("m_rule", "Asks renewals by product")]
+    stored.learnings = [learnt("m_rule", change=Change.FAST_PATH_RULE, tier=2)]
+
+    assert post(client, "u_admin", UNDO, {"memory_id": "m_rule"}).status_code == 404
+    assert writes(stored) == []
+
+
+def test_an_undo_names_a_memory_by_its_id_and_nothing_else(client: TestClient) -> None:
+    """A body naming no memory, a memory id wider than the column, and a body carrying which
+    correction to write are refused as requests. Delete this and a caller can choose to demote a
+    memory whose undo should have restored the one before it."""
+    assert post(client, "u_admin", UNDO, {}).status_code == 422
+    assert post(client, "u_admin", UNDO, {"memory_id": "m" * 27}).status_code == 422
+    assert (
+        post(client, "u_admin", UNDO, {"memory_id": "m_1", "correction": "demoted"}).status_code
+        == 422
+    )
+    assert set(UndoAsked.model_fields) == {"memory_id"}
 
 
 # -------------------------------------------------------- the memory viewer (M27.7.22)
@@ -648,7 +1033,6 @@ def test_the_memory_viewer_shows_a_subjects_memory_split_by_where_it_came_from(
     ]
     assert 0.89 < body["extracted"][0]["confidence"] < 0.9
     assert sorted(one["memory_id"] for one in body["history"]) == ["m_inferred", "m_stated"]
-    assert body["corrections_are_not_recorded"] is True
     assert body["edit_is_not_writable"] is True
     assert body["considered_per_kind"] == MAX_MEMORIES_CONSIDERED
 
@@ -770,11 +1154,11 @@ def test_stored_memory_refuses_each_row_a_viewer_cannot_show_and_keeps_a_good_on
     assert stored_memory(stated("m_badtag", "x", tags=("not a capability",))) is None
 
 
-def test_every_revision_has_no_diff_because_nothing_records_what_a_memory_replaced(
+def test_a_memory_nothing_records_as_replacing_another_has_no_diff(
     client: TestClient, stored: Stored
 ) -> None:
-    """Each readable memory is one history entry, oldest first, with no replaced memory, no
-    diff, no trigger and no correction.
+    """Each readable memory with no learning record naming what it replaced is one history entry,
+    oldest first, with no replaced memory, no diff, no trigger and no correction.
 
     Delete this and a diff invented from two statements that happen to sit side by side could
     appear, which is a viewer inferring why something changed by comparing text, the thing
@@ -847,9 +1231,8 @@ def test_a_revision_is_sent_with_its_trigger_and_correction_as_their_words() -> 
     """A revision carrying a trigger and a correction is projected with both, as the words of
     their vocabularies, and one carrying neither is projected with two nulls.
 
-    Nothing stores a correction yet, so no route test can reach a revision with either. Delete
-    this and the projection can drop them, and the day a store exists the history says a
-    memory changed and never why."""
+    Delete this and the projection can drop them, and the history says a memory changed and
+    never why."""
     moved = Revision(
         memory_id="m_new",
         replaced_id="m_old",
@@ -866,6 +1249,62 @@ def test_a_revision_is_sent_with_its_trigger_and_correction_as_their_words() -> 
     assert view.diff == ("-June", "+September")
     assert view.replaced_id == "m_old"
     assert (still.trigger, still.correction) == (None, None)
+
+
+def test_an_edit_is_shown_as_a_revision_with_its_diff_and_what_triggered_it(
+    client: TestClient, stored: Stored
+) -> None:
+    """**The history leaf's sentence, over stored rows.** A memory whose learning record names the
+    memory it replaced, with the supersession that marked the older one, is a revision carrying
+    both statements' diff and the supersession's signal; what is remembered now is the newer
+    statement alone.
+
+    Delete this and the viewer can go on answering every revision with no diff and no trigger over a
+    store that records both, which is the screen saying nothing changed when something did."""
+    stored.stated = [
+        stated("m_june", "Retainer ends in June", formed_at=ago(hours=3)),
+        stated("m_september", "Retainer ends in September", formed_at=ago(hours=1)),
+    ]
+    stored.learnings = [learnt("m_september", replaced_id="m_june", agent_id=None)]
+    stored.corrections = [marked("m_june", by_id="m_september", at=ago(hours=1))]
+
+    body = get(client, "u_admin", MEMORY, subject="u_subject").json()
+
+    assert ids(body["curated"]) == ["m_september"]
+    assert [(one["memory_id"], one["replaced_id"]) for one in body["history"]] == [
+        ("m_june", None),
+        ("m_september", "m_june"),
+    ]
+    step = body["history"][1]
+    assert (step["trigger"], step["correction"]) == ("contradicted", "superseded")
+    assert step["diff"] == ["@@ -1 +1 @@", "-Retainer ends in June", "+Retainer ends in September"]
+
+
+def test_a_revision_whose_older_side_the_reader_may_not_recall_is_shown_without_its_diff(
+    client: TestClient, stored: Stored
+) -> None:
+    """The replaced memory was formed under a capability this reader lacks, so the revision is
+    listed with no diff and nothing saying why, and a reader who holds both sees the diff.
+
+    Delete this and the history is the one place a statement formed under wider tags reaches a
+    reader who could not recall it, which is `brain.console.reach_view.
+    A_DIFF_IS_TWO_DISCLOSURES_AND_THE_OLDER_ONE_IS_THE_ONE_NOBODY_CHECKS` at the route."""
+    stored.stated = [
+        stated(
+            "m_secret",
+            "Retainer is worth a lot",
+            tags=("read:client.contract_value",),
+            formed_at=ago(hours=3),
+        ),
+        stated("m_open", "Retainer renews yearly", formed_at=ago(hours=1)),
+    ]
+    stored.learnings = [learnt("m_open", replaced_id="m_secret", agent_id=None)]
+    stored.corrections = [marked("m_secret", by_id="m_open", at=ago(hours=1))]
+
+    narrow = get(client, "u_elsewhere", MEMORY, subject="u_subject").json()
+
+    assert [(one["memory_id"], one["diff"]) for one in narrow["history"]] == [("m_open", [])]
+    assert "Retainer is worth a lot" not in str(narrow)
 
 
 # --------------------------------------------------------------- all three screens
@@ -929,16 +1368,18 @@ def test_a_caller_with_no_grant_is_refused_each_screen_and_its_holder_is_answere
     assert get(client, "u_admin", path).status_code == 200
 
 
-def test_none_of_the_three_screens_has_a_write(client: TestClient) -> None:
-    """The application's own OpenAPI document declares GET and nothing else on the three paths.
+def test_the_undo_is_the_only_write_on_the_three_screens(client: TestClient) -> None:
+    """The application's own OpenAPI document declares GET on the three paths, POST on the undo,
+    and nothing else under either screen.
 
-    Delete this and an undo, an edit or an upload can be added with nothing behind it, which is
-    the control `docs/admin-console.md` says is worse than none: it renders and reaches no row."""
+    Delete this and an edit or an upload can be added with nothing behind it, which is the control
+    `docs/admin-console.md` says is worse than none: it renders and reaches no row."""
     paths = client.get("/openapi.json").json()["paths"]
 
     for path in (LIBRARY, LEARNING, MEMORY):
         assert set(paths[path]) == {"get"}
-    assert not [one for one in paths if one.startswith(f"{API_PREFIX}/govern/learning/")]
+    assert set(paths[UNDO]) == {"post"}
+    assert [one for one in paths if one.startswith(f"{API_PREFIX}/govern/learning/")] == [UNDO]
     assert not [one for one in paths if one.startswith(f"{API_PREFIX}/govern/memory/")]
 
 
@@ -950,6 +1391,8 @@ VIEWS: tuple[type[BaseModel], ...] = (
     TierThreeView,
     TierRuleView,
     LearningReviewView,
+    UndoAsked,
+    LearningUndoneView,
     MemoryTextView,
     RevisionView,
     SubjectMemoryView,

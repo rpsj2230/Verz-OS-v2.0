@@ -315,7 +315,7 @@ def may_recall(
     if reached is None:
         return None
 
-    place = dict(where) if where is not None else _place_of(formation.scope)
+    place = dict(where) if where is not None else place_of(formation.scope)
     if place and not reached.matches(place):
         return None
 
@@ -330,8 +330,12 @@ def may_recall(
     return Recollection(formation=formation, scope=reached, confidence=confidence)
 
 
-def _place_of(scope: Scope) -> dict[str, object]:
+def place_of(scope: Scope) -> dict[str, object]:
     """The row a scope describes, for scopes that describe one.
+
+    Public since 2026-09-17, because the authority to undo a learning is asked of the place its
+    memory is about (`brain.console.govern_estate.may_undo`), and asking recall's own question of a
+    second reading of the scope would be two places for "where is this memory" to disagree.
 
     Only equality clauses produce a place. A scope saying "department in (a, b)" describes
     two places and not one, so it yields nothing here and the caller's `where` decides, which

@@ -34,7 +34,7 @@ Scope: M24.1 is the chain logic only. Nothing here touches a database. The table
 eventually persists these entries stores the same fields and runs `verify` as its check
 job (M24.1.2).
 
-Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5
+Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5, M27.7.21
 """
 
 from __future__ import annotations
@@ -125,6 +125,8 @@ SUBJECT_KINDS = frozenset(
         "webhook",
         # A request to erase somebody's data, since 2026-09-17. See ERASURE below.
         "erasure",
+        # A memory a correction marked, since 2026-09-17. See MEMORY below.
+        "memory",
     }
 )
 
@@ -414,6 +416,25 @@ class AuditAction(enum.StrEnum):
     the reason LEGAL_HOLD's subject is the hold, because a list of the people who asked to be
     erased is a list of endings, and the ledger is the table kept longest and read most widely.
     Seven characters.
+
+    MEMORY was added on 2026-09-17, and it is the twenty-fourth. The Learning screen undoes a
+    tier-one learning (M27.7.21), and an undo writes a correction that changes what the system
+    recalls from then on: "who decided the system should stop believing this, and when" is the
+    question asked the day an answer changes and nobody can say why. **Recorded by the database,
+    from a trigger on `mem.correction`**, the way CONNECTOR is, on the insert, with the actor read
+    off the row's own `recorded_by` and the correction's kind in the details. A correction row is
+    never updated, so there is nothing else to fire on.
+
+    Every existing member was tried. REVOKE is a grant taken away, and an undo takes nobody's access
+    away: a tier-one learning never changed who may see what, which is the definition of tier one in
+    `brain.memory.tiers`. COMPOSE_CHANGE is what one agent carries, and a learning belongs to a
+    memory rather than to an agent's composition, and may belong to no agent at all. APPROVAL is a
+    suspended action decided, and a tier-one learning was never suspended. The subject is the memory
+    the correction marked, under a new kind `memory`, because the only other candidate, the agent,
+    is absent from a learning formed in a plain conversation and would file an undo under a party
+    that did not make it. The details are the kind of correction and nothing else: never the
+    statement, which is `brain.memory.correction`'s refusal to keep a transcript in a correction
+    log, and never the memory that replaced it, which the row keeps. Six characters.
     """
 
     GRANT = "grant"
@@ -477,6 +498,9 @@ class AuditAction(enum.StrEnum):
     #: incomplete. Which is in the details, and never whose data it was. Written by `0060`'s
     #: trigger on `ops.erasure_request`.
     ERASURE = "erasure"
+    #: A memory was marked by a correction: superseded by another, or demoted. Which is in the
+    #: details, and never what either memory says. Written by `0061`'s trigger on `mem.correction`.
+    MEMORY = "memory"
 
 
 # --------------------------------------------------------------------- redaction

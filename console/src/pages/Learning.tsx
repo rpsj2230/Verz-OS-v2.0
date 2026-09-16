@@ -5,18 +5,20 @@
  * "What changed" listing, and two cards underneath, one explaining the four tiers and one saying
  * why tier one notifies rather than asks. This is that layout in that order. Two things differ
  * and both are argued in `learningQuery.ts`: the listing is one table per tier rather than one
- * table with a tier column, which is `THREE_TIERS_ARE_THREE_TABLES`, and every figure is a
- * sentence while the API says no learning is recorded, which is `A_ZERO_NOBODY_COUNTED_IS_A_CLAIM`.
+ * table with a tier column, which is `THREE_TIERS_ARE_THREE_TABLES`, and the undo control is drawn
+ * only on a row the API offers it on, which is `UNDO_IS_ASKED_OF_THE_SERVER_ROW_BY_ROW`.
  *
  * **The rule the whole page encodes is the design's**: learning that narrows, personalises or
  * re-ranks applies by itself, and learning that widens, publishes or changes behaviour waits for
  * a person. The four-tier card is drawn from `brain.memory.tiers.BLAST_RADIUS` as the API sends
  * it, so the change kinds listed under each tier are the ones that really need it.
  *
- * **No undo, promote or decide control is drawn.** SCREEN 8 draws Undo beside every tier-one row,
- * Promote beside tier two and Decide beside tier three. Nothing on this install stores a
- * correction, promotes a rule or records a decision, so each is a sentence under its tier, in
- * words a person can act on, rather than a button refused every time it is pressed.
+ * **Undo is a confirmed write; promote and decide are not drawn.** SCREEN 8 draws Undo beside every
+ * tier-one row, Promote beside tier two and Decide beside tier three. Since 2026-09-17 an undo is
+ * stored, audited and read by recall, so a tier-one row the API offers it on carries the button,
+ * and pressing it opens a confirmation in the sentence the API serves for what it will write. A row
+ * undone says so and offers nothing. Nothing records agreement or a decision, so Promote and Decide
+ * are still sentences under their tiers rather than buttons refused every time they are pressed.
  *
  * **What a learning says is not on this screen.** A learning record carries no text, on purpose,
  * and the statement it produced is read on the Memory screen under the capability it was formed
@@ -30,15 +32,24 @@
  * Task ids: M27.7.21
  */
 
+import { useCallback, useState } from "react";
+import { request } from "../api/client";
+import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
 import {
   LEARNING_API_PATH,
   RECENT_DAYS,
   TIER_WORDS,
+  UNDO_API_PATH,
+  consideredSentence,
   learnedRecently,
   readLearningPage,
+  readUndone,
+  undoBody,
   type LearningPage,
+  type TierOne,
 } from "./learningQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -51,25 +62,32 @@ export const LEARNING_LEDE =
   "publishes or changes behaviour waits for a person. Tier one is listed so it can be undone, not " +
   "so it can be approved. Only tier three blocks.";
 
-/** What every figure is while nothing is recorded. */
+/** What a figure the design draws and nothing measures says instead of a number. */
 export const NOT_RECORDED = "Not recorded on this install.";
 
-/** Said once, above the listing, while the API says nothing is recorded. */
-export const LEARNINGS_ARE_NOT_RECORDED =
-  "Nothing on this install records what the system learns yet: no table holds a learning's tier, " +
-  "the change it proposed or what it replaced. So every list below is empty because there is " +
-  "nothing stored to list, not because the system has learnt nothing.";
+/** Under the figures: what they count, so a count is never read as the company's. */
+export const FIGURES_ARE_OF_WHAT_YOU_CAN_SEE =
+  "Every figure counts the learnings listed below, which are the ones you may see.";
 
 /** What a learning row does not show, and where it is read instead. */
 export const STATEMENTS_ARE_ELSEWHERE =
   "A learning record carries no text. What a learning says is read on the Memory screen, under " +
   "the capability it was formed with.";
 
-/** In place of the Undo button beside every tier-one row. */
-export const UNDO_NOT_OFFERED =
-  "Undo is not offered. Undoing a tier-one learning writes a correction, nothing on this install " +
-  "stores one yet, and nothing reads memory while answering, so an undo here would change neither " +
-  "a record nor an answer.";
+/** The control beside a tier-one row the API offers it on, and the confirmation's verb. */
+export const UNDO_LABEL = "Undo";
+
+/** The confirmation's way out. */
+export const KEEP_IT = "Keep it";
+
+/** Under tier one: where the control is and is not, in words a person can act on. */
+export const WHERE_UNDO_IS_OFFERED =
+  "Undo is offered on a change that is still in effect, where you hold the authority to undo " +
+  "learning in the department its memory was formed in, and you signed in with a second factor. " +
+  "Undoing writes a correction and deletes nothing: the Memory screen shows what changed.";
+
+/** The state of a tier-one row a correction has taken out of effect. */
+export const UNDONE = "undone";
 
 /** In place of the Promote button beside tier two. */
 export const PROMOTE_NOT_OFFERED =
@@ -86,7 +104,7 @@ export const TIER_THREE_WITHHELD =
   "Where gated changes were routed is shown to a reader who holds the Scopes and departments " +
   "screen for the whole company, because each one names the department that decides it.";
 
-/** An empty tier, once the API says learnings are recorded. */
+/** An empty tier. */
 export const NOTHING_IN_TIER = "Nothing in this tier.";
 
 /** The design's hint on the notify card, in its own words. */
@@ -103,18 +121,16 @@ function Figure({
   label,
   value,
   sub,
-  recorded,
 }: {
   readonly label: string;
   readonly value: number;
   readonly sub: string;
-  readonly recorded: boolean;
 }) {
   return (
     <div className="fields__row">
       <dt>{label}</dt>
       <dd>
-        {recorded ? <span>{String(value)}</span> : <p className="note">{NOT_RECORDED}</p>}
+        <span>{String(value)}</span>
         <p className="note">{sub}</p>
       </dd>
     </div>
@@ -122,7 +138,6 @@ function Figure({
 }
 
 function Figures({ page }: { readonly page: LearningPage }) {
-  const recorded = !page.learningsAreNotRecorded;
   return (
     <section className="card">
       <h2>At a glance</h2>
@@ -131,19 +146,16 @@ function Figures({ page }: { readonly page: LearningPage }) {
           label={`Learned in the last ${String(RECENT_DAYS)} days`}
           value={learnedRecently(page)}
           sub="tiers one and two"
-          recorded={recorded}
         />
         <Figure
           label="Applied automatically"
           value={page.tierOne.length}
           sub="tier one, each reversible"
-          recorded={recorded}
         />
         <Figure
           label="In shadow"
           value={page.tierTwo.length}
           sub="tier two, proving out"
-          recorded={recorded}
         />
         {page.tierThree === null ? (
           <div className="fields__row">
@@ -157,16 +169,96 @@ function Figures({ page }: { readonly page: LearningPage }) {
             label="Waiting on a human"
             value={page.tierThree.length}
             sub="tier three"
-            recorded={recorded}
-          />
+            />
         )}
       </dl>
+      <p className="note">{FIGURES_ARE_OF_WHAT_YOU_CAN_SEE}</p>
     </section>
   );
 }
 
-function LearningAnswerView() {
+function TierOneTable({
+  rows,
+  busy,
+  onUndo,
+}: {
+  readonly rows: readonly TierOne[];
+  readonly busy: boolean;
+  readonly onUndo: (row: TierOne) => void;
+}) {
+  return (
+    <div className="grid__scroll">
+      <table className="grid__table">
+        <caption className="grid__caption">Tier one learnings you can see</caption>
+        <thead>
+          <tr>
+            <th scope="col">What it learned</th>
+            <th scope="col">Memory</th>
+            <th scope="col">State</th>
+            <th scope="col">Undo would write</th>
+            <th scope="col">
+              <span className="visually-hidden">Undo</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.memory_id}>
+              <td>{row.change}</td>
+              <td>
+                <code>{row.memory_id}</code>
+              </td>
+              <td>{row.in_effect ? "applied" : UNDONE}</td>
+              <td>{row.control_writes}</td>
+              <td>
+                {row.undo_offered ? (
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={busy}
+                    aria-label={`${UNDO_LABEL} ${row.memory_id}`}
+                    onClick={() => {
+                      onUndo(row);
+                    }}
+                  >
+                    {UNDO_LABEL}
+                  </button>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function LearningAnswerView({ onChanged }: { readonly onChanged: (sentence: string) => void }) {
   const answer = useResource<unknown>(LEARNING_API_PATH);
+  const [undoing, setUndoing] = useState<TierOne | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
+
+  const undo = useCallback(
+    (row: TierOne) => {
+      setBusy(true);
+      void (async () => {
+        const result = await request<unknown>(UNDO_API_PATH, {
+          method: "POST",
+          body: undoBody(row.memory_id),
+        });
+        setBusy(false);
+        setUndoing(null);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        onChanged(readUndone(result.data).told);
+      })();
+    },
+    [onChanged],
+  );
 
   if (answer.failure) {
     return (
@@ -182,51 +274,52 @@ function LearningAnswerView() {
   }
 
   const page = readLearningPage(answer.data);
+  const consequence = undoing === null ? "" : (page.undoSays[undoing.control_writes] ?? "");
 
   return (
     <>
+      {page.staleness === null ? null : <p className="note">{page.staleness}</p>}
+      {failure === null ? null : <FailureNotice failure={failure} />}
+
       <Figures page={page} />
 
       <section className="card">
         <h2>What changed</h2>
-        {page.learningsAreNotRecorded ? <p className="note">{LEARNINGS_ARE_NOT_RECORDED}</p> : null}
         <p className="note">{STATEMENTS_ARE_ELSEWHERE}</p>
 
         <h3>Tier one: applied automatically</h3>
         {page.tierOne.length === 0 ? (
-          <p className="note">{page.learningsAreNotRecorded ? NOT_RECORDED : NOTHING_IN_TIER}</p>
+          <p className="note">{NOTHING_IN_TIER}</p>
         ) : (
-          <div className="grid__scroll">
-            <table className="grid__table">
-              <caption className="grid__caption">Tier one learnings you can see</caption>
-              <thead>
-                <tr>
-                  <th scope="col">What it learned</th>
-                  <th scope="col">Memory</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Undo would write</th>
-                </tr>
-              </thead>
-              <tbody>
-                {page.tierOne.map((row) => (
-                  <tr key={row.memory_id}>
-                    <td>{row.change}</td>
-                    <td>
-                      <code>{row.memory_id}</code>
-                    </td>
-                    <td>applied</td>
-                    <td>{row.control_writes}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TierOneTable
+            rows={page.tierOne}
+            busy={busy}
+            onUndo={(row) => {
+              setFailure(null);
+              setUndoing(row);
+            }}
+          />
         )}
-        {page.undoIsNotWritable ? <p className="note">{UNDO_NOT_OFFERED}</p> : null}
+        {undoing === null || consequence === "" ? null : (
+          <ConfirmAction
+            question={`${UNDO_LABEL} the ${undoing.change} learning ${undoing.memory_id}?`}
+            consequence={consequence}
+            confirmLabel={UNDO_LABEL}
+            cancelLabel={KEEP_IT}
+            busy={busy}
+            onConfirm={() => {
+              undo(undoing);
+            }}
+            onCancel={() => {
+              setUndoing(null);
+            }}
+          />
+        )}
+        <p className="note">{WHERE_UNDO_IS_OFFERED}</p>
 
         <h3>Tier two: in shadow</h3>
         {page.tierTwo.length === 0 ? (
-          <p className="note">{page.learningsAreNotRecorded ? NOT_RECORDED : NOTHING_IN_TIER}</p>
+          <p className="note">{NOTHING_IN_TIER}</p>
         ) : (
           <div className="grid__scroll">
             <table className="grid__table">
@@ -260,7 +353,7 @@ function LearningAnswerView() {
         {page.tierThree === null ? (
           <p className="note">{TIER_THREE_WITHHELD}</p>
         ) : page.tierThree.length === 0 ? (
-          <p className="note">{page.learningsAreNotRecorded ? NOT_RECORDED : NOTHING_IN_TIER}</p>
+          <p className="note">{NOTHING_IN_TIER}</p>
         ) : (
           <div className="grid__scroll">
             <table className="grid__table">
@@ -287,6 +380,7 @@ function LearningAnswerView() {
           </div>
         )}
         {page.tierThree === null ? null : <p className="note">{DECIDE_NOT_OFFERED}</p>}
+        <p className="note">{consideredSentence(page.considered)}</p>
       </section>
 
       <section className="card">
@@ -330,11 +424,24 @@ function LearningAnswerView() {
 }
 
 export function Learning() {
+  // A counter rather than a boolean, so two undos in a row read the review twice. Never rendered.
+  const [generation, setGeneration] = useState(0);
+  const [changed, setChanged] = useState<string | null>(null);
+  const onChanged = useCallback((sentence: string) => {
+    setChanged(sentence);
+    setGeneration((current) => current + 1);
+  }, []);
+
   return (
     <article className="page">
       <h1>{LEARNING_HEADING}</h1>
       <p className="lede">{LEARNING_LEDE}</p>
-      <LearningAnswerView />
+      {changed === null ? null : (
+        <p className="note" role="status">
+          {changed}
+        </p>
+      )}
+      <LearningAnswerView key={generation} onChanged={onChanged} />
     </article>
   );
 }

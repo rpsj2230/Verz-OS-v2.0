@@ -37,7 +37,7 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4, M42.6.5
+Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21
 """
 
 from __future__ import annotations
@@ -169,6 +169,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "instructions": AuditAction.INSTRUCTIONS,
         "webhook": AuditAction.WEBHOOK,
         "erasure": AuditAction.ERASURE,
+        "memory": AuditAction.MEMORY,
     }
 )
 
@@ -309,6 +310,18 @@ class ErasureChange(enum.StrEnum):
     ERASED = "erased"
     HELD = "held"
     INCOMPLETE = "incomplete"
+
+
+class MemoryChange(enum.StrEnum):
+    """What a correction did to a memory. The two values `0061`'s trigger writes.
+
+    The words of `brain.memory.correction.Correction`, restated rather than imported for the reason
+    the `TYPE_CHECKING` block above gives about keeping this package underneath the layers that
+    record into it, and held equal to that enum by a test.
+    """
+
+    SUPERSEDED = "superseded"
+    DEMOTED = "demoted"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -926,4 +939,17 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.ERASURE, subject("erasure", request_id), {"change": change.value}
+        )
+
+    def memory(self, *, memory_id: str, change: MemoryChange) -> AuditEntry:
+        """Record that a correction marked a memory: superseded it, or demoted it.
+
+        Written in a deployed database by `0061`'s trigger on `mem.correction`, on the insert, and
+        held to this method's details by a test. **Never what the memory says, and never the memory
+        that replaced it**: the statement is `brain.memory.correction`'s refusal to keep a
+        transcript in a correction log, and the replacement is on the correction's own row. There is
+        no parameter through which either could arrive.
+        """
+        return self._write(
+            AuditAction.MEMORY, subject("memory", memory_id), {"change": change.value}
         )

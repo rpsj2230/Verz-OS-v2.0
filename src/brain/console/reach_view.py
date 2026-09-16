@@ -160,6 +160,7 @@ from brain.gate.leash import Leash
 from brain.memory.correction import Correction, Demotion, Supersession
 from brain.memory.digest import Learning, MemoryItem, memory_item
 from brain.memory.formation import Formation, MemoryKind, Recollection, may_recall
+from brain.memory.recall import standing
 from brain.memory.signals import Signal
 from brain.memory.tiers import (
     PROMOTION_AGREEMENT,
@@ -1017,6 +1018,8 @@ def split_memory(
     *,
     now: datetime,
     where: Mapping[str, object] | None = None,
+    supersessions: Iterable[Supersession] = (),
+    demotions: Iterable[Demotion] = (),
 ) -> SplitMemoryView:
     """Everything this reader may have, split by where it came from (M39.4.1.2).
 
@@ -1026,10 +1029,17 @@ def split_memory(
 
     A session memory in the input raises rather than being dropped: dropping it silently would
     make a viewer that is missing half a conversation look like a viewer that is complete.
+
+    **What a correction marked is not in either list**, through `brain.memory.recall.standing`,
+    which is the step recall takes before reach. Since 2026-09-17 a correction is stored, and a
+    viewer that went on listing an undone learning as remembered would say the undo did nothing.
+    The marked memory stays in `revisions`, which is where a person reads what changed.
     """
     curated: list[MemoryText] = []
     extracted: list[MemoryText] = []
-    for learning, statement in entries:
+    for learning, statement in standing(
+        entries, _entry_id, supersessions=supersessions, demotions=demotions
+    ):
         text = readable(learning, statement, reader, now=now, where=where)
         if text is None:
             continue
@@ -1042,6 +1052,10 @@ def split_memory(
         curated=tuple(curated),
         extracted=tuple(extracted),
     )
+
+
+def _entry_id(entry: tuple[Remembered, str]) -> str:
+    return entry[0].memory_id
 
 
 @dataclass(frozen=True)
@@ -1096,6 +1110,15 @@ def revisions(
     The trigger comes from a `Supersession` or a `Demotion` and never from this module's own
     reading of the two statements. A viewer that inferred why something changed by comparing
     text would be a classifier deciding what a correction meant.
+
+    **Two kinds of step since 2026-09-17, when corrections began to be stored.** A memory that
+    replaced another is a step at the instant it formed, with the supersession that marked what
+    it replaced, and that supersession has to name both of them: until then the step took any
+    supersession of the replaced memory, so a memory replaced twice showed the second
+    replacement's trigger on the first. And a supersession that no formed memory accounts for is
+    a step of its own, at the correction's instant: this is an undo, which puts back the memory
+    a learning replaced by marking the learning, and without it the history of a memory a person
+    restored would say nothing had happened since it was replaced.
     """
     readable_text: dict[str, str] = {}
     for learning, statement in chain:
@@ -1103,8 +1126,9 @@ def revisions(
         if text is not None:
             readable_text[learning.memory_id] = text.statement
 
-    by_superseded = {one.superseded_id: one for one in supersessions}
+    marks = tuple(supersessions)
     demoted = {one.memory_id: one for one in demotions}
+    formed = {(learning.replaced_id, learning.memory_id) for learning, _ in chain}
 
     found: list[Revision] = []
     for learning, _ in chain:
@@ -1112,7 +1136,11 @@ def revisions(
             continue
         previous = learning.replaced_id
         both = previous is not None and previous in readable_text
-        supersession = by_superseded.get(previous) if previous is not None else None
+        supersession = _latest(
+            one
+            for one in marks
+            if one.superseded_id == previous and one.by_id == learning.memory_id
+        )
         demotion = demoted.get(learning.memory_id)
 
         trigger: Signal | None = None
@@ -1137,7 +1165,38 @@ def revisions(
                 correction=correction,
             )
         )
+
+    for one in marks:
+        if (one.superseded_id, one.by_id) in formed or one.by_id not in readable_text:
+            continue
+        found.append(
+            Revision(
+                memory_id=one.by_id,
+                replaced_id=one.superseded_id,
+                at=one.at,
+                diff=(
+                    _diff_lines(readable_text[one.superseded_id], readable_text[one.by_id])
+                    if one.superseded_id in readable_text
+                    else ()
+                ),
+                trigger=one.prompted_by,
+                correction=Correction.SUPERSEDED,
+            )
+        )
     return tuple(sorted(found, key=lambda one: (one.at, one.memory_id)))
+
+
+def _latest(found: Iterable[Supersession]) -> Supersession | None:
+    """The newest of these supersessions, or `None`.
+
+    A tie keeps the first the store returned. Every candidate names the same two memories, so
+    the step it describes is the same step, and only its trigger could differ.
+    """
+    newest: Supersession | None = None
+    for one in found:
+        if newest is None or one.at > newest.at:
+            newest = one
+    return newest
 
 
 @dataclass(frozen=True)
@@ -1318,6 +1377,11 @@ class TierOneRow:
     change: Change
     control_writes: Correction
     learned_at: datetime
+    #: Whether it still takes effect. False once a correction has marked it, whichever way and
+    #: whoever wrote it, which is `brain.memory.recall.standing`'s answer, so the row a person just
+    #: undid says so rather than offering the undo again. A later correction the other way puts it
+    #: back, and this reads that too.
+    in_effect: bool = True
 
 
 @dataclass(frozen=True)
@@ -1359,6 +1423,8 @@ def tier_one_rows(
     learnings: Sequence[Learning],
     *,
     agent_id: str,
+    supersessions: Iterable[Supersession] = (),
+    demotions: Iterable[Demotion] = (),
 ) -> tuple[TierOneRow, ...]:
     """Every automatic change this agent made, newest first (M39.4.2.2).
 
@@ -1369,21 +1435,33 @@ def tier_one_rows(
     `control_writes` is `SUPERSEDED` when there is an earlier memory to restore and `DEMOTED`
     when there is not, which is the same rule `brain.memory.digest.undo` applies, read off the
     same field rather than decided again here.
+
+    `in_effect` is whether the corrections handed in leave it standing, through
+    `brain.memory.recall.standing`, so an undone change stays listed and says it was undone.
     """
     found = [
         one for one in learnings if one.agent_id == agent_id and one.proposal.tier is Tier.AUTOMATIC
     ]
+    still = {
+        one.memory_id
+        for one in standing(found, _learning_id, supersessions=supersessions, demotions=demotions)
+    }
     return tuple(
         TierOneRow(
             memory_id=one.memory_id,
             change=one.proposal.change,
             control_writes=(Correction.SUPERSEDED if one.replaced_id else Correction.DEMOTED),
             learned_at=one.formation.formed_at,
+            in_effect=one.memory_id in still,
         )
         for one in sorted(
             found, key=lambda one: (-one.formation.formed_at.timestamp(), one.memory_id)
         )
     )
+
+
+def _learning_id(learning: Learning) -> str:
+    return learning.memory_id
 
 
 def tier_two_rows(
@@ -1461,7 +1539,7 @@ def tier_three_routing(
 def _department_of(scope: Scope) -> str:
     """The one department a scope names, or an empty string.
 
-    Equality clauses only, which is `brain.memory.formation._place_of`'s rule and holds here
+    Equality clauses only, which is `brain.memory.formation.place_of`'s rule and holds here
     for the same reason: a scope saying "department in (a, b)" names two queues and not one,
     and picking either would be this module deciding where somebody's access change is
     reviewed.

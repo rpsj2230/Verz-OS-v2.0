@@ -293,6 +293,7 @@ export const ACTION_PHRASES: Readonly<Record<string, string>> = Object.freeze({
   instructions: "changed the instructions of",
   webhook: "changed the webhook subscriber",
   erasure: "filed or finished",
+  memory: "corrected",
 });
 
 /** The phrase for an action, or its code when the vocabulary has outgrown this console. */

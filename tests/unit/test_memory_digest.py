@@ -670,13 +670,35 @@ def test_no_second_caller_of_a_memory_listing_has_arrived_unargued() -> None:
     a memory formed under a grant since revoked leaves the page although its owner is standing
     in front of it.
 
+    **Three more arrived on 2026-09-17, when learnings and corrections began to be stored**
+    (M27.7.21, M27.7.22). `brain.console.govern_estate` calls `review.agent_memory` for the
+    learning review, one agent at a time, with that agent's own ceiling, so the review is read at
+    `E_run` exactly as the agent's tab is; its sibling is
+    `test_a_learning_is_in_view_only_through_an_agent_whose_ceiling_reaches_its_memory` in
+    `tests/unit/test_govern_estate.py`.
+    `brain.estate_routes` builds a `Learning` from stored rows and hands it to that decision and
+    to the store, and lists nothing itself; its sibling is
+    `test_a_learning_the_reader_may_not_recall_is_absent_from_the_review_and_cannot_be_undone` in
+    `tests/unit/test_estate_routes.py`.
+    `brain.ops.memory_store` calls `digest.undo` and `review.edit` to write what they decide and
+    lists nothing, so it has no reach to get wrong; what it has is an order, and its sibling is
+    `test_an_undo_locks_the_memory_reads_its_marks_and_the_clock_then_writes_one_correction` in
+    `tests/unit/test_memory_store.py`.
+
     Delete this and the gap stops being visible, and a listing gets wired at the wrong reach
     by somebody who saw that a caller already existed and assumed the question was settled."""
-    assert _callers_of("brain.memory.review") == ["brain.console.own_things"]
+    assert _callers_of("brain.memory.review") == [
+        "brain.console.govern_estate",
+        "brain.console.own_things",
+        "brain.ops.memory_store",
+    ]
     assert _callers_of("brain.memory.digest") == [
+        "brain.console.govern_estate",
         "brain.console.own_things",
         "brain.console.reach_view",
+        "brain.estate_routes",
         "brain.member_activity",
+        "brain.ops.memory_store",
     ]
 
 

@@ -81,6 +81,7 @@ from brain.tables.identity import (
     one_of,
 )
 from brain.tables.knowledge import KnowledgeItemRow
+from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.operation import OperationRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
@@ -251,6 +252,11 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0060_erasure_request. Points at nothing: the person and the administrator are values, so the
     # record that an erasure was asked for outlives the rows it erased.
     "ops.erasure_request",
+    # 0061_learning_and_correction. Neither points at anything: a learning and a correction name
+    # memories by id, and a memory id may be in either of 0018's tables, so a key into one would
+    # refuse the other. The person who recorded a correction is a value, as every actor is.
+    "mem.learning",
+    "mem.correction",
 )
 
 __all__ = [
@@ -271,6 +277,7 @@ __all__ = [
     "ConnectorConnectionRow",
     "ControlRunRow",
     "ConversationRow",
+    "CorrectionRow",
     "CredentialWriteRow",
     "DataExportRow",
     "DepartmentRow",
@@ -284,6 +291,7 @@ __all__ = [
     "FieldPolicyRow",
     "GrantsVersionRow",
     "KnowledgeItemRow",
+    "LearningRow",
     "LegalHoldRow",
     "MessageRole",
     "MessageRow",

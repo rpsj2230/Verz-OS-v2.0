@@ -258,6 +258,10 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
     request rather than by age, which is why it is not RETENTION, and the grants it retires are
     REVOKEs already.
 
+    `memory` records a correction marking a memory, superseded or demoted, written by `0061`'s
+    trigger on `mem.correction`. It is what an undo on the Learning screen leaves, and it takes no
+    access away from anybody, which is why it is not REVOKE.
+
     Note that the document's "deny" and "revoke" are one item and two members here. A deny
     is a request refused at runtime, a revoke is a grant taken away by an administrator;
     they differ by orders of magnitude in frequency and they answer different questions.
@@ -286,6 +290,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "agent instructions edited or given back": AuditAction.INSTRUCTIONS,
         "webhook subscriber registered, rotated or switched off": AuditAction.WEBHOOK,
         "erasure requested, then erased, held or left incomplete": AuditAction.ERASURE,
+        "memory superseded or demoted by a correction": AuditAction.MEMORY,
     }
     assert set(required.values()) == set(AuditAction)
     assert {action.value for action in AuditAction} == {
@@ -312,6 +317,7 @@ def test_the_auditable_action_set_is_closed_and_complete() -> None:
         "instructions",
         "webhook",
         "erasure",
+        "memory",
     }
     # Every value fits the column, which is `VARCHAR(16)`. This is not decoration: the two
     # other names considered for the eighth member were `attachment_change` at seventeen

@@ -92,7 +92,6 @@ export interface MemoryPage {
   readonly history: readonly Revision[];
   readonly consideredPerKind: number;
   readonly staleness: string | null;
-  readonly correctionsAreNotRecorded: boolean;
   readonly editIsNotWritable: boolean;
 }
 
@@ -105,7 +104,6 @@ function nothing(subject: string): MemoryPage {
     consideredPerKind: 0,
     staleness: null,
     // True on an unreadable body, for `readSkillsPage`' reason.
-    correctionsAreNotRecorded: true,
     editIsNotWritable: true,
   };
 }
@@ -122,7 +120,6 @@ export function readMemoryPage(payload: unknown, subject: string): MemoryPage {
     history?: unknown;
     considered_per_kind?: unknown;
     staleness?: unknown;
-    corrections_are_not_recorded?: unknown;
     edit_is_not_writable?: unknown;
   };
   if (!Array.isArray(body.curated) || !Array.isArray(body.extracted)) {
@@ -137,7 +134,6 @@ export function readMemoryPage(payload: unknown, subject: string): MemoryPage {
     consideredPerKind:
       typeof body.considered_per_kind === "number" ? body.considered_per_kind : 0,
     staleness: typeof staleness?.message === "string" ? staleness.message : null,
-    correctionsAreNotRecorded: body.corrections_are_not_recorded !== false,
     editIsNotWritable: body.edit_is_not_writable !== false,
   };
 }

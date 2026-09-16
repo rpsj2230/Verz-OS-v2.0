@@ -104,9 +104,10 @@ def test_oversight_is_every_screen_read_below_content_both_planes_and_the_decide
 def test_every_audit_kind_is_decided_and_the_ones_naming_business_records_are_withheld() -> None:
     """See `AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA`. Delete this and a kind added
     to the ledger is granted to every first administrator by default, and the two that name a
-    business record or an artefact can be granted by a tidy-up nobody argued."""
+    business record or an artefact can be granted by a tidy-up nobody argued. `memory` joined them
+    on 2026-09-17: a correction names a memory, and whether one exists is recall's to disclose."""
     assert set(AUDIT_KINDS_WITHHELD) <= SUBJECT_KINDS
-    assert {"entity", "artifact"} == set(AUDIT_KINDS_WITHHELD)
+    assert {"entity", "artifact", "memory"} == set(AUDIT_KINDS_WITHHELD)
     assert all(reason.strip() for reason in AUDIT_KINDS_WITHHELD.values())
     for kind in AUDIT_KINDS_WITHHELD:
         assert CAPABILITY_BY_KIND[kind].value not in OVERSIGHT

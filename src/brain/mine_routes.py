@@ -84,13 +84,7 @@ from brain.console.own_things import is_own
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.core.errors import Absent, Failed
-from brain.estate_routes import (
-    MAX_MEMORIES_CONSIDERED,
-    inferred_about,
-    recorded_corrections,
-    stated_about,
-    stored_memory,
-)
+from brain.estate_routes import MAX_MEMORIES_CONSIDERED, RememberedAbout, remembered_about
 from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.member.shell import disclosure_line, member_screen
 from brain.member_activity import my_agents, personal_budget
@@ -101,7 +95,6 @@ from brain.routing_routes import sessions_of
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
 from brain.tables.knowledge import KnowledgeItemRow
-from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
 from brain.tables.spend import SpendActualRow
 
 log = structlog.get_logger()
@@ -342,8 +335,7 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
         list[SpendActualRow],
         list[AgentRow],
         list[KnowledgeItemRow],
-        list[PersistentMemoryRow],
-        list[AdaptiveMemoryRow],
+        RememberedAbout,
         list[BudgetRow],
     ]:
         questions = int((await session.execute(questions_asked(me, this_month, now))).scalar_one())
@@ -352,21 +344,16 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
         items = list(
             (await session.execute(items_stewarded_by(me, MAX_OWN_ITEMS + 1))).scalars().all()
         )
-        stated = list(
-            (await session.execute(stated_about(me, MAX_MEMORIES_CONSIDERED))).scalars().all()
-        )
-        inferred = list(
-            (await session.execute(inferred_about(me, MAX_MEMORIES_CONSIDERED))).scalars().all()
-        )
+        remembered = await remembered_about(session, me, MAX_MEMORIES_CONSIDERED)
         ceilings: list[BudgetRow] = []
         for period in (BudgetPeriod.DAY, BudgetPeriod.MONTH):
             found = await in_force(session, (BudgetLevel.USER, me, period), now)
             if found is not None:
                 ceilings.append(found)
-        return questions, runs, agents, items, stated, inferred, ceilings
+        return questions, runs, agents, items, remembered, ceilings
 
     served = await _console_reads(request).read(load, now=now)
-    questions, runs, agent_rows, item_rows, stated, inferred, ceilings = served.value
+    questions, runs, agent_rows, item_rows, stored, ceilings = served.value
 
     actuals = [one for one in (actual_of(row) for row in runs) if one is not None]
     records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
@@ -408,16 +395,13 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
 
     owned = [row for row in item_rows[:MAX_OWN_ITEMS] if is_own(me, row.owner_id)]
 
-    memory_rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
-    entries = [found for found in (stored_memory(row) for row in memory_rows) if found is not None]
-    supersessions, demotions = recorded_corrections()
     remembered = subject_memory(
         subject_id=me,
-        entries=entries,
+        entries=stored.entries,
         reader=asked.reach,
         now=now,
-        supersessions=supersessions,
-        demotions=demotions,
+        supersessions=stored.corrections.supersessions,
+        demotions=stored.corrections.demotions,
     )
 
     return MineWorkspaceView(

@@ -20,9 +20,16 @@
  * colleague can be sent the page being argued about. A list of the people there is memory about
  * would be a directory of people, which the decision refuses to be.
  *
- * **Nothing here edits or deletes a memory, and the page says why.** An edit and a delete both
- * write a correction beside the memory they change, and nothing on this install stores one. For
- * the same reason no revision carries a diff yet: nothing records what a memory replaced.
+ * **Every change is a revision with its diff and what triggered it.** Since 2026-09-17 what a
+ * memory replaced and every correction are stored, so a memory that replaced another is a step
+ * with the diff between the two and the signal that prompted it, and an undo from the Learning
+ * screen is a step of its own naming the memory it put back. A memory a correction marked is no
+ * longer listed as remembered and stays in the history. A diff is drawn only where the API admitted
+ * this reader to both sides; the page adds nothing.
+ *
+ * **Nothing here edits or deletes a memory, and the page says why.** An edit is written beside the
+ * memory it changes, and the control belongs on a person's own memory tab, not on a screen for
+ * reading somebody else's.
  *
  * **Nothing here decides who may read anything.** A memory this reader may not recall is absent,
  * and the page for a person with such memories is identical to the page for a person with none,
@@ -69,15 +76,14 @@ export const NONE_ON_THIS_SIDE = "Nothing to show.";
 
 /** In place of the edit and delete controls. */
 export const EDIT_NOT_OFFERED =
-  "A memory cannot be edited or deleted from this screen. Either one writes a correction beside " +
-  "the memory it changes, so the old sentence stays on the record, and nothing on this install " +
-  "stores a correction yet.";
+  "A memory cannot be edited or deleted from this screen. A tier-one learning is undone from the " +
+  "Learning screen, and the change appears in the history below with what the memory said before.";
 
-/** Beside the history, while corrections are not recorded. */
-export const NO_DIFFS_YET =
-  "No revision here shows a change yet. A change is recorded as a newer memory replacing an older " +
-  "one, and nothing on this install records what a memory replaced, so each entry is the moment a " +
-  "memory was formed.";
+/** Beside the history: how to read a step. */
+export const HOW_TO_READ_THE_HISTORY =
+  "Each step is a memory forming, replacing another or being put back. Lines starting with a minus " +
+  "are what it said before, lines starting with a plus are what it says now, and a step shows no " +
+  "lines when you may not read both sides.";
 
 /** In place of the design's "Learning tiers active" row. */
 export const TIERS_ARE_PER_AGENT =
@@ -198,7 +204,7 @@ function MemoryAnswerView({ subject }: { readonly subject: string }) {
 
       <section className="card">
         <h2>Change history</h2>
-        {page.correctionsAreNotRecorded ? <p className="note">{NO_DIFFS_YET}</p> : null}
+        <p className="note">{HOW_TO_READ_THE_HISTORY}</p>
         {page.history.length === 0 ? (
           <p className="note">{NONE_ON_THIS_SIDE}</p>
         ) : (
@@ -216,7 +222,7 @@ function MemoryAnswerView({ subject }: { readonly subject: string }) {
               </thead>
               <tbody>
                 {page.history.map((one) => (
-                  <tr key={one.memory_id}>
+                  <tr key={`${one.memory_id}-${one.at}-${one.replaced_id ?? ""}`}>
                     <td>
                       <time dateTime={one.at}>{dayOf(one.at)}</time>
                     </td>
@@ -226,7 +232,7 @@ function MemoryAnswerView({ subject }: { readonly subject: string }) {
                     <td>{one.replaced_id === null ? "" : <code>{one.replaced_id}</code>}</td>
                     <td>
                       {one.diff.length === 0 ? (
-                        "formed"
+                        one.replaced_id === null ? "formed" : "no change you may read"
                       ) : (
                         <ul>
                           {one.diff.map((line, index) => (

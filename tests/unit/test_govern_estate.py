@@ -37,6 +37,7 @@ from pathlib import Path
 
 import pytest
 
+from brain.agents.model import AgentAudience, AgentAuthority, AgentRecord
 from brain.console import govern_estate as estate_module
 from brain.console.agent_output import Artifact, ArtifactKind, basis_over
 from brain.console.govern import Placed
@@ -47,6 +48,7 @@ from brain.console.govern_estate import (
     NAMES_THAT_WOULD_BE_A_BULK_CONTROL,
     NAMES_THAT_WOULD_BE_A_PREDICATE,
     PROMOTION_APPROVER_SCREEN,
+    UNDO_AUTHORITY,
     EstateError,
     LearningReview,
     LibraryItem,
@@ -55,9 +57,12 @@ from brain.console.govern_estate import (
     artifact_estate,
     departments_represented,
     estate_gaps,
+    learning_estate,
     learning_review,
+    learnings_in_view,
     leash_estate,
     library_rows,
+    may_undo,
     rung_estate,
     skill_queue,
     spans_departments,
@@ -81,7 +86,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.injection import AutonomyTier
 from brain.gate.leash import Leash, LeashEntry
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
-from brain.memory.correction import Correction
+from brain.memory.correction import Correction, Demotion
 from brain.memory.digest import Learning
 from brain.memory.formation import Formation, MemoryKind
 from brain.memory.signals import Signal
@@ -853,3 +858,174 @@ def test_nothing_in_this_module_computes_a_reach() -> None:
     source = Path(str(estate_module.__file__)).read_text(encoding="utf-8")
 
     assert intersections_in(source) == ()
+
+
+# ------------------------------------------ the review over what is stored (M27.7.21)
+def an_agent(agent_id: str, *capabilities: str) -> AgentRecord:
+    """An agent every reader may see, whose ceiling holds these capabilities everywhere."""
+    return AgentRecord(
+        agent_id=agent_id,
+        display_name=agent_id.replace("_", " ").title(),
+        persona="Answers questions briefly.",
+        audience=AgentAudience(level=Visibility.COMPANY, owner_id="u_steward"),
+        authority=AgentAuthority(
+            scope=Scope(clauses=()),
+            capabilities=tuple(Capability(value=one) for one in capabilities),
+            allowed_tools=frozenset(),
+        ),
+        created_by="u_steward",
+    )
+
+
+def a_stored_learning(
+    memory_id: str,
+    change: Change = Change.PREFERENCE,
+    *,
+    scope: Scope | None = None,
+    agent_id: str = DESK,
+) -> Learning:
+    """A learning as the route builds one from stored rows, formed in a place the tests choose."""
+    return Learning(
+        memory_id=memory_id,
+        proposal=propose(change, subject=f"subject:{memory_id}"),
+        formation=Formation(
+            principal_id="u_subject",
+            capabilities=(Capability(value="read:client.name"),),
+            scope=scope if scope is not None else Scope(clauses=()),
+            ent_hash="0" * 32,
+            formed_at=NOW - timedelta(hours=1),
+            kind=MemoryKind.ADAPTIVE,
+        ),
+        evidence=frozenset({Signal.REASKED}),
+        agent_id=agent_id,
+    )
+
+
+def test_the_undo_authority_is_matched_against_where_the_memory_was_formed() -> None:
+    """The authority in finance undoes a tier-one learning formed in finance and not one formed in
+    web, the authority over everything undoes both, and a reader holding every read and no authority
+    undoes neither. Delete this and `admin:learning` anywhere undoes everything, which puts one
+    department's administrator in charge of what the system recalls for all of them."""
+    finance = a_stored_learning("m_finance", scope=in_department(FINANCE))
+    web = a_stored_learning("m_web", scope=in_department(MAINTENANCE))
+    in_finance = holding(UNDO_AUTHORITY.value, scope=in_department(FINANCE))
+    everywhere = holding(UNDO_AUTHORITY.value)
+    reader = holding("read:learning", "read:client.name")
+
+    assert (may_undo(in_finance, finance, NOW), may_undo(in_finance, web, NOW)) == (True, False)
+    assert (may_undo(everywhere, finance, NOW), may_undo(everywhere, web, NOW)) == (True, True)
+    assert (may_undo(reader, finance, NOW), may_undo(reader, web, NOW)) == (False, False)
+
+
+def test_a_memory_formed_in_no_one_place_is_undone_only_under_the_authority_everywhere() -> None:
+    """A memory whose scope names no department has no place a department's grant could match, so a
+    grant in one department fails closed and the grant over everything admits it. Delete this and a
+    missing field satisfies a clause, which is the widening `brain.console.govern.NOWHERE`
+    refuses."""
+    nowhere = a_stored_learning("m_nowhere")
+
+    assert (
+        may_undo(holding(UNDO_AUTHORITY.value, scope=in_department(FINANCE)), nowhere, NOW) is False
+    )
+    assert may_undo(holding(UNDO_AUTHORITY.value), nowhere, NOW) is True
+
+
+def test_only_a_tier_one_learning_may_be_undone_whatever_the_authority() -> None:
+    """Tier two is promoted by agreement and tier three is decided by a person, and neither is
+    undone from a review. Delete this and the undo reaches a gated change, which is a person
+    deciding a scope widening by pressing something that says undo."""
+    everywhere = holding(UNDO_AUTHORITY.value)
+
+    assert may_undo(everywhere, a_stored_learning("m_one"), NOW) is True
+    assert may_undo(everywhere, a_stored_learning("m_two", Change.FAST_PATH_RULE), NOW) is False
+    assert (
+        may_undo(
+            everywhere,
+            a_stored_learning("m_three", Change.SCOPE_WIDENING, scope=in_department(FINANCE)),
+            NOW,
+        )
+        is False
+    )
+
+
+def test_a_learning_is_in_view_only_through_an_agent_whose_ceiling_reaches_its_memory() -> None:
+    """The same reader, who holds the memory's capability, is shown a learning through an agent
+    whose ceiling holds it and not one of the same kind through an agent whose ceiling does not; a
+    reader without the capability is shown neither. Delete this and the review is read at the
+    caller's own reach, which is an agent's tab with its lens taken off."""
+    desk, blind = an_agent(DESK, "read:client.name"), an_agent(FINANCE_AGENT)
+    learnings = (
+        a_stored_learning("m_desk"),
+        a_stored_learning("m_blind", agent_id=FINANCE_AGENT),
+    )
+
+    shown = learnings_in_view(
+        records=(desk, blind),
+        learnings=learnings,
+        caller=holding("read:client.name"),
+        now=NOW,
+    )
+    unshown = learnings_in_view(
+        records=(desk, blind), learnings=learnings, caller=holding("read:learning"), now=NOW
+    )
+
+    assert {agent: [one.memory_id for one in theirs] for agent, theirs in shown.items()} == {
+        DESK: ["m_desk"],
+        FINANCE_AGENT: [],
+    }
+    assert all(theirs == () for theirs in unshown.values())
+
+
+def test_a_stored_review_keeps_tiers_apart_marks_an_undone_change_and_skips_an_unroutable_one() -> (
+    None
+):
+    """Over stored learnings: tier one lists both changes with the undone one out of effect, tier
+    two lists the rule, and a gated change whose scope names no department is absent while a
+    routable one is listed. Delete this and one unroutable row fails every reader's review, or an
+    undone change reads as still applied."""
+    review = learning_estate(
+        basis=Basis.EVERYONE,
+        records=(an_agent(DESK, "read:client.name"),),
+        learnings=(
+            a_stored_learning("m_undone"),
+            a_stored_learning("m_applied"),
+            a_stored_learning("m_rule", Change.FAST_PATH_RULE),
+            a_stored_learning("m_unroutable", Change.SCOPE_WIDENING),
+            a_stored_learning("m_routed", Change.SCOPE_WIDENING, scope=in_department(MAINTENANCE)),
+        ),
+        caller=holding("read:client.name"),
+        now=NOW,
+        demotions=(Demotion(memory_id="m_undone", field="subject:m_undone", at=NOW),),
+    )
+
+    assert {(one.memory_id, one.in_effect) for one in review.tier_one} == {
+        ("m_undone", False),
+        ("m_applied", True),
+    }
+    assert [one.memory_id for one in review.tier_two] == ["m_rule"]
+    assert review.tier_three is not None
+    assert [(one.memory_id, one.department) for one in review.tier_three] == [
+        ("m_routed", MAINTENANCE)
+    ]
+
+
+def test_a_memory_viewer_leaves_out_what_a_correction_marked_and_keeps_it_in_the_history() -> None:
+    """The subject's demoted memory is absent from what is remembered and present in the history as
+    demoted. Delete this and the viewer passes the corrections to the history alone, so an undo
+    shows in one half of the screen and not the other."""
+    kept = a_learning("m_kept", subject_principal="u_one")
+    undone = a_learning("m_undone", subject_principal="u_one")
+
+    view = subject_memory(
+        subject_id="u_one",
+        entries=((kept, "Kept."), (undone, "Undone.")),
+        reader=holding("read:client.name"),
+        now=NOW,
+        demotions=(Demotion(memory_id="m_undone", field="subject:m_undone", at=NOW),),
+    )
+
+    assert [one.memory_id for one in view.memory.extracted] == ["m_kept"]
+    assert {(one.memory_id, one.correction) for one in view.history} == {
+        ("m_kept", None),
+        ("m_undone", Correction.DEMOTED),
+    }

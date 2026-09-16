@@ -103,6 +103,11 @@ over HTTP, each calling the function here rather than restating it. `subject_mem
 `brain.console.reach_view.Remembered` rather than `Learning` for that route's reason: a stored
 memory row records no proposal, and a `Learning` built from one would carry an invented one.
 
+**Since 2026-09-17 the review and the viewer read what is stored.** `mem.learning` and
+`mem.correction` exist, so `learning_estate` assembles the review from stored learnings for the
+agents a caller may see, at the reach each agent's tab would admit, and `may_undo` decides who may
+undo a tier-one row. `subject_memory` hands the stored corrections to both of its halves.
+
 Task ids: M27.3.12, M27.3.13, M27.3.14
 Task ids: M27.3.15, M27.3.16, M27.3.17
 """
@@ -115,10 +120,12 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
+from brain.agents.model import AgentRecord, entitlement_ceiling
 from brain.console.agent_output import Artifact, basis_over, visible_artifacts
 from brain.console.govern import Placed, _in_reach
 from brain.console.reach_view import (
     LeashMatrix,
+    MemoryViewError,
     PromotionEvidence,
     Remembered,
     Revision,
@@ -130,13 +137,20 @@ from brain.console.reach_view import (
     revisions,
     rung_history,
     split_memory,
+    tier_one_rows,
+    tier_three_routing,
+    tier_two_rows,
 )
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import Basis
-from brain.core.entitlement import EntitlementSet
+from brain.core.entitlement import Capability, EntitlementSet
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.memory.correction import Demotion, Supersession
+from brain.memory.digest import Learning
+from brain.memory.formation import place_of
+from brain.memory.review import agent_memory
+from brain.memory.tiers import Tier
 from brain.ops.jobs import hidden_count_fields
 from brain.tools.review import QueueEntry, QueueSummary, summarise
 
@@ -599,6 +613,136 @@ def learning_review(
     )
 
 
+# ------------------------------------------ the review over what is stored (M27.7.21)
+#: The authority an undo of a tier-one learning is written under, matched against where the
+#: learning's memory was formed. See `AN_UNDO_IS_ADMINISTERED_WHERE_THE_MEMORY_WAS_FORMED`.
+UNDO_AUTHORITY: Final = Capability(value="admin:learning")
+
+#: Why the undo authority is matched against the memory's own place.
+AN_UNDO_IS_ADMINISTERED_WHERE_THE_MEMORY_WAS_FORMED: Final = (
+    "An undo changes what the system recalls for everybody who reaches a memory, so the "
+    "authority to press it is held over the place the memory is about: admin:learning in the "
+    "department it was formed in undoes it, and the same grant in another department does not. "
+    "The place is brain.memory.formation.place_of, which is where recall itself asks whether a "
+    "reader reaches a memory, so the two questions are asked of one place. A memory whose scope "
+    "names no single place is undone only under a grant over everything, which is "
+    "brain.console.govern.NOWHERE's argument: a missing field never satisfies a clause. Seeing the "
+    "row is not the authority: a reader of the Learning screen reads, and an undo is a write."
+)
+
+#: Why a learning the reader cannot recall is absent from the review rather than listed bare.
+A_LEARNING_IS_LISTED_ONLY_TO_A_READER_WHO_MAY_RECALL_IT: Final = (
+    "A tier-one row carries no statement, and it still says that a memory exists, what kind of "
+    "change it was and when the agent formed it. That is a fact about a conversation the reader "
+    "may not reach, so the review lists a learning only where brain.memory.review.agent_memory "
+    "admits it at E_run(caller, agent), the agent's own tab's decision and the same intersection "
+    "every run is held to. A review listing every learning of every visible agent would be the "
+    "per-agent tab with its lens taken off."
+)
+
+
+def may_undo(reach: EntitlementSet, learning: Learning, now: datetime) -> bool:
+    """Whether this caller may undo this learning (M27.7.21).
+
+    Tier one only: tier two is promoted by agreement and tier three is decided by a person on a
+    surface that records the decision, and neither is undone from a review. Then `UNDO_AUTHORITY`
+    in a scope admitting the place the memory was formed, through `brain.console.govern._in_reach`,
+    which is `scope_for` then `Scope.matches` and no arithmetic of its own. See
+    `AN_UNDO_IS_ADMINISTERED_WHERE_THE_MEMORY_WAS_FORMED`.
+
+    Says nothing about whether the caller may see the learning. The route asks that first, of
+    `learning_estate`, so a caller who may not see a row is refused before this is reached, in the
+    same words.
+    """
+    if learning.proposal.tier is not Tier.AUTOMATIC:
+        return False
+    place = {field: str(value) for field, value in place_of(learning.formation.scope).items()}
+    return _in_reach(reach, UNDO_AUTHORITY, place, now)
+
+
+def learnings_in_view(
+    *,
+    records: Sequence[AgentRecord],
+    learnings: Sequence[Learning],
+    caller: EntitlementSet,
+    now: datetime,
+) -> Mapping[str, tuple[Learning, ...]]:
+    """Per agent the caller may see, the learnings they may be told of, in the order given.
+
+    `records` are the agents the caller's audience covers, which the route decides with
+    `brain.agents.model.visible_agent_ids` before this is reached. Each agent's learnings go
+    through `brain.memory.review.agent_memory` with the agent's own ceiling, which computes
+    `E_run(caller, agent)` by the one `intersect` and asks `may_recall` of every row. See
+    `A_LEARNING_IS_LISTED_ONLY_TO_A_READER_WHO_MAY_RECALL_IT`.
+
+    A learning of an agent not in `records`, or of no agent, is in no list. That is an absence and
+    not a refusal, for the reason `agent_memory` gives about a learning formed with no agent
+    running.
+    """
+    found: dict[str, tuple[Learning, ...]] = {}
+    for record in records:
+        theirs = [one for one in learnings if one.agent_id == record.agent_id]
+        admitted = {
+            one.memory_id
+            for one in agent_memory(
+                now=now,
+                caller=caller,
+                agent_ceiling=entitlement_ceiling(record),
+                agent_id=record.agent_id,
+                learnings=theirs,
+            ).items
+        }
+        found[record.agent_id] = tuple(one for one in theirs if one.memory_id in admitted)
+    return found
+
+
+def learning_estate(
+    *,
+    basis: Basis,
+    records: Sequence[AgentRecord],
+    learnings: Sequence[Learning],
+    caller: EntitlementSet,
+    now: datetime,
+    supersessions: Iterable[Supersession] = (),
+    demotions: Iterable[Demotion] = (),
+) -> LearningReview:
+    """The learning review over what the install stores, for this caller (M27.7.21).
+
+    Every decision is somebody else's and is called rather than restated: which learnings the caller
+    may be told of is `learnings_in_view`, the rows per agent are `brain.console.reach_view`'s three
+    builders, whether an undone change is still in effect is `tier_one_rows` reading the corrections
+    through `brain.memory.recall.standing`, and the tiers are kept apart and tier three withheld on
+    the narrower basis by `learning_review`.
+
+    **A gated change the routing refuses is absent rather than the end of the screen.**
+    `tier_three_routing` refuses a gated change whose scope names no department, and a stored row
+    can be one. Asked one learning at a time, so one such row costs its own line and not every
+    reader's review; the absence is not reported, for `brain.govern_routes.
+    A_ROW_THE_TYPE_REFUSES_IS_A_ROW_AND_NOT_THE_END_OF_THE_SCREEN`'s reason.
+    """
+    marks = tuple(supersessions)
+    marked_down = tuple(demotions)
+    shown = learnings_in_view(records=records, learnings=learnings, caller=caller, now=now)
+    ones: dict[str, Sequence[TierOneRow]] = {}
+    twos: dict[str, Sequence[TierTwoRow]] = {}
+    threes: dict[str, Sequence[TierThreeRouting]] = {}
+    for agent_id, theirs in shown.items():
+        ones[agent_id] = tier_one_rows(
+            theirs, agent_id=agent_id, supersessions=marks, demotions=marked_down
+        )
+        twos[agent_id] = tier_two_rows(theirs, agent_id=agent_id, now=now)
+        routed: list[TierThreeRouting] = []
+        for one in theirs:
+            try:
+                routed.extend(tier_three_routing((one,), agent_id=agent_id))
+            except MemoryViewError:
+                continue
+        threes[agent_id] = tuple(routed)
+    return learning_review(
+        basis=basis, visible=shown.keys(), tier_one=ones, tier_two=twos, tier_three=threes
+    )
+
+
 # --------------------------------------------------------------- artifacts (M27.3.16)
 def artifact_estate(
     entries: Sequence[Artifact],
@@ -682,6 +826,10 @@ def subject_memory(
     this subject. The statement is handed in beside each learning because `Learning`
     deliberately does not carry one, and inventing a field for it would put the transcript
     back on the record that refuses to hold it.
+
+    The corrections reach both halves: `split_memory` leaves out what a correction marked, which is
+    recall's own first step, and `revisions` shows the step each correction was. So an undo on the
+    Learning screen moves a memory out of what is remembered and into the history in one reading.
     """
     if not subject_id.strip():
         msg = (
@@ -694,15 +842,19 @@ def subject_memory(
         for learning, statement in entries
         if learning.formation.principal_id == subject_id
     ]
+    marks = tuple(supersessions)
+    marked_down = tuple(demotions)
     return SubjectMemory(
         subject_id=subject_id,
-        memory=split_memory(theirs, reader, now=now, where=where),
+        memory=split_memory(
+            theirs, reader, now=now, where=where, supersessions=marks, demotions=marked_down
+        ),
         history=revisions(
             theirs,
             reader,
             now=now,
-            supersessions=supersessions,
-            demotions=demotions,
+            supersessions=marks,
+            demotions=marked_down,
             where=where,
         ),
     )
@@ -719,6 +871,8 @@ ESTATE_SIGNATURES: Final[tuple[Callable[..., object], ...]] = (
     artifact_estate,
     departments_represented,
     leash_estate,
+    learning_estate,
+    learnings_in_view,
     library_rows,
     rung_estate,
     skill_queue,

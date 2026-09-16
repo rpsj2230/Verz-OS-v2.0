@@ -7,11 +7,11 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 64 tables, from `brain.db.Base.metadata`.
+- 66 tables, from `brain.db.Base.metadata`.
 - 22 installation values, from `brain.install.INSTALLATION`.
-- 96 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 97 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 64 console addresses, from the route table in `console/src/App.tsx`.
-- 29 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 35 routes.
+- 30 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 36 routes.
 - 33 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
@@ -178,7 +178,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Knowledge bases, documents and data sources
 
 - **Screens:** `/library`, `/learning`, `/memory`, `/memory/:subject`, `/records`, `/records/:entity`, `/classification`, `/classification/:entity`, `/classification/:entity/:column`, `/artifacts`
-- **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`
+- **Tables:** `know.item`, `know.chunk`, `mem.adaptive`, `mem.persistent`, `mem.learning`, `mem.correction`, `gate.fast_path_rule`, `gate.field_policy`, `agent.artifact`
 - **Installation values:** `INSTALL_VECTOR_STORE`
 
 | Route | Called by |
@@ -190,9 +190,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/memory` | `/memory/:subject` |
 | `GET /api/v1/records/{entity}` | `/records/:entity` |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` |
+| `POST /api/v1/govern/learning/undo` | `/learning` |
 
 - **Gap.** A document or a data source cannot be added from the console after setup. Open leaf `M42.5.9`.
-- **Gap.** A learning cannot be undone and a memory cannot be corrected. Recorded: The routes say undo_is_not_writable and edit_is_not_writable on every answer: brain.estate_routes serves the reads and no write exists.
+- **Gap.** A memory cannot be edited from a screen, and a tier-two rule cannot be promoted nor a tier-three change decided. Recorded: brain.ops.memory_store writes an edit and no route offers one: the control belongs on a person's own memory tab, and the Memory screen says edit_is_not_writable. Nothing records agreement or a decision, which the Learning screen says in place of Promote and Decide.
 - **Gap.** A column's classification cannot be changed; a proposed change is reviewed and not applied. Recorded: brain.classification_routes mounts only the dry-run review, and tests/unit/test_classification_routes.py holds that nothing mounted there can change a classification.
 
 ### File and object storage
@@ -389,7 +390,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 29 of 35 write routes have all three proved or not applicable, 4 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 30 of 36 write routes have all three proved or not applicable, 4 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -405,6 +406,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/erasures` | `/retention` | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_a_request_is_filed_in_the_sessions_own_name_once_per_open_person_and_never_finished` in `tests/unit/test_erasure_store.py` (database, in CI) | `test_the_queue_carries_a_request_out_and_writes_what_each_store_did_and_what_it_could_not` in `tests/unit/test_erasure_store.py` (database, in CI) |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach` in `tests/unit/test_console_control_audit.py` (database, in CI) |
+| `POST /api/v1/govern/learning/undo` | `/learning` | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_reaches_the_row_the_ledger_and_what_is_recalled_next` in `tests/unit/test_memory_store.py` (database, in CI) | `test_an_undo_writes_the_correction_and_the_next_reading_no_longer_recalls_the_learning` in `tests/unit/test_estate_routes.py` |
 | `POST /api/v1/govern/legal-holds` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/legal-holds/lift` | `/retention` | `test_a_hold_is_placed_lifted_once_and_kept` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_hold_placed_through_the_store_keeps_its_rows_from_the_sweep_and_lifted_releases_them` in `tests/unit/test_console_control_audit.py` (database, in CI) |
 | `POST /api/v1/govern/prompts/{agent_id}` | `/prompts` | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt` in `tests/unit/test_console_control_audit.py` (database, in CI) |

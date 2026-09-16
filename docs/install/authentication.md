@@ -235,6 +235,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:feature` | running the system |
 | `admin:field_classification` | running the system |
 | `admin:halt` | running the system |
+| `admin:learning` | running the system |
 | `admin:legal_hold` | running the system |
 | `admin:operations_alert` | running the system |
 | `admin:operations_incident` | running the system |
@@ -304,6 +305,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `approve:action` | Approving a suspended action lets an agent act over data the first administrator cannot read. Approvals belong to whoever a department makes its approver. |
 | `read:audit.artifact` | A publish entry names an artefact, and who may see an artefact is decided by what it was built from, which an audit grant never asks. |
 | `read:audit.entity` | A merge entry names two business records, and the first administrator holds no scope over any business record. |
+| `read:audit.memory` | A correction entry names a memory, and who may know a memory exists is decided by the capabilities it was formed under, which an audit grant never asks. |
 
 Nor is any read of the company's data. What a person may read of that comes from grants somebody
 writes for them. **If you were expecting the administrator account to be able to read everything,

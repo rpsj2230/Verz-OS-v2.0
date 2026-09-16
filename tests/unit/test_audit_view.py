@@ -44,6 +44,7 @@ from brain.audit.record import (
     ErasureChange,
     InstructionsChange,
     LegalHoldChange,
+    MemoryChange,
     RetentionChange,
     RoutingChange,
     SettingChange,
@@ -409,6 +410,7 @@ CALLS: dict[str, dict[str, object]] = {
     },
     "webhook": {"subscriber_id": "billing_bridge", "change": WebhookChange.SECRET_REPLACED},
     "erasure": {"request_id": "r-1", "change": ErasureChange.INCOMPLETE},
+    "memory": {"memory_id": "m_learnt", "change": MemoryChange.SUPERSEDED},
 }
 
 

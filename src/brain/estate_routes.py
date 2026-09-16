@@ -1,25 +1,26 @@
-"""The knowledge library, the learning review and the memory viewer over HTTP, and what each
-one's store cannot yet tell it.
+"""The knowledge library, the learning review and the memory viewer over HTTP, what each one's
+store can tell it, and the one write among them.
 
 `brain.console.govern_estate` decides three Govern screens the design draws: SCREEN 7 of
 `docs/screens.html` is Knowledge, SCREEN 8 is Learning, and the memory card inside SCREEN 13
 is the change history a person's memory carries. `library_rows` and `departments_represented`
-decide what a reader may know exists and how the rows may be grouped, `learning_review` keeps
-the three tiers apart and withholds tier three on the narrower basis, and `subject_memory`
-decides which memories about one person a reader may read and which revisions they may diff.
-None of the three could be reached from a browser. This module is the read they sit behind,
-and nothing in it decides who may see anything: every route asks
-`brain.console.reads.permitted` whether its screen opens, loads, hands the rows to the
-function that owns the decision, and projects what comes back. See
+decide what a reader may know exists and how the rows may be grouped, `learning_estate` keeps
+the three tiers apart over what is stored and withholds tier three on the narrower basis, and
+`subject_memory` decides which memories about one person a reader may read and which revisions
+they may diff. This module is the read they sit behind and the undo beside the review, and
+nothing in it decides who may see anything: every route asks `brain.console.reads.permitted`
+whether its screen opens, loads, hands the rows to the function that owns the decision, and
+projects what comes back. See
 `brain.govern_routes.THE_SCREEN_DECIDES_NOTHING_AND_THE_CONSOLE_MODULE_DECIDES_EVERYTHING`.
 
-**All three stores are empty on every install today, and the routes are written for the day
-they are not.** `brain.knowledge.item_store.put_item` says in its own docstring that nothing
-calls it outside the tests. Nothing writes `mem.persistent` or `mem.adaptive` either, and
-nothing stores a learning's tier, the change it proposed or what it replaced. So the library
-and the viewer read real tables through real decisions and answer nothing, and the review has
-no table to read at all. Each response says which of its facts has no source rather than
-drawing an empty table that reads as a company with no knowledge, no learning and no memory.
+**Since 2026-09-17 the learning review and the memory viewer read stored learnings and
+corrections.** `mem.learning` holds what a learning proposed, which agent ran and what it
+replaced, and `mem.correction` holds every supersession and demotion, both from `0061`. The
+review reads the learnings of the agents a caller may see and the corrections naming them; the
+viewer reads a person's memories, what each replaced and the corrections naming them. Nothing
+yet forms a memory from a conversation on a running install, so on most installs both still
+answer empty, and neither says so with a flag any more: an empty review over a store that exists
+is an install where nothing has been learnt, which is now a fact the tables establish.
 
 **The library shows two facts per item, because the decision admits two.** `LibraryRow` is an
 item's reference and its visibility level, and `brain.console.govern_estate.
@@ -43,27 +44,29 @@ that finance holds at least a page of documents. The load is the whole retrievab
 bounded, and the page narrows what it already holds. See
 `A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT`.
 
-**The learning review is empty by construction, and tier-one undo is not a route.** Undoing a
-tier-one learning is `brain.memory.digest.undo`, which returns a `Supersession` or a `Demotion`
-for whoever owns the correction table, and there is no correction table. There is also nothing
-that recalls from memory at request time, so a written correction would change no answer.
-A route that accepted an undo would answer 200 for a write that reaches neither a row nor a
-behaviour, which is `docs/admin-console.md`'s "a control that renders but reaches nothing is
-worse than no control at all". See
-`AN_UNDO_WITH_NO_CORRECTION_STORE_REACHES_NEITHER_A_ROW_NOR_A_BEHAVIOUR`.
+**Undoing a tier-one learning is a confirmed, audited write.** `POST /govern/learning/undo`
+names one memory. The caller must open the Learning screen and hold `admin:learning` somewhere,
+before anything is loaded; then the learning must be one the review would show them, at the
+reach their run of its agent has, and `brain.console.govern_estate.may_undo` must admit the place
+its memory was formed. Every refusal is the one 404. The store decides and writes under a lock,
+`0061`'s trigger appends the ledger entry, and the next recall reads the correction: the memory
+viewer, a person's own memory tab and `brain.memory.recall.recall` all leave the undone memory
+out. The console confirms first, in the sentence `undo_says` serves. See
+`AN_UNDO_REACHES_A_ROW_A_LEDGER_ENTRY_AND_WHAT_IS_RECALLED`.
 
 **The memory viewer is asked about one person and says nothing about how much there is.** A
 subject is required, which is `brain.console.govern_estate.
 A_MEMORY_VIEWER_OVER_EVERY_SUBJECT_IS_A_DIRECTORY_OF_PEOPLE`. What this adds is the bound: the
 load is keyed by a name the caller typed, so a flag saying it came back full would say a
 person has at least that many memories, readable or not. See
-`A_TRUNCATION_FLAG_ON_A_LOOKUP_BY_PERSON_COUNTS_WHAT_IS_REMEMBERED_ABOUT_THEM`.
+`A_TRUNCATION_FLAG_ON_A_LOOKUP_BY_PERSON_COUNTS_WHAT_IS_REMEMBERED_ABOUT_THEM`. The review's
+bound is stated the same way and for the same reason: a flag over the learnings of the agents a
+caller may see counts learnings they may not recall.
 
 **Memory is a Govern screen and not a tab inside an agent, although SCREEN 13 draws it in
 one.** The design places a memory card on one agent's page and has no company-level memory
 screen. `brain.console.screens` registers `memory` under Govern, and the decision it serves,
-`subject_memory`, is keyed by the person a memory is about. Neither memory table records the
-agent that was running, so a per-agent tab would have nothing to select on.
+`subject_memory`, is keyed by the person a memory is about.
 
 **Whether a screen opens is `permitted` and it is asked before anything else.** The Library
 screen is the existence plane, Learning and Memory are the content plane, and a hand-written
@@ -73,10 +76,6 @@ one without.
 
 **Nothing here computes a reach.** There is no `.intersect(` in this module.
 `brain.console.workspace.intersections_in` is run over this source by its test.
-
-**What has never run.** This repository has no PostgreSQL, so neither load has been executed
-against one. What is tested is the statement each compiles to, every refusal and the order it
-happens in, and each decision reached through the real application.
 
 Task ids: M27.7.20, M27.7.21, M27.7.22
 """
@@ -91,18 +90,23 @@ from typing import Annotated, Final
 
 import structlog
 from fastapi import APIRouter, Query, Request
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain.agent_routes import every_agent, one_agent, record_of, viewer_of
+from brain.agents.model import AgentRecord, visible_agent_ids
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
 from brain.console.govern import NOWHERE, Placed
 from brain.console.govern_estate import (
+    UNDO_AUTHORITY,
     LibraryItem,
     departments_represented,
-    learning_review,
+    learning_estate,
+    learnings_in_view,
     library_rows,
+    may_undo,
     spans_departments,
     subject_memory,
 )
@@ -110,9 +114,6 @@ from brain.console.reach_view import (
     MemoryText,
     MemoryViewError,
     Revision,
-    TierOneRow,
-    TierThreeRouting,
-    TierTwoRow,
     provenance_of,
 )
 from brain.console.read_replica import StalenessBanner
@@ -124,12 +125,27 @@ from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
 from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
-from brain.memory.correction import Demotion, Supersession
+from brain.memory.correction import Correction, Supersession
+from brain.memory.digest import Learning, Undo
 from brain.memory.formation import Formation, MemoryKind
-from brain.memory.tiers import BLAST_RADIUS, Tier
+from brain.memory.signals import Signal
+from brain.memory.tiers import BLAST_RADIUS, Change, Proposal, Tier, TierError
+from brain.ops.memory_store import (
+    Corrections,
+    MemoryRecords,
+    StoredMemoryRecords,
+    corrections_naming,
+    corrections_of,
+    inferred_named,
+    learnings_named,
+    learnings_of_agents,
+    stated_named,
+)
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
+from brain.tables.agent import AgentRow
 from brain.tables.knowledge import KnowledgeItemRow
+from brain.tables.learning import MEMORY_ID_CHARS, LearningRow
 from brain.tables.memory import PRINCIPAL_ID_CHARS, AdaptiveMemoryRow, PersistentMemoryRow
 
 log = structlog.get_logger()
@@ -167,24 +183,14 @@ A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT: Final = (
     "filters and sorts the rows it already holds, saying that is what it did."
 )
 
-#: Why the learning review answers three empty tiers and a flag.
-NOTHING_STORES_A_LEARNING_SO_THE_REVIEW_HAS_NOTHING_TO_NARROW: Final = (
-    "brain.memory.digest.Learning is a proposal, a formation, evidence and what it replaced, "
-    "and no table in this repository stores one: mem.persistent and mem.adaptive hold the "
-    "formation and the statement and record no change kind, no tier and no agent. So "
-    "learning_review is asked over nothing, the tiers come back empty, and the response carries "
-    "learnings_are_not_recorded so the page says an empty review is an absence of a store and "
-    "not a system that has learnt nothing."
-)
-
-#: Why there is no undo route.
-AN_UNDO_WITH_NO_CORRECTION_STORE_REACHES_NEITHER_A_ROW_NOR_A_BEHAVIOUR: Final = (
-    "brain.memory.digest.undo returns a Supersession or a Demotion for whoever owns the table, "
-    "and nothing owns one: no migration creates a correction table. Nothing recalls from memory "
-    "while answering a question either, so a correction written somewhere would change no "
-    "answer. A route accepting an undo would answer success for a write that reaches no row and "
-    "no behaviour, and docs/admin-console.md says a control that cannot be proved end to end is "
-    "not shipped as working. undo_is_not_writable says so on the response."
+#: Why an undo is followed to the row, the ledger and recall rather than to the row alone.
+AN_UNDO_REACHES_A_ROW_A_LEDGER_ENTRY_AND_WHAT_IS_RECALLED: Final = (
+    "docs/admin-console.md says a control that renders but reaches nothing is worse than no "
+    "control. An undo reaches three places: brain.ops.memory_store writes the correction under a "
+    "lock, 0061's trigger appends a memory entry to the ledger naming who undid it, and "
+    "brain.memory.recall reads the correction, so the memory viewer and a person's own memory tab "
+    "stop listing the undone memory and list the one it replaced, if any. A second undo of the "
+    "same learning writes nothing and says so."
 )
 
 #: Why the memory viewer carries no truncation flag.
@@ -205,6 +211,9 @@ LIBRARY_SCREEN: Final = "library"
 LEARNING_SCREEN: Final = "learning"
 MEMORY_SCREEN: Final = "memory"
 
+#: Where the undo is posted, under the learning screen's own path.
+UNDO_PATH: Final = "/govern/learning/undo"
+
 
 # ------------------------------------------------------------------ the bounds
 
@@ -220,10 +229,35 @@ DEFAULT_ITEMS_CONSIDERED: Final = 500
 #: `A_TRUNCATION_FLAG_ON_A_LOOKUP_BY_PERSON_COUNTS_WHAT_IS_REMEMBERED_ABOUT_THEM`.
 MAX_MEMORIES_CONSIDERED: Final = 200
 
+#: The most agents one review is assembled over, in id order, before their audience is asked.
+MAX_AGENTS_CONSIDERED: Final = 500
+
+#: The most learnings one review is assembled from, most recently recorded first. Sent on every
+#: response as a constant, for the viewer's reason.
+MAX_LEARNINGS_CONSIDERED: Final = 500
+
 #: What a stated memory was worth when it was formed. `mem.persistent` has no confidence column
 #: and `brain.memory.digest.Learning.formed_confidence` defaults to certain for the same kind
 #: of memory, so a row read back is handed to recall on the terms it was written on.
 STATED_CONFIDENCE: Final = 1.0
+
+#: What the confirmation says an undo will do, by what it would write. Served, so the console
+#: shows the API's sentence rather than a copy of it.
+UNDO_SAYS: Final[Mapping[Correction, str]] = MappingProxyType(
+    {
+        Correction.SUPERSEDED: (
+            "The memory this learning replaced is put back and this one is marked, so the system "
+            "recalls the earlier memory again and stops recalling this one. Nothing is deleted: "
+            "both stay on the record, the Memory screen shows the change, and the audit trail "
+            "records that you undid it."
+        ),
+        Correction.DEMOTED: (
+            "This learning's memory is marked, so the system stops recalling it. Nothing is "
+            "deleted: it stays on the record, the Memory screen shows the change, and the audit "
+            "trail records that you undid it."
+        ),
+    }
+)
 
 
 # ------------------------------------------------------------------- the shapes
@@ -264,7 +298,8 @@ class LibraryPage(Page[LibraryRowView]):
 
 
 class TierOneView(BaseModel):
-    """One automatic change, as `brain.console.reach_view.TierOneRow` carries it."""
+    """One automatic change, as `brain.console.reach_view.TierOneRow` carries it, and whether
+    this reader is offered its undo."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -273,6 +308,11 @@ class TierOneView(BaseModel):
     #: What undoing it would write, which is a mark and never a removal.
     control_writes: str
     learned_at: datetime
+    #: False once a correction marked it. `TierOneRow.in_effect`.
+    in_effect: bool
+    #: Whether this reader may undo it now: in effect, and `may_undo` admits them. A reader who
+    #: may see the row and not undo it is shown the row without the control.
+    undo_offered: bool
 
 
 class TierTwoView(BaseModel):
@@ -301,8 +341,7 @@ class TierRuleView(BaseModel):
     """One tier and every kind of change that needs it, from `brain.memory.tiers.BLAST_RADIUS`.
 
     A constant of the product, identical on every install and for every reader, which is why
-    it may be shown to anybody who opens the screen. It is the one part of SCREEN 8 that is
-    true today whatever has been recorded.
+    it may be shown to anybody who opens the screen.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -329,10 +368,38 @@ class LearningReviewView(BaseModel):
     tier_two: tuple[TierTwoView, ...]
     tier_three: tuple[TierThreeView, ...] | None
     tiers: tuple[TierRuleView, ...]
-    #: See `NOTHING_STORES_A_LEARNING_SO_THE_REVIEW_HAS_NOTHING_TO_NARROW`.
-    learnings_are_not_recorded: bool = True
-    #: See `AN_UNDO_WITH_NO_CORRECTION_STORE_REACHES_NEITHER_A_ROW_NOR_A_BEHAVIOUR`.
-    undo_is_not_writable: bool = True
+    #: How many learnings the load reads at most. A constant, never a measurement.
+    considered: int = MAX_LEARNINGS_CONSIDERED
+    #: What the confirmation says an undo will do, keyed by `control_writes`. See `UNDO_SAYS`.
+    undo_says: dict[str, str]
+    staleness: StalenessBanner | None = None
+
+
+class UndoAsked(BaseModel):
+    """Which tier-one learning to undo. Its memory's id and nothing else.
+
+    No reason and no correction kind: what an undo writes is `brain.memory.digest.undo`'s to
+    decide from whether the learning replaced a memory, and a caller choosing would be a caller
+    able to demote a memory whose undo should have restored the one before it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    memory_id: str = Field(min_length=1, max_length=MEMORY_ID_CHARS, pattern=r"^[A-Za-z0-9_.@-]+$")
+
+
+class LearningUndoneView(BaseModel):
+    """What one undo did: the correction it wrote and when, or nothing, and the domain's reason."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    memory_id: str
+    #: False when the memory was already marked, which is the ordinary outcome of a second click.
+    took_effect: bool
+    #: What was written, as `Correction`'s word, or null when nothing was.
+    correction: str | None
+    at: datetime | None
+    told: str
 
 
 class MemoryTextView(BaseModel):
@@ -380,11 +447,8 @@ class SubjectMemoryView(BaseModel):
     #: How many memories of each kind the load reads at most. A constant, never a measurement.
     considered_per_kind: int = MAX_MEMORIES_CONSIDERED
     staleness: StalenessBanner | None = None
-    #: Nothing stores a supersession, a demotion or what a memory replaced, so no revision here
-    #: carries a diff or a trigger yet.
-    corrections_are_not_recorded: bool = True
-    #: There is no route that edits or deletes a memory from this screen. See the module
-    #: docstring on the undo, whose store is the same missing table.
+    #: There is no route that edits a memory from this screen. `brain.ops.memory_store` writes an
+    #: edit, and the control belongs on a person's own memory tab, which has no route yet.
     edit_is_not_writable: bool = True
 
 
@@ -428,6 +492,11 @@ def inferred_about(subject_id: str, limit: int) -> Select[tuple[AdaptiveMemoryRo
     )
 
 
+def bounded_agents(limit: int) -> Select[tuple[AgentRow]]:
+    """Every stored agent, bounded. Filtered by audience afterwards, by the one predicate."""
+    return every_agent().limit(limit)
+
+
 # ------------------------------------------------------------------ rows to records
 
 
@@ -459,8 +528,9 @@ def placed_item(row: KnowledgeItemRow) -> Placed[LibraryItem]:
 class StoredMemory:
     """One memory row, as `brain.console.reach_view.Remembered` reads it.
 
-    Not a `Learning`, because a row records no proposal. See `Remembered`. `replaced_id` is
-    always `None`: no column records what a memory replaced.
+    Not a `Learning`, because a memory row records no proposal; `recorded_learning` builds one
+    when `mem.learning` holds it. `replaced_id` is the learning record's, and `None` for a
+    memory nothing records as having replaced another.
     """
 
     memory_id: str
@@ -471,6 +541,7 @@ class StoredMemory:
 
 def stored_memory(
     row: PersistentMemoryRow | AdaptiveMemoryRow,
+    learning: LearningRow | None = None,
 ) -> tuple[StoredMemory, str] | None:
     """One row and its statement, or `None` when the row does not describe a memory a viewer
     can show.
@@ -482,6 +553,9 @@ def stored_memory(
     logged, and the response says nothing about it: a note that a row was skipped is a count of
     what the reader was not shown, which is `brain.govern_routes.
     A_ROW_THE_TYPE_REFUSES_IS_A_ROW_AND_NOT_THE_END_OF_THE_SCREEN`.
+
+    `learning` is this memory's record in `mem.learning`, when there is one, and it is where
+    what the memory replaced is read from.
     """
     try:
         kind = MemoryKind(row.kind)
@@ -498,56 +572,145 @@ def stored_memory(
         log.warning("memory row does not construct", memory=row.id, error=type(exc).__name__)
         return None
     confidence = row.formed_confidence if isinstance(row, AdaptiveMemoryRow) else STATED_CONFIDENCE
+    replaced = learning.replaced_id if learning is not None else None
     return (
-        StoredMemory(memory_id=row.id, formation=formation, formed_confidence=confidence),
+        StoredMemory(
+            memory_id=row.id,
+            formation=formation,
+            formed_confidence=confidence,
+            replaced_id=replaced,
+        ),
         row.statement,
     )
 
 
-# ---------------------------------------------------------------- what is recorded
+def recorded_learning(row: LearningRow, memory: StoredMemory) -> Learning | None:
+    """One stored learning as the domain's `Learning`, or `None` when the domain refuses it.
+
+    `Proposal` refuses a tier the change does not need and `Learning` refuses a confidence of
+    zero or a memory that replaced itself. `0061`'s constraints refuse the first and third, and
+    an inferred memory can be stored at zero, so each is possible on disk; the row is skipped and
+    logged, for `stored_memory`'s reason.
+    """
+    try:
+        return Learning(
+            memory_id=memory.memory_id,
+            proposal=Proposal(change=Change(row.change), tier=Tier(row.tier), subject=row.subject),
+            formation=memory.formation,
+            evidence=frozenset(Signal(one) for one in row.evidence),
+            formed_confidence=memory.formed_confidence,
+            replaced_id=row.replaced_id,
+            agent_id=row.agent_id,
+        )
+    except (ValueError, TierError) as exc:
+        log.warning(
+            "learning row does not construct", memory=row.memory_id, error=type(exc).__name__
+        )
+        return None
+
+
+# ---------------------------------------------------------------- the loads
 
 
 @dataclass(frozen=True)
-class RecordedLearning:
-    """The per-agent tier rows `learning_review` gathers, and the agents a reader may see.
+class RememberedAbout:
+    """One person's memories, each with its statement and what it replaced, and the corrections
+    naming any of them."""
 
-    Four fields shaped exactly as that function's parameters, so the day a store exists the
-    change is `recorded_learnings` and nothing that calls it.
+    entries: tuple[tuple[StoredMemory, str], ...]
+    corrections: Corrections
+
+
+async def remembered_about(session: AsyncSession, subject_id: str, limit: int) -> RememberedAbout:
+    """What is stored about one person, for the memory viewer and a person's own memory tab.
+
+    Four statements in the session the caller holds: both memory tables keyed by the subject and
+    bounded newest first, the learning records of exactly the memories found, and the corrections
+    naming them. The last two are asked only when a memory was found, so a person nobody remembers
+    anything about costs two statements.
     """
+    stated = (await session.execute(stated_about(subject_id, limit))).scalars().all()
+    inferred = (await session.execute(inferred_about(subject_id, limit))).scalars().all()
+    rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
+    ids = [row.id for row in rows]
+    if not ids:
+        return RememberedAbout(entries=(), corrections=Corrections((), ()))
+    records = {
+        one.memory_id: one for one in (await session.execute(learnings_named(ids))).scalars().all()
+    }
+    marks = (await session.execute(corrections_naming(ids))).scalars().all()
+    entries = tuple(
+        found for found in (stored_memory(row, records.get(row.id)) for row in rows) if found
+    )
+    return RememberedAbout(entries=entries, corrections=corrections_of(marks))
 
-    visible: tuple[str, ...]
-    tier_one: Mapping[str, Sequence[TierOneRow]]
-    tier_two: Mapping[str, Sequence[TierTwoRow]]
-    tier_three: Mapping[str, Sequence[TierThreeRouting]]
+
+@dataclass(frozen=True)
+class StoredLearnings:
+    """The agents a review was assembled over, their learnings, and the corrections naming them."""
+
+    records: tuple[AgentRecord, ...]
+    learnings: tuple[Learning, ...]
+    corrections: Corrections
 
 
-def recorded_learnings() -> RecordedLearning:
-    """What this install records about learning, which is nothing.
+async def learnings_stored(
+    session: AsyncSession, visible: Sequence[AgentRecord], limit: int
+) -> StoredLearnings:
+    """The learnings formed while these agents ran, with their memories and corrections.
 
-    A function rather than empty literals at the call site, for `brain.skill_routes.submitted`'s
-    reason: the absence has a place to be argued and a name to search for. **No agent roster is
-    loaded**, because nothing recorded is keyed by an agent; the day a store exists, `visible` is
-    `brain.agents.model.visible_agent_ids` over the roster, as `brain.skill_routes` assembles it,
-    and the three mappings are `brain.console.reach_view.tier_one_rows`, `tier_two_rows` and
-    `tier_three_routing` per agent. See
-    `NOTHING_STORES_A_LEARNING_SO_THE_REVIEW_HAS_NOTHING_TO_NARROW`.
+    `visible` has already been narrowed to the caller's audience, so nothing is loaded about an
+    agent the caller may not see. The memories are read by id from both tables, because a learning
+    record does not say which table its memory is in, and a learning whose memory is in neither is
+    skipped: there is no formation to decide recall from.
     """
-    return RecordedLearning(
-        visible=(),
-        tier_one=MappingProxyType({}),
-        tier_two=MappingProxyType({}),
-        tier_three=MappingProxyType({}),
+    if not visible:
+        return StoredLearnings(records=(), learnings=(), corrections=Corrections((), ()))
+    rows = (
+        (await session.execute(learnings_of_agents([one.agent_id for one in visible], limit)))
+        .scalars()
+        .all()
+    )
+    ids = [one.memory_id for one in rows]
+    if not ids:
+        return StoredLearnings(
+            records=tuple(visible), learnings=(), corrections=Corrections((), ())
+        )
+    stated = (await session.execute(stated_named(ids))).scalars().all()
+    inferred = (await session.execute(inferred_named(ids))).scalars().all()
+    marks = (await session.execute(corrections_naming(ids))).scalars().all()
+    memory_rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
+    memories = {
+        found[0].memory_id: found[0]
+        for found in (stored_memory(row) for row in memory_rows)
+        if found is not None
+    }
+    learnings = tuple(
+        learning
+        for learning in (
+            recorded_learning(row, memories[row.memory_id])
+            for row in rows
+            if row.memory_id in memories
+        )
+        if learning is not None
+    )
+    return StoredLearnings(
+        records=tuple(visible), learnings=learnings, corrections=corrections_of(marks)
     )
 
 
-def recorded_corrections() -> tuple[tuple[Supersession, ...], tuple[Demotion, ...]]:
-    """Every supersession and demotion this install records, which is none.
+def visible_records(records: Sequence[AgentRecord], asked: Asking) -> tuple[AgentRecord, ...]:
+    """The agents this caller's audience covers, in id order.
 
-    No migration creates a table for either. `brain.memory.correction` defines both and
-    `brain.memory.digest.undo` and `brain.memory.review.edit` build them, and every one of those
-    returns its correction for somebody else to write.
+    `brain.agents.model.visible_agent_ids` is the answer and `brain.agent_routes.viewer_of`
+    builds the viewer, so who may see an agent is decided once, by the module that owns it.
     """
-    return (), ()
+    visible = visible_agent_ids(records, viewer_of(asked))
+    return tuple(sorted((one for one in records if one.agent_id in visible), key=_agent_id))
+
+
+def _agent_id(record: AgentRecord) -> str:
+    return record.agent_id
 
 
 def tier_rules() -> tuple[TierRuleView, ...]:
@@ -591,6 +754,28 @@ def revision_view(one: Revision) -> RevisionView:
     )
 
 
+def undone_view(decided: Undo) -> LearningUndoneView:
+    """What one undo did, from the correction the store wrote or its absence."""
+    correction = decided.correction
+    if correction is None:
+        return LearningUndoneView(
+            memory_id=decided.memory_id,
+            took_effect=False,
+            correction=None,
+            at=None,
+            told=decided.reason,
+        )
+    return LearningUndoneView(
+        memory_id=decided.memory_id,
+        took_effect=True,
+        correction=(
+            Correction.SUPERSEDED if isinstance(correction, Supersession) else Correction.DEMOTED
+        ).value,
+        at=correction.at,
+        told=decided.reason,
+    )
+
+
 # ------------------------------------------------------------------- the wiring
 
 
@@ -608,6 +793,20 @@ def _require_console_reads(request: Request) -> ConsoleReads:
     if factory is None:
         raise Failed("no database on this process")
     return ConsoleReads(factory)
+
+
+def memory_records_of(request: Request) -> MemoryRecords | None:
+    """What `app.state.memory_records` holds, or the database's store, or None without one."""
+    found = getattr(request.app.state, "memory_records", None)
+    if isinstance(found, MemoryRecords):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredMemoryRecords(sessions)
+
+
+def _trace_id() -> str:
+    # The id the trace middleware vouched for or minted, as `brain.connector_routes` reads it.
+    return str(structlog.contextvars.get_contextvars().get("trace_id", ""))
 
 
 def _not_answerable(what: str) -> Absent:
@@ -666,26 +865,41 @@ async def library(
 
 
 @router.get("/govern/learning", response_model=LearningReviewView, responses=COMMON_RESPONSES)
-async def learning(asked: Asked) -> LearningReviewView:
-    """The three tiers across the estate, kept apart, and the vocabulary that sorts them.
+async def learning(request: Request, asked: Asked) -> LearningReviewView:
+    """The three tiers across the agents this reader may see, kept apart, and what undo would do.
 
-    No database, because nothing stores a learning; see `recorded_learnings`. The basis is
-    `spans_departments`' answer for this reader and `learning_review` uses it to decide whether
-    tier three is shown, so the one per-reader decision on this screen is made today and is the
-    same decision the day rows exist.
+    The screen's question first and the database second. The agents are loaded bounded and
+    narrowed to the caller's audience before anything about them is read; their learnings, the
+    memories those were formed as and the corrections naming them are loaded next; and
+    `learning_estate` decides every row, including which learnings the caller may be told of at
+    the reach their run of each agent has. Whether a row's undo is offered is `may_undo`, asked per
+    row of the learning the row is about.
     """
     if not permitted(screen(LEARNING_SCREEN).read, asked.reach, asked.now):
         log.info("learning screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable(LEARNING_SCREEN)
 
-    recorded = recorded_learnings()
-    review = learning_review(
+    reads = _require_console_reads(request)
+
+    async def load(session: AsyncSession) -> StoredLearnings:
+        agent_rows = (await session.execute(bounded_agents(MAX_AGENTS_CONSIDERED))).scalars().all()
+        records = [one for one in (record_of(row) for row in agent_rows) if one is not None]
+        return await learnings_stored(
+            session, visible_records(records, asked), MAX_LEARNINGS_CONSIDERED
+        )
+
+    served = await reads.read(load, now=asked.now)
+    stored = served.value
+    review = learning_estate(
         basis=spans_departments(asked.reach, asked.now),
-        visible=recorded.visible,
-        tier_one=recorded.tier_one,
-        tier_two=recorded.tier_two,
-        tier_three=recorded.tier_three,
+        records=stored.records,
+        learnings=stored.learnings,
+        caller=asked.reach,
+        now=asked.now,
+        supersessions=stored.corrections.supersessions,
+        demotions=stored.corrections.demotions,
     )
+    by_id = {one.memory_id: one for one in stored.learnings}
     return LearningReviewView(
         basis=review.basis,
         as_of=asked.now,
@@ -695,6 +909,9 @@ async def learning(asked: Asked) -> LearningReviewView:
                 change=one.change.value,
                 control_writes=one.control_writes.value,
                 learned_at=one.learned_at,
+                in_effect=one.in_effect,
+                undo_offered=one.in_effect
+                and may_undo(asked.reach, by_id[one.memory_id], asked.now),
             )
             for one in review.tier_one
         ),
@@ -715,7 +932,79 @@ async def learning(asked: Asked) -> LearningReviewView:
             for one in review.tier_three
         ),
         tiers=tier_rules(),
+        undo_says={correction.value: said for correction, said in UNDO_SAYS.items()},
+        staleness=served.banner,
     )
+
+
+@router.post(UNDO_PATH, response_model=LearningUndoneView, responses=COMMON_RESPONSES)
+async def undo_learning(request: Request, body: UndoAsked, asked: Asked) -> LearningUndoneView:
+    """Undo one tier-one learning, as the person asking, and say what was written.
+
+    **Four questions, every refusal the one 404, and the order is the property.** Whether the caller
+    may open the Learning screen and holds `UNDO_AUTHORITY` anywhere, before a session is reached
+    for, so a caller who may not undo anything cannot tell an instance with a database from one
+    without, or a memory that exists from one that does not. Then the learning, its memory and its
+    agent are read from the primary, and the learning must be one `learnings_in_view` shows this
+    caller: a visible agent's, recalled at the caller's run of it. Then `may_undo`, which is tier
+    one and the authority in a scope admitting where the memory was formed. Only then the store,
+    which decides and writes under a lock. See
+    `AN_UNDO_REACHES_A_ROW_A_LEDGER_ENTRY_AND_WHAT_IS_RECALLED`.
+
+    A second undo is answered 200 with `took_effect` false and the domain's sentence, because the
+    person did nothing wrong and there is nothing for them to fix.
+    """
+    if not permitted(screen(LEARNING_SCREEN).read, asked.reach, asked.now) or not asked.reach.holds(
+        UNDO_AUTHORITY, asked.now
+    ):
+        log.info("undo not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable(LEARNING_SCREEN)
+    factory = sessions_of(request)
+    records = memory_records_of(request)
+    if factory is None or records is None:
+        raise Failed("no database on this process")
+
+    async with factory() as session:
+        row = (await session.execute(learnings_named((body.memory_id,)))).scalars().first()
+        agent_row = (
+            None
+            if row is None or row.agent_id is None
+            else (await session.execute(one_agent(row.agent_id))).scalars().first()
+        )
+        stated = (await session.execute(stated_named((body.memory_id,)))).scalars().all()
+        inferred = (await session.execute(inferred_named((body.memory_id,)))).scalars().all()
+
+    record = None if agent_row is None else record_of(agent_row)
+    memory_rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
+    memories = [found for found in (stored_memory(one) for one in memory_rows) if found]
+    found = None if row is None or not memories else recorded_learning(row, memories[0][0])
+    visible = () if record is None else visible_records((record,), asked)
+    shown = learnings_in_view(
+        records=visible,
+        learnings=() if found is None else (found,),
+        caller=asked.reach,
+        now=asked.now,
+    )
+    if (
+        found is None
+        or found.memory_id not in {one.memory_id for theirs in shown.values() for one in theirs}
+        or not may_undo(asked.reach, found, asked.now)
+    ):
+        log.info("undo not answerable", principal=asked.caller.principal.id)
+        raise _not_answerable(LEARNING_SCREEN)
+
+    decided = await records.undo(
+        found,
+        actor=asked.reach.principal_id,
+        trace_id=_trace_id(),
+        ent_hash=asked.reach.ent_hash(),
+    )
+    log.info(
+        "learning undo answered",
+        principal=asked.reach.principal_id,
+        took_effect=decided.took_effect,
+    )
+    return undone_view(decided)
 
 
 @router.get("/govern/memory", response_model=SubjectMemoryView, responses=COMMON_RESPONSES)
@@ -726,9 +1015,10 @@ async def memory(
 ) -> SubjectMemoryView:
     """What this reader may read of what is remembered about one person, and its history.
 
-    The screen's question first and the database second. Two loads, both keyed by the subject
-    and bounded newest first, then `subject_memory`, which asks `may_recall` about every row
-    for this reader and decides every diff from two admissions.
+    The screen's question first and the database second. One load, `remembered_about`, keyed by
+    the subject and bounded newest first, with what each memory replaced and the corrections
+    naming them; then `subject_memory`, which asks `may_recall` about every row for this reader,
+    leaves out what a correction marked and decides every diff from two admissions.
 
     A person nobody remembers anything about and a person whose every memory this reader may
     not recall produce the same response, byte for byte, because nothing on it varies with the
@@ -744,27 +1034,18 @@ async def memory(
 
     reads = _require_console_reads(request)
 
-    async def load(
-        session: AsyncSession,
-    ) -> tuple[list[PersistentMemoryRow], list[AdaptiveMemoryRow]]:
-        stated = (await session.execute(stated_about(subject, MAX_MEMORIES_CONSIDERED))).scalars()
-        inferred = (
-            await session.execute(inferred_about(subject, MAX_MEMORIES_CONSIDERED))
-        ).scalars()
-        return list(stated.all()), list(inferred.all())
+    async def load(session: AsyncSession) -> RememberedAbout:
+        return await remembered_about(session, subject, MAX_MEMORIES_CONSIDERED)
 
     served = await reads.read(load, now=asked.now)
-    stated, inferred = served.value
-    rows: list[PersistentMemoryRow | AdaptiveMemoryRow] = [*stated, *inferred]
-    entries = [found for found in (stored_memory(row) for row in rows) if found is not None]
-    supersessions, demotions = recorded_corrections()
+    stored = served.value
     remembered = subject_memory(
         subject_id=subject,
-        entries=entries,
+        entries=stored.entries,
         reader=asked.reach,
         now=asked.now,
-        supersessions=supersessions,
-        demotions=demotions,
+        supersessions=stored.corrections.supersessions,
+        demotions=stored.corrections.demotions,
     )
     return SubjectMemoryView(
         subject_id=remembered.subject_id,

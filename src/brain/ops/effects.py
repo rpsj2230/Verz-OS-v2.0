@@ -309,6 +309,11 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_store:ConnectorRecords.disconnect": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The Learning screen's undo and a memory's edit. Each is this system's own rows in one
+        # transaction, decided under a lock on the memory; a repeat reads the first one's correction
+        # and writes nothing, which is `brain.memory.digest.undo`'s own idempotency.
+        "brain.ops.memory_store:MemoryRecords.undo": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.ops.memory_store:MemoryRecords.edit": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.erasure:Hold.is_active": Repeat.READS,
         "brain.ops.erasure:StoreEraser.count_for": Repeat.READS,
         "brain.ops.erasure:StoreEraser.erase": Repeat.SAME_RESULT_WHEN_REPEATED,

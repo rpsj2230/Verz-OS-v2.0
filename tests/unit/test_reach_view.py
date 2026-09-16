@@ -1632,3 +1632,115 @@ def test_a_freeze_by_nobody_is_refused() -> None:
 
     with pytest.raises(LeashError):
         freeze(LearningState(agent_id=DESK, declared=frozenset({Tier.AUTOMATIC})), at=NOW, by=" ")
+
+
+# ================================================== stored corrections (M27.7.21, M27.7.22)
+def test_an_undo_that_puts_a_memory_back_is_a_step_of_its_own_in_the_history() -> None:
+    """A learning replaced a memory and an undo put it back. The history has the replacement at the
+    instant the learning formed, with the trigger that prompted it, and the restoration at the
+    undo's instant, naming the learning as what the restored memory replaced, with the refusal as
+    its trigger and the diff read the other way.
+
+    Delete this and the history of a memory a person restored says nothing happened after it was
+    replaced, which is the change the Memory screen exists to show."""
+    before = learning("m_before", at=NOW - timedelta(days=2))
+    learnt = learning("m_learnt", at=NOW - timedelta(days=1), replaced_id="m_before")
+    seen = revisions(
+        [(before, "Invoices go out on the first."), (learnt, "Invoices go out on the fifth.")],
+        holder(CLIENT_CAP, scope=IN_WEB),
+        now=NOW,
+        supersessions=(
+            Supersession("m_before", "m_learnt", Signal.CONTRADICTED, NOW - timedelta(days=1)),
+            Supersession("m_learnt", "m_before", Signal.REJECTED, NOW - timedelta(hours=1)),
+        ),
+    )
+
+    assert [(one.memory_id, one.replaced_id) for one in seen] == [
+        ("m_before", None),
+        ("m_learnt", "m_before"),
+        ("m_before", "m_learnt"),
+    ]
+    assert (seen[1].trigger, seen[2].trigger) == (Signal.CONTRADICTED, Signal.REJECTED)
+    assert seen[2].correction is Correction.SUPERSEDED
+    assert seen[2].at == NOW - timedelta(hours=1)
+    assert "-Invoices go out on the fifth." in seen[2].diff
+    assert "+Invoices go out on the first." in seen[2].diff
+
+
+def test_a_replacements_trigger_is_the_supersession_naming_both_memories_and_not_a_later_one() -> (
+    None
+):
+    """The older memory was replaced by one learning, and a second learning later replaced it again.
+    Each replacement's step carries the signal of its own supersession. Delete this and the step
+    reads any supersession of the memory it replaced, so the first replacement shows the second's
+    trigger and the history misstates why the first change happened."""
+    old = learning("m_old", at=NOW - timedelta(days=3))
+    first = learning("m_first", at=NOW - timedelta(days=2), replaced_id="m_old")
+    second = learning("m_second", at=NOW - timedelta(days=1), replaced_id="m_old")
+    seen = revisions(
+        [(old, "One."), (first, "Two."), (second, "Three.")],
+        holder(CLIENT_CAP, scope=IN_WEB),
+        now=NOW,
+        supersessions=(
+            Supersession("m_old", "m_first", Signal.CONTRADICTED, NOW - timedelta(days=2)),
+            Supersession("m_old", "m_second", Signal.REASKED, NOW - timedelta(days=1)),
+        ),
+    )
+
+    triggers = {one.memory_id: one.trigger for one in seen}
+    assert (triggers["m_first"], triggers["m_second"]) == (Signal.CONTRADICTED, Signal.REASKED)
+    assert len(seen) == 3
+
+
+def test_a_restoration_the_reader_may_not_read_the_restored_memory_of_is_not_in_their_history() -> (
+    None
+):
+    """The restored memory was formed in finance and the reader reaches web. The restoration step
+    is about a memory they may not read, so it is absent, with no note. Delete this and a history
+    names a memory the reader cannot recall, as the thing a person put back."""
+    before = learning("m_before", at=NOW - timedelta(days=2), scope=IN_FINANCE)
+    learnt = learning("m_learnt", at=NOW - timedelta(days=1), replaced_id="m_before")
+    seen = revisions(
+        [(before, "Finance says the fifteenth."), (learnt, "Web says the fifth.")],
+        holder(CLIENT_CAP, scope=IN_WEB),
+        now=NOW,
+        supersessions=(Supersession("m_learnt", "m_before", Signal.REJECTED, NOW),),
+    )
+
+    assert [one.memory_id for one in seen] == ["m_learnt"]
+
+
+def test_what_a_correction_marked_is_not_listed_as_remembered_and_the_rest_is() -> None:
+    """A demoted memory and a superseded one are absent from both halves of the split, and a memory
+    nothing marked stays. Delete this and the Memory screen lists an undone learning as remembered,
+    which says the undo did nothing."""
+    view = split_memory(
+        [
+            (learning("m_kept"), "Kept."),
+            (learning("m_demoted"), "Demoted."),
+            (learning("m_old", kind=MemoryKind.PERSISTENT), "Replaced."),
+        ],
+        holder(CLIENT_CAP, scope=IN_WEB),
+        now=NOW,
+        supersessions=(Supersession("m_old", "m_kept", Signal.CONTRADICTED, NOW),),
+        demotions=(Demotion(memory_id="m_demoted", field="subject:m_demoted", at=NOW),),
+    )
+
+    assert [one.memory_id for one in view.extracted] == ["m_kept"]
+    assert view.curated == ()
+
+
+def test_a_tier_one_row_says_whether_a_correction_has_taken_it_out_of_effect() -> None:
+    """An undone change is still listed, newest first as before, and says it is no longer in effect;
+    one nothing marked says it is. Delete this and the review offers the undo again on a change a
+    person already undid, or drops the row and the person cannot see their undo happened."""
+    rows = tier_one_rows(
+        [learning("m_undone", at=NOW), learning("m_standing", at=NOW - timedelta(hours=1))],
+        agent_id=DESK,
+        demotions=(Demotion(memory_id="m_undone", field="subject:m_undone", at=NOW),),
+    )
+
+    assert [(one.memory_id, one.in_effect) for one in rows] == [
+        ("m_undone", False),
+        ("m_standing", True),
+    ]

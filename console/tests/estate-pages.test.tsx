@@ -45,19 +45,27 @@ import {
 } from "../src/pages/knowledgeQuery";
 import {
   DECIDE_NOT_OFFERED,
-  LEARNINGS_ARE_NOT_RECORDED,
+  FIGURES_ARE_OF_WHAT_YOU_CAN_SEE,
+  KEEP_IT,
   Learning,
-  NOT_RECORDED,
   PROMOTE_NOT_OFFERED,
   TIER_THREE_WITHHELD,
-  UNDO_NOT_OFFERED,
+  UNDONE,
+  UNDO_LABEL,
+  WHERE_UNDO_IS_OFFERED,
 } from "../src/pages/Learning";
-import { LEARNING_API_PATH, learnedRecently, readLearningPage } from "../src/pages/learningQuery";
+import {
+  LEARNING_API_PATH,
+  UNDO_API_PATH,
+  consideredSentence as reviewConsideredSentence,
+  learnedRecently,
+  readLearningPage,
+} from "../src/pages/learningQuery";
 import {
   EDIT_NOT_OFFERED,
+  HOW_TO_READ_THE_HISTORY,
   Memory,
   NOTHING_TO_READ,
-  NO_DIFFS_YET,
   ONE_PERSON_AT_A_TIME,
   consideredSentence,
 } from "../src/pages/Memory";
@@ -114,8 +122,21 @@ function learningBody(over: Record<string, unknown> = {}): Record<string, unknow
       { tier: 2, changes: ["fast_path_rule"] },
       { tier: 3, changes: ["scope_widening"] },
     ],
-    learnings_are_not_recorded: true,
-    undo_is_not_writable: true,
+    considered: 500,
+    undo_says: { superseded: sentinel("undo-supersedes"), demoted: sentinel("undo-demotes") },
+    staleness: null,
+    ...over,
+  };
+}
+
+function aTierOne(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    memory_id: "m-one-sentinel",
+    change: "preference",
+    control_writes: "demoted",
+    learned_at: "2019-03-05T09:00:00Z",
+    in_effect: true,
+    undo_offered: false,
     ...over,
   };
 }
@@ -159,7 +180,6 @@ function memoryBody(over: Record<string, unknown> = {}): Record<string, unknown>
     ],
     considered_per_kind: 200,
     staleness: null,
-    corrections_are_not_recorded: true,
     edit_is_not_writable: true,
     ...over,
   };
@@ -208,6 +228,34 @@ function text(container: HTMLElement): string {
 
 function headers(container: HTMLElement): string[] {
   return [...container.querySelectorAll("th")].map((one) => one.textContent ?? "");
+}
+
+/** Every write the page sent to the API, with its body. */
+function posts(idp: FakeIdp): { path: string; body: unknown }[] {
+  return idp.calls
+    .filter((call) => call.init?.method === "POST" && new URL(call.url, "https://console.test").pathname.startsWith("/api/"))
+    .map((call) => ({
+      path: new URL(call.url, "https://console.test").pathname,
+      body: call.init?.body === undefined ? undefined : (JSON.parse(String(call.init.body)) as unknown),
+    }));
+}
+
+function button(scope: ParentNode, name: string): HTMLButtonElement {
+  const found = [...scope.querySelectorAll("button")].find(
+    (one) => one.textContent === name || one.getAttribute("aria-label")?.startsWith(name),
+  );
+  if (!found) {
+    throw new Error(`no button named ${name}`);
+  }
+  return found as HTMLButtonElement;
+}
+
+function confirmPanel(container: HTMLElement): HTMLElement {
+  const found = container.querySelector(".confirm");
+  if (!found) {
+    throw new Error("no confirmation is open");
+  }
+  return found as HTMLElement;
 }
 
 // --- Knowledge -----------------------------------------------------------------------------------
@@ -357,33 +405,104 @@ describe("the Learning screen", () => {
       "tier_two",
       "tier_three",
       "tiers",
-      "learnings_are_not_recorded",
-      "undo_is_not_writable",
+      "considered",
+      "undo_says",
+      "staleness",
     ];
 
     expect(backendModelFields(ROUTES, "LearningReviewView").sort()).toEqual([...read].sort());
   });
 
-  test("while nothing is recorded every figure is a sentence and no digit is drawn for one", async () => {
-    // What breaks if this is deleted: four zeroes, which read as a system that learnt nothing and
-    // has nothing waiting on anybody, which nothing on this install measured.
-    const container = await mount("/learning", answering(LEARNING_API_PATH, learningBody()));
+  test("the figures count the rows the API sent and say that is what they count", async () => {
+    // What breaks if this is deleted: a figure read as the company's when it is a count of what this
+    // reader was shown, which the API narrowed before sending, or a figure computed from something
+    // other than the rows on the page.
+    const container = await mount(
+      "/learning",
+      answering(LEARNING_API_PATH, learningBody({ tier_one: [aTierOne()], tier_three: [] })),
+    );
     const glance = container.querySelector('[aria-label="Learning at a glance"]');
 
-    expect(text(container)).toContain(LEARNINGS_ARE_NOT_RECORDED);
-    expect(glance?.textContent ?? "").toContain(NOT_RECORDED);
-    expect((glance?.textContent ?? "").replace("last 7 days", "")).not.toMatch(/\d/);
+    expect(text(container)).toContain(FIGURES_ARE_OF_WHAT_YOU_CAN_SEE);
+    expect(glance?.textContent ?? "").toContain("Applied automatically1");
+    expect(text(container)).toContain(reviewConsideredSentence(500));
   });
 
-  test("no undo, promote or decide control is drawn, and each is a sentence where the design draws it", async () => {
-    // What breaks if this is deleted: a button beside a tier-one row that writes nothing anywhere,
-    // which docs/admin-console.md calls worse than no control at all.
-    const container = await mount("/learning", answering(LEARNING_API_PATH, learningBody()));
+  test("no promote or decide control is drawn, and undo is drawn only on a row the API offers it on", async () => {
+    // What breaks if this is deleted: an undo button on every row, which the server refuses for a
+    // reader without the authority, or promote and decide buttons that write nothing anywhere.
+    const container = await mount(
+      "/learning",
+      answering(
+        LEARNING_API_PATH,
+        learningBody({
+          tier_one: [
+            aTierOne({ memory_id: "m-offered", undo_offered: true }),
+            aTierOne({ memory_id: "m-not-offered" }),
+            aTierOne({ memory_id: "m-undone", in_effect: false }),
+          ],
+        }),
+      ),
+    );
 
-    expect(container.querySelectorAll("button")).toHaveLength(0);
-    expect(text(container)).toContain(UNDO_NOT_OFFERED);
+    expect([...container.querySelectorAll("button")].map((one) => one.getAttribute("aria-label"))).toEqual([
+      `${UNDO_LABEL} m-offered`,
+    ]);
+    expect(text(container)).toContain(UNDONE);
+    expect(text(container)).toContain(WHERE_UNDO_IS_OFFERED);
     expect(text(container)).toContain(PROMOTE_NOT_OFFERED);
     expect(text(container)).toContain(DECIDE_NOT_OFFERED);
+  });
+
+  test("undoing is confirmed in the API's words, keeping it sends nothing, and the review is read again", async () => {
+    // What breaks if this is deleted: an undo with no second step, a confirmation that does not say
+    // what the undo will write, or a page that goes on showing the change as applied after it was
+    // undone.
+    let undone = false;
+    const idp = fakeIdentityProvider({
+      api(url, init) {
+        const path = new URL(url, "https://console.test").pathname;
+        const ok = (body: unknown) =>
+          new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+        if (path.endsWith(`${API}${UNDO_API_PATH}`) && init?.method === "POST") {
+          undone = true;
+          return ok({
+            memory_id: "m-one-sentinel",
+            took_effect: true,
+            correction: "superseded",
+            at: "2019-03-06T09:00:00Z",
+            told: sentinel("undone-told"),
+          });
+        }
+        if (path.endsWith(`${API}${LEARNING_API_PATH}`)) {
+          return ok(
+            learningBody({
+              tier_one: [
+                aTierOne({ control_writes: "superseded", in_effect: !undone, undo_offered: !undone }),
+              ],
+            }),
+          );
+        }
+        return null;
+      },
+    });
+    const container = await mount("/learning", idp);
+
+    fireEvent.click(button(container, UNDO_LABEL));
+    expect(confirmPanel(container).textContent).toContain(sentinel("undo-supersedes"));
+    fireEvent.click(button(confirmPanel(container), KEEP_IT));
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.click(button(container, UNDO_LABEL));
+    fireEvent.click(button(confirmPanel(container), UNDO_LABEL));
+    await waitFor(() => {
+      expect(text(container)).toContain(sentinel("undone-told"));
+    });
+    expect(posts(idp)).toEqual([{ path: `${API}${UNDO_API_PATH}`, body: { memory_id: "m-one-sentinel" } }]);
+    await waitFor(() => {
+      expect(text(container)).toContain(UNDONE);
+    });
+    expect(container.querySelectorAll("tbody button")).toHaveLength(0);
   });
 
   test("tier three withheld is a different sentence from tier three empty", async () => {
@@ -413,15 +532,7 @@ describe("the Learning screen", () => {
       answering(
         LEARNING_API_PATH,
         learningBody({
-          learnings_are_not_recorded: false,
-          tier_one: [
-            {
-              memory_id: "m-one-sentinel",
-              change: "preference",
-              control_writes: "demoted",
-              learned_at: "2019-03-05T09:00:00Z",
-            },
-          ],
+          tier_one: [aTierOne()],
           tier_two: [
             {
               memory_id: "m-two-sentinel",
@@ -443,7 +554,6 @@ describe("the Learning screen", () => {
     expect(tables[1]?.textContent).toContain("m-two-sentinel");
     expect(tables[2]?.textContent).toContain("m-three-sentinel");
     expect(headers(container)).not.toContain("Tier");
-    expect(text(container)).not.toContain(LEARNINGS_ARE_NOT_RECORDED);
   });
 
   test("the four-tier card lists the change kinds the API puts at each tier", async () => {
@@ -461,10 +571,9 @@ describe("the Learning screen", () => {
     // counts differently on two machines, or a learning from last month counted as this week's.
     const page = readLearningPage(
       learningBody({
-        learnings_are_not_recorded: false,
         tier_one: [
-          { memory_id: "a", change: "preference", control_writes: "demoted", learned_at: "2019-03-05T09:00:00Z" },
-          { memory_id: "b", change: "preference", control_writes: "demoted", learned_at: "2019-02-20T09:00:00Z" },
+          aTierOne({ memory_id: "a", learned_at: "2019-03-05T09:00:00Z" }),
+          aTierOne({ memory_id: "b", learned_at: "2019-02-20T09:00:00Z" }),
         ],
       }),
     );
@@ -485,7 +594,6 @@ describe("the Memory screen", () => {
       "history",
       "considered_per_kind",
       "staleness",
-      "corrections_are_not_recorded",
       "edit_is_not_writable",
     ];
 
@@ -542,7 +650,7 @@ describe("the Memory screen", () => {
     expect(curated?.textContent).toContain(sentinel("stated"));
     expect(curated?.textContent).not.toContain(sentinel("inferred"));
     expect(extracted?.textContent).toContain(sentinel("inferred"));
-    expect(text(container)).toContain(NO_DIFFS_YET);
+    expect(text(container)).toContain(HOW_TO_READ_THE_HISTORY);
     expect(text(container)).toContain(EDIT_NOT_OFFERED);
     expect(text(container)).toContain(consideredSentence(200));
     expect(headers(container)).toEqual(["When", "Memory", "Replaced", "What changed", "Why"]);
@@ -550,22 +658,37 @@ describe("the Memory screen", () => {
     expect(text(container)).not.toContain(NOTHING_TO_READ);
   });
 
-  test("a revision that carries a diff draws each line of it", async () => {
-    // What breaks if this is deleted: the day corrections are recorded, the diff the design says
-    // every revision has is dropped by the page that was built before there was one.
+  test("a revision that carries a diff draws each line of it, and a memory put back is a step of its own", async () => {
+    // What breaks if this is deleted: the diff the design says every revision has is dropped, or two
+    // steps about the same memory, its forming and its being put back, collapse into one row.
     const container = await mount(
       "/memory/u_subject",
       answering(
         MEMORY_API_PATH,
         memoryBody({
-          corrections_are_not_recorded: false,
           history: [
+            {
+              memory_id: "m_old",
+              replaced_id: null,
+              at: "2019-03-04T09:00:00Z",
+              diff: [],
+              trigger: null,
+              correction: null,
+            },
             {
               memory_id: "m_new",
               replaced_id: "m_old",
               at: "2019-03-05T09:00:00Z",
               diff: ["-Retainer ends in June", "+Retainer ends in September"],
               trigger: "contradicted",
+              correction: "superseded",
+            },
+            {
+              memory_id: "m_old",
+              replaced_id: "m_new",
+              at: "2019-03-06T09:00:00Z",
+              diff: ["-Retainer ends in September", "+Retainer ends in June"],
+              trigger: "rejected",
               correction: "superseded",
             },
           ],
@@ -575,7 +698,8 @@ describe("the Memory screen", () => {
 
     expect(text(container)).toContain("+Retainer ends in September");
     expect(text(container)).toContain("superseded, contradicted");
-    expect(text(container)).not.toContain(NO_DIFFS_YET);
+    expect(text(container)).toContain("superseded, rejected");
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(3);
   });
 
   test("a person with nothing readable is one sentence, whatever the reason", async () => {

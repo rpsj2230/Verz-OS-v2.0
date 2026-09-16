@@ -603,6 +603,20 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "whoever may read it reads whose request it is."
                 ),
             ),
+            AuditKindDecision(
+                kind="memory",
+                covered=False,
+                because=(
+                    "Not covered, for the reason entity and artifact are not, since the kind was "
+                    "added on 2026-09-17, after item 48. A correction entry names a memory, and a "
+                    "memory is formed from somebody's conversation under the capabilities they "
+                    "held then; whether a reader may know one exists is brain.memory.formation."
+                    "may_recall's question, asked against those capabilities, which an "
+                    "actor-scoped audit grant never consults. Admitting the kind would make the "
+                    "ledger the way round recall. A head who undoes a learning in their department "
+                    "sees it undone on the Learning screen, which asks recall first."
+                ),
+            ),
         )
     }
 )
