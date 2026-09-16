@@ -43,6 +43,7 @@ import { Suspense } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
+import { INSTALL_SECTIONS } from "../pages/installQuery";
 
 /** Every section, for everyone. See the note above before adding a condition to this. */
 const SECTIONS: readonly { to: string; label: string }[] = [
@@ -53,6 +54,21 @@ const SECTIONS: readonly { to: string; label: string }[] = [
   { to: "/classification", label: "Classification" },
   { to: "/agents", label: "Agents" },
   { to: "/approvals", label: "Approvals" },
+  { to: "/service-levels", label: "Service levels" },
+  { to: "/spend", label: "Spend" },
+  { to: "/adoption", label: "Adoption" },
+  // The govern group, in the order `brain.console.screens` registers it and under the titles
+  // that registry gives it. Flat, for the reason the install group below is flat.
+  { to: "/people", label: "People and grants" },
+  { to: "/roles", label: "Roles" },
+  { to: "/capabilities", label: "Capabilities" },
+  { to: "/scopes", label: "Scopes and departments" },
+  // The install group, in the order `brain.console.screens` lists it and under the titles that
+  // registry gives it. Five flat entries rather than one heading with five under it, because
+  // this list has no nesting and inventing some for one group would make the shape of the menu
+  // a claim about which screens belong together, decided here rather than by the registry that
+  // already decides it. See `pages/installQuery.ts`.
+  ...INSTALL_SECTIONS,
 ];
 
 export function Shell() {

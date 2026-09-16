@@ -44,6 +44,7 @@
 import type { RJSFSchema, UiSchema } from "@rjsf/utils";
 import type { ReactNode } from "react";
 import { chipCell, valueCell } from "../components/cells";
+import { scopeLines } from "./scopeText";
 import type { GridColumn } from "../components/DataTable";
 import type { components } from "../api/schema";
 
@@ -177,50 +178,15 @@ export function rungById(rungs: readonly RungRow[], rungId: string): RungRow | n
 }
 
 /**
- * One clause of a rung's scope, in the API's own three words.
+ * One clause of a scope and the clauses of one scope, as text.
  *
- * The console supplies the spaces and nothing else: the field name, the operator and the
- * value are all `brain.core.scope.Clause`'s, unchanged. There is no table of friendlier
- * operator words here for the reason `ui/Status.tsx` renders a state word exactly as it
- * arrived: `prefix` is the word the grant tables, the query compiler and every support
- * conversation use, and "starts with" would be a fourth vocabulary.
- *
- * A value that is not a string is rendered as its own JSON. `Op.IN` carries a list and
- * `Op.ANY` carries nothing, and both are payload shapes rather than prose; joining a list
- * with commas would read as a conjunction, which is the opposite of what IN means.
+ * Re-exported rather than defined here since 2026-09-16, when the govern console's Scopes
+ * screen needed the same rendering. See `scopeText.ts` for why the move, and why that module
+ * imports nothing: a page reaching into this one for two pure functions would pull the table
+ * library into its chunk. Nothing that imports `clauseText` or `scopeLines` from here had to
+ * change, which is the point of re-exporting rather than relocating the call sites.
  */
-export function clauseText(clause: unknown): string {
-  if (typeof clause !== "object" || clause === null) {
-    return "";
-  }
-  const { field, op, value } = clause as { field?: unknown; op?: unknown; value?: unknown };
-  if (typeof field !== "string" || typeof op !== "string") {
-    return "";
-  }
-  if (value === null || value === undefined) {
-    return `${field} ${op}`;
-  }
-  return `${field} ${op} ${typeof value === "string" ? value : JSON.stringify(value)}`;
-}
-
-/**
- * The clauses of one rung's scope, as text.
- *
- * A scope with no clauses yields no lines, and the cell is empty. That is the honest
- * rendering: an unrestricted scope narrows nothing, and a word like "all" would be this
- * console naming a state the payload does not carry. Every other empty cell in this console
- * means the same thing, which is that there was nothing there to show.
- */
-export function scopeLines(scope: unknown): string[] {
-  if (typeof scope !== "object" || scope === null) {
-    return [];
-  }
-  const clauses = (scope as { clauses?: unknown }).clauses;
-  if (!Array.isArray(clauses)) {
-    return [];
-  }
-  return clauses.map(clauseText).filter((line) => line !== "");
-}
+export { clauseText, scopeLines } from "./scopeText";
 
 /**
  * How each column of a rung is rendered.

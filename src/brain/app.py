@@ -72,6 +72,7 @@ from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
 from brain.gate.suspension_store import StoredSuspensions
+from brain.govern_routes import router as govern_router
 from brain.identity.bearer import TokenAuthority, log_refusal, refusal_headers
 from brain.identity.first_administrator import FirstAdministrators
 from brain.identity.keycloak_tokens import http_get, keycloak_authority
@@ -81,6 +82,7 @@ from brain.identity.principal_store import StoredPrincipals
 from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
 from brain.install import InstallError, installed_name
+from brain.install_routes import router as install_router
 from brain.knowledge.row_store import SessionRowSource
 from brain.migrate import run_migrations
 from brain.ops.automation_owner_store import StoredAutomations
@@ -89,6 +91,7 @@ from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
+from brain.report_routes import router as report_router
 from brain.routing_routes import router as routing_router
 from brain.session import (
     check_reachable,
@@ -734,6 +737,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # administrator the finishing screen above then signs in. An eighth router because its caller
     # holds the setup code and no token at all. See `brain.setup_routes`.
     app.include_router(setup_router)
+    # The five install screens. A ninth router because what it answers about is the deployment
+    # rather than the company's data: no name to guess, no row belonging to anybody, and no
+    # session on four of the five. The same `asking` dependency, imported. See
+    # `brain.install_routes`.
+    app.include_router(install_router)
+    # The three Report screens: service levels, spend and adoption. A router of its own because
+    # the decision differs again and in the opposite direction to the matrix's: none of these
+    # checks a capability at all, because the module that owns each screen narrows it row by
+    # row and a check here would be the first half of that predicate in a second copy. See
+    # `brain.report_routes`.
+    app.include_router(report_router)
+    # The four Govern screens, and the two writes over a grant. A router of its own because
+    # what it answers about is the permission system itself: whether a screen opens is
+    # `brain.console.reads.permitted` rather than a bare capability, so an existence-only
+    # reader is refused a configuration screen, and the two writes defer entirely to
+    # `brain.console.scoped_authority` and `brain.console.govern`. See `brain.govern_routes`.
+    app.include_router(govern_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:

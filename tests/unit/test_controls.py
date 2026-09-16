@@ -379,18 +379,25 @@ def test_a_control_whose_only_caller_is_itself_uncalled_is_reported() -> None:
 
     **It named that function until 2026-09-15**, when `brain.knowledge.item_store` became its
     caller and the worker's schedule the store's, so the chain it described was repaired rather
-    than hidden. The recovery panel is the same shape today: `drill_due` is called from
-    `brain.console.recovery_view`, a console page nothing imports.
+    than hidden. **It named `brain.ops.recovery:drill_due` until 2026-09-16**, and that one was
+    repaired the same way: `brain.install_routes` serves the recovery panel at an address and
+    `brain.app` mounts it, so `brain.console.recovery_view` is a module something imports.
+
+    The staff sync is the same shape today: `dry_run` is called from
+    `brain.console.staff_source_view`, a console page nothing imports. The fixture has to be a
+    real chain in this tree rather than an invented one, so it moves as the tree is wired, and
+    the day nothing here is left unreached this test needs a tree of its own instead.
     """
     from brain.ops.controls import chains_worth_checking
 
     inner_only = _control(
-        symbols=("brain.ops.recovery:drill_due",),
+        symbols=("brain.identity.staff_sync:dry_run",),
         invoked_by=Invocation.IN_PROCESS,
     )
     findings = chains_worth_checking((inner_only,))
     assert any(
-        "called from brain.console.recovery_view:" in one and "as unreached as the control" in one
+        "called from brain.console.staff_source_view:" in one
+        and "as unreached as the control" in one
         for one in findings
     )
     assert chains_worth_checking((control("audit_anchor"),)) == ()

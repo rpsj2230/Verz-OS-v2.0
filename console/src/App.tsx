@@ -44,8 +44,19 @@ import { RequireSession } from "./auth/RequireSession";
 import { CallbackRoute, SignedOutRoute } from "./auth/routes";
 import { configProblems } from "./config";
 import { Shell } from "./layout/Shell";
+import { Adoption } from "./pages/Adoption";
 import { Agents } from "./pages/Agents";
 import { Ask } from "./pages/Ask";
+import { Capabilities } from "./pages/Capabilities";
+import { Capacity } from "./pages/Capacity";
+import { Roles } from "./pages/Roles";
+import { Scopes } from "./pages/Scopes";
+import { Install } from "./pages/Install";
+import { Limits } from "./pages/Limits";
+import { Recovery } from "./pages/Recovery";
+import { Updates } from "./pages/Updates";
+import { ServiceLevels } from "./pages/ServiceLevels";
+import { Spend } from "./pages/Spend";
 import { NotFound } from "./pages/NotFound";
 import { FirstRun } from "./pages/FirstRun";
 import { Overview } from "./pages/Overview";
@@ -107,6 +118,20 @@ const Agent = lazy(async () => ({ default: (await import("./pages/Agent")).Agent
 const Approvals = lazy(async () => ({
   default: (await import("./pages/Approvals")).Approvals,
 }));
+
+/**
+ * The people and grants page, fetched when somebody asks for it.
+ *
+ * It mounts the form library to write a grant, so an eager import here would put `@rjsf/core`
+ * and the ajv validator back in the entry chunk for everybody, which is the measurement the
+ * records and matrix routes are split for. `tests/bundle-split.test.ts` walks the static graph
+ * from `main.tsx` and does not care which route reached the library.
+ *
+ * The other three Govern pages are imported statically below. None of them mounts a heavy
+ * library or a stylesheet of its own, so a chunk for any of them would buy a round trip and
+ * save no bytes, which is this file's rule for `Overview` and `Agents`.
+ */
+const People = lazy(async () => ({ default: (await import("./pages/People")).People }));
 
 /**
  * Shown when a page throws while rendering.
@@ -212,6 +237,35 @@ export const routes: RouteObject[] = [
       // The queue, and one approval on its own, which is where a link from a chat lands.
       { path: "approvals", element: <Approvals /> },
       { path: "approvals/:suspensionId", element: <Approvals /> },
+      // The five install screens. One path each and no parameter on any of them, because none
+      // of them has a sub-object to open: `brain.install_routes` gives the same argument for
+      // its own addresses. Each path is the screen's key in `brain.console.screens`, which is
+      // what `brain.ops.console_screens.routed_screen_keys` matches the registry against, so a
+      // prettier address would take these off that list while leaving them reachable. Eager
+      // rather than split: each mounts neither heavy library and imports no stylesheet of its
+      // own, so a chunk for any of them would buy a round trip and save no bytes.
+      { path: "install", element: <Install /> },
+      { path: "updates", element: <Updates /> },
+      { path: "recovery", element: <Recovery /> },
+      { path: "limits", element: <Limits /> },
+      { path: "connections", element: <Capacity /> },
+      // The three Report screens. One path each and no parameter on any of them: each is a
+      // reading of a window, the window is the request rather than the address, and there is
+      // nothing on these pages a person could open. Eager rather than split, because none of
+      // the three mounts a heavy library or a stylesheet of its own.
+      { path: "service-levels", element: <ServiceLevels /> },
+      { path: "spend", element: <Spend /> },
+      { path: "adoption", element: <Adoption /> },
+      // The four Govern screens. Two paths and one component for People, at the address one
+      // subject's page has: the bare path is where somebody arrives from the menu and the
+      // segment is the subject key, resolved against the page rather than against a route of
+      // its own. See `pages/People.tsx`. The other three are one path each, because there is
+      // nothing on them a person opens: a role, a capability and a scope are each shown whole.
+      { path: "people", element: <People /> },
+      { path: "people/:subject", element: <People /> },
+      { path: "roles", element: <Roles /> },
+      { path: "capabilities", element: <Capabilities /> },
+      { path: "scopes", element: <Scopes /> },
       { path: "*", element: <NotFound /> },
     ],
   },

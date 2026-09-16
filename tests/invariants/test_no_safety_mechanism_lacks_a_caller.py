@@ -125,9 +125,17 @@ SCHEDULED_BY_THE_WORKER = frozenset(
 #: `KNOWN_ORPHANS`' reason: a chain that appears quietly is an incident, and one repaired
 #: without being recorded makes every entry above it less believable.
 #:
-#: `restore_drill` joined it on 2026-09-14 for the reason `directory_sync` did: its caller is
-#: `brain.console.recovery_view`, a console page nothing imports.
-CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "restore_drill"})
+#: `restore_drill` joined it on 2026-09-14 for the reason `directory_sync` did: its caller was
+#: `brain.console.recovery_view`, a console page nothing imported. **It left again on
+#: 2026-09-16**, when `brain.install_routes` was written and `brain.app` mounted it: the
+#: recovery panel is served at an address now, so the module that calls `drill_due` is a module
+#: another one imports, and the chain is repaired rather than hidden. That is what this set is
+#: for in both directions, and the equality below is what makes the repair have to be recorded.
+#:
+#: `directory_sync` stays, and the sentence above about the console is now narrower than it was:
+#: five console pages are reachable, and `brain.console.staff_source_view` and
+#: `brain.console.scoped_authority` are not two of them.
+CALLERS_NOTHING_REACHES = frozenset({"directory_sync"})
 
 
 def test_every_control_names_functions_that_exist() -> None:

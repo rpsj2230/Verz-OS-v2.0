@@ -52,12 +52,20 @@ implies the other is the same false assurance, so `memory_capacity` reports both
 and never derives one from the other.
 
 **These screens are about the installation and never about the company's data**, which is why
-almost nothing here filters by reach. `brain.console.screens` marks all four `company_wide` and
-`for_department` leaves them out, which is M27.5.10 and is already built. The exception is the
-throttling list: a rate limit names its subject, and `brain.ops.limits.LimitScope.PRINCIPAL`
-means that subject is a person. A screen listing who is currently being throttled is a
-directory of who is busy, so `throttled_now` filters by the limits screen's own capability in a
-scope matching the row.
+almost nothing here filters by reach. The exception is the throttling list: a rate limit names
+its subject, and `brain.ops.limits.LimitScope.PRINCIPAL` means that subject is a person. A
+screen listing who is currently being throttled is a directory of who is busy, so
+`throttled_now` filters by the limits screen's own capability in a scope matching the row.
+
+**This paragraph said until 2026-09-16 that `brain.console.screens` marks all four of these
+screens `company_wide` and that `for_department` leaves them out.** Neither half is true and
+both stopped being true on 2026-09-10, when the owner overruled exactly that reading of
+M27.5.10: there is no `company_wide` field on a `Screen` any more and there is deliberately no
+parameter for one, and `NOT_AT_DEPARTMENT_SCOPE` withholds only the screen whose rows are
+people. A screen that renders empty at a department's scope has said the rows this reader may
+see are none, which is what every scoped surface here does, and taking it out of the menu
+instead is the subtraction disclosure. So This install, Backup and recovery and Capacity are
+all offered to a department admin, and only the throttling list is not.
 
 **Nothing here reads the environment.** `brain.install.value_of` is the one reader of an
 installation value and `brain.ops.independence.second_readers` refuses a second, so the
@@ -151,8 +159,9 @@ WHAT_A_PROFILE_DECLARES_AND_WHAT_THE_COMPOSE_FILES_RESERVE_ARE_TWO_FIGURES: Fina
 
 #: Why a throttling list is filtered when the rest of this group is not.
 A_RATE_LIMIT_NAMES_ITS_SUBJECT_AND_A_SUBJECT_IS_OFTEN_A_PERSON: Final = (
-    "The other screens in this group are about the deployment and about nobody, which is "
-    "why brain.console.screens marks them company_wide. A rate limit is different: its "
+    "The other screens in this group are about the deployment and about nobody, which is why "
+    "nothing on them is narrowed by who is asking and why every one of them is offered to a "
+    "department admin. A rate limit is different: its "
     "scope may be a principal, and a list of who is currently being throttled is a list of "
     "who is busy, with a number beside each name. So the rows are narrowed by the limits "
     "screen's own capability in a scope that matches the row, exactly as any other listing "

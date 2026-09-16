@@ -148,6 +148,33 @@ const WORKSPACE = {
   ],
 };
 
+/** One page of people, whose subject key and capability are both unbreakable tokens. */
+const PEOPLE = {
+  items: [{ subject: `principal:${UNBROKEN}`, capabilities: [UNBROKEN] }],
+  next_cursor: null,
+  total: null,
+  truncated: false,
+  editable: true,
+  staleness: null,
+};
+
+/** One scope, whose slug and whose clause value are both unbreakable tokens. */
+const SCOPES = {
+  items: [
+    {
+      slug: UNBROKEN,
+      label: UNBROKEN,
+      is_department: true,
+      scope: { clauses: [{ field: "department", op: "eq", value: UNBROKEN }] },
+    },
+  ],
+  next_cursor: null,
+  total: null,
+  truncated: false,
+  departments: [UNBROKEN],
+  staleness: null,
+};
+
 /** Every registered route pattern, and what to mount for it. */
 const PAGES: Readonly<Record<string, PageCase>> = {
   "/": {
@@ -241,6 +268,232 @@ const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/approvals/sus_1": card("sus_1") },
+  },
+  // The three Report screens. Each draws a table of figures beside a key that can be an
+  // unbroken identifier, which is the shape that took five views off the side of a phone
+  // before `.grid__scroll` existed: the table scrolls and the document does not.
+  "/service-levels": {
+    address: "/service-levels",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/report/service-levels": {
+        start: "2019-03-04T09:00:00Z",
+        end: "2019-03-05T09:00:00Z",
+        lanes: [
+          {
+            lane: UNBROKEN,
+            objective_p95_ms: 2000,
+            objective_success_rate: 0.99,
+            p95_ms: 1200,
+            success_rate: 0.995,
+            requests: 40,
+            met: true,
+            shortfalls: [UNBROKEN],
+          },
+        ],
+      },
+    },
+  },
+  "/spend": {
+    address: "/spend",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/report/spend": {
+        dimension: "department",
+        built: true,
+        lines: [{ key: UNBROKEN, cost_minor: 700 }],
+        machine_included: false,
+        total_minor: 700,
+        as_of: "2019-03-04T09:00:00Z",
+        freshness: "live",
+      },
+    },
+  },
+  "/adoption": {
+    address: "/adoption",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/report/adoption": {
+        items: [{ department: UNBROKEN, questions: 12, people: 3 }],
+        next_cursor: null,
+        total: null,
+        truncated: false,
+      },
+    },
+  },
+  // The four govern screens. Every one of them draws an identifier from the API with nowhere to
+  // break: a subject key, a capability, a scope slug and a clause are all one token, and a
+  // capability is the longest of them. The people screen is mounted twice, once from the menu
+  // and once at a subject's own address, because the second draws a second list and a form.
+  "/people": {
+    address: "/people",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/people": PEOPLE },
+  },
+  "/people/:subject": {
+    address: `/people/${encodeURIComponent(`principal:${UNBROKEN}`)}`,
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/people": PEOPLE, "/api/v1/govern/scopes": SCOPES },
+  },
+  "/roles": {
+    address: "/roles",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/roles": {
+        roles: [
+          {
+            role: UNBROKEN,
+            exists_to: UNBROKEN,
+            typical_count: UNBROKEN,
+            scope_required: true,
+          },
+        ],
+        holders_are_not_recorded_yet: true,
+      },
+    },
+  },
+  "/capabilities": {
+    address: "/capabilities",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/govern/capabilities": {
+        capabilities: [{ capability: UNBROKEN, description: UNBROKEN }],
+        staleness: null,
+      },
+    },
+  },
+  "/scopes": {
+    address: "/scopes",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/govern/scopes": SCOPES },
+  },
+  // The five install screens. Each draws a value the API sent, so the unbroken identifier is on
+  // every one of them: a fact's value, a release statement, a copy's timestamp, a ceiling's name
+  // and a database's name are all identifiers with nowhere to break, which is the shape that
+  // took three other pages past a phone's width before anybody measured.
+  "/install": {
+    address: "/install",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install": {
+        facts: [
+          { name: "profile", source: "declared", value: "standard", because: "" },
+          { name: "release", source: "measured", value: UNBROKEN, because: UNBROKEN },
+        ],
+      },
+    },
+  },
+  "/updates": {
+    address: "/updates",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install/updates": {
+        running: {
+          tag: "",
+          facts: [{ name: "built commit", source: "measured", value: UNBROKEN, because: UNBROKEN }],
+          cannot_say: UNBROKEN,
+        },
+        told: null,
+        unanswered: {
+          why: "no release list is configured",
+          detail: UNBROKEN,
+          at: "2019-03-04T09:00:00Z",
+        },
+        standing: "unknown running",
+        says: UNBROKEN,
+        what_to_do: UNBROKEN,
+        told_days_ago: null,
+        goes_off_after_days: 30,
+      },
+    },
+  },
+  "/recovery": {
+    address: "/recovery",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install/recovery": {
+        panel: {
+          profile: "standard",
+          copies: [
+            {
+              coverage: "database",
+              facts: [
+                {
+                  name: "database: newest copy reaches",
+                  source: "measured",
+                  value: UNBROKEN,
+                  because: UNBROKEN,
+                },
+              ],
+              within_objective: false,
+              objective_seconds: 3600,
+            },
+          ],
+          last_verified: {
+            name: "last verified restore",
+            source: "unknown",
+            value: "",
+            because: UNBROKEN,
+          },
+          measured_rto_seconds: null,
+          assurance: "never verified",
+          says: UNBROKEN,
+          what_to_do: UNBROKEN,
+          drill_is_due: true,
+          // Empty, and not because the unreadable case does not matter. `ui/Notice.tsx` carries
+          // `role="status"`, which is what `mount` above waits for the absence of before it
+          // measures, so a page whose steady state holds a notice never settles here. The two
+          // notice states on these screens are held by `tests/install-pages.test.tsx` instead.
+          unreadable: [],
+        },
+        unread: "",
+      },
+    },
+  },
+  "/limits": {
+    address: "/limits",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install/limits": {
+        ceilings: [{ name: UNBROKEN, per_day: 5000, raisable: true, derived: false }],
+        throttled: [
+          { scope: "principal", subject: UNBROKEN, limit: 60, retry_after_seconds: 12 },
+        ],
+        unread: "",
+      },
+    },
+  },
+  "/connections": {
+    address: "/connections",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install/capacity": {
+        memory: {
+          profile: "standard",
+          host_total_mib: 16000,
+          declared_mib: 4000,
+          deployed_mib: null,
+          // Empty for the reason the recovery case above gives: a budget finding draws a notice,
+          // and a notice never stops looking like a page that is still asking to `mount`.
+          breaches: [],
+          unbudgeted: [],
+        },
+        connections: [{ database: UNBROKEN, admissible: 100, demand: 60, headroom: 40 }],
+      },
+    },
   },
   "/*": { address: "/no/such/page", signedIn: true, drawsValues: false, answers: {} },
   [CALLBACK_PATH]: {
