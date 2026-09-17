@@ -58,6 +58,15 @@ function choicesFor(expression: string, wizard: string): string[] {
     const block = blockFrom(wizard, /^STAFF_SOURCE_BROKERS: .*$/m, "STAFF_SOURCE_BROKERS");
     return [...block.matchAll(/^\s+"(\w+)": "/gm)].map((one) => one[1] ?? "");
   }
+  if (expression === "_one_of(STEWARD_IS_ADMINISTRATOR_ANSWERS)") {
+    return quoted(
+      extractOne(
+        wizard,
+        /^STEWARD_IS_ADMINISTRATOR_ANSWERS: [^=]+= \(([^)]*)\)$/m,
+        "STEWARD_IS_ADMINISTRATOR_ANSWERS",
+      ),
+    );
+  }
   if (expression === "_one_of(MODEL_PROFILES)") {
     return quoted(extractOne(wizard, /^MODEL_PROFILES: [^=]+= \(([^)]*)\)$/m, "MODEL_PROFILES"));
   }

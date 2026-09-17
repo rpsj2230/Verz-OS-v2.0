@@ -21,7 +21,7 @@
  * administrator's token, and to be the Connectors screen's own request, and skipping the step is
  * asserted to connect nothing.
  *
- * Task ids: M42.5.14, M27.8.7, M42.5.9
+ * Task ids: M42.5.14, M27.8.7, M42.5.9, M27.9.9
  */
 
 import { RouterProvider, createMemoryRouter } from "react-router-dom";
@@ -29,6 +29,7 @@ import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import {
   APPOINTMENT_PATH,
+  DATA_STEWARD_EXPLAINED,
   FINISH_PATH,
   FINISH_TITLE,
   FIRST_RUN_PATH,
@@ -183,8 +184,16 @@ async function openFirstRun(idp: ReturnType<typeof fakeIdentityProvider>) {
   return { loaded, router, container, landed };
 }
 
-/** Every screen answered, the data sources skipped unless some are named, ending on the review. */
-async function answerEverything(container: HTMLElement, hosted = false, sources = ""): Promise<void> {
+/**
+ * Every screen answered, the data sources skipped unless some are named, ending on the review. The
+ * data steward is another person unless `administratorIsSteward`, which answers yes and nothing else.
+ */
+async function answerEverything(
+  container: HTMLElement,
+  hosted = false,
+  sources = "",
+  administratorIsSteward = false,
+): Promise<void> {
   give(container, "setup_code", "setup_code", CODE);
   press(container, "Continue");
   await arriveAt(container, "Your company");
@@ -194,6 +203,15 @@ async function answerEverything(container: HTMLElement, hosted = false, sources 
   await arriveAt(container, "The first administrator");
   give(container, "administrator", "full_name", "NAME-SENTINEL");
   give(container, "administrator", "work_address", "first@example.invalid");
+  press(container, "Continue");
+  await arriveAt(container, "The data steward");
+  expect(container.textContent).toContain(DATA_STEWARD_EXPLAINED);
+  if (administratorIsSteward) {
+    give(container, "data_steward", "steward_is_administrator", "yes");
+  } else {
+    give(container, "data_steward", "steward_full_name", "STEWARD-SENTINEL");
+    give(container, "data_steward", "steward_work_address", "steward@example.invalid");
+  }
   press(container, "Continue");
   await arriveAt(container, "Your staff list");
   give(container, "staff_source", "staff_source", "spreadsheet");
@@ -373,6 +391,11 @@ describe("the whole of first run", () => {
       answers: {
         company: { company_name: COMPANY, product_name: "", web_address: WEB, logo_url: "" },
         administrator: { full_name: "NAME-SENTINEL", work_address: "first@example.invalid" },
+        data_steward: {
+          steward_full_name: "STEWARD-SENTINEL",
+          steward_work_address: "steward@example.invalid",
+          steward_is_administrator: "",
+        },
         staff_source: { staff_source: "spreadsheet", staff_source_location: "" },
         model_provider: { model_profile: "local", model_provider: "", provider_key: "" },
       },
@@ -382,6 +405,28 @@ describe("the whole of first run", () => {
     expect(finishing?.body).toEqual({ setup_code: CODE, principal_id: PRINCIPAL });
     expect(finishing?.authorization).toBe("Bearer ACCESS-TOKEN-1");
     expect(router.state.location.pathname).toBe("/");
+  });
+
+  test("the data steward screen says what the choice means, and the administrator chosen is sent as that answer alone", async () => {
+    // What breaks if this is deleted: the one screen whose default decides who every read of the
+    // company's data begins with. The page must say what choosing the administrator means before it
+    // is chosen, and a person who chooses it must send that answer with the name and address blank,
+    // which is what the server reads as the same person said out loud.
+    const { idp, seen } = standIn({
+      appointment: () => json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: "not_asked" }),
+    });
+    const { container } = await openFirstRun(idp);
+
+    await answerEverything(container, false, "", true);
+    press(container, "Set up this system");
+    await arriveAt(container, "Overview");
+
+    const sent = callsTo(seen, APPOINTMENT_PATH)[0]?.body as { answers: Record<string, unknown> };
+    expect(sent.answers["data_steward"]).toEqual({
+      steward_full_name: "",
+      steward_work_address: "",
+      steward_is_administrator: "yes",
+    });
   });
 
   test("the setup code reaches no browser store and no address at any point", async () => {

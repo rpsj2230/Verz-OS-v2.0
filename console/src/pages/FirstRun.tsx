@@ -66,11 +66,16 @@
  * not be: that is the fact `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER` hides. The install
  * page tells the person holding the code which address to open.
  *
+ * **The data steward screen says what the choice means above its questions**, because the default
+ * is another person and the one answer that makes the administrator the steward as well puts the
+ * widest governance and the widest data reach in one account. See
+ * `brain.identity.data_steward.DATA_ACCESS_BEGINS_WITH_A_NAMED_STEWARD`.
+ *
  * **The staff list screen carries a check under its questions**, drawn by `components/StaffListCheck.tsx`,
  * which reads the chosen list once and holds what it needs in its own state, so nothing it asks
  * for is an answer, in the review or in the appointment.
  *
- * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9
+ * Task ids: M42.5.14, M27.8.7, M42.5.7, M42.5.9, M27.9.9
  */
 
 import { useState, useSyncExternalStore } from "react";
@@ -83,6 +88,7 @@ import { accessToken, beginSignIn, getSessionState, subscribe } from "../auth/se
 import { ConnectSourcesStep, namedSources } from "../setup/ConnectSourcesStep";
 import {
   APPOINTMENT_PATH,
+  DATA_STEWARD_EXPLAINED,
   FINISH_PATH,
   FINISH_TITLE,
   FIRST_RUN_PATH,
@@ -538,6 +544,7 @@ function Wizard() {
         Step {at + 1} of {TOTAL_STEPS}
       </p>
       <h1>{screen.title}</h1>
+      {screen.key === "data_steward" ? <p>{DATA_STEWARD_EXPLAINED}</p> : null}
       <StepProblems sentences={placed.byStep[screen.key]} />
       <form
         className="form"

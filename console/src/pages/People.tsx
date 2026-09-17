@@ -43,7 +43,11 @@
  * opens the overview. `App.tsx` loads this route on demand and `tests/bundle-split.test.ts`
  * walks the static import graph to prove it.
  *
- * Task ids: M27.7.3, M27.7.7, M27.8.4
+ * **The data steward card sits under the listing**, because a grant of a data read begins with the
+ * steward and an install set up before the setup wizard named one names them here. See
+ * `components/DataStewardCard.tsx`.
+ *
+ * Task ids: M27.7.3, M27.7.7, M27.8.4, M27.9.9
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -55,6 +59,7 @@ import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListContr
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { DataStewardCard } from "../components/DataStewardCard";
 import { SchemaForm } from "../components/SchemaForm";
 import {
   GRANTS_API_PATH,
@@ -416,6 +421,12 @@ export function People() {
       <p className="lede">{PEOPLE_LEDE}</p>
 
       <PeopleRows openSubject={subject} version={version} onWritten={onWritten} />
+
+      {/*
+       * Who every read of the company's data begins with, and naming them where nobody is. Below
+       * the listing, and drawn only for a reader the API answers. See `components/DataStewardCard`.
+       */}
+      <DataStewardCard />
     </article>
   );
 }

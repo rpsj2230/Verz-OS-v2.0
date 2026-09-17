@@ -17,6 +17,7 @@ import json
 import os
 import re
 import stat
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -82,6 +83,8 @@ from brain.setup_wizard import (
     skip,
     snapshot,
     step_for,
+    steward_answer,
+    steward_problems,
     unlock,
     wizard_gaps,
     write_draft,
@@ -111,6 +114,9 @@ COMPANY_ANSWERS = MappingProxyType(
 ADMIN_ANSWERS = MappingProxyType(
     {"full_name": "A Person", "work_address": "a.person@company.internal"}
 )
+STEWARD_ANSWERS = MappingProxyType(
+    {"steward_full_name": "A Steward", "steward_work_address": "a.steward@company.internal"}
+)
 SOURCE_ANSWERS = MappingProxyType(
     {"staff_source": "google_workspace", "staff_source_location": "company.internal"}
 )
@@ -132,6 +138,7 @@ def answered(*, hosted: bool = False, skip_connections: bool = True) -> Draft:
     for key, values in (
         (StepId.COMPANY, COMPANY_ANSWERS),
         (StepId.ADMINISTRATOR, ADMIN_ANSWERS),
+        (StepId.DATA_STEWARD, STEWARD_ANSWERS),
         (StepId.STAFF_SOURCE, SOURCE_ANSWERS),
         (StepId.MODEL_PROVIDER, HOSTED_ANSWERS if hosted else LOCAL_ANSWERS),
     ):
@@ -1567,6 +1574,7 @@ def test_the_screens_that_store_nothing_are_the_ones_a_resume_cannot_land_on() -
     assert stores == {
         StepId.COMPANY,
         StepId.ADMINISTRATOR,
+        StepId.DATA_STEWARD,
         StepId.STAFF_SOURCE,
         StepId.MODEL_PROVIDER,
         StepId.CONNECTIONS,
@@ -1678,3 +1686,83 @@ def test_the_first_sign_in_is_bound_only_to_an_administrator() -> None:
     with pytest.raises(WizardError) as refused:
         finish(an_enrolment(), SECRET, administrators=0, signing_in=0, now=INSIDE)
     assert not isinstance(refused.value, WizardClosedError | WizardLockedError)
+
+
+# ------------------------------------------------------------------ the data steward
+
+
+def test_the_steward_screen_wants_another_person_unless_the_administrator_is_chosen() -> None:
+    """Both directions of `_steward_rule`, and the answers that pass. Blank, the screen wants a name
+    and an address; with the administrator chosen it wants neither, and refuses one given beside
+    that choice; an address that is not one and a choice that is not offered are each their own
+    question's refusal alone. Delete this and the wizard can appoint a steward with no name, or
+    quietly drop a name typed beside the choice that made it meaningless."""
+    step = step_for(StepId.DATA_STEWARD)
+    another = {
+        "steward_full_name": "A Steward",
+        "steward_work_address": "a.steward@company.internal",
+    }
+
+    def keyed(values: Mapping[str, str]) -> list[tuple[str, str]]:
+        return [(one.field, one.key) for one in problems_with(step, values)]
+
+    assert keyed({}) == [
+        ("steward_full_name", "setup.error.steward_needed"),
+        ("steward_work_address", "setup.error.steward_needed"),
+    ]
+    assert keyed(another) == []
+    assert keyed({**another, "steward_is_administrator": "no"}) == []
+    assert keyed({"steward_is_administrator": "yes"}) == []
+    assert keyed({"steward_is_administrator": "yes", "steward_full_name": "A Steward"}) == [
+        ("steward_full_name", "setup.error.steward_not_wanted")
+    ]
+    assert keyed({**another, "steward_work_address": "nobody"}) == [
+        ("steward_work_address", "setup.error.not_an_address")
+    ]
+    assert keyed({"steward_is_administrator": "maybe"}) == [
+        ("steward_is_administrator", "setup.error.unknown_choice")
+    ]
+
+
+def test_the_administrator_s_address_as_another_person_is_the_one_problem_across_screens() -> None:
+    """`steward_problems` reads the administrator's screen and the steward's, and `apply_install`
+    refuses what it finds. The administrator's own address, in any case, is refused against the
+    steward's address box; the same person chosen by the separate answer is not, and is applied as
+    the administrator. Delete this and one human can be written as two principals, one the widest
+    governance and the other the widest data reach, with nothing saying they are one person."""
+    theirs = ADMIN_ANSWERS["work_address"].upper()
+    same_address, problems = answer(
+        answered(),
+        StepId.DATA_STEWARD,
+        {"steward_full_name": "A Person", "steward_work_address": theirs},
+        an_enrolment(),
+        SECRET,
+        administrators=0,
+        now=INSIDE,
+    )
+    chosen, chosen_problems = answer(
+        answered(),
+        StepId.DATA_STEWARD,
+        {"steward_is_administrator": "yes"},
+        an_enrolment(),
+        SECRET,
+        administrators=0,
+        now=INSIDE,
+    )
+
+    assert problems == chosen_problems == ()
+    assert [(one.field, one.key) for one in steward_problems(same_address)] == [
+        ("steward_work_address", "setup.error.steward_is_administrator")
+    ]
+    assert steward_problems(answered()) == ()
+    assert steward_problems(chosen) == ()
+    with pytest.raises(WizardError, match="administrator's own address"):
+        apply_install(
+            same_address, an_enrolment(), SECRET, principal_id=PERSON, administrators=0, now=INSIDE
+        )
+    applied = apply_install(
+        chosen, an_enrolment(), SECRET, principal_id=PERSON, administrators=0, now=INSIDE
+    )
+    assert applied.steward == steward_answer(chosen)
+    assert applied.steward is not None
+    assert applied.steward.same_as_administrator is True

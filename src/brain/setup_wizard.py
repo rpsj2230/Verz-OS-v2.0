@@ -115,12 +115,20 @@ one that hands the person into the console signed in, and a screen after it woul
 "finished" with a back button onto a written install. The token, the database and the binding
 are `brain.sign_in_routes`'; see `THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE`.
 
+**The data steward is named on a screen of its own, after the administrator's.** Since
+2026-09-17 every read of the company's data begins with a steward, and
+`brain.identity.data_steward.DATA_ACCESS_BEGINS_WITH_A_NAMED_STEWARD` is the rule. The screen
+asks for a different person by default, identified the way the administrator is, and the same
+person only as a separate answer. Because "the same person" is judged by the work address and the
+address is on the administrator's screen, it is the one rule here that reads two screens:
+`steward_problems`. See `THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE`.
+
 Scope: domain logic and one file. Nothing here opens a socket, reads a clock or renders
 anything; the three functions that read or write the draft are handed the path, and the only
 other file this touches is its own source, which `minting_gaps` reads to check itself.
 
 Task ids: M42.5.3, M42.5.4, M42.5.5, M42.5.6, M42.5.8
-Task ids: M42.5.10, M42.5.11, M42.5.12, M42.5.13, M42.5.14
+Task ids: M42.5.10, M42.5.11, M42.5.12, M42.5.13, M42.5.14, M27.9.9
 """
 
 from __future__ import annotations
@@ -259,6 +267,16 @@ THE_FINISHING_SCREEN_SIGNS_IN_ONE_ADMINISTRATOR_ONCE: Final = (
 )
 
 
+#: Why the steward screen defaults to somebody else, and how the same person is told apart.
+THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE: Final = (
+    "The data steward holds the widest reach over the company's data and the administrator the "
+    "widest governance, and one account holding both is a choice to make out loud. So the screen "
+    "asks for a name and a work address by default, and the same person is a separate answer. "
+    "The administrator's own address typed as the steward's is the same person without that "
+    "answer, which would make a second account for one human, so it is refused beside the box."
+)
+
+
 class WizardError(Exception):
     """Raised when the wizard is asked for something it must not do."""
 
@@ -293,6 +311,7 @@ class StepId(enum.StrEnum):
     SETUP_CODE = "setup_code"
     COMPANY = "company"
     ADMINISTRATOR = "administrator"
+    DATA_STEWARD = "data_steward"
     STAFF_SOURCE = "staff_source"
     MODEL_PROVIDER = "model_provider"
     CONNECTIONS = "connections"
@@ -425,6 +444,13 @@ STAFF_SOURCE_BROKERS: Final[Mapping[str, str]] = MappingProxyType(
 #: The two model profiles, spelled as `INSTALL_MODEL_PROFILE` spells them.
 MODEL_PROFILES: Final[tuple[str, ...]] = ("local", "hosted")
 
+#: The answers to whether the administrator is also the data steward. Blank is "no".
+STEWARD_IS_ADMINISTRATOR_ANSWERS: Final[tuple[str, ...]] = ("no", "yes")
+
+#: The one answer that makes the administrator the data steward as well. See
+#: `THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE`.
+SAME_PERSON: Final = "yes"
+
 #: The profile a client who has not chosen gets, matching that setting's own default: a client
 #: who has not chosen to send their text off their own hardware has not chosen it.
 LOCAL_ONLY: Final = "local"
@@ -556,6 +582,36 @@ def _staff_source_rule(values: Mapping[str, str]) -> tuple[FieldError, ...]:
     if location_problem(chosen.name, location):
         return (FieldError(field=field_name, key="setup.error.location_unusable"),)
     return ()
+
+
+#: The steward screen's name and address questions, in the order a problem is told.
+STEWARD_FIELDS: Final[tuple[str, ...]] = ("steward_full_name", "steward_work_address")
+
+
+def _steward_rule(values: Mapping[str, str]) -> tuple[FieldError, ...]:
+    """What the steward screen needs beyond each answer being well formed.
+
+    Both directions, for the provider screen's reason. The administrator chosen as the steward and
+    a name or address given beside it is two answers to one question, so each given one is refused
+    rather than silently dropped. Anybody else needs a name and an address. An answer to the
+    choice that is not one of the two produces nothing: its own question already refuses it. See
+    `THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE`.
+    """
+    chosen = values.get("steward_is_administrator", "").strip()
+    if chosen and chosen not in STEWARD_IS_ADMINISTRATOR_ANSWERS:
+        return ()
+    given = {name: values.get(name, "").strip() for name in STEWARD_FIELDS}
+    if chosen == SAME_PERSON:
+        return tuple(
+            FieldError(field=name, key="setup.error.steward_not_wanted")
+            for name in STEWARD_FIELDS
+            if given[name]
+        )
+    return tuple(
+        FieldError(field=name, key="setup.error.steward_needed")
+        for name in STEWARD_FIELDS
+        if not given[name]
+    )
 
 
 @dataclass(frozen=True)
@@ -706,6 +762,44 @@ WIZARD: Final[tuple[Step, ...]] = (
                 check=_work_address,
             ),
         ),
+    ),
+    Step(
+        key=StepId.DATA_STEWARD,
+        title_key="setup.step.data_steward.title",
+        questions=(
+            _q(
+                "steward_full_name",
+                errors=_errors(
+                    TOO_LONG,
+                    {
+                        "steward_needed": "setup.error.steward_needed",
+                        "steward_not_wanted": "setup.error.steward_not_wanted",
+                    },
+                ),
+                required=False,
+            ),
+            _q(
+                "steward_work_address",
+                errors=_errors(
+                    TOO_LONG,
+                    {
+                        "not_an_address": "setup.error.not_an_address",
+                        "steward_needed": "setup.error.steward_needed",
+                        "steward_not_wanted": "setup.error.steward_not_wanted",
+                        "steward_is_administrator": "setup.error.steward_is_administrator",
+                    },
+                ),
+                check=_work_address,
+                required=False,
+            ),
+            _q(
+                "steward_is_administrator",
+                errors=_errors(TOO_LONG, UNKNOWN),
+                check=_one_of(STEWARD_IS_ADMINISTRATOR_ANSWERS),
+                required=False,
+            ),
+        ),
+        also=_steward_rule,
     ),
     Step(
         key=StepId.STAFF_SOURCE,
@@ -1567,6 +1661,47 @@ def settings_from(draft: Draft) -> Mapping[str, str]:
 
 
 @dataclass(frozen=True)
+class StewardAnswer:
+    """Who the steward screen named: the administrator, or a person by name and address.
+
+    No principal id, because this module mints nothing; `brain.setup_routes` chooses one. The work
+    address is carried for the rule that reads it and is kept nowhere, as the administrator's is.
+    """
+
+    same_as_administrator: bool
+    full_name: str = ""
+    work_address: str = ""
+
+
+def steward_answer(draft: Draft) -> StewardAnswer:
+    """What the steward screen says, read the way `_steward_rule` reads it."""
+    values = draft.values_for(StepId.DATA_STEWARD)
+    if values.get("steward_is_administrator", "").strip() == SAME_PERSON:
+        return StewardAnswer(same_as_administrator=True)
+    return StewardAnswer(
+        same_as_administrator=False,
+        full_name=values.get("steward_full_name", "").strip(),
+        work_address=values.get("steward_work_address", "").strip(),
+    )
+
+
+def steward_problems(draft: Draft) -> tuple[FieldError, ...]:
+    """The one rule that reads two screens: the administrator's address named as another person.
+
+    Said against the steward screen's address field. Nothing for a steward who is the administrator
+    by the separate answer, and nothing while either address is blank, which each screen's own
+    rules already say. See `THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE`.
+    """
+    named = steward_answer(draft)
+    theirs = draft.values_for(StepId.ADMINISTRATOR).get("work_address", "").strip()
+    if named.same_as_administrator or not named.work_address or not theirs:
+        return ()
+    if named.work_address.casefold() != theirs.casefold():
+        return ()
+    return (FieldError(field="steward_work_address", key="setup.error.steward_is_administrator"),)
+
+
+@dataclass(frozen=True)
 class Applied:
     """What one completed wizard produces, and nothing it has already done.
 
@@ -1595,6 +1730,8 @@ class Applied:
     enrolment: Enrolment
     provider: str = ""
     provider_key: str = field(default="", repr=False)
+    #: Who the steward screen named. None only for a result built without the wizard.
+    steward: StewardAnswer | None = None
 
     def __post_init__(self) -> None:
         # Read out first so the condition fits on one line. `.scratch/guard_audit.py` mutates
@@ -1652,6 +1789,13 @@ def apply_install(
     if outstanding:
         msg = f"these screens are not finished and nothing has been written: {outstanding}"
         raise WizardError(msg)
+    if steward_problems(draft):
+        msg = (
+            "the data steward screen names the administrator's own address as another person, and "
+            "nothing has been written. "
+            f"{THE_STEWARD_IS_ANOTHER_PERSON_UNLESS_SOMEBODY_SAYS_OTHERWISE}"
+        )
+        raise WizardError(msg)
 
     provider = draft.values_for(StepId.MODEL_PROVIDER)
     return Applied(
@@ -1662,6 +1806,7 @@ def apply_install(
         enrolment=claimed.enrolment,
         provider=provider.get("model_provider", "").strip(),
         provider_key=provider.get("provider_key", "").strip(),
+        steward=steward_answer(draft),
     )
 
 

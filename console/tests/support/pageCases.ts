@@ -159,6 +159,19 @@ const PEOPLE = {
   staleness: null,
 };
 
+/**
+ * The People screen's Data steward card with nobody appointed, so its form is drawn. Sentences
+ * rather than tokens, because the card draws the API's sentences and never an identifier.
+ */
+const NO_STEWARD = {
+  appointed: false,
+  principal_id: null,
+  display_name: null,
+  told: "No data steward is appointed.",
+  appointing_another: "They are granted the reads of every connected source.",
+  appointing_yourself: "Your account then holds both.",
+};
+
 /** One scope, whose slug and whose clause value are both unbreakable tokens. */
 const SCOPES = {
   items: [
@@ -938,13 +951,17 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     address: "/people",
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/people": PEOPLE },
+    answers: { "/api/v1/govern/people": PEOPLE, "/api/v1/govern/data-steward": NO_STEWARD },
   },
   "/people/:subject": {
     address: `/people/${encodeURIComponent(`principal:${UNBROKEN}`)}`,
     signedIn: true,
     drawsValues: true,
-    answers: { "/api/v1/govern/people": PEOPLE, "/api/v1/govern/scopes": SCOPES },
+    answers: {
+      "/api/v1/govern/people": PEOPLE,
+      "/api/v1/govern/scopes": SCOPES,
+      "/api/v1/govern/data-steward": NO_STEWARD,
+    },
   },
   "/roles": {
     address: "/roles",

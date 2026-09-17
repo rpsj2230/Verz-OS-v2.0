@@ -33,6 +33,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANSWER_API_PATH } from "../../src/pages/askQuery";
 import { automationStartApiPath, automationStopApiPath } from "../../src/pages/agentAutomationsQuery";
+import { STEWARD_API_PATH } from "../../src/pages/dataStewardQuery";
 import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath } from "../../src/pages/auditQuery";
@@ -175,6 +176,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/govern/sessions*",
       "/api/v1/govern/sign-ins*",
       "/api/v1/sign-ins",
+      "/api/v1/govern/data-steward",
       "/api/v1/govern/staff_sources*",
     ],
     tables: [
@@ -662,6 +664,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/People.tsx REMOVAL_API_PATH": [at("POST /api/v1/govern/grants/removal", "REMOVAL_API_PATH", REMOVAL_API_PATH)],
   "src/pages/People.tsx GRANTS_API_PATH": [at("POST /api/v1/govern/grants", "GRANTS_API_PATH", GRANTS_API_PATH)],
+  "src/components/DataStewardCard.tsx STEWARD_API_PATH": [
+    at("POST /api/v1/govern/data-steward", "STEWARD_API_PATH", STEWARD_API_PATH),
+  ],
   "src/pages/Prompts.tsx editPath(asked.row.agent_id)": [at("POST /api/v1/govern/prompts/{agent_id}", "editPath", editPath("quote-helper"))],
   "src/pages/Prompts.tsx giveBackPath(asked.row.agent_id)": [
     at("POST /api/v1/govern/prompts/{agent_id}/give-back", "giveBackPath", giveBackPath("quote-helper")),
@@ -929,6 +934,19 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: GRANTS_PRESSED,
     audit: GRANTS_PRESSED,
     behaviour: GRANTS_PRESSED,
+  },
+  "POST /api/v1/govern/data-steward": {
+    row: t(
+      "test_data_steward_routes",
+      "test_an_administrator_names_themselves_steward_over_http_once_and_is_told_why_not_twice",
+      true,
+    ),
+    audit: t("test_data_steward", "test_every_steward_grant_leaves_a_ledger_entry_naming_who_made_it", true),
+    behaviour: t(
+      "test_data_steward",
+      "test_a_steward_named_at_setup_grants_a_source_s_read_on_and_the_administrator_cannot",
+      true,
+    ),
   },
   "POST /api/v1/govern/prompts/{agent_id}": {
     row: INSTRUCTIONS_PRESSED,

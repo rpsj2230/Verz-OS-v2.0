@@ -81,6 +81,7 @@ from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
 from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
+from brain.data_steward_routes import router as data_steward_router
 from brain.data_transfer_routes import router as data_transfer_router
 from brain.docs_routes import router as docs_router
 from brain.erasure_routes import router as erasure_router
@@ -1134,6 +1135,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # the shell renders an answer rather than a permission check of its own. See
     # `brain.navigation_routes`.
     app.include_router(navigation_router)
+    # The data steward: who every read of the company's data begins with, and naming one on an
+    # install whose setup named nobody, behind `admin:data_steward` over everything. See
+    # `brain.data_steward_routes` and `brain.identity.data_steward`.
+    app.include_router(data_steward_router)
 
     @app.get("/health/live", response_model=Health, tags=["health"])
     async def live() -> Health:
