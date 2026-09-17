@@ -8,6 +8,7 @@ These routes are public-by-deployment but carry no company data, they describe t
 not the client's records. Nothing here touches the gate.
 
 Task ids: M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5, M27.8.1, M38.2.1.6, M38.2.1.1
+Task ids: M38.5.1
 """
 
 from __future__ import annotations
@@ -91,6 +92,17 @@ async def status_json() -> JSONResponse:
     """What the tracker page reads. Also the machine-readable progress feed."""
     body = _read_status()
     body["requirements"] = _requirements(body)
+    return JSONResponse(body, headers={"cache-control": "no-store"})
+
+
+@router.get("/api/deploy-checks.json", response_class=JSONResponse)
+async def deploy_checks_json() -> JSONResponse:
+    """The post-deploy checks' verdict for the commit this container serves. See
+    `brain.ops.post_deploy`: passed, failed or not run, and never what a check found."""
+    from brain.ops.post_deploy import read_recorded, served
+    from brain.settings import Settings
+
+    body = served(Settings().resolved_commit(), read_recorded())
     return JSONResponse(body, headers={"cache-control": "no-store"})
 
 

@@ -79,3 +79,27 @@ fi
 note "deploying" "$tag_id"
 /usr/local/bin/brain-deploy
 note "deployed" "$tag_id"
+
+# THE POST-DEPLOY CHECKS (M38.5.1), run inside the container just deployed. `brain-deploy`
+# returns as soon as Coolify accepts the deploy, before the new container exists, so this waits
+# for the container to run the new image and report healthy first. The verdict is written in the
+# container and served at /api/deploy-checks.json, where the Deploy workflow reads it; what a
+# check found goes to this unit's journal only. See brain.ops.post_deploy.
+for _ in $(seq 1 36); do
+  running=$(docker inspect "$CONTAINER" --format '{{.Image}}' 2>/dev/null || true)
+  health=$(docker inspect "$CONTAINER" --format '{{.State.Health.Status}}' 2>/dev/null || true)
+  [ "$running" = "$tag_id" ] && [ "$health" = "healthy" ] && break
+  sleep 10
+done
+if [ "$running" != "$tag_id" ] || [ "$health" != "healthy" ]; then
+  note "checks-not-run" "$tag_id"
+  echo "the new container was not healthy after six minutes; post-deploy checks not run" >&2
+  exit 1
+fi
+if docker exec "$CONTAINER" python -m brain.ops.post_deploy; then
+  note "checks-passed" "$tag_id"
+else
+  note "checks-failed" "$tag_id"
+  echo "post-deploy checks failed; the Deploy workflow will refuse this commit" >&2
+  exit 1
+fi

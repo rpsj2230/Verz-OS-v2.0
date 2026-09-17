@@ -42,7 +42,7 @@ ExecStart=/usr/local/bin/brain-autodeploy
 # Longer than the timer interval on purpose. A deploy that recreates the app and waits for
 # health takes a couple of minutes; systemd will not start a second run of a oneshot unit
 # while the first is still going, so the overlap resolves itself without a lock file.
-TimeoutStartSec=600
+TimeoutStartSec=900
 UNIT
 
 cat > /etc/systemd/system/brain-autodeploy.timer <<'UNIT'

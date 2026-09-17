@@ -1640,3 +1640,47 @@ def vault_interface_served(compose: Mapping[str, Any]) -> bool:
         raise InstallDocsError(msg)
     found = VAULT_UI_SETTING.findall(config)
     return bool(found) and found[-1] == "true"
+
+
+# ------------------------------------------------------------- the threat model (M38.5.2)
+SURFACES_MARKER: Final = "<!-- checked: every exposed surface -->"
+
+#: A code span in a table cell, which is how a surface is named in the threat model.
+_CODE_SPAN: Final = re.compile(r"`([^`]+)`")
+
+
+def first_segment(path: str) -> str:
+    """`/api/status.json` is `/api`, and the root is `/`: the unit the threat model has rows for."""
+    head = path.lstrip("/").split("/", 1)[0]
+    return f"/{head}"
+
+
+def threat_model_gaps(
+    guide: str, *, served: Collection[str], reachable: Collection[str]
+) -> tuple[str, ...]:
+    """Surfaces an install exposes that the threat model has no row for, and paths it invents.
+
+    `served` is every path the application routes and `reachable` every service a compose file
+    publishes a port for or the network guide sends a browser to. A surface with no row is one
+    nobody argued about. Only paths are checked the other way: rows like `ssh` or `outbound
+    calls` name surfaces no register in this repository declares, and are prose.
+    """
+    rows: set[str] = set()
+    for cells in table_after(guide, SURFACES_MARKER):
+        rows.update(one.strip() for one in _CODE_SPAN.findall(cells[0]))
+    segments = {first_segment(one) for one in served}
+    stated_paths = {one for one in rows if one.startswith("/")}
+    findings = [
+        f"{one}: the application serves it and the threat model has no row for it"
+        for one in sorted(segments - stated_paths)
+    ]
+    findings.extend(
+        f"{one}: a row for a path the application does not serve, which reads as a surface "
+        "somebody is still defending"
+        for one in sorted(stated_paths - segments)
+    )
+    findings.extend(
+        f"{one}: reachable from outside the compose network and the threat model has no row for it"
+        for one in sorted(set(reachable) - rows)
+    )
+    return tuple(findings)

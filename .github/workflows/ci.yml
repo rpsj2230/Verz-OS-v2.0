@@ -640,3 +640,155 @@ jobs:
         # widely recommended. This job exists so that is caught by CI and not by a person
         # reading a LICENCE file and forgetting to check whether the project is alive.
         run: uv run python -m brain.ops.sweeps dependencies
+      - name: Every image's terms and the licences the npm locks record
+        run: uv run python -m brain.ops.dependency_policy offline
+      - name: The policy refuses a copyleft addition and an archived one, and passes the tree
+        # M0.5.7 and M0.7.1. The release age, the archived check and each locked package's
+        # licence as the index gives it are asked here and nowhere else, over both uv locks,
+        # both npm locks and every image. `prove` adds a real GPL package and a real package
+        # on an archived repository to a copy of the lock and requires both refused by the same
+        # rules, and the evidence file is kept, named for the commit.
+        env:
+          # Read by `gh`, which the archived check calls, and never by the Python process.
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          uv run python -m brain.ops.dependency_policy prove
+          --commit "${{ github.sha }}" --evidence evidence/dependency-policy.json
+      - name: Keep the dependency policy evidence, named for the commit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-policy-${{ github.sha }}
+          path: evidence/dependency-policy.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # M38.5.2. Known vulnerabilities in every locked dependency and in the image, on every build.
+  #
+  # Trivy scans and `brain.ops.vulnerabilities` decides: a critical finding fails the job unless
+  # `ops/security/vulnerability-exceptions.json` records why it may ship and until when, and a
+  # lock the scan did not read is a failure rather than a clean result. The image is built here
+  # the way production builds it, since the image that ships is built after CI by `Deploy`.
+  vulnerabilities:
+    name: Vulnerability scan, locks and image
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Install Trivy from its signed package repository
+        run: |
+          sudo install -d -m 0755 /usr/share/keyrings
+          curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key \
+            | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+            | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -q && sudo apt-get install -y -q trivy
+          trivy --version
+      - name: Scan every lock
+        # `.venv` is skipped because it is this runner's install of one lock, and the lock itself
+        # is what is scanned; scanning both reports every finding twice under two targets.
+        run: |
+          mkdir -p evidence
+          trivy fs --scanners vuln --list-all-pkgs --format json --skip-dirs .venv             --output evidence/trivy-locks.json .
+      - name: Build the image the way production builds it
+        run: docker build --build-arg COMMIT_SHA=ci-scan -t brain:scan .
+      - name: Scan the image
+        run: >-
+          trivy image --scanners vuln --list-all-pkgs --format json
+          --output evidence/trivy-image.json brain:scan
+      - name: No critical finding without a recorded exception
+        run: >-
+          uv run python -m brain.ops.vulnerabilities
+          --locks evidence/trivy-locks.json --image evidence/trivy-image.json
+      - name: Keep both scans, named for the commit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: vulnerabilities-${{ github.sha }}
+          path: evidence/trivy-*.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # M0.5.3. The migration round trip over a database shaped like an install rather than over
+  # whatever a test shard left. See `brain.ops.migration_shape`, which counts every table at head,
+  # one step back and head again, refuses a step back that lost a row it kept, and prints how many
+  # tables held a row when the rollback ran.
+  migrations_install_shaped:
+    name: Migrations round trip over an install-shaped database
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_PASSWORD: install-shaped
+          POSTGRES_DB: brain_shaped
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:install-shaped@localhost:5432/brain_shaped
+      APP_ROLE_PASSWORD: "install'shaped\"password"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: An install from empty, with the demo company loaded
+        run: |
+          uv run alembic upgrade head
+          uv run python -m brain.seed
+      - name: One step back and forward again keeps every row it keeps
+        run: |
+          mkdir -p evidence
+          uv run python -m brain.ops.migration_shape record evidence/shape-head.json
+          uv run alembic downgrade -1
+          uv run python -m brain.ops.migration_shape record evidence/shape-back.json
+          uv run alembic upgrade head
+          uv run python -m brain.ops.migration_shape record evidence/shape-again.json
+          uv run python -m brain.ops.migration_shape compare \
+            evidence/shape-head.json evidence/shape-back.json evidence/shape-again.json
+      - name: The whole chain back to base and forward again over that data
+        run: |
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run alembic current | grep -q "(head)" || { echo "::error::not at head"; exit 1; }
+      - name: Keep the counts, named for the commit
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-shape-${{ github.sha }}
+          path: evidence/shape-*.json
+          if-no-files-found: warn
+          retention-days: 90
+
+  # M38.1.1.1. A pull request's branch is named for its module, `M12/tool-registry`, so twelve
+  # concurrent tracks cannot be reviewed as though they were the same work. The rule is
+  # `brain.ops.conventions.check_branch_name`; until this job it had a test and no caller.
+  branch_name:
+    name: Branch named for its module
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - name: The branch name follows the convention
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: uv run python -m brain.ops.conventions --branch "$HEAD_REF"

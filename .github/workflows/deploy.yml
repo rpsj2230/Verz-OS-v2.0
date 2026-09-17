@@ -232,3 +232,62 @@ jobs:
           echo "The server's own timer pulled this image and the site reports its commit." >> "$GITHUB_STEP_SUMMARY"
           echo "- commit \`${{ needs.build.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- image \`${{ env.IMAGE }}:${{ needs.build.outputs.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  staging_checks:
+    name: Staging permission canaries and RLS sweep
+    # M38.5.1. The server's deploy timer runs both checks inside the container it has just
+    # deployed (`ops/deploy/brain-autodeploy`, `brain.ops.post_deploy`) and the application serves
+    # the verdict. Nothing here reaches the database: the verdict is read from the site, and it
+    # says passed, failed or not run and never what a check found.
+    #
+    # A failure here makes this Deploy run red, and the Release workflow refuses to put a release
+    # tag on a commit whose Deploy run did not pass this job. That is the promotion it stops.
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Both checks passed on staging for this commit
+        env:
+          SHA: ${{ needs.build.outputs.sha }}
+          SITE: ${{ vars.BRAIN_URL }}
+          # passed, failed, or wait: wait until the document names this commit, since the page
+          # answers for the container serving it and that is the previous commit until the pull.
+          DECIDE: |
+            import json, os, sys
+            d = json.load(sys.stdin)
+            commit = str(d.get("commit", ""))
+            verdicts = (d.get("rls"), d.get("canaries"))
+            if not commit or not os.environ["SHA"].startswith(commit):
+                print("wait")
+            elif verdicts == ("passed", "passed"):
+                print("passed")
+            elif "failed" in verdicts:
+                print("failed")
+            else:
+                print("wait")
+        run: |
+          # Ten minutes: the timer waits up to six for the new container to be healthy, then the
+          # canaries ask every reach the install holds.
+          deadline=$((SECONDS + 600))
+          body=""
+          while [ $SECONDS -lt $deadline ]; do
+            body=$(curl -fsS --max-time 20 "$SITE/api/deploy-checks.json" 2>/dev/null || echo "{}")
+            state=$(printf '%s' "$body" | python3 -c "$DECIDE" 2>/dev/null || echo wait)
+            if [ "$state" = "passed" ]; then
+              echo "$body"
+              echo "### Staging checks passed" >> "$GITHUB_STEP_SUMMARY"
+              echo "- \`$body\`" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "$state" = "failed" ]; then
+              echo "::error::staging reports a failed post-deploy check: $body"
+              echo "### Staging checks FAILED" >> "$GITHUB_STEP_SUMMARY"
+              echo "\`$body\`. What was found is in the server's brain-autodeploy journal." >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            echo "waiting: $body"
+            sleep 20
+          done
+          echo "::error::no post-deploy verdict for ${SHA:0:7} after ten minutes: $body"
+          echo "### Staging checks NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+          echo "Check that the server runs the current ops/deploy/brain-autodeploy." >> "$GITHUB_STEP_SUMMARY"
+          exit 1

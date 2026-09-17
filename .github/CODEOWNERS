@@ -1,5 +1,5 @@
 # Three files decide what every answer is allowed to contain. A change to any of them
-# gets a second pair of eyes, always — not because the author is untrusted, but because
+# gets a second pair of eyes, always, and not because the author is untrusted, but because
 # a permission bug here is silent: it returns a plausible answer that is simply too wide.
 
 /src/brain/core/entitlement.py   @rpsj2230
@@ -28,3 +28,14 @@
 
 # CI is where the sweeps and the deploy gate live.
 /.github/workflows/              @rpsj2230
+
+# What may ship despite a known flaw, and the rules that decide which dependencies and images an
+# install runs. A line added to the exceptions file ships a critical vulnerability; an entry in
+# the dependency policy's tables admits a licence or an archived project.
+/ops/security/                         @rpsj2230
+/src/brain/ops/dependency_policy.py    @rpsj2230
+/src/brain/ops/vulnerabilities.py      @rpsj2230
+
+# What stops a staging commit the canaries or the row-level security sweep refused being released.
+/src/brain/ops/post_deploy.py          @rpsj2230
+/ops/deploy/                           @rpsj2230

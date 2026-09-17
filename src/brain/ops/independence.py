@@ -300,6 +300,14 @@ ALLOWED_HOSTS: Final[frozenset[str]] = frozenset(
         "schema.org",
         "ghcr.io",
         "quay.io",
+        # The two public package indexes the locks resolve against. `brain.ops.dependency_policy`
+        # asks them for a pinned package's licence and last release; like `ghcr.io`, neither
+        # can become a client's host.
+        "pypi.org",
+        "registry.npmjs.org",
+        # Trivy's signed apt repository, from which CI's vulnerability job installs the scanner.
+        # A tool's package source, like the two above; never a client's.
+        "aquasecurity.github.io",
         # This product's own provenance, and the two entries are one fact in two halves.
         # `ops/deploy.sh` and `ops/watch-and-deploy.sh` verify the image's signature before
         # running it, and a Sigstore verification is an assertion about two fixed strings:
