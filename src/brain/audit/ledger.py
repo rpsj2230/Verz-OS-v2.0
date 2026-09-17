@@ -471,6 +471,29 @@ class AuditAction(enum.StrEnum):
     decided, and a request for more access is not an agent's action. One member for the three
     changes, requested, approved and denied, with the capability and the reason code in the
     details, and the requester as the subject. Nine characters.
+
+    AGENT was added on 2026-09-17, and it is the twenty-seventh. The agent workspace installs an
+    agent from a published template version, duplicates one, enables, disables and archives one,
+    and hands one to a new steward (M27.11.6, M27.11.7), and `brain.agents.lifecycle` has held
+    each of those transitions since M13.1.4 with nothing recording any of them: "who switched this
+    agent off, who archived it and who is answering for it now" is asked the day an agent stops
+    answering, and `agent.agent` keeps the timestamps and the steward but never who moved them.
+    **Recorded by the database, from a trigger on `agent.agent`**, the way CONNECTOR is, on the
+    insert and on an update that moves the lifecycle timestamps, the steward or the audience
+    level, so an operator's statement is recorded as well as a press in the console.
+
+    Every existing member was tried. INSTRUCTIONS is what the agent is told, and a state change
+    tells it nothing; COMPOSE_CHANGE is an attachment, and nothing is attached; LEASH_CHANGE is its
+    two rungs, and disabling an agent moves no rung, which is `brain.agents.lifecycle`'s argument
+    that a state change never touches the ceiling; PUBLISH is an artefact leaving; GRANT is a
+    capability gained, and a transfer grants the new steward nothing, which is
+    `A_TRANSFER_MOVES_THE_STEWARD_AND_NOT_THE_REACH`. One member for its changes, created,
+    enabled, disabled, archived, transferred and published, and the two only a statement makes,
+    unarchived and audience_changed, with the change in the details, for the reason SIGN_IN
+    gives. The subject is the agent, under the kind `agent` a department's head
+    already reads. **Never the steward's id in the details**: a principal id is not a field name,
+    so the recorder would keep the marker, and the row says who answers for the agent now. Five
+    characters.
     """
 
     GRANT = "grant"
@@ -545,6 +568,11 @@ class AuditAction(enum.StrEnum):
     #: request. Which is in the details, with the capability and the reason code. Written by
     #: `0062`'s trigger on `gate.elevation_request`.
     ELEVATION = "elevation"
+    #: An agent was created, enabled, disabled, archived, handed to a new steward or published, or
+    #: a statement unarchived it or moved its audience. Which is in the details, and never the
+    #: steward. Written by `0087`'s trigger on
+    #: `agent.agent`.
+    AGENT = "agent"
 
 
 # --------------------------------------------------------------------- redaction
