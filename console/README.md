@@ -627,6 +627,191 @@ again, because two spellings of one sentence is two sentences and the second is 
 somebody later makes more helpful. That import costs nothing: an entry importing only that
 constant builds to 0.17 kB, so the grid is tree-shaken away.
 
+## The component layer: shadcn/ui on Radix, with Tailwind (M27.10.2, M27.10.4)
+
+The owner chose shadcn/ui on its Radix base with Tailwind CSS v4 on 2026-09-17 and approved the
+design spike's look; `docs/admin-console-architecture.md` 5.7 records the choice. This section is
+the foundation that decision needs, and **no page is restyled by it**: the shell, the navigation and
+every screen render exactly as they did, which is measured below rather than assumed. The shell is
+the next package and is built from these parts.
+
+### What was added
+
+| Package | Version | Licence | Where it ends up |
+| --- | --- | --- | --- |
+| `tailwindcss`, `@tailwindcss/vite` | 4.3.3 | MIT | the build; nothing at run time |
+| `@tailwindcss/node`, `@tailwindcss/oxide` | 4.3.3 | MIT | the tests only (`tests/support/tailwind.ts`) |
+| `radix-ui` | 1.6.7 | MIT | the components' primitives |
+| `class-variance-authority` | 0.7.1 | Apache-2.0 | variants |
+| `clsx`, `tailwind-merge` | 2.1.1, 3.7.0 | MIT | `lib/utils.ts`'s `cn` |
+| `lucide-react` | 1.46.0 | ISC | icons, one module per icon imported |
+| `sonner` | 2.0.8 | MIT | the toast region |
+| `cmdk` | 1.1.1 | MIT | the command palette |
+| `react-hook-form`, `zod`, `@hookform/resolvers` | 7.88.0, 4.6.5, 5.9.1 | MIT | nothing yet: the first validated form is a later package's, and must be a lazy route |
+| `tw-animate-css` | 1.4.0 | MIT | the open and close animations |
+| `@fontsource/ibm-plex-sans`, `@fontsource/ibm-plex-mono`, `@fontsource/poppins` | 5.2.8, 5.2.7, 5.2.7 | OFL-1.1 | 18 font files in `dist/assets`, 157.50 kB of them woff2 |
+
+Every version is exact, for the reason the rest of this directory's are. The versions are the design
+spike's wherever the spike used the package, so what the owner approved is what is built; the spike
+imported the `cn` package where this uses `clsx` and `tailwind-merge`, which is shadcn/ui's own
+`lib/utils.ts` and what every component copied from it assumes. The pins this console already had
+did not move: React 19.1.0, React DOM 19.1.0, Vite 6.4.3, react-router-dom 6.30.6 and
+`@tanstack/react-table` 9.2.4, and the lockfile changed the version of no existing package (compared
+entry by entry: none changed, none removed). **Nothing is fetched from a CDN**: the fonts are imported
+from `@fontsource` in `theme/tailwind.css` and served from this origin, because an install may have no
+route to a font host and a font fetched from one tells a third party each time somebody opens the
+console. Installing into a fresh worktree took 64 seconds for the existing lockfile and 89 seconds
+more for the new set (75 and 14), on this machine with its own `node_modules`.
+
+**shadcn/ui's CLI is not a dependency.** Its `tailwind.css` supplies nine state variants and one
+utility the components use, and those are copied into `theme/tailwind.css`; its other utilities
+(scroll fade, shimmer) are not used and are not copied. There is no `components.json`, because the
+components import each other by relative path, which is what `tests/support/typescript.ts`'s import
+graph follows. An upstream change arrives by generating the component in a scratch project with
+`shadcn add` and diffing it against the copy here, and every local change is listed at the top of the
+file it was made in, so it can be re-applied.
+
+### Licences
+
+Everything added is MIT, ISC, Apache-2.0 or OFL-1.1, and no purchase is involved. The texts are the
+`LICENSE` or `LICENSE.md` file in each package under `node_modules/`. Two are recorded here as well,
+because they are not only depended on but copied or shipped:
+
+- **shadcn/ui**, MIT, Copyright (c) 2023 shadcn. Every file in `src/components/ui/` except
+  `explained.tsx`, `secret-field.tsx` and `focus-return.ts` is a modified copy of a shadcn/ui
+  component. The MIT licence asks that its copyright notice and permission notice be included in all
+  copies or substantial portions; the notice is the line above and the permission text is
+  shadcn/ui's `LICENSE.md` (https://github.com/shadcn-ui/ui/blob/main/LICENSE.md), which is the
+  standard MIT text.
+- **IBM Plex Sans and IBM Plex Mono** (Copyright 2017 and 2019 IBM Corp.) and **Poppins** (Copyright
+  2020 The Poppins Project Authors), all under the SIL Open Font Licence 1.1, which allows bundling
+  with software and asks that the copyright notice and the licence travel with the fonts. The texts
+  are `node_modules/@fontsource/<font>/LICENSE`.
+
+**What is not done about either**: the built image carries `dist/` and not `node_modules/`, so neither
+notice is inside the image today. A notices file served beside the bundle is the fix, and it belongs
+with whoever next touches the Dockerfile's console stage.
+
+### The cascade, and how the old pages stay as they were
+
+Three mechanisms, each held by `tests/tailwind-foundation.test.ts`:
+
+1. **The old sheets are in a `legacy` cascade layer**, between Tailwind's reset and its utilities
+   (`@layer theme, base, legacy, components, utilities`). They were unlayered, and an unlayered rule
+   beats every layered one, so `app.css`'s `a`, `h2` and `code` rules would otherwise beat a class on
+   a new component. `scripts/legacy-layer.mjs` wraps `app.css`, `approvals.css`, `agent-workspace.css`
+   and `@xyflow/react/dist/base.css` at build time, so the files and the tests that read them are
+   unchanged, and all four move together so their order among themselves is what it was.
+   `tokens.css` stays unlayered: a token has to beat Tailwind's variable of the same name.
+2. **Tailwind's reset applies to the new components and not to the old pages.** Loaded globally it
+   takes the weight off headings, the bullets off lists and the underline off links, which the old
+   sheets never set because the browser did; `theme/preflight.css` narrows every rule to elements
+   carrying `data-slot`, their contents, and not an element inside `[data-legacy]`. **The shell that
+   comes next must put `data-legacy` on the element that renders an old page**, because the sidebar's
+   provider is a `data-slot` element around the whole application.
+3. **Tailwind generates no utility named like an old class.** It reads `src/components/ui` only
+   (`source(none)` and one `@source`), and `@source not inline("grid")` refuses the one collision
+   there is: every data table sits in `.grid`, which Tailwind would make `display: grid` in a layer
+   that now outranks `app.css`. The test compiles every class name an old sheet or an old page uses
+   and asserts none comes out as a rule, and proves the exclusion is load-bearing by compiling without
+   it.
+
+**Measured in Chrome, not inferred from the suite, which applies no stylesheet.** Every registered
+page's rendered markup (62 pages, from the same stand-in answers `phone-width.test.tsx` uses) was
+painted with the stylesheets of the build before this change and of the build after it, with every
+component's utilities in the bundle, at 360 and 1280 pixels, in the light theme, the machine's dark
+theme and an explicit dark choice: 372 comparisons, 68,898 elements, every computed property except
+custom properties and every element box compared, against origin/main at f32c385. **No difference.**
+The same run against the earlier base e14969a compared 68,718 elements with the same result. Two
+negative controls, taken on that earlier base, show the comparison would have seen one: the same
+build with Tailwind's reset global changed 1,641 computed properties on the overview alone, and with
+the `grid` exclusion removed every records table's display turned from flex to grid. The harness is
+outside version control (it is a browser run, and this directory commits no browser); the numbers are
+the record.
+
+**Known leak in the other direction.** An old element rule still reaches a bare element inside a new
+component for any property the component leaves unset (a `p` inside a card takes `app.css`'s margin).
+The copied dialog, sheet, popover and empty-state parts set margin and size on their own headings and
+paragraphs for that reason; a page that moves puts its own classes on what it adds.
+
+### The theme
+
+`tokens.css` carries the design of record's tokens beside the old ones, in the same three blocks, with
+names that do not meet the old ones: shadcn/ui's `--border`, `--accent` and `--radius` are already
+the old pages' names, so the class names are mapped straight onto the design's tokens in
+`theme/tailwind.css`'s `@theme inline` rather than through shadcn/ui's variables, and Tailwind's
+`--font-sans`, `--text-*` and `--radius-lg` are restated inline so a utility never reads the old
+value of the same name. `tests/design-tokens.test.ts` holds the vocabularies apart. Tailwind's
+palette is removed (`--color-*: initial`), so a class can name only a token, and
+`scripts/check-boundaries.mjs` refuses a palette class or an arbitrary colour in the source.
+
+Two measured departures from `docs/screens.html`, both in the tokens file's own comment: `--dim` is
+the design's grey moved a tenth of the way to its ink, because the design's value is 4.02 to 1 on the
+sunk surface a muted label sits on, and `--faint` is kept and mapped to no class, because it is below
+4.5 to 1 on every surface in both themes. `brain.locale.READ_PAIRS` now measures the design's pairs.
+
+**The accent is the install's.** `INSTALL_ACCENT_COLOUR` (default `#2563eb` in `brain.install`, which
+is the product's and no company's) is turned by `brain.locale.accent_set` into six colours, the fill,
+the text on it, the accent as text in each theme and a wash in each theme, each measured at 4.5 to 1
+against every surface it is drawn on, and served in `/api/console.js`. `theme/accent.ts` puts them on
+the root element before the first render, through the style object rather than a `<style>` element.
+With no accent served, the tokens fall back to the design's own ink, which reads. The focus ring on
+every new component is the accent's text colour at full strength, so its contrast is the derivation's.
+
+### Content-Security-Policy
+
+**No policy is served today** (see "What is NOT done"), so nothing in this change is blocked. The
+policy proposed there already has `style-src 'self' 'unsafe-inline'`, and it needs it: `sonner`
+inserts its stylesheet as a `<style>` element and Radix's scroll lock does the same, which the design
+spike measured in Chrome with these same versions (four violations under `style-src 'self'`, none with
+`'unsafe-inline'`); it was not re-measured here, because no page mounts either yet. `script-src` is
+untouched: nothing added evaluates code, the accent is applied through the CSS object model, and
+`zod` is not reachable from any page (the spike ran it with `jitless`, which the first form that
+imports it must set too).
+
+### What these parts weigh
+
+`npm run build`, measured 2026-09-17, with Vite's own figures.
+
+| Build | Entry JS | Gzipped | Entry CSS | Gzipped |
+| --- | --- | --- | --- | --- |
+| Before (origin/main f32c385) | 601.56 kB | 170.60 kB | 13.63 kB | 3.04 kB |
+| After: tokens, reset, every component's utilities and the fonts' faces | 602.25 kB | 170.88 kB | 84.13 kB | 14.23 kB |
+
+The script barely moves because no page imports a component yet; the 0.69 kB is `theme/accent.ts` and
+the accent reading in `config.ts`. The stylesheet grows by 70.50 kB (11.19 kB gzipped) because
+Tailwind emits every utility the component directory uses whether or not a page mounts it, and the 18
+font files are fetched only when something is drawn in their face. `tests/bundle-split.test.ts` now
+refuses `react-hook-form`, `zod`, `@hookform/resolvers` and `cmdk` in the entry; `radix-ui` and
+`sonner` are expected there once the shell lands.
+
+### How the four jsdom layout tests move when the first page is restyled
+
+Measured now, with no page restyled: `phone-width.test.tsx` (124 tests), `approvals-phone.test.tsx`
+(8), `status-primitives.test.tsx` (15) and `theme.test.ts` (12) all pass unchanged. They read the old
+stylesheets from disk, which is correct for as long as the pages they render are styled by those
+sheets. In the commit that restyles the first page:
+
+1. **`phone-width.test.tsx` and `approvals-phone.test.tsx`** read `CONSOLE_SHEETS` through
+   `support/cascade.ts`. Hand `declared()` the rules from `compiledRules((await compileLayer()).css)`
+   (`support/tailwind.ts`) concatenated after `consoleRules()`, so a restyled element's utilities are
+   seen and an old one's rules still are. `tests/ui-structure.test.tsx` is the worked example: it reads
+   a drawer's width and a table's overflow at 360 pixels that way. Where the menu moves to the Menu
+   button (5.1), the "navigation above the page" test changes to the Menu-button property in the same
+   commit, and `ui-structure.test.tsx`'s phone sidebar test already holds that property for the part.
+   Order between the two rule sets is not modelled by the reader, so a claim that a utility beats an
+   old rule belongs in the browser comparison above, not in these tests.
+2. **`status-primitives.test.tsx`** holds "one rule per tone" over `app.css`. A restyled status moves
+   that rule to the component's own tone map, and the test's "no component writes a colour" already
+   reads `src/components`; `tests/ui-rules.test.ts` holds the compiled half (every colour a component
+   paints reads a token) and the badge's `variant` is held as its `tone` is.
+3. **`theme.test.ts`** keeps its three-state tests on `tokens.css` unchanged. Its "no stylesheet outside
+   the tokens file names a colour" reads `app.css` only; `tests/tailwind-foundation.test.ts` extends it
+   to `tailwind.css` and `preflight.css`, and it must extend to any sheet a moved page brings, which
+   the "a new stylesheet under src is a decision" test forces somebody to notice.
+4. **Anything that moves to a browser instead goes to W1.6's harness**, and the old test is changed in
+   the commit that adds its replacement, never deleted ahead of it.
+
 ## What is NOT done
 
 - **No browser has run any of this.** The suite below runs under jsdom, which parses CSS
@@ -834,6 +1019,13 @@ by a function that refuses everything.
 | `tests/records-page.test.tsx` | The request against the route's declared parameters, the column a withheld field still gets, the chrome that does not change with the number of rows, and the bounds against `brain.knowledge.rows`. |
 | `tests/bundle-split.test.ts` | The static import graph from `main.tsx`, and the four libraries that must not be in it. |
 | `tests/phone-width.test.tsx` | Every registered route at a phone's width, read through `support/cascade.ts`: no `max-width` query in any sheet, no width wider than the phone, the navigation above the page and a thumb tall, and every value the API sent able to break. |
+| `tests/tailwind-foundation.test.ts` | The cascade layer order, the old sheets wrapped whole and the new ones not, the reset's scope against the browser's own selector engine, Tailwind reading one directory, and no old class name compiling to a utility. |
+| `tests/design-tokens.test.ts` | The design of record's tokens in three states, the accent drawn only from the install's configuration, the old and new vocabularies apart, and no class able to name the faint grey. |
+| `tests/accent.test.ts` | The six accent names read as the server writes them, a malformed accent refused without stopping the console, and the colours on the root element before the first render. |
+| `tests/ui-controls.test.tsx` | Button, badge, input, textarea, label, checkbox (a dash, never a tick, for "some selected"), switch, select, and the write-once secret field, from the keyboard. |
+| `tests/ui-overlays.test.tsx` | Dialog, confirmation, drawer, popover, menu, tooltip, command palette and toast region: focus in, Escape out, and focus back to the opener however the overlay was opened. |
+| `tests/ui-structure.test.tsx` | Sidebar at desktop and phone width, tabs, breadcrumb, table, card, drawer and dialog widths read from the compiled stylesheet at 360 pixels, scroll area, separator, skeleton, empty state and explanation panel. |
+| `tests/ui-rules.test.ts` | Over every component: no totals, no cookie, every class compiles, every colour reads a token, the focus ring at full strength, a badge's colour never chosen from data, and every promised part present and tested. |
 
 **Several constants are checked against the thing they are a copy of, not against
 themselves.** That is the point of `tests/support/python.ts` and the realm parsing in

@@ -57,7 +57,39 @@ interface ServedConfig {
   readonly apiBaseUrl?: unknown;
   readonly issuer?: unknown;
   readonly clientId?: unknown;
+  readonly accent?: unknown;
 }
+
+/**
+ * The install's accent, as `brain.locale.accent_set` derived it from `INSTALL_ACCENT_COLOUR`.
+ *
+ * Six colours rather than one, because the console draws the accent three ways (a fill with text
+ * on it, text on the page, a wash behind that text) and in two themes, and every one of those was
+ * measured for contrast on the server before it was sent. The console applies them and computes
+ * none: a second copy of the contrast arithmetic in the browser would be a second place for it to
+ * be wrong. `theme/accent.ts` puts them on the root element.
+ */
+export interface InstallAccent {
+  readonly fill: string;
+  readonly onFill: string;
+  readonly textLight: string;
+  readonly textDark: string;
+  readonly washLight: string;
+  readonly washDark: string;
+}
+
+/** The six names, in the order the served document writes them. */
+export const INSTALL_ACCENT_KEYS: readonly (keyof InstallAccent)[] = [
+  "fill",
+  "onFill",
+  "textLight",
+  "textDark",
+  "washLight",
+  "washDark",
+];
+
+/** A colour the way the server writes one, and the only shape put on the root element. */
+const SERVED_COLOUR = /^#[0-9a-f]{6}$/;
 
 /**
  * The fallback API base, and why one exists at all when the issuer has none.
@@ -92,6 +124,16 @@ export interface Config {
    * has renamed the realm's client too, and one that sets nothing gets the product's own.
    */
   readonly clientId: string;
+  /**
+   * The install's accent, or null when the document carries none that can be drawn.
+   *
+   * **Null is not a configuration problem, and that is a decision.** `configProblems` replaces the
+   * whole console with a list of what is wrong, which is right for an identity provider nobody can
+   * sign in through and wrong for a tint. With no accent the design's own ink stands in, which
+   * reads (see `theme/tokens.css`), and `brain.locale.presentation_gaps` is where an unreadable
+   * install is reported.
+   */
+  readonly accent: InstallAccent | null;
 }
 
 /** Whatever the served document put on the window, or an empty object when it served none. */
@@ -103,6 +145,29 @@ function served(): ServedConfig {
 /** A served field as a string, or empty when it is absent or is not one. */
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * The accent, when every one of its six values is a colour in the server's own spelling.
+ *
+ * All or nothing. Five of the six would paint a fill whose text colour was never sent, and a value
+ * that is not `#rrggbb` is not something the server writes, so it is refused rather than handed to
+ * the style engine to interpret.
+ */
+function readAccent(value: unknown): InstallAccent | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const fields = value as Record<string, unknown>;
+  const accent: Partial<Record<keyof InstallAccent, string>> = {};
+  for (const key of INSTALL_ACCENT_KEYS) {
+    const colour = fields[key];
+    if (typeof colour !== "string" || !SERVED_COLOUR.test(colour)) {
+      return null;
+    }
+    accent[key] = colour;
+  }
+  return Object.freeze(accent as InstallAccent);
 }
 
 function readIssuer(raw: string, problems: string[]): string {
@@ -154,6 +219,7 @@ export const config: Config = Object.freeze({
   apiBaseUrl: text(document_.apiBaseUrl) || DEFAULT_API_BASE_URL,
   issuer: readIssuer(text(document_.issuer), problems),
   clientId: text(document_.clientId) || KEYCLOAK_CLIENT_ID,
+  accent: readAccent(document_.accent),
 });
 
 /** Empty when the console is configured. Rendered as the whole page when it is not. */

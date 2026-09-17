@@ -62,9 +62,11 @@ to read `VITE_KEYCLOAK_ISSUER` and `VITE_API_BASE_URL`, which Vite inlines as pl
 build time, so a single image could only ever have been built for one client's identity
 provider. The issuer and the client id now arrive at runtime from `brain.install`, through
 the document this module serves, and the API base is `brain.api.API_PREFIX` because the two
-share an origin. See `NO_INSTALLS_VALUES_ARE_BUILT_INTO_THE_BUNDLE`.
+share an origin. See `NO_INSTALLS_VALUES_ARE_BUILT_INTO_THE_BUNDLE`. The install's accent
+arrives the same way, already turned into the colours the console draws with it and measured
+for contrast in both themes, which `served_accent` argues.
 
-Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1
+Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4
 """
 
 from __future__ import annotations
@@ -81,6 +83,7 @@ from starlette.types import Receive, Scope, Send
 from brain.api import API_PREFIX
 from brain.docs_routes import COMING
 from brain.install import InstallError, value_of
+from brain.locale import LocaleError, Theme, accent_set
 
 #: Where the built console lives, relative to the installed package.
 #:
@@ -220,12 +223,43 @@ def runtime_config(env: Mapping[str, str] | None = None) -> str:
         "apiBaseUrl": API_PREFIX,
         "issuer": _optional("INSTALL_OIDC_ISSUER", env),
         "clientId": _optional("INSTALL_OIDC_CLIENT_ID", env),
+        "accent": served_accent(env),
     }
     # `json.dumps` rather than an f-string, so a value containing a quote or a line break is
     # escaped by something that knows the grammar. These values come from an install's own
     # environment, which is not hostile, but a document assembled by concatenation is a
     # document that breaks on an apostrophe and nobody tests that case.
     return f"window.{CONSOLE_CONFIG_GLOBAL} = Object.freeze({json.dumps(payload)});\n"
+
+
+def served_accent(env: Mapping[str, str] | None = None) -> dict[str, str] | None:
+    """The install's accent, in the colours `brain.locale.accent_set` derived and measured.
+
+    **Derived here and not in the browser.** The console is not a trust boundary, but it is not
+    a contrast meter either: a second implementation of the WCAG arithmetic in TypeScript would
+    be a second place for it to be subtly wrong, and the Python one is the one
+    `tests/unit/test_locale.py` holds against the stylesheet. The console applies six values and
+    computes none.
+
+    **An accent that is not a colour is served as none rather than refused.** The console falls
+    back to the design's own ink, which reads, and goes on working. Refusing would put a
+    configuration problem on the whole screen for a setting that decides a tint, and the sweep
+    that reports an unreadable install (`brain.locale.presentation_gaps`) is where it is named.
+
+    The keys are the console's spelling, `InstallAccent` in `console/src/config.ts`.
+    """
+    try:
+        derived = accent_set(value_of("INSTALL_ACCENT_COLOUR", env))
+    except LocaleError:
+        return None
+    return {
+        "fill": derived.fill,
+        "onFill": derived.on_fill,
+        "textLight": derived.text[Theme.LIGHT],
+        "textDark": derived.text[Theme.DARK],
+        "washLight": derived.wash[Theme.LIGHT],
+        "washDark": derived.wash[Theme.DARK],
+    }
 
 
 def _optional(name: str, env: Mapping[str, str] | None) -> str:

@@ -20,14 +20,35 @@
  * Task ids: M32.5.1.2
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 import { packageOf, staticImportGraph } from "./support/typescript";
 
 /** The entry the bundler starts from. `index.html` names it in a module script tag. */
 const ENTRY = "src/main.tsx";
 
-/** The libraries the component layer brings, and the ones worth splitting a route for. */
-const HEAVY = ["@rjsf/core", "@rjsf/validator-ajv8", "@tanstack/react-table", "@xyflow/react"];
+/**
+ * The libraries the component layer brings, and the ones worth splitting a route for.
+ *
+ * The second line is the shadcn/ui foundation's (M27.10.2). `react-hook-form`, `zod` and
+ * `@hookform/resolvers` weighed 214.8, 110.2 kB and more unminified in the design spike's Agents
+ * route, and they belong to a page with a form, never to the first response. `cmdk` is the command
+ * palette, which opens on a key and can arrive with it. Left out on purpose: `radix-ui`, which the
+ * shell will put in the entry because its menu and header are built from it, and `sonner`, whose
+ * toast region has to exist before its first message for a screen reader to announce it
+ * (`components/ui/sonner.tsx`).
+ */
+const HEAVY = [
+  "@rjsf/core",
+  "@rjsf/validator-ajv8",
+  "@tanstack/react-table",
+  "@xyflow/react",
+  "react-hook-form",
+  "zod",
+  "@hookform/resolvers",
+  "cmdk",
+];
 
 describe("what the entry chunk reaches", () => {
   test("no heavy component library is reachable from the entry without a dynamic import", () => {
@@ -51,6 +72,22 @@ describe("what the entry chunk reaches", () => {
     expect(files).toContain("src/pages/Overview.tsx");
     expect(files).toContain("src/api/client.ts");
     expect(files).not.toContain("src/pages/Records.tsx");
+  });
+
+  test("the component layer's heavy libraries are real and reachable from where they belong", () => {
+    // What breaks if this is deleted: the four names added to the refusal above being names of
+    // nothing, which the refusal would accept for ever. The palette's library is reached from the
+    // palette, and the form libraries are dependencies the console really installs; no page mounts a
+    // form on them yet, and the first one to do so must be a lazy route.
+    const palette = new Set(staticImportGraph("src/components/ui/command.tsx").packages);
+    expect(palette.has("cmdk")).toBe(true);
+
+    const declared = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    for (const library of ["react-hook-form", "zod", "@hookform/resolvers", "cmdk"]) {
+      expect(declared.dependencies[library], library).toMatch(/^\d+\.\d+\.\d+$/);
+    }
   });
 
   test("the split route is the one that reaches the libraries", () => {

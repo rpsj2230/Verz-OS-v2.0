@@ -117,6 +117,31 @@ const RULES = [
       "needs one: every control is a native element, so the tab order is the source order.",
   },
   {
+    name: "no cookie",
+    pattern: /document\s*\.\s*cookie/,
+    allow: [],
+    why:
+      "A cookie is sent to the API with every request and outlives the tab, and this console keeps " +
+      "nothing in the browser but the theme. shadcn/ui's sidebar writes one on every toggle, and it " +
+      "is the kind of line that arrives inside a copied component rather than a reviewed change. " +
+      "Keep the state in memory, or ask whether it belongs on the server.",
+  },
+  {
+    name: "a colour class names a token",
+    pattern: new RegExp(
+      "(?<![\\w-])(?:[\\w-]+:)*(?:bg|text|border|ring|ring-offset|fill|stroke|from|via|to|outline|shadow|decoration|divide|placeholder|accent|caret)-" +
+        "(?:white|black|slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)" +
+        "(?:-\\d{2,3})?(?:\\/\\d+)?(?![\\w-])" +
+        "|(?<![\\w-])(?:[\\w-]+:)*[\\w-]+-\\[(?:#[0-9a-fA-F]{3,8}|rgba?\\(|hsla?\\(|oklch\\()",
+    ),
+    allow: [],
+    why:
+      "theme/tailwind.css removes Tailwind's palette, so `bg-red-500` or `text-white` compiles to " +
+      "nothing and the element silently loses its colour, and an arbitrary value such as " +
+      "`bg-[#fff]` compiles to a second palette that is wrong in one theme. Name a token instead " +
+      "(`bg-crit-wash`, `text-muted-foreground`); tests/ui-rules.test.ts holds the compiled result.",
+  },
+  {
     name: "no service worker",
     pattern: /serviceWorker|navigator\.serviceWorker|workbox|registerSW/,
     allow: [],

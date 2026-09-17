@@ -1,0 +1,251 @@
+/*
+ * The component layer's stylesheet: Tailwind, the design of record's tokens named as classes, and
+ * the cascade order that lets the new parts arrive without repainting the pages that exist.
+ *
+ * THE ORDER, AND WHAT EACH POSITION IS FOR.
+ *
+ *   theme        Tailwind's own variables, which lose to every token in `tokens.css`
+ *   base         the reset, narrowed to the components (see `preflight.css`)
+ *   legacy       `styles/*.css` and the canvas library's sheet, exactly as they were
+ *   components   nothing yet
+ *   utilities    the class names on the new components, which win over everything above
+ *
+ * Every sheet the console had before this file existed was unlayered, and an unlayered rule
+ * beats every layered one whatever its specificity, so left alone `app.css`'s element rules for
+ * `a`, `h2` and `code` would beat a utility class on a new component. Moving them into `legacy`
+ * puts them below the utilities and keeps their order among themselves, which is the only thing
+ * that decided how an existing page looked: they were all in one tier before and they are all
+ * in one tier now. `vite.config.ts` does the moving, through `scripts/legacy-layer.mjs`, rather
+ * than an edit to each sheet, so the sheets and the tests that read them are byte for byte
+ * what they were. `tokens.css` stays unlayered on purpose: it defines custom properties and
+ * nothing else, and a token has to beat Tailwind's theme variable of the same name.
+ *
+ * WHERE TAILWIND LOOKS FOR CLASS NAMES, AND WHY IT IS TOLD. By default it reads every file in the
+ * project and generates a rule for every word that happens to be a utility, comments included.
+ * One of the old pages' own class names is such a word: every data table is wrapped in `.grid`,
+ * which `app.css` makes a flex column, and Tailwind's `grid` is `display: grid` in a layer that
+ * now outranks `app.css`, so the word appearing anywhere Tailwind reads would change the display
+ * of every existing table at once. So Tailwind reads only
+ * `components/ui/`, a page that moves adds its own directory below, and every class an old page
+ * uses that Tailwind could also generate is refused outright with `@source not inline`.
+ * `tests/tailwind-foundation.test.ts` compiles this file the way the build does and asserts that
+ * no class name in an old sheet or an old page comes out as a utility.
+ *
+ * Task ids: M27.10.2, M27.10.4
+ */
+
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "./preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "tw-animate-css";
+
+/*
+ * Bundled under the SIL Open Font Licence 1.1 and served from this origin: an install may have no
+ * route to a font host, and a font fetched from one tells a third party every time somebody opens
+ * the console. The Latin Extended subset is carried for the interface face because names arrive
+ * from a directory, and a name with a character outside plain Latin would otherwise be drawn in
+ * two typefaces.
+ */
+@import "@fontsource/ibm-plex-sans/latin-400.css";
+@import "@fontsource/ibm-plex-sans/latin-ext-400.css";
+@import "@fontsource/ibm-plex-sans/latin-500.css";
+@import "@fontsource/ibm-plex-sans/latin-ext-500.css";
+@import "@fontsource/ibm-plex-sans/latin-600.css";
+@import "@fontsource/ibm-plex-sans/latin-ext-600.css";
+@import "@fontsource/ibm-plex-mono/latin-400.css";
+@import "@fontsource/ibm-plex-mono/latin-500.css";
+@import "@fontsource/poppins/latin-600.css";
+
+@source "../components/ui";
+@source not inline("grid");
+
+/*
+ * `dark:` follows the console's three theme states rather than shadcn/ui's `.dark` class: the
+ * machine is dark and nobody chose light, or somebody chose dark. The same two selectors
+ * `tokens.css` uses, so a component and a token can never disagree about which theme is showing.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:root:not([data-theme="light"]) *) {
+      @slot;
+    }
+  }
+  &:where([data-theme="dark"], [data-theme="dark"] *) {
+    @slot;
+  }
+}
+
+/* The state variants shadcn/ui's components are written in, copied from `shadcn/tailwind.css`. */
+@custom-variant data-open {
+  &:where([data-state="open"]),
+  &:where([data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-closed {
+  &:where([data-state="closed"]),
+  &:where([data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-checked {
+  &:where([data-state="checked"]),
+  &:where([data-checked]:not([data-checked="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-unchecked {
+  &:where([data-state="unchecked"]),
+  &:where([data-unchecked]:not([data-unchecked="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-selected {
+  &:where([data-selected="true"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-active {
+  &:where([data-state="active"]),
+  &:where([data-active]:not([data-active="false"])) {
+    @slot;
+  }
+}
+
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/*
+ * NO DEFAULT PALETTE. With every `--color-*` reset, `bg-red-500` or `text-white` produces no CSS
+ * at all, so the only colours a class can name are the tokens mapped below. The silent half of
+ * that, a class that names nothing rendering no colour, is what `scripts/check-boundaries.mjs`
+ * refuses.
+ */
+@theme {
+  --color-*: initial;
+}
+
+/*
+ * `inline` throughout, so a utility carries the token's reference rather than a Tailwind variable
+ * of its own. It matters for five names: Tailwind's `--font-sans`, `--font-mono`, `--radius-lg` and
+ * the `--text-*` sizes are also names in the old half of `tokens.css`, which is unlayered and wins,
+ * so a utility reading `var(--text-sm)` would get the old pages' 13px rather than its own 14px.
+ */
+@theme inline {
+  /* shadcn/ui's semantic names, pointed straight at the design of record */
+  --color-background: var(--ground);
+  --color-foreground: var(--ink);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--ink);
+  --color-popover: var(--panel);
+  --color-popover-foreground: var(--ink);
+  --color-primary: var(--brand);
+  --color-primary-foreground: var(--brand-ink);
+  --color-secondary: var(--sunk);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--sunk);
+  --color-muted-foreground: var(--dim);
+  --color-accent: var(--acc-wash);
+  --color-accent-foreground: var(--acc-text);
+  --color-destructive: var(--crit);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--acc-text);
+  --color-sidebar: var(--sunk);
+  --color-sidebar-foreground: var(--body);
+  --color-sidebar-primary: var(--brand);
+  --color-sidebar-primary-foreground: var(--brand-ink);
+  --color-sidebar-accent: var(--acc-wash);
+  --color-sidebar-accent-foreground: var(--acc-text);
+  --color-sidebar-border: var(--line);
+  --color-sidebar-ring: var(--acc-text);
+
+  /* the design's own names, for what shadcn/ui has no word for; `--faint` is left out on purpose */
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-acc-text: var(--acc-text);
+  --color-acc-wash: var(--acc-wash);
+  --color-ground: var(--ground);
+  --color-panel: var(--panel);
+  --color-sunk: var(--sunk);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-dim: var(--dim);
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-w);
+  --color-warn: var(--warn);
+  --color-warn-wash: var(--warn-w);
+  --color-crit: var(--crit);
+  --color-crit-wash: var(--crit-w);
+  --color-lock: var(--lock);
+  --color-lock-wash: var(--lock-w);
+  --color-scrim: var(--scrim);
+
+  --font-sans: var(--ui);
+  --font-heading: var(--brandfont);
+  --font-mono: var(--mono);
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: calc(1 / 0.75);
+  --text-sm: 0.875rem;
+  --text-sm--line-height: calc(1.25 / 0.875);
+  --text-base: 1rem;
+  --text-base--line-height: calc(1.5 / 1);
+  --text-lg: 1.125rem;
+  --text-lg--line-height: calc(1.75 / 1.125);
+  --text-xl: 1.25rem;
+  --text-xl--line-height: calc(1.75 / 1.25);
+
+  --radius-sm: calc(var(--corner) * 0.6);
+  --radius-md: calc(var(--corner) * 0.8);
+  --radius-lg: var(--corner);
+  --radius-xl: calc(var(--corner) * 1.4);
+  --radius-2xl: calc(var(--corner) * 1.8);
+  --radius-3xl: calc(var(--corner) * 2.2);
+  --radius-4xl: calc(var(--corner) * 2.6);
+}
+
+/*
+ * shadcn/ui gives every element a border colour so that `border` alone draws a line; narrowed to
+ * the same scope as the reset, because the old pages' borders were drawn in their text colour
+ * wherever they named no colour.
+ */
+@layer base {
+  :where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *) {
+    border-color: var(--line);
+    outline-color: var(--acc-text);
+  }
+}

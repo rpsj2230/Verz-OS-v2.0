@@ -20,21 +20,27 @@ import pytest
 
 from brain.install import BY_NAME, Belongs, value_of
 from brain.locale import (
+    ACCENT_SURFACE_TOKENS,
+    ACCENT_SURFACES,
     AMBIGUOUS_ORDERS,
     BY_TAG,
     DEFERRALS,
+    DESIGN_INK,
     DETECTION_FLOOR,
     MESSAGES,
     MINIMUM_CONTRAST,
     MINIMUM_NON_TEXT_CONTRAST,
     PUSH_FOR_APPROVALS,
     PUSH_IS_DUE_ABOVE_HOURS,
+    READ_PAIRS,
     REASSURANCE_AFTER_SECONDS,
     RIGHT_TO_LEFT,
     SECTION_SHARE,
     SHIPPED,
     SHIPPED_TAGS,
+    TEXT_TOWARD,
     TOKENS_CSS,
+    WASH_BASE,
     Announcement,
     DateOrder,
     Deferral,
@@ -50,6 +56,7 @@ from brain.locale import (
     Theme,
     Trigger,
     accent_gaps,
+    accent_set,
     accent_window,
     announcements,
     catalogue_gaps,
@@ -861,6 +868,159 @@ def test_this_installs_presentation_is_correct_before_anybody_opens_it() -> None
     Delete this and the catalogue, the palette and the accent are each checked alone and
     nothing checks that a default install is readable."""
     assert presentation_gaps(REPO, {}) == ()
+
+
+# --- the accent an install sets, derived into what the console draws (M27.10.4) --------------
+
+#: Three accents no company is known by, one from each part of the range, with what each is
+#: expected to need. A pale one cannot be read as text on a light surface and is moved toward
+#: black there, and reads as it is on a dark one. A dark one is the mirror. A mid one is the case
+#: the design's own pair cannot carry: neither its ink nor white reaches the floor on it, so the
+#: text on the fill falls back to black, and it has to move in both themes.
+PALE, MID, DARK = "#f3e6b5", "#d4574b", "#1f3a5f"
+ACCENT_CASES = (
+    pytest.param(PALE, DESIGN_INK, True, False, id="pale"),
+    pytest.param(MID, "#000000", True, True, id="mid"),
+    pytest.param(DARK, "#ffffff", False, True, id="dark"),
+)
+
+#: The console's token file, which the accent's surfaces are read from in these tests.
+TOKENS = REPO / "console" / "src" / "theme" / "tokens.css"
+
+
+def _stylesheet_surfaces(theme: Theme) -> tuple[str, ...]:
+    """The surfaces an accent's text is drawn on, read from the stylesheet and not the copy."""
+    palette = theme_palettes(TOKENS)[theme]
+    return tuple(palette[name] for name in ACCENT_SURFACE_TOKENS)
+
+
+def test_the_accent_is_measured_against_the_surfaces_the_stylesheet_declares() -> None:
+    """`ACCENT_SURFACES` and `DESIGN_INK` are copies of `tokens.css`, kept because the image that
+    serves the accent carries no stylesheet. A copy agrees on the day it is written, and when the
+    design's panel changes and the copy does not, every derived colour is measured against a
+    surface nobody draws and served as readable.
+
+    Delete this and the derivation can pass its own tests against a palette the console left."""
+    palettes = theme_palettes(TOKENS)
+
+    for theme in Theme:
+        assert ACCENT_SURFACES[theme] == _stylesheet_surfaces(theme)
+    assert palettes[Theme.LIGHT]["ink"] == DESIGN_INK
+    assert WASH_BASE[Theme.LIGHT] == palettes[Theme.LIGHT]["panel"]
+    assert WASH_BASE[Theme.DARK] == palettes[Theme.DARK]["ground"]
+
+
+@pytest.mark.parametrize(("accent", "on_fill", "moves_in_light", "moves_in_dark"), ACCENT_CASES)
+def test_a_pale_a_mid_and_a_dark_accent_each_read_in_both_themes(
+    accent: str, on_fill: str, moves_in_light: bool, moves_in_dark: bool
+) -> None:
+    """The contract with the console, measured the way a reader meets it: the text on the fill,
+    and the accent as text on every surface and on its own wash, at 4.5 to 1 in both themes.
+    Measured against the stylesheet's surfaces rather than the module's copy of them.
+
+    The expected branch is asserted as well as the ratio, because a derivation that turned every
+    accent into black and white would clear every ratio here and serve no company's colour at
+    all. So an accent that already reads is served as the company chose it, and one that does not
+    is moved.
+
+    Delete this and the colours the console is told to draw are measured by nothing."""
+    derived = accent_set(accent)
+
+    assert derived.fill == accent
+    assert derived.on_fill == on_fill
+    assert contrast_ratio(derived.on_fill, derived.fill) >= MINIMUM_CONTRAST
+    for theme, moves in ((Theme.LIGHT, moves_in_light), (Theme.DARK, moves_in_dark)):
+        text = derived.text[theme]
+        for surface in (*_stylesheet_surfaces(theme), derived.wash[theme]):
+            assert contrast_ratio(text, surface) >= MINIMUM_CONTRAST, (theme, surface)
+        assert (text != accent) is moves, theme
+
+
+@pytest.mark.parametrize(("accent", "on_fill", "moves_in_light", "moves_in_dark"), ACCENT_CASES)
+def test_an_accent_that_has_to_move_moves_no_further_than_it_must(
+    accent: str, on_fill: str, moves_in_light: bool, moves_in_dark: bool
+) -> None:
+    """A company's colour moved all the way to black reads perfectly and is no longer the
+    company's colour. The accent is moved in two per cent steps and the first step that reads is
+    the one served, so the colour served sits just above the floor on the surface that binds.
+
+    Delete this and the derivation can serve black and white for every accent, which every
+    contrast assertion in this file would call a pass."""
+    derived = accent_set(accent)
+    assert contrast_ratio(derived.on_fill, derived.fill) >= MINIMUM_CONTRAST
+
+    for theme, moves in ((Theme.LIGHT, moves_in_light), (Theme.DARK, moves_in_dark)):
+        if not moves:
+            continue
+        text = derived.text[theme]
+        surfaces = (*_stylesheet_surfaces(theme), derived.wash[theme])
+        tightest = min(contrast_ratio(text, surface) for surface in surfaces)
+        assert tightest < Decimal("4.9"), (theme, text, tightest)
+        assert text != TEXT_TOWARD[theme]
+
+
+def test_the_end_of_each_line_clears_every_surface_a_wash_can_be() -> None:
+    """When no step along the line reads, the end of the line is served. That is only right if the
+    end reads on every surface and on every wash any accent can produce, and the extremes of the
+    wash are the ones black and white make.
+
+    Delete this and a change to a surface or a wash share can leave an accent whose text is served
+    unmeasured and unreadable, through the one path no ordinary accent takes."""
+    for theme in Theme:
+        washes = [accent_set(end).wash[theme] for end in ("#000000", "#ffffff")]
+        for surface in (*_stylesheet_surfaces(theme), *washes):
+            assert contrast_ratio(TEXT_TOWARD[theme], surface) >= MINIMUM_CONTRAST, (theme, surface)
+
+
+def test_every_colour_served_for_any_accent_reads_as_the_hex_the_console_receives() -> None:
+    """Swept over a lattice of accents from black to white, and re-measured from the hex strings
+    the console is sent rather than from anything the derivation held in between. A step lands
+    between two representable colours and the console gets the rounded one, so the rounded one is
+    the one a reader sees (`THE_COLOUR_MEASURED_IS_THE_COLOUR_SERVED`).
+
+    Delete this and the three hand-picked accents above are the only evidence, and a failure that
+    lives between them ships to the install that happens to pick it."""
+    levels = ("00", "40", "80", "bf", "ff")
+    for red in levels:
+        for green in levels:
+            for blue in levels:
+                derived = accent_set(f"#{red}{green}{blue}")
+                assert contrast_ratio(derived.on_fill, derived.fill) >= MINIMUM_CONTRAST
+                for theme in Theme:
+                    for surface in (*ACCENT_SURFACES[theme], derived.wash[theme]):
+                        ratio = contrast_ratio(derived.text[theme], surface)
+                        assert ratio >= MINIMUM_CONTRAST, (red, green, blue, theme, surface)
+
+
+def test_an_accent_that_is_not_a_hex_colour_is_refused_and_a_short_one_is_expanded() -> None:
+    """The value is typed on install day. A name, a function or a hex with the wrong number of
+    digits is refused rather than guessed at, and the three-digit form a person reasonably
+    writes is read as the browser would read it.
+
+    Delete this and `accent_set` can be handed a colour name and fail somewhere less legible, or
+    serve `#abc` as a fill no browser draws the same way."""
+    for unusable in ("brand orange", "#12345", "rgb(31, 122, 92)", "", "#1f7a5c80"):
+        with pytest.raises(LocaleError):
+            accent_set(unusable)
+    assert accent_set("#abc").fill == "#aabbcc"
+    assert accent_set(" #1F7A5C ").fill == "#1f7a5c"
+
+
+def test_the_designs_faint_grey_is_below_the_text_floor_on_every_surface_so_it_is_no_pair() -> None:
+    """`faint` is the one token of the design of record that `READ_PAIRS` leaves out, and the
+    stylesheet says no class may name it. This is the measurement that decision rests on, taken
+    from the stylesheet, in both themes.
+
+    If the design's faint grey is ever made readable this fails, and the right change is to add
+    its pairs above and map it in `console/src/theme/tailwind.css`, not to delete this.
+
+    Delete this and the omission is a decision nobody can check."""
+    palettes = theme_palettes(TOKENS)
+
+    assert all("faint" not in pair for pair in READ_PAIRS)
+    for theme in Theme:
+        for surface in _stylesheet_surfaces(theme):
+            assert contrast_ratio(palettes[theme]["faint"], surface) < MINIMUM_CONTRAST
 
 
 #: Full-width stop, comma, question mark and exclamation mark, by code point.
