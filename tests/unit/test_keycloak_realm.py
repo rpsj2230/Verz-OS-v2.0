@@ -36,17 +36,28 @@ started the server with `--import-realm`; it never went through kcadm, so the sc
 What these tests catch day to day is drift between this file and `brain.identity`, which
 would otherwise be discovered as "random logouts" or as a token nobody should have accepted.
 
-Task ids: M1.1.1
+**And a token nobody could make strong, which every test here passed over.** On 2026-09-17 the
+owner's staging install showed "Assurance: authenticated" to a signed-in administrator and
+refused every `admin:` and `approve:` screen. `brain.identity.bearer.assurance_from` reads
+`amr`, and this realm minted none: no amr mapper, and no reference value on any step of the
+browser flow. The tests at the end of this file walk that join from the realm to the function
+that reads it, the way the audience test walks the join to `validate_token`.
+
+Task ids: M1.1.1, M3.3.4
 """
 
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from brain.gate.admission import Assurance
+from brain.identity.bearer import SECOND_FACTOR_METHODS, assurance_from
+from brain.identity.oidc import VerifiedClaims
 from brain.identity.roles import ROLE_COUNT, SCOPE_REQUIRED, Role
 from brain.identity.sessions import SESSION_ABSOLUTE_MAX
 
@@ -453,3 +464,215 @@ def test_the_realms_own_scope_mints_the_subject_every_token_is_read_for() -> Non
     assert "subject" in mappers, sorted(mappers)
     assert mappers["subject"]["protocolMapper"] == "oidc-sub-mapper", mappers["subject"]
     assert mappers["subject"]["config"]["access.token.claim"] == "true", mappers["subject"]
+
+
+# --------------------------------------------------------------- a second factor, in the token
+#
+# Keycloak 26.0.0 source, read rather than remembered: `AmrProtocolMapper` sets `amr` to
+# `AmrUtils.getAuthenticationExecutionReferences`, which takes each step the person completed,
+# reads that step's authenticator config, and keeps `default.reference.value` while
+# `authTime + default.reference.maxAge >= now`, with an absent max age read as "0". No built-in
+# client scope carries the mapper. So three things have to be true of this file at once, and
+# on 2026-09-17 none of them was.
+
+#: `Constants.AUTHENTICATION_EXECUTION_REFERENCE_VALUE` in Keycloak 26.0.0.
+REFERENCE_VALUE = "default.reference.value"
+#: `Constants.AUTHENTICATION_EXECUTION_REFERENCE_MAX_AGE` in Keycloak 26.0.0.
+REFERENCE_MAX_AGE = "default.reference.maxAge"
+#: What `AmrUtils.isAmrValid` reads an absent max age as.
+MAX_AGE_WHEN_ABSENT = "0"
+#: The provider ids of the two steps whose references decide assurance.
+PASSWORD_FORM = "auth-username-password-form"
+OTP_FORM = "auth-otp-form"
+#: The flow Keycloak binds for browser sign-in when a realm names none.
+DEFAULT_BROWSER_FLOW = "browser"
+
+
+def _steps_a_browser_sign_in_can_reach() -> list[dict[str, Any]]:
+    """Every step of the flow this realm binds for browser sign-in, subflows followed.
+
+    A step marked DISABLED is left out, because Keycloak never runs it and a reference on it
+    is never written. A flow alias this file does not declare raises here, which is the
+    import's own behaviour: it looks every subflow up by alias and stops when one is missing.
+    """
+    realm = _realm()
+    flows = {flow["alias"]: flow for flow in realm.get("authenticationFlows") or []}
+    reached: list[dict[str, Any]] = []
+    pending = [str(realm.get("browserFlow") or DEFAULT_BROWSER_FLOW)]
+    followed: set[str] = set()
+    while pending:
+        alias = pending.pop()
+        if alias in followed:
+            continue
+        followed.add(alias)
+        for step in flows[alias]["authenticationExecutions"]:
+            if step.get("requirement") == "DISABLED":
+                continue
+            if step.get("authenticatorFlow"):
+                pending.append(step["flowAlias"])
+            else:
+                reached.append(step)
+    return reached
+
+
+def _method_reference(authenticator: str) -> dict[str, str]:
+    """The authenticator config on the one reachable step `authenticator` names."""
+    steps = [s for s in _steps_a_browser_sign_in_can_reach() if s["authenticator"] == authenticator]
+    assert len(steps) == 1, f"a browser sign-in reaches {len(steps)} {authenticator} steps"
+    alias = steps[0].get("authenticatorConfig")
+    assert alias, f"the {authenticator} step names no authenticator config, so amr never names it"
+    configs = {one["alias"]: one for one in _realm().get("authenticatorConfig") or []}
+    assert alias in configs, f"the {authenticator} step names {alias!r}, which is not declared"
+    config: dict[str, str] = configs[alias]["config"]
+    return config
+
+
+def _claims_naming(methods: list[str]) -> VerifiedClaims:
+    """A token as `validate_token` hands it over, whose `amr` is exactly `methods`.
+
+    The year 2999 because nothing here is about the present, and `assurance_from` reads no date.
+    """
+    issued = datetime(2999, 1, 1, tzinfo=UTC)
+    return VerifiedClaims(
+        issuer="https://id.example.test/realms/brain",
+        subject="u_probe",
+        audience=("brain-api",),
+        issued_at=issued,
+        expires_at=issued + timedelta(minutes=5),
+        session_id="s_probe",
+        key_id="k_probe",
+        algorithm="RS256",
+        verified_at=issued,
+        claims={"sub": "u_probe", "amr": methods},
+    )
+
+
+def test_the_console_s_own_tokens_carry_the_methods_its_sign_in_used() -> None:
+    """**Without this mapper no token this realm mints has an `amr` at all**, and
+    `assurance_from` reads a token with no `amr` as AUTHENTICATED. That is the staging finding:
+    a person who had set up OTP, signed in with it, and was refused every admin screen.
+
+    Walked from the client a person signs in through, across its default scopes, for the reason
+    the audience test above gives: a mapper merely present somewhere in this file would pass on
+    the day it sits on a client that mints no tokens. `access.token.claim` is asserted as the
+    string "true" because Keycloak 26.0's `includeInAccessToken` is `"true".equals(value)`, so an
+    absent key is off, and the access token is the one the console sends.
+
+    Delete this and the mapper can be removed or pointed at the ID token, with every reference
+    below intact and every administrator refused again."""
+    realm = _realm()
+    clients = {c["clientId"]: c for c in realm["clients"]}
+    scopes = {s["name"]: s for s in realm.get("clientScopes") or []}
+    console = clients["brain-console"]
+    assert console.get("standardFlowEnabled") is True, "the console is the client people sign in to"
+
+    reachable = list(console.get("protocolMappers") or [])
+    for name in console.get("defaultClientScopes") or []:
+        reachable.extend(scopes.get(name, {}).get("protocolMappers") or [])
+
+    minting = [
+        m
+        for m in reachable
+        if m.get("protocolMapper") == "oidc-amr-mapper"
+        and m.get("config", {}).get("access.token.claim") == "true"
+    ]
+
+    assert minting, "no amr mapper reachable from brain-console writes into its access tokens"
+
+
+def test_passing_the_one_time_code_step_earns_a_second_factor_the_api_recognises() -> None:
+    """**The positive half, and the one that was missing.** The OTP form on the flow this realm
+    binds for browser sign-in names a method `brain.identity.bearer` counts, so a sign-in that
+    passed it is STRONG. Tied to the code rather than to a literal: the reference is asserted
+    to be a member of `SECOND_FACTOR_METHODS`, and a token carrying the realm's own two
+    references is handed to `assurance_from`, so neither side can be edited alone.
+
+    The walk starts at the realm's browser binding and skips DISABLED steps, so a reference on
+    a flow nobody signs in through, or behind a disabled OTP subflow, fails here rather than
+    importing as a realm where a second factor can never be presented.
+
+    Delete this and the OTP step's reference can drift to a value the API has never heard of,
+    which is exactly as silent as having none."""
+    otp = _method_reference(OTP_FORM).get(REFERENCE_VALUE, "")
+    password = _method_reference(PASSWORD_FORM).get(REFERENCE_VALUE, "")
+
+    assert otp in SECOND_FACTOR_METHODS, f"the OTP step writes {otp!r}"
+    assert assurance_from(_claims_naming([password, otp])) is Assurance.STRONG
+
+
+def test_a_password_alone_earns_no_second_factor() -> None:
+    """**The negative half, without which the test above is satisfied by a realm that calls
+    everything a second factor.** The password form's reference is written, so a
+    password-only token says what it is, and it is not a member of `SECOND_FACTOR_METHODS`,
+    so that token stays AUTHENTICATED and cannot exercise an `admin:` or `approve:` capability.
+
+    Written at all, rather than left off, because a password-only token and one from a realm
+    whose amr mapper never ran would otherwise both carry an empty `amr`, and decoding a token is
+    the one diagnostic an administrator has.
+
+    Delete this and the password step can be given `mfa`, which promotes every sign-in in the
+    company with no second factor presented, silently and in the permissive direction."""
+    password = _method_reference(PASSWORD_FORM).get(REFERENCE_VALUE, "")
+
+    assert password, "the password step writes no reference, so a password-only token says nothing"
+    assert password not in SECOND_FACTOR_METHODS, f"the password step writes {password!r}"
+    assert assurance_from(_claims_naming([password])) is Assurance.AUTHENTICATED
+
+
+@pytest.mark.parametrize("authenticator", [PASSWORD_FORM, OTP_FORM])
+def test_a_method_reference_counts_for_the_whole_session_it_was_earned_in(
+    authenticator: str,
+) -> None:
+    """**A reference with no max age is gone before the first token.** Keycloak 26.0.0's
+    `AmrUtils.isAmrValid` keeps it only while `authTime + maxAge >= now`, and reads an absent
+    max age as 0, so the code exchange a second after the OTP form already mints a token
+    without `otp`. Shorter than the session is the quieter version of the same fault: the
+    administrator is STRONG until a refresh past the max age, then refused mid-task.
+
+    Asserted as at least `SESSION_ABSOLUTE_MAX`, the policy the realm's own
+    `ssoSessionMaxLifespan` is held to above, because the second factor is a claim about the
+    session (`A_SECOND_FACTOR_IS_A_CLAIM_ABOUT_THIS_SESSION`) and the session cannot outlive it.
+
+    Delete this and the max age can be dropped as looking optional, which it is in the admin
+    console, with every other test here green and no strong token ever minted."""
+    max_age = int(_method_reference(authenticator).get(REFERENCE_MAX_AGE, MAX_AGE_WHEN_ABSENT))
+
+    assert max_age >= SESSION_ABSOLUTE_MAX.total_seconds(), (
+        f"the {authenticator} reference lasts {max_age}s of a "
+        f"{SESSION_ABSOLUTE_MAX.total_seconds():.0f}s session"
+    )
+
+
+def test_every_config_and_subflow_a_declared_flow_names_is_declared_in_this_file() -> None:
+    """**A flow naming something this file does not declare stops the whole import.** Keycloak
+    26.0.0's `DefaultExportImportManager` resolves every step's `authenticatorConfig` and
+    `flowAlias` by alias as it imports the declared flows, and calls `getId()` on what it finds;
+    only afterwards does `migrateFlows` build the built-in flows this file leaves out. So a
+    built-in name cannot satisfy a reference here, and a missing one leaves Keycloak running
+    with no realm, which every sign-in reports as nothing in particular.
+
+    Both kinds of step are checked for shape too: a subflow step names a flow and no
+    authenticator, and an authenticator step names an authenticator.
+
+    Delete this and one renamed alias ships a realm that does not import, with the tests that
+    read the file as JSON all green."""
+    realm = _realm()
+    flow_aliases = [flow["alias"] for flow in realm.get("authenticationFlows") or []]
+    config_aliases = [one["alias"] for one in realm.get("authenticatorConfig") or []]
+    assert len(set(flow_aliases)) == len(flow_aliases), f"a flow alias repeats: {flow_aliases}"
+    assert len(set(config_aliases)) == len(config_aliases), f"a config repeats: {config_aliases}"
+
+    dangling: list[str] = []
+    for flow in realm.get("authenticationFlows") or []:
+        for step in flow["authenticationExecutions"]:
+            if step.get("authenticatorFlow"):
+                assert not step.get("authenticator"), f"{flow['alias']}: {step}"
+                if step.get("flowAlias") not in flow_aliases:
+                    dangling.append(f"{flow['alias']} -> flow {step.get('flowAlias')!r}")
+            else:
+                assert step.get("authenticator"), f"{flow['alias']}: {step}"
+                named = step.get("authenticatorConfig")
+                if named is not None and named not in config_aliases:
+                    dangling.append(f"{flow['alias']} -> config {named!r}")
+
+    assert not dangling, f"these names are not declared in this file: {dangling}"

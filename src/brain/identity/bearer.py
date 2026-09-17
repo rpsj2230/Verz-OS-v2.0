@@ -162,9 +162,15 @@ A_KEY_FETCH_NEVER_HOLDS_THE_EVENT_LOOP: Final = (
 #: know. Widening this list would raise the assurance of a session on the strength of a value
 #: this realm has never been observed to mint, and the failure is silent and permissive.
 #:
-#: `mfa` is the one Keycloak emits when its browser flow completed more than one factor, and
-#: `otp` is the one its OTP form contributes. `hwk` is included because a hardware key is the
-#: factor this company would move to next and it is a second factor by definition.
+#: **Keycloak mints none of these by itself.** This comment said until 2026-09-17 that it emits
+#: `mfa` after a multi-factor sign-in and `otp` from its OTP form, and Keycloak 26.0.0 does
+#: neither: `oidc-amr-mapper` writes only the reference value an administrator configured on
+#: each completed step, and no built-in scope carries that mapper. The realm minted nothing,
+#: every token was AUTHENTICATED, and every admin screen refused everybody on the owner's
+#: staging install. `otp` is minted now because `ops/keycloak/realm-export.json` configures it
+#: on the OTP form, and `test_keycloak_realm.py` holds that value to this set. `mfa` is RFC
+#: 8176's value for a sign-in that used more than one factor, and `hwk` is a hardware key, the
+#: factor a company would move to next; both are second factors by definition.
 SECOND_FACTOR_METHODS: Final[frozenset[str]] = frozenset({"mfa", "otp", "hwk"})
 
 #: The scheme the `Authorization` header must name, compared case-insensitively because the
