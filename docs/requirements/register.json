@@ -1599,7 +1599,9 @@
     "M11.4.2",
     "M11.5.1",
     "M11.5.5",
-    "M11.8.3"
+    "M11.8.3",
+    "M11.9.1",
+    "M11.9.2"
    ],
    "proof": [
     "M11.8.3"
@@ -4659,7 +4661,7 @@
    "id": "FEAT-11.8",
    "source": "owner feature list, architecture §19 Feature list: Models / Local model support where required",
    "area": "Models",
-   "requirement": "Where required the install can run on local models with no external model provider.",
+   "requirement": "Model providers are online services chosen by the company (owner decision 2026-09-18); a local-only profile is supported but not required.",
    "leaves": [
     "M41.1.6",
     "M42.5.8",
@@ -10978,7 +10980,9 @@
     "M11.5.1",
     "M11.4.5",
     "M11.8.2",
-    "M11.8.3"
+    "M11.8.3",
+    "M11.9.1",
+    "M11.9.2"
    ],
    "proof": [
     "M11.8.3"
@@ -11144,7 +11148,7 @@
    "id": "REQ-42",
    "source": "requirements-audit §4 Asked for, and still missing",
    "area": "Models",
-   "requirement": "A local-only model profile with no external provider is a supported deployment profile.",
+   "requirement": "Model providers are online services chosen by the company (owner decision 2026-09-18); a local-only profile is supported but not required.",
    "leaves": [
     "M41.1.6",
     "M42.5.8",
@@ -18227,6 +18231,267 @@
    "proof": [
     "M27.14.2",
     "M39.8.3"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-1",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Connectors are not synced into the Brain: only a minimal index is kept and every business value is read live from the source.",
+   "leaves": [
+    "M11.9.1",
+    "M11.9.2"
+   ],
+   "proof": [
+    "M11.9.3",
+    "M11.9.4",
+    "M11.9.5",
+    "M11.9.6",
+    "M11.9.7",
+    "M11.9.8",
+    "M11.9.9",
+    "M11.9.10",
+    "M11.9.11",
+    "M11.9.12",
+    "M11.9.13",
+    "M11.9.14"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C1",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Google Drive is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.3"
+   ],
+   "proof": [
+    "M11.9.3"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C2",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Lark is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.4"
+   ],
+   "proof": [
+    "M11.9.4"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C3",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Slack is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.5"
+   ],
+   "proof": [
+    "M11.9.5"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C4",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Freshdesk is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.6"
+   ],
+   "proof": [
+    "M11.9.6"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C5",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Xero is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.7"
+   ],
+   "proof": [
+    "M11.9.7"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C6",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "The CRM is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.8"
+   ],
+   "proof": [
+    "M11.9.8"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C7",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "The maintenance portal is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.9"
+   ],
+   "proof": [
+    "M11.9.9"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C8",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "The domain and hosting connector is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.10"
+   ],
+   "proof": [
+    "M11.9.10"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C9",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Cloudflare is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.11"
+   ],
+   "proof": [
+    "M11.9.11"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C10",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Google Workspace is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.12"
+   ],
+   "proof": [
+    "M11.9.12"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C11",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Google Analytics is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.13"
+   ],
+   "proof": [
+    "M11.9.13"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-C12",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Connectors",
+   "requirement": "Search Console is ready to use as soon as it is connected from the console.",
+   "leaves": [
+    "M11.9.14"
+   ],
+   "proof": [
+    "M11.9.14"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-2",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Models",
+   "requirement": "Model providers are online services, OpenAI, Anthropic, Moonshot, DeepSeek and others, switched on from the console; a local-only profile is not required.",
+   "leaves": [
+    "M5.7.1",
+    "M5.7.2"
+   ],
+   "proof": [
+    "M5.6.1"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-3",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Agents",
+   "requirement": "Super admins and department admins create agents from their requirements and workflow and assign the skills, tools and other parts each needs.",
+   "leaves": [
+    "M13.9.1",
+    "M13.9.2"
+   ],
+   "proof": [
+    "M13.9.3"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-4",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Agents",
+   "requirement": "A template agent installs with one click with sensible defaults, and the wizard stays available.",
+   "leaves": [
+    "M13.9.4"
+   ],
+   "proof": [
+    "M27.14.2"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-5",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Multi-agent",
+   "requirement": "Delegation is never collapsed into the coordinator by the cost check.",
+   "leaves": [
+    "M18.7.1"
+   ],
+   "proof": [
+    "M17.6.8"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-6",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Models",
+   "requirement": "An agent uses a model level by default and may be pinned to a specific provider and model.",
+   "leaves": [
+    "M5.7.3"
+   ],
+   "proof": [
+    "M5.6.1"
+   ],
+   "decision": null
+  },
+  {
+   "id": "OWN2-7",
+   "source": "owner decisions of 2026-09-18",
+   "area": "Permissions",
+   "requirement": "Who can see a record is shown only to someone who can already see it.",
+   "leaves": [
+    "M1.9.1"
+   ],
+   "proof": [
+    "M27.14.1"
    ],
    "decision": null
   }
