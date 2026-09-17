@@ -60,7 +60,8 @@ calls it makes (M21.3.4). The other seven are `FILLED_BY_A_MODEL_CALL`, and they
 2026-09-17 when `brain.models.calls.ModelCalls` started calling a model: the model, the
 provider, the tokens, the agent and the fallback and retry counts come from the request's
 `brain.models.metering.Meter` through `Finished.model_usage`, and they are None exactly when the
-request called no model, which is still every question the answer lane finishes. The fields
+request called no model, which is every question a fast-path rule answers or the lane abstained on
+before asking one. The fields
 that can be filled on every request are required and have no default, so the difference is
 enforced by the dataclass rather than by a comment.
 

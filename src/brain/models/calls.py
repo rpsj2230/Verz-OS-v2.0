@@ -40,10 +40,9 @@ the rung's ceiling says: "a slow provider becomes queueing rather than unbounded
 
 **Not built, and said.** The probe loop `health.next_probes` describes has no scheduler, so an
 idle provider's health is whatever its last real attempts say. A lane's per-provider overrides
-(`driver.ProviderClient`) have nowhere to be edited, so every rung runs at its own numbers. And
-nothing on the answer lane calls this yet: `brain.gate.answer` answers from fast-path rules and
-abstains otherwise, so the callers today are the Models screen's provider check and whatever is
-built next.
+(`driver.ProviderClient`) have nowhere to be edited, so every rung runs at its own numbers. The
+callers are the Models screen's provider check and `brain.gate.model_lane`, the answer lane's step
+for a question no fast-path rule answers.
 
 Task ids: M27.7.14, M27.8.8, M5.3.4
 """

@@ -47,7 +47,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import router as agent_router
 from brain.api import ErrorBody, TimeoutMiddleware
-from brain.api_routes import GateWiring
+from brain.api_routes import GateWiring, passage_search_for
 from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.artifact_routes import router as artifact_router
@@ -77,6 +77,7 @@ from brain.erasure_routes import router as erasure_router
 from brain.error_routes import router as error_router
 from brain.estate_routes import router as estate_router
 from brain.feature_routes import router as feature_router
+from brain.firstrun import GRANTED_BY
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
@@ -99,13 +100,14 @@ from brain.identity.principal_directory import StoredDirectory
 from brain.identity.principal_store import StoredPrincipals
 from brain.identity.roles import IdentityError
 from brain.identity.sign_in_binding import sign_in_bindings
-from brain.install import InstallError, installed_name
+from brain.install import InstallError, installed_name, value_of
 from brain.install_routes import router as install_router
 from brain.jobs_routes import router as jobs_router
 from brain.knowledge.row_store import SessionRowSource
 from brain.log_routes import router as log_router
 from brain.migrate import run_migrations
 from brain.mine_routes import router as mine_router
+from brain.models.default_ladder import reconcile as reconcile_default_ladder
 from brain.navigation_routes import router as navigation_router
 from brain.notification_routes import router as notification_router
 from brain.operate_routes import router as operate_router
@@ -113,9 +115,14 @@ from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import credentials_at_start
+from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.log_store import start_log_store, stop_log_store
-from brain.ops.model_service import ModelService, model_service_at_start
+from brain.ops.model_service import (
+    ModelService,
+    held_providers,
+    model_service_at_start,
+)
 from brain.ops.object_store import backup_objects, object_store_at_start
 from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
@@ -376,6 +383,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     records = SessionRowSource(app.state.db_sessions) if app.state.db_sessions else None
     app.state.tools = build_registry(source=settings.tool_source, records=records)
     app.state.ready["tools"] = True
+    # The passage search the answer lane's model step reads through: the registered document
+    # tool's own handler, so the reach is decided where the tool decides it. None without a row
+    # source, which is a lane that abstains on a question no rule answers. See
+    # `brain.api_routes.model_lane_of`.
+    app.state.passage_search = passage_search_for(app.state.tools)
     log.info(
         "tool registry frozen",
         tools=len(app.state.tools),
@@ -404,6 +416,29 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # switch or a key saved from the console takes effect without a restart. See
     # `brain.ops.model_service` and `brain.models.assembly`.
     app.state.models = model_service_at_start(app.state.db_sessions)
+    # The default routing ladder: written by the wizard as it appoints, through this writer, and
+    # reconciled here for an install that has been set up and whose ladder nobody has ever held.
+    # After the installation settings and the vault's keys, because the profile and the held
+    # keys name the provider; never fatal, because a missing ladder is a question that cannot
+    # reach a model and a process that will not start is every screen. See
+    # `brain.models.default_ladder`.
+    app.state.default_ladder = None
+    if app.state.db_sessions is not None:
+        writer = SessionLadderWriter(app.state.db_sessions)
+        app.state.default_ladder = writer
+        try:
+            now = datetime.now(UTC)
+            written = await reconcile_default_ladder(
+                writer,
+                administrators=await FirstAdministrators(app.state.db_sessions).administrators(now),
+                profile=value_of("INSTALL_MODEL_PROFILE"),
+                held=held_providers(),
+                actor=GRANTED_BY,
+                trace_id=f"{RECONCILIATION_TRACE}{uuid.uuid4().hex[:16]}",
+            )
+            log.info("default ladder reconciled", outcome=written.value)
+        except Exception as exc:
+            log.warning("default ladder could not be reconciled", error=type(exc).__name__)
     # No ledger writer survives a restart yet, so no store is built even with a database. See
     # `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions, ledger=None)

@@ -62,6 +62,16 @@ and FastAPI's own 422 for a body in the wrong shape quotes the input it refused,
 built on `brain.api.NoEchoRoute`. Before 2026-09-16 a setup code over the length cap came back
 in the response that refused it.
 
+**The routing ladder is written for the provider the wizard chose, after the door closes.** A
+fresh install's `ops.routing_rung` is empty, so until the defaults are written no question reaches
+a model and the Models screen's check says no rung names the provider. Once the appointment has
+landed, `brain.models.default_ladder.default_ladder` is written for the local server under a local
+profile, or for the hosted provider whose key was just kept, through the same writer
+`brain.app.lifespan` reconciles with at a start. After the appointment rather than inside it,
+because the ladder is not what closes the door and a routing table that refuses it must not take
+the appointment with it; the refusal is logged, and the next start writes the ladder. See
+`THE_LADDER_IS_WRITTEN_AFTER_THE_APPOINTMENT_AND_NEVER_IN_ITS_WAY`.
+
 **The server chooses the administrator's principal id.** See
 `THE_SERVER_CHOOSES_WHO_IS_APPOINTED`.
 
@@ -110,6 +120,7 @@ from brain.firstrun import GRANTED_BY, Enrolment
 from brain.identity.first_administrator import FirstAdministratorRefusedError
 from brain.identity.roles import RoleGrant
 from brain.install import hold_saved, saved_values
+from brain.models.default_ladder import LadderWriter, LadderWritten, provider_at_setup
 from brain.ops.credentials import (
     SLOTS,
     CredentialProblemError,
@@ -170,6 +181,16 @@ A_PROVIDER_KEY_IS_KEPT_BEFORE_THE_DOOR_CLOSES: Final = (
     "again. An install that names no vault still finishes when its environment already carries "
     "that same key. Otherwise the slot's path, the variable it would be read as and the reason "
     "are told back. A path, a name and a reason, never a value."
+)
+
+#: Why the ladder is written once the appointment has landed, and why its failure is logged.
+THE_LADDER_IS_WRITTEN_AFTER_THE_APPOINTMENT_AND_NEVER_IN_ITS_WAY: Final = (
+    "The default ladder is what lets the first question reach a model, and it is not what closes "
+    "the wizard. Written before the appointment, a ladder for an install that then refused its "
+    "administrator would sit in front of whatever the next attempt chose, because a held ladder "
+    "is never refilled. Written inside it, a routing table that refused would take the door with "
+    "it. So it is written after, for the provider the appointed answers name, and a refusal is "
+    "logged by its class and repaired by the reconciliation at the next start."
 )
 
 #: Why the principal id is not taken from the request.
@@ -459,6 +480,30 @@ def put_provider_key_to_use(
     return ProviderKeyKept.IN_USE if in_use is InUse.HERE else ProviderKeyKept.OUTRANKED
 
 
+async def write_ladder_after_appointment(
+    ladder: LadderWriter | None, applied: Applied, *, trace_id: str
+) -> LadderWritten | None:
+    """The default ladder for the provider `applied` names, or None where nothing was written.
+
+    Never raises: see `THE_LADDER_IS_WRITTEN_AFTER_THE_APPOINTMENT_AND_NEVER_IN_ITS_WAY`. None for
+    a process with no writer, which has no database to write a ladder into, and for a writer that
+    refused, which is logged by the class of what it raised.
+    """
+    if ladder is None:
+        return None
+    profile = applied.settings.get("INSTALL_MODEL_PROFILE", "")
+    provider = provider_at_setup(profile, applied.provider)
+    if provider is None:
+        return LadderWritten.NO_PROVIDER
+    try:
+        written = await ladder.write(provider, actor=GRANTED_BY, trace_id=trace_id)
+    except Exception as exc:
+        log.warning("setup.ladder_unwritten", provider=provider, error=type(exc).__name__)
+        return None
+    log.info("setup.ladder", provider=provider, outcome=written.value)
+    return written
+
+
 async def appoint_first_administrator(
     appointer: Appointer,
     asked: AppointmentAsked,
@@ -469,13 +514,15 @@ async def appoint_first_administrator(
     now: datetime,
     credentials: Credentials | None = None,
     env: Mapping[str, str] | None = None,
+    ladder: LadderWriter | None = None,
 ) -> Appointment:
     """Run the appointment in its order, or refuse before the answers in one way.
 
     See `THE_APPOINTMENT_RUNS_IN_THE_ORDER_THAT_KEEPS_AN_INSTALL_FINISHABLE`. Raises
     `_nothing_to_appoint` for every refusal in `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER`,
     and returns problems, or the key that could not be kept, with nobody appointed, for the
-    rest. `credentials` None is an install with no vault.
+    rest. `credentials` None is an install with no vault. `ladder` None is a process with no
+    database, which writes no routing ladder.
     """
     store = credentials if credentials is not None else Credentials(None)
     if enrolment is None:
@@ -518,6 +565,7 @@ async def appoint_first_administrator(
     # Held from what was written rather than read back, so this process answers with the
     # install's own values on the very next request. See the module note.
     hold_saved({**saved_values(), **applied.settings})
+    await write_ladder_after_appointment(ladder, applied, trace_id=trace_id)
     return Appointment(
         principal_id=principal_id,
         provider_key=put_provider_key_to_use(slot, applied, store),
@@ -531,6 +579,12 @@ def appointer_of(request: Request) -> Appointer | None:
     """The first administrator store this process was built with, or None."""
     found = getattr(request.app.state, "first_administrators", None)
     return found if isinstance(found, Appointer) else None
+
+
+def ladder_of(request: Request) -> LadderWriter | None:
+    """Where this process writes the default routing ladder, or None without a database."""
+    found = getattr(request.app.state, "default_ladder", None)
+    return found if isinstance(found, LadderWriter) else None
 
 
 def credentials_of(request: Request) -> Credentials | None:
@@ -569,6 +623,7 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
             trace_id=_trace_id(),
             now=now,
             credentials=credentials_of(request),
+            ladder=ladder_of(request),
         )
     except BrainError:
         raise

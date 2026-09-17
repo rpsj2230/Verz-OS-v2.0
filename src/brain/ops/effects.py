@@ -255,6 +255,10 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.gate.answer_cache:AnswerStore.set": Repeat.DERIVED_STATE,
         "brain.gate.compose:TraceSink.emit": Repeat.DERIVED_STATE,
         "brain.gate.finish:RequestRecorder.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The answer lane's model step: passages found at a reach, and a model that answers and
+        # forgets, whose attempt rows are written through `AttemptLog`'s own doors.
+        "brain.gate.model_lane:PassageSearch.passages": Repeat.READS,
+        "brain.gate.model_lane:AnswerModel.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         "brain.gate.provenance:Cited.render": Repeat.READS,
         "brain.gate.resolve:VersionSource.grants_version": Repeat.READS,
         "brain.gate.resolve:EntitlementStore.load": Repeat.READS,
@@ -278,6 +282,9 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.models.calls:Ladder.current": Repeat.READS,
         "brain.models.calls:AttemptLog.started": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.models.calls:AttemptLog.finished": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        # The default ladder: rows in `ops.routing_rung`, written under a lock and refused by the
+        # table's unique live position when the ladder is already held.
+        "brain.models.default_ladder:LadderWriter.write": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.models.driver:ModelDriver.complete": Repeat.NO_EFFECT_AT_THE_FAR_END,
         # Operations.
         "brain.ops.automation_owner:PrincipalRecords.live_principal": Repeat.READS,

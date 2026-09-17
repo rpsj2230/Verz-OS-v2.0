@@ -106,7 +106,7 @@ Task ids: M31.1.4.1, M31.1.4.3, M31.1.4.4, M32.5.2.1
 from __future__ import annotations
 
 import inspect
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Final, cast
@@ -118,6 +118,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.core.entitlement import EntitlementSet
+from brain.core.envelope import TypedResult
 from brain.core.errors import Absent, BrainError, Failed
 from brain.core.field_policy import FieldPolicy
 from brain.core.redaction import (
@@ -133,10 +134,13 @@ from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.context import Channel
 from brain.gate.fast_lane import RowReader
 from brain.gate.finish import Origin, RequestRecorder
+from brain.gate.model_lane import DocumentSearchTool, ModelLane
 from brain.gate.resolve import EntitlementCache, EntitlementStore, VersionSource, resolve
 from brain.identity.bearer import Caller, TokenAuthority, authenticate
 from brain.identity.oidc import VerifiedClaims
+from brain.knowledge.document_tools import SEARCH_DOCUMENTS, KnowledgePassage
 from brain.knowledge.rows import DEFAULT_ROW_LIMIT, MAX_ROW_LIMIT, RowRequest, row_scope_for
+from brain.ops.model_service import ModelService
 from brain.ops.trace_sink import CountingTraceSink
 from brain.tools.registry import ToolRegistry
 from brain.tools.startup import classification_for
@@ -723,6 +727,39 @@ def field_policies(registry: ToolRegistry) -> dict[str, FieldPolicy]:
     return policies
 
 
+def passage_search_for(registry: ToolRegistry) -> DocumentSearchTool | None:
+    """The passage search the answer lane's model step reads through, or None without one.
+
+    Over the handler `brain.tools.startup.build_registry` registered for
+    `knowledge.search_documents`, which exists exactly when the registry was built over a row
+    source. Built once, by `brain.app.lifespan`, beside the registry it reads.
+    """
+    if not registry.has(SEARCH_DOCUMENTS):
+        return None
+    # A cast at the registry's boundary, for the reason `row_readers` gives: the registry holds
+    # handlers of more than one shape, and the name selects the one this is.
+    handler = cast(
+        Callable[..., Awaitable[TypedResult[KnowledgePassage]]],
+        registry.get(SEARCH_DOCUMENTS).handler,
+    )
+    return DocumentSearchTool(handler=handler)
+
+
+def model_lane_of(state: Any) -> ModelLane | None:
+    """The model step this process hands the answer lane, or None where it has nothing to hand.
+
+    Both halves are built by `brain.app.lifespan`: the model service on every process, and the
+    passage search only on one with a database. A process missing either abstains on a question
+    no rule answers, exactly as the lane did before it had a model step, rather than finding
+    passages it cannot read to a model or asking a model with nothing to show it.
+    """
+    models = getattr(state, "models", None)
+    search = getattr(state, "passage_search", None)
+    if not isinstance(models, ModelService) or search is None:
+        return None
+    return ModelLane(search=search, model=models.calls)
+
+
 @router.post("/answer", responses=COMMON_RESPONSES)
 async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResponse:
     """One question, answered as a stream of events, at this caller's reach.
@@ -730,8 +767,9 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
     **The first route in this application that answers a question rather than serving rows.**
     It runs `brain.gate.answer.answer_lane`, which had no caller, over
     `brain.gate.fast_lane`, which had none either, and writes the result through
-    `brain.gate.streaming`, which had none either. There is no model in it: see
-    `brain.gate.answer` for why, and for what goes where the abstention currently does.
+    `brain.gate.streaming`, which had none either. A question no rule answers is handed to the
+    lane's model step when this process has one, `model_lane_of`: see `brain.gate.model_lane`
+    for what a model is shown and why nothing it says is read for references.
 
     A POST for something that writes nothing, because of where the question can safely live:
     `A_QUESTION_IN_A_URL_IS_A_QUESTION_IN_EVERY_LOG`.
@@ -788,6 +826,7 @@ async def answer(request: Request, asked: Asked, ask: Question) -> StreamingResp
             # lane's cache path is built and tested; what is missing is the store, and passing
             # None with this said beside it is better than a None that reads as "no hit".
             cached=None,
+            model=model_lane_of(request.app.state),
         )
     except BrainError:
         # Already in the taxonomy, already has a public message, already maps to a status.

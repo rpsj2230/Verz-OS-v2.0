@@ -1,4 +1,4 @@
-"""The answer lane: one question in, a stream of frames out, and no model anywhere in it.
+"""The answer lane: one question in, a stream of frames out, and a model only where no rule answers.
 
 Until this module the pieces of an answer existed and nothing joined them.
 `brain.gate.fast_lane.respond` matched a data-driven rule and fetched a row and was called
@@ -8,13 +8,27 @@ derived citations from a redacted payload and was called by nothing. Four correc
 documented modules with no path between them and a request, which is the recurring defect in
 this repository and by the time this was written it had thirteen recorded instances.
 
-**This is a lane and not the lane.** There is no model call here. A model can be called now,
-through `brain.models.calls.ModelCalls`, and this lane does not call it, because a model step
-needs what it may be shown decided first and that is not decided here. So the lane answers what a
-fast-path rule can answer, and abstains otherwise, using the abstention vocabulary that already
-exists rather than a sentence written here. When the model lane is built, it goes where `_abstained`
-currently sits, and everything around it, the ordering, the redaction and the frames, is
-already right.
+**A question no rule matched at all goes to a model, when the lane is handed one, and nothing
+else does.** A question whose wording a rule matches stays the fast path's, answered or abstained
+on exactly as before, including a rule for a source this install does not connect, which is
+"nothing connected" before anything is read. A question no rule's shape matches is handed to
+`brain.gate.model_lane.draft` when the caller passed a `ModelLane`, which finds passages at the
+caller's reach, redacts them with the same reach, asks a model only when something survived, and
+derives the citations from what the model was shown. The ordering, the redaction and the frames
+around it are the code that was already here. With no `ModelLane` the lane abstains exactly as it
+did, which is what the golden corpus and every caller without a model sees. See
+`brain.gate.model_lane` for what a model is shown and why nothing it says is read for references.
+
+**Whether a rule matched is decided before anything is read, from the question and the install's
+rules, which is why it may choose the lane.** A rule that matched and then found two records under
+one name, or a record whose answer field is withheld, is not handed on to a model: the read has
+happened by then, and a different set of steps or a different answer after it would tell the
+asker what the read found. See `THE_MODEL_STEP_TAKES_ONLY_A_QUESTION_NO_RULE_MATCHED`.
+
+The branch that finds no row readers still says nothing is connected, with or without a model.
+The document plane is read through the same row source the readers are, and
+`brain.tools.startup` registers the one exactly when it registers the other, so a process with
+no readers has no passage search to hand the lane either.
 
 **Every frame goes through `brain.gate.streaming.AnswerStream`, so the order is enforced
 rather than intended.** Citations before prose, no step once the prose has started, nothing
@@ -41,11 +55,12 @@ so a fast-lane answer whose answer field is locked is a refusal this layer saw, 
 `nothing_retrieved` renders, referenced twice rather than written twice, so the two are
 byte identical to the asker and the ledger still says what happened.
 
-**A question that matched no rule abstains rather than erroring.** No rule matched, two
-matched, or two records answered to one name: `respond` returns None for all three and the
+**A question the fast path cannot answer abstains rather than erroring.** No served rule matched,
+two matched, or two records answered to one name: `respond` returns None for all three and the
 distinction is deliberately not visible to the asker, because "two rules matched your
 question" is a fact about this installation's configuration and "two records matched that
-name" is a fact about its data.
+name" is a fact about its data. A question no rule matched at all never reaches `respond` when
+the lane has a model step.
 
 **The scope statement is derived from the asker's reach and never from what ran.** That is
 `brain.gate.abstain.SearchScope`'s rule and this module obeys it by passing the sources the
@@ -53,20 +68,21 @@ caller may be told about, which the caller computes from their own entitlements.
 assembled from the sources that actually answered would vary with whether a record existed,
 and the variation is readable by asking twice.
 
-**The lane declares the budget it runs under, and it is the fast lane's.** No path through this
-module calls a model, so every request it finishes spent what `brain.core.lane.Lane.FAST`
-allows, including a question `brain.gate.classify` would have sent to the answer lane and this
-lane abstained on. Recording those as `ANSWER` would compare a two-millisecond abstention against
-an eight-second objective and report it met. See
-`NO_PATH_THROUGH_THIS_LANE_CALLS_A_MODEL_SO_EVERY_REQUEST_SPENT_THE_FAST_BUDGET`; when the model
-lane goes where `_abstained` sits, which lane produced an outcome becomes a property of the
-outcome rather than of this module.
+**A request is recorded under the lane whose budget it spent, and the meter is what says so.**
+A request that attempted a model call spent the answer lane's allowance and is recorded as
+`Lane.ANSWER`, with the meter's usage on its ledger row; every other request, an answer from a
+rule, a cache hit, an abstention decided before any model was asked and a fault before one,
+spent the fast lane's and is recorded as `Lane.FAST`. Recording every question a model could
+have read as `ANSWER` would compare a two-millisecond abstention against an eight-second
+objective and report it met. The decision is read off the one `Meter` the request's calls were
+counted on, so it cannot disagree with the tokens on the same row. See
+`A_REQUEST_IS_RECORDED_UNDER_THE_LANE_WHOSE_BUDGET_IT_SPENT`.
 
 Scope: this module opens no connection and reads no clock of its own. `now` is a parameter, the
 readers are handed in, the rules are handed in, and the trace sink is handed in. The completion
 instant comes from `clock`, which the caller hands in and the lane reads exactly once, in the
-`finally` that finishes the request. It is `async` only because a row read is, which is the one
-thing here that waits on anything.
+`finally` that finishes the request. It is `async` because a row read, a passage search and a
+model call are, which are the things here that wait on anything.
 
 **Every reader call is counted as it starts, by a wrapper the lane puts around the readers it was
 handed (M21.3.4).** The count reaches `Finished.tool_calls` and from there the trace ledger's
@@ -76,7 +92,7 @@ reported would have to be threaded out through every one of those returns. A wra
 miss a return, and it counts a read that raised, which is a call the lane made. See
 `brain.gate.finish.A_TOOL_CALL_IS_COUNTED_WHEN_IT_STARTS`.
 
-Task ids: M30.5.2, M21.3.4
+Task ids: M30.5.2, M21.3.4, M3.9.3
 """
 
 from __future__ import annotations
@@ -114,12 +130,15 @@ from brain.gate.fast_lane import (
     FastLaneAnswer,
     FastPathRule,
     RowReader,
+    match_rule,
     respond,
     unserved_match,
 )
 from brain.gate.finish import Finished, Origin, RequestRecorder, attributable, finish
+from brain.gate.model_lane import ModelLane, draft
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 from brain.knowledge.rows import RowRecord, RowRequest
+from brain.models.metering import Meter
 
 log = structlog.get_logger(__name__)
 
@@ -143,17 +162,32 @@ A_SENTENCE_BUILT_BEFORE_REDACTION_IS_A_SENTENCE_THAT_SKIPPED_IT = (
     "than a sentence with a gap in it."
 )
 
-#: Why every request this lane finishes is recorded under the fast lane.
-NO_PATH_THROUGH_THIS_LANE_CALLS_A_MODEL_SO_EVERY_REQUEST_SPENT_THE_FAST_BUDGET: Final = (
+#: Why a request's lane is read off its meter.
+A_REQUEST_IS_RECORDED_UNDER_THE_LANE_WHOSE_BUDGET_IT_SPENT: Final = (
     "A lane is a budget, and the budget a request spent is decided by what ran, not by what "
-    "the question would have been classified as. Nothing in this module calls a model, so an "
-    "answer, an abstention, a cache hit and a fault all spent the fast lane's allowance. "
-    "Filing the abstentions under the answer lane because a model would have read them there "
-    "measures a lane that did not run against an objective sized for one that did."
+    "the question would have been classified as. A request that attempted a model call spent "
+    "the answer lane's allowance, answered or not; an answer from a rule, a cache hit, an "
+    "abstention decided before any model was asked and a fault before one spent the fast "
+    "lane's. Filing those under the answer lane because a model could have read them measures "
+    "a lane that did not run against an objective sized for one that did. The meter the calls "
+    "were counted on decides, so the lane and the tokens on one ledger row cannot disagree."
 )
 
-#: The lane this module is, for the ledger. See the constant above.
+#: Why only a question no rule matched is handed to a model.
+THE_MODEL_STEP_TAKES_ONLY_A_QUESTION_NO_RULE_MATCHED: Final = (
+    "Whether a rule's wording matches a question is decided from the question and the install's "
+    "rules before anything is read, so it is the same for every asker and every record. What a "
+    "matched rule's read found is not: two records under one name, or one whose answer field is "
+    "withheld, would reach a model with different steps and a different answer from a record "
+    "that does not exist, and the asker would learn which. So a matched rule stays the fast "
+    "lane's whatever it found, and only a question no rule matched at all is the model's."
+)
+
+#: The lane a request that called no model is recorded under. See the constant above.
 LANE: Final = Lane.FAST
+
+#: The lane a request that attempted a model call is recorded under. See the constant above.
+MODEL_LANE: Final = Lane.ANSWER
 
 
 class ToolCalls:
@@ -165,6 +199,10 @@ class ToolCalls:
 
     def __init__(self) -> None:
         self.started = 0
+
+    def start(self) -> None:
+        """Count one call that is about to start and is not a row read, such as a passage search."""
+        self.started += 1
 
     def counting(
         self, readers: Mapping[tuple[str, str], RowReader]
@@ -258,6 +296,7 @@ async def answer_lane(
     now: datetime,
     clock: Callable[[], datetime],
     cached: CachedAnswer | None = None,
+    model: ModelLane | None = None,
 ) -> Answered:
     """Answer one question, and finish the request once whatever the answer was.
 
@@ -278,9 +317,15 @@ async def answer_lane(
     It is a required argument with no default for the reason the recorders are: a default
     wall clock would be a clock this module reads, and a test passing a fixed `now` would then
     record a duration measured against the machine's real time.
+
+    `model` is the model step for a question no rule answers, or None for a lane that abstains
+    on it. One `Meter` is made here per request and handed to that step, and it is what the
+    ledger row's lane and usage are read from: see
+    `A_REQUEST_IS_RECORDED_UNDER_THE_LANE_WHOSE_BUDGET_IT_SPENT`.
     """
     attributable(origin, entitlement.principal_id)
     calls = ToolCalls()
+    meter = Meter()
     outcome: Answered | None = None
     try:
         outcome = await _outcome(
@@ -293,10 +338,15 @@ async def answer_lane(
             sink=sink,
             now=now,
             cached=cached,
+            model=model,
+            meter=meter,
+            trace_id=origin.trace_id,
+            calls=calls,
         )
         return outcome
     finally:
         completed_at = clock()
+        usage = meter.usage()
         await finish(
             recorders,
             Finished(
@@ -305,8 +355,9 @@ async def answer_lane(
                 outcome=outcome,
                 completed_at=completed_at,
                 entitlement_hash=entitlement.ent_hash(),
-                lane=LANE,
+                lane=LANE if usage is None else MODEL_LANE,
                 tool_calls=calls.started,
+                model_usage=usage,
             ),
         )
 
@@ -321,7 +372,11 @@ async def _outcome(
     reachable_sources: Iterable[str],
     sink: TraceSink,
     now: datetime,
-    cached: CachedAnswer | None = None,
+    cached: CachedAnswer | None,
+    model: ModelLane | None,
+    meter: Meter,
+    trace_id: str,
+    calls: ToolCalls,
 ) -> Answered:
     """Answer one question, or decline, and hand back the frames either way.
 
@@ -366,6 +421,22 @@ async def _outcome(
                 detail="no row readers" if unserved is None else "no reader for a matched rule",
                 missing_source="" if unserved is None else unserved.rule.source,
             ),
+        )
+
+    if model is not None and no_rule_matches(question, rules):
+        # Before anything is read. See THE_MODEL_STEP_TAKES_ONLY_A_QUESTION_NO_RULE_MATCHED.
+        return await _answered_by_model(
+            question,
+            stream,
+            frames,
+            model=model,
+            entitlement=entitlement,
+            scope=scope,
+            sink=sink,
+            now=now,
+            meter=meter,
+            trace_id=trace_id,
+            calls=calls,
         )
 
     frames.append(stream.step(at_tool_input_start()))
@@ -427,6 +498,71 @@ async def _outcome(
     frames.append(stream.text(_with_scope(composed.text, scope)))
     frames.append(stream.done())
 
+    return Answered(frames=tuple(frames), composed=composed)
+
+
+def no_rule_matches(question: str, rules: Sequence[FastPathRule]) -> bool:
+    """Whether no rule's wording matches this question, whatever this install connects.
+
+    Each rule is asked through `match_rule` on its own, as though its own source were served, so a
+    rule for an unconnected source still counts as matching and two rules matching still count.
+    Nothing about the caller and nothing read reaches this. See
+    `THE_MODEL_STEP_TAKES_ONLY_A_QUESTION_NO_RULE_MATCHED`.
+    """
+    return all(
+        match_rule(question, (rule,), served=frozenset({(rule.source, rule.entity)})) is None
+        for rule in rules
+    )
+
+
+async def _answered_by_model(
+    question: str,
+    stream: AnswerStream,
+    frames: list[str],
+    *,
+    model: ModelLane,
+    entitlement: EntitlementSet,
+    scope: SearchScope,
+    sink: TraceSink,
+    now: datetime,
+    meter: Meter,
+    trace_id: str,
+    calls: ToolCalls,
+) -> Answered:
+    """The model step's frames, after the understanding and checking steps.
+
+    The looking-up and reading steps go out whatever the step found, for the reason the fast
+    path emits its reading step unconditionally: a step describes the lane's phases and never
+    what a call found. The composing step goes out only when a model was asked, which is decided
+    by what survived redaction at this caller's reach, so a withheld passage and an absent one
+    produce the same steps.
+
+    The citations come from `ComposedAnswer.citations`, which `compose` derived from the payload
+    the model was shown, and they go out before the prose, which is the model's reply and the
+    only thing of the model's that reaches a frame.
+    """
+    frames.append(stream.step(at_tool_input_start()))
+    drafted = await draft(
+        question,
+        lane=model,
+        entitlement=entitlement,
+        scope=scope,
+        sink=sink,
+        now=now,
+        meter=meter,
+        trace_id=trace_id,
+        searching=calls.start,
+    )
+    frames.append(stream.step(Progress.READING))
+    if drafted.asked:
+        frames.append(stream.step(Progress.COMPOSING))
+    if isinstance(drafted.outcome, Abstention):
+        return _abstained(stream, frames, drafted.outcome)
+    composed = drafted.outcome
+    for citation in composed.citations:
+        frames.append(stream.citation(citation))
+    frames.append(stream.text(_with_scope(composed.text, scope)))
+    frames.append(stream.done())
     return Answered(frames=tuple(frames), composed=composed)
 
 
@@ -517,10 +653,11 @@ async def frames_of(answered: Answered) -> AsyncIterator[str]:
     """The frames as a stream, for a response that writes them as they are ready.
 
     A generator over an already-complete tuple today, because the lane computes its answer
-    before it writes any of it: a fast-path answer is one row read and there is nothing to
-    show in the meantime. It is written as a generator anyway so the response body's type
-    does not change on the day the lane yields while it works, which is the change that
-    would otherwise touch every caller.
+    before it writes any of it: a fast-path answer is one row read, and a model's answer is one
+    call that is not streamed from the provider, so there is nothing yet to show in the
+    meantime. It is written as a generator anyway so the response body's type does not change
+    on the day the lane yields while it works, which is the change that would otherwise touch
+    every caller.
     """
     for frame in answered.frames:
         yield frame
