@@ -14,7 +14,7 @@ real table does with a lock, a policy and a second writer is `tests/unit/test_su
 routes read `datetime.now(UTC)` through `Asking`, and whether an approval is open is a question
 about the present.
 
-Task ids: M35.3.1.1
+Task ids: M35.3.1.1, M27.9.3
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ from brain.approval_routes import (
     DecisionAsked,
     RejectionReason,
 )
-from brain.audit.ledger import AuditAction, AuditChain
+from brain.audit.ledger import AuditAction, AuditChain, AuditEntry
 from brain.audit.record import ApprovalVerdict, AuditRecorder
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import SideEffect, ToolDefinition
@@ -47,7 +47,7 @@ from brain.core.errors import Absent
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_artefact
-from brain.gate.suspension_store import ReadableSuspensions, StoredSuspensions
+from brain.gate.suspension_store import StoredSuspensions
 from brain.identity.bearer import TokenAuthority
 from brain.session import make_app_engine, make_session_factory
 from tests.fixtures.http_client import Response
@@ -170,10 +170,17 @@ class MemorySource:
 
 
 class MemoryHeld:
-    """A `HeldSuspensions` whose writes land only when the holding block ends cleanly."""
+    """A `HeldSuspensions` whose writes land only when the holding block ends cleanly.
 
-    def __init__(self, rows: dict[str, SuspendedAction], *, writes_land: bool) -> None:
+    A decision's entry is appended to the store's chain, which stands in for what
+    `gate.suspension`'s trigger appends to `obs.audit_entry`, and the appended entry is returned.
+    """
+
+    def __init__(
+        self, rows: dict[str, SuspendedAction], ledger: AuditChain, *, writes_land: bool
+    ) -> None:
         self.rows = rows
+        self.ledger = ledger
         self.writes: dict[str, SuspendedAction] = {}
         self.writes_land = writes_land
         self.locked: list[str] = []
@@ -182,7 +189,7 @@ class MemoryHeld:
         self.locked.append(suspension_id)
         return self.rows.get(suspension_id)
 
-    async def record(self, decided: SuspendedAction) -> bool:
+    async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
         current = self.rows.get(decided.id)
         if (
             not self.writes_land
@@ -190,24 +197,29 @@ class MemoryHeld:
             or current.state is not ApprovalState.PENDING
             or current.action_digest != decided.action_digest
         ):
-            return False
+            return None
         self.writes[decided.id] = decided
-        return True
+        return self.ledger.append(
+            action=entry.action,
+            actor_id=entry.actor_id,
+            subject=entry.subject,
+            ent_hash=entry.ent_hash,
+            trace_id=entry.trace_id,
+            at=entry.at,
+            details=entry.details,
+        )
 
 
 class MemoryStore:
-    """A `SuspensionStore` over a dict, a real `AuditChain`, and a record of who read it."""
+    """A `SuspensionStore` over a dict, a real `AuditChain` it keeps entries in, and a record of
+    who read it."""
 
     def __init__(self, held: Sequence[SuspendedAction] = (), *, writes_land: bool = True) -> None:
         self.rows: dict[str, SuspendedAction] = {one.id: one for one in held}
-        self._ledger = AuditChain()
+        self.ledger = AuditChain()
         self.writes_land = writes_land
         self.read_as: list[str] = []
         self.held_as: list[str] = []
-
-    @property
-    def ledger(self) -> AuditChain:
-        return self._ledger
 
     def reading_as(self, reach: EntitlementSet, now: datetime) -> MemorySource:
         self.read_as.append(reach.principal_id)
@@ -216,7 +228,7 @@ class MemoryStore:
     @asynccontextmanager
     async def holding(self, reach: EntitlementSet, now: datetime) -> AsyncIterator[MemoryHeld]:
         self.held_as.append(reach.principal_id)
-        held = MemoryHeld(self.rows, writes_land=self.writes_land)
+        held = MemoryHeld(self.rows, self.ledger, writes_land=self.writes_land)
         yield held
         self.rows.update(held.writes)
 
@@ -493,81 +505,50 @@ def test_only_approving_and_rejecting_are_offered_and_both_are_ledger_verdicts()
 # ------------------------------------------------------------------------ the process
 
 
-def test_a_process_that_cannot_keep_a_decision_refuses_every_decision_alike() -> None:
-    """No store, a thing that is not one, and a source that can only be read all answer every
-    caller and every id with one fault, and a store answers.
+def test_a_process_that_cannot_hold_an_approval_refuses_every_decision_alike_and_in_words() -> None:
+    """No store and a thing that is not one answer every caller and every id with the sentence
+    saying approvals are not kept here; a source that can only be read answers with the sentence
+    saying it cannot take a decision; and a store answers.
 
-    Delete this and a process whose decisions have nowhere to go can accept one."""
-    app: FastAPI = create_app(Settings(env="development"))
+    Delete this and a process whose decisions have nowhere to go can accept one, or refuse it with
+    "Something went wrong.", which is what the Approvals screen said on a staging install."""
+    app: FastAPI = create_app(Settings(env="development", database_url=""))
     held = a_suspension("m_1")
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
-        for attached in (None, object(), MemorySource({held.id: held})):
+        for attached, sentence in (
+            (None, approval_routes.APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS),
+            (object(), approval_routes.APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS),
+            (
+                MemorySource({held.id: held}),
+                approval_routes.A_SOURCE_THAT_ONLY_READS_CANNOT_TAKE_A_DECISION,
+            ),
+        ):
             app.state.suspensions = attached
             answers = [approve(c, "u_narrow", "m_1"), approve(c, "u_none", "nothing_here")]
             assert {one.status_code for one in answers} == {500}
             assert len({str(without_trace(one)) for one in answers}) == 1
+            assert answers[0].json()["message"] == sentence
 
         app.state.suspensions = MemoryStore([held])
         assert approve(c, "u_narrow", "m_1").status_code == 200
 
 
-class MemoryReader:
-    """A `SuspensionReader` over a dict: what a deployed process with no ledger now holds."""
+def test_a_store_is_built_with_a_database_alone_and_nothing_is_built_without_one() -> None:
+    """A database is all a store needs, because the entry a decision leaves is kept by the row's
+    own trigger; with no database the lifespan builds nothing.
 
-    def __init__(self, rows: dict[str, SuspendedAction]) -> None:
-        self.rows = rows
-
-    def reading_as(self, reach: EntitlementSet, now: datetime) -> MemorySource:
-        del reach, now
-        return MemorySource(self.rows)
-
-
-def test_a_process_that_reads_approvals_and_keeps_no_decision_serves_the_queue_and_says_why() -> (
-    None
-):
-    """The reading half answers the queue and the card, and a decision is refused in words that
-    say why, identically for an approval in reach and one that does not exist.
-
-    Delete this and a process with a database and no ledger can go back to answering the
-    Approvals screen with a 500 for everybody, which a staging install did, or a refused decision
-    can say "Something went wrong." or differ by whether the approval exists."""
-    app: FastAPI = create_app(Settings(env="development"))
-    held = a_suspension("m_1")
-    with TestClient(app, raise_server_exceptions=False) as c:
-        app.state.gate = _wiring()
-        app.state.suspensions = MemoryReader({held.id: held})
-        queue = c.get(APPROVALS, headers=headers("u_narrow"))
-        empty = c.get(APPROVALS, headers=headers("u_none"))
-        in_reach = approve(c, "u_narrow", "m_1")
-        invented = approve(c, "u_none", "nothing_here")
-
-    assert queue.status_code == 200
-    assert [one["suspension_id"] for one in queue.json()["items"]] == ["m_1"]
-    assert (empty.status_code, empty.json()["items"]) == (200, [])
-    assert in_reach.status_code == invented.status_code == 500
-    assert in_reach.json()["message"] == approval_routes.DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS
-    assert without_trace(in_reach) == without_trace(invented)
-
-
-def test_a_store_is_built_only_with_a_database_and_a_ledger_and_the_lifespan_builds_none() -> None:
-    """A database without a ledger gets the reading half, which is not a store: it can be read and
-    cannot hold a row to decide. Delete this and a process can be given a store whose decisions are
-    recorded in a ledger that is gone at the next restart, or a database with no ledger can go back
-    to building nothing, which answered every person's Approvals screen with a 500."""
+    Delete this and `suspension_store_for` can go back to asking for a ledger writer nothing in the
+    process can be, which is how every decision on a running install came to be refused, or build
+    a store over no database at all."""
     engine = make_app_engine("postgresql://nobody@127.0.0.1:1/nothing")
     sessions = make_session_factory(engine)
-    ledger = AuditChain()
 
-    assert suspension_store_for(None, ledger) is None
-    assert suspension_store_for(None, None) is None
-    readable = suspension_store_for(sessions, None)
-    assert isinstance(readable, ReadableSuspensions)
-    assert isinstance(readable, approval_routes.SuspensionReader)
-    assert not isinstance(readable, approval_routes.SuspensionStore)
-    built = suspension_store_for(sessions, ledger)
+    assert suspension_store_for(None) is None
+    built = suspension_store_for(sessions)
     assert isinstance(built, StoredSuspensions)
     assert isinstance(built, approval_routes.SuspensionStore)
+    assert built.sessions is sessions
 
     # Pinned, for the reason `tests.fixtures.no_database` gives: CI's environment has a database.
     app: FastAPI = create_app(Settings(env="development", database_url=""))
