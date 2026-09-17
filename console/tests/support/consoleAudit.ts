@@ -387,7 +387,14 @@ export const AREAS: Readonly<Record<string, Area>> = {
       "/api/v1/agents/{agent_id}/workspace",
       "/api/v1/agents/{agent_id}/about",
       "/api/v1/agents/{agent_id}/model-pin",
+      "/api/v1/agents/{agent_id}/lifecycle",
+      "/api/v1/agents/{agent_id}/enable",
+      "/api/v1/agents/{agent_id}/disable",
+      "/api/v1/agents/{agent_id}/archive",
+      "/api/v1/agents/{agent_id}/transfer",
+      "/api/v1/agents/{agent_id}/duplicate",
       "/api/v1/agent-templates",
+      "/api/v1/agent-templates/{template_id}/versions/{version}*",
       "/api/v1/approvals*",
     ],
     tables: [
@@ -401,8 +408,12 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: [],
     gaps: [
       {
-        what: "An agent cannot be created, and its manifest, leash and procedure cannot be edited.",
-        because: "components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes agent.agent or a template version from the console.",
+        what: "An agent cannot be created from scratch, and its manifest, leash and procedure cannot be edited.",
+        because: "components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes a template version from the console.",
+      },
+      {
+        what: "An agent cannot be installed, enabled, disabled, archived, handed on or duplicated from the console.",
+        because: "brain.agent_lifecycle_routes serves each move and writes agent.agent under 0137's trigger, and no page has a button that presses one yet.",
       },
     ],
   },

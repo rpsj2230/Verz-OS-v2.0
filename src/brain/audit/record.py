@@ -178,6 +178,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "breach": AuditAction.BREACH,
         "agent_owner": AuditAction.AGENT_OWNER,
         "halt": AuditAction.HALT,
+        "agent": AuditAction.AGENT,
     }
 )
 
@@ -421,6 +422,26 @@ class ElevationChange(enum.StrEnum):
     REQUESTED = "requested"
     APPROVED = "approved"
     DENIED = "denied"
+
+
+class AgentChange(enum.StrEnum):
+    """What happened to an agent. The seven words `0137`'s trigger writes, in the order it checks.
+
+    No `transferred`: a hand-over is `agent_owner`, which `0105`'s trigger writes with both
+    owners, so the same change is not recorded twice.
+
+    `unarchived` and `audience_changed` are written by no route: archive is terminal and the only
+    audience move `brain.agents.lifecycle` makes is a publication, so each is an operator's
+    statement, which is the change a ledger most needs to name.
+    """
+
+    CREATED = "created"
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    ARCHIVED = "archived"
+    UNARCHIVED = "unarchived"
+    PUBLISHED = "published"
+    AUDIENCE_CHANGED = "audience_changed"
 
 
 def _with_names(details: dict[str, object], key: str, names: Sequence[str]) -> None:
@@ -1262,3 +1283,20 @@ class AuditRecorder:
             subject("principal", principal_id),
             {"change": change.value, "capability": capability.value, "reason": reason},
         )
+
+    def agent(
+        self, *, agent_id: str, change: AgentChange, actor_inferred: bool = False
+    ) -> AuditEntry:
+        """Record that an agent was created, enabled, disabled, archived or published.
+
+        Written in a deployed database by `0137`'s trigger on `agent.agent`, on the insert and on
+        an update that moves a lifecycle timestamp or the audience level, and held to
+        this method's details by a test. The subject is the agent. **Never the steward**: there is
+        no parameter through which a principal id could arrive, because one is not a field name
+        and the ledger would keep the marker in its place. `actor_inferred` is the detail the
+        trigger adds when nobody named the actor, as `instructions` adds it.
+        """
+        details: dict[str, object] = {"change": change.value}
+        if actor_inferred:
+            details["actor"] = INFERRED_ACTOR
+        return self._write(AuditAction.AGENT, subject("agent", agent_id), details)

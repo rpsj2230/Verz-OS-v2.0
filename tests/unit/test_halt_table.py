@@ -18,7 +18,7 @@ import psycopg
 import pytest
 from sqlalchemy.schema import CreateIndex, CreateTable
 
-from brain.audit.ledger import SUBJECT_KINDS, AuditAction
+from brain.audit.ledger import SUBJECT_KINDS
 from brain.audit.record import HaltAct
 from brain.db import metadata
 from brain.identity.principal_store import PRINCIPAL_SETTING
@@ -76,10 +76,12 @@ def test_the_audit_grammar_is_widened_over_todays_by_halt_alone() -> None:
     """**The defect this migration was landed with a fix for.** It was drafted over `0083` and
     copied that day's action list, so applying it would have dropped the four actions and the
     subject kind added since, and the next `vault_access` entry would have been refused. The
-    narrower lists are the ones the newest earlier migrations wrote, and the widened ones are the
-    model's. Delete this and a draft carried forward can narrow the ledger silently."""
+    narrower lists are the ones the newest earlier migrations wrote, the widened action list is
+    the narrower one with `halt` alone added (a later migration widens it again, `0137` with
+    `agent`), and the subject grammar is the model's. Delete this and a draft carried forward can
+    narrow the ledger silently."""
     m = module()
-    assert one_of("action", AuditAction) == m.WIDENED_ACTIONS
+    assert m.NARROWER_ACTIONS.replace("'grant', ", "'grant', 'halt', ") == m.WIDENED_ACTIONS
     assert f"subject ~ '{SUBJECT_PATTERN}'" == m.WIDENED_SUBJECTS
     assert (
         m.NARROWER_ACTIONS

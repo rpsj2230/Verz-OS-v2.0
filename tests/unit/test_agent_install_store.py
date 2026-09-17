@@ -4,9 +4,10 @@ written.
 `brain.agents.install` holds what an install is and `tests/e2e/test_wave_three_installed_agent.py`
 installs the catalogue through it in memory. This file holds the end of that flow on a database:
 the rows `brain.agents.install_store.StoredAgentInstalls.finish` writes read back through the
-readers the console already uses, a second finish writes nothing, and a version on file with another
-body is refused before anything is written. The first half needs no server; **the second skips when
-there is no server**, and CI always has one.
+readers the console already uses, the agent is written disabled, a second finish writes nothing, a
+version on file with another body is refused before anything is written, and a version whose leash
+starts above Shadow is refused before a connection is opened. The first half needs no server; **the
+second skips when there is no server**, and CI always has one.
 
 Task ids: M13.3.6, M13.3.7, M38.2.2.4
 """
@@ -30,15 +31,26 @@ from brain.agents.install import (
     provide,
 )
 from brain.agents.install_store import (
+    AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET,
+    INSTALLED_RUNG,
     InstallStoreError,
     StoredAgentInstalls,
     agent_values,
     instance_values,
+    rungs_above_the_start,
     version_values,
 )
-from brain.agents.model import AgentViewer
-from brain.agents.template import SYSTEM_PUBLISHER, SignedManifest, TemplateError, publish
+from brain.agents.model import AgentState, AgentViewer
+from brain.agents.template import (
+    SYSTEM_PUBLISHER,
+    LeashRung,
+    ManifestGuardrails,
+    SignedManifest,
+    TemplateError,
+    publish,
+)
 from brain.app import Settings
+from brain.gate.injection import AutonomyTier
 from brain.session import make_session_factory
 from brain.tables.agent import AgentRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
@@ -60,9 +72,9 @@ from tests.unit.test_memory_store import through_0061
 MANIFEST = catalogue.internal_helpdesk()
 
 
-def a_draft(key: str = SIGNING_KEY) -> InstallDraft:
+def a_draft(key: str = SIGNING_KEY, manifest: Any = MANIFEST) -> InstallDraft:
     """The helpdesk opened and answered as an installer does it, signed with `key`."""
-    signed = publish(MANIFEST, key=key, signed_by=SYSTEM_PUBLISHER, at=NOW)
+    signed = publish(manifest, key=key, signed_by=SYSTEM_PUBLISHER, at=NOW)
     shelf = TemplateCatalogue()
     shelf.offer(signed, audience=OFFERED_TO)
     viewer = AgentViewer(principal_id=INSTALLER, departments=frozenset({"maintenance"}))
@@ -89,6 +101,8 @@ def finishing(store: StoredAgentInstalls, draft: InstallDraft) -> Callable[[], A
         registry=serving(MANIFEST.connectors),
         tools=tools(),
         at=NOW,
+        ent_hash="e" * 32,
+        trace_id="install-store-test",
     )
 
 
@@ -146,6 +160,54 @@ def test_a_draft_the_domain_refuses_opens_no_connection() -> None:
         run(finishing(store, a_draft(key="somebody-elses-key")))
 
 
+def raised(rung: AutonomyTier) -> Any:
+    """The helpdesk with its first leash target moved to `rung`, and the rest as shipped."""
+    first, *rest = MANIFEST.guardrails.leash
+    return MANIFEST.model_copy(
+        update={
+            "guardrails": ManifestGuardrails(
+                max_side_effect=MANIFEST.guardrails.max_side_effect,
+                leash=(LeashRung(target=first.target, scope=first.scope, rung=rung), *rest),
+            )
+        }
+    )
+
+
+def test_a_version_whose_leash_starts_above_shadow_is_refused_before_a_connection_opens() -> None:
+    """One target at ASSISTED is enough, the refusal names it, and no session is asked for.
+
+    Delete this and a version somebody published with a raised rung could be installed, and every
+    agent made from it would start with autonomy earned, if at all, by another agent."""
+
+    def no_session() -> Any:
+        msg = "the store opened a session for a version whose leash starts above Shadow"
+        raise AssertionError(msg)
+
+    manifest = raised(AutonomyTier.ASSISTED)
+    target = manifest.guardrails.leash[0].target
+    store = StoredAgentInstalls(no_session)  # type: ignore[arg-type]
+    with pytest.raises(InstallStoreError, match="above Shadow") as refused:
+        run(finishing(store, a_draft(manifest=manifest)))
+
+    assert target in str(refused.value)
+    assert AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET in str(refused.value)
+
+
+def test_the_leash_a_shipped_template_seals_starts_nothing_above_shadow() -> None:
+    """The positive half: the helpdesk as shipped names targets, all at the start rung.
+
+    Delete this and the refusal above could be satisfied by one that refuses every leash with an
+    entry in it, which would refuse every template this product ships."""
+    signed = publish(MANIFEST, key=SIGNING_KEY, signed_by=SYSTEM_PUBLISHER, at=NOW)
+    assert MANIFEST.guardrails.leash
+    assert INSTALLED_RUNG is AutonomyTier.SHADOW
+    assert rungs_above_the_start(signed) == ()
+    at_the_start = publish(
+        raised(AutonomyTier.SHADOW), key=SIGNING_KEY, signed_by=SYSTEM_PUBLISHER, at=NOW
+    )
+    assert rungs_above_the_start(at_the_start) == ()
+
+
 # ------------------------------------------------------------------ with a server
 def counts(url: str) -> tuple[int, int, int]:
     [(versions, instances, agents)] = sql(
@@ -157,9 +219,10 @@ def counts(url: str) -> tuple[int, int, int]:
 
 
 def test_an_install_writes_the_three_rows_the_console_reads_and_a_second_writes_none() -> None:
-    """As the application role. The agent reads back selectable and published to the installer's
+    """As the application role. The agent reads back disabled and published to the installer's
     chosen audience, its install joins its version, and a second finish of the same draft writes
-    nothing and says so.
+    nothing and says so. The helpdesk is complete, so `complete` alone would have left it
+    selectable: disabled is `AN_INSTALLED_AGENT_IS_WRITTEN_DISABLED`.
 
     Delete this and `install.complete` could go back to having no caller that reaches a table."""
     with through_0061("brain_agent_install_store") as url:
@@ -188,7 +251,9 @@ def test_an_install_writes_the_three_rows_the_console_reads_and_a_second_writes_
     assert (first.created, second.created) == (True, False)
     assert written == (1, 1, 1)
     assert record == first.installation.record
-    assert record.is_selectable
+    assert first.installation.completeness.is_ready
+    assert record.state is AgentState.DISABLED
+    assert record.disabled_at == NOW
     assert record.audience == AUDIENCE
     assert install_of(joined[0], joined[1], record) is not None
 

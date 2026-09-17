@@ -500,6 +500,33 @@ class AuditAction(enum.StrEnum):
     the slug rather than the row id, because the slug is the value every grant's predicate carries,
     so a department retired and created again under the same name is the same history to anybody
     asking what reached it.
+
+    AGENT was drafted on 2026-09-17 and landed on 2026-09-28, after AGENT_OWNER. The agent
+    workspace installs an agent from a published template version, duplicates one, enables,
+    disables and archives one,
+    and hands one to a new steward (M27.11.6, M27.11.7), and `brain.agents.lifecycle` has held
+    each of those transitions since M13.1.4 with nothing recording any of them: "who switched this
+    agent off, who archived it and who is answering for it now" is asked the day an agent stops
+    answering, and `agent.agent` keeps the timestamps and the steward but never who moved them.
+    **Recorded by the database, from a trigger on `agent.agent`**, the way CONNECTOR is, on the
+    insert and on an update that moves the lifecycle timestamps, the steward or the audience
+    level, so an operator's statement is recorded as well as a press in the console.
+    **A hand-over is not recorded here**: `0105`'s trigger records every change of
+    `owner_id` as AGENT_OWNER, with both owners, and a second entry for the same change
+    would make one act two rows an auditor has to reconcile.
+
+    Every existing member was tried. INSTRUCTIONS is what the agent is told, and a state change
+    tells it nothing; COMPOSE_CHANGE is an attachment, and nothing is attached; LEASH_CHANGE is its
+    two rungs, and disabling an agent moves no rung, which is `brain.agents.lifecycle`'s argument
+    that a state change never touches the ceiling; PUBLISH is an artefact leaving; GRANT is a
+    capability gained, and a transfer grants the new steward nothing, which is
+    `A_TRANSFER_MOVES_THE_STEWARD_AND_NOT_THE_REACH`. One member for its changes, created,
+    enabled, disabled, archived and published, and the two only a statement makes,
+    unarchived and audience_changed, with the change in the details, for the reason SIGN_IN
+    gives. The subject is the agent, under the kind `agent` a department's head
+    already reads. **Never the steward's id in the details**: a principal id is not a field name,
+    so the recorder would keep the marker, and the row says who answers for the agent now. Five
+    characters.
     """
 
     GRANT = "grant"
@@ -616,6 +643,10 @@ class AuditAction(enum.StrEnum):
     #: administrator tunes: a halt is the one act here that is unilateral and refuses everything,
     #: and "who stopped it and who started it again" is asked of it alone.
     HALT = "halt"
+    #: An agent was created, enabled, disabled, archived or published, or a statement
+    #: unarchived it or moved its audience. Which is in the details, and never the steward.
+    #: Written by `0137`'s trigger on `agent.agent`; a hand-over is AGENT_OWNER's.
+    AGENT = "agent"
 
 
 # --------------------------------------------------------------------- redaction

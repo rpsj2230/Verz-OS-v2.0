@@ -3,20 +3,29 @@
 - **Screens:** `/agents`, `/agents/:agentId`, `/agents/:agentId/:tab`, `/agent-templates`, `/approvals`, `/approvals/:suspensionId`
 - **Tables:** `agent.agent`, `agent.template_instance`, `agent.template_version`, `agent.upgrade_decline`, `agent.browser_envelope`, `gate.suspension`
 - **Installation values:** none
-- **Measured here:** 8 routes, 1 called by no screen; 2 write routes, 1 with all three proofs; 1 gaps.
+- **Measured here:** 16 routes, 9 called by no screen; 2 write routes, 1 with all three proofs; 2 gaps.
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/agent-templates` | `/agent-templates` |
+| `GET /api/v1/agent-templates/{template_id}/versions/{version}` | **no screen** |
 | `GET /api/v1/agents` | `/agents`, `/department` |
 | `GET /api/v1/agents/{agent_id}/about` | **no screen** |
+| `GET /api/v1/agents/{agent_id}/lifecycle` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |
+| `POST /api/v1/agent-templates/{template_id}/versions/{version}/install` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/archive` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/disable` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/duplicate` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/enable` | **no screen** |
+| `POST /api/v1/agents/{agent_id}/transfer` | **no screen** |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` |
 | `PUT /api/v1/agents/{agent_id}/model-pin` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 
-- **Gap.** An agent cannot be created, and its manifest, leash and procedure cannot be edited. Recorded: components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes agent.agent or a template version from the console.
+- **Gap.** An agent cannot be created from scratch, and its manifest, leash and procedure cannot be edited. Recorded: components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes a template version from the console.
+- **Gap.** An agent cannot be installed, enabled, disabled, archived, handed on or duplicated from the console. Recorded: brain.agent_lifecycle_routes serves each move and writes agent.agent under 0137's trigger, and no page has a button that presses one yet.
 
 **Every write to this area, followed to the system.**
 
