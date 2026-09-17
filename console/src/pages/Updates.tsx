@@ -34,7 +34,13 @@
  * check here would be the second copy of a rule whose first copy is the one that runs on the
  * server. It opens without a referrer, so the release host is not told the console's address.
  *
- * Task ids: M27.7.25, M42.3.9
+ * **What went out on this install is listed under the version, newest first (M38.1.3.5).** Each
+ * deploy the server's deploy script finished, with its time, commit, the task ids its release
+ * carried and how it ended, including the ones held back or rolled back. The sentence above the
+ * list and whether the chain holds are the API's; when nothing could be read the API's reason is
+ * drawn instead of an empty table, which would read as nothing ever deployed.
+ *
+ * Task ids: M27.7.25, M42.3.9, M38.1.3.5
  */
 
 import { useResource } from "../api/useResource";
@@ -57,6 +63,15 @@ export const NO_RELEASE_NAMED = "This install does not name a release";
 
 /** The words of the link to a release's notes. The address is the API's. */
 export const READ_ITS_NOTES = "Read its release notes";
+
+/** The heading over the deployment history. */
+export const DEPLOYED_HERE = "What has been deployed here";
+
+/** The caption of the history table, which is also its accessible name. */
+export const DEPLOYS_CAPTION = "Deploys on this install, newest first";
+
+/** The warning drawn above the rows when the chain does not hold. The detail is the API's. */
+export const HISTORY_CHANGED = "This history was changed after it was written";
 
 export function Updates() {
   const answer = useResource<UpdatesPanel>(UPDATES_API_PATH);
@@ -174,6 +189,53 @@ export function Updates() {
               <p className="note">{panel.what_to_do}</p>
             ) : null}
           </section>
+
+          {panel.history ? (
+            <section className="card">
+              <h2>{DEPLOYED_HERE}</h2>
+              {panel.history.deploys ? (
+                <>
+                  {panel.history.holds ? null : (
+                    <p role="alert">
+                      <strong>{HISTORY_CHANGED}</strong>
+                    </p>
+                  )}
+                  <p className="note">{panel.history.says}</p>
+                  {panel.history.deploys.length ? (
+                    <div className="grid">
+                      <div className="grid__scroll">
+                        <table className="grid__table" aria-label={DEPLOYS_CAPTION}>
+                          <caption className="grid__caption">{DEPLOYS_CAPTION}</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">when</th>
+                              <th scope="col">commit</th>
+                              <th scope="col">outcome</th>
+                              <th scope="col">tasks in this release</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {panel.history.deploys.map((deploy) => (
+                              <tr key={deploy.seq}>
+                                <th scope="row">{deploy.at}</th>
+                                <td>{deploy.commit}</td>
+                                <td>
+                                  <Chip label={deploy.outcome} />
+                                </td>
+                                <td>{deploy.task_ids.join(", ")}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="note">{panel.history.unread}</p>
+              )}
+            </section>
+          ) : null}
         </>
       ) : null}
     </article>

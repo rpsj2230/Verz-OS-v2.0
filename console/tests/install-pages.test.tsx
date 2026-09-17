@@ -448,6 +448,83 @@ describe("version and updates", () => {
     expect(container.textContent).toContain(sentinel("timed-out"));
     expect(valueBeside(container, "newest release")).toBeNull();
   });
+
+  test("each deploy is listed with its time, commit, outcome and the tasks its release carried", async () => {
+    // What breaks if this is deleted: the history can be dropped from the page, or one of the
+    // four things the owner reads it for can go missing, with the version panel still drawn.
+    const deployed = {
+      ...PANEL,
+      history: {
+        deploys: [
+          {
+            seq: 1,
+            at: "2019-03-04T10:00:00+00:00",
+            outcome: "rolled_back",
+            commit: sentinel("newer-commit"),
+            image: "sha256:new",
+            previous: "sha256:old",
+            task_ids: ["M1.1.1", "M38.1.3.5"],
+          },
+        ],
+        holds: true,
+        broken: [],
+        says: sentinel("history-says"),
+        unread: "",
+      },
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", deployed);
+
+    const table = container.querySelector("table[aria-label='Deploys on this install, newest first']");
+    expect(table?.textContent).toContain("2019-03-04T10:00:00+00:00");
+    expect(table?.textContent).toContain(sentinel("newer-commit"));
+    expect(table?.textContent).toContain("rolled_back");
+    expect(table?.textContent).toContain("M1.1.1, M38.1.3.5");
+    expect(container.textContent).toContain(sentinel("history-says"));
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  test("a history that could not be read says why and draws no table", async () => {
+    // What breaks if this is deleted: an unread history renders as an empty table, which reads
+    // as nothing ever deployed on an install that simply could not look.
+    const unread = {
+      ...PANEL,
+      history: { deploys: null, holds: false, broken: [], says: "", unread: sentinel("no-database") },
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", unread);
+
+    expect(container.textContent).toContain(sentinel("no-database"));
+    expect(container.querySelector("table")).toBeNull();
+  });
+
+  test("a history whose chain does not hold is flagged above its rows", async () => {
+    // What breaks if this is deleted: an edited history is drawn exactly like an intact one.
+    const broken = {
+      ...PANEL,
+      history: {
+        deploys: [
+          {
+            seq: 0,
+            at: "2019-03-04T09:00:00+00:00",
+            outcome: "deployed",
+            commit: "abc1234",
+            image: "sha256:a",
+            previous: "",
+            task_ids: [],
+          },
+        ],
+        holds: false,
+        broken: [0],
+        says: sentinel("changed"),
+        unread: "",
+      },
+    };
+    const container = await pageAnswering("Updates", "Updates", "/install/updates", broken);
+
+    expect(container.querySelector("[role='alert']")?.textContent).toContain(
+      "This history was changed after it was written",
+    );
+    expect(container.querySelector("table")).not.toBeNull();
+  });
 });
 
 // --- backup and recovery ----------------------------------------------------------------------

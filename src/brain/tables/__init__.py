@@ -62,6 +62,7 @@ from brain.tables.connector_connection import ConnectorConnectionRow
 from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
+from brain.tables.deployment_record import DeploymentRecordRow
 from brain.tables.elevation import ElevationRequestRow
 from brain.tables.erasure import ErasureOutcome, ErasureRequestRow
 from brain.tables.fast_lane import FastPathRuleRow
@@ -282,6 +283,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0068_connector_sync. Points at nothing: the connection an attempt read with is named by its
     # id as a value, so a source connected again starts a history of its own.
     "ops.connector_sync",
+    # 0091_deployment_record. Points at nothing: a deploy names an image and a commit as values,
+    # and is kept apart from the permission ledger on purpose.
+    "ops.deployment_record",
 )
 
 __all__ = [
@@ -311,6 +315,7 @@ __all__ = [
     "DataExportRow",
     "DepartmentLeadRow",
     "DepartmentRow",
+    "DeploymentRecordRow",
     "DirectoryRoleGrantRow",
     "ElevationRequestRow",
     "EntityAliasRow",

@@ -3,33 +3,57 @@
 # the server's own timer sees a new image, or by an administrator by hand. Nothing outside this
 # machine calls it.
 #
+# WHAT IT DOES, IN ORDER, AND WHY EACH STEP IS WHERE IT IS.
+#
+# 1. The health gate (M38.1.3.3). The new image is started as a second container beside the
+#    running one, on the same network, with the same settings and no proxy labels, so it takes
+#    no traffic. The running container is not touched until that candidate answers
+#    /health/ready. An image that never does is HELD BACK: recorded, counted, removed, and the
+#    running version carries on as if nothing happened. Until 2026-09-17 this script recreated
+#    the only app container first and asked about health afterwards, so a broken image took the
+#    site down before anything had looked at it.
+# 2. The replacement. Only after the candidate passed is the app container recreated from the
+#    same image. Its readiness is asked again, because a container that passed beside the old one
+#    can still fail as the one the proxy routes to.
+# 3. The rollback (M38.1.3.4). If the replacement is not ready within the window, the image the
+#    old container ran is pinned back onto the tag by its id and the container is recreated from
+#    it. By id, not by tag: `:latest` has already moved to the broken build, and a rollback that
+#    re-pulled it would redeploy the failure and read as a rollback that worked.
+# 4. The record (M38.1.3.5). Every way a deploy ends appends one line to the host's
+#    deployments.jsonl, including the ones where the application never came up, and once a
+#    container answers ready the whole file is handed to `python -m brain.ops.deployment_store`
+#    inside it, which takes in whatever the database's history lacks. The Version and updates
+#    screen reads that history.
+#
+# WHAT THE GATE DOES NOT BUY, MEASURED RATHER THAN IMPLIED. Coolify runs this app as a compose
+# service with a fixed container name behind its proxy, and a fixed name means there is never a
+# moment with two containers the proxy routes to. So the recreate in step 2 still leaves a gap
+# while the replacement starts: measured on the owner's install on 2026-09-17 as 12 to 20
+# seconds from "Recreate" to healthy. What the gate removes is the outage that does not end, a
+# broken image replacing a working one. Coolify's own redeploy of a compose service is the same
+# `docker compose up` recreate with no readiness gate and no rollback, which is why this script
+# does not hand the deploy to Coolify's API: an API deploy returns when it is accepted, and
+# nothing here could gate it, roll it back or record how it ended.
+#
 # WHY NOTHING OUTSIDE CALLS IT. Coolify's API is on :8000 and the firewall allows only 22, 80
 # and 443 from the internet. Reaching it from GitHub Actions would mean allowlisting GitHub's
-# Actions ranges, which are thousands of CIDRs that change without notice and from which
-# anybody with a GitHub account can run a job. That exposes the panel that controls every
-# container on this box, including the database, to a large slice of the internet. This script
-# was once also meant as the one command a GitHub deploy key could run over SSH; no workflow
-# holds such a key now, and a `command=` line for one left in root's authorized_keys is a
-# credential with nothing to do that should be removed. The API call below is to 127.0.0.1.
+# Actions ranges, thousands of CIDRs from which anybody with a GitHub account can run a job.
 #
-# WHY IT PREFERS COOLIFY'S API. Coolify owns the stored compose, and a deploy it does not
-# know about leaves its UI describing a state that is not real. The compose fallback exists
-# because it is what was run by hand on 2026-09-05 and it worked, and because a deploy
-# mechanism that needs a token to exist at all is one more thing that can be missing.
+# THE CANDIDATE SHARES THE DATABASE, AND THAT IS ACCEPTED ON PURPOSE. The application applies its
+# migrations before it reports ready, so the candidate migrates the schema the old container is
+# still serving from. That is the same exposure every deploy already had, one step earlier, and
+# `brain.ops.migration_policy` is what keeps a migration safe to run under the previous release.
+# A rollback past a migration puts older code in front of a newer schema, and the rollback
+# record says which image it went back to so that can be judged.
+#
+# Task ids: M38.1.3.3, M38.1.3.4, M38.1.3.5
 set -euo pipefail
 
-# WHERE THE SERVICE IDENTIFIER COMES FROM, AND WHY NOT FROM THIS FILE. It was written here
-# until 2026-09-09, three times: in the compose directory and in two container names. That is
-# one deployment's identifier in a script this repository ships, and it fails in the direction
-# nobody checks - `docker inspect app-<somebody else's uuid>` prints nothing and exits
-# non-zero, which every branch below reads as "not running yet".
-#
-# A file rather than an environment variable because this runs from a systemd unit and from a
-# `command=` restriction in authorized_keys, neither of which carries an environment worth
-# relying on. The file already existed for the Coolify API call below; it is now the one
-# source for the identifier, and its absence is a refusal rather than a guess.
-UUID_FILE="/root/.coolify-service-uuid"
-TOKEN_FILE="/root/.coolify-deploy-token"
+# The service identifier is one deployment's and is read from a file, never written here: an
+# identifier from another install makes `docker inspect` print nothing, which reads as "not
+# running". The overrides exist for `tests/unit/test_brain_deploy.py`, which runs this script
+# against a stubbed docker and has no /root to write to.
+UUID_FILE="${BRAIN_DEPLOY_UUID_FILE:-/root/.coolify-service-uuid}"
 if [ ! -s "$UUID_FILE" ]; then
   echo "$UUID_FILE is missing or empty: write this deployment's Coolify service" >&2
   echo "identifier into it (it is the last path segment of that resource's URL)." >&2
@@ -37,64 +61,185 @@ if [ ! -s "$UUID_FILE" ]; then
 fi
 UUID="$(cat "$UUID_FILE")"
 
-SERVICE_DIR="/data/coolify/services/$UUID"
+SERVICE_DIR="${BRAIN_DEPLOY_SERVICE_DIR:-/data/coolify/services/$UUID}"
 APP="app-$UUID"
-DB="db-$UUID"
+CANDIDATE="brain-candidate-$UUID"
 IMAGE="ghcr.io/rpsj2230/verz-brain-v2.0:latest"
-HEALTH_URL="http://127.0.0.1:8000"
+RECORD="${BRAIN_DEPLOY_RECORD:-/var/lib/brain/deployments.jsonl}"
+FAILDIR="${BRAIN_DEPLOY_FAILDIR:-/var/lib/brain/failed}"
+# The window: forty tries three seconds apart. Twice the slowest start measured on the install,
+# because a window sized to a good day turns an ordinary slow start into a rollback.
+READY_TRIES="${BRAIN_DEPLOY_READY_TRIES:-40}"
+READY_GAP="${BRAIN_DEPLOY_READY_GAP:-3}"
+# How many times one image may fail before this script stops trying it. Not one, because a
+# database restarting for a minute is not the image's fault; not unlimited, because the timer
+# would otherwise retry a broken image every two minutes for ever.
+FAIL_LIMIT=2
 
 log() { printf '%s %s\n' "$(date -u +%H:%M:%SZ)" "$*"; }
 
+ENV_FILE=""
+cleanup() {
+  [ -n "$ENV_FILE" ] && rm -f "$ENV_FILE" "$ENV_FILE.image"
+  docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+# Readiness, not liveness: a container that is up and cannot reach its database is live.
+is_ready() {
+  docker exec "$1" python -c \
+    "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=4).status==200 else 1)" \
+    >/dev/null 2>&1
+}
+
+wait_ready() {
+  local i=0
+  while [ "$i" -lt "$READY_TRIES" ]; do
+    if is_ready "$1"; then
+      return 0
+    fi
+    i=$((i + 1))
+    sleep "$READY_GAP"
+  done
+  return 1
+}
+
+# What the running process believes it is, from the manifest baked into its image. An
+# environment variable can be overridden by whatever started the container and has been.
+commit_of() {
+  docker exec "$1" python -c \
+    "import json,urllib.request;print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/health/live',timeout=4))['commit'])" \
+    2>/dev/null || echo unknown
+}
+
+# The task ids CI baked into the image, read without running it. Newlines are stripped before
+# the match because the manifest is indented and sed reads one line at a time.
+task_ids() {
+  local cid ids
+  cid="$(docker create "$1" 2>/dev/null)" || { printf ''; return 0; }
+  ids="$(docker cp "$cid:/app/RELEASE.json" - 2>/dev/null \
+         | tr -d '\000' | tr '\n' ' ' \
+         | sed -n 's/.*"task_ids"[^]]*\[\([^]]*\)\].*/\1/p' \
+         | tr -d ' "')"
+  docker rm -f "$cid" >/dev/null 2>&1 || true
+  printf '%s' "$ids"
+}
+
+# One line per deploy, appended, never rewritten. The format is `brain.ops.deployments`'.
+record() {
+  mkdir -p "$(dirname "$RECORD")"
+  printf '{"at":"%s","outcome":"%s","commit":"%s","image":"%s","previous":"%s","task_ids":"%s"}\n' \
+    "$(date -Is)" "$1" "$2" "$3" "$4" "${5:-}" >> "$RECORD"
+}
+
+# Hand the whole file to the history inside a container that answers. Never fails the deploy:
+# the file is the source, and the next deploy that reaches a ready container takes in anything
+# this one could not.
+publish_history() {
+  if docker exec -i "$1" python -m brain.ops.deployment_store < "$RECORD"; then
+    log "deployment history updated"
+  else
+    log "deployment history NOT updated; the record is kept in $RECORD for the next deploy"
+  fi
+}
+
+fail_file() { printf '%s/%s\n' "$FAILDIR" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"; }
+fail_count() { local f; f="$(fail_file "$1")"; if [ -f "$f" ]; then cat "$f"; else echo 0; fi; }
+note_failure() {
+  mkdir -p "$FAILDIR"
+  echo $(( $(fail_count "$1") + 1 )) > "$(fail_file "$1")"
+}
+
 log "pulling $IMAGE"
 docker pull -q "$IMAGE" >/dev/null
+NEW="$(docker image inspect "$IMAGE" --format '{{.Id}}')"
+PREVIOUS="$(docker inspect "$APP" --format '{{.Image}}' 2>/dev/null || true)"
 
-if [ -s "$TOKEN_FILE" ]; then
-  log "asking Coolify to deploy service $UUID"
-  code=$(curl -sS -o /tmp/coolify-deploy.out -w '%{http_code}' \
-    -X POST "http://127.0.0.1:8000/api/v1/deploy?uuid=$UUID" \
-    -H "Authorization: Bearer $(cat "$TOKEN_FILE")" \
-    -H "Content-Type: application/json") || code=000
-  cat /tmp/coolify-deploy.out || true
-  echo
-  if [ "$code" -ge 300 ] || [ "$code" = "000" ]; then
-    log "Coolify returned $code; falling back to compose so the deploy still happens"
+if [ "$(fail_count "$NEW")" -ge "$FAIL_LIMIT" ]; then
+  log "image $NEW has failed readiness $FAIL_LIMIT times; not trying it again"
+  log "publish a new build, or remove $(fail_file "$NEW") to retry this one"
+  exit 0
+fi
+
+IDS="$(task_ids "$IMAGE")"
+PREVIOUS_COMMIT="unknown"
+
+# ---- 1. the health gate: the new image answers ready before the old container stops --------
+if [ -n "$PREVIOUS" ]; then
+  PREVIOUS_COMMIT="$(commit_of "$APP")"
+  # The running container's settings, minus the ones its image supplied: those belong to the
+  # image, and carrying the old image's values into the new one would override what it knows.
+  ENV_FILE="$(mktemp)"
+  chmod 600 "$ENV_FILE"
+  docker inspect "$APP" --format '{{range .Config.Env}}{{println .}}{{end}}' > "$ENV_FILE.all"
+  docker image inspect "$PREVIOUS" --format '{{range .Config.Env}}{{println .}}{{end}}' \
+    > "$ENV_FILE.image"
+  grep -vxF -f "$ENV_FILE.image" "$ENV_FILE.all" | grep -v '^$' > "$ENV_FILE" || true
+  rm -f "$ENV_FILE.all"
+  NETWORK="$(docker inspect "$APP" \
+    --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' | head -n 1)"
+  MEMORY="$(docker inspect "$APP" --format '{{.HostConfig.Memory}}')"
+
+  log "health gate: starting $NEW beside $APP"
+  docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
+  docker run -d --name "$CANDIDATE" --network "$NETWORK" --env-file "$ENV_FILE" \
+    --memory "$MEMORY" "$IMAGE" >/dev/null
+  if wait_ready "$CANDIDATE"; then
+    log "health gate passed after readiness; $APP is replaced next"
+    docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
   else
-    log "Coolify accepted the deploy ($code)"
-    exit 0
+    CANDIDATE_COMMIT="$(commit_of "$CANDIDATE")"
+    log "HELD BACK: $NEW did not report ready within $((READY_TRIES * READY_GAP))s; $APP untouched"
+    docker logs --tail 40 "$CANDIDATE" 2>&1 || true
+    docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
+    note_failure "$NEW"
+    record held_back "$CANDIDATE_COMMIT" "$NEW" "$PREVIOUS" "$IDS"
+    publish_history "$APP"
+    exit 1
   fi
 fi
 
-# No token, or Coolify refused. Same compose file Coolify itself uses, from its own
-# directory, so the result is what Coolify would have produced minus its own record.
-#
-# ONLY `app`, NOT `migrate`. The app applies migrations itself before it reports ready, under
-# an advisory lock so two replicas cannot race, so the separate one-shot `migrate` service is
-# doing the same work a second time. Recreating it also makes a bad situation worse: it exits
-# 0 as designed, Coolify reads an exited container as a service needing repair, and heals it
-# by bringing the whole project up again, which recreates `app` underneath. Production was
-# turning over roughly every three minutes for that reason.
-#
-# This does not fix that on its own, because Coolify goes on healing whether or not this
-# script touches `migrate`. It stops this script contributing to it. The fix is to take the
-# `migrate` service out of Coolify's stored compose, which is a change to the owner's
-# infrastructure configuration and is recorded in docs/needs-rupash.md rather than made here.
-log "deploying with compose from $SERVICE_DIR"
+# ---- 2. the replacement --------------------------------------------------------------------
+# ONLY `app`, NOT `migrate`: the app migrates itself under an advisory lock before it reports
+# ready, and recreating the one-shot service makes Coolify heal the whole project around it.
+log "replacing $APP from $SERVICE_DIR"
 cd "$SERVICE_DIR"
 docker compose up -d --force-recreate --no-deps app
 
-# Do not report success until it is actually serving. A deploy that reports success while
-# the container crash-loops is the failure this whole exercise was about.
-for i in $(seq 1 30); do
-  sleep 4
-  status=$(docker inspect --format '{{.State.Health.Status}}' "$APP" 2>/dev/null || echo unknown)
-  if [ "$status" = "healthy" ]; then
-    log "app is healthy after $((i * 4))s"
-    docker exec "$DB" psql -U brain -d brain -tAc \
-      'select version_num from alembic_version' 2>/dev/null | sed 's/^/alembic: /' || true
-    exit 0
-  fi
-done
+if wait_ready "$APP"; then
+  log "$APP is ready on $NEW"
+  rm -f "$(fail_file "$NEW")"
+  record deployed "$(commit_of "$APP")" "$NEW" "$PREVIOUS" "$IDS"
+  publish_history "$APP"
+  exit 0
+fi
 
-log "app did not become healthy; last 40 lines follow"
-docker compose logs --tail 40 app || true
+# ---- 3. the rollback -----------------------------------------------------------------------
+log "$APP did not report ready within $((READY_TRIES * READY_GAP))s on $NEW"
+docker logs --tail 40 "$APP" 2>&1 || true
+note_failure "$NEW"
+
+if [ -z "$PREVIOUS" ]; then
+  # Nothing to go back to. A first deploy that fails is a failure, not a rollback.
+  record failed_no_rollback unknown "$NEW" "" "$IDS"
+  exit 1
+fi
+
+log "ROLLING BACK to $PREVIOUS"
+docker tag "$PREVIOUS" "$IMAGE"
+docker compose up -d --force-recreate --no-deps app
+
+if wait_ready "$APP"; then
+  log "rolled back and ready on $PREVIOUS"
+  record rolled_back "$PREVIOUS_COMMIT" "$NEW" "$PREVIOUS" "$IDS"
+  publish_history "$APP"
+  # Non-zero on purpose: the rollback worked and a deploy failed, and the journal is where that
+  # is seen.
+  exit 1
+fi
+
+# Neither version answers. Almost always something outside the image, and the line says so.
+log "ROLLBACK ALSO NOT READY - the problem is probably not the image (database? disk? pooler?)"
+docker logs --tail 40 "$APP" 2>&1 || true
+record rollback_failed "$PREVIOUS_COMMIT" "$NEW" "$PREVIOUS" "$IDS"
 exit 1

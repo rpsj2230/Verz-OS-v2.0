@@ -123,7 +123,7 @@ would be this module deciding that, from the side that renders.
 Scope: five read-only routes. Nothing here writes, and the only session anything here would need
 is the one it deliberately does not open.
 
-Task ids: M27.7.25, M27.7.27, M42.3.9
+Task ids: M27.7.25, M27.7.27, M42.3.9, M38.1.3.5
 """
 
 from __future__ import annotations
@@ -136,6 +136,8 @@ from typing import Final, Protocol, cast
 import structlog
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, model_validator
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
@@ -162,6 +164,7 @@ from brain.core.errors import Absent, Failed
 from brain.deployment.release_feed import ReleaseWatch, feed_address
 from brain.ops.admission import Ceiling
 from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX, read_drills, read_manifests
+from brain.ops.deployment_history import History, history_from, recorded
 from brain.ops.install_from_empty import read_plan
 from brain.ops.limits import Limit, LimiterState, ceilings
 from brain.ops.recovery import DRILL_INTERVAL_DAYS
@@ -276,6 +279,19 @@ THE_BACKUP_BUCKET_DID_NOT_ANSWER: Final = (
     "was opened, so nothing on it is a statement about them. It is not that no copy exists: it is "
     "that the store could not be read just now. Open the screen again, and if it still does not "
     "answer, check the object store is running."
+)
+
+#: What the deployment history answers on a process with no database.
+NOTHING_HERE_READS_THE_DEPLOYMENT_HISTORY: Final = (
+    "This process has no database, so the history of deploys is not read and nothing below is a "
+    "statement about them. It is not that nothing was deployed: it is that nothing here looked."
+)
+
+#: What the deployment history answers when the database did not answer the read.
+THE_DEPLOYMENT_HISTORY_DID_NOT_ANSWER: Final = (
+    "The history of deploys could not be read when this screen was opened, so nothing below is a "
+    "statement about them. Open the screen again, and if it still does not answer, check the "
+    "database is running and migrated."
 )
 
 #: What the rate limits surface answers about the throttling half while nothing enumerates it.
@@ -498,6 +514,56 @@ class UnansweredView(BaseModel):
     at: str
 
 
+class DeployView(BaseModel):
+    """One deploy as the history recorded it: when, which commit, which tasks, and how it ended.
+
+    `outcome` is one of `brain.ops.deployments.OUTCOMES`, sent as the word rather than mapped to
+    a colour here, for the reason `standing` is.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    seq: int
+    at: str
+    outcome: str
+    commit: str
+    image: str
+    previous: str
+    task_ids: list[str]
+
+
+class DeploymentHistoryView(BaseModel):
+    """The newest deploys and whether the chain they belong to holds, or why nothing was read.
+
+    `deploys` and `unread` follow `RecoveryView`'s rule: an empty list reads as nothing ever
+    deployed, which is a statement nobody established on a process that could not look.
+    `broken` names the sequence numbers that do not hold and is shown with the rows, never
+    instead of them. See `brain.ops.deployment_history`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    deploys: list[DeployView] | None = None
+    holds: bool = False
+    broken: list[int] = []
+    says: str = ""
+    #: Why there is no history. Required when there is none, empty when there is one.
+    unread: str = ""
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> DeploymentHistoryView:
+        if self.deploys is not None and self.unread:
+            msg = "a deployment history and a reason for having none cannot both be set"
+            raise ValueError(msg)
+        if self.deploys is None and not self.unread:
+            msg = (
+                "no deployment history and nothing saying why, which reads as nothing ever "
+                f"deployed. {AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE}"
+            )
+            raise ValueError(msg)
+        return self
+
+
 class UpdatesView(BaseModel):
     """Where this install stands against the newest release anybody has named.
 
@@ -521,6 +587,8 @@ class UpdatesView(BaseModel):
     what_to_do: str
     told_days_ago: int | None
     goes_off_after_days: int
+    #: What went out on this install, newest first (M38.1.3.5). Set by the route on every answer.
+    history: DeploymentHistoryView | None = None
 
 
 class CopyStateView(BaseModel):
@@ -801,6 +869,47 @@ def updates_view(one: UpdatesPanel) -> UpdatesView:
     )
 
 
+def history_view(one: History) -> DeploymentHistoryView:
+    """The deployment history as a response, newest first, with the chain's verdict beside it."""
+    return DeploymentHistoryView(
+        deploys=[
+            DeployView(
+                seq=link.seq,
+                at=link.deployment.at.isoformat(),
+                outcome=link.deployment.outcome,
+                commit=link.deployment.commit,
+                image=link.deployment.image,
+                previous=link.deployment.previous,
+                task_ids=list(link.deployment.task_ids),
+            )
+            for link in one.shown
+        ],
+        holds=not one.broken,
+        broken=list(one.broken),
+        says=one.says,
+    )
+
+
+async def read_history(
+    factory: async_sessionmaker[AsyncSession] | None,
+) -> DeploymentHistoryView:
+    """The history from `ops.deployment_record`, or the sentence saying why it was not read.
+
+    On the application's session, which holds SELECT and nothing else on that table (`0091`).
+    A database that refuses or is not migrated answers a sentence rather than a 500, because the
+    version panel above it is still true and is what the reader came for.
+    """
+    if factory is None:
+        return DeploymentHistoryView(unread=NOTHING_HERE_READS_THE_DEPLOYMENT_HISTORY)
+    try:
+        async with factory() as session:
+            rows = (await session.execute(recorded())).all()
+    except SQLAlchemyError as error:
+        log.warning("deployment history not read", error=type(error).__name__)
+        return DeploymentHistoryView(unread=THE_DEPLOYMENT_HISTORY_DID_NOT_ANSWER)
+    return history_view(history_from(rows))
+
+
 def copy_state_view(one: CopyState) -> CopyStateView:
     """One coverage, with both of its facts and the comparison it was judged by.
 
@@ -947,6 +1056,11 @@ async def updates(request: Request, asked: Asked) -> UpdatesView:
     that finished and starts the next one beside this request when it is due, so the page is as
     fast with a silent list as with none. The capability is checked first, so a caller who may
     not open this screen cannot make this server ask anything outside its network either.
+
+    **The deployment history is read after the capability and beside the panel (M38.1.3.5).**
+    It is what went out on this install, which is the question the version above answers for
+    the running container only. A process with no database answers a sentence, never an empty
+    list; see `read_history`.
     """
     _permitted(asked.reach, "updates", asked.now)
     settings = settings_of(request)
@@ -955,7 +1069,7 @@ async def updates(request: Request, asked: Asked) -> UpdatesView:
         feed_address(switched_on=settings.release_check, url=settings.release_feed_url),
         now=asked.now,
     )
-    return updates_view(
+    panel = updates_view(
         updates_panel(
             running_release(
                 pinned_image=settings.app_image,
@@ -965,6 +1079,9 @@ async def updates(request: Request, asked: Asked) -> UpdatesView:
             now=asked.now,
         )
     )
+    found = getattr(request.app.state, "db_sessions", None)
+    factory = found if isinstance(found, async_sessionmaker) else None
+    return panel.model_copy(update={"history": await read_history(factory)})
 
 
 @router.get("/install/recovery", response_model=RecoveryView, responses=COMMON_RESPONSES)

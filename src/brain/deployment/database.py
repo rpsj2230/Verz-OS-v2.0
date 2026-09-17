@@ -310,6 +310,9 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
             else:
                 print("the schema is already at this release; nothing was applied")
             return EXIT_DONE
+        refused = seeding.refused_by_environment(settings.env)
+        if refused:
+            raise DatabaseScriptError(refused)
         return seed(url)
     except DiskFullError as full:
         print(f"DISK FULL: {full}", file=sys.stderr)

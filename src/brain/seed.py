@@ -47,6 +47,11 @@ because the guard refused before an insert ever ran. So the refusal is now narro
 the narrowing is a short-circuit rather than a change to the guard: see
 `THE_DEMOS_OWN_ROWS_ARE_NOT_SOMEBODY_ELSES` for why it is placed after it and not inside it.
 
+**An install that calls itself production is refused before anything else (M38.1.4.4).** The
+row guard cannot tell a production install set up this morning from an empty staging one, because
+both are empty. `BRAIN_ENV` can, so loading is refused unless it is `development` or `staging`,
+and `--force` does not reach that refusal. See `A_PRODUCTION_INSTALL_NEVER_HOLDS_THE_DEMO`.
+
 **The ledger keeps its entries after `--remove`, and that is the one case still refused.**
 Writing a grant fires `gate.record_entitlement_change`, which appends to `obs.audit_entry`,
 and removing the demo deletes no audit entry: a hash chain with a hole in it is a hash chain
@@ -56,7 +61,7 @@ That refusal is correct - the ledger is evidence that grants were written here -
 remedy is to rebuild the database, which is `make reset`, rather than to turn the guard off.
 See `A_REFUSAL_WHOSE_ONLY_REMEDY_IS_FORCE_TEACHES_FORCE`.
 
-Task ids: M0.4.4, M0.4.5, M41.2.3
+Task ids: M0.4.4, M0.4.5, M41.2.3, M38.1.4.4
 """
 
 from __future__ import annotations
@@ -117,6 +122,31 @@ A_REFUSAL_WHOSE_ONLY_REMEDY_IS_FORCE_TEACHES_FORCE = (
     "here names what the demo can do about itself first - it is removable by identifier, and "
     "a development loop rebuilds the database - and names `--force` last, as what it is."
 )
+
+#: The environments the demo may be loaded into (M38.1.4.4). `production` is not one of them.
+DEMO_ENVIRONMENTS = frozenset({"development", "staging"})
+
+#: Why an install that calls itself production is refused before its database is looked at.
+A_PRODUCTION_INSTALL_NEVER_HOLDS_THE_DEMO = (
+    "The row guard refuses a database holding rows the demo did not write, and a production "
+    "install on the morning it was set up holds none: every table is empty until somebody "
+    "signs in, so the guard waves the demo through. The environment is the one thing that "
+    "already says which install this is, so it is asked first, and no flag answers it: a "
+    "production install that needs the demo is a staging install with the wrong name, and "
+    "the remedy is to name it, not to override the refusal."
+)
+
+
+def refused_by_environment(environment: str) -> str | None:
+    """Why the demo may not be loaded into an install in this environment, or None when it may."""
+    if environment in DEMO_ENVIRONMENTS:
+        return None
+    return (
+        f"this install says it is {environment!r} (BRAIN_ENV), and the demo company is loaded "
+        "only into development or staging. If this is a staging install, set BRAIN_ENV=staging "
+        "on it and run this again. There is no flag past this refusal."
+    )
+
 
 #: What an ordinary Postgres identifier looks like. A name that does not match is reported
 #: rather than interpolated into a query.
@@ -605,6 +635,12 @@ def main(argv: list[str] | None = None) -> int:
         # absent answer is a fact about what exists.
         print(found if found else demo.NO_ANSWER)
         return 0
+    # Before the database is asked anything, and `--force` does not reach it. See
+    # `A_PRODUCTION_INSTALL_NEVER_HOLDS_THE_DEMO`.
+    refused = refused_by_environment(Settings().env)
+    if refused:
+        print(f"REFUSED: {refused}", file=sys.stderr)
+        return 1
     return seed(url, force="--force" in args)
 
 
