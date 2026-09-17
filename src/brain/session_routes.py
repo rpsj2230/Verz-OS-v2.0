@@ -46,12 +46,24 @@ difference between a 404 and a 500.
 `truncated` says a load came back full, computed against what was loaded rather than what survived,
 for the reason every listing in this application gives.
 
+**Both listings page, search, filter and order through `brain.listing`, over the rows the reader is
+sent.** The load is `MAX_ROWS` whatever was asked, so `truncated` is the same fact for every search,
+and a cursor walks the decided rows rather than the loaded ones. See
+`brain.listing.THE_LOAD_IS_NEVER_NARROWED_BY_THE_QUERY`.
+
+**Several sessions are ended as several endings.** `POST /govern/sessions/end-several` names up to
+`brain.listing.MAX_SEVERAL` sessions and runs the single ending once for each, through the same
+capability, the same `may` under the same lock and the same trigger, and answers each session's own
+outcome in the order asked. A session the reader may not end and one that does not exist are the
+same outcome, which is the single control's one 404 spelled per row. See
+`brain.listing.SEVERAL_ACTS_ARE_EACH_DECIDED_ALONE`.
+
 **The sentences are served, not written in the console.** What ending a session does, where the
 account a person signs in with is kept, and why the last administrator's link stays are facts this
 side knows, so they travel on the response, which is `brain.skill_routes`' arrangement: the day a
 fact changes, the sentence changes in the same commit.
 
-Task ids: M27.7.10, M27.7.11
+Task ids: M27.7.10, M27.7.11, M27.8.6
 """
 
 from __future__ import annotations
@@ -61,12 +73,12 @@ from datetime import datetime
 from typing import Annotated, Final, Protocol, runtime_checkable
 
 import structlog
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
 from brain.console.govern import SESSION_CONTROL, Placed, may_end, open_sessions
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -85,6 +97,7 @@ from brain.identity.session_store import (
     StoredSessions,
 )
 from brain.identity.sign_in_binding import SignInLink, Unlinked
+from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
 from brain.routing_routes import sessions_of
 
 log = structlog.get_logger()
@@ -114,9 +127,10 @@ SESSIONS_SCREEN: Final = "sessions"
 #: `brain.console.sign_in_links` for why its authority is the one that makes a link.
 SIGN_IN_LINKS_SCREEN: Final = "sign-in links"
 
-#: The most rows one listing loads. A resource bound and not a permission one.
+#: The most rows one listing loads, whatever page, search, filter or order was asked for. A
+#: resource bound and not a permission one. See
+#: `brain.listing.THE_LOAD_IS_NEVER_NARROWED_BY_THE_QUERY`.
 MAX_ROWS: Final = 500
-DEFAULT_ROWS: Final = 200
 
 
 # ------------------------------------------------------------------- the shapes
@@ -146,6 +160,8 @@ class SessionsPage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: list[SessionView]
+    #: Present exactly when a further session this reader may see matches. See `brain.listing`.
+    next_cursor: str | None = None
     #: The load came back full. Never how much more there is.
     truncated: bool
     ending: str = ENDING_A_SESSION_IS_ONE_SITTING_AND_NOT_THE_PERSON
@@ -170,6 +186,41 @@ class SessionEnded(BaseModel):
     ended_at: datetime
 
 
+#: One session id as the single ending's body declares it, for a list of them.
+SessionId = Annotated[str, Field(min_length=1, max_length=120, pattern=SESSION_ID_PATTERN)]
+
+
+class SessionsEnding(BaseModel):
+    """Which sessions to end. Ids, and nothing that could say whose or why."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_ids: list[SessionId] = Field(min_length=1, max_length=MAX_SEVERAL)
+
+
+class SessionOutcome(BaseModel):
+    """What came of one session named in a bulk ending.
+
+    `ended` false carries nothing else, identically for a session out of reach, one already ended
+    and one that never existed: the single control's one refusal, per row.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    session_id: str
+    ended: bool
+    principal_id: str | None = None
+    ended_at: datetime | None = None
+
+
+class SessionsEnded(BaseModel):
+    """Each session named, in the order asked, with its own outcome."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    outcomes: list[SessionOutcome]
+
+
 class SignInLinkView(BaseModel):
     """One person who can sign in, since when, and whether their link is the last way in."""
 
@@ -190,6 +241,8 @@ class SignInLinksPage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: list[SignInLinkView]
+    #: Present exactly when a further link this reader may see matches. See `brain.listing`.
+    next_cursor: str | None = None
     truncated: bool
     account: str = THE_ACCOUNT_IS_KEPT_AT_THE_IDENTITY_PROVIDER_AND_NOT_HERE
     unlinking: str = UNLINKING_TAKES_EFFECT_ON_THE_NEXT_REQUEST
@@ -329,6 +382,40 @@ def _no_link_here() -> Absent:
     return Absent("no sign-in link is removable here for this caller")
 
 
+# ------------------------------------------------------------------- the listings
+
+#: What the Sessions screen may search, filter and order by: the fields a row shows.
+SESSIONS: Final[Listing[SessionView]] = Listing(
+    name="sessions",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("principal_id", lambda row: row.principal_id, search=True, filter=True),
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("second_factor", lambda row: row.second_factor, filter=True),
+        Column("signed_in_at", lambda row: row.signed_in_at, sort=True),
+        Column("lapses_at", lambda row: row.lapses_at, sort=True),
+    ),
+    key=lambda row: row.session_id,
+    order="-signed_in_at",
+)
+SessionsQuery = Annotated[ListAsked, Depends(SESSIONS.query())]
+
+#: What the Sign-in links screen may search, filter and order by.
+SIGN_IN_LINKS: Final[Listing[SignInLinkView]] = Listing(
+    name="sign-in-links",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("principal_id", lambda row: row.principal_id, search=True, filter=True),
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("linked_at", lambda row: row.linked_at, sort=True),
+        Column("last_administrator", lambda row: row.last_administrator, filter=True),
+    ),
+    key=lambda row: row.principal_id,
+    order="display_name",
+)
+SignInLinksQuery = Annotated[ListAsked, Depends(SIGN_IN_LINKS.query())]
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["sessions"])
 
 
@@ -336,32 +423,45 @@ router = APIRouter(prefix=API_PREFIX, tags=["sessions"])
 
 
 @router.get("/govern/sessions", response_model=SessionsPage, responses=COMMON_RESPONSES)
-async def sessions_page(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = DEFAULT_ROWS,
-) -> SessionsPage:
-    """Every live session this reader may see, newest first.
+async def sessions_page(request: Request, asked: Asked, listed: SessionsQuery) -> SessionsPage:
+    """One page of the live sessions this reader may see, newest first unless asked otherwise.
 
-    The screen's question first and the database second. `truncated` is the load having come back
-    full, computed against what was loaded rather than what `open_sessions` kept, because the second
-    would be a count of what the decision withheld spelled as a boolean.
+    The screen's question first, the listing's second and the database third. `truncated` is the
+    load having come back full, computed against what was loaded rather than what `open_sessions`
+    kept, because the second would be a count of what the decision withheld spelled as a boolean.
     """
     if not permitted(screen(SESSIONS_SCREEN).read, asked.reach, asked.now):
         log.info("sessions screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable(SESSIONS_SCREEN)
+    plan = SESSIONS.plan(listed, reader=asked.caller.principal.id)
 
     store = session_store_of(request)
-    loaded, full = await store.open_sessions(now=asked.now, limit=limit)
+    loaded, full = await store.open_sessions(now=asked.now, limit=MAX_ROWS)
     shown = open_sessions([placed_session(one) for one in loaded], asked.reach, asked.now)
     current = asked.caller.claims.session_id
-    return SessionsPage(
-        items=[
+    page = plan.page(
+        [
             session_view(one, endable=may_end(one, asked.reach, asked.now), current=current)
             for one in shown
-        ],
-        truncated=full,
+        ]
     )
+    return SessionsPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
+
+
+def _may_end_one(asked: Asking) -> Callable[[StoredSession], bool]:
+    """The question the store asks about a session under its lock, for one caller.
+
+    Both `open_sessions` and `may_end`, because a control is pressed by whatever was posted rather
+    than by what was offered, and a session the reader may not see must not be endable by somebody
+    who guessed its id. One function for the single ending and the bulk one, so they cannot differ.
+    """
+    reach, now = asked.reach, asked.now
+
+    def may(record: StoredSession) -> bool:
+        placed = placed_session(record)
+        return bool(open_sessions([placed], reach, now)) and may_end(placed, reach, now)
+
+    return may
 
 
 @router.post("/govern/sessions/end", response_model=SessionEnded, responses=COMMON_RESPONSES)
@@ -378,25 +478,63 @@ async def end_session(request: Request, body: SessionEnding, asked: Asked) -> Se
         raise _no_session_here()
 
     store = session_store_of(request)
-    reach, now = asked.reach, asked.now
-
-    def may(record: StoredSession) -> bool:
-        placed = placed_session(record)
-        return bool(open_sessions([placed], reach, now)) and may_end(placed, reach, now)
-
     ended = await store.end(
         body.session_id,
-        may=may,
+        may=_may_end_one(asked),
         ended_by=asked.caller.principal.id,
-        ent_hash=reach.ent_hash(),
+        ent_hash=asked.reach.ent_hash(),
         trace_id=_trace_id(),
-        now=now,
+        now=asked.now,
     )
     if ended is None:
         log.info("session end refused", principal=asked.caller.principal.id)
         raise _no_session_here()
     return SessionEnded(
         session_id=ended.session_id, principal_id=ended.principal_id, ended_at=ended.ended_at
+    )
+
+
+@router.post(
+    "/govern/sessions/end-several", response_model=SessionsEnded, responses=COMMON_RESPONSES
+)
+async def end_sessions(request: Request, body: SessionsEnding, asked: Asked) -> SessionsEnded:
+    """End each named session this reader may see and may end, one ending at a time.
+
+    The control's capability is asked once, before a store is reached for, exactly as the single
+    ending asks it; a caller without it is the single ending's 404. Then every id is the single
+    ending: its own lock, its own `may`, its own ledger entry. See
+    `brain.listing.SEVERAL_ACTS_ARE_EACH_DECIDED_ALONE`.
+    """
+    if asked.reach.scope_for(SESSION_CONTROL, asked.now) is None:
+        log.info("sessions not endable", principal=asked.caller.principal.id)
+        raise _no_session_here()
+
+    store = session_store_of(request)
+    may = _may_end_one(asked)
+
+    async def end_one(session_id: str) -> EndedSession | None:
+        return await store.end(
+            session_id,
+            may=may,
+            ended_by=asked.caller.principal.id,
+            ent_hash=asked.reach.ent_hash(),
+            trace_id=_trace_id(),
+            now=asked.now,
+        )
+
+    outcomes = await each_of(body.session_ids, end_one)
+    return SessionsEnded(
+        outcomes=[
+            SessionOutcome(session_id=session_id, ended=False)
+            if ended is None
+            else SessionOutcome(
+                session_id=session_id,
+                ended=True,
+                principal_id=ended.principal_id,
+                ended_at=ended.ended_at,
+            )
+            for session_id, ended in outcomes
+        ]
     )
 
 
@@ -421,22 +559,20 @@ def link_views(
 
 @router.get("/govern/sign-ins", response_model=SignInLinksPage, responses=COMMON_RESPONSES)
 async def sign_in_links_page(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = DEFAULT_ROWS,
+    request: Request, asked: Asked, listed: SignInLinksQuery
 ) -> SignInLinksPage:
-    """Every person who can sign in, since when, and which link is the last administrator's."""
+    """One page of the people who can sign in, since when, and which link is the last
+    administrator's."""
     if not may_see_links(asked.reach, asked.now):
         log.info("sign-in links not answerable", principal=asked.caller.principal.id)
         raise _not_answerable(SIGN_IN_LINKS_SCREEN)
+    plan = SIGN_IN_LINKS.plan(listed, reader=asked.caller.principal.id)
 
     store = link_store_of(request)
-    links, full = await store.links(limit=limit)
+    links, full = await store.links(limit=MAX_ROWS)
     administrators = await store.administrators_linked(asked.now)
-    return SignInLinksPage(
-        items=link_views(links, administrators, asked.caller.principal.id),
-        truncated=full,
-    )
+    page = plan.page(link_views(links, administrators, asked.caller.principal.id))
+    return SignInLinksPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
 
 
 _TOLD: Final[dict[int | str, dict[str, object]]] = {

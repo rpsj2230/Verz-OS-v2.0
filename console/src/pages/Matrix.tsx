@@ -55,11 +55,16 @@ import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { DataTable } from "../components/DataTable";
 import { SchemaForm } from "../components/SchemaForm";
 import {
   editableDefaults,
-  matrixApiPath,
+  MATRIX_API_PATH,
+  MATRIX_FILTERS,
+  openRungApiPath,
   matrixColumns,
   readMatrixPage,
   RUNG_EDIT_SCHEMA,
@@ -76,10 +81,9 @@ import { ConfirmAction } from "../components/ConfirmAction";
 /**
  * What is said when the page came back full.
  *
- * No number, and none available to put in one: `readMatrixPage` keeps a flag. The route
- * sends no cursor, so raising what this screen asks for is a change to `MATRIX_PAGE_SIZE`
- * rather than something a person can do, and the sentence says what is true rather than
- * offering an action that does not exist.
+ * No number, and none available to put in one: `readMatrixPage` keeps a flag. It says the route's
+ * load came back full, which "Show more" cannot reach past, so the sentence says what is true
+ * rather than offering an action that does not exist.
  */
 const THERE_IS_MORE = "This page came back full, so there are more rungs than it shows.";
 
@@ -210,23 +214,31 @@ function RungEditor({
   );
 }
 
+/** What the controls narrow, and what a narrowed matrix with no rung says. */
+export const FILTERS_LABEL = "Narrow the matrix";
+export const NONE_MATCH = NOTHING_MATCHES;
+
 /**
- * The matrix itself.
+ * The matrix itself, and the rung that is open.
  *
- * A separate component so that a successful save can remount it by key and it asks the API
- * again. `useResource` re-runs on a change of path, and the path must not change: it is the
- * request, and a console that varied its request to force a refresh would be asking a
- * different question to get the same answer.
+ * The rows are `useListing`'s, so the search, the filters and "Show more" are requests, and the
+ * order is the chain's, which is the only order the route takes. The open rung is a request of its
+ * own, filtered to the id in the address, so its editor opens whichever page it sits on. A save
+ * moves `version` and both are asked again.
  */
 function MatrixRows({
   openRungId,
+  version,
   onSaved,
 }: {
   readonly openRungId: string | undefined;
+  readonly version: number;
   readonly onSaved: () => void;
 }) {
-  const answer = useResource<unknown>(matrixApiPath());
-  const page = useMemo(() => readMatrixPage(answer.data), [answer.data]);
+  const listing = useListing<RungRow>(MATRIX_API_PATH, { choices: MATRIX_FILTERS, version });
+  const opened = useResource<unknown>(openRungId === undefined ? null : openRungApiPath(openRungId), version);
+  const page = useMemo(() => readMatrixPage(listing.body), [listing.body]);
+  const openPage = useMemo(() => readMatrixPage(opened.data), [opened.data]);
 
   const columns = useMemo(
     () =>
@@ -236,18 +248,23 @@ function MatrixRows({
     [page.editable],
   );
 
-  const open = openRungId === undefined ? null : rungById(page.rungs, openRungId);
+  const open = openRungId === undefined ? null : rungById(openPage.rungs, openRungId);
 
   return (
     <>
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={MATRIX_FILTERS} />
       <DataTable
         caption="The routing matrix"
         columns={columns}
         rows={page.rungs}
         rowId={(rung) => rung.id}
-        failure={answer.failure}
-        busy={answer.busy}
+        failure={listing.failure}
+        busy={listing.busy}
       />
+      {!listing.busy && listing.failure === null && page.rungs.length === 0 && narrows(listing.question) ? (
+        <p className="note">{NONE_MATCH}</p>
+      ) : null}
+      <ShowMore listing={listing} />
 
       {page.truncated ? <p className="note">{THERE_IS_MORE}</p> : null}
 
@@ -258,9 +275,9 @@ function MatrixRows({
        * refusal, when a save is attempted, is the same one it gives somebody who cannot read
        * the matrix at all.
        */}
-      {open !== null && page.editable ? <RungEditor rung={open} onSaved={onSaved} /> : null}
+      {open !== null && openPage.editable ? <RungEditor rung={open} onSaved={onSaved} /> : null}
 
-      {openRungId !== undefined && open === null && !answer.busy && answer.failure === null ? (
+      {openRungId !== undefined && open === null && !opened.busy && opened.failure === null ? (
         <p className="note">{NO_SUCH_RUNG}</p>
       ) : null}
     </>
@@ -272,9 +289,9 @@ export function Matrix() {
   // A counter rather than a boolean, because two saves in a row must remount twice. Its
   // value is never rendered: it is a key, and a key that reached the screen would be a
   // number describing how many times somebody had saved.
-  const [generation, setGeneration] = useState(0);
+  const [version, setVersion] = useState(0);
   const onSaved = useCallback(() => {
-    setGeneration((current) => current + 1);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -284,7 +301,7 @@ export function Matrix() {
         Which model handles a request, in what order, and what each rung is allowed to spend.
       </p>
 
-      <MatrixRows key={generation} openRungId={rungId} onSaved={onSaved} />
+      <MatrixRows openRungId={rungId} version={version} onSaved={onSaved} />
     </article>
   );
 }

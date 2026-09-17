@@ -30,23 +30,23 @@
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { LIST_PAGE_SIZE } from "../src/components/listing";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   CAPABILITIES_API_PATH,
   GRANTS_API_PATH,
-  PEOPLE_PAGE_SIZE,
+  SCOPE_CHOICES_PAGE_SIZE,
   PROPOSAL_FIELDS,
   REMOVAL_API_PATH,
   ROLES_API_PATH,
-  SCOPES_PAGE_SIZE,
-  peopleApiPath,
+  scopeChoicesApiPath,
+  subjectApiPath,
   principalIn,
   proposalSchema,
   readCapabilities,
   readPeoplePage,
   readRoles,
   readScopesPage,
-  scopesApiPath,
   subjectAddress,
   submittedProposal,
 } from "../src/pages/governQuery";
@@ -235,12 +235,12 @@ describe("what the govern screens ask for", () => {
     const people = declaredParameterSchema(PEOPLE_OPERATION, "get", "limit");
     const scopes = declaredParameterSchema(SCOPES_OPERATION, "get", "limit");
 
-    expect(PEOPLE_PAGE_SIZE).toBeLessThanOrEqual(people["maximum"] as number);
-    expect(PEOPLE_PAGE_SIZE).toBeGreaterThanOrEqual(people["minimum"] as number);
-    expect(SCOPES_PAGE_SIZE).toBeLessThanOrEqual(scopes["maximum"] as number);
-    expect(SCOPES_PAGE_SIZE).toBeGreaterThanOrEqual(scopes["minimum"] as number);
-    expect(peopleApiPath()).toBe(`/govern/people?limit=${String(PEOPLE_PAGE_SIZE)}`);
-    expect(scopesApiPath()).toBe(`/govern/scopes?limit=${String(SCOPES_PAGE_SIZE)}`);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(people["maximum"] as number);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(scopes["maximum"] as number);
+    expect(SCOPE_CHOICES_PAGE_SIZE).toBeLessThanOrEqual(scopes["maximum"] as number);
+    expect(SCOPE_CHOICES_PAGE_SIZE).toBeGreaterThanOrEqual(scopes["minimum"] as number);
+    expect(scopeChoicesApiPath()).toBe(`/govern/scopes?limit=${String(SCOPE_CHOICES_PAGE_SIZE)}`);
+    expect(subjectApiPath("principal:u_1")).toBe("/govern/people?limit=1&filter=subject%3Aprincipal%3Au_1");
   });
 
   test("an address this screen builds always stays inside the console", () => {
@@ -351,11 +351,12 @@ describe("what the people screen offers", () => {
       scopes: scopesPage([{ slug: "maintenance" }]),
     });
 
-    expect(editable.container.querySelector("form")).not.toBeNull();
+    // The grant form, and not the search form every list draws.
+    expect(editable.container.querySelector('form:not([role="search"])')).not.toBeNull();
     expect(
       [...editable.container.querySelectorAll("button")].map((one) => one.textContent),
     ).toContain(removeLabel("read:client.name"));
-    expect(readOnly.container.querySelector("form")).toBeNull();
+    expect(readOnly.container.querySelector('form:not([role="search"])')).toBeNull();
     expect(
       [...readOnly.container.querySelectorAll("button")].map((one) => one.textContent),
     ).not.toContain(removeLabel("read:client.name"));

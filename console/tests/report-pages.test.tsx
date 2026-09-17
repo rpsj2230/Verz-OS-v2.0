@@ -32,14 +32,15 @@ import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { ADOPTION_HEADING, MORE_DEPARTMENTS, NO_ADOPTION } from "../src/pages/Adoption";
-import { adoptionApiPath, readAdoptionPage } from "../src/pages/adoptionQuery";
+import { NO_QUESTION, listPath } from "../src/components/listing";
+import { ADOPTION_DAYS, ADOPTION_PERIODS, DAYS_PARAMETER, readAdoptionPage } from "../src/pages/adoptionQuery";
 import { NOT_BUILT_YET, SPEND_HEADING, WITHOUT_AUTOMATION } from "../src/pages/Spend";
 import { spendApiPath } from "../src/pages/spendQuery";
 import { NO_LANES, SERVICE_LEVELS_HEADING } from "../src/pages/ServiceLevels";
 import { ratePercent, serviceLevelsApiPath } from "../src/pages/serviceLevelsQuery";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./support/navigation";
-import { declaredQueryParameters } from "./support/openapi";
+import { declaredParameterSchema, declaredQueryParameters } from "./support/openapi";
 
 const CONSOLE_ORIGIN = "https://console.test";
 
@@ -363,11 +364,22 @@ describe("the adoption screen", () => {
     // What breaks if this is deleted: the window or the bound is sent under a name the route
     // does not declare, and the page silently shows the route's default instead.
     const declared = new Set(declaredQueryParameters(ADOPTION_API, "get"));
-    const asked = [...new URL(adoptionApiPath(), CONSOLE_ORIGIN).searchParams.keys()];
+    const path = listPath(
+      "/report/adoption",
+      { ...NO_QUESTION, search: "x", filters: { department: "support" }, sort: "-questions" },
+      "c",
+      50,
+      { [DAYS_PARAMETER]: String(ADOPTION_DAYS) },
+    );
+    const asked = [...new URL(path, CONSOLE_ORIGIN).searchParams.keys()];
 
     expect(asked.length).toBeGreaterThan(0);
     expect(declared.size).toBeGreaterThan(0);
     expect(asked.filter((name) => !declared.has(name))).toEqual([]);
+    // Every period offered is one the route admits.
+    const days = declaredParameterSchema(ADOPTION_API, "get", DAYS_PARAMETER);
+    expect(Math.max(...ADOPTION_PERIODS)).toBeLessThanOrEqual(days["maximum"] as number);
+    expect(ADOPTION_PERIODS).toContain(ADOPTION_DAYS);
   });
 });
 

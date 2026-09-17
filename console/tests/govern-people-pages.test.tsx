@@ -54,17 +54,13 @@ import {
   READING_ELEVATION,
   YOU_HOLD_THE_AUTHORITY,
 } from "../src/pages/Elevation";
+import { LIST_PAGE_SIZE } from "../src/components/listing";
 import {
-  GOVERN_PEOPLE_PAGE_SIZE,
   ASK_BLANKS,
-  departmentsApiPath,
-  narrowedReview,
+  MOST_DECIDED_AT_ONCE,
   readOrganisation,
   readReview,
   readSubscribers,
-  reviewApiPath,
-  reviewDepartments,
-  searchedOrganisation,
   type DepartmentRow,
   type ElevationRequestRow,
   type ReviewRow,
@@ -88,6 +84,7 @@ const DEPARTMENTS_OPERATION = "/api/v1/govern/departments";
 const ELEVATION_OPERATION = "/api/v1/govern/elevation";
 const REVIEW_OPERATION = "/api/v1/govern/access-review";
 const DECISION_OPERATION = "/api/v1/govern/access-review/decision";
+const DECISIONS_OPERATION = "/api/v1/govern/access-review/decisions";
 const SUBSCRIBERS_OPERATION = "/api/v1/govern/subscribers";
 
 const TEAMS = "A team lists the people in it you may see.";
@@ -193,8 +190,7 @@ describe("the departments and teams screen", () => {
     const sent = sentQuery(idp, DEPARTMENTS_OPERATION);
     expect(sent.length).toBeGreaterThan(0);
     expect(sent.filter((name) => !declared.has(name))).toEqual([]);
-    expect(GOVERN_PEOPLE_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-    expect(departmentsApiPath()).toBe(`/govern/departments?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
   });
 
   test("a department shows its teams and its people, each person leads to what they hold, and the three sentences are said", async () => {
@@ -331,23 +327,32 @@ describe("the departments and teams screen", () => {
     });
   });
 
-  test("the search narrows the page it was given and asks the API nothing", async () => {
-    // What breaks if this is deleted: a search that sends a query the route does not declare, or
-    // one that hides a department whose person matched.
+  test("the search and the team filter are requests, and the team filter offers only teams drawn", async () => {
+    // What breaks if this is deleted: a search that narrows the departments already drawn, which
+    // reads as a search of the organisation and is one of what arrived, or a team dropdown naming
+    // a team on no department this reader was shown.
     const { container, idp } = await mount("/departments", (url) =>
-      url.pathname === DEPARTMENTS_OPERATION ? json(organisation([FINANCE, WEB])) : null,
+      url.pathname === DEPARTMENTS_OPERATION
+        ? json(organisation(url.searchParams.get("q") === "zzz" ? [] : [FINANCE, WEB]))
+        : null,
     );
-    const box = [...container.querySelectorAll("input")].find((one) =>
-      one.closest("label")?.textContent?.startsWith(SEARCH_LABEL),
-    ) as HTMLInputElement;
+    const box = container.querySelector('input[type="search"]') as HTMLInputElement;
+    const team = [...container.querySelectorAll("select")].find((one) =>
+      one.closest("label")?.firstChild?.textContent?.trim() === "Team",
+    ) as HTMLSelectElement;
+    const drawn = [FINANCE, WEB].flatMap((one) => one.teams.map((each) => each.name));
 
-    fireEvent.change(box, { target: { value: "aaron" } });
-    expect(container.querySelector('[aria-label="People in Web"]')?.textContent).not.toContain("Wei Ling Tan");
-    expect(container.textContent).not.toContain("Finance");
+    expect([...team.querySelectorAll("option")].map((one) => one.value).filter((one) => one !== "")).toEqual(
+      [...new Set(drawn)].sort((a, b) => a.localeCompare(b)),
+    );
     fireEvent.change(box, { target: { value: "zzz" } });
-    expect(container.textContent).toContain(NO_DEPARTMENT_MATCHES);
-    expect(idp.urls.filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === DEPARTMENTS_OPERATION)).toHaveLength(1);
-    expect(searchedOrganisation([WEB], "web")).toEqual([WEB]);
+    await waitFor(() => {
+      expect(container.textContent).toContain(NO_DEPARTMENT_MATCHES);
+    });
+    const asked = idp.urls
+      .map((url) => new URL(url, CONSOLE_ORIGIN))
+      .filter((url) => url.pathname === DEPARTMENTS_OPERATION);
+    expect(asked[asked.length - 1]?.searchParams.get("q")).toBe("zzz");
   });
 
   test("empty, unreachable and refused are three different sentences", async () => {
@@ -573,10 +578,12 @@ describe("the access review screen", () => {
     );
 
     expect(sentQuery(idp, REVIEW_OPERATION).filter((name) => !declared.has(name))).toEqual([]);
-    expect(GOVERN_PEOPLE_PAGE_SIZE).toBeLessThanOrEqual(
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(
       declaredParameterSchema(REVIEW_OPERATION, "get", "limit")["maximum"] as number,
     );
-    expect(reviewApiPath()).toBe(`/govern/access-review?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`);
+    const several = declaredRequestBodySchema(DECISIONS_OPERATION, "post");
+    const holdings = (several["properties"] as Record<string, Record<string, unknown>>)["holdings"];
+    expect(holdings?.["maxItems"]).toBe(MOST_DECIDED_AT_ONCE);
   });
 
   test("a row reads as the design's entitlement row, with who, the pack, and the last decision", async () => {
@@ -676,36 +683,84 @@ describe("the access review screen", () => {
     expect(container.textContent).not.toMatch(/was kept at/);
   });
 
-  test("the filters offer what is on the page and narrow only the page", async () => {
-    // What breaks if this is deleted: a department filter naming places nobody on the page is in,
-    // or the never-reviewed filter keeping a row somebody reviewed.
+  test("the filters offer only values on rows drawn, and each is a request to the route", async () => {
+    // What breaks if this is deleted: a department filter naming places nobody drawn is in, or a
+    // filter that narrows the rows already drawn instead of asking the route.
     const rows = [
       row({ row_id: "r-web" }),
       row({ row_id: "r-sales", department: "sales", principal_id: "u_s", display_name: "Sales Person", last_decision: "keep", last_decided_by: "u_lead", last_decided_at: "2019-04-01T09:00:00Z" }),
     ];
-    const { container } = await mount("/access_review", (url) =>
-      url.pathname === REVIEW_OPERATION ? json(review(rows)) : null,
-    );
-    const department = [...container.querySelectorAll("select")].find((one) =>
-      one.closest("label")?.textContent?.startsWith("Department"),
-    ) as HTMLSelectElement;
+    const { container, idp } = await mount("/access_review", (url) => {
+      if (url.pathname !== REVIEW_OPERATION) {
+        return null;
+      }
+      const filters = url.searchParams.getAll("filter");
+      return json(review(rows.filter((one) => filters.every((term) => term === `department:${one.department ?? ""}`))));
+    });
+    const select = (name: string) =>
+      [...container.querySelectorAll("select")].find((one) =>
+        one.closest("label")?.firstChild?.textContent?.trim() === name,
+      ) as HTMLSelectElement;
 
-    expect([...department.querySelectorAll("option")].map((one) => one.value)).toEqual(["", "sales", "web"]);
-    fireEvent.change(department, { target: { value: "sales" } });
-    expect(container.querySelector('[aria-label="Grants to review"]')?.textContent).not.toContain("Wei Ling Tan");
-    const person = [...container.querySelectorAll("select")].find((one) =>
-      one.closest("label")?.textContent?.startsWith("Person"),
-    ) as HTMLSelectElement;
-    fireEvent.change(person, { target: { value: "u_1" } });
-    expect(container.textContent).toContain(NO_GRANT_MATCHES);
+    expect([...select("Department").querySelectorAll("option")].map((one) => one.value)).toEqual(["", "sales", "web"]);
+    expect([...select("Reviewed").querySelectorAll("option")].map((one) => one.value)).toEqual(["", "keep", "undecided"]);
+    fireEvent.change(select("Department"), { target: { value: "sales" } });
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Grants to review"]')?.textContent).not.toContain("Wei Ling Tan");
+    });
+    fireEvent.change(select("Person"), { target: { value: "u_1" } });
+    await waitFor(() => {
+      expect(container.textContent).toContain(NO_GRANT_MATCHES);
+    });
+    const asked = idp.urls.map((url) => new URL(url, CONSOLE_ORIGIN)).filter((url) => url.pathname === REVIEW_OPERATION);
+    expect(asked[asked.length - 1]?.searchParams.getAll("filter")).toEqual(["department:sales", "principal_id:u_1"]);
+  });
 
-    const now = new Date("2019-04-02T00:00:00Z");
-    expect(narrowedReview(rows, { department: "", person: "", decided: "never" }, now).map((one) => one.row_id)).toEqual(["r-web"]);
-    expect(narrowedReview(rows, { department: "", person: "", decided: "stale" }, now).map((one) => one.row_id)).toEqual(["r-web"]);
-    expect(
-      narrowedReview(rows, { department: "", person: "", decided: "stale" }, new Date("2020-01-01T00:00:00Z")).map((one) => one.row_id),
-    ).toEqual(["r-web", "r-sales"]);
-    expect(reviewDepartments([])).toEqual([]);
+  test("keeping the ticked grants lists each one first, sends their holdings, and says what came of each", async () => {
+    // What breaks if this is deleted: a bulk decision with no confirmation, a confirmation that does
+    // not say which grants, a body naming rows by id alone so a pack and a grant are confused, or a
+    // refused grant reported as decided.
+    const rows = [
+      row({ row_id: "r-1" }),
+      row({ row_id: "r-2", principal_id: "u_s", display_name: "Sales Person", department: "sales" }),
+    ];
+    const { container, idp } = await mount("/access_review", (url) => {
+      if (url.pathname === DECISIONS_OPERATION) {
+        return json({
+          decision: "keep",
+          outcomes: [
+            { kind: "grant", row_id: "r-1", decided: true, principal_id: "u_1", decided_at: "2019-04-02T09:00:00Z" },
+            { kind: "grant", row_id: "r-2", decided: false, principal_id: null, decided_at: null },
+          ],
+        });
+      }
+      return url.pathname === REVIEW_OPERATION ? json(review(rows)) : null;
+    });
+    const button = (name: string) =>
+      [...container.querySelectorAll("button")].find((one) => one.textContent === name) as HTMLButtonElement;
+
+    const boxes = [...container.querySelectorAll('tbody input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes).toHaveLength(2);
+    expect(button("Keep the ticked grants").disabled).toBe(true);
+    boxes.forEach((box) => fireEvent.click(box));
+    fireEvent.click(button("Keep the ticked grants"));
+    const panel = container.querySelector(".confirm") as HTMLElement;
+    expect([...panel.querySelectorAll("li")].map((one) => one.textContent)).toEqual([
+      expect.stringContaining("Wei Ling Tan"),
+      expect.stringContaining("Sales Person"),
+    ]);
+    fireEvent.click([...panel.querySelectorAll("button")].find((one) => one.textContent === "Keep the ticked grants") as HTMLElement);
+
+    await waitFor(() => {
+      expect(container.textContent).toContain("was kept.");
+    });
+    expect(container.textContent).toContain("Sales Person was not decided.");
+    const sent = idp.calls
+      .filter((call) => call.init?.method === "POST" && new URL(call.url, CONSOLE_ORIGIN).pathname === DECISIONS_OPERATION)
+      .map((call) => JSON.parse(String(call.init?.body)) as unknown);
+    expect(sent).toEqual([{ decision: "keep", holdings: [{ kind: "grant", row_id: "r-1" }, { kind: "grant", row_id: "r-2" }] }]);
+    const declared = declaredRequestBodySchema(DECISIONS_OPERATION, "post");
+    expect(Object.keys(sent[0] as object).sort()).toEqual(Object.keys(declared["properties"] as object).sort());
   });
 
   test("empty, a full load, unreachable and refused are different sentences, and nothing counts the rows", async () => {

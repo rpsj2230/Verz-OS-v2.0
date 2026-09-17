@@ -20,11 +20,14 @@
  * which is `App.tsx`'s rule for `Overview` and `NotFound`: a chunk for it would buy a round trip
  * and save no bytes.
  *
- * Task ids: M39.1.2.5
+ * Task ids: M39.1.2.5, M27.8.6
  */
 
 import { Link } from "react-router-dom";
-import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows, type FilterChoice, type SortChoice } from "../components/listing";
+import { useListing } from "../components/useListing";
+import type { components } from "../api/schema";
 import { AGENT_ADDRESS_PREFIX } from "../components/agentWorkspaceState";
 import { readRoster, ROSTER_API_PATH } from "./agentsQuery";
 import { FailureNotice } from "../ui/FailureNotice";
@@ -43,6 +46,23 @@ export const MORE_AGENTS = "There are more agents than this page shows.";
 
 /** The accessible name of the table. */
 export const ROSTER_LIST_LABEL = "Agents you can open";
+
+export const FILTERS_LABEL = "Narrow the agents";
+export const NONE_MATCH = NOTHING_MATCHES;
+
+type RosterRow = components["schemas"]["RosterEntry"];
+
+/** The filters the roster route declares that this screen offers, over values on rows drawn. */
+export const ROSTER_FILTERS: readonly FilterChoice<RosterRow>[] = [
+  { column: "department", label: "Department", everything: "All departments", read: (row) => row.department },
+  { column: "owner_id", label: "Owner", everything: "Anybody", read: (row) => row.owner_id },
+];
+
+export const ROSTER_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By name" },
+  { value: "department", label: "By department" },
+  { value: "agent_id", label: "By id" },
+];
 
 /**
  * The four columns `docs/screens.html` SCREEN 4 names, under its own words.
@@ -73,28 +93,38 @@ export function agentAddress(agentId: string): string {
 }
 
 function RosterAnswerView() {
-  const answer = useResource<unknown>(ROSTER_API_PATH);
+  const listing = useListing<RosterRow>(ROSTER_API_PATH, { choices: ROSTER_FILTERS });
+  const controls = (
+    <ListControls label={FILTERS_LABEL} listing={listing} choices={ROSTER_FILTERS} sorts={ROSTER_SORTS} />
+  );
 
-  if (answer.failure) {
+  if (listing.failure) {
     return (
-      <FailureNotice failure={answer.failure} />
+      <>
+        {controls}
+        <FailureNotice failure={listing.failure} />
+      </>
     );
   }
-  if (answer.busy) {
+  if (listing.busy) {
     return (
-      <p className="note" role="status">
-        Loading.
-      </p>
+      <>
+        {controls}
+        <p className="note" role="status">
+          Loading.
+        </p>
+      </>
     );
   }
-  const roster = readRoster(answer.data);
+  const roster = readRoster(listing.body);
   if (roster === null) {
-    return null;
+    return controls;
   }
   return (
     <>
+      {controls}
       {roster.entries.length === 0 ? (
-        <p className="note">{NO_AGENTS}</p>
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_AGENTS}</p>
       ) : (
         /*
          * Wrapped in `.grid__scroll`, which is not decoration: a ceiling clause and an agent
@@ -141,6 +171,7 @@ function RosterAnswerView() {
           </table>
         </div>
       )}
+      <ShowMore listing={listing} />
       {roster.truncated ? <p className="note">{MORE_AGENTS}</p> : null}
     </>
   );

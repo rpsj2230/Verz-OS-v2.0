@@ -43,13 +43,12 @@ from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel, TrafficClass
+from brain.listing import DEFAULT_PAGE_ROWS, MAX_PAGE_ROWS
 from brain.ops.reliability import LANE_OBJECTIVES
 from brain.ops.spend import Dimension
 from brain.ops.telemetry import RequestStatus
 from brain.report_routes import (
-    DEFAULT_ADOPTION_LINES,
     MAX_ADOPTION_DAYS,
-    MAX_ADOPTION_LINES,
     MAX_READING_HOURS,
     live_departments,
 )
@@ -577,6 +576,26 @@ def test_a_department_scoped_reader_is_shown_one_line_and_no_sign_of_the_others(
     assert body["truncated"] is False
 
 
+def test_adoption_is_searched_and_ordered_over_the_lines_the_reader_may_see(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and the adoption search can reach a department the reader's usage grant does not
+    admit, which tells them the department exists from one line; or an order by questions can be
+    accepted and ignored. The positive half is the company-wide reader ordering by questions."""
+    stored.departments = ("finance", "support")
+    stored.questions = (
+        question("t1", principal="p1", department="support"),
+        question("t2", principal="p2", department="finance"),
+        question("t3", principal="p3", department="finance"),
+    )
+
+    narrow = get(client, ADOPTION_PATH, "u_narrow", q="finance").json()
+    wide = get(client, ADOPTION_PATH, "u_wide", sort="-questions").json()
+
+    assert narrow["items"] == [] and narrow["next_cursor"] is None
+    assert [one["department"] for one in wide["items"]] == ["finance", "support"]
+
+
 def test_a_full_page_of_adoption_says_there_is_more_and_never_how_much(
     client: TestClient, stored: Stored
 ) -> None:
@@ -734,8 +753,9 @@ def test_the_page_a_console_asks_for_by_default_is_one_the_route_admits(
     """
     stored.departments = ("support",)
 
-    assert DEFAULT_ADOPTION_LINES <= MAX_ADOPTION_LINES
-    assert get(client, ADOPTION_PATH, "u_wide", limit=DEFAULT_ADOPTION_LINES).status_code == 200
+    assert DEFAULT_PAGE_ROWS <= MAX_PAGE_ROWS
+    assert get(client, ADOPTION_PATH, "u_wide", limit=DEFAULT_PAGE_ROWS).status_code == 200
+    assert get(client, ADOPTION_PATH, "u_wide", limit=MAX_PAGE_ROWS).status_code == 200
 
 
 def test_a_reading_names_the_objective_it_was_measured_against(

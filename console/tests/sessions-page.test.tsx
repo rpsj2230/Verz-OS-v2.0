@@ -10,7 +10,7 @@
  * **What the control sends is read against the route's own request body**, so a key this console
  * invented is a failure here rather than a 422 in front of an administrator.
  *
- * Task ids: M27.7.10
+ * Task ids: M27.7.10, M27.8.6
  */
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
@@ -18,6 +18,8 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   END_LABEL,
+  END_SELECTED_LABEL,
+  KEEP_ALL_LABEL,
   KEEP_LABEL,
   MORE_SESSIONS,
   NONE_MATCH,
@@ -26,12 +28,10 @@ import {
   THE_BRAIN_COULD_NOT_BE_REACHED,
   YOUR_SESSION,
 } from "../src/pages/Sessions";
+import { LIST_PAGE_SIZE } from "../src/components/listing";
 import {
-  SESSIONS_PAGE_SIZE,
-  narrowed,
-  offeredDepartments,
+  MOST_ENDED_AT_ONCE,
   readSessionsPage,
-  sessionsApiPath,
   type SessionRow,
 } from "../src/pages/sessionsQuery";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
@@ -44,6 +44,7 @@ import {
 
 const SESSIONS_OPERATION = "/api/v1/govern/sessions";
 const END_OPERATION = "/api/v1/govern/sessions/end";
+const END_SEVERAL_OPERATION = "/api/v1/govern/sessions/end-several";
 const CONSOLE_ORIGIN = "https://console.test";
 const ENDING = "Ending a session refuses every request made with that sign-in from the next one on.";
 const APPEARS = "A session appears here from the first request it makes to this system.";
@@ -66,8 +67,8 @@ function session(overrides: Partial<SessionRow> & { session_id: string }): Sessi
   };
 }
 
-function page(items: SessionRow[], truncated = false): unknown {
-  return { items, truncated, ending: ENDING, appears: APPEARS };
+function page(items: SessionRow[], truncated = false, next_cursor: string | null = null): unknown {
+  return { items, next_cursor, truncated, ending: ENDING, appears: APPEARS };
 }
 
 function json(body: unknown, status = 200): Response {
@@ -132,8 +133,12 @@ describe("what the sessions screen asks for", () => {
       .flatMap((url) => [...new URL(url, CONSOLE_ORIGIN).searchParams.keys()]);
     expect(sent.length).toBeGreaterThan(0);
     expect(sent.filter((name) => !declared.has(name))).toEqual([]);
-    expect(SESSIONS_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-    expect(sessionsApiPath()).toBe(`/govern/sessions?limit=${String(SESSIONS_PAGE_SIZE)}`);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
+    // The bulk bound is the route's, read off its body, so the page never offers a request the
+    // declaration refuses.
+    const several = declaredRequestBodySchema(END_SEVERAL_OPERATION, "post");
+    const ids = (several["properties"] as Record<string, Record<string, unknown>>)["session_ids"];
+    expect(ids?.["maxItems"]).toBe(MOST_ENDED_AT_ONCE);
   });
 });
 
@@ -168,8 +173,10 @@ describe("what the sessions screen shows and does", () => {
         : null,
     );
 
-    const labels = [...container.querySelectorAll("button")].map((one) => one.getAttribute("aria-label"));
+    const labels = [...container.querySelectorAll("tbody button")].map((one) => one.getAttribute("aria-label"));
     expect(labels).toEqual([`${END_LABEL}: Aaron Lim`]);
+    const boxes = [...container.querySelectorAll('tbody input[type="checkbox"]')].map((one) => one.getAttribute("aria-label"));
+    expect(boxes).toEqual(["Tick to end: Aaron Lim"]);
     expect(container.textContent).toContain(YOUR_SESSION);
   });
 
@@ -251,29 +258,125 @@ describe("what the sessions screen shows and does", () => {
     expect(container.textContent).not.toMatch(/was ended at/);
   });
 
-  test("the filters offer the departments and people on the page and narrow only the page", async () => {
+  test("the filters offer only values on rows drawn, and every search, filter and order is a request", async () => {
     // What breaks if this is deleted: a department dropdown listing places nobody on the page is
-    // in, or a filter that asks the API a different question.
+    // in, or a filter that narrows the rows already drawn instead of asking the route, which reads
+    // as a search of every session and is one of what arrived.
     const rows = [
       session({ session_id: "kc-web", department: "web", display_name: "Web Person", principal_id: "u_w" }),
       session({ session_id: "kc-sales", department: "sales", display_name: "Sales Person", principal_id: "u_s" }),
       session({ session_id: "kc-none", department: null, display_name: "No Department", principal_id: "u_n" }),
     ];
-    const { container, idp } = await mount((url) =>
-      url.pathname === SESSIONS_OPERATION ? json(page(rows)) : null,
-    );
-    const department = [...container.querySelectorAll("select")].find((one) =>
-      one.closest("label")?.textContent?.startsWith("Department"),
-    ) as HTMLSelectElement;
+    const { container, idp } = await mount((url) => {
+      if (url.pathname !== SESSIONS_OPERATION) {
+        return null;
+      }
+      const filtered = url.searchParams.getAll("filter");
+      return json(page(filtered.length === 0 ? rows : rows.filter((one) => filtered.includes(`department:${one.department ?? ""}`))));
+    });
+    const select = (name: string) =>
+      [...container.querySelectorAll("select")].find((one) =>
+        one.closest("label")?.textContent?.startsWith(name),
+      ) as HTMLSelectElement;
 
-    expect([...department.querySelectorAll("option")].map((one) => one.value)).toEqual(["", "sales", "web"]);
-    fireEvent.change(department, { target: { value: "sales" } });
-    const table = container.querySelector('[aria-label="Sessions signed in now"]')?.textContent ?? "";
-    expect(table).toContain("Sales Person");
-    expect(table).not.toContain("Web Person");
-    expect(idp.urls.filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === SESSIONS_OPERATION)).toHaveLength(1);
-    expect(narrowed(rows, { department: "finance", person: "", sort: "recent" })).toEqual([]);
-    expect(offeredDepartments([])).toEqual([]);
+    expect([...select("Department").querySelectorAll("option")].map((one) => one.value)).toEqual(["", "sales", "web"]);
+    fireEvent.change(select("Department"), { target: { value: "sales" } });
+    await waitFor(() => {
+      const table = container.querySelector('[aria-label="Sessions signed in now"]')?.textContent ?? "";
+      expect(table).toContain("Sales Person");
+      expect(table).not.toContain("Web Person");
+    });
+    // The value that is no longer on a row stays offered: it was shown.
+    expect([...select("Department").querySelectorAll("option")].map((one) => one.value)).toEqual(["", "sales", "web"]);
+    fireEvent.change(select("Sort by"), { target: { value: "display_name" } });
+    fireEvent.change(container.querySelector('input[type="search"]') as HTMLInputElement, { target: { value: "sales" } });
+
+    await waitFor(() => {
+      const asked = idp.urls
+        .map((url) => new URL(url, CONSOLE_ORIGIN))
+        .filter((url) => url.pathname === SESSIONS_OPERATION);
+      const last = asked[asked.length - 1];
+      expect(last?.searchParams.getAll("filter")).toEqual(["department:sales"]);
+      expect(last?.searchParams.get("sort")).toBe("display_name");
+      expect(last?.searchParams.get("q")).toBe("sales");
+    });
+  });
+
+  test("show more asks for the page after the cursor and adds its rows under the first", async () => {
+    // What breaks if this is deleted: a second page that replaces the first, so a session ticked
+    // above disappears from view, or a cursor that is never sent back.
+    const { container, idp } = await mount((url) => {
+      if (url.pathname !== SESSIONS_OPERATION) {
+        return null;
+      }
+      return url.searchParams.get("cursor") === "c-2"
+        ? json(page([session({ session_id: "kc-2", display_name: "Second Page", principal_id: "u_2" })]))
+        : json(page([session({ session_id: "kc-1", display_name: "First Page" })], false, "c-2"));
+    });
+
+    fireEvent.click(button(container, "Show more") as HTMLButtonElement);
+    await waitFor(() => {
+      expect(container.textContent).toContain("Second Page");
+    });
+    expect(container.textContent).toContain("First Page");
+    expect(button(container, "Show more")).toBeNull();
+    expect(idp.urls.some((url) => new URL(url, CONSOLE_ORIGIN).searchParams.get("cursor") === "c-2")).toBe(true);
+  });
+
+  test("ending the ticked sessions lists each one first, sends only their ids, and says what came of each", async () => {
+    // What breaks if this is deleted: a bulk act with no confirmation, a confirmation that does not
+    // say which sessions, a box on a session the API said may not be ended or on your own, or a
+    // partial failure reported as a success.
+    let asked: unknown = null;
+    const rows = [
+      session({ session_id: "kc-a", display_name: "Aaron Lim", principal_id: "u_a" }),
+      session({ session_id: "kc-b", display_name: "Bea Tan", principal_id: "u_b" }),
+      session({ session_id: "kc-watch", display_name: "Siti Rahman", principal_id: "u_s", endable: false }),
+      session({ session_id: "kc-mine", display_name: "Me Myself", principal_id: "u_me", yours: true }),
+    ];
+    const { container, idp } = await mount((url) => {
+      if (url.pathname === END_SEVERAL_OPERATION) {
+        return json({
+          outcomes: [
+            { session_id: "kc-a", ended: true, principal_id: "u_a", ended_at: "2019-03-04T10:00:00Z" },
+            { session_id: "kc-b", ended: false, principal_id: null, ended_at: null },
+          ],
+        });
+      }
+      return url.pathname === SESSIONS_OPERATION ? json(page(rows)) : null;
+    });
+    idp.calls.length = 0;
+
+    const boxes = [...container.querySelectorAll('tbody input[type="checkbox"]')] as HTMLInputElement[];
+    expect(boxes.map((one) => one.getAttribute("aria-label"))).toEqual(["Tick to end: Aaron Lim", "Tick to end: Bea Tan"]);
+    expect((button(container, END_SELECTED_LABEL) as HTMLButtonElement).disabled).toBe(true);
+    for (const box of boxes) {
+      fireEvent.click(box);
+    }
+    fireEvent.click(button(container, END_SELECTED_LABEL) as HTMLButtonElement);
+    const panel = container.querySelector(".confirm") as HTMLElement;
+    expect([...panel.querySelectorAll("li")].map((one) => one.textContent)).toEqual([
+      expect.stringContaining("Aaron Lim"),
+      expect.stringContaining("Bea Tan"),
+    ]);
+    expect(panel.textContent).toContain(ENDING);
+    fireEvent.click(button(container, KEEP_ALL_LABEL) as HTMLButtonElement);
+    expect(posts(idp)).toEqual([]);
+
+    fireEvent.click(button(container, END_SELECTED_LABEL) as HTMLButtonElement);
+    fireEvent.click(
+      [...container.querySelectorAll(".confirm button")].find((one) => one.textContent === END_SELECTED_LABEL) as HTMLElement,
+    );
+    await waitFor(() => {
+      expect(container.textContent).toContain("Aaron Lim's session was ended.");
+    });
+    expect(container.textContent).toContain("Bea Tan's session was not ended.");
+    const [sent] = posts(idp);
+    expect(sent?.url.pathname).toBe(END_SEVERAL_OPERATION);
+    asked = sent?.body;
+    expect(asked).toEqual({ session_ids: ["kc-a", "kc-b"] });
+    const declared = declaredRequestBodySchema(END_SEVERAL_OPERATION, "post");
+    expect(Object.keys(asked as object)).toEqual(Object.keys(declared["properties"] as object));
   });
 
   test("an empty list, a filter matching nothing, a full load, unreachable and refused are different sentences", async () => {
@@ -281,6 +384,13 @@ describe("what the sessions screen shows and does", () => {
     // read alike, and "nobody is signed in" is said when the Brain could not be reached.
     const empty = await mount((url) => (url.pathname === SESSIONS_OPERATION ? json(page([])) : null));
     expect(empty.container.textContent).toContain(NO_SESSIONS);
+    fireEvent.change(empty.container.querySelector('input[type="search"]') as HTMLInputElement, {
+      target: { value: "nobody" },
+    });
+    await waitFor(() => {
+      expect(empty.container.textContent).toContain(NONE_MATCH);
+    });
+    expect(empty.container.textContent).not.toContain(NO_SESSIONS);
 
     const full = await mount((url) =>
       url.pathname === SESSIONS_OPERATION ? json(page([session({ session_id: "kc-1" })], true)) : null,

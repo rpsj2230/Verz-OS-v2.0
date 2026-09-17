@@ -23,7 +23,7 @@
  * with a cursor when the server stopped reading, and the button is still offered, because the
  * cursor is the only statement about whether there is more.
  *
- * Task ids: M27.7.13
+ * Task ids: M27.7.13, M27.8.6
  */
 
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
@@ -89,6 +89,8 @@ export const HISTORY_FILLED_A_PAGE =
 export const ENTRIES_LABEL = "Audit entries";
 export const HISTORY_LABEL = "Permission history";
 export const FILTERS_LABEL = "Narrow the ledger";
+/** The search box: words an entry says, asked of the route over the entries you may see. */
+export const SEARCH_LABEL = "Search";
 
 /** Everything, when a filter is not chosen. */
 export const ALL_ACTIONS = "All actions";
@@ -148,6 +150,19 @@ function Filters({
 
   return (
     <form className="form" aria-label={FILTERS_LABEL} onSubmit={(event) => event.preventDefault()}>
+      <label className="control-label">
+        {SEARCH_LABEL}{" "}
+        <input
+          type="search"
+          className="form-control"
+          maxLength={120}
+          value={filters.search}
+          onChange={(event) => {
+            // Replaced rather than pushed, so the back button undoes a filter and not a keystroke.
+            navigate(withFilter(search, ADDRESS_PARAMETERS.search, event.target.value), { replace: true });
+          }}
+        />
+      </label>
       <label className="control-label">
         Action{" "}
         <select

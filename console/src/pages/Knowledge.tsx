@@ -19,9 +19,9 @@
  *
  * **Three controls from the design are absent and say so.** Upload and Export inventory are
  * writes nothing on the server offers, and the Review due chip filters on a date the API does not
- * send. The search, the level filter and the sort narrow the rows this page already holds, which
- * the page says beside them, because the route declares no filter a server could apply without
- * its truncation flag becoming a count.
+ * send. The search, the level filter, the order and "Show more" are requests the route answers over
+ * the items this reader may know exist, without narrowing what it loads, so its truncation flag
+ * stays a fact about the install rather than a count of what matched.
  *
  * **Nothing here decides who may see anything.** The request is identical for every caller. A
  * failure is the API's own sentence and the trace id, including a 404, which here means the
@@ -30,21 +30,21 @@
  * Imported statically rather than split, which is `Roles.tsx`' rule: it mounts neither heavy
  * library and imports no stylesheet of its own.
  *
- * Task ids: M27.7.20
+ * Task ids: M27.7.20, M27.8.6
  */
 
-import { useState } from "react";
-import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { Chip } from "../ui/Chip";
 import {
-  EVERY_ROW,
-  LEVELS,
   atLevel,
-  knowledgeApiPath,
-  narrowed,
+  KNOWLEDGE_API_PATH,
+  LIBRARY_FILTERS,
+  LIBRARY_SORTS,
   readKnowledgePage,
+  type LibraryRow,
   type Level,
-  type LibraryView,
 } from "./knowledgeQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -61,16 +61,17 @@ export const KNOWLEDGE_LEDE =
 /** An empty library, whichever of the reasons it is empty. */
 export const NO_ITEMS = "There are no knowledge items to show.";
 
-/** The page holds rows and none of them matches the view. Says nothing about rows not held. */
-export const NO_MATCH = "No item on this page matches.";
+/** A search or a filter matched nothing the reader may know exists. About the question. */
+export const NO_MATCH = NOTHING_MATCHES;
 
 /** A load that came back full. A fact about there being more, and never a figure. */
 export const MORE_ITEMS =
-  "This page came back full, so there are more items than it holds, and the search and filters " +
-  "below narrow only the items it holds.";
+  "The library holds more items than one reading covers, so this list, its search and its filter " +
+  "cover the first part of it by reference.";
 
-/** What the controls act on. Said once, beside them, so nobody reads a match as a search. */
-export const NARROWS_THIS_PAGE = "Search, filter and sort work on the items this page holds.";
+/** What the controls act on. Said once, beside them, so nobody reads a match as more than it is. */
+export const NARROWS_THIS_PAGE =
+  "Search, filter and order ask for the items you may know exist; Show more asks for the next ones.";
 
 /** What the design's Fresh and Never retrieved figures and the coverage bars become. */
 export const NOT_MEASURED =
@@ -119,8 +120,8 @@ export const LEVEL_WORDS: Readonly<Record<Level, string>> = {
 };
 
 /** The accessible names of the lists and the table. */
-export const DEPARTMENTS_LABEL = "Departments with items on this page";
-export const LIBRARY_CAPTION = "Items this page holds";
+export const DEPARTMENTS_LABEL = "Departments with items you may know exist";
+export const LIBRARY_CAPTION = "Items you may know exist";
 
 function Figures({
   shown,
@@ -136,13 +137,13 @@ function Figures({
       <h2>At a glance</h2>
       <dl className="fields" aria-label="Knowledge at a glance">
         <div className="fields__row">
-          <dt>Items</dt>
+          <dt>Items listed</dt>
           <dd>
             <span>{String(shown)}</span>
             <p className="note">
               {departments === null
-                ? "items you can see"
-                : `items you can see, across ${String(departments.length)} departments`}
+                ? "items listed below"
+                : `items listed below, from ${String(departments.length)} departments you can see`}
             </p>
           </dd>
         </div>
@@ -162,7 +163,7 @@ function Figures({
           <dt>Company-wide</dt>
           <dd>
             <span>{String(companyWide)}</span>
-            <p className="note">visible to everyone</p>
+            <p className="note">listed below and visible to everyone</p>
           </dd>
         </div>
       </dl>
@@ -171,15 +172,12 @@ function Figures({
 }
 
 function KnowledgeAnswerView() {
-  const answer = useResource<unknown>(knowledgeApiPath());
-  const [view, setView] = useState<LibraryView>(EVERY_ROW);
+  const listing = useListing<LibraryRow>(KNOWLEDGE_API_PATH, { choices: LIBRARY_FILTERS });
 
-  if (answer.failure) {
-    return (
-      <FailureNotice failure={answer.failure} />
-    );
-  }
-  if (answer.busy) {
+  if (listing.body === null) {
+    if (listing.failure) {
+      return <FailureNotice failure={listing.failure} />;
+    }
     return (
       <p className="note" role="status">
         Loading.
@@ -187,8 +185,12 @@ function KnowledgeAnswerView() {
     );
   }
 
-  const page = readKnowledgePage(answer.data);
-  const rows = narrowed(page.items, view);
+  const page = readKnowledgePage(listing.body);
+  const rows = page.items;
+  const choices = LIBRARY_FILTERS.map((choice) => ({
+    ...choice,
+    describe: (value: string) => LEVEL_WORDS[value as Level] ?? value,
+  }));
 
   return (
     <>
@@ -264,87 +266,47 @@ function KnowledgeAnswerView() {
           <p className="note">{ONLY_EXISTENCE_AND_REACH}</p>
         ) : null}
 
-        {page.items.length === 0 ? (
-          <p className="note">{NO_ITEMS}</p>
+        <p className="note">{NARROWS_THIS_PAGE}</p>
+        <ListControls label="Find an item" listing={listing} choices={choices} sorts={LIBRARY_SORTS} />
+
+        {listing.failure ? (
+          <FailureNotice failure={listing.failure} />
+        ) : listing.busy ? (
+          <p className="note" role="status">
+            Loading.
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="note">{narrows(listing.question) ? NO_MATCH : NO_ITEMS}</p>
         ) : (
           <>
-            <div className="form">
-              <p className="note">{NARROWS_THIS_PAGE}</p>
-              <label className="control-label" htmlFor="knowledge-search">
-                Find an item by its reference
-              </label>
-              <input
-                id="knowledge-search"
-                className="form-control"
-                type="search"
-                value={view.search}
-                onChange={(event) => {
-                  setView({ ...view, search: event.target.value });
-                }}
-              />
-              <label className="control-label" htmlFor="knowledge-level">
-                Visible to
-              </label>
-              <select
-                id="knowledge-level"
-                className="form-control"
-                value={view.level}
-                onChange={(event) => {
-                  setView({ ...view, level: event.target.value as Level | "" });
-                }}
-              >
-                <option value="">Every level</option>
-                {LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {LEVEL_WORDS[level]}
-                  </option>
-                ))}
-              </select>
-              <label className="control-label" htmlFor="knowledge-sort">
-                Order
-              </label>
-              <select
-                id="knowledge-sort"
-                className="form-control"
-                value={view.sort}
-                onChange={(event) => {
-                  setView({ ...view, sort: event.target.value === "level" ? "level" : "item" });
-                }}
-              >
-                <option value="item">By reference</option>
-                <option value="level">Widest first</option>
-              </select>
-            </div>
-
-            {rows.length === 0 ? (
-              <p className="note">{NO_MATCH}</p>
-            ) : (
-              // `.grid__scroll`, for `Connectors.tsx`' reason: an item reference is an identifier
-              // with no break in it, and without a scrolling parent it takes a phone's page wide.
-              <div className="grid__scroll">
-                <table className="grid__table">
-                  <caption className="grid__caption">{LIBRARY_CAPTION}</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Item</th>
-                      <th scope="col">Visible to</th>
+            {/*
+             * `.grid__scroll`, for `Connectors.tsx`' reason: an item reference is an identifier
+             * with no break in it, and without a scrolling parent it takes a phone's page wide.
+             */}
+            <div className="grid__scroll">
+              <table className="grid__table">
+                <caption className="grid__caption">{LIBRARY_CAPTION}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Item</th>
+                    <th scope="col">Visible to</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.item_id}>
+                      <td>
+                        <code>{row.item_id}</code>
+                      </td>
+                      <td>
+                        <code>{LEVEL_WORDS[row.level as Level]}</code>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.item_id}>
-                        <td>
-                          <code>{row.item_id}</code>
-                        </td>
-                        <td>
-                          <code>{LEVEL_WORDS[row.level as Level]}</code>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ShowMore listing={listing} />
           </>
         )}
 

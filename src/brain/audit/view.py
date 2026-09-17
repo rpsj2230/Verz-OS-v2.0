@@ -67,7 +67,7 @@ import base64
 import binascii
 import json
 import re
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final, Self
@@ -275,8 +275,14 @@ class AuditView:
         limit: int = DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
         newest_first: bool = False,
+        shows: Callable[[AuditRow], bool] | None = None,
     ) -> AuditPage:
         """One page of the entries this reader may see, oldest first unless asked otherwise.
+
+        `shows` narrows by what a row says as the reader reads it, which is the audit screen's
+        search. It is asked of the projected row of a visible entry and of nothing else, so a
+        search can only ever match a detail the reader is shown: the redacted details and never
+        the digest, the chain or a withheld entry.
 
         The page is filled from visible rows, so its length says nothing about what was
         withheld: a page shorter than `limit` means the reader has reached the end of what
@@ -302,13 +308,16 @@ class AuditView:
         for entry in self._visible(criteria or AuditFilter(), walk):
             if after is not None and _already_read(entry, after, newest_first=newest_first):
                 continue
+            row = _row(entry)
+            if shows is not None and not shows(row):
+                continue
             if len(rows) == limit:
                 # One visible row beyond the page. Found rather than counted: the loop stops
                 # here, so nothing anywhere holds a number of remaining rows that could be
                 # returned by accident.
                 more = True
                 break
-            rows.append(_row(entry))
+            rows.append(row)
             last_key = _order(entry)
 
         next_cursor = _encode_cursor(last_key) if more and last_key is not None else None

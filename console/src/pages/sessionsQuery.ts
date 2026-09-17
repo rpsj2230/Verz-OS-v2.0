@@ -1,5 +1,6 @@
 /**
- * What the Sessions screen asks the API for, what it may send, and how its rows narrow. No React.
+ * What the Sessions screen asks the API for, what it may send, and what its filters may offer. No
+ * React.
  *
  * **This screen sits beside People and grants in Govern, which is where `docs/screens.html` SCREEN
  * 10 puts what happens to a person's sign-ins.** The design draws a leaver's line as "sessions
@@ -11,41 +12,39 @@
  * this module reads them and decides only what a control looks like. A session this reader may
  * not end has no button, and the route refuses the end whatever the page drew.
  *
- * **The filters narrow what was shown and offer only what was shown.** Department and person are
- * the two axes every console screen carries, and the values offered are the ones on the rows the
- * API sent, so a dropdown cannot name a department this reader was not shown a session in. See
- * `A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE`.
+ * **The list is searched, filtered, ordered and paged by the route** (`brain.listing`, over the
+ * sessions the reader may see), and a filter offers only the values on rows already drawn. See
+ * `components/listing.ts`' `A_FILTER_OFFERS_ONLY_WHAT_WAS_SHOWN`.
+ *
+ * **Several sessions are ended by one confirmed request that ends each of them alone.** The route
+ * runs the single ending once per session and answers each one's outcome, and the page says, per
+ * session, whether it was ended. A session that was not ended is said the same way whatever the
+ * reason, because the route answers it the same way.
  *
  * **No number about the rows.** `readSessionsPage` drops nothing because the answer carries no
- * total, and the page renders no count of sessions.
+ * total, and the page renders no count of sessions, including of the ones ticked.
  *
- * Task ids: M27.7.10
+ * Task ids: M27.7.10, M27.8.6
  */
 
 import type { components } from "../api/schema";
+import type { FilterChoice, SortChoice } from "../components/listing";
 
 /** One live session, as `brain.session_routes.SessionView` sends it. */
 export type SessionRow = components["schemas"]["SessionView"];
+/** One session's outcome in a bulk ending, as `brain.session_routes.SessionOutcome` sends it. */
+export type SessionOutcome = components["schemas"]["SessionOutcome"];
 
-/** Written down because the obvious dropdown lists every department in the company. */
-export const A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE =
-  "The department and person filters narrow the rows already on the page and offer the values " +
-  "those rows carry. A list of departments read from anywhere else would name places this reader " +
-  "was not shown a session in, which is the listing the rows were narrowed to avoid.";
-
-/** Where the API keeps this screen and its control. */
+/** Where the API keeps this screen and its controls. */
 export const SESSIONS_API_PATH = "/govern/sessions";
 export const END_SESSION_API_PATH = "/govern/sessions/end";
+export const END_SESSIONS_API_PATH = "/govern/sessions/end-several";
 
 /** The console address. */
 export const SESSIONS_PATH = "/sessions";
 
-/** How many sessions one listing asks for. Below the route's maximum; see the test. */
-export const SESSIONS_PAGE_SIZE = 200;
-
-export function sessionsApiPath(): string {
-  return `${SESSIONS_API_PATH}?limit=${String(SESSIONS_PAGE_SIZE)}`;
-}
+/** The most sessions one bulk ending may name. `brain.listing.MAX_SEVERAL`; see the test. */
+export const MOST_ENDED_AT_ONCE = 50;
 
 /** One page of sessions, as this console holds it. */
 export interface SessionsPage {
@@ -95,64 +94,54 @@ export function endingBody(session: SessionRow): SessionEnding {
   return { session_id: session.session_id };
 }
 
-/** How the rows may be put in order. */
-export const SORTS = ["recent", "name"] as const;
-export type Sort = (typeof SORTS)[number];
-export const SORT_LABELS: Readonly<Record<Sort, string>> = Object.freeze({
-  recent: "Most recent sign-in first",
-  name: "By name",
-});
-
-/** What a reader narrowed the page to. Empty strings are unset. */
-export interface SessionFilters {
-  readonly department: string;
-  readonly person: string;
-  readonly sort: Sort;
+/** The body of a bulk ending, as `SessionsEnding` declares it. One key. */
+export interface SessionsEnding {
+  readonly session_ids: readonly string[];
 }
 
-export const NO_SESSION_FILTERS: SessionFilters = Object.freeze({
-  department: "",
-  person: "",
-  sort: "recent",
-});
-
-/** The department a row carries, as a filter value. A person in no department is "". */
-export function departmentOf(row: SessionRow): string {
-  return row.department ?? "";
+export function endingsBody(sessions: readonly SessionRow[]): SessionsEnding {
+  return { session_ids: sessions.map((one) => one.session_id) };
 }
 
-/** The departments on these rows, each once, in name order. See the module note. */
-export function offeredDepartments(rows: readonly SessionRow[]): readonly string[] {
-  return [...new Set(rows.map(departmentOf).filter((one) => one !== ""))].sort();
-}
-
-/** The people on these rows, each once, by name. */
-export function offeredPeople(
-  rows: readonly SessionRow[],
-): readonly { id: string; name: string }[] {
-  const seen = new Map<string, string>();
-  for (const row of rows) {
-    seen.set(row.principal_id, row.display_name);
+/** Read `brain.session_routes.SessionsEnded` out of a response body. */
+export function readOutcomes(payload: unknown): readonly SessionOutcome[] {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
   }
-  return [...seen.entries()]
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  const outcomes = (payload as { outcomes?: unknown }).outcomes;
+  return Array.isArray(outcomes) ? (outcomes as SessionOutcome[]) : [];
 }
 
-/** The rows these filters keep, in the order asked for. */
-export function narrowed(rows: readonly SessionRow[], filters: SessionFilters): readonly SessionRow[] {
-  const kept = rows.filter(
-    (row) =>
-      (filters.department === "" || departmentOf(row) === filters.department) &&
-      (filters.person === "" || row.principal_id === filters.person),
-  );
-  if (filters.sort === "name") {
-    return [...kept].sort(
-      (a, b) => a.display_name.localeCompare(b.display_name) || a.session_id.localeCompare(b.session_id),
-    );
-  }
-  return [...kept].sort((a, b) => b.signed_in_at.localeCompare(a.signed_in_at));
+/** Whether a row may be ticked for a bulk ending: the API said it may be ended, and it is not yours. */
+export function tickable(row: SessionRow): boolean {
+  return row.endable && !row.yours;
 }
+
+/** The filters the Sessions route declares that this screen offers. */
+export const SESSION_FILTERS: readonly FilterChoice<SessionRow>[] = [
+  {
+    column: "department",
+    label: "Department",
+    everything: "All departments",
+    read: (row) => row.department,
+  },
+  { column: "principal_id", label: "Person", everything: "Everyone", read: (row) => row.principal_id },
+  {
+    column: "second_factor",
+    label: "Second factor",
+    everything: "With or without",
+    read: (row) => row.second_factor,
+    describe: (value) => (value === "true" ? "Shown" : "Not shown"),
+  },
+];
+
+/** The orders this screen offers, as the route spells them. Empty is the route's own. */
+export const SESSION_SORTS: readonly SortChoice[] = [
+  { value: "", label: "Most recent sign-in first" },
+  { value: "display_name", label: "By name" },
+  { value: "department", label: "By department" },
+  { value: "lapses_at", label: "Soonest to end first" },
+];
 
 /** An instant, as the rows show it. */
 export function when(value: string): string {
@@ -171,4 +160,18 @@ export function when(value: string): string {
 /** The question the confirmation asks, naming the person and when they signed in. */
 export function endQuestion(row: SessionRow): string {
   return `End ${row.display_name}'s session from ${when(row.signed_in_at)}?`;
+}
+
+/** The question the bulk confirmation asks. Names no figure: the list under it names each one. */
+export const END_SELECTED_QUESTION = "End each of these sessions?";
+
+/** What the bulk confirmation lists for one session: whose, from when, and what happens to it. */
+export function endingLine(row: SessionRow): string {
+  return `${row.display_name}'s session from ${when(row.signed_in_at)} is refused from its next request.`;
+}
+
+/** What the page says about one session after a bulk ending. */
+export function outcomeLine(row: SessionRow | undefined, outcome: SessionOutcome): string {
+  const whose = row === undefined ? "A session" : `${row.display_name}'s session`;
+  return outcome.ended ? `${whose} was ended.` : `${whose} was not ended.`;
 }

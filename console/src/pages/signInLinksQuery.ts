@@ -22,10 +22,11 @@
  * as not exactly what a token carries; this module refuses the same thing first so the form can
  * say which field is wrong rather than returning the route's code.
  *
- * Task ids: M27.7.11
+ * Task ids: M27.7.11, M27.8.6
  */
 
 import type { components } from "../api/schema";
+import type { FilterChoice, SortChoice } from "../components/listing";
 
 /** One person who can sign in, as `brain.session_routes.SignInLinkView` sends it. */
 export type LinkRow = components["schemas"]["SignInLinkView"];
@@ -45,12 +46,17 @@ export const LINK_API_PATH = "/sign-ins";
 /** The console address. */
 export const SIGN_IN_LINKS_PATH = "/sign-in-links";
 
-/** How many links one listing asks for. Below the route's maximum; see the test. */
-export const LINKS_PAGE_SIZE = 200;
+/** The filters the links route declares that this screen offers, over values on rows drawn. */
+export const LINK_FILTERS: readonly FilterChoice<LinkRow>[] = [
+  { column: "department", label: "Department", everything: "All departments", read: (row) => row.department },
+];
 
-export function linksApiPath(): string {
-  return `${LINKS_API_PATH}?limit=${String(LINKS_PAGE_SIZE)}`;
-}
+/** The orders this screen offers, as the route spells them. Empty is the route's own, by name. */
+export const LINK_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By name" },
+  { value: "department", label: "By department" },
+  { value: "-linked_at", label: "Most recently linked first" },
+];
 
 /** One page of links, as this console holds it. */
 export interface LinksPage {
@@ -175,17 +181,4 @@ export function linkedOn(value: string): string {
     return value;
   }
   return parsed.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
-/** The rows whose name or ID contains what was typed, ignoring case. Over the page only. */
-export function matching(rows: readonly LinkRow[], typed: string): readonly LinkRow[] {
-  const wanted = typed.trim().toLowerCase();
-  if (wanted === "") {
-    return rows;
-  }
-  return rows.filter(
-    (row) =>
-      row.display_name.toLowerCase().includes(wanted) ||
-      row.principal_id.toLowerCase().includes(wanted),
-  );
 }

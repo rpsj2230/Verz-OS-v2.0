@@ -60,26 +60,38 @@ sentence changes in the same commit, which is what happened to the Elevation scr
 **No count of anything, anywhere.** Every listing is filtered per caller, and `truncated` says a
 load came back full, computed against what was loaded rather than what survived.
 
-Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12
+**The three long lists page, search, filter and order through `brain.listing`.** Departments, the
+elevation requests and the access review each load `MAX_ROWS` whatever was asked, decide, project,
+and hand the projected rows to their listing. The people nobody has placed are answered with the
+first page of departments and narrowed by the same search, because they are the organisation's
+remainder rather than a list of their own: see `THE_UNPLACED_ARRIVE_WITH_THE_FIRST_PAGE`.
+
+**Several review decisions are several decisions.** `POST /govern/access-review/decisions` records
+one decision over up to `brain.listing.MAX_SEVERAL` holdings, and each holding goes through the
+single decision's store call, its lock, its `may` and its trigger, with its own outcome answered in
+the order asked. Elevations are not decided in bulk. See
+`AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON`.
+
+Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6
 """
 
 from __future__ import annotations
 
 import enum
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Final, Literal, Self
 
 import structlog
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
-from brain.api_routes import Asked
+from brain.api_routes import Asked, Asking
 from brain.console.elevation import (
     ELEVATION_CONTROL,
     ElevationRequest,
@@ -140,6 +152,7 @@ from brain.identity.organisation_store import (
 from brain.identity.packs import SubjectGrant
 from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason
 from brain.identity.teams import PrincipalSubject
+from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
 from brain.ops.outbox import EventKind, Subscriber, may_manage
 from brain.ops.outbox_store import last_delivered, subscribers
 from brain.ops.replica_store import ConsoleReads, Served
@@ -216,6 +229,22 @@ WHAT_A_REVIEW_SHOWS: Final = (
     "Nobody may decide a grant of their own."
 )
 
+#: Why the people nobody has placed are not a paged list of their own.
+THE_UNPLACED_ARRIVE_WITH_THE_FIRST_PAGE: Final = (
+    "The people whose row names no registered department are the organisation's remainder, not a "
+    "list an administrator walks. They are answered once, beside the first page of departments, "
+    "narrowed by the same search and in name order, and never again on a later page, so walking "
+    "the departments does not repeat them."
+)
+
+#: Why elevation requests are listed, searched and ordered and never decided several at once.
+AN_ELEVATION_IS_DECIDED_ON_ITS_OWN_REASON: Final = (
+    "Approving an elevation widens one person's reach for hours on the strength of the reason "
+    "and explanation they wrote, and the authority to approve it is asked against that request. "
+    "Approving several at once is approving explanations nobody read, so each is decided from its "
+    "own row."
+)
+
 #: What the subscribers screen cannot do, served beside it.
 HOW_TO_STOP_BEING_TOLD: Final = (
     "A subscriber is switched off on the Webhooks screen, which records who switched it off in "
@@ -240,9 +269,10 @@ A_SUBSCRIBER_IS_TOLD_IDENTIFIERS: Final = (
 #: offered at all. A key rather than a capability, so it cannot drift from the registry.
 ACCESS_REVIEW_SCREEN: Final = "access_review"
 
-#: The most rows one listing loads. A resource bound and not a permission one.
+#: The most rows one listing loads, whatever page, search, filter or order was asked for. A
+#: resource bound and not a permission one. See
+#: `brain.listing.THE_LOAD_IS_NEVER_NARROWED_BY_THE_QUERY`.
 MAX_ROWS: Final = 1000
-DEFAULT_ROWS: Final = 500
 
 
 # ------------------------------------------------------------------- the shapes
@@ -293,6 +323,9 @@ class OrganisationPage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     departments: list[DepartmentView]
+    #: Present exactly when a further department this reader may see matches.
+    next_cursor: str | None = None
+    #: Empty on every page but the first. See `THE_UNPLACED_ARRIVE_WITH_THE_FIRST_PAGE`.
     unplaced: list[UnplacedView]
     #: A load came back full. Never how much more there is.
     truncated: bool
@@ -392,6 +425,8 @@ class ElevationPage(BaseModel):
     #: The longest an elevation may run, in hours.
     longest_hours: int
     requests: list[ElevationRequestView] = Field(default_factory=list)
+    #: Present exactly when a further request this reader may see matches.
+    next_cursor: str | None = None
     #: A load came back full. Never how much more there is.
     truncated: bool = False
     what: str = AN_ELEVATION_IS_A_GRANT_WITH_A_CLOCK_ON_IT
@@ -471,6 +506,8 @@ class ReviewPage(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     items: list[ReviewRowView]
+    #: Present exactly when a further holding this reviewer may decide matches.
+    next_cursor: str | None = None
     truncated: bool
     shows: str = WHAT_A_REVIEW_SHOWS
     keeping: str = KEEPING_A_GRANT_RECORDS_THE_DECISION
@@ -495,6 +532,49 @@ class ReviewDecided(BaseModel):
     principal_id: str
     decision: ReviewDecision
     decided_at: datetime
+
+
+class HoldingNamed(BaseModel):
+    """One holding in a bulk decision: which table, and which row."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: HoldingKind
+    row_id: uuid.UUID
+
+
+class ReviewDecisionsAsked(BaseModel):
+    """One decision over several holdings. Nothing that could say who."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    decision: Decision
+    holdings: list[HoldingNamed] = Field(min_length=1, max_length=MAX_SEVERAL)
+
+
+class ReviewOutcome(BaseModel):
+    """What came of one holding named in a bulk decision.
+
+    `decided` false carries nothing else, identically for a holding out of reach, the reviewer's
+    own, the wrong kind and one that does not exist: the single decision's one refusal, per row.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: HoldingKind
+    row_id: str
+    decided: bool
+    principal_id: str | None = None
+    decided_at: datetime | None = None
+
+
+class ReviewDecisionsDecided(BaseModel):
+    """Each holding named, in the order asked, with its own outcome."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    decision: ReviewDecision
+    outcomes: list[ReviewOutcome]
 
 
 class SubscriberView(BaseModel):
@@ -818,24 +898,119 @@ def _not_decidable_here() -> Absent:
 router = APIRouter(prefix=API_PREFIX, tags=["govern"])
 
 
+# ------------------------------------------------------------------ the listings
+
+#: What the Departments and teams screen may search, filter and order by: a department's name, its
+#: teams, the people it shows and its lead, and whether it has one.
+DEPARTMENTS: Final[Listing[DepartmentView]] = Listing(
+    name="departments",
+    columns=(
+        Column("name", lambda row: row.name, search=True, sort=True),
+        Column("slug", lambda row: row.slug, search=True, sort=True),
+        Column("teams", lambda row: tuple(one.name for one in row.teams), search=True, filter=True),
+        Column(
+            "members",
+            lambda row: tuple(
+                name
+                for one in (
+                    *row.members,
+                    *(member for team in row.teams for member in team.members),
+                )
+                for name in (one.display_name, one.principal_id)
+            ),
+            search=True,
+        ),
+        Column(
+            "lead", lambda row: None if row.lead is None else row.lead.display_name, search=True
+        ),
+        Column("led", lambda row: row.lead is not None, filter=True),
+    ),
+    key=lambda row: row.slug,
+    order="name",
+)
+DepartmentsQuery = Annotated[ListAsked, Depends(DEPARTMENTS.query())]
+
+#: The people nobody has placed, searched with the departments' words. Never paged.
+UNPLACED: Final[Listing[UnplacedView]] = Listing(
+    name="unplaced",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("principal_id", lambda row: row.principal_id, search=True),
+        Column("department", lambda row: row.department, search=True),
+    ),
+    key=lambda row: row.principal_id,
+    order="display_name",
+)
+
+#: What the Elevation screen may search, filter and order the requests it shows by.
+ELEVATIONS: Final[Listing[ElevationRequestView]] = Listing(
+    name="elevation-requests",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("principal_id", lambda row: row.principal_id, search=True, filter=True),
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("capability", lambda row: row.capability, search=True, filter=True, sort=True),
+        Column("scope_slug", lambda row: row.scope_slug, search=True, filter=True),
+        Column("reason", lambda row: row.reason, filter=True),
+        Column("explanation", lambda row: row.explanation, search=True),
+        Column("state", lambda row: row.state.value, filter=True, sort=True),
+        Column("decidable", lambda row: row.decidable, filter=True),
+        Column("requested_at", lambda row: row.requested_at, sort=True),
+        Column("lapses_at", lambda row: row.lapses_at, sort=True),
+    ),
+    key=lambda row: row.request_id,
+    order="-requested_at",
+)
+ElevationsQuery = Annotated[ListAsked, Depends(ELEVATIONS.query())]
+
+#: What the Access review screen may search, filter and order by.
+REVIEW: Final[Listing[ReviewRowView]] = Listing(
+    name="access-review",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("principal_id", lambda row: row.principal_id, search=True, filter=True, sort=True),
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("capabilities", lambda row: tuple(row.capabilities), search=True, filter=True),
+        Column("pack", lambda row: row.pack, search=True, filter=True),
+        Column("kind", lambda row: row.kind.value, filter=True),
+        Column("granted_by", lambda row: row.granted_by, search=True, filter=True),
+        Column("reason", lambda row: row.reason, search=True),
+        Column(
+            "last_decision",
+            lambda row: "undecided" if row.last_decision is None else row.last_decision.value,
+            filter=True,
+            sort=True,
+        ),
+        Column("granted_at", lambda row: row.granted_at, sort=True),
+        Column("lapses_at", lambda row: row.lapses_at, sort=True),
+        Column("last_decided_at", lambda row: row.last_decided_at, sort=True),
+    ),
+    key=lambda row: f"{row.kind.value}:{row.row_id}",
+    order="principal_id",
+)
+ReviewQuery = Annotated[ListAsked, Depends(REVIEW.query())]
+
+
 # ------------------------------------------------------------------ departments
 
 
 @router.get("/govern/departments", response_model=OrganisationPage, responses=COMMON_RESPONSES)
 async def departments_page(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = DEFAULT_ROWS,
+    request: Request, asked: Asked, listed: DepartmentsQuery
 ) -> OrganisationPage:
-    """The departments, their teams and their people, as this reader may be shown them.
+    """One page of the departments, their teams and their people, as this reader may be shown them.
 
     Opens on the Scopes and departments screen's read, because the headings are that screen's
-    decision; who is listed under them is the People screen's, asked inside `organisation`.
+    decision; who is listed under them is the People screen's, asked inside `organisation`. The
+    search, filter and order are applied to the projected departments, so a search for a person
+    finds the department they are shown under and never one they are withheld from.
     """
     if not permitted(screen(DEPARTMENTS_SCREEN).read, asked.reach, asked.now):
         log.info("departments screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("departments")
-    served = await organisation_source_of(request).load(limit=limit, now=asked.now)
+    plan = DEPARTMENTS.plan(listed, reader=asked.caller.principal.id)
+    remainder = UNPLACED.plan(ListAsked(search=listed.search), reader=asked.caller.principal.id)
+    served = await organisation_source_of(request).load(limit=MAX_ROWS, now=asked.now)
     loaded = served.value
     shown = organisation(
         loaded.departments,
@@ -846,11 +1021,20 @@ async def departments_page(
         memberships=loaded.memberships,
         leads=loaded.leads,
     )
-    return organisation_page(
+    whole = organisation_page(
         shown,
         full=loaded.full,
         banner=served.banner,
         may_organise=asked.reach.scope_for(ORGANISING_AUTHORITY, asked.now) is not None,
+    )
+    page = plan.page(whole.departments)
+    unplaced = [] if listed.cursor is not None else remainder.matching(whole.unplaced)
+    return whole.model_copy(
+        update={
+            "departments": list(page.items),
+            "next_cursor": page.next_cursor,
+            "unplaced": unplaced,
+        }
     )
 
 
@@ -1058,29 +1242,30 @@ def _not_elevatable_here() -> Absent:
 
 
 @router.get("/govern/elevation", response_model=ElevationPage, responses=COMMON_RESPONSES)
-async def elevation_page(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = DEFAULT_ROWS,
-) -> ElevationPage:
+async def elevation_page(request: Request, asked: Asked, listed: ElevationsQuery) -> ElevationPage:
     """The request screen for this reader: their standing, the requests they are shown, the rules.
 
     Open to every signed-in caller, because everybody may ask for more and see their own
     requests, and the one reader the landing is designed for is somebody holding nothing. So the
     store is read for every caller alike, and a process with no database answers every caller
-    alike. `requests_shown` decides the rows.
+    alike. `requests_shown` decides the rows, and the listing pages what it decided.
     """
+    plan = ELEVATIONS.plan(listed, reader=asked.caller.principal.id)
     shown = landing(asked.caller.principal, grants=asked.reach.grants)
-    stored, full = await elevation_records_of(request).requests(limit=limit)
+    stored, full = await elevation_records_of(request).requests(limit=MAX_ROWS)
     by_id = {str(one.request_id): one for one in stored}
     visible = requests_shown([elevation_request(one) for one in stored], asked.reach, asked.now)
+    page = plan.page(
+        [request_view(by_id[one.request_id], asked.reach, asked.now) for one in visible]
+    )
     return ElevationPage(
         prompt=requester_prompt(shown),
         holds_nothing_standing=shown.holds_nothing_standing,
         may_authorise=asked.reach.scope_for(ELEVATION_CONTROL, asked.now) is not None,
         reasons=[one.value for one in BreakGlassReason],
         longest_hours=int(BREAK_GLASS_MAX.total_seconds() // 3600),
-        requests=[request_view(by_id[one.request_id], asked.reach, asked.now) for one in visible],
+        requests=list(page.items),
+        next_cursor=page.next_cursor,
         truncated=full,
     )
 
@@ -1183,23 +1368,47 @@ async def decide_elevation(
 
 
 @router.get("/govern/access-review", response_model=ReviewPage, responses=COMMON_RESPONSES)
-async def access_review_page(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_ROWS)] = DEFAULT_ROWS,
-) -> ReviewPage:
-    """Every grant this reviewer could have written, and the last decision about each."""
+async def access_review_page(request: Request, asked: Asked, listed: ReviewQuery) -> ReviewPage:
+    """One page of the grants this reviewer could have written, and the last decision about each."""
     if not permitted(screen(ACCESS_REVIEW_SCREEN).read, asked.reach, asked.now):
         log.info("access review not answerable", principal=asked.caller.principal.id)
         raise _not_answerable("access review")
-    holdings, decided, full = await review_store_of(request).holdings(limit=limit)
+    plan = REVIEW.plan(listed, reader=asked.caller.principal.id)
+    holdings, decided, full = await review_store_of(request).holdings(limit=MAX_ROWS)
     items: list[ReviewRowView] = []
     for holding in holdings:
         grants = reviewable(holding, asked.reach, asked.now)
         if grants is None:
             continue
         items.append(review_row(holding, grants, decided.get(holding.row.id)))
-    return ReviewPage(items=items, truncated=full)
+    page = plan.page(items)
+    return ReviewPage(items=list(page.items), next_cursor=page.next_cursor, truncated=full)
+
+
+def _may_decide_holding(
+    asked: Asking, decision: Decision, *, pack: bool
+) -> Callable[[Holding], bool]:
+    """The question the review store asks about one holding under its lock, for one caller.
+
+    `govern.certify` over every grant the holding confers, and the holding must be of the table the
+    body named. One function for the single decision and the bulk one, so the two cannot differ.
+    """
+    reach, now, decider = asked.reach, asked.now, asked.caller.principal.id
+
+    def may(holding: Holding) -> bool:
+        if isinstance(holding, PackHolding) is not pack:
+            return False
+        grants = reviewable(holding, reach, now)
+        if grants is None:
+            return False
+        try:
+            for one in grants:
+                certify(one, reach, decision, by=decider, at=now, now=now)
+        except (GovernError, ValueError):
+            return False
+        return True
+
+    return may
 
 
 @router.post(
@@ -1220,25 +1429,11 @@ async def decide_review(request: Request, body: ReviewDecisionAsked, asked: Aske
     store = review_store_of(request)
     decider = asked.caller.principal.id
     wanted_pack = body.kind is HoldingKind.PACK
-
-    def may(holding: Holding) -> bool:
-        if isinstance(holding, PackHolding) is not wanted_pack:
-            return False
-        grants = reviewable(holding, reach, now)
-        if grants is None:
-            return False
-        try:
-            for one in grants:
-                certify(one, reach, body.decision, by=decider, at=now, now=now)
-        except (GovernError, ValueError):
-            return False
-        return True
-
     decided: Decided | None = await store.decide(
         body.row_id,
         pack=wanted_pack,
         decision=ReviewDecision(body.decision.value),
-        may=may,
+        may=_may_decide_holding(asked, body.decision, pack=wanted_pack),
         decided_by=decider,
         ent_hash=reach.ent_hash(),
         trace_id=_trace_id(),
@@ -1252,6 +1447,60 @@ async def decide_review(request: Request, body: ReviewDecisionAsked, asked: Aske
         principal_id=decided.principal_id,
         decision=decided.decision,
         decided_at=decided.decided_at,
+    )
+
+
+@router.post(
+    "/govern/access-review/decisions",
+    response_model=ReviewDecisionsDecided,
+    responses=COMMON_RESPONSES,
+)
+async def decide_reviews(
+    request: Request, body: ReviewDecisionsAsked, asked: Asked
+) -> ReviewDecisionsDecided:
+    """Keep or remove each named holding, one decision at a time.
+
+    The review authority is asked once, before a store is reached for, exactly as the single
+    decision asks it, and a caller without it is the single decision's 404. Then every holding is
+    the single decision: its own lock, its own `may`, its own row and ledger entries. See
+    `brain.listing.SEVERAL_ACTS_ARE_EACH_DECIDED_ALONE`.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(screen(ACCESS_REVIEW_SCREEN).read.requires, now) is None:
+        log.info("review decisions refused", principal=asked.caller.principal.id)
+        raise _not_decidable_here()
+
+    store = review_store_of(request)
+    decision = ReviewDecision(body.decision.value)
+
+    async def decide_one(named: tuple[HoldingKind, uuid.UUID]) -> Decided | None:
+        kind, row_id = named
+        pack = kind is HoldingKind.PACK
+        return await store.decide(
+            row_id,
+            pack=pack,
+            decision=decision,
+            may=_may_decide_holding(asked, body.decision, pack=pack),
+            decided_by=asked.caller.principal.id,
+            ent_hash=reach.ent_hash(),
+            trace_id=_trace_id(),
+        )
+
+    outcomes = await each_of([(one.kind, one.row_id) for one in body.holdings], decide_one)
+    return ReviewDecisionsDecided(
+        decision=decision,
+        outcomes=[
+            ReviewOutcome(kind=kind, row_id=str(row_id), decided=False)
+            if decided is None
+            else ReviewOutcome(
+                kind=kind,
+                row_id=str(row_id),
+                decided=True,
+                principal_id=decided.principal_id,
+                decided_at=decided.decided_at,
+            )
+            for (kind, row_id), decided in outcomes
+        ],
     )
 
 

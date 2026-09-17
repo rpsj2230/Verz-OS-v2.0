@@ -44,33 +44,32 @@ interface FormCase {
 /** Every form in a file that also holds a write, by file. The count is checked against the source. */
 const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
   "src/components/ConnectSource.tsx": [{ pattern: "/connectors", index: 0, writes: true }],
-  "src/pages/AccessReview.tsx": [{ pattern: "/access_review", index: 0, writes: false }],
   "src/pages/Classification.tsx": [
     { pattern: "/classification/:entity/:column", index: 0, writes: false },
     { pattern: "/classification/:entity/:column", index: 1, writes: true },
   ],
   "src/pages/DataTransfer.tsx": [{ pattern: "/import-export", index: 0, writes: true }],
+  // Index 0 on every page drawing a long list is `components/ListControls.tsx`' search form, which
+  // is not in the page's file and sends nothing but a read.
   "src/pages/Departments.tsx": [
-    { pattern: "/departments", index: 0, writes: false },
     { pattern: "/departments", index: 1, writes: true },
     { pattern: "/departments", index: 2, writes: true },
   ],
   "src/pages/Elevation.tsx": [{ pattern: "/elevation", index: 0, writes: true }],
-  "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 0, writes: true }],
+  "src/pages/Matrix.tsx": [{ pattern: "/routing/:rungId", index: 1, writes: true }],
   "src/pages/Notifications.tsx": [
     { pattern: "/notifications", index: 0, writes: true },
     { pattern: "/notifications", index: 1, writes: true },
     { pattern: "/notifications", index: 2, writes: true },
   ],
-  "src/pages/People.tsx": [{ pattern: "/people/:subject", index: 0, writes: true }],
+  "src/pages/People.tsx": [{ pattern: "/people/:subject", index: 1, writes: true }],
   "src/pages/Prompts.tsx": [{ pattern: "/prompts", opener: "Edit instructions", index: 0, writes: true }],
   "src/pages/Retention.tsx": [
     { pattern: "/retention", index: 0, writes: true },
     { pattern: "/retention", index: 1, writes: true },
     { pattern: "/retention", index: 2, writes: true },
   ],
-  "src/pages/Sessions.tsx": [{ pattern: "/sessions", index: 0, writes: false }],
-  "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 0, writes: true }],
+  "src/pages/SignInLinks.tsx": [{ pattern: "/sign-in-links", index: 1, writes: true }],
   "src/pages/Webhooks.tsx": [
     { pattern: "/webhooks", index: 0, writes: false },
     { pattern: "/webhooks", opener: "Replace secret", index: 1, writes: true },

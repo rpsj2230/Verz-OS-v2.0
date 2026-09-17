@@ -358,6 +358,25 @@ def test_every_filter_narrows_to_exactly_what_it_names(client: TestClient) -> No
     assert [one[2] for one in by_window] == ["connector:xero", "artifact:report_1"]
 
 
+def test_a_search_reads_what_a_visible_row_says_and_never_an_entry_the_reader_may_not_see(
+    client: TestClient,
+) -> None:
+    """Delete this and the ledger search can be matched before the visibility decision, so a reader
+    of principal entries types a connector's name and learns from a short page or a cursor whether
+    it was denied; or it reads the digest or the trace, which a row never shows. The positive halves
+    are the auditor finding the connector entry and a principal reader finding their own kind by a
+    detail it carries."""
+    auditor = seen(get(client, "u_admin", q="XERO"))
+    narrow = get(client, "u_narrow", q="xero").json()
+    by_detail = seen(get(client, "u_narrow", q="client.name revoke"))
+    by_trace = get(client, "u_admin", q="trace2").json()
+
+    assert auditor == [("deny", "u_narrow", "connector:xero")]
+    assert narrow["items"] == [] and narrow["next_cursor"] is None
+    assert by_detail == [("revoke", "u_admin", "principal:u_narrow")]
+    assert by_trace["items"] == []
+
+
 def test_a_page_continues_from_its_cursor_through_every_visible_entry_exactly_once(
     client: TestClient,
 ) -> None:

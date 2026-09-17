@@ -47,6 +47,7 @@ import { chipCell, valueCell } from "../components/cells";
 import { scopeLines } from "./scopeText";
 import type { GridColumn } from "../components/DataTable";
 import type { components } from "../api/schema";
+import { NO_QUESTION, listPath, type FilterChoice } from "../components/listing";
 
 /** One rung, as `brain.routing_routes.RungView` sends it. */
 export type RungRow = components["schemas"]["RungView"];
@@ -87,22 +88,25 @@ export const A_HIDDEN_EDITOR_IS_NOT_A_REFUSAL =
 /** Where the API keeps the matrix. */
 export const MATRIX_API_PATH = "/routing/rungs";
 
-/** The one query parameter the matrix route declares. */
-export const LIMIT_PARAMETER = "limit";
-
 /**
- * How many rungs to ask for.
- *
- * Below the route's declared maximum, which is asserted rather than assumed: a console
- * asking for more than the route admits is refused with `HTTPValidationError`, which reaches
- * a person as the least useful sentence this console has, and it would do so on every load
- * rather than on an unusual one.
- *
- * There is no control for this and no pager, because the route sends no cursor. A matrix
- * larger than this pages nowhere, and `truncated` is what says so. It is a real gap and a
- * small one: this many rungs across four tiers is twenty-five deep in each.
+ * How many rungs the Models screen asks for when it draws the whole chain: the most one page may
+ * carry, which is also every rung the route loads. Asserted against the route's declared maximum,
+ * because a size the route refuses is a screen that never loads. The Routing screen pages instead.
  */
-export const MATRIX_PAGE_SIZE = 100;
+export const CHAIN_PAGE_SIZE = 200;
+
+/** The filters the matrix route declares that the Routing screen offers, over rungs drawn. */
+export const MATRIX_FILTERS: readonly FilterChoice<RungRow>[] = [
+  { column: "tier", label: "Tier", everything: "Every tier", read: (row) => row.tier },
+  { column: "provider", label: "Provider", everything: "Every provider", read: (row) => row.provider },
+  {
+    column: "enabled",
+    label: "Switched",
+    everything: "On or off",
+    read: (row) => row.enabled,
+    describe: (value) => (value === "true" ? "On" : "Off"),
+  },
+];
 
 /** The console address for the matrix, and for the matrix with one rung open. */
 export const MATRIX_PATH = "/routing";
@@ -112,9 +116,14 @@ export function rungApiPath(rungId: string): string {
   return `${MATRIX_API_PATH}/${encodeURIComponent(rungId)}`;
 }
 
-/** The whole request this screen makes, query string included. */
-export function matrixApiPath(): string {
-  return `${MATRIX_API_PATH}?${LIMIT_PARAMETER}=${String(MATRIX_PAGE_SIZE)}`;
+/** The request the Models screen makes for the whole chain. No search, no filter, one page. */
+export function chainApiPath(): string {
+  return listPath(MATRIX_API_PATH, NO_QUESTION, null, CHAIN_PAGE_SIZE);
+}
+
+/** The request for one rung, when a rung is open: a filter on its id, whichever page it sits on. */
+export function openRungApiPath(rungId: string): string {
+  return listPath(MATRIX_API_PATH, { ...NO_QUESTION, filters: { id: rungId } }, null, 1);
 }
 
 /**

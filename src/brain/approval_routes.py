@@ -74,7 +74,11 @@ is `pending_for`'s question and holding the action's own capability in the actio
 its answer; a second gate would be a second answer, and the two would disagree about the same
 approver on the same day.
 
-Task ids: M35.3.1.2, M35.3.1.1
+**The queue pages, searches, filters and orders through `brain.listing`**, over the cards the
+reach decided, soonest to lapse first unless asked otherwise. Approvals are never decided several
+at once: see `AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD`.
+
+Task ids: M35.3.1.2, M35.3.1.1, M27.8.6
 """
 
 from __future__ import annotations
@@ -83,10 +87,10 @@ import enum
 from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from datetime import datetime
-from typing import Final, Protocol, Self, runtime_checkable
+from typing import Annotated, Final, Protocol, Self, runtime_checkable
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
@@ -96,6 +100,7 @@ from brain.console.approvals import ApprovalError, Card, Decided, card, decide
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.gate.leash import SuspendedAction
+from brain.listing import Column, ListAsked, Listing, Plan
 
 log = structlog.get_logger()
 
@@ -140,9 +145,16 @@ TAKING_OVER_AND_AMENDING_WAIT_FOR_WHAT_THEY_HAND_OVER_TO: Final = (
 
 # ------------------------------------------------------------------------ the bounds
 
-#: The most cards one queue answer carries. A resource bound and not a permission one: it is
-#: applied after the reach filter, so raising it discloses nothing.
+#: The most cards one queue page carries when nothing asked for fewer. A resource bound and not a
+#: permission one: it is applied after the reach filter, so raising it discloses nothing.
 MAX_QUEUE_CARDS: Final = 200
+
+#: Why the queue has no act on several cards.
+AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD: Final = (
+    "An approval lets one suspended action run, and the card is the statement of what it will do. "
+    "Approving several at once approves artefacts nobody read, and a rejection names its own "
+    "reason, so each approval is decided from its own card."
+)
 
 
 # ----------------------------------------------------------------- the vocabulary
@@ -244,10 +256,10 @@ class ApprovalCardView(BaseModel):
 
 
 class ApprovalQueue(Page[ApprovalCardView]):
-    """Every approval this caller may decide, soonest to lapse first.
+    """One page of the approvals this caller may decide, soonest to lapse first.
 
-    `total` is inherited and never populated, and `next_cursor` is always null: the queue is
-    bounded by `MAX_QUEUE_CARDS` rather than paged. See
+    `total` is inherited and never populated. `next_cursor` is present exactly when a further card
+    this reader may decide matches, and `truncated` says the same. See
     `APPROVALS_ARE_FILTERED_BEFORE_THEY_ARE_BOUNDED`.
     """
 
@@ -312,22 +324,40 @@ def shown_card(suspension: SuspendedAction, reach: EntitlementSet, now: datetime
         return None
 
 
+#: What the Approvals screen may search, filter and order the queue by: what a card shows.
+QUEUE: Final[Listing[ApprovalCardView]] = Listing(
+    name="approvals",
+    columns=(
+        Column("artefact", lambda row: row.artefact, search=True),
+        Column("runs_as", lambda row: row.runs_as, search=True, filter=True, sort=True),
+        Column("suspension_id", lambda row: row.suspension_id, search=True),
+        Column("raised_at", lambda row: row.raised_at, sort=True),
+        Column("expires_at", lambda row: row.expires_at, sort=True),
+    ),
+    key=lambda row: row.suspension_id,
+    order="expires_at",
+)
+QueueQuery = Annotated[ListAsked, Depends(QUEUE.query())]
+
+
 def queue(
-    suspensions: Sequence[SuspendedAction], reach: EntitlementSet, now: datetime
+    suspensions: Sequence[SuspendedAction],
+    reach: EntitlementSet,
+    now: datetime,
+    plan: Plan[ApprovalCardView] | None = None,
 ) -> ApprovalQueue:
-    """The cards this reach may decide, soonest to lapse first, bounded after filtering."""
-    cards = sorted(
-        (
-            shown
-            for shown in (shown_card(one, reach, now) for one in suspensions)
-            if shown is not None
-        ),
-        key=lambda shown: (shown.expires_at, shown.suspension_id),
-    )
+    """One page of the cards this reach may decide, soonest to lapse first, cut after filtering."""
+    cards = [
+        card_view(shown)
+        for shown in (shown_card(one, reach, now) for one in suspensions)
+        if shown is not None
+    ]
+    chosen = plan or QUEUE.plan(ListAsked(limit=MAX_QUEUE_CARDS), reader=reach.principal_id)
+    page = chosen.page(cards)
     return ApprovalQueue(
-        items=[card_view(shown) for shown in cards[:MAX_QUEUE_CARDS]],
-        next_cursor=None,
-        truncated=len(cards) > MAX_QUEUE_CARDS,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=page.next_cursor is not None,
     )
 
 
@@ -412,10 +442,11 @@ router = APIRouter(prefix=API_PREFIX, tags=["approvals"])
 
 
 @router.get("/approvals", response_model=ApprovalQueue, responses=COMMON_RESPONSES)
-async def approvals(request: Request, asked: Asked) -> ApprovalQueue:
-    """Every approval this caller may decide, at their admitted reach."""
+async def approvals(request: Request, asked: Asked, listed: QueueQuery) -> ApprovalQueue:
+    """One page of the approvals this caller may decide, at their admitted reach."""
+    plan = QUEUE.plan(listed, reader=asked.caller.principal.id)
     source = _require_source(request, asked.reach, asked.now)
-    return queue(await source.open_suspensions(), asked.reach, asked.now)
+    return queue(await source.open_suspensions(), asked.reach, asked.now, plan)
 
 
 @router.get(

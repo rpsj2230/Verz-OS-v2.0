@@ -23,33 +23,39 @@
  * `brain.console.organisation.may_place` and `may_appoint` whatever this page offered.
  *
  * **Nothing here decides who may see anything.** The API answers from `brain.console.organisation`,
- * the search narrows the rows already on the page, and a write is followed by a fresh request, keyed
- * on a counter, for `People.tsx`' reason: the page shows what the database holds.
+ * and the search, the filters, the order and "Show more" are requests to it (`brain.listing`), so a
+ * search for a person finds the department they are shown under and never one they are withheld
+ * from. The people in no recorded department arrive with the first page and are searched with the
+ * same words. A write asks for the first page again, for `People.tsx`' reason: the page shows what
+ * the database holds.
  *
  * Imported statically: it mounts neither heavy library and no stylesheet of its own.
  *
- * Task ids: M27.7.4
+ * Task ids: M27.7.4, M27.8.6
  */
 
 import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Notice } from "../ui/Notice";
 import {
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
   appointBody,
-  departmentsApiPath,
+  DEPARTMENTS_API_PATH,
+  DEPARTMENT_FILTERS,
+  DEPARTMENT_SORTS,
   leadCandidates,
   leadQuestion,
   membershipBody,
   membershipQuestion,
   personAddress,
   readOrganisation,
-  searchedOrganisation,
   standDownBody,
   teamCandidates,
   when,
@@ -77,7 +83,7 @@ export const NOBODY_LISTED = "Nobody is listed in this department.";
 export const NOBODY_IN_TEAM = "Nobody you may see is listed in this team.";
 export const NO_LEAD = "No lead you may see is recorded for this department.";
 export const NO_TEAMS = "This department has no teams.";
-export const NONE_MATCH = "No department or person on this page matches that search.";
+export const NONE_MATCH = NOTHING_MATCHES;
 export const MORE_ROWS = "This list came back full, so there is more than it shows.";
 export const DISABLED = "Disabled";
 
@@ -174,9 +180,18 @@ function Chooser({
   );
 }
 
-function Organisation({ onChanged }: { readonly onChanged: (sentence: string) => void }) {
-  const answer = useResource<unknown>(departmentsApiPath());
-  const [search, setSearch] = useState("");
+function Organisation({
+  version,
+  onChanged,
+}: {
+  readonly version: number;
+  readonly onChanged: (sentence: string) => void;
+}) {
+  const listing = useListing<DepartmentRow>(DEPARTMENTS_API_PATH, {
+    listKey: "departments",
+    choices: DEPARTMENT_FILTERS,
+    version,
+  });
   const [chosen, setChosen] = useState<Readonly<Record<string, string>>>({});
   const [pending, setPending] = useState<Pending | null>(null);
   const [blank, setBlank] = useState<string | null>(null);
@@ -201,19 +216,8 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
     [onChanged],
   );
 
-  if (answer.failure) {
-    return <Failure failure={answer.failure} />;
-  }
-  if (answer.busy) {
-    return (
-      <p className="note" role="status">
-        {READING_DEPARTMENTS}
-      </p>
-    );
-  }
-
-  const page = readOrganisation(answer.data);
-  const shown = searchedOrganisation(page.departments, search);
+  const page = readOrganisation(listing.body);
+  const shown = page.departments;
   const choose = (key: string) => (value: string) => {
     setChosen({ ...chosen, [key]: value });
   };
@@ -264,21 +268,12 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
 
   return (
     <>
-      {page.departments.length === 0 ? null : (
-        <form className="form" role="search" onSubmit={(event) => event.preventDefault()}>
-          <label className="control-label">
-            {SEARCH_LABEL}{" "}
-            <input
-              className="form-control"
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-              }}
-            />
-          </label>
-        </form>
-      )}
+      <ListControls
+        label={SEARCH_LABEL}
+        listing={listing}
+        choices={DEPARTMENT_FILTERS}
+        sorts={DEPARTMENT_SORTS}
+      />
 
       {failure === null ? null : <Failure failure={failure} />}
 
@@ -298,10 +293,14 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
         />
       )}
 
-      {page.departments.length === 0 ? (
-        <p className="note">{NO_DEPARTMENTS_HERE}</p>
+      {listing.failure ? (
+        <Failure failure={listing.failure} />
+      ) : listing.busy ? (
+        <p className="note" role="status">
+          {READING_DEPARTMENTS}
+        </p>
       ) : shown.length === 0 ? (
-        <p className="note">{NONE_MATCH}</p>
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_DEPARTMENTS_HERE}</p>
       ) : (
         shown.map((department) => (
           <section className="card" key={department.slug} aria-labelledby={`department-${department.slug}`}>
@@ -450,7 +449,9 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
         ))
       )}
 
-      {search.trim() !== "" || page.unplaced.length === 0 ? null : (
+      {listing.busy || listing.failure ? null : <ShowMore listing={listing} />}
+
+      {listing.busy || page.unplaced.length === 0 ? null : (
         <section className="card" aria-labelledby="department-unplaced">
           <h2 id="department-unplaced">{UNPLACED_HEADING}</h2>
           <ul className="roster" aria-label={UNPLACED_HEADING}>
@@ -476,12 +477,12 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
 }
 
 export function Departments() {
-  // A counter rather than a boolean, so two changes in a row remount twice. Never rendered.
-  const [generation, setGeneration] = useState(0);
+  // A counter, so two changes in a row ask twice. Never rendered.
+  const [version, setVersion] = useState(0);
   const [changed, setChanged] = useState<string | null>(null);
   const onChanged = useCallback((sentence: string) => {
     setChanged(sentence);
-    setGeneration((current) => current + 1);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -494,7 +495,7 @@ export function Departments() {
           {changed}
         </p>
       )}
-      <Organisation key={generation} onChanged={onChanged} />
+      <Organisation version={version} onChanged={onChanged} />
     </article>
   );
 }

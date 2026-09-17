@@ -84,7 +84,14 @@ UPDATE below has ever been executed. What is tested is the statement each one co
 every refusal either can produce, and the order the checks happen in. The write's success
 path is unverified and is the first thing to exercise against a real database.
 
-Task ids: M5.3.3
+**The matrix pages, searches and filters through `brain.listing`, and is ordered only as the
+chain.** A cursor walks the rungs in (tier, position) order, a search reads the deployment, the
+provider and the model a rung shows, and a filter narrows by tier, provider, role or whether a rung
+is switched on. There is one order because the order is the chain: see
+`A_CHAIN_HAS_ONE_ORDER`. And there is no act on several rungs at once: see
+`A_RUNG_IS_SAVED_ONE_AT_A_TIME`.
+
+Task ids: M5.3.3, M27.8.6
 """
 
 from __future__ import annotations
@@ -93,7 +100,7 @@ import uuid
 from typing import Annotated, Any, Final
 
 import structlog
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Numeric, Select, Update, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -103,6 +110,7 @@ from brain.api_routes import Asked
 from brain.console.read_replica import StalenessBanner
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
 from brain.tables.audit import attributed_to
 from brain.tables.routing import RoutingRungRow
@@ -209,15 +217,25 @@ MIN_ATTEMPTS: Final = 1
 #: zero is a rung that queues for ever, which is indistinguishable from a hung provider.
 MIN_CONCURRENCY: Final = 1
 
-#: How many rungs one page carries at most. A resource bound rather than a permission one:
-#: the matrix is tiers times rungs per tier and both are operator-controlled, so this is far
-#: above anything a real estate holds and exists so one request cannot ask for an unbounded
-#: statement.
+#: How many rungs one matrix answer is loaded from, whatever page, search or filter was asked
+#: for. A resource bound rather than a permission one: the matrix is tiers times rungs per tier and
+#: both are operator-controlled, so this is far above anything a real estate holds and exists so
+#: one request cannot ask for an unbounded statement.
 MAX_RUNGS_PER_PAGE: Final = 200
 
-#: What a caller gets when they do not say. Above any plausible matrix, so `truncated` is
-#: false in practice and the console's lack of a pager is not hiding anything.
-DEFAULT_RUNGS_PER_PAGE: Final = 100
+#: Why the matrix is ordered one way only.
+A_CHAIN_HAS_ONE_ORDER: Final = (
+    "A routing chain is drawn in tier and position order because that order is the chain: the "
+    "position is the order attempts are made in. Any other order would draw a fallback above "
+    "the rung it falls back from, so the matrix declares that one order and no other."
+)
+
+#: Why the matrix has no act on several rungs.
+A_RUNG_IS_SAVED_ONE_AT_A_TIME: Final = (
+    "Saving a rung changes the chain the next model call walks. Switching several off at once "
+    "can leave a tier with no rung switched on, which nothing refuses and which fails every call "
+    "routed to that tier, so each rung is saved on its own, confirmed with what it changes."
+)
 
 
 # ------------------------------------------------------------------------ the shapes
@@ -266,10 +284,8 @@ class RungPage(Page[RungView]):
     available on this collection and the rule is still the rule: see
     `THE_MATRIX_IS_NOT_FILTERED_PER_CALLER`.
 
-    `next_cursor` is always null. `ops.routing_rung` has a stable order in
-    (tier, position) and a keyset cursor over it is expressible, so this is a gap rather
-    than an impossibility; what makes it a small one is that a matrix above
-    `DEFAULT_RUNGS_PER_PAGE` rungs would mean twenty-five rungs in a tier.
+    `next_cursor` is present exactly when a further rung matches, in chain order. See
+    `brain.listing`.
     """
 
     #: There is more. Never how much more.
@@ -439,15 +455,43 @@ def _no_matrix_here() -> Absent:
 
 # -------------------------------------------------------------------------- the routes
 
+
+def chain_key(row: RungView) -> str:
+    """A rung's place in the chain as one order key: its tier, then its position, zero-padded.
+
+    Both halves are on the row, so a cursor carries nothing the reader was not shown. The padding is
+    wide enough for `SMALLINT_MAX`, so position 10 sorts after position 9.
+    """
+    return f"{row.tier}{CHAIN_SEPARATOR}{row.position:05d}"
+
+
+#: Between a tier and a position in `chain_key`. Below every character a tier name may hold.
+CHAIN_SEPARATOR: Final = " "
+
+#: What the Routing and Models screens may search and filter the matrix by. One order: the chain.
+MATRIX: Final[Listing[RungView]] = Listing(
+    name="routing-rungs",
+    columns=(
+        Column("chain", chain_key, sort=True),
+        Column("id", lambda row: row.id, filter=True),
+        Column("tier", lambda row: row.tier, search=True, filter=True),
+        Column("role", lambda row: row.role, filter=True),
+        Column("provider", lambda row: row.provider, search=True, filter=True),
+        Column("model", lambda row: row.model, search=True, filter=True),
+        Column("deployment_id", lambda row: row.deployment_id, search=True),
+        Column("enabled", lambda row: row.enabled, filter=True),
+    ),
+    key=lambda row: row.id,
+    order="chain",
+)
+MatrixQuery = Annotated[ListAsked, Depends(MATRIX.query())]
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["routing"])
 
 
 @router.get("/routing/rungs", response_model=RungPage, responses=COMMON_RESPONSES)
-async def rungs(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_RUNGS_PER_PAGE)] = DEFAULT_RUNGS_PER_PAGE,
-) -> RungPage:
+async def rungs(request: Request, asked: Asked, listed: MatrixQuery) -> RungPage:
     """The live matrix, in chain order.
 
     The capability first and the database second. See the module docstring: the order is
@@ -461,6 +505,8 @@ async def rungs(
     if not asked.reach.holds(MATRIX_READ, asked.now):
         log.info("routing matrix not answerable", principal=asked.caller.principal.id)
         raise _no_matrix_here()
+    plan = MATRIX.plan(listed, reader=asked.caller.principal.id)
+    limit = MAX_RUNGS_PER_PAGE
 
     reads = _require_console_reads(request)
 
@@ -469,10 +515,11 @@ async def rungs(
 
     served = await reads.read(live, now=asked.now)
     found = served.value
+    page = plan.page([view_of(row) for row in found])
 
     return RungPage(
-        items=[view_of(row) for row in found],
-        next_cursor=None,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
         truncated=len(found) >= limit,
         editable=asked.reach.holds(MATRIX_WRITE, asked.now),
         staleness=served.banner,

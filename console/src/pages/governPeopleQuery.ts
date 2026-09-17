@@ -13,16 +13,22 @@
  * reads them and decides only what a control looks like. The review route refuses a decision
  * whatever the page drew.
  *
- * **Filters narrow what was shown and offer only what was shown.** See
- * `A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE`, which is the Sessions screen's rule: a department dropdown
- * read from anywhere but the rows on the page names places this reader was not shown.
+ * **The three long lists are searched, filtered, ordered and paged by their routes** (`brain.listing`,
+ * over the rows the reader may see), and a filter offers only the values on rows already drawn. See
+ * `A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE`: a department dropdown read from anywhere but the rows drawn
+ * names places this reader was not shown.
+ *
+ * **Several review decisions are one confirmed request that decides each holding alone.** The route
+ * runs the single decision once per holding and answers each one's outcome, and the page says, per
+ * holding, whether it was decided.
  *
  * **No number about the rows.** No reader here keeps a total, and no screen renders a count.
  *
- * Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12
+ * Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6
  */
 
 import type { components } from "../api/schema";
+import type { FilterChoice, SortChoice } from "../components/listing";
 
 export type OrganisationBody = components["schemas"]["OrganisationPage"];
 export type DepartmentRow = components["schemas"]["DepartmentView"];
@@ -32,13 +38,14 @@ export type UnplacedRow = components["schemas"]["UnplacedView"];
 export type ElevationBody = components["schemas"]["ElevationPage"];
 export type ElevationRequestRow = components["schemas"]["ElevationRequestView"];
 export type ReviewRow = components["schemas"]["ReviewRowView"];
+export type ReviewOutcome = components["schemas"]["ReviewOutcome"];
 export type SubscriberRow = components["schemas"]["SubscriberView"];
 
 /** Written down because the obvious dropdown lists every department in the company. */
 export const A_FILTER_OVER_A_PAGE_OFFERS_THE_PAGE =
-  "Every filter on these screens narrows the rows already on the page and offers the values those " +
-  "rows carry. A list read from anywhere else would name places or people this reader was not " +
-  "shown, which is the listing the rows were narrowed to avoid.";
+  "Every filter on these screens asks the route and offers the values carried by rows already " +
+  "drawn. A list read from anywhere else would name places or people this reader was not shown, " +
+  "which is the listing the rows were narrowed to avoid.";
 
 /** Where the API keeps each screen and the one control. */
 export const DEPARTMENTS_API_PATH = "/govern/departments";
@@ -48,6 +55,7 @@ export const ELEVATION_API_PATH = "/govern/elevation";
 export const ELEVATION_REQUESTS_API_PATH = "/govern/elevation/requests";
 export const REVIEW_API_PATH = "/govern/access-review";
 export const REVIEW_DECISION_API_PATH = "/govern/access-review/decision";
+export const REVIEW_DECISIONS_API_PATH = "/govern/access-review/decisions";
 export const SUBSCRIBERS_API_PATH = "/govern/subscribers";
 
 /**
@@ -59,25 +67,14 @@ export const ELEVATION_PATH = "/elevation";
 export const REVIEW_PATH = "/access_review";
 export const SUBSCRIBERS_PATH = "/subscribers";
 
-/** How many rows a listing asks for. At or below the routes' maximum of 1000; see the test. */
-export const GOVERN_PEOPLE_PAGE_SIZE = 500;
-
-export function departmentsApiPath(): string {
-  return `${DEPARTMENTS_API_PATH}?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`;
-}
-
-export function elevationApiPath(): string {
-  return `${ELEVATION_API_PATH}?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`;
-}
+/** The most holdings one bulk decision may name. `brain.listing.MAX_SEVERAL`; see the test. */
+export const MOST_DECIDED_AT_ONCE = 50;
 
 /** Where one request's decision is sent. The id is the API's, encoded as a path segment. */
 export function elevationDecisionApiPath(requestId: string): string {
   return `${ELEVATION_REQUESTS_API_PATH}/${encodeURIComponent(requestId)}/decision`;
 }
 
-export function reviewApiPath(): string {
-  return `${REVIEW_API_PATH}?limit=${String(GOVERN_PEOPLE_PAGE_SIZE)}`;
-}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -184,35 +181,23 @@ export function leadCandidates(department: DepartmentRow): readonly MemberRow[] 
   return department.members.filter((one) => !one.disabled && one.principal_id !== current);
 }
 
-/**
- * The departments and people a search leaves, in the order the API sent them.
- *
- * A department stays when its name or slug matches, with everybody in it; otherwise it stays with
- * the people whose name or id matches, and it goes when none do. Case does not matter. The search
- * narrows what was shown and asks the API nothing.
- */
-export function searchedOrganisation(
-  departments: readonly DepartmentRow[],
-  search: string,
-): readonly DepartmentRow[] {
-  const wanted = search.trim().toLowerCase();
-  if (wanted === "") {
-    return departments;
-  }
-  const hit = (value: string) => value.toLowerCase().includes(wanted);
-  const kept: DepartmentRow[] = [];
-  for (const department of departments) {
-    if (hit(department.name) || hit(department.slug)) {
-      kept.push(department);
-      continue;
-    }
-    const members = department.members.filter((one) => hit(one.display_name) || hit(one.principal_id));
-    if (members.length > 0) {
-      kept.push({ ...department, members });
-    }
-  }
-  return kept;
-}
+/** The filters the departments route declares that this screen offers, over values on rows drawn. */
+export const DEPARTMENT_FILTERS: readonly FilterChoice<DepartmentRow>[] = [
+  { column: "teams", label: "Team", everything: "Any team", read: (row) => row.teams.map((one) => one.name) },
+  {
+    column: "led",
+    label: "Lead",
+    everything: "With or without a lead",
+    read: (row) => row.lead !== null && row.lead !== undefined,
+    describe: (value) => (value === "true" ? "With a lead" : "Without a lead you may see"),
+  },
+];
+
+/** The orders this screen offers. Empty is the route's own, by name. */
+export const DEPARTMENT_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By name" },
+  { value: "slug", label: "By short name" },
+];
 
 /** The People and grants address for one person, where their entitlement is. */
 export function personAddress(principalId: string): string {
@@ -228,6 +213,33 @@ export function readElevation(payload: unknown): ElevationBody | null {
   }
   return payload as unknown as ElevationBody;
 }
+
+/** The filters the elevation route declares that this screen offers, over values on rows drawn. */
+export const ELEVATION_FILTERS: readonly FilterChoice<ElevationRequestRow>[] = [
+  {
+    column: "state",
+    label: "Where it stands",
+    everything: "Every request",
+    read: (row) => row.state,
+    describe: (value) => STATE_WORDS[value as ElevationRequestRow["state"]] ?? value,
+  },
+  { column: "department", label: "Department", everything: "All departments", read: (row) => row.department },
+  {
+    column: "reason",
+    label: "Reason",
+    everything: "Any reason",
+    read: (row) => row.reason,
+    describe: (value) => reasonWords(value),
+  },
+];
+
+/** The orders this screen offers. Empty is the route's own, newest first. */
+export const ELEVATION_SORTS: readonly SortChoice[] = [
+  { value: "", label: "Most recently asked first" },
+  { value: "display_name", label: "By name" },
+  { value: "capability", label: "By capability" },
+  { value: "lapses_at", label: "Soonest to lapse first" },
+];
 
 /** A reason code as a person reads it: `incident_response` becomes "incident response". */
 export function reasonWords(reason: string): string {
@@ -331,53 +343,90 @@ export function decisionBody(row: ReviewRow, decision: ReviewDecisionWord): Revi
   return { kind: row.kind, row_id: row.row_id, decision };
 }
 
-/** How far back a decision still counts as recent, for the one filter that asks. */
-export const RECENT_DAYS = 90;
+/** The words a last decision is filtered by. `undecided` is the route's word for none. */
+export const LAST_DECISION_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  undecided: "Never reviewed",
+  keep: "Last kept",
+  remove: "Last removed",
+});
 
-/** What a reviewer narrowed the rows to. Empty strings are unset. */
-export interface ReviewFilters {
-  readonly department: string;
-  readonly person: string;
-  /** "" for every row, "never" for never decided, "stale" for not decided in `RECENT_DAYS`. */
-  readonly decided: "" | "never" | "stale";
+/** The filters the review route declares that this screen offers, over values on rows drawn. */
+export const REVIEW_FILTERS: readonly FilterChoice<ReviewRow>[] = [
+  { column: "department", label: "Department", everything: "All departments", read: (row) => row.department },
+  {
+    column: "principal_id",
+    label: "Person",
+    everything: "Everyone",
+    read: (row) => row.principal_id,
+  },
+  {
+    column: "last_decision",
+    label: "Reviewed",
+    everything: "Every grant",
+    read: (row) => row.last_decision ?? "undecided",
+    describe: (value) => LAST_DECISION_WORDS[value] ?? value,
+  },
+  {
+    column: "kind",
+    label: "Kind",
+    everything: "Grants and packs",
+    read: (row) => row.kind,
+    describe: (value) => (value === "pack" ? "Packs" : "Single grants"),
+  },
+];
+
+/** The orders this screen offers. Empty is the route's own, by person. */
+export const REVIEW_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By person" },
+  { value: "last_decided_at", label: "Least recently reviewed first" },
+  { value: "lapses_at", label: "Soonest to lapse first" },
+  { value: "-granted_at", label: "Most recently granted first" },
+  { value: "department", label: "By department" },
+];
+
+/** The key a holding is ticked under: its table and its row, because a grant and a pack may share an id. */
+export function holdingKey(row: ReviewRow): string {
+  return `${row.kind}:${row.row_id}`;
 }
 
-export const NO_REVIEW_FILTERS: ReviewFilters = Object.freeze({ department: "", person: "", decided: "" });
-
-/** The departments on these rows, each once, in name order. */
-export function reviewDepartments(rows: readonly ReviewRow[]): readonly string[] {
-  return [...new Set(rows.map((row) => row.department ?? "").filter((one) => one !== ""))].sort();
+/** The body of a bulk decision, as `ReviewDecisionsAsked` declares it. Two keys. */
+export interface ReviewDecisionsBody {
+  readonly decision: ReviewDecisionWord;
+  readonly holdings: readonly { readonly kind: ReviewRow["kind"]; readonly row_id: string }[];
 }
 
-/** The people on these rows, each once, by name. */
-export function reviewPeople(rows: readonly ReviewRow[]): readonly { id: string; name: string }[] {
-  const seen = new Map<string, string>();
-  for (const row of rows) {
-    seen.set(row.principal_id, row.display_name ?? row.principal_id);
+export function decisionsBody(rows: readonly ReviewRow[], decision: ReviewDecisionWord): ReviewDecisionsBody {
+  return { decision, holdings: rows.map((row) => ({ kind: row.kind, row_id: row.row_id })) };
+}
+
+/** Read `brain.govern_people_routes.ReviewDecisionsDecided` out of a response body. */
+export function readReviewOutcomes(payload: unknown): readonly ReviewOutcome[] {
+  if (!isObject(payload) || !Array.isArray(payload.outcomes)) {
+    return [];
   }
-  return [...seen.entries()]
-    .map(([id, name]) => ({ id, name }))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  return payload.outcomes as ReviewOutcome[];
 }
 
-/** The rows these filters keep, in the order the API sent them. `now` is a parameter, not a clock. */
-export function narrowedReview(rows: readonly ReviewRow[], filters: ReviewFilters, now: Date): readonly ReviewRow[] {
-  const cutoff = now.getTime() - RECENT_DAYS * 24 * 60 * 60 * 1000;
-  return rows.filter((row) => {
-    if (filters.department !== "" && (row.department ?? "") !== filters.department) {
-      return false;
-    }
-    if (filters.person !== "" && row.principal_id !== filters.person) {
-      return false;
-    }
-    if (filters.decided === "never") {
-      return row.last_decided_at === null;
-    }
-    if (filters.decided === "stale") {
-      return row.last_decided_at === null || new Date(row.last_decided_at).getTime() < cutoff;
-    }
-    return true;
-  });
+/** The question the bulk confirmation asks. Names no figure: the list under it names each one. */
+export function decisionsQuestion(decision: ReviewDecisionWord): string {
+  return decision === "keep" ? "Keep each of these grants?" : "Remove each of these grants?";
+}
+
+/** What the bulk confirmation lists for one holding: what, whose, and what happens to it. */
+export function decisionLine(row: ReviewRow, decision: ReviewDecisionWord): string {
+  const who = row.display_name ?? row.principal_id;
+  return decision === "keep"
+    ? `${holdingName(row)} for ${who} is recorded as kept.`
+    : `${holdingName(row)} is taken away from ${who} from their next request.`;
+}
+
+/** What the page says about one holding after a bulk decision. */
+export function reviewOutcomeLine(row: ReviewRow | undefined, outcome: ReviewOutcome, decision: ReviewDecisionWord): string {
+  const what = row === undefined ? "A grant" : `${holdingName(row)} for ${row.display_name ?? row.principal_id}`;
+  if (!outcome.decided) {
+    return `${what} was not decided.`;
+  }
+  return `${what} was ${decision === "keep" ? "kept" : "removed"}.`;
 }
 
 /** What a holding is called in a sentence: its capability, or its pack by name. */

@@ -246,6 +246,30 @@ def test_an_approval_outside_the_callers_reach_is_absent_from_the_queue_rather_t
     assert queued(client, "u_narrow") == ["m_1"]
 
 
+def test_a_queue_search_matches_only_cards_the_caller_may_decide_and_pages_through_them(
+    client: TestClient, source: MemorySource
+) -> None:
+    """Delete this and the queue search can read every open suspension, so an approver searching
+    another department's artefact learns it is pending from whether a card comes back; or a walk
+    through the queue repeats or skips a card at a page boundary."""
+    source.held = [
+        a_suspension("m_1", department=MAINTENANCE),
+        a_suspension("f_1", department=FINANCE),
+        a_suspension("m_2", department=MAINTENANCE, window=timedelta(hours=5)),
+    ]
+    token = {"authorization": f"Bearer {token_for('u_narrow')}"}
+
+    hidden = client.get(APPROVALS, headers=token, params={"q": "f_1"}).json()
+    first = client.get(APPROVALS, headers=token, params={"limit": 1}).json()
+    rest = client.get(
+        APPROVALS, headers=token, params={"limit": 1, "cursor": first["next_cursor"]}
+    ).json()
+
+    assert hidden["items"] == [] and hidden["next_cursor"] is None
+    assert [one["suspension_id"] for one in (*first["items"], *rest["items"])] == ["m_1", "m_2"]
+    assert rest["next_cursor"] is None
+
+
 def test_a_decided_or_lapsed_approval_is_absent_from_the_queue_and_an_open_one_is_listed(
     client: TestClient, source: MemorySource
 ) -> None:

@@ -53,7 +53,7 @@ import { useResource, type Resource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
 import { Notice } from "../ui/Notice";
-import { matrixApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
+import { chainApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
 import {
   answerLatencyApiPath,
   answerReading,
@@ -704,7 +704,7 @@ function SpendByDepartment({ spend }: { readonly spend: Resource<unknown> }) {
 
 /** The cards that need the models route's answer, and the four routes they borrow from. */
 function ModelsAnswer({ models }: { readonly models: ModelsBody }) {
-  const matrix = useResource<unknown>(matrixApiPath());
+  const matrix = useResource<unknown>(chainApiPath());
   const latency = useResource<unknown>(answerLatencyApiPath(SERVICE_LEVELS_API_PATH));
   // Computed once per mount, so the address does not change under the effect that fetches it.
   const since = useMemo(() => spendSinceApiPath(SPEND_API_PATH, SPEND_DIMENSION, new Date()), []);

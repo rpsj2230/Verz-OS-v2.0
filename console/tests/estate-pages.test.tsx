@@ -23,6 +23,7 @@
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
+import { LIST_PAGE_SIZE } from "../src/components/listing";
 import {
   CONTROLS_NOT_OFFERED,
   GROUPING_WITHHELD,
@@ -35,11 +36,7 @@ import {
   ONLY_EXISTENCE_AND_REACH,
 } from "../src/pages/Knowledge";
 import {
-  EVERY_ROW,
   KNOWLEDGE_API_PATH,
-  KNOWLEDGE_PAGE_SIZE,
-  knowledgeApiPath,
-  narrowed,
   readKnowledgePage,
   type LibraryRow,
 } from "../src/pages/knowledgeQuery";
@@ -282,9 +279,8 @@ describe("the Knowledge screen", () => {
     // person as the least useful sentence this console has. Read off the route's own parameter.
     const limit = declaredParameterSchema(`${API}${KNOWLEDGE_API_PATH}`, "get", "limit");
 
-    expect(KNOWLEDGE_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-    expect(KNOWLEDGE_PAGE_SIZE).toBeGreaterThanOrEqual(limit["minimum"] as number);
-    expect(knowledgeApiPath()).toBe(`/govern/library?limit=${String(KNOWLEDGE_PAGE_SIZE)}`);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
+    expect(LIST_PAGE_SIZE).toBeGreaterThanOrEqual(limit["minimum"] as number);
   });
 
   test("draws every item with its level, and says in words which of the design's columns are absent", async () => {
@@ -316,8 +312,8 @@ describe("the Knowledge screen", () => {
     const container = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
     const glance = container.querySelector('[aria-label="Knowledge at a glance"]');
 
-    expect(glance?.textContent).toContain("3items you can see, across 2 departments");
-    expect(glance?.textContent).toContain("1visible to everyone");
+    expect(glance?.textContent).toContain("3items listed below, from 2 departments you can see");
+    expect(glance?.textContent).toContain("1listed below and visible to everyone");
     expect(glance?.textContent ?? "").not.toMatch(/\bof\b/);
   });
 
@@ -329,10 +325,10 @@ describe("the Knowledge screen", () => {
       answering(KNOWLEDGE_API_PATH, libraryBody({ departments: null })),
     );
     expect(text(withheld)).toContain(GROUPING_WITHHELD);
-    expect(text(withheld)).not.toContain("across 2 departments");
+    expect(text(withheld)).not.toContain("from 2 departments");
 
     const listed = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody()));
-    const names = [...listed.querySelectorAll('[aria-label="Departments with items on this page"] li')];
+    const names = [...listed.querySelectorAll('[aria-label="Departments with items you may know exist"] li')];
     expect(names.map((one) => one.textContent)).toEqual(["sales", "web"]);
   });
 
@@ -342,31 +338,26 @@ describe("the Knowledge screen", () => {
     const empty = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody({ items: [] })));
     expect(text(empty)).toContain(NO_ITEMS);
 
-    const full = await mount("/library", answering(KNOWLEDGE_API_PATH, libraryBody({ truncated: true })));
+    // The stand-in answers a search with nothing, as the route would for a reference nobody holds.
+    const full = await mount(
+      "/library",
+      fakeIdentityProvider({
+        api(url) {
+          const asked = new URL(url, "https://console.test");
+          if (!asked.pathname.endsWith(`${API}${KNOWLEDGE_API_PATH}`)) {
+            return null;
+          }
+          const body = asked.searchParams.has("q") ? libraryBody({ items: [], truncated: true }) : libraryBody({ truncated: true });
+          return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+        },
+      }),
+    );
     expect(text(full)).toContain(MORE_ITEMS);
-    const search = full.querySelector("#knowledge-search") as HTMLInputElement;
+    const search = full.querySelector('input[type="search"]') as HTMLInputElement;
     fireEvent.change(search, { target: { value: "nothing-matches-this" } });
-    expect(text(full)).toContain(NO_MATCH);
-    expect(text(full)).not.toContain(NO_ITEMS);
-  });
-
-  test("search, level and order narrow and sort only the rows the page holds", () => {
-    // What breaks if this is deleted: the filter can drop the level test or the sort can stop being
-    // stable, and a person reading the narrowed table reads the wrong items as the matching ones.
-    const rows: LibraryRow[] = [
-      { item_id: "b-web", level: "department" },
-      { item_id: "a-mine", level: "personal" },
-      { item_id: "c-all", level: "company" },
-    ];
-
-    expect(narrowed(rows, EVERY_ROW).map((one) => one.item_id)).toEqual(["a-mine", "b-web", "c-all"]);
-    expect(narrowed(rows, { ...EVERY_ROW, sort: "level" }).map((one) => one.item_id)).toEqual([
-      "c-all",
-      "b-web",
-      "a-mine",
-    ]);
-    expect(narrowed(rows, { ...EVERY_ROW, level: "company" }).map((one) => one.item_id)).toEqual(["c-all"]);
-    expect(narrowed(rows, { ...EVERY_ROW, search: "WEB" }).map((one) => one.item_id)).toEqual(["b-web"]);
+    await waitFor(() => {
+      expect(text(full)).toContain(NO_MATCH);
+    });
   });
 
   test("a refusal is the API's own sentence and nothing else", async () => {

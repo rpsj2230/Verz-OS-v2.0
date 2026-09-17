@@ -71,10 +71,10 @@ from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
+from brain.listing import MAX_PAGE_ROWS
 from brain.ops.jobs import hidden_count_fields
 from brain.prompt_routes import installed
 from brain.skill_routes import (
-    MAX_AGENTS_CONSIDERED,
     AgentChoiceView,
     AssignedView,
     FoundAgent,
@@ -964,13 +964,14 @@ def test_the_statements_bound_the_agents_and_join_the_pin_on_both_halves() -> No
 
 
 def test_the_bound_on_the_page_is_a_bound_on_the_load_and_not_on_the_answer(
-    client: TestClient, stored: Stored
+    client: TestClient, stored: Stored, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`truncated` is true when the agent load came back full, and the rows are whatever
-    survived the audience.
+    """`truncated` is true when the agent load came back full, whatever was searched for, and
+    the rows are whatever survived the audience.
 
     Delete this and the flag can be computed against the rows that survived filtering, which
-    is a count of what the filter removed spelled as a boolean."""
+    is a count of what the filter removed spelled as a boolean, or against a load the search
+    narrowed."""
     stored.agents["company_desk"] = agent_row("company_desk")
     stored.agents["sales_helper"] = agent_row(
         "sales_helper", level=Visibility.DEPARTMENT, department="sales"
@@ -979,10 +980,14 @@ def test_the_bound_on_the_page_is_a_bound_on_the_load_and_not_on_the_answer(
         "company_desk", skills=(SkillRef(name="hosting-expiry", digest=DIGEST_ONE),)
     )
 
-    full = get(client, "u_narrow", f"{SKILLS}?limit=2")
-    roomy = get(client, "u_narrow", f"{SKILLS}?limit=3")
+    monkeypatch.setattr(skill_routes, "MAX_AGENTS_CONSIDERED", 2)
+    full = get(client, "u_narrow", SKILLS)
+    searched = get(client, "u_narrow", f"{SKILLS}?q=nothing-is-called-this")
+    monkeypatch.setattr(skill_routes, "MAX_AGENTS_CONSIDERED", 3)
+    roomy = get(client, "u_narrow", SKILLS)
 
     assert full.json()["truncated"] is True
+    assert searched.json()["truncated"] is True
     assert roomy.json()["truncated"] is False
     assert names(full) == names(roomy) == ["hosting-expiry"]
 
@@ -990,11 +995,11 @@ def test_the_bound_on_the_page_is_a_bound_on_the_load_and_not_on_the_answer(
 def test_a_limit_outside_the_routes_bound_is_refused_rather_than_clamped(
     client: TestClient, stored: Stored
 ) -> None:
-    """A limit over `MAX_AGENTS_CONSIDERED` and one below one are both 422.
+    """A limit over `brain.listing.MAX_PAGE_ROWS` and one below one are both 422.
 
     Delete this and a caller can ask for a page the statement was never bounded for, which is
     a resource decision made by whoever wrote the query string."""
-    over = get(client, "u_admin", f"{SKILLS}?limit={MAX_AGENTS_CONSIDERED + 1}")
+    over = get(client, "u_admin", f"{SKILLS}?limit={MAX_PAGE_ROWS + 1}")
     under = get(client, "u_admin", f"{SKILLS}?limit=0")
 
     assert over.status_code == under.status_code == 422

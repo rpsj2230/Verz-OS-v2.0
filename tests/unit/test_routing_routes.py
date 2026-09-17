@@ -36,15 +36,16 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Numeric, SmallInteger, Table
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain import routing_routes
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.console.read_replica import LagReading
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
+from brain.listing import DEFAULT_PAGE_ROWS, MAX_PAGE_ROWS
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import (
-    DEFAULT_RUNGS_PER_PAGE,
     MATRIX_READ,
     MATRIX_WRITE,
     MAX_RUNGS_PER_PAGE,
@@ -252,12 +253,12 @@ def _wiring() -> Any:
     )
 
 
-def read(c: TestClient, pid: str, *, limit: int | None = None) -> Response:
+def read(c: TestClient, pid: str, *, limit: int | None = None, **asked: str) -> Response:
     token = token_for(pid, claims=SECOND_FACTOR)
     response: Response = c.get(
         RUNGS_PATH,
         headers={"authorization": f"Bearer {token}"},
-        params={} if limit is None else {"limit": limit},
+        params={**asked, **({} if limit is None else {"limit": limit})},
     )
     return response
 
@@ -453,18 +454,23 @@ def test_a_page_of_the_matrix_carries_no_count_of_anything(client: TestClient) -
     assert numbers == set(), f"a page carries a number of its own: {sorted(numbers)}"
 
 
-def test_a_full_page_says_there_is_more_without_saying_how_much(client: TestClient) -> None:
-    """`truncated` is the page having come back full, and it is a boolean.
+def test_a_full_page_says_there_is_more_without_saying_how_much(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`truncated` is the load having come back full, and it is a boolean.
 
     Both directions, because a flag that is always true and a flag that is always false each
     satisfy half of this. The stub answers two rows whatever the statement asked for, so what
-    varies is the limit the caller sent and nothing else.
+    varies is the load bound and nothing else, and a page size or a search changes nothing.
 
     Delete this and `truncated` can be computed as `len(found) > limit`, which is false for
     every page this route can produce, and a person reading the first hundred rungs of a
     larger matrix is told there is nothing more."""
-    assert read(client, "u_narrow", limit=2).json()["truncated"] is True
-    assert read(client, "u_narrow", limit=3).json()["truncated"] is False
+    monkeypatch.setattr(routing_routes, "MAX_RUNGS_PER_PAGE", 2)
+    assert read(client, "u_narrow").json()["truncated"] is True
+    assert read(client, "u_narrow", limit=1, q="no-such-model").json()["truncated"] is True
+    monkeypatch.setattr(routing_routes, "MAX_RUNGS_PER_PAGE", 3)
+    assert read(client, "u_narrow", limit=1).json()["truncated"] is False
 
 
 def test_the_page_says_whether_this_caller_may_change_it(client: TestClient) -> None:
@@ -667,11 +673,11 @@ def test_the_matrix_is_read_live_and_in_chain_order(client: TestClient) -> None:
 
     Delete this and the ORDER BY can go, at which point the order of a chain is whatever the
     planner returns and the console renders a fallback above its primary."""
-    sql = str(live_rungs(DEFAULT_RUNGS_PER_PAGE).compile(compile_kwargs={"literal_binds": True}))
+    sql = str(live_rungs(MAX_RUNGS_PER_PAGE).compile(compile_kwargs={"literal_binds": True}))
 
     assert "deleted_at IS NULL" in sql
     assert "ORDER BY ops.routing_rung.tier, ops.routing_rung.position" in sql
-    assert f"LIMIT {DEFAULT_RUNGS_PER_PAGE}" in sql
+    assert f"LIMIT {MAX_RUNGS_PER_PAGE}" in sql
 
 
 def test_the_update_touches_only_the_columns_the_edit_carries(client: TestClient) -> None:
@@ -785,10 +791,10 @@ def test_a_page_larger_than_the_route_admits_is_refused(client: TestClient) -> N
     The default is asserted to be inside the bound as well, because a default outside it
     would make every request that named no limit a 422, which is a screen that never loads.
 
-    Delete this and `limit` becomes whatever a caller types, and the LIMIT clause with it."""
-    assert read(client, "u_narrow", limit=MAX_RUNGS_PER_PAGE + 1).status_code == 422
-    assert read(client, "u_narrow", limit=MAX_RUNGS_PER_PAGE).status_code == 200
-    assert DEFAULT_RUNGS_PER_PAGE <= MAX_RUNGS_PER_PAGE
+    Delete this and `limit` becomes whatever a caller types."""
+    assert read(client, "u_narrow", limit=MAX_PAGE_ROWS + 1).status_code == 422
+    assert read(client, "u_narrow", limit=MAX_PAGE_ROWS).status_code == 200
+    assert DEFAULT_PAGE_ROWS <= MAX_PAGE_ROWS
 
 
 def test_both_routes_refuse_a_request_carrying_no_credential(client: TestClient) -> None:

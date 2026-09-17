@@ -519,6 +519,59 @@ def test_an_agent_outside_the_audience_is_absent_from_the_roster_rather_than_mar
     assert listed(client, "u_wide") == ["company_desk", "sales_helper", "their_notes"]
 
 
+def test_a_roster_search_finds_an_agent_only_inside_the_callers_audience_and_pages_there(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and the roster search can read every agent loaded, so a reader typing another
+    department's agent's name learns from one row whether it exists; or the cursor can be computed
+    before the audience, so the last agent a reader may see carries a cursor to agents they may not.
+    The positive half is the reader who is in the audience finding it, one page at a time."""
+    stored.agents["company_desk"] = agent_row("company_desk")
+    stored.agents["sales_helper"] = agent_row(
+        "sales_helper", level=Visibility.DEPARTMENT, department="sales"
+    )
+    token = {"authorization": f"Bearer {token_for('u_narrow')}"}
+    wide = {"authorization": f"Bearer {token_for('u_wide')}"}
+
+    hidden = client.get(AGENTS, headers=token, params={"q": "sales_helper"}).json()
+    narrow = client.get(AGENTS, headers=token, params={"limit": 1}).json()
+    shown = client.get(AGENTS, headers=wide, params={"filter": "department:sales"}).json()
+    first = client.get(AGENTS, headers=wide, params={"limit": 1, "sort": "agent_id"}).json()
+    rest = client.get(
+        AGENTS,
+        headers=wide,
+        params={"limit": 1, "sort": "agent_id", "cursor": first["next_cursor"]},
+    ).json()
+
+    assert hidden["items"] == [] and hidden["next_cursor"] is None
+    assert narrow["next_cursor"] is None and narrow["truncated"] is False
+    assert [one["agent_id"] for one in shown["items"]] == ["sales_helper"]
+    assert [one["agent_id"] for one in (*first["items"], *rest["items"])] == [
+        "company_desk",
+        "sales_helper",
+    ]
+
+
+def test_the_template_gallery_is_searched_by_what_a_card_says(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and the gallery search can be accepted and dropped, which draws every template
+    as a match, or a filter on something a card does not show can be accepted."""
+    token = {"authorization": f"Bearer {token_for('u_elsewhere')}"}
+    every = client.get(TEMPLATES, headers=token, params={"limit": 200}).json()["items"]
+    assert every, "the gallery ships templates"
+    wanted = every[-1]
+
+    found = client.get(TEMPLATES, headers=token, params={"q": wanted["display_name"]}).json()
+    built_in = client.get(TEMPLATES, headers=token, params={"filter": "origin:built_in"}).json()
+    undeclared = client.get(TEMPLATES, headers=token, params={"filter": "document:x"})
+
+    assert wanted["template_id"] in [one["template_id"] for one in found["items"]]
+    assert len(found["items"]) < len(every) or len(every) == 1
+    assert {one["origin"] for one in built_in["items"]} == {"built_in"}
+    assert undeclared.status_code == 422
+
+
 def test_a_person_with_no_department_is_not_matched_by_a_department_audience(
     client: TestClient, stored: Stored
 ) -> None:
@@ -1508,7 +1561,10 @@ def test_a_published_template_is_shown_at_its_highest_version_and_hides_the_buil
     assert by_id["pricing_desk"].version == 4
     assert (by_id[shipped].origin, by_id[shipped].version) == ("published", 2)
     assert {one.origin for one in cards} == {"published", "built_in"}
-    assert [one.display_name for one in cards] == sorted(one.display_name for one in cards)
+    # By name without regard to case, which is `brain.listing.sort_key`'s order: a gallery where
+    # "SMM Agent" sorts before "Shopify Developer" reads as broken.
+    names = [one.display_name for one in cards]
+    assert names == sorted(names, key=str.casefold)
 
 
 def test_a_published_row_that_does_not_construct_is_absent_from_the_gallery(

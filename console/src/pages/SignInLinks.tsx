@@ -26,7 +26,9 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Notice } from "../ui/Notice";
 import {
@@ -35,8 +37,9 @@ import {
   linkOutcome,
   linkProblems,
   linkedOn,
-  linksApiPath,
-  matching,
+  LINKS_API_PATH,
+  LINK_FILTERS,
+  LINK_SORTS,
   readLinksPage,
   unlinkSentence,
   type LinkRow,
@@ -55,7 +58,7 @@ export const NO_LINKS = "There are no sign-in links to show.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 
 export const MORE_LINKS = "This list came back full, so there are more links than it shows.";
-export const NONE_MATCH = "Nobody on this page matches that.";
+export const NONE_MATCH = NOTHING_MATCHES;
 
 /** What the last administrator's row says in place of a control. */
 export const KEPT = "Kept: the last administrator who can sign in.";
@@ -67,7 +70,7 @@ export const YOUR_OWN_LINK =
   "This is your own sign-in link. You will be signed out on your next request.";
 
 export const LINKS_LABEL = "People who can sign in";
-export const FIND_LABEL = "Find a person on this page";
+export const FIND_LABEL = "Find a person who can sign in";
 export const LINK_FORM_LABEL = "Link an account to a person";
 export const ACCOUNT_LABEL = "Identity provider account ID";
 export const PERSON_LABEL = "Person ID";
@@ -183,9 +186,14 @@ function LinkForm({ onLinked }: { readonly onLinked: (sentence: string) => void 
   );
 }
 
-function LinkList({ onUnlinked }: { readonly onUnlinked: (sentence: string) => void }) {
-  const answer = useResource<unknown>(linksApiPath());
-  const [typed, setTyped] = useState("");
+function LinkList({
+  version,
+  onUnlinked,
+}: {
+  readonly version: number;
+  readonly onUnlinked: (sentence: string) => void;
+}) {
+  const listing = useListing<LinkRow>(LINKS_API_PATH, { choices: LINK_FILTERS, version });
   const [confirming, setConfirming] = useState<LinkRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [told, setTold] = useState<string | null>(null);
@@ -216,22 +224,12 @@ function LinkList({ onUnlinked }: { readonly onUnlinked: (sentence: string) => v
     [onUnlinked],
   );
 
-  if (answer.failure) {
-    return <Failure failure={answer.failure} />;
-  }
-  if (answer.busy) {
-    return (
-      <p className="note" role="status">
-        {READING_LINKS}
-      </p>
-    );
-  }
-
-  const page = readLinksPage(answer.data);
-  const shown = matching(page.links, typed);
+  const page = readLinksPage(listing.body);
+  const shown = page.links;
 
   return (
     <>
+      <ListControls label={FIND_LABEL} listing={listing} choices={LINK_FILTERS} sorts={LINK_SORTS} />
       {failure === null ? null : <Failure failure={failure} />}
       {told === null ? null : (
         <Notice title={SOMETHING_DID_NOT_WORK}>
@@ -256,66 +254,60 @@ function LinkList({ onUnlinked }: { readonly onUnlinked: (sentence: string) => v
       )}
       <section className="card">
         <h2>{LINKS_LABEL}</h2>
-        {page.links.length === 0 ? null : (
-          <label className="control-label">
-            {FIND_LABEL}{" "}
-            <input
-              className="form-control"
-              type="search"
-              value={typed}
-              onChange={(event) => {
-                setTyped(event.target.value);
-              }}
-            />
-          </label>
-        )}
-        {page.links.length === 0 ? (
-          <p className="note">{NO_LINKS}</p>
+        {listing.failure ? (
+          <Failure failure={listing.failure} />
+        ) : listing.busy ? (
+          <p className="note" role="status">
+            {READING_LINKS}
+          </p>
         ) : shown.length === 0 ? (
-          <p className="note">{NONE_MATCH}</p>
+          <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_LINKS}</p>
         ) : (
-          <div className="grid__scroll">
-            <table className="grid__table" aria-label={LINKS_LABEL}>
-              <thead>
-                <tr>
-                  <th scope="col">Person</th>
-                  <th scope="col">Department</th>
-                  <th scope="col">Linked on</th>
-                  <th scope="col">Control</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((row) => (
-                  <tr key={row.principal_id}>
-                    <td>
-                      {row.display_name} <code>{row.principal_id}</code>
-                    </td>
-                    <td>{row.department ?? ""}</td>
-                    <td>{linkedOn(row.linked_at)}</td>
-                    <td>
-                      {row.last_administrator ? (
-                        <span className="note">{KEPT}</span>
-                      ) : (
-                        <button
-                          type="button"
-                          className="button"
-                          aria-label={`${UNLINK_LABEL}: ${row.display_name}`}
-                          disabled={busy}
-                          onClick={() => {
-                            setFailure(null);
-                            setTold(null);
-                            setConfirming(row);
-                          }}
-                        >
-                          {UNLINK_LABEL}
-                        </button>
-                      )}
-                    </td>
+          <>
+            <div className="grid__scroll">
+              <table className="grid__table" aria-label={LINKS_LABEL}>
+                <thead>
+                  <tr>
+                    <th scope="col">Person</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Linked on</th>
+                    <th scope="col">Control</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {shown.map((row) => (
+                    <tr key={row.principal_id}>
+                      <td>
+                        {row.display_name} <code>{row.principal_id}</code>
+                      </td>
+                      <td>{row.department ?? ""}</td>
+                      <td>{linkedOn(row.linked_at)}</td>
+                      <td>
+                        {row.last_administrator ? (
+                          <span className="note">{KEPT}</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="button"
+                            aria-label={`${UNLINK_LABEL}: ${row.display_name}`}
+                            disabled={busy}
+                            onClick={() => {
+                              setFailure(null);
+                              setTold(null);
+                              setConfirming(row);
+                            }}
+                          >
+                            {UNLINK_LABEL}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ShowMore listing={listing} />
+          </>
         )}
         {page.truncated ? <p className="note">{MORE_LINKS}</p> : null}
         {page.links.some((row) => row.last_administrator) ? (
@@ -328,11 +320,11 @@ function LinkList({ onUnlinked }: { readonly onUnlinked: (sentence: string) => v
 }
 
 export function SignInLinks() {
-  const [generation, setGeneration] = useState(0);
+  const [version, setVersion] = useState(0);
   const [said, setSaid] = useState<string | null>(null);
   const changed = useCallback((sentence: string) => {
     setSaid(sentence);
-    setGeneration((current) => current + 1);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -345,7 +337,7 @@ export function SignInLinks() {
           {said}
         </p>
       )}
-      <LinkList key={generation} onUnlinked={changed} />
+      <LinkList version={version} onUnlinked={changed} />
       <LinkForm onLinked={changed} />
     </article>
   );

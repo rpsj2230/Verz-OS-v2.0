@@ -12,7 +12,7 @@ database, the ledger entries the triggers write and the refusal of the next requ
 **Every refusal has a sibling proving the permitted case is answered**, which is CLAUDE.md's rule
 about a guard tested only by its refusals.
 
-Task ids: M27.7.10, M27.7.11
+Task ids: M27.7.10, M27.7.11, M27.8.6
 """
 
 from __future__ import annotations
@@ -61,6 +61,7 @@ from tests.unit.test_api_routes import (
 
 SESSIONS = f"{API_PREFIX}/govern/sessions"
 END = f"{API_PREFIX}/govern/sessions/end"
+END_SEVERAL = f"{API_PREFIX}/govern/sessions/end-several"
 LINKS = f"{API_PREFIX}/govern/sign-ins"
 UNLINK = f"{API_PREFIX}/govern/sign-ins/unlink"
 
@@ -391,6 +392,8 @@ def test_a_full_load_says_so_and_no_answer_carries_a_count(
         session_routes.SignInLinkView,
         session_routes.UnlinkView,
         session_routes.SessionEnded,
+        session_routes.SessionsEnded,
+        session_routes.SessionOutcome,
     ):
         assert not set(model.model_fields) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, model
 
@@ -655,3 +658,131 @@ def test_a_process_with_no_store_refuses_a_permitted_caller_and_nobody_else_diff
 
     assert stranger.status_code == links_stranger.status_code == 404
     assert permitted_caller.status_code == links_admin.status_code == 500
+
+
+# ------------------------------------------------------------------- paging, search and filter
+
+
+def _walk(client: TestClient, path: str, pid: str, params: dict[str, str]) -> list[str]:
+    """Every row key a reader reaches by following the cursor, one row per page."""
+    found: list[str] = []
+    cursor: str | None = None
+    for _ in range(10):
+        asked = {**params, "limit": "1", **({"cursor": cursor} if cursor else {})}
+        answer = client.get(path, headers=auth(pid), params=asked)
+        assert answer.status_code == 200, answer.text
+        body = answer.json()
+        found.extend(one.get("session_id") or one["principal_id"] for one in body["items"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            return found
+    msg = "the walk did not end"
+    raise AssertionError(msg)
+
+
+def test_the_sessions_list_pages_searches_and_filters_inside_what_the_reader_may_see(
+    client: TestClient, sessions: Sessions
+) -> None:
+    """Delete this and a search can reach a session `open_sessions` withheld, so a department
+    reader learns who is signed in elsewhere by searching a name and watching a row come back; or
+    the cursor can be computed over the load, so a last page in one department carries a cursor
+    because another department has sessions. The positive halves are the wide reader finding the
+    same row and every web session reached one page at a time."""
+    sessions.live["s-web"] = a_session("s-web", "u_narrow", "web")
+    sessions.live["s-web-2"] = a_session("s-web-2", "u_prefix", "web")
+    sessions.live["s-sales"] = a_session("s-sales", "u_wide", "sales")
+
+    assert _walk(client, SESSIONS, "u_narrow", {"sort": "display_name"}) == ["s-web", "s-web-2"]
+    assert _walk(client, SESSIONS, "u_narrow", {"q": "u_wide"}) == []
+    assert _walk(client, SESSIONS, "u_wide", {"q": "u_wide"}) == ["s-sales"]
+    assert _walk(client, SESSIONS, "u_narrow", {"filter": "department:sales"}) == []
+    assert _walk(client, SESSIONS, "u_wide", {"filter": "department:sales"}) == ["s-sales"]
+
+
+def test_a_sessions_cursor_is_refused_to_another_reader_and_an_undeclared_order_to_everybody(
+    client: TestClient, sessions: Sessions
+) -> None:
+    """Delete this and a cursor copied between administrators is read under the second one's
+    question, or an order by a field no row shows is accepted. Both are 422s decided from the
+    parameters, so the answer is the same over any sessions at all."""
+    sessions.live["s-web"] = a_session("s-web", "u_narrow", "web")
+    sessions.live["s-sales"] = a_session("s-sales", "u_wide", "sales")
+    minted = client.get(SESSIONS, headers=auth("u_wide"), params={"limit": "1"}).json()
+    assert minted["next_cursor"] is not None
+
+    copied = client.get(
+        SESSIONS, headers=auth("u_admin"), params={"limit": "1", "cursor": minted["next_cursor"]}
+    )
+    owned = client.get(
+        SESSIONS, headers=auth("u_wide"), params={"limit": "1", "cursor": minted["next_cursor"]}
+    )
+    undeclared = client.get(SESSIONS, headers=auth("u_wide"), params={"sort": "channel"})
+
+    assert copied.status_code == undeclared.status_code == 422
+    assert owned.status_code == 200, owned.text
+
+
+def test_the_sign_in_links_list_filters_by_what_a_row_shows_and_pages_in_name_order(
+    client: TestClient, links: Links
+) -> None:
+    """Delete this and the links listing can ignore a filter, which draws every link as a match, or
+    page out of order, which skips a person at a page boundary."""
+    links.linked = {pid: a_link(pid) for pid in ("u_admin", "u_wide", "u_narrow")}
+    links.administrators = {"u_admin"}
+
+    assert _walk(client, LINKS, "u_admin", {}) == ["u_admin", "u_narrow", "u_wide"]
+    assert _walk(client, LINKS, "u_admin", {"filter": "department:web"}) == ["u_admin", "u_narrow"]
+    assert _walk(client, LINKS, "u_admin", {"filter": "last_administrator:true"}) == ["u_admin"]
+
+
+# ------------------------------------------------------------------- several at once
+
+
+def test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question(
+    client: TestClient, sessions: Sessions
+) -> None:
+    """Delete this and a bulk ending can decide the set once, so a department administrator ends a
+    session in another department by putting it in a list beside one of their own; or the outcomes
+    can differ between a session out of reach and one that does not exist, which turns the bulk
+    control into a way of asking which sessions exist. The positive half is the web session ended,
+    with the store told who did it."""
+    sessions.live["s-web"] = a_session("s-web", "u_prefix", "web")
+    sessions.live["s-sales"] = a_session("s-sales", "u_wide", "sales")
+
+    answer = client.post(
+        END_SEVERAL,
+        headers=auth("u_narrow"),
+        json={"session_ids": ["s-web", "s-sales", "s-nothing", "s-web"]},
+    )
+
+    assert answer.status_code == 200, answer.text
+    outcomes = answer.json()["outcomes"]
+    assert [one["session_id"] for one in outcomes] == ["s-web", "s-sales", "s-nothing"]
+    assert outcomes[0]["ended"] is True
+    assert outcomes[0]["principal_id"] == "u_prefix"
+    assert {k: v for k, v in outcomes[1].items() if k != "session_id"} == {
+        k: v for k, v in outcomes[2].items() if k != "session_id"
+    }
+    assert outcomes[1]["ended"] is False
+    assert "s-sales" in sessions.live and "s-web" not in sessions.live
+    ends = [one for one in sessions.calls if "end" in one]
+    assert [one["end"] for one in ends] == ["s-web", "s-sales", "s-nothing"]
+    assert {one["ended_by"] for one in ends} == {"u_narrow"}
+
+
+def test_a_caller_without_the_control_is_refused_the_bulk_ending_as_the_single_one_is(
+    client: TestClient, sessions: Sessions
+) -> None:
+    """Delete this and the bulk route can reach the store for a reader who holds no control, or
+    refuse them in different words from the single ending, which says the two are guarded apart."""
+    sessions.live["s-sales"] = a_session("s-sales", "u_wide", "sales")
+
+    several = client.post(END_SEVERAL, headers=auth("u_wide"), json={"session_ids": ["s-sales"]})
+    single = client.post(END, headers=auth("u_wide"), json={"session_id": "s-sales"})
+    empty = client.post(END_SEVERAL, headers=auth("u_admin"), json={"session_ids": []})
+
+    assert several.status_code == single.status_code == 404
+    assert refusal(several)["message"] == refusal(single)["message"]
+    assert empty.status_code == 422
+    assert [one for one in sessions.calls if "end" in one] == []
+    assert "s-sales" in sessions.live

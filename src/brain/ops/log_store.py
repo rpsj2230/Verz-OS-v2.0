@@ -281,8 +281,11 @@ def entries(
     event: str | None,
     after: tuple[datetime, int] | None,
     limit: int,
+    newest_first: bool = True,
 ) -> Select[tuple[Any, ...]]:
-    """Rows in `[start, end)`, newest first, narrowed as asked, one past `limit`."""
+    """Rows in `[start, end)`, newest first unless asked otherwise, narrowed as asked, one past
+    `limit`. A cursor continues in the direction its page was read in, so `after` is passed going
+    back towards older rows when newest first and forward towards newer ones otherwise."""
     statement = select(*(getattr(ApplicationLogRow, name) for name in ENTRY_COLUMNS)).where(
         ApplicationLogRow.at >= start, ApplicationLogRow.at < end
     )
@@ -293,13 +296,14 @@ def entries(
             ApplicationLogRow.event.ilike(f"%{escape_like(event)}%", escape="\\")
         )
     if after is not None:
-        statement = statement.where(
-            tuple_(ApplicationLogRow.at, ApplicationLogRow.id)
-            < tuple_(literal(after[0]), literal(after[1]))
-        )
-    return statement.order_by(ApplicationLogRow.at.desc(), ApplicationLogRow.id.desc()).limit(
-        limit + 1
-    )
+        position = tuple_(ApplicationLogRow.at, ApplicationLogRow.id)
+        bound = tuple_(literal(after[0]), literal(after[1]))
+        statement = statement.where(position < bound if newest_first else position > bound)
+    if newest_first:
+        ordered = statement.order_by(ApplicationLogRow.at.desc(), ApplicationLogRow.id.desc())
+    else:
+        ordered = statement.order_by(ApplicationLogRow.at.asc(), ApplicationLogRow.id.asc())
+    return ordered.limit(limit + 1)
 
 
 def fields_of(stored: object) -> Mapping[str, str]:

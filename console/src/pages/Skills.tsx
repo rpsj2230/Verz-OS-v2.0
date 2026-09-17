@@ -30,13 +30,16 @@
  *
  * Imported statically rather than split, which is `Roles.tsx`'s rule.
  *
- * Task ids: M42.6.4
+ * Task ids: M42.6.4, M27.8.6
  */
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { FailureNotice } from "../ui/FailureNotice";
 import {
@@ -58,7 +61,9 @@ import {
   skillAddress,
   skillIn,
   SKILLS_API_PATH,
-  skillsApiPath,
+  SKILL_FILTERS,
+  SKILL_SORTS,
+  skillApiPath,
   versionsOf,
   type AgentChoice,
   type Assigned,
@@ -81,6 +86,8 @@ export const NO_LIBRARY = "There are no skills in the library to show.";
 
 /** No agent runs a skill this reader's agents run, whichever of the reasons. */
 export const NO_SKILLS = "There are no skills in use to show.";
+export const NONE_MATCH = NOTHING_MATCHES;
+export const FILTERS_LABEL = "Narrow the skills in use";
 
 /** A load that came back full. A fact about there being more, and never a figure. */
 export const MORE_AGENTS =
@@ -484,14 +491,13 @@ function SkillsAnswerView({
   readonly version: number;
   readonly onTold: Tell;
 }) {
-  const answer = useResource<unknown>(skillsApiPath(), version);
+  const listing = useListing<SkillLibraryRow>(SKILLS_API_PATH, { choices: SKILL_FILTERS, version });
+  const opened = useResource<unknown>(openName === undefined ? null : skillApiPath(openName), version);
 
-  if (answer.failure) {
-    return (
-      <FailureNotice failure={answer.failure} />
-    );
-  }
-  if (answer.busy) {
+  if (listing.body === null) {
+    if (listing.failure) {
+      return <FailureNotice failure={listing.failure} />;
+    }
     return (
       <p className="note" role="status">
         Loading.
@@ -499,8 +505,9 @@ function SkillsAnswerView({
     );
   }
 
-  const page = readSkillsPage(answer.data);
-  const pinned = openName === undefined ? null : skillIn(page.skills, openName);
+  const page = readSkillsPage(listing.body);
+  const openPage = readSkillsPage(opened.data);
+  const pinned = openName === undefined ? null : skillIn(openPage.skills, openName);
   const versions = openName === undefined ? [] : versionsOf(page.library, openName);
   const drifting = driftingRows(page.skills);
 
@@ -523,7 +530,7 @@ function SkillsAnswerView({
       )}
       {page.libraryTruncated ? <p className="note">{MORE_SKILLS}</p> : null}
 
-      {openName === undefined ? null : versions.length === 0 && pinned === null ? (
+      {openName === undefined || opened.busy ? null : versions.length === 0 && pinned === null ? (
         <p className="note">{NO_SUCH_SKILL}</p>
       ) : (
         <section className="card" aria-label={openName}>
@@ -565,17 +572,27 @@ function SkillsAnswerView({
       )}
 
       <h2>In use by agents</h2>
-      {page.skills.length === 0 ? (
-        <p className="note">{NO_SKILLS}</p>
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={SKILL_FILTERS} sorts={SKILL_SORTS} />
+      {listing.failure ? (
+        <FailureNotice failure={listing.failure} />
+      ) : listing.busy ? (
+        <p className="note" role="status">
+          Loading.
+        </p>
+      ) : page.skills.length === 0 ? (
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_SKILLS}</p>
       ) : (
-        <ul className="roster" aria-label={IN_USE_LABEL}>
-          {page.skills.map((row) => (
-            <li key={row.name}>
-              <Link to={skillAddress(row.name)}>{row.name}</Link>
-              <Pins row={row} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="roster" aria-label={IN_USE_LABEL}>
+            {page.skills.map((row) => (
+              <li key={row.name}>
+                <Link to={skillAddress(row.name)}>{row.name}</Link>
+                <Pins row={row} />
+              </li>
+            ))}
+          </ul>
+          <ShowMore listing={listing} />
+        </>
       )}
       {page.truncated ? <p className="note">{MORE_AGENTS}</p> : null}
 

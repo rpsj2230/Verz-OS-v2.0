@@ -1,5 +1,5 @@
 /**
- * Sessions: who is signed in now, and the control to end one.
+ * Sessions: who is signed in now, and the control to end one or several.
  *
  * `docs/screens.html` SCREEN 10, People and Grants, is where the design puts what happens to a
  * person's sign-ins, and this screen sits beside it in Govern. The layout is that screen's: the
@@ -12,40 +12,50 @@
  * is refused from its next request, no grant is removed, and the person may sign in again. A
  * success says what was ended and when the database recorded it; a failure is the API's sentence.
  *
- * **The reader's own session has no control and says why.** Ending it would refuse the request
- * after the one that ended it, which is signing out with extra steps and no way back to this page.
+ * **Ending several is one confirmation listing each session and what happens to it**, and one
+ * request that the route runs as that many single endings. The page then says, per session, whether
+ * it was ended, because a bulk act whose partial failure is not stated is the unsafe version.
+ *
+ * **The reader's own session has no control and no box, and says why.** Ending it would refuse the
+ * request after the one that ended it, which is signing out with extra steps and no way back.
  *
  * **Nothing here decides who may see or end a session.** `endable` came from `brain.console.govern.
- * may_end` on the server and only decides whether a button is drawn. The route decides again.
+ * may_end` on the server and only decides whether a button or a box is drawn. The route decides
+ * again, per session.
  *
- * **A write is followed by a fresh request**, keyed on a counter, for `People.tsx`' reason: the
+ * **The search, the filters, the order and "Show more" are requests** (`components/useListing.ts`),
+ * and a write asks for the first page again with the same question, for `People.tsx`' reason: the
  * list shows what the database holds, not what this page sent.
  *
- * Task ids: M27.7.10
+ * Task ids: M27.7.10, M27.8.6
  */
 
-import { useCallback, useState, type ChangeEvent } from "react";
+import { useCallback, useState } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { Notice } from "../ui/Notice";
 import {
+  END_SELECTED_QUESTION,
+  END_SESSIONS_API_PATH,
   END_SESSION_API_PATH,
-  NO_SESSION_FILTERS,
-  SORT_LABELS,
-  SORTS,
+  MOST_ENDED_AT_ONCE,
+  SESSIONS_API_PATH,
+  SESSION_FILTERS,
+  SESSION_SORTS,
   endQuestion,
   endingBody,
-  narrowed,
-  offeredDepartments,
-  offeredPeople,
+  endingLine,
+  endingsBody,
+  outcomeLine,
+  readOutcomes,
   readSessionsPage,
-  sessionsApiPath,
+  tickable,
   when,
-  type SessionFilters,
   type SessionRow,
-  type Sort,
 } from "./sessionsQuery";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
@@ -63,19 +73,23 @@ export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 /** A full load. A fact about there being more, and never a figure. */
 export const MORE_SESSIONS = "This list came back full, so there are more sessions than it shows.";
 
-/** Nothing on the page matches the filters chosen. About the page, not the company. */
-export const NONE_MATCH = "No session on this page matches these filters.";
+/** Nothing matches the search and filters chosen. About the reader's own sessions. */
+export const NONE_MATCH = NOTHING_MATCHES;
 
 /** What the reader's own row says instead of a control. */
 export const YOUR_SESSION = "This is the session you are using. Sign out to end it.";
 
 export const END_LABEL = "End session";
 export const KEEP_LABEL = "Keep it";
+export const END_SELECTED_LABEL = "End the ticked sessions";
+export const KEEP_ALL_LABEL = "Keep them";
+export const TICK_LABEL = "Tick to end";
+/** Said when more are ticked than one request may carry. A bound, not a count of anything. */
+export const TOO_MANY_TICKED =
+  "One request ends at most fifty sessions. Untick some and end the rest afterwards.";
 
 export const SESSIONS_LABEL = "Sessions signed in now";
 export const FILTERS_LABEL = "Narrow the sessions";
-export const ALL_DEPARTMENTS = "All departments";
-export const EVERYONE = "Everyone";
 
 /** What a success says: whose, and the instant the database recorded. */
 export function endedSentence(row: SessionRow, endedAt: string): string {
@@ -101,10 +115,17 @@ function readEndedAt(payload: unknown): string | null {
   return typeof ended === "string" ? ended : null;
 }
 
-function SessionList({ onEnded }: { readonly onEnded: (sentence: string) => void }) {
-  const answer = useResource<unknown>(sessionsApiPath());
-  const [filters, setFilters] = useState<SessionFilters>(NO_SESSION_FILTERS);
+function SessionList({
+  version,
+  onEnded,
+}: {
+  readonly version: number;
+  readonly onEnded: (sentences: readonly string[]) => void;
+}) {
+  const listing = useListing<SessionRow>(SESSIONS_API_PATH, { choices: SESSION_FILTERS, version });
   const [confirming, setConfirming] = useState<SessionRow | null>(null);
+  const [confirmingTicked, setConfirmingTicked] = useState(false);
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
@@ -124,73 +145,56 @@ function SessionList({ onEnded }: { readonly onEnded: (sentence: string) => void
         }
         setFailure(null);
         setConfirming(null);
-        onEnded(endedSentence(row, readEndedAt(result.data) ?? ""));
+        onEnded([endedSentence(row, readEndedAt(result.data) ?? "")]);
       })();
     },
     [onEnded],
   );
 
-  if (answer.failure) {
-    return <Failure failure={answer.failure} />;
-  }
-  if (answer.busy) {
-    return (
-      <p className="note" role="status">
-        {READING_SESSIONS}
-      </p>
-    );
-  }
+  const endTicked = useCallback(
+    (rows: readonly SessionRow[]) => {
+      setBusy(true);
+      void (async () => {
+        const result = await request<unknown>(END_SESSIONS_API_PATH, {
+          method: "POST",
+          body: endingsBody(rows),
+        });
+        setBusy(false);
+        setConfirmingTicked(false);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        setTicked(new Set());
+        const byId = new Map(rows.map((one) => [one.session_id, one]));
+        onEnded(readOutcomes(result.data).map((one) => outcomeLine(byId.get(one.session_id), one)));
+      })();
+    },
+    [onEnded],
+  );
 
-  const page = readSessionsPage(answer.data);
-  const shown = narrowed(page.sessions, filters);
-  const set = (name: keyof SessionFilters) => (event: ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, [name]: event.target.value });
+  const names = new Map(listing.rows.map((one) => [one.principal_id, one.display_name]));
+  const choices = SESSION_FILTERS.map((choice) =>
+    choice.column === "principal_id"
+      ? { ...choice, describe: (value: string) => names.get(value) ?? value }
+      : choice,
+  );
+  const page = readSessionsPage(listing.body);
+  const tickedRows = page.sessions.filter((one) => ticked.has(one.session_id) && tickable(one));
+  const toggle = (row: SessionRow) => {
+    const next = new Set(ticked);
+    if (next.has(row.session_id)) {
+      next.delete(row.session_id);
+    } else {
+      next.add(row.session_id);
+    }
+    setTicked(next);
   };
 
   return (
     <>
-      {page.sessions.length === 0 ? null : (
-        <form className="form" aria-label={FILTERS_LABEL} onSubmit={(event) => event.preventDefault()}>
-          <label className="control-label">
-            Department{" "}
-            <select className="form-control" value={filters.department} onChange={set("department")}>
-              <option value="">{ALL_DEPARTMENTS}</option>
-              {offeredDepartments(page.sessions).map((one) => (
-                <option key={one} value={one}>
-                  {one}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="control-label">
-            Person{" "}
-            <select className="form-control" value={filters.person} onChange={set("person")}>
-              <option value="">{EVERYONE}</option>
-              {offeredPeople(page.sessions).map((one) => (
-                <option key={one.id} value={one.id}>
-                  {one.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="control-label">
-            Order{" "}
-            <select
-              className="form-control"
-              value={filters.sort}
-              onChange={(event) => {
-                setFilters({ ...filters, sort: event.target.value as Sort });
-              }}
-            >
-              {SORTS.map((one) => (
-                <option key={one} value={one}>
-                  {SORT_LABELS[one]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </form>
-      )}
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={choices} sorts={SESSION_SORTS} />
 
       {failure === null ? null : <Failure failure={failure} />}
 
@@ -210,58 +214,118 @@ function SessionList({ onEnded }: { readonly onEnded: (sentence: string) => void
         />
       )}
 
+      {!confirmingTicked ? null : (
+        <ConfirmAction
+          question={END_SELECTED_QUESTION}
+          consequence={page.ending}
+          details={
+            <ul className="confirm__items">
+              {tickedRows.map((one) => (
+                <li key={one.session_id}>{endingLine(one)}</li>
+              ))}
+            </ul>
+          }
+          confirmLabel={END_SELECTED_LABEL}
+          cancelLabel={KEEP_ALL_LABEL}
+          busy={busy}
+          onConfirm={() => {
+            endTicked(tickedRows);
+          }}
+          onCancel={() => {
+            setConfirmingTicked(false);
+          }}
+        />
+      )}
+
       <section className="card">
         <h2>Signed in now</h2>
-        {page.sessions.length === 0 ? (
-          <p className="note">{NO_SESSIONS}</p>
-        ) : shown.length === 0 ? (
-          <p className="note">{NONE_MATCH}</p>
+        {listing.failure ? (
+          <Failure failure={listing.failure} />
+        ) : listing.busy ? (
+          <p className="note" role="status">
+            {READING_SESSIONS}
+          </p>
+        ) : page.sessions.length === 0 ? (
+          <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_SESSIONS}</p>
         ) : (
-          <div className="grid__scroll">
-            <table className="grid__table" aria-label={SESSIONS_LABEL}>
-              <thead>
-                <tr>
-                  <th scope="col">Person</th>
-                  <th scope="col">Department</th>
-                  <th scope="col">Signed in</th>
-                  <th scope="col">Ends by</th>
-                  <th scope="col">Second factor</th>
-                  <th scope="col">Control</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((row) => (
-                  <tr key={row.session_id}>
-                    <td>
-                      {row.display_name} <code>{row.principal_id}</code>
-                    </td>
-                    <td>{row.department ?? ""}</td>
-                    <td>{when(row.signed_in_at)}</td>
-                    <td>{when(row.lapses_at)}</td>
-                    <td>{row.second_factor ? "Yes" : "No"}</td>
-                    <td>
-                      {row.yours ? (
-                        <span className="note">{YOUR_SESSION}</span>
-                      ) : row.endable ? (
-                        <button
-                          type="button"
-                          className="button"
-                          aria-label={`${END_LABEL}: ${row.display_name}`}
-                          disabled={busy}
-                          onClick={() => {
-                            setFailure(null);
-                            setConfirming(row);
-                          }}
-                        >
-                          {END_LABEL}
-                        </button>
-                      ) : null}
-                    </td>
+          <>
+            <div className="grid__scroll">
+              <table className="grid__table" aria-label={SESSIONS_LABEL}>
+                <thead>
+                  <tr>
+                    <th scope="col">{TICK_LABEL}</th>
+                    <th scope="col">Person</th>
+                    <th scope="col">Department</th>
+                    <th scope="col">Signed in</th>
+                    <th scope="col">Ends by</th>
+                    <th scope="col">Second factor</th>
+                    <th scope="col">Control</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {page.sessions.map((row) => (
+                    <tr key={row.session_id}>
+                      <td>
+                        {tickable(row) ? (
+                          <input
+                            type="checkbox"
+                            aria-label={`${TICK_LABEL}: ${row.display_name}`}
+                            checked={ticked.has(row.session_id)}
+                            disabled={busy}
+                            onChange={() => {
+                              toggle(row);
+                            }}
+                          />
+                        ) : null}
+                      </td>
+                      <td>
+                        {row.display_name} <code>{row.principal_id}</code>
+                      </td>
+                      <td>{row.department ?? ""}</td>
+                      <td>{when(row.signed_in_at)}</td>
+                      <td>{when(row.lapses_at)}</td>
+                      <td>{row.second_factor ? "Yes" : "No"}</td>
+                      <td>
+                        {row.yours ? (
+                          <span className="note">{YOUR_SESSION}</span>
+                        ) : row.endable ? (
+                          <button
+                            type="button"
+                            className="button"
+                            aria-label={`${END_LABEL}: ${row.display_name}`}
+                            disabled={busy}
+                            onClick={() => {
+                              setFailure(null);
+                              setConfirming(row);
+                            }}
+                          >
+                            {END_LABEL}
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {tickedRows.length > MOST_ENDED_AT_ONCE ? <p className="note">{TOO_MANY_TICKED}</p> : null}
+            {page.sessions.some(tickable) ? (
+              <div className="form-actions">
+                <button
+                  type="button"
+                  className="button"
+                  disabled={busy || tickedRows.length === 0 || tickedRows.length > MOST_ENDED_AT_ONCE}
+                  onClick={() => {
+                    setFailure(null);
+                    setConfirmingTicked(true);
+                  }}
+                >
+                  {END_SELECTED_LABEL}
+                </button>
+              </div>
+            ) : null}
+            <ShowMore listing={listing} />
+          </>
         )}
         {page.truncated ? <p className="note">{MORE_SESSIONS}</p> : null}
         {page.appears === "" ? null : <p className="note">{page.appears}</p>}
@@ -271,12 +335,12 @@ function SessionList({ onEnded }: { readonly onEnded: (sentence: string) => void
 }
 
 export function Sessions() {
-  // A counter rather than a boolean, so two endings in a row remount twice. Never rendered.
-  const [generation, setGeneration] = useState(0);
-  const [ended, setEnded] = useState<string | null>(null);
-  const onEnded = useCallback((sentence: string) => {
-    setEnded(sentence);
-    setGeneration((current) => current + 1);
+  // A counter, so two endings in a row ask twice. Never rendered.
+  const [version, setVersion] = useState(0);
+  const [ended, setEnded] = useState<readonly string[]>([]);
+  const onEnded = useCallback((sentences: readonly string[]) => {
+    setEnded(sentences);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -284,12 +348,16 @@ export function Sessions() {
       <p className="note">{SESSIONS_CRUMB}</p>
       <h1>{SESSIONS_HEADING}</h1>
       <p className="lede">{SESSIONS_LEDE}</p>
-      {ended === null ? null : (
-        <p className="note" role="status">
-          {ended}
-        </p>
+      {ended.length === 0 ? null : (
+        <div role="status">
+          {ended.map((sentence, index) => (
+            <p className="note" key={`${String(index)}-${sentence}`}>
+              {sentence}
+            </p>
+          ))}
+        </div>
       )}
-      <SessionList key={generation} onEnded={onEnded} />
+      <SessionList version={version} onEnded={onEnded} />
     </article>
   );
 }

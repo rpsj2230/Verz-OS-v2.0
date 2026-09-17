@@ -11,6 +11,7 @@
 
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
+import { LIST_PAGE_SIZE } from "../src/components/listing";
 import { beforeAll, describe, expect, test } from "vitest";
 import {
   ACCOUNT_LABEL,
@@ -29,7 +30,6 @@ import {
   ACCOUNT_HAS_SPACE_AROUND_IT,
   ACCOUNT_IS_EMPTY,
   LINK_OUTCOMES,
-  LINKS_PAGE_SIZE,
   PERSON_IS_EMPTY,
   linkProblems,
   readLinksPage,
@@ -146,7 +146,7 @@ describe("what the links screen asks for", () => {
       .filter((url) => new URL(url, CONSOLE_ORIGIN).pathname === LINKS_OPERATION)
       .flatMap((url) => [...new URL(url, CONSOLE_ORIGIN).searchParams.keys()]);
     expect(sent.filter((name) => !declared.has(name))).toEqual([]);
-    expect(LINKS_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
     expect(Object.keys(declaredRequestBodySchema(UNLINK_OPERATION, "post")["properties"] as object)).toEqual([
       "principal_id",
     ]);

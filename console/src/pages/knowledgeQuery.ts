@@ -16,12 +16,11 @@
  * `freshness_and_use_are_not_measured` to say so, and the page says it in words. See
  * `A_COLUMN_NOTHING_SENDS_IS_A_SENTENCE_AND_NEVER_A_BLANK_COLUMN`.
  *
- * **The search, the level filter and the sort work on the rows this page holds, and say so.**
- * The route declares no filter parameter on purpose: a load narrowed by a department the caller
- * typed would turn the route's `truncated` flag into a statement about how many documents that
- * department holds, which `brain.estate_routes.
- * A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT` refuses. So the controls here are
- * labelled as narrowing this page, and when the page came back full it says so beside them.
+ * **The search, the level filter, the order and "Show more" are requests to the route**
+ * (`brain.listing`), and the route runs them over the items the reader may know exist without ever
+ * narrowing what it loads, which is what keeps `truncated` from becoming a statement about how many
+ * documents match: `brain.estate_routes.A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT`.
+ * Filtering by department is not offered, because a row carries no department to match.
  *
  * **The counts on this page are of rows the reader was shown**, never of a company total. A
  * count of what was shown is not a count of what was hidden, which is
@@ -31,10 +30,11 @@
  * **Nothing here decides who may see what.** The request is identical for every caller and the
  * API answers from grants this browser never receives. Served by `brain.console.govern_estate`.
  *
- * Task ids: M27.7.20
+ * Task ids: M27.7.20, M27.8.6
  */
 
 import type { components } from "../api/schema";
+import type { FilterChoice, SortChoice } from "../components/listing";
 
 /** One item on the library, as `brain.estate_routes.LibraryRowView` sends it. */
 export type LibraryRow = components["schemas"]["LibraryRowView"];
@@ -56,20 +56,16 @@ export const KNOWLEDGE_API_PATH = "/govern/library";
 /** The console address, at the screen's own key in `brain.console.screens`. */
 export const KNOWLEDGE_PATH = "/library";
 
-/** The one query parameter the route declares. */
-export const LIMIT_PARAMETER = "limit";
+/** The filters the library route declares that this screen offers, over values on rows drawn. */
+export const LIBRARY_FILTERS: readonly FilterChoice<LibraryRow>[] = [
+  { column: "level", label: "Visible to", everything: "Every level", read: (row) => row.level },
+];
 
-/**
- * How many items to ask for. Below the route's declared maximum, which
- * `tests/estate-pages.test.tsx` reads out of the API's own document rather than comparing with
- * a second constant here.
- */
-export const KNOWLEDGE_PAGE_SIZE = 500;
-
-/** The whole request this screen makes, query string included. */
-export function knowledgeApiPath(): string {
-  return `${KNOWLEDGE_API_PATH}?${LIMIT_PARAMETER}=${String(KNOWLEDGE_PAGE_SIZE)}`;
-}
+/** The orders this screen offers. The levels' own names sort widest first. */
+export const LIBRARY_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By reference" },
+  { value: "level", label: "Widest first" },
+];
 
 /** One page of the library, as this console holds it. */
 export interface KnowledgePage {
@@ -127,40 +123,6 @@ export function readKnowledgePage(payload: unknown): KnowledgePage {
     onlyExistenceAndReachAreShown: body.only_existence_and_reach_are_shown !== false,
     freshnessAndUseAreNotMeasured: body.freshness_and_use_are_not_measured !== false,
   };
-}
-
-/** How the rows on this page are narrowed and ordered. Nothing here reaches the API. */
-export interface LibraryView {
-  /** Part of an item's reference, compared without regard to case. Empty matches everything. */
-  readonly search: string;
-  /** One level, or empty for all three. */
-  readonly level: Level | "";
-  /** By reference, or widest level first and then by reference. */
-  readonly sort: "item" | "level";
-}
-
-export const EVERY_ROW: LibraryView = Object.freeze({ search: "", level: "", sort: "item" });
-
-/**
- * The rows this page holds that match the view, in the view's order.
- *
- * Never a row the page was not handed, because there is nowhere for one to come from: the
- * input is the page. The sort is stable on the reference, so two readings of the same page in
- * the same view are the same list.
- */
-export function narrowed(rows: readonly LibraryRow[], view: LibraryView): readonly LibraryRow[] {
-  const wanted = view.search.trim().toLowerCase();
-  const kept = rows.filter(
-    (row) =>
-      (wanted === "" || row.item_id.toLowerCase().includes(wanted)) &&
-      (view.level === "" || row.level === view.level),
-  );
-  const byItem = (a: LibraryRow, b: LibraryRow): number =>
-    a.item_id < b.item_id ? -1 : a.item_id > b.item_id ? 1 : 0;
-  const widest = (row: LibraryRow): number => LEVELS.indexOf(row.level as Level);
-  return [...kept].sort((a, b) =>
-    view.sort === "level" ? widest(a) - widest(b) || byItem(a, b) : byItem(a, b),
-  );
 }
 
 /** How many of the rows shown sit at one level. A count of what is on the page and nothing else. */

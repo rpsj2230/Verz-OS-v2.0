@@ -25,19 +25,23 @@ decided before any statement is built and does not depend on what the table hold
 nothing about whether there is anything to read. See
 `A_REFUSED_READER_IS_TOLD_THE_SCREEN_AND_NOTHING_ABOUT_THE_LOG`.
 
-**A page and never a count.** Newest first, at most `MAX_PAGE` rows, and a cursor when there is
-more. The search is literal within event names; a level is one level; the window is at most
-`MAX_WINDOW`, which is longer than the rows are kept.
+**A page and never a count.** Newest first unless oldest first is asked for, at most `MAX_PAGE`
+rows, and a cursor when there is more, which continues in the order its page was read in. The log
+is not narrowed per reader, so the search, the level and the window are put into the statement:
+there is no decision a narrowed load could turn into a count. The search is literal within event
+names; a level is one level; the window is at most `MAX_WINDOW`, which is longer than the rows are
+kept.
 
 **The page says what it cannot show.** Debug is never kept, info is a sample, the worker's output is
 on its own container, and rows are kept for the trace window, and each is a field on the answer so
 the sentence leaves the page on the day it stops being true.
 
-Task ids: M27.8.14
+Task ids: M27.8.14, M27.8.6
 """
 
 from __future__ import annotations
 
+import enum
 from datetime import datetime, timedelta
 from typing import Annotated, Final
 
@@ -147,6 +151,13 @@ class LogPage(BaseModel):
     worker_output_is_not_kept: bool = True
 
 
+class LogOrder(enum.StrEnum):
+    """Which way a page walks the log. Two, the audit ledger's words."""
+
+    NEWEST = "newest"
+    OLDEST = "oldest"
+
+
 # ---------------------------------------------------------------- the decision
 def may_read_application_log(reach: EntitlementSet, now: datetime) -> bool:
     """Whether this reach may read the log: the authority and its plane, over the whole install.
@@ -200,6 +211,7 @@ async def logs(
     end: datetime | None = None,
     cursor: Annotated[str | None, Query(max_length=64)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE)] = DEFAULT_PAGE,
+    order: LogOrder = LogOrder.NEWEST,
 ) -> LogPage:
     """One page of the kept log, newest first, narrowed by level, event name and window.
 
@@ -215,7 +227,15 @@ async def logs(
             after = position_of(cursor)
         except ValueError:
             raise _refused_input("cursor", "malformed cursor") from None
-    statement = entries(start=since, end=until, level=level, event=event, after=after, limit=limit)
+    statement = entries(
+        start=since,
+        end=until,
+        level=level,
+        event=event,
+        after=after,
+        limit=limit,
+        newest_first=order is LogOrder.NEWEST,
+    )
     async with _require_sessions(request)() as session:
         found = (await session.execute(statement)).all()
     page = found[:limit]

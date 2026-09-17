@@ -23,14 +23,16 @@
  * said the row is decidable, and the route asks `may_approve` or `may_decide` again whatever this
  * page drew. A write is followed by a fresh request, keyed on a counter.
  *
- * Task ids: M27.7.8
+ * Task ids: M27.7.8, M27.8.6
  */
 
 import { useCallback, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Notice } from "../ui/Notice";
 import {
@@ -40,7 +42,9 @@ import {
   STATE_WORDS,
   askBlanks,
   askQuestion,
-  elevationApiPath,
+  ELEVATION_API_PATH,
+  ELEVATION_FILTERS,
+  ELEVATION_SORTS,
   elevationDecisionApiPath,
   elevationQuestion,
   personAddress,
@@ -68,6 +72,8 @@ export const YOU_HOLD_THE_AUTHORITY = "You hold that authority.";
 export const NO_REASON_IS_ACCEPTED = "No reason is accepted, so no elevation can be asked for.";
 export const NO_REQUESTS = "There are no elevation requests for you to see.";
 export const MORE_REQUESTS = "This list came back full, so there are more requests than it shows.";
+export const NONE_MATCH = NOTHING_MATCHES;
+export const FILTERS_LABEL = "Narrow the requests";
 
 export const ASK_LABEL = "Ask for this";
 export const CANCEL_LABEL = "Not now";
@@ -118,8 +124,18 @@ const EMPTY_ASK: ElevationAsk = Object.freeze({
   hours: 1,
 });
 
-function Requests({ onChanged }: { readonly onChanged: (sentence: string) => void }) {
-  const answer = useResource<unknown>(elevationApiPath());
+function Requests({
+  version,
+  onChanged,
+}: {
+  readonly version: number;
+  readonly onChanged: (sentence: string) => void;
+}) {
+  const listing = useListing<ElevationRequestRow>(ELEVATION_API_PATH, {
+    listKey: "requests",
+    choices: ELEVATION_FILTERS,
+    version,
+  });
   const [ask, setAsk] = useState<ElevationAsk>(EMPTY_ASK);
   const [blanks, setBlanks] = useState<readonly (keyof typeof ASK_BLANKS)[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -154,17 +170,19 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
     [onChanged],
   );
 
-  if (answer.failure) {
-    return <Failure failure={answer.failure} />;
-  }
-  if (answer.busy) {
+  // The landing is the first page's body, and it stays drawn while a search is answered, so the
+  // form somebody is filling in is not taken away by a keystroke in the search box.
+  if (listing.body === null) {
+    if (listing.failure) {
+      return <Failure failure={listing.failure} />;
+    }
     return (
       <p className="note" role="status">
         {READING_ELEVATION}
       </p>
     );
   }
-  const page = readElevation(answer.data);
+  const page = readElevation(listing.body);
   if (page === null) {
     return <p className="note">{NOT_A_LANDING}</p>;
   }
@@ -295,69 +313,79 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
 
       <section className="card" aria-labelledby="elevation-requests">
         <h2 id="elevation-requests">Requests</h2>
-        {rows.length === 0 ? (
-          <p className="note">{NO_REQUESTS}</p>
+        <ListControls label={FILTERS_LABEL} listing={listing} choices={ELEVATION_FILTERS} sorts={ELEVATION_SORTS} />
+        {listing.failure ? (
+          <Failure failure={listing.failure} />
+        ) : listing.busy ? (
+          <p className="note" role="status">
+            {READING_ELEVATION}
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_REQUESTS}</p>
         ) : (
-          <div className="grid__scroll">
-            <table className="grid__table" aria-label={REQUESTS_LABEL}>
-              <thead>
-                <tr>
-                  <th scope="col">Person</th>
-                  <th scope="col">Asked for</th>
-                  <th scope="col">Why</th>
-                  <th scope="col">Asked</th>
-                  <th scope="col">Where it stands</th>
-                  <th scope="col">Decision</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.request_id}>
-                    <td>
-                      <Link to={personAddress(row.principal_id)}>{row.display_name ?? row.principal_id}</Link>{" "}
-                      <code>{row.principal_id}</code> {row.department === null ? null : <code>{row.department}</code>}
-                    </td>
-                    <td>
-                      <code>{row.capability}</code> over <code>{row.scope_slug}</code> for {`${String(row.hours)} hours`}
-                    </td>
-                    <td>
-                      {reasonWords(row.reason)}
-                      <p className="note">{row.explanation}</p>
-                    </td>
-                    <td>{when(row.requested_at)}</td>
-                    <td>
-                      {STATE_WORDS[row.state]}
-                      {row.lapses_at === null ? null : <p className="note">{`Lapses ${when(row.lapses_at)}`}</p>}
-                      {row.decided_by === null ? null : (
-                        <p className="note">
-                          <code>{row.decided_by}</code> {when(row.decided_at)}
-                        </p>
-                      )}
-                    </td>
-                    <td>
-                      {row.decidable
-                        ? ELEVATION_DECISIONS.map((decision) => (
-                            <button
-                              key={decision}
-                              type="button"
-                              className="button"
-                              disabled={busy}
-                              aria-label={`${DECISION_LABELS[decision]}: ${elevationQuestion(row, decision)}`}
-                              onClick={() => {
-                                setFailure(null);
-                                setPending({ kind: "decide", row, decision });
-                              }}
-                            >
-                              {DECISION_LABELS[decision]}
-                            </button>
-                          ))
-                        : null}
-                    </td>
+          <>
+            <div className="grid__scroll">
+              <table className="grid__table" aria-label={REQUESTS_LABEL}>
+                <thead>
+                  <tr>
+                    <th scope="col">Person</th>
+                    <th scope="col">Asked for</th>
+                    <th scope="col">Why</th>
+                    <th scope="col">Asked</th>
+                    <th scope="col">Where it stands</th>
+                    <th scope="col">Decision</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={row.request_id}>
+                      <td>
+                        <Link to={personAddress(row.principal_id)}>{row.display_name ?? row.principal_id}</Link>{" "}
+                        <code>{row.principal_id}</code> {row.department === null ? null : <code>{row.department}</code>}
+                      </td>
+                      <td>
+                        <code>{row.capability}</code> over <code>{row.scope_slug}</code> for {`${String(row.hours)} hours`}
+                      </td>
+                      <td>
+                        {reasonWords(row.reason)}
+                        <p className="note">{row.explanation}</p>
+                      </td>
+                      <td>{when(row.requested_at)}</td>
+                      <td>
+                        {STATE_WORDS[row.state]}
+                        {row.lapses_at === null ? null : <p className="note">{`Lapses ${when(row.lapses_at)}`}</p>}
+                        {row.decided_by === null ? null : (
+                          <p className="note">
+                            <code>{row.decided_by}</code> {when(row.decided_at)}
+                          </p>
+                        )}
+                      </td>
+                      <td>
+                        {row.decidable
+                          ? ELEVATION_DECISIONS.map((decision) => (
+                              <button
+                                key={decision}
+                                type="button"
+                                className="button"
+                                disabled={busy}
+                                aria-label={`${DECISION_LABELS[decision]}: ${elevationQuestion(row, decision)}`}
+                                onClick={() => {
+                                  setFailure(null);
+                                  setPending({ kind: "decide", row, decision });
+                                }}
+                              >
+                                {DECISION_LABELS[decision]}
+                              </button>
+                            ))
+                          : null}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <ShowMore listing={listing} />
+          </>
         )}
         {page.truncated === true ? <p className="note">{MORE_REQUESTS}</p> : null}
       </section>
@@ -392,12 +420,12 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
 }
 
 export function Elevation() {
-  // A counter rather than a boolean, so two changes in a row remount twice. Never rendered.
-  const [generation, setGeneration] = useState(0);
+  // A counter, so two changes in a row ask twice. Never rendered.
+  const [version, setVersion] = useState(0);
   const [changed, setChanged] = useState<string | null>(null);
   const onChanged = useCallback((sentence: string) => {
     setChanged(sentence);
-    setGeneration((current) => current + 1);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -410,7 +438,7 @@ export function Elevation() {
           {changed}
         </p>
       )}
-      <Requests key={generation} onChanged={onChanged} />
+      <Requests version={version} onChanged={onChanged} />
     </article>
   );
 }

@@ -45,6 +45,7 @@ import {
   ELEVATION_REQUESTS_API_PATH,
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
+  REVIEW_DECISIONS_API_PATH,
   REVIEW_DECISION_API_PATH,
   elevationDecisionApiPath,
 } from "../../src/pages/governPeopleQuery";
@@ -60,7 +61,7 @@ import {
   RELEASE_API_PATH,
   WITHDRAWAL_API_PATH,
 } from "../../src/pages/retentionQuery";
-import { END_SESSION_API_PATH } from "../../src/pages/sessionsQuery";
+import { END_SESSIONS_API_PATH, END_SESSION_API_PATH } from "../../src/pages/sessionsQuery";
 import { LINK_API_PATH, UNLINK_API_PATH } from "../../src/pages/signInLinksQuery";
 import { TRIAL_API_PATH } from "../../src/pages/staffSourcesQuery";
 import { CONNECTORS_API_PATH, disconnectApiPath } from "../../src/pages/connectorsQuery";
@@ -631,6 +632,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/pages/AccessReview.tsx REVIEW_DECISION_API_PATH": [
     at("POST /api/v1/govern/access-review/decision", "REVIEW_DECISION_API_PATH", REVIEW_DECISION_API_PATH),
   ],
+  "src/pages/AccessReview.tsx REVIEW_DECISIONS_API_PATH": [
+    at("POST /api/v1/govern/access-review/decisions", "REVIEW_DECISIONS_API_PATH", REVIEW_DECISIONS_API_PATH),
+  ],
   "src/pages/Approvals.tsx approvalDecisionApiPath(suspensionId)": [
     at("POST /api/v1/approvals/{suspension_id}/decision", "approvalDecisionApiPath", approvalDecisionApiPath("sus-1")),
   ],
@@ -674,6 +678,9 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
     at("POST /api/v1/govern/erasures", "ERASURES_API_PATH", ERASURES_API_PATH),
   ],
   "src/pages/Sessions.tsx END_SESSION_API_PATH": [at("POST /api/v1/govern/sessions/end", "END_SESSION_API_PATH", END_SESSION_API_PATH)],
+  "src/pages/Sessions.tsx END_SESSIONS_API_PATH": [
+    at("POST /api/v1/govern/sessions/end-several", "END_SESSIONS_API_PATH", END_SESSIONS_API_PATH),
+  ],
   "src/pages/SignInLinks.tsx LINK_API_PATH": [at("POST /api/v1/sign-ins", "LINK_API_PATH", LINK_API_PATH)],
   "src/pages/SignInLinks.tsx UNLINK_API_PATH": [at("POST /api/v1/govern/sign-ins/unlink", "UNLINK_API_PATH", UNLINK_API_PATH)],
   "src/pages/Webhooks.tsx REGISTER_API_PATH": [at("POST /api/v1/webhooks/subscribers", "REGISTER_API_PATH", REGISTER_API_PATH)],
@@ -831,6 +838,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     audit: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
     behaviour: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
   },
+  // Several decisions are the single decision's store call once per holding, which the route test
+  // holds; what that call writes, records and changes is the single decision's database proof.
+  "POST /api/v1/govern/access-review/decisions": {
+    row: t("test_govern_people_routes", "test_several_holdings_are_decided_one_at_a_time_each_by_the_single_decisions_question"),
+    audit: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
+    behaviour: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
+  },
   "POST /api/v1/approvals/{suspension_id}/decision": {
     row: t("test_approval_decisions", "test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it"),
     audit: t("test_approval_decisions", "test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it"),
@@ -960,6 +974,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   },
   "POST /api/v1/govern/sessions/end": {
     row: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    audit: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+    behaviour: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
+  },
+  // Several endings are the single ending's store call once per session, which the route test holds;
+  // what that call writes, records and refuses is the single ending's database proof.
+  "POST /api/v1/govern/sessions/end-several": {
+    row: t("test_session_routes", "test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question"),
     audit: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
     behaviour: t("test_session_store", "test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request", true),
   },
@@ -1206,7 +1227,7 @@ export function renderAudit(measured: Measured): string {
     "- **A form that writes is judged before it sends**, and a blank one says what to fill in: `console/tests/validated-before-write.test.tsx`.",
   );
   lines.push(
-    "- **Long lists** are measured rather than claimed, and what each does not offer is recorded with its reason: `console/tests/long-lists.test.tsx`. Leaf `M27.8.6` stays open: most routes take a limit and nothing else.",
+    "- **Long lists page, search, filter and sort** through one convention, `brain.listing`, over the rows the reader may see, and a filter offers only values on rows drawn: `console/tests/long-lists.test.tsx` measures every long list against its route and records what each does not offer with its reason. Ending several sessions and deciding several review holdings are bulk acts, each item decided by the single act's own check.",
   );
   lines.push("");
   return `${lines.join("\n")}`;

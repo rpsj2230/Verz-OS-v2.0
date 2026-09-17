@@ -51,19 +51,25 @@ import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { SchemaForm } from "../components/SchemaForm";
 import {
   GRANTS_API_PATH,
   PROPOSAL_UI,
   REMOVAL_API_PATH,
-  peopleApiPath,
+  PEOPLE_API_PATH,
+  PEOPLE_FILTERS,
+  PEOPLE_SORTS,
+  subjectApiPath,
   personIn,
   principalIn,
   proposalSchema,
   readPeoplePage,
   readScopesPage,
-  scopesApiPath,
+  scopeChoicesApiPath,
   subjectAddress,
   submittedProposal,
   type PersonRow,
@@ -91,7 +97,9 @@ export const MORE_PEOPLE = "This page came back full, so there are more subjects
  * and one who has simply dropped off a full page. A sentence that distinguished any two of
  * those would be the oracle the deep link is written to avoid.
  */
-export const NO_SUCH_SUBJECT = "No subject on this page has that key.";
+export const NO_SUCH_SUBJECT = "No subject you may see has that key.";
+export const NONE_MATCH = NOTHING_MATCHES;
+export const FILTERS_LABEL = "Narrow the subjects";
 
 /**
  * What is said on a subject whose key is not a principal's.
@@ -259,7 +267,7 @@ function HeldCapabilities({
 function GrantForm({ subject, onWritten }: { readonly subject: string; readonly onWritten: () => void }) {
   const [failure, setFailure] = useState<ApiFailure | null>(null);
   const [busy, setBusy] = useState(false);
-  const scopes = useResource<unknown>(scopesApiPath());
+  const scopes = useResource<unknown>(scopeChoicesApiPath());
   const slugs = useMemo(
     () => readScopesPage(scopes.data).scopes.map((one) => one.slug),
     [scopes.data],
@@ -314,61 +322,63 @@ function GrantForm({ subject, onWritten }: { readonly subject: string; readonly 
 }
 
 /**
- * The listing itself.
+ * The listing itself, and the open subject beside it.
  *
- * A separate component so that a successful write can remount it by key and it asks the API
- * again. `useResource` re-runs on a change of path, and the path must not change: it is the
- * request, and a console that varied its request to force a refresh would be asking a different
- * question to get the same answer.
+ * The list is `useListing`'s, so its search, its capability filter, its order and "Show more" are
+ * requests. The open subject is a request of its own, filtered to the key in the address, so it is
+ * found whichever page it would sit on. A successful write moves `version` and both are asked again.
  */
 function PeopleRows({
   openSubject,
+  version,
   onWritten,
 }: {
   readonly openSubject: string | undefined;
+  readonly version: number;
   readonly onWritten: () => void;
 }) {
-  const answer = useResource<unknown>(peopleApiPath());
+  const listing = useListing<PersonRow>(PEOPLE_API_PATH, { choices: PEOPLE_FILTERS, version });
+  const opened = useResource<unknown>(openSubject === undefined ? null : subjectApiPath(openSubject), version);
 
-  if (answer.failure) {
-    return (
-      <FailureNotice failure={answer.failure} />
-    );
-  }
-  if (answer.busy) {
-    return (
-      <p className="note" role="status">
-        Loading.
-      </p>
-    );
-  }
-
-  const page = readPeoplePage(answer.data);
-  const open = openSubject === undefined ? null : personIn(page.people, openSubject);
+  const page = readPeoplePage(listing.body);
+  const openPage = readPeoplePage(opened.data);
+  const open = openSubject === undefined ? null : personIn(openPage.people, openSubject);
 
   return (
     <>
-      {page.people.length === 0 ? (
-        <p className="note">{NO_PEOPLE}</p>
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={PEOPLE_FILTERS} sorts={PEOPLE_SORTS} />
+      {listing.failure ? (
+        <FailureNotice failure={listing.failure} />
+      ) : listing.busy ? (
+        <p className="note" role="status">
+          Loading.
+        </p>
+      ) : page.people.length === 0 ? (
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_PEOPLE}</p>
       ) : (
-        <ul className="roster" aria-label={PEOPLE_LIST_LABEL}>
-          {page.people.map((person) => (
-            <li key={person.subject}>
-              <Link to={subjectAddress(person.subject)}>{person.subject}</Link>{" "}
-              {person.capabilities.map((capability) => (
-                <code key={capability}>{capability}</code>
-              ))}
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="roster" aria-label={PEOPLE_LIST_LABEL}>
+            {page.people.map((person) => (
+              <li key={person.subject}>
+                <Link to={subjectAddress(person.subject)}>{person.subject}</Link>{" "}
+                {person.capabilities.map((capability) => (
+                  <code key={capability}>{capability}</code>
+                ))}
+              </li>
+            ))}
+          </ul>
+          <ShowMore listing={listing} />
+        </>
       )}
 
       {page.truncated ? <p className="note">{MORE_PEOPLE}</p> : null}
 
+      {opened.failure ? <FailureNotice failure={opened.failure} /> : null}
+
       {open === null ? null : (
         <section className="card">
           <h2>{open.subject}</h2>
-          <HeldCapabilities person={open} editable={page.editable} onWritten={onWritten} />
+          <HeldCapabilities person={open} editable={openPage.editable} onWritten={onWritten} />
         </section>
       )}
 
@@ -379,11 +389,11 @@ function PeopleRows({
        * refusal, when a write is attempted, is the same one it gives somebody who may not read
        * the screen at all.
        */}
-      {open !== null && page.editable ? (
+      {open !== null && openPage.editable ? (
         <GrantForm subject={open.subject} onWritten={onWritten} />
       ) : null}
 
-      {openSubject !== undefined && open === null ? (
+      {openSubject !== undefined && !opened.busy && opened.failure === null && open === null ? (
         <p className="note">{NO_SUCH_SUBJECT}</p>
       ) : null}
     </>
@@ -395,9 +405,9 @@ export function People() {
   // A counter rather than a boolean, because two writes in a row must remount twice. Its value
   // is never rendered: it is a key, and a key that reached the screen would be a number
   // describing how many times somebody had written something.
-  const [generation, setGeneration] = useState(0);
+  const [version, setVersion] = useState(0);
   const onWritten = useCallback(() => {
-    setGeneration((current) => current + 1);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -405,7 +415,7 @@ export function People() {
       <h1>{PEOPLE_HEADING}</h1>
       <p className="lede">{PEOPLE_LEDE}</p>
 
-      <PeopleRows key={generation} openSubject={subject} onWritten={onWritten} />
+      <PeopleRows openSubject={subject} version={version} onWritten={onWritten} />
     </article>
   );
 }

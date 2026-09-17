@@ -9,9 +9,9 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 74 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
-- 113 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 115 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 66 console addresses, from the route table in `console/src/App.tsx`.
-- 40 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 48 routes.
+- 42 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 50 routes.
 - 37 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
@@ -37,11 +37,13 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/govern/staff_sources/trial` | `/staff_sources` |
 | `GET /api/v1/me` | `/` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` |
+| `POST /api/v1/govern/access-review/decisions` | `/access_review` |
 | `POST /api/v1/govern/elevation/requests` | `/elevation` |
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/grants/removal` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/sessions/end` | `/sessions` |
+| `POST /api/v1/govern/sessions/end-several` | `/sessions` |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` |
 | `POST /api/v1/sign-ins` | `/sign-in-links` |
 
@@ -410,7 +412,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 43 of 48 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 45 of 50 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -425,6 +427,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
 | `POST /api/v1/data-transfer/exports` | `/import-export` | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own` in `tests/unit/test_data_transfer_routes.py` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
+| `POST /api/v1/govern/access-review/decisions` | `/access_review` | `test_several_holdings_are_decided_one_at_a_time_each_by_the_single_decisions_question` in `tests/unit/test_govern_people_routes.py` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
 | `POST /api/v1/govern/departments/lead` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
 | `POST /api/v1/govern/departments/membership` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |
 | `POST /api/v1/govern/elevation/requests` | `/elevation` | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) | `test_an_approved_elevation_widens_the_requester_and_after_its_lapse_it_does_not` in `tests/unit/test_elevation_store.py` (database, in CI) |
@@ -440,6 +443,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/govern/retention/release` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
 | `POST /api/v1/govern/retention/withdrawal` | `/retention` | `test_a_release_names_the_newest_report_and_is_withdrawn_by_being_marked` in `tests/unit/test_retention_store.py` (database, in CI) | `test_each_retention_write_the_console_makes_appends_one_entry_naming_its_own_actor` in `tests/unit/test_retention_audit.py` (database, in CI) | `test_a_released_sweep_is_started_to_act_and_a_withdrawn_one_to_report` in `tests/unit/test_worker_schedule.py` (database, in CI) |
 | `POST /api/v1/govern/sessions/end` | `/sessions` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
+| `POST /api/v1/govern/sessions/end-several` | `/sessions` | `test_several_sessions_are_ended_one_at_a_time_each_decided_by_the_single_endings_question` in `tests/unit/test_session_routes.py` | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) | `test_ending_a_session_writes_the_row_the_ledger_entry_and_refuses_the_next_request` in `tests/unit/test_session_store.py` (database, in CI) |
 | `POST /api/v1/govern/sign-ins/unlink` | `/sign-in-links` | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) | `test_an_unlink_retires_the_link_names_who_did_it_and_the_account_is_refused_after` in `tests/unit/test_sign_in_links.py` (database, in CI) |
 | `POST /api/v1/install/features/{name}` | `/features` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_switching_schedule_control_on_from_the_features_screen_is_what_lets_a_job_be_paused` in `tests/unit/test_console_controls_reach_behaviour.py` |
 | `POST /api/v1/jobs/{name}/pause` | `/jobs` | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_job_paused_from_the_screen_is_left_unstarted_by_the_next_tick_and_resumed_is_started` in `tests/unit/test_console_controls_reach_behaviour.py` |
@@ -468,4 +472,4 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 - **Loading, empty, unreachable and failed** are four different sentences on every registered address: `console/tests/screen-states.test.tsx`, with the addresses excused and why in `console/tests/support/screenStateRules.tsx`.
 - **A destructive write is confirmed**, and the confirmation names what and says what will happen: `console/tests/destructive-confirmed.test.ts`, with the writes that are not destructive and why.
 - **A form that writes is judged before it sends**, and a blank one says what to fill in: `console/tests/validated-before-write.test.tsx`.
-- **Long lists** are measured rather than claimed, and what each does not offer is recorded with its reason: `console/tests/long-lists.test.tsx`. Leaf `M27.8.6` stays open: most routes take a limit and nothing else.
+- **Long lists page, search, filter and sort** through one convention, `brain.listing`, over the rows the reader may see, and a filter offers only values on rows drawn: `console/tests/long-lists.test.tsx` measures every long list against its route and records what each does not offer with its reason. Ending several sessions and deciding several review holdings are bulk acts, each item decided by the single act's own check.

@@ -20,6 +20,7 @@ import {
   NAME_NOT_KEPT,
   NO_ENTRIES,
   NO_MORE_ENTRIES,
+  SHOW_NEWER,
   SHOW_OLDER,
   WORKER_OUTPUT_IS_NOT_KEPT,
   filtersFrom,
@@ -154,6 +155,33 @@ describe("what the Logs screen draws", () => {
     expect(older.searchParams.get("cursor")).toBe("c1");
     expect(older.searchParams.get("start")).toBe(first.searchParams.get("start"));
     expect(older.searchParams.get("level")).toBe("error");
+  });
+
+  test("oldest first is carried to the request, and the control then fetches newer rows", async () => {
+    // What breaks if this is deleted: an order chosen on the page that reorders nothing the route
+    // reads, or a pager still labelled older while walking forward.
+    const { container, sent } = await logsPage({
+      [LIST]: (_body, url) =>
+        url.searchParams.get("cursor") === "c1"
+          ? json(page({ entries: [entry({ event: "newer.row" })] }))
+          : json(page({ next_cursor: "c1" })),
+    });
+    const order = [...container.querySelectorAll("select")].find((one) =>
+      one.closest("label")?.textContent?.startsWith("Order"),
+    ) as HTMLSelectElement;
+    fireEvent.change(order, { target: { value: "oldest" } });
+    await waitFor(() => {
+      expect(sent.at(-1)?.path).toContain("order=oldest");
+    });
+    await settled(container);
+
+    fireEvent.click(button(container, SHOW_NEWER));
+    await waitFor(() => {
+      expect(container.textContent).toContain("newer.row");
+    });
+    const newer = new URL(`https://console.test${sent.at(-1)?.path ?? ""}`);
+    expect(newer.searchParams.get("cursor")).toBe("c1");
+    expect(newer.searchParams.get("order")).toBe("oldest");
   });
 
   test("every parameter the page sends is one the route declares, and every field it reads is one the route sends", () => {

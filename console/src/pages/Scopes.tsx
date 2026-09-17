@@ -30,8 +30,10 @@
  * Task ids: M27.7.4
  */
 
-import { useResource } from "../api/useResource";
-import { readScopesPage, scopesApiPath } from "./governQuery";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
+import { SCOPES_API_PATH, SCOPE_FILTERS, SCOPE_SORTS, readScopesPage, type ScopeRowView } from "./governQuery";
 import { scopeLines } from "./scopeText";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -60,55 +62,53 @@ export const IS_A_DEPARTMENT = "This scope is a department.";
 /** The accessible names of the two lists. */
 export const SCOPES_LIST_LABEL = "Scopes you can see";
 export const DEPARTMENTS_LIST_LABEL = "Departments you can see";
+export const FILTERS_LABEL = "Narrow the scopes";
+export const NONE_MATCH = NOTHING_MATCHES;
 
 function ScopesAnswerView() {
-  const answer = useResource<unknown>(scopesApiPath());
-
-  if (answer.failure) {
-    return (
-      <FailureNotice failure={answer.failure} />
-    );
-  }
-  if (answer.busy) {
-    return (
-      <p className="note" role="status">
-        Loading.
-      </p>
-    );
-  }
-
-  const page = readScopesPage(answer.data);
+  const listing = useListing<ScopeRowView>(SCOPES_API_PATH, { choices: SCOPE_FILTERS });
+  const page = readScopesPage(listing.body);
 
   return (
     <>
-      {page.scopes.length === 0 ? (
-        <p className="note">{NO_SCOPES}</p>
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={SCOPE_FILTERS} sorts={SCOPE_SORTS} />
+      {listing.failure ? (
+        <FailureNotice failure={listing.failure} />
+      ) : listing.busy ? (
+        <p className="note" role="status">
+          Loading.
+        </p>
+      ) : page.scopes.length === 0 ? (
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_SCOPES}</p>
       ) : (
-        <ul className="roster" aria-label={SCOPES_LIST_LABEL}>
-          {page.scopes.map((scope) => {
-            const lines = scopeLines(scope.scope);
-            return (
-              <li key={scope.slug}>
-                <h2>
-                  <code>{scope.slug}</code>
-                </h2>
-                {scope.label === "" ? null : <p>{scope.label}</p>}
-                {lines.length === 0 ? (
-                  <p className="note">{RESTRICTS_NOTHING}</p>
-                ) : (
-                  <ul>
-                    {lines.map((line) => (
-                      <li key={line}>
-                        <code>{line}</code>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {scope.is_department ? <p className="note">{IS_A_DEPARTMENT}</p> : null}
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className="roster" aria-label={SCOPES_LIST_LABEL}>
+            {page.scopes.map((scope) => {
+              const lines = scopeLines(scope.scope);
+              return (
+                <li key={scope.slug}>
+                  <h2>
+                    <code>{scope.slug}</code>
+                  </h2>
+                  {scope.label === "" ? null : <p>{scope.label}</p>}
+                  {lines.length === 0 ? (
+                    <p className="note">{RESTRICTS_NOTHING}</p>
+                  ) : (
+                    <ul>
+                      {lines.map((line) => (
+                        <li key={line}>
+                          <code>{line}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {scope.is_department ? <p className="note">{IS_A_DEPARTMENT}</p> : null}
+                </li>
+              );
+            })}
+          </ul>
+          <ShowMore listing={listing} />
+        </>
       )}
 
       {page.truncated ? <p className="note">{MORE_SCOPES}</p> : null}

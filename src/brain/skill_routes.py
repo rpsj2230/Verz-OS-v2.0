@@ -66,7 +66,11 @@ library existed, and it is answered by the library rather than argued away.
 against one here; `tests/unit/test_skill_store.py` runs them against a scratch server where one
 exists and skips otherwise.
 
-Task ids: M42.6.4
+**The skills the reader's agents run page, search, filter and order through `brain.listing`**,
+over the rows `catalogue` built from the agents this reader's audience covers, with the agent load
+bounded by `MAX_AGENTS_CONSIDERED` whatever was asked.
+
+Task ids: M42.6.4, M27.8.6
 """
 
 from __future__ import annotations
@@ -79,7 +83,7 @@ from datetime import datetime
 from typing import Annotated, Final, Literal, Protocol, runtime_checkable
 
 import structlog
-from fastapi import APIRouter, Path, Query, Request
+from fastapi import APIRouter, Depends, Path, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Select, and_, select
@@ -132,6 +136,7 @@ from brain.console.skill_library import (
 from brain.console.workspace import WorkspaceError
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.skill_store import MAX_LIBRARY, StoredSkills
 from brain.prompt_routes import agent_scope_row, every_agent_with_install, installed
 from brain.routing_routes import sessions_of
@@ -181,13 +186,11 @@ SKILLS_SCREEN: Final = "skills"
 
 
 # ------------------------------------------------------------------ the bounds
-#: The most agents one catalogue answer is assembled from. A resource bound and not a
-#: permission one: it is applied to the load, the audience filter runs over what came back,
-#: and `truncated` says the load came back full without saying what was in the rest of it.
+#: The most agents one catalogue answer is assembled from, whatever page, search, filter or order
+#: was asked for. A resource bound and not a permission one: it is applied to the load, the
+#: audience filter runs over what came back, and `truncated` says the load came back full without
+#: saying what was in the rest of it.
 MAX_AGENTS_CONSIDERED: Final = 500
-
-#: What a caller gets when they do not say.
-DEFAULT_AGENTS_CONSIDERED: Final = 200
 
 #: The longest package a request may carry, in characters, which is the largest package in base64
 #: with room for the encoding. `brain.console.skill_library.MAX_PACKAGE_BYTES` refuses the bytes.
@@ -667,15 +670,30 @@ def _by_id(record: AgentRecord) -> str:
     return record.agent_id
 
 
+#: What the Skills screen may search, filter and order the skills the reader's agents run by.
+CATALOGUE_LISTING: Final[Listing[SkillRow]] = Listing(
+    name="skills",
+    columns=(
+        Column("name", lambda row: row.name, search=True, filter=True, sort=True),
+        Column(
+            "agents",
+            lambda row: tuple(one.agent_id for one in row.pinned_by),
+            search=True,
+            filter=True,
+        ),
+        Column("versions_differ", lambda row: row.versions_differ, filter=True),
+    ),
+    key=lambda row: row.name,
+    order="name",
+)
+CatalogueQuery = Annotated[ListAsked, Depends(CATALOGUE_LISTING.query())]
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["skills"])
 
 
 @router.get("/skills", response_model=SkillsPage, responses=COMMON_RESPONSES)
-async def skills(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_AGENTS_CONSIDERED)] = DEFAULT_AGENTS_CONSIDERED,
-) -> SkillsPage:
+async def skills(request: Request, asked: Asked, listed: CatalogueQuery) -> SkillsPage:
     """The skills the reader's agents run, the library and its queue, and what the reader may do.
 
     The screen's question first and the database second, and the order is the property: a caller
@@ -688,6 +706,8 @@ async def skills(
     if not permitted(screen(SKILLS_SCREEN).read, asked.reach, asked.now):
         log.info("skills screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable()
+    plan = CATALOGUE_LISTING.plan(listed, reader=asked.caller.principal.id)
+    limit = MAX_AGENTS_CONSIDERED
 
     factory = _require_sessions(request)
     async with factory() as session:
@@ -716,9 +736,10 @@ async def skills(
         if readable and may_assign(asked.reach, agent_scope_row(one), asked.now)
     )
     discloses = reviews or may_add(asked.reach, asked.now)
+    page = plan.page(list(catalogue(pins)))
     return SkillsPage(
-        items=list(catalogue(pins)),
-        next_cursor=None,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
         truncated=len(rows) >= limit,
         queue=queue_view(submitted(library, asked.now), asked.reach, asked.now),
         library=tuple(

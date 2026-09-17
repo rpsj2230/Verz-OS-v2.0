@@ -34,7 +34,7 @@
  * Chrome on 2026-09-16 with the console's own sheets: at 360 pixels the card began 1003 pixels
  * down before and 385 after. `tests/approvals-phone.test.tsx` holds the rules.
  *
- * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3
+ * Task ids: M35.3.1.2, M35.3.1.1, M40.6.1.5, M40.1.2.3, M27.8.6
  */
 
 import "../styles/approvals.css";
@@ -43,6 +43,10 @@ import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows, type FilterChoice, type SortChoice } from "../components/listing";
+import { useListing } from "../components/useListing";
+import type { components } from "../api/schema";
 import {
   approvalApiPath,
   approvalDecisionApiPath,
@@ -254,24 +258,52 @@ function Busy() {
   );
 }
 
-function QueueRows({ onDecided }: { readonly onDecided: (verdict: Verdict) => void }) {
-  const answer = useResource<unknown>(APPROVALS_API_PATH);
-  if (answer.failure) {
+export const FILTERS_LABEL = "Narrow the approvals";
+export const NONE_MATCH = NOTHING_MATCHES;
+
+type QueueRow = components["schemas"]["ApprovalCardView"];
+
+/** The filters the queue route declares that this screen offers, over values on cards drawn. */
+export const QUEUE_FILTERS: readonly FilterChoice<QueueRow>[] = [
+  { column: "runs_as", label: "Runs as", everything: "Anybody", read: (row) => row.runs_as },
+];
+
+export const QUEUE_SORTS: readonly SortChoice[] = [
+  { value: "", label: "Soonest to lapse first" },
+  { value: "-raised_at", label: "Most recently raised first" },
+  { value: "runs_as", label: "By who it runs as" },
+];
+
+function QueueRows({ version, onDecided }: { readonly version: number; readonly onDecided: (verdict: Verdict) => void }) {
+  const listing = useListing<QueueRow>(APPROVALS_API_PATH, { choices: QUEUE_FILTERS, version });
+  const controls = (
+    <ListControls label={FILTERS_LABEL} listing={listing} choices={QUEUE_FILTERS} sorts={QUEUE_SORTS} />
+  );
+  if (listing.failure) {
     return (
-      <FailureNotice failure={answer.failure} />
+      <>
+        {controls}
+        <FailureNotice failure={listing.failure} />
+      </>
     );
   }
-  if (answer.busy) {
-    return <Busy />;
+  if (listing.busy) {
+    return (
+      <>
+        {controls}
+        <Busy />
+      </>
+    );
   }
-  const read = readApprovalQueue(answer.data);
+  const read = readApprovalQueue(listing.body);
   if (read === null) {
-    return null;
+    return controls;
   }
   return (
     <>
+      {controls}
       {read.cards.length === 0 ? (
-        <p className="note">{NO_APPROVALS}</p>
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_APPROVALS}</p>
       ) : (
         <ul className="approval-list" aria-label={APPROVAL_LIST_LABEL}>
           {read.cards.map((card) => (
@@ -285,6 +317,7 @@ function QueueRows({ onDecided }: { readonly onDecided: (verdict: Verdict) => vo
           ))}
         </ul>
       )}
+      <ShowMore listing={listing} />
       {read.truncated ? <p className="note">{MORE_APPROVALS}</p> : null}
     </>
   );
@@ -312,7 +345,7 @@ function QueueView() {
           {said(last)}
         </p>
       )}
-      <QueueRows key={round} onDecided={decided} />
+      <QueueRows version={round} onDecided={decided} />
     </>
   );
 }

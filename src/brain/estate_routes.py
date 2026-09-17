@@ -39,11 +39,13 @@ outside the reach predicate is the thing it refuses to be. Never retrieved and U
 count of retrievals per document, and nothing records one. See
 `FRESHNESS_NEEDS_A_WHOLE_DOCUMENT_AND_THE_ROW_HOLDS_NONE`.
 
-**The library is not filtered on the server, because a filter makes `truncated` an oracle.**
-A department filter answering "the load came back full" tells a reader who cannot see finance
-that finance holds at least a page of documents. The load is the whole retrievable table,
-bounded, and the page narrows what it already holds. See
-`A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT`.
+**The library's load is never narrowed by a parameter, because a narrowed load makes
+`truncated` an oracle.** A department filter answering "the load came back full" tells a reader who
+cannot see finance that finance holds at least a page of documents. The load is the whole
+retrievable table to `MAX_ITEMS_CONSIDERED`, whatever was asked; the search, the level filter, the
+order and the cursor of `brain.listing` run over the rows `library_rows` decided, so a page, and
+whether there is another, is a statement about rows this reader may know exist and nothing else.
+See `A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT`.
 
 **Undoing a tier-one learning is a confirmed, audited write.** `POST /govern/learning/undo`
 names one memory. The caller must open the Learning screen and hold `admin:learning` somewhere,
@@ -78,7 +80,7 @@ one without.
 **Nothing here computes a reach.** There is no `.intersect(` in this module.
 `brain.console.workspace.intersections_in` is run over this source by its test.
 
-Task ids: M27.7.20, M27.7.21, M27.7.22
+Task ids: M27.7.20, M27.7.21, M27.7.22, M27.8.6
 """
 
 from __future__ import annotations
@@ -90,7 +92,7 @@ from types import MappingProxyType
 from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -126,6 +128,7 @@ from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
 from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
+from brain.listing import Column, ListAsked, Listing
 from brain.memory.correction import Correction, Supersession
 from brain.memory.digest import Learning, Undo
 from brain.memory.formation import Formation, MemoryKind
@@ -175,13 +178,14 @@ FRESHNESS_NEEDS_A_WHOLE_DOCUMENT_AND_THE_ROW_HOLDS_NONE: Final = (
     "rather than drawing a figure of zero, which would read as a library nobody uses."
 )
 
-#: Why the library has no department, level or search parameter.
+#: Why the library's search, level filter and order never narrow what is loaded.
 A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT: Final = (
     "truncated says the load came back full. Over the whole table that is a fact about the "
     "install. Over a load narrowed by a department the caller typed, it says that department "
     "holds at least a page of documents, which a reader who cannot see that department learns "
-    "without being shown a row. So the load is never narrowed by a parameter, and the page "
-    "filters and sorts the rows it already holds, saying that is what it did."
+    "without being shown a row. So the load is never narrowed by a parameter: the search, the "
+    "level filter and the order run over the rows the decision already admitted, and the flag "
+    "is the same whatever was asked."
 )
 
 #: Why an undo is followed to the row, the ledger and recall rather than to the row alone.
@@ -218,12 +222,10 @@ UNDO_PATH: Final = "/govern/learning/undo"
 
 # ------------------------------------------------------------------ the bounds
 
-#: The most knowledge items one library answer is assembled from. A resource bound and not a
-#: permission one: `library_rows` narrows what came back, and `truncated` says the load was full.
+#: The most knowledge items one library answer is assembled from, whatever page, search, filter or
+#: order was asked for. A resource bound and not a permission one: `library_rows` narrows what came
+#: back, and `truncated` says the load was full.
 MAX_ITEMS_CONSIDERED: Final = 2000
-
-#: What a caller gets when they do not say.
-DEFAULT_ITEMS_CONSIDERED: Final = 500
 
 #: The most memories of each kind one viewer answer is assembled from, newest first. Sent on
 #: every response as a constant; see
@@ -819,15 +821,24 @@ def _not_answerable(what: str) -> Absent:
     return Absent(f"the {what} screen is not answerable for this caller")
 
 
+#: What the Knowledge screen may search, filter and order by: the two facts a row carries.
+LIBRARY: Final[Listing[LibraryRowView]] = Listing(
+    name="library",
+    columns=(
+        Column("item_id", lambda row: row.item_id, search=True, sort=True),
+        Column("level", lambda row: row.level.value, filter=True, sort=True),
+    ),
+    key=lambda row: row.item_id,
+    order="item_id",
+)
+LibraryQuery = Annotated[ListAsked, Depends(LIBRARY.query())]
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["govern"])
 
 
 @router.get("/govern/library", response_model=LibraryPage, responses=COMMON_RESPONSES)
-async def library(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_ITEMS_CONSIDERED)] = DEFAULT_ITEMS_CONSIDERED,
-) -> LibraryPage:
+async def library(request: Request, asked: Asked, listed: LibraryQuery) -> LibraryPage:
     """Every retrievable item this reader may know exists, with how widely each reaches.
 
     The screen's question first and the database second. Then one load, `library_rows` for the
@@ -842,6 +853,8 @@ async def library(
     if not permitted(screen(LIBRARY_SCREEN).read, asked.reach, asked.now):
         log.info("library screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable(LIBRARY_SCREEN)
+    plan = LIBRARY.plan(listed, reader=asked.caller.principal.id)
+    limit = MAX_ITEMS_CONSIDERED
 
     reads = _require_console_reads(request)
 
@@ -853,12 +866,15 @@ async def library(
     items = [placed_item(row) for row in rows]
     basis = spans_departments(asked.reach, asked.now)
 
-    return LibraryPage(
-        items=[
+    page = plan.page(
+        [
             LibraryRowView(item_id=one.item_id, level=one.level)
             for one in library_rows(items, asked.reach, asked.now)
-        ],
-        next_cursor=None,
+        ]
+    )
+    return LibraryPage(
+        items=list(page.items),
+        next_cursor=page.next_cursor,
         truncated=len(rows) >= limit,
         departments=departments_represented(items, asked.reach, basis=basis, now=asked.now),
         staleness=served.banner,

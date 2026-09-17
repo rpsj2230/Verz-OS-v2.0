@@ -27,6 +27,7 @@
  */
 
 import type { components } from "../api/schema";
+import { NO_QUESTION, listPath, type FilterChoice, type SortChoice } from "../components/listing";
 
 /** One skill and the agents pinned to it, as `brain.skill_routes.SkillRow` sends it. */
 export type SkillLibraryRow = components["schemas"]["SkillRow"];
@@ -57,16 +58,22 @@ export function assignPath(digest: string): string {
 /** The console addresses. The second is one skill open. */
 export const SKILLS_PATH = "/skills";
 
-/** The one query parameter the listing declares. */
-export const LIMIT_PARAMETER = "limit";
+/** The filters the skills route declares that this screen offers, over values on rows drawn. */
+export const SKILL_FILTERS: readonly FilterChoice<SkillLibraryRow>[] = [
+  { column: "agents", label: "Agent", everything: "Any agent", read: (row) => row.pinned_by.map((one) => one.agent_id) },
+  {
+    column: "versions_differ",
+    label: "Versions",
+    everything: "Same or different",
+    read: (row) => row.versions_differ,
+    describe: (value) => (value === "true" ? "Agents run different versions" : "Every agent runs one version"),
+  },
+];
 
-/**
- * How many agents to assemble the catalogue from.
- *
- * Below the route's declared maximum, which `tests/skills-page.test.tsx` reads out of the API's
- * own document rather than comparing with another constant here.
- */
-export const SKILLS_PAGE_SIZE = 200;
+export const SKILL_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By name" },
+  { value: "-name", label: "By name, last first" },
+];
 
 /**
  * The largest package the API reads, in bytes. `brain.console.skill_library.MAX_PACKAGE_BYTES`,
@@ -74,9 +81,14 @@ export const SKILLS_PAGE_SIZE = 200;
  */
 export const MAX_PACKAGE_BYTES = 256 * 1024;
 
-/** The whole request the listing makes, query string included. */
-export function skillsApiPath(): string {
-  return `${SKILLS_API_PATH}?${LIMIT_PARAMETER}=${String(SKILLS_PAGE_SIZE)}`;
+/**
+ * The request for one skill's row, when a skill is open: a filter on its name, so the skill is found
+ * whichever page of the list it would sit on. The route answers it over the agents this reader's
+ * audience covers, so a name nobody's agent runs and a name run only by agents the reader may not
+ * see are the same answer.
+ */
+export function skillApiPath(name: string): string {
+  return listPath(SKILLS_API_PATH, { ...NO_QUESTION, filters: { name } }, null, 1);
 }
 
 /**

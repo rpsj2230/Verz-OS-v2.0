@@ -18,10 +18,11 @@
  * the matrix. `total` is inherited by the response model and never populated, and it stops
  * here: this module has no field for it and therefore no path from the payload to a renderer.
  *
- * Task ids: M27.7.17
+ * Task ids: M27.7.17, M27.8.6
  */
 
 import type { components } from "../api/schema";
+import type { FilterChoice, SortChoice } from "../components/listing";
 
 /** One department's adoption, as `brain.report_routes.AdoptionLineView` sends it. */
 export type AdoptionLineRow = components["schemas"]["AdoptionLineView"];
@@ -54,21 +55,23 @@ export const LIMIT_PARAMETER = "limit";
  */
 export const ADOPTION_DAYS = 30;
 
-/**
- * How many lines to ask for.
- *
- * The route's own default, which is above any real department list. There is no pager and the
- * route sends no cursor, so a longer list pages nowhere and `truncated` is what says so.
- */
-export const ADOPTION_PAGE_SIZE = 200;
+/** The windows a reader may choose, in days. A closed list: a free number box is a second parser. */
+export const ADOPTION_PERIODS: readonly number[] = [7, ADOPTION_DAYS, 90, 365];
 
-/** The whole request this screen makes, query string included. */
-export function adoptionApiPath(): string {
-  return (
-    `${ADOPTION_API_PATH}?${DAYS_PARAMETER}=${String(ADOPTION_DAYS)}` +
-    `&${LIMIT_PARAMETER}=${String(ADOPTION_PAGE_SIZE)}`
-  );
+export function periodWords(days: number): string {
+  return days === 365 ? "The last year" : `The last ${String(days)} days`;
 }
+
+/** The filters the adoption route declares that this screen offers, over lines drawn. */
+export const ADOPTION_FILTERS: readonly FilterChoice<AdoptionLineRow>[] = [
+  { column: "department", label: "Department", everything: "All departments", read: (row) => row.department },
+];
+
+export const ADOPTION_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By department" },
+  { value: "-questions", label: "Most questions first" },
+  { value: "-people", label: "Most people first" },
+];
 
 /** One page of adoption, as this console holds it. Two fields, deliberately. */
 export interface AdoptionPage {

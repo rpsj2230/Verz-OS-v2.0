@@ -31,6 +31,7 @@
 
 import type { RJSFSchema, UiSchema } from "@rjsf/utils";
 import type { components } from "../api/schema";
+import { NO_QUESTION, listPath, type FilterChoice, type SortChoice } from "../components/listing";
 
 /** One subject and what this reader may be told they hold, as `PersonView` sends it. */
 export type PersonRow = components["schemas"]["PersonView"];
@@ -95,27 +96,53 @@ export const SCOPES_PATH = "/scopes";
 export const LIMIT_PARAMETER = "limit";
 
 /**
- * How many rows to ask for.
- *
- * Below each route's declared maximum, which is asserted in `tests/govern-pages.test.tsx`
- * rather than assumed: a console asking for more than a route admits is refused with
- * `HTTPValidationError`, which reaches a person as the least useful sentence this console has,
- * and it would do so on every load rather than on an unusual one.
- *
- * There is no control for either and no pager, because neither route sends a cursor.
- * `truncated` is what says a page was cut short, and it is a real gap and a small one.
+ * How many scopes the grant form asks for to offer as slugs: the most one page may carry, which is
+ * also every scope the route loads. Asserted against the route's declared maximum in
+ * `tests/govern-pages.test.tsx`, because a size the route refuses is a form that never loads.
  */
-export const PEOPLE_PAGE_SIZE = 200;
-export const SCOPES_PAGE_SIZE = 100;
+export const SCOPE_CHOICES_PAGE_SIZE = 200;
 
-/** The whole request each listing makes, query string included. */
-export function peopleApiPath(): string {
-  return `${PEOPLE_API_PATH}?${LIMIT_PARAMETER}=${String(PEOPLE_PAGE_SIZE)}`;
+/** The request the grant form makes for the scopes it may offer. No search, no filter. */
+export function scopeChoicesApiPath(): string {
+  return listPath(SCOPES_API_PATH, NO_QUESTION, null, SCOPE_CHOICES_PAGE_SIZE);
 }
 
-export function scopesApiPath(): string {
-  return `${SCOPES_API_PATH}?${LIMIT_PARAMETER}=${String(SCOPES_PAGE_SIZE)}`;
+/**
+ * The request for one subject's row, when a subject is open.
+ *
+ * A filter on the subject the address names, so the open subject is found whichever page of the
+ * list it would sit on. The route answers it over the subjects this reader may see, so a key that
+ * matches nothing is the same answer as a key nobody holds.
+ */
+export function subjectApiPath(subject: string): string {
+  return listPath(PEOPLE_API_PATH, { ...NO_QUESTION, filters: { subject } }, null, 1);
 }
+
+/** The filters the people route declares that this screen offers, over values on rows drawn. */
+export const PEOPLE_FILTERS: readonly FilterChoice<PersonRow>[] = [
+  { column: "capabilities", label: "Capability", everything: "Any capability", read: (row) => row.capabilities },
+];
+
+export const PEOPLE_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By subject" },
+  { value: "-subject", label: "By subject, last first" },
+];
+
+/** The filters the scopes route declares that this screen offers, over values on rows drawn. */
+export const SCOPE_FILTERS: readonly FilterChoice<ScopeRowView>[] = [
+  {
+    column: "is_department",
+    label: "Kind",
+    everything: "Every scope",
+    read: (row) => row.is_department,
+    describe: (value) => (value === "true" ? "A department" : "Named"),
+  },
+];
+
+export const SCOPE_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By slug" },
+  { value: "label", label: "By label" },
+];
 
 /**
  * The console address for one subject's page.

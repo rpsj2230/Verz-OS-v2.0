@@ -133,7 +133,12 @@ each route can produce, and the order the checks happen in. The insert's and the
 success paths, and the audit entry the trigger writes behind them, are unverified and are the
 first thing to exercise against a real database.
 
-Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7
+**People and Scopes page, search, filter and order through `brain.listing`**, over the rows
+`govern.people` and `scope_rows` decided, with the load bounded by the constants below whatever was
+asked. A search for a capability therefore finds a subject only where this reader was shown that
+capability, and a withheld list of capabilities matches nothing at all.
+
+Task ids: M27.7.3, M27.7.4, M27.7.5, M27.7.6, M27.7.7, M27.8.6
 """
 
 from __future__ import annotations
@@ -143,7 +148,7 @@ from datetime import datetime
 from typing import Annotated, Any, Final
 
 import structlog
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import Insert, Select, Update, func, insert, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -178,6 +183,7 @@ from brain.core.scope_sql import PredicateRefusedError
 from brain.identity.packs import CapabilityPack, PackAssignment, SubjectGrant, expand
 from brain.identity.roles import RoleSpec
 from brain.identity.teams import PrincipalSubject
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
 from brain.tables.audit import ACTOR_SETTING
@@ -290,18 +296,15 @@ ROLES_SCREEN: Final = "roles"
 
 # ------------------------------------------------------------------ the bounds
 
-#: How many grant rows one page of the People screen carries at most. A resource bound rather
-#: than a permission one: what a caller may see is decided per row by `govern.people`, and this
-#: is only what one statement may ask the database for.
+#: How many grant rows, and how many pack assignments, one People answer is loaded from, whatever
+#: page, search, filter or order was asked for. A resource bound rather than a permission one: what
+#: a caller may see is decided per row by `govern.people`, and this is only what one statement may
+#: ask the database for. See `brain.listing.THE_LOAD_IS_NEVER_NARROWED_BY_THE_QUERY`.
 MAX_PEOPLE_PER_PAGE: Final = 500
 
-#: What a caller gets when they do not say.
-DEFAULT_PEOPLE_PER_PAGE: Final = 200
-
-#: The same pair for the scopes listing. Lower, because a scope is written by a person and an
+#: The same bound for the scopes listing. Lower, because a scope is written by a person and an
 #: install with five hundred of them has a different problem from a paging one.
 MAX_SCOPES_PER_PAGE: Final = 200
-DEFAULT_SCOPES_PER_PAGE: Final = 100
 
 #: The same pair for the vocabulary. Higher than the others, because the catalogue is answered
 #: whole or not at all and a truncated whole is the one shape it must not take: see
@@ -341,6 +344,22 @@ class PersonView(BaseModel):
 
     subject: str
     capabilities: tuple[str, ...]
+
+
+def departments_named(scope: dict[str, Any]) -> tuple[str, ...]:
+    """The department values a predicate's clauses name, as the row shows the predicate.
+
+    Read off `ScopeView.scope`, the dump the reader is sent, so filtering a scope by department asks
+    only about what the row already says. A clause naming several departments names each.
+    """
+    named: list[str] = []
+    for clause in scope.get("clauses", ()):
+        if not isinstance(clause, dict) or clause.get("field") != "department":
+            continue
+        value = clause.get("value")
+        values = value if isinstance(value, list | tuple) else (value,)
+        named.extend(one for one in values if isinstance(one, str))
+    return tuple(named)
 
 
 class PeoplePage(Page[PersonView]):
@@ -967,15 +986,41 @@ def _no_grant_here() -> Absent:
 
 # -------------------------------------------------------------------- the routes
 
+# ------------------------------------------------------------------- the listings
+
+#: What the People screen may search, filter and order by: a subject and the capabilities it is
+#: shown holding. A withheld list is empty on the row, so it matches no search and no filter.
+PEOPLE: Final[Listing[PersonView]] = Listing(
+    name="people",
+    columns=(
+        Column("subject", lambda row: row.subject, search=True, filter=True, sort=True),
+        Column("capabilities", lambda row: row.capabilities, search=True, filter=True),
+    ),
+    key=lambda row: row.subject,
+    order="subject",
+)
+PeopleQuery = Annotated[ListAsked, Depends(PEOPLE.query())]
+
+#: What the Scopes screen may search, filter and order by.
+SCOPES: Final[Listing[ScopeView]] = Listing(
+    name="scopes",
+    columns=(
+        Column("slug", lambda row: row.slug, search=True, sort=True),
+        Column("label", lambda row: row.label, search=True, sort=True),
+        Column("is_department", lambda row: row.is_department, filter=True),
+        Column("departments", lambda row: departments_named(row.scope), search=True, filter=True),
+    ),
+    key=lambda row: row.slug,
+    order="slug",
+)
+ScopesQuery = Annotated[ListAsked, Depends(SCOPES.query())]
+
+
 router = APIRouter(prefix=API_PREFIX, tags=["govern"])
 
 
 @router.get("/govern/people", response_model=PeoplePage, responses=COMMON_RESPONSES)
-async def people_page(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_PEOPLE_PER_PAGE)] = DEFAULT_PEOPLE_PER_PAGE,
-) -> PeoplePage:
+async def people_page(request: Request, asked: Asked, listed: PeopleQuery) -> PeoplePage:
     """Who holds what, at this reader's reach.
 
     The screen's question first and the database second; see the module docstring on the order.
@@ -1003,6 +1048,8 @@ async def people_page(
     if not permitted(screen(PEOPLE_SCREEN).read, asked.reach, asked.now):
         log.info("people screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable(PEOPLE_SCREEN)
+    plan = PEOPLE.plan(listed, reader=asked.caller.principal.id)
+    limit = MAX_PEOPLE_PER_PAGE
 
     reads = _require_console_reads(request)
 
@@ -1022,12 +1069,15 @@ async def people_page(
     served = await reads.read(load, now=asked.now)
     holdings, full = served.value
 
-    return PeoplePage(
-        items=[
+    page = plan.page(
+        [
             person_view(one.subject, one.capabilities)
             for one in people(holdings, asked.reach, asked.now)
-        ],
-        next_cursor=None,
+        ]
+    )
+    return PeoplePage(
+        items=list(page.items),
+        next_cursor=page.next_cursor,
         truncated=full,
         editable=asked.reach.scope_for(REACH_AUTHORITY, asked.now) is not None,
         staleness=served.banner,
@@ -1112,11 +1162,7 @@ async def capabilities(request: Request, asked: Asked) -> CapabilityCatalogue:
 
 
 @router.get("/govern/scopes", response_model=ScopePage, responses=COMMON_RESPONSES)
-async def scopes(
-    request: Request,
-    asked: Asked,
-    limit: Annotated[int, Query(ge=1, le=MAX_SCOPES_PER_PAGE)] = DEFAULT_SCOPES_PER_PAGE,
-) -> ScopePage:
+async def scopes(request: Request, asked: Asked, listed: ScopesQuery) -> ScopePage:
     """The row predicates a grant can carry, and the departments they are written over.
 
     Two decisions, both somebody else's. `scope_rows` narrows the predicates by
@@ -1134,6 +1180,8 @@ async def scopes(
     if not permitted(screen(SCOPES_SCREEN).read, asked.reach, asked.now):
         log.info("scopes screen not answerable", principal=asked.caller.principal.id)
         raise _not_answerable(SCOPES_SCREEN)
+    plan = SCOPES.plan(listed, reader=asked.caller.principal.id)
+    limit = MAX_SCOPES_PER_PAGE
 
     reads = _require_console_reads(request)
 
@@ -1159,9 +1207,10 @@ async def scopes(
         except (ValueError, PredicateRefusedError):
             log.warning("scope row does not construct", slug=row.slug)
 
+    page = plan.page([scope_view(one) for one in scope_rows(records, asked.reach, asked.now)])
     return ScopePage(
-        items=[scope_view(one) for one in scope_rows(records, asked.reach, asked.now)],
-        next_cursor=None,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
         truncated=full,
         departments=departments_offered(names, asked.reach, asked.now),
         staleness=served.banner,

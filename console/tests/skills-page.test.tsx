@@ -24,6 +24,7 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
+import { LIST_PAGE_SIZE } from "../src/components/listing";
 import {
   A_SKILL_HAS_NO_REACH_OF_ITS_OWN,
   ADD,
@@ -44,7 +45,6 @@ import {
 import {
   MAX_PACKAGE_BYTES,
   REVIEW_WORDS,
-  SKILLS_PAGE_SIZE,
   assignedSentence,
   assignPath,
   base64Of,
@@ -56,7 +56,7 @@ import {
   reviewPath,
   skillAddress,
   skillIn,
-  skillsApiPath,
+  skillApiPath,
   type SkillLibraryRow,
 } from "../src/pages/skillsQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
@@ -248,9 +248,9 @@ describe("what the skills screen asks for and sends", () => {
     // What breaks if this is deleted: every load of this screen becomes a 422.
     const limit = declaredParameterSchema(SKILLS_OPERATION, "get", "limit");
 
-    expect(SKILLS_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
-    expect(SKILLS_PAGE_SIZE).toBeGreaterThanOrEqual(limit["minimum"] as number);
-    expect(skillsApiPath()).toBe(`/skills?limit=${String(SKILLS_PAGE_SIZE)}`);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(limit["maximum"] as number);
+    expect(LIST_PAGE_SIZE).toBeGreaterThanOrEqual(limit["minimum"] as number);
+    expect(skillApiPath("hosting-expiry")).toBe("/skills?limit=1&filter=name%3Ahosting-expiry");
   });
 
   test("the bodies this console sends are the ones the three writes declare", () => {
@@ -318,7 +318,8 @@ describe("adding a skill", () => {
     expect(offered.container.querySelector(`form[aria-label="${ADD_HEADING}"]`)).not.toBeNull();
     const page = withheld.container.querySelector(".page") as HTMLElement;
     expect(page.querySelectorAll("button")).toHaveLength(0);
-    expect(page.querySelector("form")).toBeNull();
+    // No form but the search every list draws.
+    expect(page.querySelector('form:not([role="search"])')).toBeNull();
   });
 
   test("a paste is checked before it is sent, sent as text, and the page says so and reads again", async () => {
@@ -497,9 +498,11 @@ describe("assigning a skill", () => {
     });
 
     expect(() => button(pending.container, ASSIGN)).toThrow();
-    const options = [...container.querySelectorAll("select option")].map((one) => one.textContent);
+    // The assign choice, and not the list's own filters.
+    const choices = [...container.querySelectorAll("select")].filter((one) => one.closest('form[role="search"]') === null);
+    const options = choices.flatMap((one) => [...one.querySelectorAll("option")]).map((one) => one.textContent);
     expect(options).toEqual(["Company Desk", "Web Desk"]);
-    fireEvent.change(container.querySelector("select") as HTMLSelectElement, {
+    fireEvent.change(choices[0] as HTMLSelectElement, {
       target: { value: "web_desk" },
     });
     fireEvent.click(button(container, ASSIGN));
@@ -648,8 +651,9 @@ describe("what the skills screen shows beside the library", () => {
     expect(container.textContent).not.toMatch(/does not exist|not found|never imported/i);
   });
 
-  test("an open skill draws its own pins and the same request as the bare listing", async () => {
-    // What breaks if this is deleted: the deep link becomes a second question asked of the API.
+  test("an open skill draws its own pins and asks the listing once more, for its own name only", async () => {
+    // What breaks if this is deleted: the deep link asking something other than its own row, or
+    // finding its pins only when the skill happens to sit on the first page of the list.
     const rows = skillsPage([
       { name: "hosting-expiry", pinned_by: [{ agent_id: "company-desk", digest: DIGEST_ONE }] },
     ]);
@@ -661,7 +665,7 @@ describe("what the skills screen shows beside the library", () => {
         .filter((url) => url.includes(SKILLS_OPERATION))
         .map((url) => new URL(url, CONSOLE_ORIGIN).pathname + new URL(url, CONSOLE_ORIGIN).search);
 
-    expect(asked(open.idp)).toEqual(asked(bare.idp));
+    expect(asked(open.idp).sort()).toEqual([...asked(bare.idp), `/api/v1${skillApiPath("hosting-expiry")}`].sort());
     expect(open.container.querySelector('section.card[aria-label="hosting-expiry"]')?.textContent).toContain(
       "company-desk",
     );

@@ -10,7 +10,7 @@
  * and the API refusing, which is shown in the API's own words: a reader who may not read the log is
  * told the screen is not theirs, and an empty table is never how that is said.
  *
- * Task ids: M27.8.14
+ * Task ids: M27.8.14, M27.8.6
  */
 
 import { useCallback, useMemo, useState, type FormEvent } from "react";
@@ -41,6 +41,9 @@ import {
   PERIODS,
   READING_THE_LOG,
   SEARCH_LABEL,
+  ORDERS,
+  ORDER_LABELS,
+  SHOW_NEWER,
   SHOW_OLDER,
   THE_BRAIN_COULD_NOT_BE_REACHED,
   UNREADABLE_ANSWER,
@@ -149,6 +152,22 @@ function Filters({ filters, search }: { readonly filters: LogFilters; readonly s
             {PERIODS.map((one) => (
               <option key={one} value={one}>
                 {PERIOD_LABELS[one]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="control-label">
+          Order{" "}
+          <select
+            className="form-control"
+            value={filters.order}
+            onChange={(event) => {
+              navigate(withFilter(search, ADDRESS_PARAMETERS.order, event.target.value));
+            }}
+          >
+            {ORDERS.map((one) => (
+              <option key={one} value={one}>
+                {ORDER_LABELS[one]}
               </option>
             ))}
           </select>
@@ -264,7 +283,7 @@ function Entries({ filters }: { readonly filters: LogFilters }) {
           entries.length === 0 ? null : <p className="note">{NO_MORE_ENTRIES}</p>
         ) : (
           <button type="button" className="button" onClick={fetchMore} disabled={fetching}>
-            {SHOW_OLDER}
+            {filters.order === "oldest" ? SHOW_NEWER : SHOW_OLDER}
           </button>
         )}
       </section>

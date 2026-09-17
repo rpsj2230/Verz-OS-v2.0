@@ -30,13 +30,15 @@
 import { createMemoryRouter, RouterProvider } from "react-router-dom";
 import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, test } from "vitest";
+import { LIST_PAGE_SIZE, NO_QUESTION, listPath } from "../src/components/listing";
 import {
   clauseText,
   EDIT_COLUMN,
   editableDefaults,
   MATRIX_COLUMNS,
-  MATRIX_PAGE_SIZE,
-  matrixApiPath,
+  CHAIN_PAGE_SIZE,
+  MATRIX_API_PATH,
+  openRungApiPath,
   matrixColumns,
   readMatrixPage,
   RUNG_EDIT_SCHEMA,
@@ -158,6 +160,9 @@ async function consoleAt(
 }
 
 /** Every request this console made to the matrix, as URLs. */
+/** The one request the matrix list makes for its first page with nothing narrowed. */
+const LIST_REQUEST = `/api/v1${listPath(MATRIX_API_PATH, NO_QUESTION, null, LIST_PAGE_SIZE)}`;
+
 function matrixRequests(idp: FakeIdp): URL[] {
   return idp.urls
     .filter((url) => url.includes("/api/v1/routing/rungs"))
@@ -200,9 +205,10 @@ describe("what the console asks for", () => {
     const declared = declaredParameterSchema(RUNGS_OPERATION, "get", "limit");
 
     expect(typeof declared["maximum"]).toBe("number");
-    expect(MATRIX_PAGE_SIZE).toBeLessThanOrEqual(declared["maximum"] as number);
-    expect(MATRIX_PAGE_SIZE).toBeGreaterThanOrEqual(declared["minimum"] as number);
-    expect(matrixApiPath()).toBe(`/routing/rungs?limit=${String(MATRIX_PAGE_SIZE)}`);
+    expect(LIST_PAGE_SIZE).toBeLessThanOrEqual(declared["maximum"] as number);
+    expect(CHAIN_PAGE_SIZE).toBeLessThanOrEqual(declared["maximum"] as number);
+    expect(CHAIN_PAGE_SIZE).toBeGreaterThanOrEqual(declared["minimum"] as number);
+    expect(openRungApiPath("r-1")).toBe("/routing/rungs?limit=1&filter=id%3Ar-1");
   });
 
   test("an address this screen builds always stays inside the console", async () => {
@@ -241,16 +247,16 @@ describe("the guard in the browser", () => {
       matrixRequests(shown.idp).map(String),
     );
     expect(matrixRequests(hidden.idp)).toHaveLength(1);
-    for (const asked of [
-      ...matrixRequests(hidden.idp),
-      ...matrixRequests(shown.idp),
-      ...matrixRequests(opened.idp),
-    ]) {
-      expect(`${asked.pathname}${asked.search}`).toBe(`/api/v1${matrixApiPath()}`);
+    for (const asked of [...matrixRequests(hidden.idp), ...matrixRequests(shown.idp)]) {
+      expect(`${asked.pathname}${asked.search}`).toBe(LIST_REQUEST);
     }
+    // An open rung asks the list and its own row, whatever the flag says.
+    expect(matrixRequests(opened.idp).map((asked) => `${asked.pathname}${asked.search}`).sort()).toEqual(
+      [LIST_REQUEST, `/api/v1${openRungApiPath("11111111-1111-4111-8111-111111111111")}`].sort(),
+    );
   });
 
-  test("no column offers a filter, because the route declares no filter to offer", async () => {
+  test("no column grows a filter box, and every filter offered is one the route declares", async () => {
     // What breaks if this is deleted: a filter box that does nothing and looks like one that
     // works. FastAPI discards a query parameter no signature names and answers 200, so a box
     // here would send a term, the whole matrix would come back, and a person would read it as
@@ -262,9 +268,15 @@ describe("the guard in the browser", () => {
       matrix: page([rung()], { editable: true }),
     });
 
-    expect(declared).not.toContain("filter");
+    expect(declared).toContain("filter");
     expect(container.querySelectorAll("input.grid__filter")).toHaveLength(0);
     expect(container.querySelector(".grid__filters")).toBeNull();
+    const pattern = new RegExp(declaredParameterSchema(RUNGS_OPERATION, "get", "filter")["items"] === undefined
+      ? String((declaredParameterSchema(RUNGS_OPERATION, "get", "filter")["anyOf"] as Record<string, Record<string, string>>[] | undefined)?.[0]?.["items"]?.["pattern"] ?? "")
+      : String((declaredParameterSchema(RUNGS_OPERATION, "get", "filter")["items"] as Record<string, string>)["pattern"]));
+    for (const column of ["tier", "provider", "enabled"]) {
+      expect(pattern.test(`${column}:x`), column).toBe(true);
+    }
   });
 
   test("an edit control appears only when the API said this caller may change something", async () => {
@@ -279,9 +291,9 @@ describe("the guard in the browser", () => {
       matrix: page([rung()], { editable: true }),
     });
 
-    expect(hidden.container.querySelector(".form")).toBeNull();
+    expect(hidden.container.querySelector(".form:not(.list-controls)")).toBeNull();
     expect(headings(hidden.container)).not.toContain(EDIT_COLUMN);
-    expect(shown.container.querySelector(".form")).not.toBeNull();
+    expect(shown.container.querySelector(".form:not(.list-controls)")).not.toBeNull();
     expect(headings(shown.container)).toContain(EDIT_COLUMN);
   });
 
@@ -429,17 +441,18 @@ describe("what the screen shows", () => {
     expect(short.container.textContent).not.toContain(THERE_IS_MORE);
   });
 
-  test("an address naming a rung the page does not carry says so and asks for nothing else", async () => {
-    // What breaks if this is deleted: a bad link renders a screen with no form and no reason,
-    // or worse, a second request for one rung. There is no per-rung route, and inventing one
-    // would be the console asking a question the API has not been given.
+  test("an address naming a rung the API does not answer says so and asks only the list's own route", async () => {
+    // What breaks if this is deleted: a bad link renders a screen with no form and no reason, or
+    // the console invents a per-rung route the API has not been given. The open rung is asked of
+    // the list route with a filter on its id, so it is found whichever page it sits on, and the
+    // stand-in's answer carries a different rung.
     const { container, idp } = await consoleAt("/routing/44444444-4444-4444-8444-444444444444", {
       matrix: page([rung()], { editable: true }),
     });
 
     expect(container.textContent).toContain(NO_SUCH_RUNG);
-    expect(container.querySelector(".form")).toBeNull();
-    expect(matrixRequests(idp)).toHaveLength(1);
+    expect(container.querySelector(".form:not(.list-controls)")).toBeNull();
+    expect(matrixRequests(idp).map((asked) => asked.pathname)).toEqual(["/api/v1/routing/rungs", "/api/v1/routing/rungs"]);
   });
 
   test("a refusal is the API's sentence and the page adds no reading of it", async () => {
@@ -526,7 +539,7 @@ describe("saving one rung", () => {
       matrix: page([rung()], { editable: true }),
     });
 
-    expect(matrixRequests(idp).filter((url) => !url.pathname.endsWith("111"))).toHaveLength(1);
+    expect(idp.urls.filter((url) => url.endsWith(LIST_REQUEST))).toHaveLength(1);
     await act(async () => {
       fireEvent.click(container.querySelector(".form button[type=submit]") as HTMLElement);
     });
@@ -534,7 +547,7 @@ describe("saving one rung", () => {
 
     await waitFor(() =>
       expect(
-        idp.urls.filter((url) => url.endsWith(`/api/v1${matrixApiPath()}`)),
+        idp.urls.filter((url) => url.endsWith(LIST_REQUEST)),
       ).toHaveLength(2),
     );
   });

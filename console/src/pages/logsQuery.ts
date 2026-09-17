@@ -15,7 +15,7 @@
  * query parameters of the console address, so an administrator can send a colleague the view they
  * are looking at. The cursor is not, because it is a position in one reader's page.
  *
- * Task ids: M27.8.14
+ * Task ids: M27.8.14, M27.8.6
  */
 
 import type { components } from "../api/schema";
@@ -47,6 +47,7 @@ export const UNREADABLE_ANSWER =
 export const NO_ENTRIES = "Nothing was kept for this search in this period.";
 export const NO_MORE_ENTRIES = "There are no older rows for this search in this period.";
 export const SHOW_OLDER = "Show older entries";
+export const SHOW_NEWER = "Show newer entries";
 
 /** What an event with no kept name reads as. */
 export const NAME_NOT_KEPT = "Name not kept";
@@ -76,7 +77,17 @@ export const ADDRESS_PARAMETERS = {
   level: "level",
   event: "event",
   period: "period",
+  order: "order",
 } as const;
+
+/** Which way the rows are walked, as `brain.log_routes.LogOrder` spells it. */
+export const ORDERS = ["newest", "oldest"] as const;
+export type Order = (typeof ORDERS)[number];
+
+export const ORDER_LABELS: Readonly<Record<Order, string>> = Object.freeze({
+  newest: "Newest first",
+  oldest: "Oldest first",
+});
 
 /** The levels a row can be kept at, most severe first. Debug is not one of them. */
 export const LEVELS = ["critical", "error", "warning", "info"] as const;
@@ -121,15 +132,18 @@ export interface LogFilters {
   /** A literal search within event names, or empty. */
   readonly event: string;
   readonly period: Period;
+  readonly order: Order;
 }
 
-export const DEFAULT_FILTERS: LogFilters = Object.freeze({ level: "", event: "", period: "day" });
+export const DEFAULT_FILTERS: LogFilters = Object.freeze({ level: "", event: "", period: "day", order: "newest" });
 
 /** The filters a console address carries. Anything unrecognised is the default. */
 export function filtersFrom(search: URLSearchParams): LogFilters {
   const level = search.get(ADDRESS_PARAMETERS.level) ?? "";
   const period = search.get(ADDRESS_PARAMETERS.period) ?? "";
+  const order = search.get(ADDRESS_PARAMETERS.order) ?? "";
   return {
+    order: (ORDERS as readonly string[]).includes(order) ? (order as Order) : DEFAULT_FILTERS.order,
     level: (LEVELS as readonly string[]).includes(level) ? (level as Level) : DEFAULT_FILTERS.level,
     event: (search.get(ADDRESS_PARAMETERS.event) ?? "").trim().slice(0, MAX_SEARCH_CHARS),
     period: (PERIODS as readonly string[]).includes(period) ? (period as Period) : DEFAULT_FILTERS.period,
@@ -163,6 +177,9 @@ export function logsApiPath(filters: LogFilters, now: Date, cursor: string | nul
   }
   if (filters.event !== "") {
     query.set("event", filters.event);
+  }
+  if (filters.order !== DEFAULT_FILTERS.order) {
+    query.set("order", filters.order);
   }
   if (cursor !== null) {
     query.set("cursor", cursor);

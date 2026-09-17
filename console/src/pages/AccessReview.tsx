@@ -20,36 +20,47 @@
  * API's refusal. There is no revocation by denial anywhere: removal retires the grant row, because
  * entitlements only add.
  *
- * **A write is followed by a fresh request**, keyed on a counter, for `People.tsx`' reason: the list
+ * **Keeping or removing several is one confirmation listing each grant and what happens to it**, and
+ * one request the route runs as that many single decisions, each through `certify` under its own lock.
+ * The page then says, per grant, whether it was decided, so a partial refusal is stated.
+ *
+ * **The search, the filters, the order and "Show more" are requests** (`components/useListing.ts`).
+ * A write asks for the first page again with the same question, for `People.tsx`' reason: the list
  * shows what the database holds, not what this page sent.
  *
- * Task ids: M27.7.9
+ * Task ids: M27.7.9, M27.8.6
  */
 
-import { useCallback, useState, type ChangeEvent } from "react";
+import { useCallback, useState } from "react";
 import { Link } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
-import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
 import { Notice } from "../ui/Notice";
 import {
   DECISIONS,
-  NO_REVIEW_FILTERS,
-  RECENT_DAYS,
+  MOST_DECIDED_AT_ONCE,
+  REVIEW_API_PATH,
+  REVIEW_DECISIONS_API_PATH,
   REVIEW_DECISION_API_PATH,
+  REVIEW_FILTERS,
+  REVIEW_SORTS,
   decisionBody,
+  decisionLine,
   decisionQuestion,
+  decisionsBody,
+  decisionsQuestion,
+  holdingKey,
   holdingName,
-  narrowedReview,
   personAddress,
   readReview,
-  reviewApiPath,
-  reviewDepartments,
-  reviewPeople,
+  readReviewOutcomes,
+  reviewOutcomeLine,
   when,
   type ReviewDecisionWord,
-  type ReviewFilters,
   type ReviewRow,
 } from "./governPeopleQuery";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
@@ -65,7 +76,7 @@ export const REVIEW_LEDE =
 export const READING_REVIEW = "Reading the grants you may review.";
 export const NOTHING_TO_REVIEW = "There are no grants for you to review.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
-export const NONE_MATCH = "No grant on this page matches these filters.";
+export const NONE_MATCH = NOTHING_MATCHES;
 export const MORE_GRANTS = "This list came back full, so there are more grants than it shows.";
 export const NEVER_DECIDED = "Never reviewed";
 export const DOES_NOT_LAPSE = "Does not lapse";
@@ -78,13 +89,14 @@ export const CANCEL_LABEL = "Decide later";
 
 export const REVIEW_LABEL = "Grants to review";
 export const FILTERS_LABEL = "Narrow the grants";
-export const ALL_DEPARTMENTS = "All departments";
-export const EVERYONE = "Everyone";
-export const DECIDED_LABELS: Readonly<Record<ReviewFilters["decided"], string>> = Object.freeze({
-  "": "Every grant",
-  never: "Never reviewed",
-  stale: `Not reviewed in ${String(RECENT_DAYS)} days`,
+export const TICK_LABEL = "Tick to decide";
+export const TICKED_LABELS: Readonly<Record<ReviewDecisionWord, string>> = Object.freeze({
+  keep: "Keep the ticked grants",
+  remove: "Remove the ticked grants",
 });
+/** Said when more are ticked than one request may carry. A bound, not a count of anything. */
+export const TOO_MANY_TICKED =
+  "One request decides at most fifty grants. Untick some and decide the rest afterwards.";
 
 /** What a success says: what, whose, and the instant the database recorded. */
 export function decidedSentence(row: ReviewRow, decision: ReviewDecisionWord, decidedAt: string): string {
@@ -117,10 +129,17 @@ interface Pending {
   readonly decision: ReviewDecisionWord;
 }
 
-function ReviewList({ onDecided }: { readonly onDecided: (sentence: string) => void }) {
-  const answer = useResource<unknown>(reviewApiPath());
-  const [filters, setFilters] = useState<ReviewFilters>(NO_REVIEW_FILTERS);
+function ReviewList({
+  version,
+  onDecided,
+}: {
+  readonly version: number;
+  readonly onDecided: (sentences: readonly string[]) => void;
+}) {
+  const listing = useListing<ReviewRow>(REVIEW_API_PATH, { choices: REVIEW_FILTERS, version });
   const [pending, setPending] = useState<Pending | null>(null);
+  const [pendingTicked, setPendingTicked] = useState<ReviewDecisionWord | null>(null);
+  const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
 
@@ -139,73 +158,59 @@ function ReviewList({ onDecided }: { readonly onDecided: (sentence: string) => v
           return;
         }
         setFailure(null);
-        onDecided(decidedSentence(chosen.row, chosen.decision, readDecidedAt(result.data)));
+        onDecided([decidedSentence(chosen.row, chosen.decision, readDecidedAt(result.data))]);
       })();
     },
     [onDecided],
   );
 
-  if (answer.failure) {
-    return <Failure failure={answer.failure} />;
-  }
-  if (answer.busy) {
-    return (
-      <p className="note" role="status">
-        {READING_REVIEW}
-      </p>
-    );
-  }
+  const decideTicked = useCallback(
+    (rows: readonly ReviewRow[], decision: ReviewDecisionWord) => {
+      setBusy(true);
+      void (async () => {
+        const result = await request<unknown>(REVIEW_DECISIONS_API_PATH, {
+          method: "POST",
+          body: decisionsBody(rows, decision),
+        });
+        setBusy(false);
+        setPendingTicked(null);
+        if (!result.ok) {
+          setFailure(result.failure);
+          return;
+        }
+        setFailure(null);
+        setTicked(new Set());
+        const byKey = new Map(rows.map((row) => [holdingKey(row), row]));
+        onDecided(
+          readReviewOutcomes(result.data).map((one) =>
+            reviewOutcomeLine(byKey.get(`${one.kind}:${one.row_id}`), one, decision),
+          ),
+        );
+      })();
+    },
+    [onDecided],
+  );
 
-  const review = readReview(answer.data);
-  const shown = narrowedReview(review.rows, filters, new Date());
-  const set = (name: "department" | "person") => (event: ChangeEvent<HTMLSelectElement>) => {
-    setFilters({ ...filters, [name]: event.target.value });
+  const names = new Map(listing.rows.map((row) => [row.principal_id, row.display_name ?? row.principal_id]));
+  const choices = REVIEW_FILTERS.map((choice) =>
+    choice.column === "principal_id" ? { ...choice, describe: (value: string) => names.get(value) ?? value } : choice,
+  );
+  const review = readReview(listing.body);
+  const tickedRows = review.rows.filter((row) => ticked.has(holdingKey(row)));
+  const toggle = (row: ReviewRow) => {
+    const next = new Set(ticked);
+    const key = holdingKey(row);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    setTicked(next);
   };
 
   return (
     <>
-      {review.rows.length === 0 ? null : (
-        <form className="form" aria-label={FILTERS_LABEL} onSubmit={(event) => event.preventDefault()}>
-          <label className="control-label">
-            Department{" "}
-            <select className="form-control" value={filters.department} onChange={set("department")}>
-              <option value="">{ALL_DEPARTMENTS}</option>
-              {reviewDepartments(review.rows).map((one) => (
-                <option key={one} value={one}>
-                  {one}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="control-label">
-            Person{" "}
-            <select className="form-control" value={filters.person} onChange={set("person")}>
-              <option value="">{EVERYONE}</option>
-              {reviewPeople(review.rows).map((one) => (
-                <option key={one.id} value={one.id}>
-                  {one.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="control-label">
-            Reviewed{" "}
-            <select
-              className="form-control"
-              value={filters.decided}
-              onChange={(event) => {
-                setFilters({ ...filters, decided: event.target.value as ReviewFilters["decided"] });
-              }}
-            >
-              {(Object.keys(DECIDED_LABELS) as ReviewFilters["decided"][]).map((one) => (
-                <option key={one} value={one}>
-                  {DECIDED_LABELS[one]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </form>
-      )}
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={choices} sorts={REVIEW_SORTS} />
 
       {failure === null ? null : <Failure failure={failure} />}
 
@@ -225,81 +230,140 @@ function ReviewList({ onDecided }: { readonly onDecided: (sentence: string) => v
         />
       )}
 
+      {pendingTicked === null ? null : (
+        <ConfirmAction
+          question={decisionsQuestion(pendingTicked)}
+          consequence={pendingTicked === "keep" ? review.keeping : review.removing}
+          details={
+            <ul className="confirm__items">
+              {tickedRows.map((row) => (
+                <li key={holdingKey(row)}>{decisionLine(row, pendingTicked)}</li>
+              ))}
+            </ul>
+          }
+          confirmLabel={TICKED_LABELS[pendingTicked]}
+          cancelLabel={CANCEL_LABEL}
+          busy={busy}
+          onConfirm={() => {
+            decideTicked(tickedRows, pendingTicked);
+          }}
+          onCancel={() => {
+            setPendingTicked(null);
+          }}
+        />
+      )}
+
       <section className="card">
         <h2>Grants to review</h2>
-        {review.rows.length === 0 ? (
-          <p className="note">{NOTHING_TO_REVIEW}</p>
-        ) : shown.length === 0 ? (
-          <p className="note">{NONE_MATCH}</p>
+        {listing.failure ? (
+          <Failure failure={listing.failure} />
+        ) : listing.busy ? (
+          <p className="note" role="status">
+            {READING_REVIEW}
+          </p>
+        ) : review.rows.length === 0 ? (
+          <p className="note">{narrows(listing.question) ? NONE_MATCH : NOTHING_TO_REVIEW}</p>
         ) : (
-          <div className="grid__scroll">
-            <table className="grid__table" aria-label={REVIEW_LABEL}>
-              <thead>
-                <tr>
-                  <th scope="col">Person</th>
-                  <th scope="col">Capability</th>
-                  <th scope="col">Scope</th>
-                  <th scope="col">By</th>
-                  <th scope="col">Lapses</th>
-                  <th scope="col">Last reviewed</th>
-                  <th scope="col">Decision</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shown.map((row) => (
-                  <tr key={row.row_id}>
-                    <td>
-                      <Link to={personAddress(row.principal_id)}>{row.display_name ?? row.principal_id}</Link>{" "}
-                      <code>{row.principal_id}</code> {row.department === null ? null : <code>{row.department}</code>}
-                    </td>
-                    <td>
-                      {row.pack === null ? null : <p className="note">{`Pack ${row.pack}`}</p>}
-                      {row.capabilities.map((capability) => (
-                        <code key={capability}>{capability} </code>
-                      ))}
-                    </td>
-                    <td>
-                      {scopeLines(row.scope).map((line) => (
-                        <code key={line}>{line} </code>
-                      ))}
-                    </td>
-                    <td>
-                      <code>{row.granted_by}</code> {when(row.granted_at)}
-                      <p className="note">{row.reason}</p>
-                    </td>
-                    <td>{row.lapses_at === null ? DOES_NOT_LAPSE : when(row.lapses_at)}</td>
-                    <td>
-                      {row.last_decision === null ? (
-                        NEVER_DECIDED
-                      ) : (
-                        <>
-                          {DECISION_LABELS[row.last_decision]} <code>{row.last_decided_by}</code>{" "}
-                          {when(row.last_decided_at)}
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      {DECISIONS.map((decision) => (
-                        <button
-                          key={decision}
-                          type="button"
-                          className="button"
-                          aria-label={`${DECISION_LABELS[decision]}: ${decisionQuestion(row, decision)}`}
-                          disabled={busy}
-                          onClick={() => {
-                            setFailure(null);
-                            setPending({ row, decision });
-                          }}
-                        >
-                          {DECISION_LABELS[decision]}
-                        </button>
-                      ))}
-                    </td>
+          <>
+            <div className="grid__scroll">
+              <table className="grid__table" aria-label={REVIEW_LABEL}>
+                <thead>
+                  <tr>
+                    <th scope="col">{TICK_LABEL}</th>
+                    <th scope="col">Person</th>
+                    <th scope="col">Capability</th>
+                    <th scope="col">Scope</th>
+                    <th scope="col">By</th>
+                    <th scope="col">Lapses</th>
+                    <th scope="col">Last reviewed</th>
+                    <th scope="col">Decision</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {review.rows.map((row) => (
+                    <tr key={holdingKey(row)}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`${TICK_LABEL}: ${holdingName(row)} for ${row.display_name ?? row.principal_id}`}
+                          checked={ticked.has(holdingKey(row))}
+                          disabled={busy}
+                          onChange={() => {
+                            toggle(row);
+                          }}
+                        />
+                      </td>
+                      <td>
+                        <Link to={personAddress(row.principal_id)}>{row.display_name ?? row.principal_id}</Link>{" "}
+                        <code>{row.principal_id}</code> {row.department === null ? null : <code>{row.department}</code>}
+                      </td>
+                      <td>
+                        {row.pack === null ? null : <p className="note">{`Pack ${row.pack}`}</p>}
+                        {row.capabilities.map((capability) => (
+                          <code key={capability}>{capability} </code>
+                        ))}
+                      </td>
+                      <td>
+                        {scopeLines(row.scope).map((line) => (
+                          <code key={line}>{line} </code>
+                        ))}
+                      </td>
+                      <td>
+                        <code>{row.granted_by}</code> {when(row.granted_at)}
+                        <p className="note">{row.reason}</p>
+                      </td>
+                      <td>{row.lapses_at === null ? DOES_NOT_LAPSE : when(row.lapses_at)}</td>
+                      <td>
+                        {row.last_decision === null ? (
+                          NEVER_DECIDED
+                        ) : (
+                          <>
+                            {DECISION_LABELS[row.last_decision]} <code>{row.last_decided_by}</code>{" "}
+                            {when(row.last_decided_at)}
+                          </>
+                        )}
+                      </td>
+                      <td>
+                        {DECISIONS.map((decision) => (
+                          <button
+                            key={decision}
+                            type="button"
+                            className="button"
+                            aria-label={`${DECISION_LABELS[decision]}: ${decisionQuestion(row, decision)}`}
+                            disabled={busy}
+                            onClick={() => {
+                              setFailure(null);
+                              setPending({ row, decision });
+                            }}
+                          >
+                            {DECISION_LABELS[decision]}
+                          </button>
+                        ))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {tickedRows.length > MOST_DECIDED_AT_ONCE ? <p className="note">{TOO_MANY_TICKED}</p> : null}
+            <div className="form-actions">
+              {DECISIONS.map((decision) => (
+                <button
+                  key={decision}
+                  type="button"
+                  className="button"
+                  disabled={busy || tickedRows.length === 0 || tickedRows.length > MOST_DECIDED_AT_ONCE}
+                  onClick={() => {
+                    setFailure(null);
+                    setPendingTicked(decision);
+                  }}
+                >
+                  {TICKED_LABELS[decision]}
+                </button>
+              ))}
+            </div>
+            <ShowMore listing={listing} />
+          </>
         )}
         {review.truncated ? <p className="note">{MORE_GRANTS}</p> : null}
         {review.shows === "" ? null : <p className="note">{review.shows}</p>}
@@ -309,12 +373,12 @@ function ReviewList({ onDecided }: { readonly onDecided: (sentence: string) => v
 }
 
 export function AccessReview() {
-  // A counter rather than a boolean, so two decisions in a row remount twice. Never rendered.
-  const [generation, setGeneration] = useState(0);
-  const [decided, setDecided] = useState<string | null>(null);
-  const onDecided = useCallback((sentence: string) => {
-    setDecided(sentence);
-    setGeneration((current) => current + 1);
+  // A counter, so two decisions in a row ask twice. Never rendered.
+  const [version, setVersion] = useState(0);
+  const [decided, setDecided] = useState<readonly string[]>([]);
+  const onDecided = useCallback((sentences: readonly string[]) => {
+    setDecided(sentences);
+    setVersion((current) => current + 1);
   }, []);
 
   return (
@@ -322,12 +386,16 @@ export function AccessReview() {
       <p className="note">{REVIEW_CRUMB}</p>
       <h1>{REVIEW_HEADING}</h1>
       <p className="lede">{REVIEW_LEDE}</p>
-      {decided === null ? null : (
-        <p className="note" role="status">
-          {decided}
-        </p>
+      {decided.length === 0 ? null : (
+        <div role="status">
+          {decided.map((sentence, index) => (
+            <p className="note" key={`${String(index)}-${sentence}`}>
+              {sentence}
+            </p>
+          ))}
+        </div>
       )}
-      <ReviewList key={generation} onDecided={onDecided} />
+      <ReviewList version={version} onDecided={onDecided} />
     </article>
   );
 }

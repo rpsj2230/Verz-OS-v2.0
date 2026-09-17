@@ -28,7 +28,7 @@
  * the back button undoes a filter. The cursor is not: it is a position in one reader's view, and a
  * link carrying one would open somebody else's page part-way through theirs.
  *
- * Task ids: M27.7.13
+ * Task ids: M27.7.13, M27.8.6
  */
 
 import type { components } from "../api/schema";
@@ -57,6 +57,7 @@ export const AUDIT_PAGE_SIZE = 50;
 
 /** The console address's own parameter names. The API's are in `auditApiPath`. */
 export const ADDRESS_PARAMETERS = {
+  search: "q",
   action: "action",
   kind: "kind",
   actor: "actor",
@@ -92,6 +93,8 @@ export const ORDER_LABELS: Readonly<Record<Order, string>> = Object.freeze({
 
 /** What the reader narrowed the ledger by. Empty strings are unset. */
 export interface AuditFilters {
+  /** Words every entry shown must say, in its action, actor, subject or details. */
+  readonly search: string;
   readonly action: string;
   readonly kind: string;
   readonly actor: string;
@@ -101,6 +104,7 @@ export interface AuditFilters {
 
 /** The week, newest first, which is what somebody opening an audit screen asks about first. */
 export const DEFAULT_FILTERS: AuditFilters = Object.freeze({
+  search: "",
   action: "",
   kind: "",
   actor: "",
@@ -113,6 +117,7 @@ export function filtersFrom(search: URLSearchParams): AuditFilters {
   const period = search.get(ADDRESS_PARAMETERS.period) ?? "";
   const order = search.get(ADDRESS_PARAMETERS.order) ?? "";
   return {
+    search: search.get(ADDRESS_PARAMETERS.search) ?? "",
     action: search.get(ADDRESS_PARAMETERS.action) ?? "",
     kind: search.get(ADDRESS_PARAMETERS.kind) ?? "",
     actor: search.get(ADDRESS_PARAMETERS.actor) ?? "",
@@ -141,6 +146,9 @@ export function auditApiPath(filters: AuditFilters, now: Date, cursor: string | 
   const query = new URLSearchParams();
   query.set("limit", String(AUDIT_PAGE_SIZE));
   query.set("order", filters.order);
+  if (filters.search.trim() !== "") {
+    query.set("q", filters.search.trim());
+  }
   if (filters.action !== "") {
     query.set("action", filters.action);
   }

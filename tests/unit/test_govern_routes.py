@@ -51,6 +51,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from brain import govern_routes
 from brain.api import API_PREFIX
 from brain.app import Settings, create_app
 from brain.console.govern import VOCABULARY_SCREEN
@@ -61,8 +62,8 @@ from brain.core.entitlement import CAPABILITY_RE, Capability, EntitlementSet, Gr
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.govern_routes import (
-    DEFAULT_PEOPLE_PER_PAGE,
     MAX_CAPABILITIES_PER_PAGE,
+    MAX_PEOPLE_PER_PAGE,
     PEOPLE_SCREEN,
     REASON_CHARS,
     ROLES_SCREEN,
@@ -666,6 +667,50 @@ def test_a_reader_who_may_not_name_capabilities_is_told_who_holds_something_and_
     assert set(withheld[0]) == {"subject", "capabilities"}
 
 
+def test_a_search_or_filter_on_capabilities_finds_nobody_for_a_reader_they_were_withheld_from(
+    client: TestClient,
+) -> None:
+    """`brain.listing.A_SEARCH_READS_ONLY_WHAT_THE_ROW_SHOWS`, through the People route.
+
+    `u_wide` is shown the subjects and not what they hold. A search or a filter matched against
+    the loaded grants would answer them the subject holding the capability they typed, which is
+    the Capabilities screen read one guess at a time. The positive half is `u_admin`, who is
+    shown the capability and finds its holder, one page at a time.
+
+    Delete this and the listing can be handed the placed grants instead of the projected rows."""
+    by_search = get(client, PEOPLE_PATH, "u_wide", q=GRANTED).json()
+    by_filter = get(client, PEOPLE_PATH, "u_wide", filter=f"capabilities:{GRANTED}").json()
+    named = get(client, PEOPLE_PATH, "u_admin", filter=f"capabilities:{GRANTED}").json()
+    first = get(client, PEOPLE_PATH, "u_admin", limit=1).json()
+    rest = get(client, PEOPLE_PATH, "u_admin", limit=1, cursor=first["next_cursor"]).json()
+
+    assert by_search["items"] == by_filter["items"] == []
+    assert by_search["next_cursor"] is None
+    assert [one["subject"] for one in named["items"]] == ["principal:u_1"]
+    assert [one["subject"] for one in (*first["items"], *rest["items"])] == [
+        "principal:u_1",
+        "principal:u_2",
+    ]
+    assert rest["next_cursor"] is None
+
+
+def test_an_open_subject_is_found_by_its_key_whichever_page_it_sits_on_and_only_in_reach(
+    client: TestClient,
+) -> None:
+    """The console opens `/people/<subject>` by asking the listing for that subject alone.
+
+    Delete this and the filter on `subject` can be dropped from the declaration, so the open subject
+    is found only when it sits on the first page; or it can be matched before `govern.people`
+    decides, so a department reader typing another department's subject key is answered its row."""
+    found = get(client, PEOPLE_PATH, "u_admin", filter="subject:principal:u_2", limit=1).json()
+    withheld = get(
+        client, PEOPLE_PATH, "u_elsewhere", filter="subject:principal:u_2", limit=1
+    ).json()
+
+    assert [one["subject"] for one in found["items"]] == ["principal:u_2"]
+    assert withheld["items"] == [] and withheld["next_cursor"] is None
+
+
 def test_a_capability_conferred_by_a_pack_is_on_the_people_screen(
     client: TestClient, executed: Executed
 ) -> None:
@@ -783,18 +828,25 @@ def test_the_people_page_says_whether_this_caller_may_write_a_grant(client: Test
     assert get(client, PEOPLE_PATH, "u_wide").json()["editable"] is False
 
 
-def test_a_full_page_of_people_says_there_is_more_without_saying_how_much(
-    client: TestClient,
+def test_a_full_load_of_people_says_there_is_more_whatever_the_reader_searched_for(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`truncated` is the page having come back full, and it is a boolean.
+    """`truncated` is the load having come back full, and it is a boolean.
 
     The stub answers two grant rows whatever the statement asked for, so what varies is the
-    limit the caller sent and nothing else.
+    load bound and nothing else. The search that matches nothing is the point of the second half:
+    a flag computed over a load narrowed by the search would say how many rows matched it,
+    including rows the reader may not see. See
+    `brain.listing.THE_LOAD_IS_NEVER_NARROWED_BY_THE_QUERY`.
 
     Delete this and `truncated` can be computed against what `govern.people` returned, which is
-    a count of what the decision withheld spelled as a flag."""
-    assert get(client, PEOPLE_PATH, "u_admin", limit=2).json()["truncated"] is True
-    assert get(client, PEOPLE_PATH, "u_admin", limit=3).json()["truncated"] is False
+    a count of what the decision withheld spelled as a flag, or against what the search kept."""
+    monkeypatch.setattr(govern_routes, "MAX_PEOPLE_PER_PAGE", 2)
+    assert get(client, PEOPLE_PATH, "u_admin").json()["truncated"] is True
+    assert get(client, PEOPLE_PATH, "u_admin", q="matches-nothing").json()["truncated"] is True
+    assert get(client, PEOPLE_PATH, "u_admin", limit=1).json()["truncated"] is True
+    monkeypatch.setattr(govern_routes, "MAX_PEOPLE_PER_PAGE", 3)
+    assert get(client, PEOPLE_PATH, "u_admin", limit=1).json()["truncated"] is False
 
 
 # ------------------------------------------------------------------- the roles screen
@@ -978,7 +1030,8 @@ def test_a_department_scoped_reader_sees_fewer_scopes_and_fewer_department_optio
     wide = get(client, SCOPES_PATH, "u_admin").json()
     narrow = get(client, SCOPES_PATH, "u_elsewhere").json()
 
-    assert [one["slug"] for one in wide["items"]] == [MAINTENANCE, FINANCE]
+    # In slug order, which is the listing's declared order and the statement's.
+    assert [one["slug"] for one in wide["items"]] == [FINANCE, MAINTENANCE]
     assert [one["slug"] for one in narrow["items"]] == [MAINTENANCE]
     assert list(wide["departments"]) == [MAINTENANCE, FINANCE]
     assert list(narrow["departments"]) == [MAINTENANCE]
@@ -1454,8 +1507,8 @@ def test_every_listing_reads_live_rows_only(client: TestClient) -> None:
     Delete this and a retired grant reappears on the People screen the day somebody restores a
     database without its policies, which is the day nobody is checking."""
     for statement in (
-        live_grants(DEFAULT_PEOPLE_PER_PAGE),
-        live_assignments(DEFAULT_PEOPLE_PER_PAGE),
+        live_grants(MAX_PEOPLE_PER_PAGE),
+        live_assignments(MAX_PEOPLE_PER_PAGE),
         live_departments(10),
         one_live_grant("u_1", GRANTED),
     ):
@@ -1473,7 +1526,7 @@ def test_the_people_load_keeps_a_grant_whose_principal_row_is_missing(client: Te
 
     Delete this and the join tightens to an inner one, reasonably, and a grant belonging to a
     soft-deleted principal stops appearing anywhere a person could remove it."""
-    sql = str(live_grants(DEFAULT_PEOPLE_PER_PAGE).compile(compile_kwargs={"literal_binds": True}))
+    sql = str(live_grants(MAX_PEOPLE_PER_PAGE).compile(compile_kwargs={"literal_binds": True}))
 
     assert "LEFT OUTER JOIN auth.principal" in sql
 

@@ -22,11 +22,24 @@
  * Imported statically rather than split, for `Agents`' reason: neither heavy library, no
  * stylesheet of its own.
  *
- * Task ids: M27.7.17
+ * Task ids: M27.7.17, M27.8.6
  */
 
-import { useResource } from "../api/useResource";
-import { adoptionApiPath, readAdoptionPage } from "./adoptionQuery";
+import { useState } from "react";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows } from "../components/listing";
+import { useListing } from "../components/useListing";
+import {
+  ADOPTION_API_PATH,
+  ADOPTION_DAYS,
+  ADOPTION_FILTERS,
+  ADOPTION_PERIODS,
+  ADOPTION_SORTS,
+  DAYS_PARAMETER,
+  periodWords,
+  readAdoptionPage,
+  type AdoptionLineRow,
+} from "./adoptionQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
 /** The page's heading. */
@@ -34,8 +47,12 @@ export const ADOPTION_HEADING = "Adoption";
 
 /** Under the heading. Names the window, because both figures on every row are over it. */
 export const ADOPTION_LEDE =
-  "How many questions each department you can see asked over the last thirty days, and how " +
-  "many people asked them.";
+  "How many questions each department you can see asked over the period chosen, and how many " +
+  "people asked them.";
+
+export const FILTERS_LABEL = "Narrow the departments";
+export const PERIOD_LABEL = "Period";
+export const NONE_MATCH = NOTHING_MATCHES;
 
 /** The table's accessible name. */
 export const ADOPTION_CAPTION = "Questions and people by department";
@@ -47,26 +64,65 @@ export const NO_ADOPTION = "There is nothing to show here.";
 export const MORE_DEPARTMENTS = "There are more departments than this page shows.";
 
 function AdoptionView() {
-  const answer = useResource<unknown>(adoptionApiPath());
+  const [days, setDays] = useState(ADOPTION_DAYS);
+  const listing = useListing<AdoptionLineRow>(ADOPTION_API_PATH, {
+    choices: ADOPTION_FILTERS,
+    extra: { [DAYS_PARAMETER]: String(days) },
+  });
+  const controls = (
+    <>
+      <ListControls label={FILTERS_LABEL} listing={listing} choices={ADOPTION_FILTERS} sorts={ADOPTION_SORTS} />
+      <form className="form" aria-label={PERIOD_LABEL} onSubmit={(event) => event.preventDefault()}>
+        <label className="control-label">
+          {PERIOD_LABEL}{" "}
+          <select
+            className="form-control"
+            value={String(days)}
+            onChange={(event) => {
+              setDays(Number(event.target.value));
+            }}
+          >
+            {ADOPTION_PERIODS.map((one) => (
+              <option key={one} value={String(one)}>
+                {periodWords(one)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </form>
+    </>
+  );
 
-  if (answer.failure) {
+  if (listing.failure) {
     return (
-      <FailureNotice failure={answer.failure} />
+      <>
+        {controls}
+        <FailureNotice failure={listing.failure} />
+      </>
     );
   }
-  if (answer.busy) {
+  if (listing.busy) {
     return (
-      <p className="note" role="status">
-        Loading.
-      </p>
+      <>
+        {controls}
+        <p className="note" role="status">
+          Loading.
+        </p>
+      </>
     );
   }
-  const page = readAdoptionPage(answer.data);
+  const page = readAdoptionPage(listing.body);
   if (page.lines.length === 0) {
-    return <p className="note">{NO_ADOPTION}</p>;
+    return (
+      <>
+        {controls}
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_ADOPTION}</p>
+      </>
+    );
   }
   return (
     <>
+      {controls}
       <div className="grid">
         <div className="grid__scroll">
           <table className="grid__table">
@@ -90,6 +146,7 @@ function AdoptionView() {
           </table>
         </div>
       </div>
+      <ShowMore listing={listing} />
       {page.truncated ? <p className="note">{MORE_DEPARTMENTS}</p> : null}
     </>
   );

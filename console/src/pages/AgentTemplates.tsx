@@ -22,10 +22,13 @@
  * `Agents`: it mounts neither heavy library and imports no stylesheet of its own, so a chunk
  * for it would buy a round trip and save no bytes.
  *
- * Task ids: none
+ * Task ids: M27.8.6
  */
 
-import { useResource } from "../api/useResource";
+import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
+import { narrows, type FilterChoice, type SortChoice } from "../components/listing";
+import { useListing } from "../components/useListing";
+import type { components } from "../api/schema";
 import { readTemplates, TEMPLATES_API_PATH } from "./agentTemplatesQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -103,29 +106,62 @@ export function originWords(origin: string): string {
   return ORIGIN_WORDS[origin] ?? origin;
 }
 
-function TemplatesAnswerView() {
-  const answer = useResource<unknown>(TEMPLATES_API_PATH);
+export const FILTERS_LABEL = "Narrow the templates";
+export const NONE_MATCH = NOTHING_MATCHES;
 
-  if (answer.failure) {
+type TemplateRow = components["schemas"]["TemplateEntry"];
+
+/** The filters the gallery route declares that this screen offers, over values on cards drawn. */
+export const TEMPLATE_FILTERS: readonly FilterChoice<TemplateRow>[] = [
+  {
+    column: "origin",
+    label: "Where it came from",
+    everything: "Shipped or published",
+    read: (row) => row.origin,
+    describe: (value) => originWords(value),
+  },
+  { column: "published_by", label: "Published by", everything: "Anybody", read: (row) => row.published_by },
+];
+
+export const TEMPLATE_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By name" },
+  { value: "template_id", label: "By id" },
+  { value: "-version", label: "Newest version first" },
+];
+
+function TemplatesAnswerView() {
+  const listing = useListing<TemplateRow>(TEMPLATES_API_PATH, { choices: TEMPLATE_FILTERS });
+  const controls = (
+    <ListControls label={FILTERS_LABEL} listing={listing} choices={TEMPLATE_FILTERS} sorts={TEMPLATE_SORTS} />
+  );
+
+  if (listing.failure) {
     return (
-      <FailureNotice failure={answer.failure} />
+      <>
+        {controls}
+        <FailureNotice failure={listing.failure} />
+      </>
     );
   }
-  if (answer.busy) {
+  if (listing.busy) {
     return (
-      <p className="note" role="status">
-        Loading.
-      </p>
+      <>
+        {controls}
+        <p className="note" role="status">
+          Loading.
+        </p>
+      </>
     );
   }
-  const gallery = readTemplates(answer.data);
+  const gallery = readTemplates(listing.body);
   if (gallery === null) {
-    return null;
+    return controls;
   }
   return (
     <>
+      {controls}
       {gallery.cards.length === 0 ? (
-        <p className="note">{NO_TEMPLATES}</p>
+        <p className="note">{narrows(listing.question) ? NONE_MATCH : NO_TEMPLATES}</p>
       ) : (
         <ul className="roster" aria-label={TEMPLATES_LIST_LABEL}>
           {gallery.cards.map((card) => (
@@ -145,6 +181,7 @@ function TemplatesAnswerView() {
           ))}
         </ul>
       )}
+      <ShowMore listing={listing} />
       {gallery.truncated ? <p className="note">{MORE_TEMPLATES}</p> : null}
       <p className="note">{INSTALLING_IS_NOT_OFFERED_HERE}</p>
     </>

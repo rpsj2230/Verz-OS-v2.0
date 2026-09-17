@@ -6,7 +6,7 @@ Driven through the real application with the table held in memory. The stub answ
 statement by the columns it selects and records it, so a refusal can be shown to have been made
 before any statement was built, and the search can be read off the statement's own parameters.
 
-Task ids: M27.8.14
+Task ids: M27.8.14, M27.8.6
 """
 
 from __future__ import annotations
@@ -202,6 +202,31 @@ def test_the_search_is_literal_and_the_level_the_window_and_the_cursor_are_the_o
     assert (params["param_1"], params["param_2"]) == position_of(cursor)
     assert params["param_3"] == 51
     assert response.json()["start"].startswith("2019-03-01")
+
+
+def test_oldest_first_walks_the_log_forward_from_its_cursor_and_newest_first_walks_it_back(
+    served: tuple[TestClient, Stub], table: Table
+) -> None:
+    """The order is on the statement, and a cursor continues in the order its page was read in.
+
+    Delete this and oldest first sorts the page in the browser while the statement still reads the
+    newest rows, which is the first page of what arrived; or a cursor from an oldest-first page is
+    compared backwards and reads the page it came from again."""
+    client, _ = served
+    cursor = cursor_of(datetime(2019, 3, 1, 12, tzinfo=UTC), 42)
+
+    newest = get(client, "u_admin", f"{LOGS}?cursor={cursor}")
+    newest_sql = str(table.asked[-1].compile())
+    oldest = get(client, "u_admin", f"{LOGS}?order=oldest&cursor={cursor}")
+    oldest_sql = str(table.asked[-1].compile())
+    refused = get(client, "u_admin", f"{LOGS}?order=sideways")
+
+    assert newest.status_code == oldest.status_code == 200
+    assert "ORDER BY" in newest_sql and "DESC" in newest_sql.split("ORDER BY")[1]
+    assert "DESC" not in oldest_sql.split("ORDER BY")[1]
+    assert ") < (" in " ".join(newest_sql.split())
+    assert ") > (" in " ".join(oldest_sql.split())
+    assert refused.status_code == 422
 
 
 @pytest.mark.parametrize(

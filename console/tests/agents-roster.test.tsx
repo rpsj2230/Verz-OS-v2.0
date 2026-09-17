@@ -302,7 +302,8 @@ describe("the roster", () => {
       .map((url) => new URL(url, CONSOLE_ORIGIN))
       .filter((url) => url.pathname.startsWith(ROSTER_API));
 
-    expect(asked.map((url) => `${url.pathname}${url.search}`)).toEqual([ROSTER_API]);
+    expect(asked.map((url) => url.pathname)).toEqual([ROSTER_API]);
+    expect(asked.flatMap((url) => [...url.searchParams.keys()])).toEqual(["limit"]);
   });
 
   test("every name the roster reads is a name the route declares, and an entry declares no more", () => {

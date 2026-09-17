@@ -138,7 +138,12 @@ Rejected: a disabled or archived flag on a roster entry. `brain.agents.model.
 runnable_agent_ids` records why a caller is told nothing about why an agent they used
 yesterday is not chosen today, and a roster saying "disabled" beside a name is that sentence.
 
-Task ids: M39.1.2.5
+**The roster and the template gallery page, search, filter and order through `brain.listing`**,
+over the entries the audience decided. Every agent is read, as before; the page is cut from what
+survived, so a cursor says there are more agents this reader may see and never that there are
+agents they may not.
+
+Task ids: M39.1.2.5, M27.8.6
 """
 
 from __future__ import annotations
@@ -147,10 +152,10 @@ import enum
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Final
+from typing import Annotated, Any, Final
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -211,6 +216,7 @@ from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.context import TrafficClass
 from brain.knowledge.visibility import Visibility
+from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.routing import Tier
 from brain.ops.spend import Actual, SpendError
 from brain.routing_routes import sessions_of
@@ -318,9 +324,9 @@ THE_VIEWER_IS_THEIR_PRIMARY_DEPARTMENT_UNTIL_MEMBERSHIP_IS_READ: Final = (
 
 # ------------------------------------------------------------------------ the bounds
 
-#: The most agents one roster answer carries. A resource bound and not a permission one: it
-#: is applied after the audience filter, so raising it discloses nothing, and an installation
-#: with more agents than this is told so by `truncated`.
+#: The most agents one roster page carries when nothing asked for fewer. A resource bound and not
+#: a permission one: it is applied after the audience filter, so raising it discloses nothing, and
+#: an installation with more agents than one page is told so by `next_cursor` and `truncated`.
 MAX_ROSTER_ENTRIES: Final = 500
 
 #: The tabs with something in them for every agent. See `ONLY_WHAT_THIS_ROUTE_HOLDS_IS_POPULATED`.
@@ -396,11 +402,11 @@ class RosterEntry(BaseModel):
 
 
 class RosterPage(Page[RosterEntry]):
-    """Every agent this caller's audience covers, by name.
+    """One page of the agents this caller's audience covers, by name unless asked otherwise.
 
-    `total` is inherited and never populated, and `next_cursor` is always null: the page is
-    bounded by `MAX_ROSTER_ENTRIES` rather than paged. See
-    `A_ROSTER_IS_FILTERED_BEFORE_IT_IS_BOUNDED`.
+    `total` is inherited and never populated. `next_cursor` is present exactly when a further agent
+    this reader may see matches, and `truncated` says the same thing for a reader that reads only
+    the flag. See `A_ROSTER_IS_FILTERED_BEFORE_IT_IS_BOUNDED`.
     """
 
     #: There are more agents this caller may see than this answer carries. Never how many.
@@ -591,10 +597,10 @@ class TemplateEntry(BaseModel):
 
 
 class TemplateGallery(Page[TemplateEntry]):
-    """Every template this reader may be offered, by name.
+    """One page of the templates this reader may be offered, by name unless asked otherwise.
 
-    `total` is inherited and never populated and `next_cursor` is always null, exactly as the
-    roster's page is, and for the same reason.
+    `total` is inherited and never populated, and `next_cursor` and `truncated` mean what the
+    roster's do.
     """
 
     truncated: bool = False
@@ -760,23 +766,58 @@ def roster_entry(record: AgentRecord, *, ceilings: bool) -> RosterEntry:
     )
 
 
-def roster(
-    records: Sequence[AgentRecord], viewer: AgentViewer, *, ceilings: bool = False
-) -> RosterPage:
-    """The agents this viewer's audience covers, by name, bounded after filtering.
+#: What the Agents screen may search, filter and order by: the fields a roster entry shows.
+ROSTER: Final[Listing[RosterEntry]] = Listing(
+    name="agents",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("agent_id", lambda row: row.agent_id, search=True, sort=True),
+        Column("owner_id", lambda row: row.owner_id, search=True, filter=True),
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+    ),
+    key=lambda row: row.agent_id,
+    order="display_name",
+)
+RosterQuery = Annotated[ListAsked, Depends(ROSTER.query())]
 
-    Ordered by name and then by id, so two readings of an unchanged table are one list and
-    the order says nothing about when an agent was created.
+#: What the template gallery may search, filter and order by.
+TEMPLATES: Final[Listing[TemplateEntry]] = Listing(
+    name="agent-templates",
+    columns=(
+        Column("display_name", lambda row: row.display_name, search=True, sort=True),
+        Column("template_id", lambda row: row.template_id, search=True, sort=True),
+        Column("summary", lambda row: row.summary, search=True),
+        Column("published_by", lambda row: row.published_by, search=True, filter=True),
+        Column("origin", lambda row: row.origin, filter=True, sort=True),
+        Column("version", lambda row: row.version, sort=True),
+    ),
+    key=lambda row: row.template_id,
+    order="display_name",
+)
+TemplatesQuery = Annotated[ListAsked, Depends(TEMPLATES.query())]
+
+
+def roster(
+    records: Sequence[AgentRecord],
+    viewer: AgentViewer,
+    *,
+    ceilings: bool = False,
+    plan: Plan[RosterEntry] | None = None,
+) -> RosterPage:
+    """One page of the agents this viewer's audience covers, cut after filtering.
+
+    Ordered by name and then by id unless the plan asks otherwise, so two readings of an unchanged
+    table are one list and the order says nothing about when an agent was created. With no plan,
+    the first `MAX_ROSTER_ENTRIES` in that order.
     """
     visible = visible_agent_ids(records, viewer)
-    kept = sorted(
-        (one for one in records if one.agent_id in visible),
-        key=lambda one: (one.display_name, one.agent_id),
-    )
+    entries = [roster_entry(one, ceilings=ceilings) for one in records if one.agent_id in visible]
+    chosen = plan or ROSTER.plan(ListAsked(limit=MAX_ROSTER_ENTRIES), reader=viewer.principal_id)
+    page = chosen.page(entries)
     return RosterPage(
-        items=[roster_entry(one, ceilings=ceilings) for one in kept[:MAX_ROSTER_ENTRIES]],
-        next_cursor=None,
-        truncated=len(kept) > MAX_ROSTER_ENTRIES,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=page.next_cursor is not None,
     )
 
 
@@ -793,7 +834,9 @@ def template_entry(manifest: TemplateManifest, origin: Origin) -> TemplateEntry:
     )
 
 
-def gallery(published: Sequence[TemplateManifest]) -> TemplateGallery:
+def gallery(
+    published: Sequence[TemplateManifest], plan: Plan[TemplateEntry] | None = None
+) -> TemplateGallery:
     """The catalogue this installation can offer: what ships, and what has been published.
 
     **The highest version of each published template and no other, and a published template
@@ -819,11 +862,12 @@ def gallery(published: Sequence[TemplateManifest]) -> TemplateGallery:
         for one in CATALOGUE
         if one.identity.template_id not in highest
     )
-    cards.sort(key=lambda one: (one.display_name, one.template_id))
+    chosen = plan or TEMPLATES.plan(ListAsked(limit=MAX_TEMPLATE_ENTRIES), reader="")
+    page = chosen.page(cards)
     return TemplateGallery(
-        items=cards[:MAX_TEMPLATE_ENTRIES],
-        next_cursor=None,
-        truncated=len(cards) > MAX_TEMPLATE_ENTRIES,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=page.next_cursor is not None,
     )
 
 
@@ -1149,12 +1193,13 @@ router = APIRouter(prefix=API_PREFIX, tags=["agents"])
 
 
 @router.get("/agents", response_model=RosterPage, responses=COMMON_RESPONSES)
-async def agents(request: Request, asked: Asked) -> RosterPage:
-    """Every agent this caller's audience covers.
+async def agents(request: Request, asked: Asked, listed: RosterQuery) -> RosterPage:
+    """One page of the agents this caller's audience covers.
 
     No capability is asked for, and that is the argument of this module rather than an
     omission. See `AUDIENCE_DECIDES_WHO_SEES_AN_AGENT_AND_NOTHING_ELSE_DOES`.
     """
+    plan = ROSTER.plan(listed, reader=asked.caller.principal.id)
     factory = _require_session_factory(request)
     async with factory() as session:
         rows = (await session.execute(every_agent())).scalars().all()
@@ -1163,6 +1208,7 @@ async def agents(request: Request, asked: Asked) -> RosterPage:
         records,
         viewer_of(asked),
         ceilings=permitted(screen(AGENT_SCREEN).read, asked.reach, asked.now),
+        plan=plan,
     )
 
 
@@ -1188,7 +1234,9 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
 
 
 @router.get("/agent-templates", response_model=TemplateGallery, responses=COMMON_RESPONSES)
-async def agent_templates(request: Request, asked: Asked) -> TemplateGallery:
+async def agent_templates(
+    request: Request, asked: Asked, listed: TemplatesQuery
+) -> TemplateGallery:
     """The templates an agent can be installed from: what ships, and what has been published.
 
     The screen's question first and the database second, which is `brain.govern_routes`'
@@ -1202,6 +1250,7 @@ async def agent_templates(request: Request, asked: Asked) -> TemplateGallery:
     if not permitted(screen(TEMPLATE_SCREEN).read, asked.reach, asked.now):
         log.info("template gallery not answerable", principal=asked.caller.principal.id)
         raise _no_templates_here()
+    plan = TEMPLATES.plan(listed, reader=asked.caller.principal.id)
     factory = _require_session_factory(request)
     async with factory() as session:
         rows = (await session.execute(published_templates())).scalars().all()
@@ -1215,4 +1264,4 @@ async def agent_templates(request: Request, asked: Asked) -> TemplateGallery:
                 template=row.template_id,
                 error=type(exc).__name__,
             )
-    return gallery(published)
+    return gallery(published, plan)

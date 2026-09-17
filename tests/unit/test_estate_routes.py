@@ -86,6 +86,7 @@ from brain.estate_routes import (
     stored_memory,
 )
 from brain.identity.bearer import TokenAuthority
+from brain.listing import MAX_PAGE_ROWS
 from brain.memory.correction import Correction
 from brain.memory.digest import COUNTING_FIELD_NAMES
 from brain.memory.formation import RECALL_FLOOR, MemoryKind
@@ -626,22 +627,56 @@ def test_a_superseded_or_archived_item_is_not_in_the_library(
 
 
 def test_truncated_is_the_load_coming_back_full_and_not_the_rows_that_survived(
-    client: TestClient, stored: Stored
+    client: TestClient, stored: Stored, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """With a bound of two and two stored items the load is full, whatever the reader sees of
-    it, and with a bound of three it is not.
+    it and whatever they searched for, and with a bound of three it is not.
 
     Delete this and `truncated` can be computed over the rows `library_rows` returned, which is
     a count of what the decision withheld spelled as a boolean: the scoped reader here sees one
-    row and would be told there is no more exactly when there is."""
+    row and would be told there is no more exactly when there is. The search that matches
+    nothing is `A_FILTER_ON_THE_SERVER_TURNS_A_TRUNCATION_FLAG_INTO_A_COUNT`: a load narrowed by
+    it would turn the flag into a statement about what matched."""
     stored.items = [an_item("doc_finance", department="finance"), an_item("doc_web")]
 
-    full = get(client, "u_narrow", LIBRARY, limit=2).json()
-    room = get(client, "u_narrow", LIBRARY, limit=3).json()
+    monkeypatch.setattr(estate_routes, "MAX_ITEMS_CONSIDERED", 2)
+    full = get(client, "u_narrow", LIBRARY).json()
+    searched = get(client, "u_narrow", LIBRARY, q="finance").json()
+    monkeypatch.setattr(estate_routes, "MAX_ITEMS_CONSIDERED", 3)
+    room = get(client, "u_narrow", LIBRARY).json()
 
     assert full["items"] == room["items"] == [{"item_id": "doc_web", "level": "department"}]
     assert full["truncated"] is True
+    assert searched["truncated"] is True
+    assert searched["items"] == []
     assert room["truncated"] is False
+
+
+def test_the_library_searches_filters_and_pages_only_the_rows_the_reader_may_know_exist(
+    client: TestClient, stored: Stored
+) -> None:
+    """Delete this and the library's search can reach the loaded items, so a department reader
+    typing a finance document's reference is answered whether it exists; or the cursor can be
+    computed over the load, so the last web document carries a cursor because finance has more.
+    The positive half is the company-wide reader's walk."""
+    stored.items = [
+        an_item("doc_a"),
+        an_item("doc_finance", department="finance"),
+        an_item("doc_web"),
+    ]
+
+    withheld = get(client, "u_narrow", LIBRARY, q="doc_finance").json()
+    narrow = get(client, "u_narrow", LIBRARY, limit=2).json()
+    first = get(client, "u_admin", LIBRARY, limit=2).json()
+    rest = get(client, "u_admin", LIBRARY, limit=2, cursor=first["next_cursor"]).json()
+    by_level = get(client, "u_admin", LIBRARY, filter="level:department").json()
+
+    assert withheld["items"] == [] and withheld["next_cursor"] is None
+    assert narrow["next_cursor"] is None
+    walked = [one["item_id"] for one in (*first["items"], *rest["items"])]
+    assert walked == ["doc_a", "doc_finance", "doc_web"]
+    assert rest["next_cursor"] is None
+    assert [one["item_id"] for one in by_level["items"]] == ["doc_a", "doc_finance", "doc_web"]
 
 
 def test_the_library_load_asks_for_retrievable_states_in_reference_order_and_bounded() -> None:
@@ -658,12 +693,14 @@ def test_the_library_load_asks_for_retrievable_states_in_reference_order_and_bou
 
 
 def test_the_library_asks_for_no_more_than_its_bound(client: TestClient, stored: Stored) -> None:
-    """A page larger than `MAX_ITEMS_CONSIDERED` is refused as a request, and the bound itself
-    is answered.
+    """A page larger than `brain.listing.MAX_PAGE_ROWS` is refused as a request, the largest page
+    is answered, and the load a page is cut from never exceeds `MAX_ITEMS_CONSIDERED`.
 
-    Delete this and a caller can ask the database for the whole table in one statement."""
-    assert get(client, "u_admin", LIBRARY, limit=MAX_ITEMS_CONSIDERED + 1).status_code == 422
-    assert get(client, "u_admin", LIBRARY, limit=MAX_ITEMS_CONSIDERED).status_code == 200
+    Delete this and a caller can ask for the whole table in one answer, or the load can follow the
+    page size and stop being a constant."""
+    assert get(client, "u_admin", LIBRARY, limit=MAX_PAGE_ROWS + 1).status_code == 422
+    assert get(client, "u_admin", LIBRARY, limit=MAX_PAGE_ROWS).status_code == 200
+    assert MAX_PAGE_ROWS < MAX_ITEMS_CONSIDERED
 
 
 # ------------------------------------------------------- the learning review (M27.7.21)

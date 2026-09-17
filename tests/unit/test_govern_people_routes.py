@@ -11,7 +11,7 @@ the grant no longer resolved are proved in `tests/unit/test_review_store.py`, ag
 about a guard tested only by its refusals. Capabilities are spelled out rather than read off the
 registry, for `tests/unit/test_govern_routes.py`' reason.
 
-Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12
+Task ids: M27.7.4, M27.7.8, M27.7.9, M27.7.12, M27.8.6
 """
 
 from __future__ import annotations
@@ -83,6 +83,7 @@ ELEVATION = f"{API_PREFIX}/govern/elevation"
 ELEVATION_REQUESTS = f"{API_PREFIX}/govern/elevation/requests"
 REVIEW = f"{API_PREFIX}/govern/access-review"
 DECISION = f"{API_PREFIX}/govern/access-review/decision"
+DECISIONS = f"{API_PREFIX}/govern/access-review/decisions"
 SUBSCRIBERS = f"{API_PREFIX}/govern/subscribers"
 
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
@@ -1107,3 +1108,167 @@ def test_every_route_here_refuses_a_request_with_no_credential(wired: Wired) -> 
         f"{ELEVATION_REQUESTS}/x/decision",
     ):
         assert wired.client.post(path, json={}).status_code == 401, path
+
+
+# ------------------------------------------------------------------ paging, search and filter
+
+
+def listed(wired: Wired, path: str, pid: str, **params: str) -> dict[str, Any]:
+    answer: Response = wired.client.get(path, headers=auth(pid), params=params)
+    assert answer.status_code == 200, answer.text
+    body: dict[str, Any] = answer.json()
+    return body
+
+
+def test_a_search_for_a_person_finds_the_department_they_are_shown_under_and_no_other(
+    wired: Wired,
+) -> None:
+    """Delete this and the departments search can read the loaded organisation, so a web reader who
+    types a finance person's name is answered the web department because that person sits in its
+    team, which is the membership `organisation` withheld. The positive half is the administrator,
+    who may name Grace, finding both departments she appears under."""
+    web_reader = listed(wired, DEPARTMENTS, "u_elsewhere", q="grace")
+    admin = listed(wired, DEPARTMENTS, "u_admin", q="grace")
+    by_team = listed(wired, DEPARTMENTS, "u_admin", filter="teams:Design")
+
+    assert web_reader["departments"] == []
+    assert [one["slug"] for one in admin["departments"]] == ["finance", "web"]
+    assert [one["slug"] for one in by_team["departments"]] == ["web"]
+
+
+def test_the_departments_page_one_at_a_time_and_the_unplaced_arrive_only_with_the_first(
+    wired: Wired,
+) -> None:
+    """Delete this and walking the departments repeats the people nobody has placed on every page,
+    or drops them, or the unplaced ignore the search and a search for one department still lists
+    everybody unplaced. See `THE_UNPLACED_ARRIVE_WITH_THE_FIRST_PAGE`."""
+    first = listed(wired, DEPARTMENTS, "u_admin", limit="1")
+    second = listed(wired, DEPARTMENTS, "u_admin", limit="1", cursor=first["next_cursor"])
+    searched = listed(wired, DEPARTMENTS, "u_admin", q="finance")
+
+    assert [one["slug"] for one in first["departments"]] == ["finance"]
+    assert [one["principal_id"] for one in first["unplaced"]] == ["u_4"]
+    assert [one["slug"] for one in second["departments"]] == ["web"]
+    assert second["unplaced"] == []
+    assert second["next_cursor"] is None
+    assert searched["unplaced"] == []
+    assert wired.organisation.calls == [routes.MAX_ROWS] * 3  # type: ignore[attr-defined]
+
+
+def test_elevation_requests_filter_by_state_and_page_inside_what_the_reader_is_shown(
+    wired: Wired,
+) -> None:
+    """Delete this and a filter on the requests can reach one `requests_shown` withheld, so a web
+    authoriser filtering by a finance person's id is told whether that person asked, or a walk
+    repeats a request at a page boundary. The positive half is the administrator's walk."""
+    soon = datetime.now(UTC) + timedelta(hours=1)
+    wired.elevations.stored = [
+        a_request("u_2", "web"),
+        a_request(
+            "u_3", "finance", decision=ElevationDecision.APPROVED, lapses_at=soon, grant_live=True
+        ),
+        a_request("u_elsewhere", "web", decision=ElevationDecision.APPROVED, lapses_at=LONG_AGO),
+    ]
+
+    withheld = listed(wired, ELEVATION, "u_elsewhere", filter="principal_id:u_3")
+    shown = listed(wired, ELEVATION, "u_admin", filter="principal_id:u_3")
+    pending = listed(wired, ELEVATION, "u_admin", filter="state:pending")
+    first = listed(wired, ELEVATION, "u_admin", limit="2", sort="display_name")
+    rest = listed(
+        wired, ELEVATION, "u_admin", limit="2", sort="display_name", cursor=first["next_cursor"]
+    )
+
+    assert withheld["requests"] == [] and withheld["next_cursor"] is None
+    assert [one["principal_id"] for one in shown["requests"]] == ["u_3"]
+    assert [one["principal_id"] for one in pending["requests"]] == ["u_2"]
+    walked = [one["principal_id"] for one in (*first["requests"], *rest["requests"])]
+    assert walked == ["u_2", "u_3", "u_elsewhere"]
+    assert rest["next_cursor"] is None
+
+
+def test_the_access_review_searches_the_capabilities_a_row_shows_and_refuses_an_undeclared_filter(
+    wired: Wired,
+) -> None:
+    """Delete this and the review search can match a pack's capability on a row the reviewer is not
+    shown, or a filter on a column no row carries is accepted and ignored, which draws every
+    holding as a match."""
+    wired.review.held = [
+        GrantHolding(
+            row=a_grant_row("u_2", "read:client.name"), display_name="W", department="web"
+        ),
+        a_pack_holding("u_5", "web"),
+    ]
+
+    admin = listed(wired, REVIEW, "u_admin", q="invoice")
+    narrow = listed(wired, REVIEW, "u_narrow", q="invoice")
+    undeclared = wired.client.get(REVIEW, headers=auth("u_admin"), params={"filter": "scope:web"})
+
+    assert [one["principal_id"] for one in admin["items"]] == ["u_5"]
+    assert narrow["items"] == []
+    assert undeclared.status_code == 422
+
+
+# ------------------------------------------------------------------ several review decisions
+
+
+def test_several_holdings_are_decided_one_at_a_time_each_by_the_single_decisions_question(
+    wired: Wired,
+) -> None:
+    """Delete this and a bulk decision can be decided for the set, so a web reviewer keeps a finance
+    grant by listing it beside a web one; or a holding out of reach is answered differently from one
+    that does not exist, which makes the bulk control a way of asking which grants exist. The
+    positive half is the web holding decided, recorded under the reviewer's name."""
+    web = a_pack_holding("u_5", "web")
+    finance = GrantHolding(
+        row=a_grant_row("u_3", "read:client.name"), display_name="G", department="finance"
+    )
+    wired.review.held = [web, finance]
+    missing = uuid.uuid5(uuid.NAMESPACE_URL, "nobody")
+
+    answer = post(
+        wired,
+        DECISIONS,
+        "u_elsewhere",
+        {
+            "decision": "keep",
+            "holdings": [
+                {"kind": "pack", "row_id": str(web.row.id)},
+                {"kind": "grant", "row_id": str(finance.row.id)},
+                {"kind": "grant", "row_id": str(missing)},
+            ],
+        },
+    )
+
+    assert answer.status_code == 200, answer.text
+    outcomes = answer.json()["outcomes"]
+    assert [one["decided"] for one in outcomes] == [True, False, False]
+    assert outcomes[0]["principal_id"] == "u_5"
+    assert {k: v for k, v in outcomes[1].items() if k != "row_id"} == {
+        k: v for k, v in outcomes[2].items() if k != "row_id"
+    }
+    assert wired.review.recorded == [(web.row.id, ReviewDecision.KEEP, "u_elsewhere")]
+    assert wired.review.calls == ["decide", "decide", "decide"]
+
+
+def test_a_caller_without_the_review_authority_is_refused_the_bulk_decision_before_the_store(
+    wired: Wired,
+) -> None:
+    """Delete this and the bulk route reaches the store for a reader holding no authority, or
+    refuses them in words the single decision does not use, which says the two are guarded apart.
+    An empty list and a third word are refused by the declaration."""
+    holding = GrantHolding(
+        row=a_grant_row("u_2", "read:client.name"), display_name="W", department="web"
+    )
+    wired.review.held = [holding]
+    named = [{"kind": "grant", "row_id": str(holding.row.id)}]
+
+    several = post(wired, DECISIONS, "u_wide", {"decision": "keep", "holdings": named})
+    single = decide(wired, "u_wide", holding, "keep")
+    empty = post(wired, DECISIONS, "u_admin", {"decision": "keep", "holdings": []})
+    deferred = post(wired, DECISIONS, "u_admin", {"decision": "defer", "holdings": named})
+
+    assert several.status_code == single.status_code == 404
+    assert several.json()["message"] == single.json()["message"]
+    assert empty.status_code == deferred.status_code == 422
+    assert wired.review.calls == []
+    assert not keys_in(several.json()) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT

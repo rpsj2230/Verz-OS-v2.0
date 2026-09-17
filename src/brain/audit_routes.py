@@ -58,7 +58,13 @@ statement has not been executed against one here. What is tested is the statemen
 every refusal, the order the checks happen in, and the whole route over a store holding real
 entries appended by `AuditChain`.
 
-Task ids: M27.7.13
+**The ledger is searched by what a row says, as well as narrowed by its exact filters.** `q` is
+`brain.listing.says_every_word` over the action, the actor, the subject and the redacted details of
+a row this reader may already see, asked by `AuditView.page` after the visibility decision. A search
+therefore cannot match a withheld entry or a field a row does not show, and a short page with a
+cursor means what it meant before: the reading stopped at its ceiling.
+
+Task ids: M27.7.13, M27.8.6
 """
 
 from __future__ import annotations
@@ -92,6 +98,7 @@ from brain.console.auditor import PERMISSION_ACTIONS, permission_history
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.core.errors import Absent, Failed
+from brain.listing import MAX_SEARCH_CHARS, says_every_word, search_words
 from brain.routing_routes import sessions_of
 from brain.tables.audit import AuditEntryRow
 
@@ -356,6 +363,7 @@ async def read_page(
     limit: int,
     cursor: str | None,
     newest_first: bool,
+    shows: Callable[[AuditRow], bool] | None = None,
 ) -> AuditPage:
     """One page of what this reader may see, read in chunks up to `READ_CEILING`.
 
@@ -376,7 +384,9 @@ async def read_page(
         loaded.extend(entry for entry in (entry_from(row) for row in rows) if entry is not None)
         if rows:
             position = (rows[-1].at, rows[-1].entry_hash)
-        page = view_of(loaded).page(criteria, limit=limit, cursor=cursor, newest_first=newest_first)
+        page = view_of(loaded).page(
+            criteria, limit=limit, cursor=cursor, newest_first=newest_first, shows=shows
+        )
         if page.next_cursor is not None or len(rows) < LOAD_CHUNK:
             return page
         if read >= READ_CEILING:
@@ -411,6 +421,11 @@ def row_view(row: AuditRow) -> AuditRowView:
     )
 
 
+def said_by(row: AuditRow) -> tuple[str, ...]:
+    """What one row says as the reader reads it: its action, actor, subject and redacted details."""
+    return (row.action.value, row.actor_id, row.subject_kind, row.subject_id, *row.details.values())
+
+
 def actors_on(rows: Sequence[AuditRow]) -> list[str]:
     """The actors on these rows, first appearance first, each once. Never read from the table."""
     seen: dict[str, None] = {}
@@ -434,6 +449,7 @@ async def audit_page(
     order: Order = Order.NEWEST,
     cursor: Annotated[str | None, Query(max_length=512)] = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    q: Annotated[str, Query(max_length=MAX_SEARCH_CHARS)] = "",
 ) -> AuditLedgerPage:
     """One page of the ledger this reader may see, narrowed by exact filters.
 
@@ -463,6 +479,7 @@ async def audit_page(
 
     ledger = ledger_of(request)
     newest_first = order is Order.NEWEST
+    words = search_words(q)
     page = await read_page(
         ledger,
         lambda loaded: AuditView(loaded, reader=asked.reach, now=asked.now),
@@ -470,6 +487,7 @@ async def audit_page(
         limit=limit,
         cursor=cursor,
         newest_first=newest_first,
+        shows=(lambda row: says_every_word(said_by(row), words)) if words else None,
     )
     return AuditLedgerPage(
         items=[row_view(row) for row in page.rows],

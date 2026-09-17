@@ -88,7 +88,11 @@ store reads are unverified against a server and are the first thing to exercise 
 Of the second three, M27.7.14, M27.7.18 and M27.7.19 are claimed here for what the screens can
 show and are closed by none of them, for the reasons each read module gives.
 
-Task ids: M27.7.14, M27.7.15, M27.7.16, M27.7.17, M27.7.18, M27.7.19
+**Adoption pages, searches, filters and orders through `brain.listing`**, over the lines
+`adoption_for_reader` produced for this reader, so a search for a department answers a line only
+where the reader's usage grant already admits one.
+
+Task ids: M27.7.14, M27.7.15, M27.7.16, M27.7.17, M27.7.18, M27.7.19, M27.8.6
 """
 
 from __future__ import annotations
@@ -97,7 +101,7 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Final
 
 import structlog
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -125,6 +129,7 @@ from brain.console.service_level_view import service_levels_for_reader
 from brain.console.spend_report_view import MaterialisedReport, spend_report_from_view
 from brain.console.usage_screen import AUTOMATION_IS_COUNTED, UsageScreen, usage_for_reader
 from brain.core.errors import Failed
+from brain.listing import Column, ListAsked, Listing
 from brain.ops.question_gap_store import gaps_between
 from brain.ops.question_store import asked_between
 from brain.ops.schedule_runner import runner_for
@@ -210,15 +215,6 @@ MAX_ADOPTION_DAYS: Final = 366
 
 #: What an adoption window covers when nobody says.
 DEFAULT_ADOPTION_DAYS: Final = 30
-
-#: How many adoption lines one page carries at most. One line per department in the reader's
-#: reach, so this is far above any real company's list and exists so one request cannot ask
-#: for an unbounded page.
-MAX_ADOPTION_LINES: Final = 500
-
-#: What a caller gets when they do not say. Above any plausible department list, so
-#: `truncated` is false in practice.
-DEFAULT_ADOPTION_LINES: Final = 200
 
 #: The longest usage window one request may ask for, in days. A year, for adoption's reason:
 #: the question somebody brings to a usage screen is often who stopped asking.
@@ -341,11 +337,8 @@ class AdoptionPage(Page[AdoptionLineView]):
     `total` is inherited and never populated, for the reason every listing here gives: a count
     beside a filtered list is the size of what the reader was not shown.
 
-    `truncated` is the page having come back full and never how much more there is, which is
-    `brain.routing_routes.RungPage`'s flag and its argument. `next_cursor` is always null:
-    the lines are ordered by department name and a keyset cursor over that is expressible, so
-    this is a gap rather than an impossibility, and a small one while a page holds two hundred
-    departments.
+    `next_cursor` is present exactly when a further line this reader may see matches, and
+    `truncated` says the same and never how much more there is.
     """
 
     truncated: bool = False
@@ -792,12 +785,26 @@ async def spend(
     return spend_view_of(report, dimension)
 
 
+#: What the Adoption screen may search, filter and order its lines by.
+ADOPTION: Final[Listing[AdoptionLineView]] = Listing(
+    name="adoption",
+    columns=(
+        Column("department", lambda row: row.department, search=True, filter=True, sort=True),
+        Column("questions", lambda row: row.questions, sort=True),
+        Column("people", lambda row: row.people, sort=True),
+    ),
+    key=lambda row: row.department,
+    order="department",
+)
+AdoptionQuery = Annotated[ListAsked, Depends(ADOPTION.query())]
+
+
 @router.get("/report/adoption", response_model=AdoptionPage, responses=COMMON_RESPONSES)
 async def adoption(
     request: Request,
     asked: Asked,
+    listed: AdoptionQuery,
     days: Annotated[int, Query(ge=1, le=MAX_ADOPTION_DAYS)] = DEFAULT_ADOPTION_DAYS,
-    limit: Annotated[int, Query(ge=1, le=MAX_ADOPTION_LINES)] = DEFAULT_ADOPTION_LINES,
 ) -> AdoptionPage:
     """How much each department this reader may see asked, over the last `days`.
 
@@ -812,6 +819,7 @@ async def adoption(
     `brain.approval_routes.APPROVALS_ARE_FILTERED_BEFORE_THEY_ARE_BOUNDED` argues for, applied
     to a listing whose filter lives one module away.
     """
+    plan = ADOPTION.plan(listed, reader=asked.caller.principal.id)
     factory = _require_sessions(request)
     start = asked.now - timedelta(days=days)
     async with factory() as session:
@@ -825,11 +833,11 @@ async def adoption(
         end=asked.now,
         now=asked.now,
     )
-    shown = lines[:limit]
+    page = plan.page([adoption_view_of(one) for one in lines])
     return AdoptionPage(
-        items=[adoption_view_of(one) for one in shown],
-        next_cursor=None,
-        truncated=len(shown) >= limit,
+        items=list(page.items),
+        next_cursor=page.next_cursor,
+        truncated=page.next_cursor is not None,
     )
 
 

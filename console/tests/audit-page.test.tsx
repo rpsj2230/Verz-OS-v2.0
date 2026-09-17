@@ -264,6 +264,24 @@ describe("what the audit screen shows", () => {
     expect(asked(idp, AUDIT_OPERATION).at(-1)?.searchParams.has("cursor")).toBe(false);
   });
 
+  test("the search is carried to the request as q and starts from the first page", async () => {
+    // What breaks if this is deleted: a search box that narrows nothing, or one whose words are sent
+    // under a name the route does not declare, which FastAPI discards and answers with every entry.
+    const { container, idp } = await mount("/audit", (url) =>
+      url.pathname === AUDIT_OPERATION ? json(ledgerPage(ROWS)) : null,
+    );
+    await settled(container);
+
+    fireEvent.change(container.querySelector('input[type="search"]') as HTMLInputElement, {
+      target: { value: " xero " },
+    });
+    await waitFor(() => {
+      expect(asked(idp, AUDIT_OPERATION).at(-1)?.searchParams.get("q")).toBe("xero");
+    });
+    expect(asked(idp, AUDIT_OPERATION).at(-1)?.searchParams.has("cursor")).toBe(false);
+    expect(declaredQueryParameters(AUDIT_OPERATION, "get")).toContain("q");
+  });
+
   test("more entries are fetched from the cursor and appended, and the control goes when there is no cursor", async () => {
     // What breaks if this is deleted: the page repeats page one, replaces it, or offers a control
     // that fetches nothing.
