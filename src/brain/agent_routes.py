@@ -200,6 +200,7 @@ from brain.agents.model import (
 )
 from brain.agents.template import (
     MANIFEST_PATHS,
+    V2_PATHS,
     FieldOwner,
     SignedManifest,
     TemplateError,
@@ -815,6 +816,9 @@ def manifest_of(document: Mapping[str, Any]) -> TemplateManifest:
     """
     nested: dict[str, Any] = {}
     for path in MANIFEST_PATHS:
+        # A v1 document predates these paths; reading it leaves them at their empty default.
+        if path in V2_PATHS and path not in document:
+            continue
         head, _, tail = path.partition(".")
         if tail:
             nested.setdefault(head, {})[tail] = document[path]

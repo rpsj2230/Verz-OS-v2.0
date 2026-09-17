@@ -237,7 +237,11 @@ THE_BLANK_TEMPLATE_IS_THE_STRICTEST_ONE: Final = (
 #: Domain separation for the manifest digest. Changing the covered fields changes every
 #: digest ever computed, so a signature raised before the change stops matching after it.
 #: That is the correct failure, and it is a migration rather than an edit to this line.
-MANIFEST_SCHEMA: Final = "brain.template.manifest.v1"
+MANIFEST_SCHEMA: Final = "brain.template.manifest.v2"
+
+#: The schema every manifest signed before `identity.overview` existed was digested under.
+#: A manifest with no overview is digested under it still, so those signatures keep verifying.
+MANIFEST_SCHEMA_V1: Final = "brain.template.manifest.v1"
 
 #: Domain separation for the configuration hash, and deliberately not the line above.
 #: An instance with an empty overlay has an effective document identical to its manifest's,
@@ -254,6 +258,9 @@ BLANK_TEMPLATE_ID: Final = "blank"
 
 #: A summary is a sentence in a picker, not a description. The persona is the description.
 SUMMARY_CHARS: Final = 240
+
+#: A paragraph a person reads on the About tab. Never passed to a model (M27.11.16).
+OVERVIEW_CHARS: Final = 1200
 
 #: A placeholder's question to the installing person: "which price list?", "who is the
 #: escalation contact?". Bounded like a form label because that is what it is.
@@ -279,6 +286,7 @@ MANIFEST_PATHS: Final[tuple[str, ...]] = (
     "guardrails.leash",
     "guardrails.max_side_effect",
     "identity.display_name",
+    "identity.overview",
     "identity.published_by",
     "identity.summary",
     "identity.template_id",
@@ -306,6 +314,12 @@ SEALED_PATHS: Final[tuple[str, ...]] = (
 #: whichever constraint was checked and refused by the other, which reads as a database
 #: fault rather than as the contradiction it is.
 SETTABLE_PATHS: Final[tuple[str, ...]] = tuple(p for p in MANIFEST_PATHS if p not in SEALED_PATHS)
+
+#: The paths `MANIFEST_SCHEMA` added. A stored document without them is a v1 document.
+V2_PATHS: Final[tuple[str, ...]] = ("identity.overview",)
+
+#: The paths a v1 document holds, which is what a v1 digest is taken over.
+MANIFEST_PATHS_V1: Final[tuple[str, ...]] = tuple(p for p in MANIFEST_PATHS if p not in V2_PATHS)
 
 
 class TemplateError(Exception):
@@ -463,6 +477,8 @@ class ManifestIdentity(BaseModel):
     published_by: str = Field(min_length=1, max_length=OWNER_ID_CHARS)
     display_name: str = Field(min_length=1, max_length=DISPLAY_NAME_CHARS)
     summary: str = Field(default="", max_length=SUMMARY_CHARS)
+    #: For readers only, and settable: an install says in its own words how it uses the agent.
+    overview: str = Field(default="", max_length=OVERVIEW_CHARS)
 
 
 class ManifestAuthority(BaseModel):
@@ -626,12 +642,25 @@ def canonical(document: Mapping[str, JsonValue]) -> str:
     return canonical_value(dict(document))
 
 
+def schema_of(manifest: TemplateManifest) -> str:
+    """The lowest schema that can express this manifest.
+
+    A manifest with no overview says nothing a v1 document could not, so it is digested as
+    one, and every signature raised before v2 existed keeps verifying without a re-sign.
+    """
+    return MANIFEST_SCHEMA if manifest.identity.overview else MANIFEST_SCHEMA_V1
+
+
 def content_digest(manifest: TemplateManifest) -> str:
     """The digest a signature is taken over, and the third field of an instance's pin."""
-    return _digest((MANIFEST_SCHEMA, canonical(manifest.document())))
+    schema = schema_of(manifest)
+    document = manifest.document()
+    if schema == MANIFEST_SCHEMA_V1:
+        document = {path: document[path] for path in MANIFEST_PATHS_V1}
+    return _digest((schema, canonical(document)))
 
 
-def _signature(digest: str, key: str) -> str:
+def _signature(digest: str, key: str, schema: str = MANIFEST_SCHEMA) -> str:
     """HMAC-SHA256 over the digest, domain-separated by the manifest schema.
 
     Symmetric rather than a public-key signature, because the question this answers is
@@ -640,9 +669,7 @@ def _signature(digest: str, key: str) -> str:
     different answer, and it is not this leaf: signing it here with a key both sides hold
     would be a signature that proves nothing about which side wrote it.
     """
-    return hmac.new(
-        key.encode("utf-8"), f"{MANIFEST_SCHEMA}:{digest}".encode(), hashlib.sha256
-    ).hexdigest()
+    return hmac.new(key.encode("utf-8"), f"{schema}:{digest}".encode(), hashlib.sha256).hexdigest()
 
 
 class SignedManifest(BaseModel):
@@ -704,7 +731,7 @@ def publish(
     return SignedManifest(
         manifest=manifest,
         content_digest=digest,
-        signature=_signature(digest, key),
+        signature=_signature(digest, key, schema_of(manifest)),
         signed_by=signed_by,
         signed_at=at,
     )
@@ -720,7 +747,7 @@ def verify(signed: SignedManifest, *, key: str) -> None:
     Raises rather than returning a bool. A caller who forgets to check a `False` installs
     the template anyway, and the failure is a signed catalogue that admits anything.
     """
-    expected = _signature(signed.content_digest, key)
+    expected = _signature(signed.content_digest, key, schema_of(signed.manifest))
     if not hmac.compare_digest(expected, signed.signature):
         msg = (
             f"the signature on {signed.manifest.identity.template_id!r} version "
