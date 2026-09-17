@@ -11,7 +11,8 @@ module.exports = [
    {n:"Guard checkpoint collapse",k:["Measure the serial cost of the three screens","Collapse into a single pass where semantics allow","Verify no detection coverage is lost"]},
    {n:"Request coalescing",k:["Identical in-flight requests share one execution","Entitlement equality required before sharing, never similarity"]},
    {n:"Load test",k:["Peak concurrency test rather than daily volume","Documented first bottleneck at ten and one hundred times","Results recorded against the SLO table"]}
- ]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["A load test at the company's declared peak concurrency runs against the owner's install on its own host, records latency per lane against the service level table and memory headroom under load, and a result outside either is a finding before go-live"]}
 ]},
 {id:"M37",name:"Migration, launch and handover",wave:9,tasks:[
  {n:"Migration from the v1 Company Brain",s:[
@@ -45,6 +46,7 @@ module.exports = [
  ]},
  {n:"Go-live hardening",s:[
    {n:"Administrative consoles",k:["Two-factor on the deployment control panel account, because its sign-in page answers from the internet and it holds every container, database and secret on the host","Delete the temporary identity provider administrator created at bootstrap, so an internet-facing admin sign-in is one account to guess rather than two","Decide whether the administrative consoles stay on public subdomains or move behind an SSH tunnel, and write down which and why","Rotate the identity provider's bootstrap administrator password once the account it created has been deleted"]}
- ]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["The company names its data steward on the people screen and the steward grants each pilot department's staff their starter reads, recorded in the audit trail","The company switches on a second sign-in factor for every account on the identity provider's admin console and every other administrative console of the install, and records that each one asks for it","The company's administrator creates the ticket desk and chat workspace credentials with the scopes the integration guide lists and enters them on the connectors screen, never in a file or a message","The company's workspace administrator installs the product's chat app with the scopes the channel guide lists, adds it to the pilot groups and creates the directory app the staff source signs in with","A migration cutover cannot be recorded complete while revoking the old system's authorisations, recording the date its access ended or the restore drill is unrecorded, and the refusal names which","A migration is rehearsed on a throwaway install: skills are imported and re-reviewed, agents are rebuilt from templates at Shadow with no learning carried, and the cutover is refused until every security act is recorded, with the checks recorded","Commission a penetration test of the owner's install before the first company data is connected, and record each finding with its fix or accepted risk","Every migration requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"]}
 ]}
 ];
