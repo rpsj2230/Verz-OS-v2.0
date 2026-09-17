@@ -42,7 +42,7 @@ reason: the case that matters is the store that could not be reached, and a modu
 database session could not be made to fail that way in a test. Every function takes what was
 observed and returns what is wrong with it.
 
-Task ids: M41.2.6
+Task ids: M41.2.6, M41.4.1
 """
 
 from __future__ import annotations
@@ -252,6 +252,11 @@ class Residue(enum.StrEnum):
     RUNTIME = "runtime"
     #: The per-install environment file, which is the one artefact holding every value above.
     INSTALL_CONFIGURATION = "install_configuration"
+    #: Grants a connected source's own admin console gave this install. They outlive the vault
+    #: slot holding the token: the vendor still honours a refresh until the grant is revoked.
+    CONNECTOR_AUTHORISATIONS = "connector_authorisations"
+    #: The chat platform app people talk to the assistant through, which keeps its membership.
+    CHAT_APP = "chat_app"
 
 
 def teardown_order() -> tuple[Store, ...]:

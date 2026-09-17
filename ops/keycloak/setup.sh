@@ -27,7 +27,9 @@ set -eu
 
 URL="${KEYCLOAK_URL:-}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-REALM="${KEYCLOAK_REALM:-brain}"
+# The realm is named by INSTALL_OIDC_REALM, the same setting brain.ops.realm_import writes into
+# the file, so the realm looked up here and the realm imported cannot be two names.
+REALM="${INSTALL_OIDC_REALM:-${KEYCLOAK_REALM:-brain}}"
 ADMIN_REALM="${KEYCLOAK_ADMIN_REALM:-master}"
 DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 SOURCE="$DIR/realm-export.json"

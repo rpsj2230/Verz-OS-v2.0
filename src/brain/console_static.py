@@ -64,9 +64,9 @@ provider. The issuer and the client id now arrive at runtime from `brain.install
 the document this module serves, and the API base is `brain.api.API_PREFIX` because the two
 share an origin. See `NO_INSTALLS_VALUES_ARE_BUILT_INTO_THE_BUNDLE`. The install's accent
 arrives the same way, already turned into the colours the console draws with it and measured
-for contrast in both themes, which `served_accent` argues.
+for contrast in both themes, which `served_accent` argues, and so do its names and logo.
 
-Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4
+Task ids: M32.5.1.1, M32.5.1.2, M42.5.14, M42.6.1, M27.10.4, M41.1.4
 """
 
 from __future__ import annotations
@@ -224,6 +224,7 @@ def runtime_config(env: Mapping[str, str] | None = None) -> str:
         "issuer": _optional("INSTALL_OIDC_ISSUER", env),
         "clientId": _optional("INSTALL_OIDC_CLIENT_ID", env),
         "accent": served_accent(env),
+        "brand": served_brand(env),
     }
     # `json.dumps` rather than an f-string, so a value containing a quote or a line break is
     # escaped by something that knows the grammar. These values come from an install's own
@@ -259,6 +260,20 @@ def served_accent(env: Mapping[str, str] | None = None) -> dict[str, str] | None
         "textDark": derived.text[Theme.DARK],
         "washLight": derived.wash[Theme.LIGHT],
         "washDark": derived.wash[Theme.DARK],
+    }
+
+
+def served_brand(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """The names and logo the console's header draws, as this install set them.
+
+    Read on every request like the accent, so a branding value saved on the Settings screen is
+    drawn on the next page this process serves. None of the three is required, so none can raise;
+    each has a neutral default in `brain.install`, which names the product and no company.
+    """
+    return {
+        "companyName": value_of("INSTALL_COMPANY_NAME", env),
+        "productName": value_of("INSTALL_PRODUCT_NAME", env),
+        "logoUrl": value_of("INSTALL_LOGO_URL", env),
     }
 
 

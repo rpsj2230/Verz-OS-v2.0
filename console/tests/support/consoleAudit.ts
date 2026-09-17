@@ -42,6 +42,7 @@ import { reviewApiPath } from "../../src/pages/classificationQuery";
 import { assignPath, reviewPath, SKILLS_API_PATH } from "../../src/pages/skillsQuery";
 import { EXPORTS_API_PATH } from "../../src/pages/dataTransferQuery";
 import { switchPath } from "../../src/pages/featuresQuery";
+import { savePath } from "../../src/pages/settingsQuery";
 import {
   ELEVATION_REQUESTS_API_PATH,
   LEAD_API_PATH,
@@ -239,12 +240,11 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "Nothing applies the staff list's teams and leads on a schedule.",
         because: "brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either, which is true of the whole staff sync: dry_run is read by the Staff sources screen and nothing applies a roster.",
       },
-      { what: "The company's name, product name, logo and accent cannot be changed after setup.", because: ONCE_BY_THE_WIZARD },
     ],
   },
   "System settings and application configuration": {
-    screens: ["/install", "/limits", "/connections", "/first-run", "/first-run/staff-list"],
-    routes: ["/api/v1/install", "/api/v1/install/limits", "/api/v1/install/capacity", "/setup/*"],
+    screens: ["/install", "/settings", "/limits", "/connections", "/first-run", "/first-run/staff-list"],
+    routes: ["/api/v1/install", "/api/v1/install/settings*", "/api/v1/install/limits", "/api/v1/install/capacity", "/setup/*"],
     tables: ["ops.setting", "ops.budget_version"],
     installation: ["INSTALL_LOCALES", "INSTALL_CURRENCY", "INSTALL_TIME_ZONE"],
     gaps: [
@@ -648,6 +648,7 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   ],
   "src/pages/DataTransfer.tsx EXPORTS_API_PATH": [at("POST /api/v1/data-transfer/exports", "EXPORTS_API_PATH", EXPORTS_API_PATH)],
   "src/pages/Features.tsx switchPath(row.name)": [at("POST /api/v1/install/features/{name}", "switchPath", switchPath("schedule_control"))],
+  "src/pages/Settings.tsx savePath(row.name)": [at("PUT /api/v1/install/settings/{name}", "savePath", savePath("INSTALL_COMPANY_NAME"))],
   "src/pages/FirstRun.tsx FINISH_PATH": [at("POST /setup/sign-in", "FINISH_PATH", FINISH_PATH, false)],
   "src/pages/FirstRun.tsx APPOINTMENT_PATH": [at("POST /setup/appointment", "APPOINTMENT_PATH", APPOINTMENT_PATH, false)],
   "src/components/StaffListCheck.tsx SIGN_IN_PATH": [
@@ -757,6 +758,10 @@ function audited(name: string): Proof {
 }
 
 const SETTINGS_PRESSED = audited("test_a_feature_switch_and_each_job_control_reach_the_row_the_ledger_and_the_next_tick");
+const BRANDING_SAVED = t(
+  "test_settings_routes",
+  "test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next",
+);
 const INSTRUCTIONS_PRESSED = audited("test_an_instruction_edit_and_its_give_back_reach_the_install_the_ledger_and_the_prompt");
 const GRANTS_PRESSED = audited("test_a_grant_written_and_removed_from_the_people_screen_reaches_row_ledger_and_reach");
 const WEBHOOK_LEDGER = audited("test_each_webhook_change_through_the_store_appends_one_entry_naming_its_own_author");
@@ -871,6 +876,13 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_data_export_store", "test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it", true),
     audit: t("test_data_export_store", "test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it", true),
     behaviour: t("test_data_transfer_routes", "test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own"),
+  },
+  "PUT /api/v1/install/settings/{name}": {
+    row: BRANDING_SAVED,
+    audit: {
+      none: "The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back.",
+    },
+    behaviour: BRANDING_SAVED,
   },
   "POST /api/v1/install/features/{name}": {
     row: SETTINGS_PRESSED,

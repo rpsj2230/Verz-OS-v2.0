@@ -19,6 +19,7 @@ front of a bare server. Nothing in them names another company's installation.
 | [coolify.md](coolify.md) | Deploying with the Coolify panel instead of the installer |
 | [scaling.md](scaling.md) | A read replica, and splitting the stack across two hosts |
 | [threat-model.md](threat-model.md) | Every surface an install exposes, and what stands in the way |
+| [handover.md](handover.md) | A company leaving: its data exported and checkable, the install removed, a certificate |
 
 ## Which half of this is checked
 
@@ -89,7 +90,7 @@ takes a backup and the one that proves a backup can be restored. See operations.
 **No update and no rollback has ever been performed on an install of this product.** See
 update-and-rollback.md.
 
-**Three of the thirteen pages here do not claim their leaf.** install.md, operations.md and
+**Three of the fourteen pages here do not claim their leaf.** install.md, operations.md and
 update-and-rollback.md each say why at the foot of the page. They are worth reading anyway; they
 are not worth relying on as finished.
 

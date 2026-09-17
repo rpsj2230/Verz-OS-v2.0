@@ -84,6 +84,11 @@ const FORMS: Readonly<Record<string, readonly FormCase[]>> = {
  * Checked, not trusted: an entry for a file that no longer holds both fails the first test.
  */
 const JUDGED_ELSEWHERE: Readonly<Record<string, string>> = {
+  "src/pages/Settings.tsx":
+    "Each branding row's form sends one value, and the API judges it with branding_problem before " +
+    "anything is written, answering 422 with a sentence drawn beside the field. " +
+    "tests/unit/test_settings_routes.py holds a refused value writing no row; the page case draws " +
+    "no editable row, so no form is opened here.",
   "src/pages/Skills.tsx":
     "Neither form is drawn with the page's usual answers, which offer no add and no approved skill. " +
     "The add form's submit is disabled until packageProblem accepts a package, which " +

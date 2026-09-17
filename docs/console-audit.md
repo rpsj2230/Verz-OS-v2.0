@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 75 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
-- 126 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 66 console addresses, from the route table in `console/src/App.tsx`.
-- 43 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 51 routes.
-- 36 gaps recorded, and 12 routes no screen calls.
+- 128 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 67 console addresses, from the route table in `console/src/App.tsx`.
+- 44 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 52 routes.
+- 35 gaps recorded, and 12 routes no screen calls.
 
 ## Area by area
 
@@ -77,11 +77,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 - **Gap.** A department, a team or a scope cannot yet be created, renamed or retired from this screen. Recorded: brain.govern_people_routes serves the eight writes, audited by 0086's triggers, and Departments.tsx does not call them yet; the screen places people in the teams that are there and leads the departments that are there.
 - **Gap.** Nothing applies the staff list's teams and leads on a schedule. Recorded: brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either, which is true of the whole staff sync: dry_run is read by the Staff sources screen and nothing applies a roster.
-- **Gap.** The company's name, product name, logo and accent cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 
 ### System settings and application configuration
 
-- **Screens:** `/install`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
+- **Screens:** `/install`, `/settings`, `/limits`, `/connections`, `/first-run`, `/first-run/staff-list`
 - **Tables:** `ops.setting`, `ops.budget_version`
 - **Installation values:** `INSTALL_LOCALES`, `INSTALL_CURRENCY`, `INSTALL_TIME_ZONE`
 
@@ -90,11 +89,13 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/install` | `/install` |
 | `GET /api/v1/install/capacity` | `/connections` |
 | `GET /api/v1/install/limits` | `/limits` |
+| `GET /api/v1/install/settings` | `/settings` |
 | `GET /setup/staff-source/registration` | `/first-run` |
 | `POST /setup/appointment` | `/first-run` |
 | `POST /setup/sign-in` | `/first-run` |
 | `POST /setup/staff-source/sign-in` | `/first-run` |
 | `POST /setup/staff-source/trial` | `/first-run` |
+| `PUT /api/v1/install/settings/{name}` | `/settings` |
 
 - **Gap.** Languages, currency and time zone cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 - **Gap.** Limits and budgets are read and never changed. Recorded: No route writes ops.budget_version or a ceiling; a limit is a release today.
@@ -422,7 +423,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 47 of 51 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 47 of 52 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -476,6 +477,7 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /setup/sign-in` | `/first-run` | `test_the_finishing_screen_binds_the_installers_sign_in_to_the_first_administrator` in `tests/unit/test_sign_in_routes.py` | `test_the_finishing_screen_binds_the_first_administrator_once_against_the_database` in `tests/unit/test_sign_in_routes.py` (database, in CI) | `test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_alone` in `tests/unit/test_setup_routes.py` (database, in CI) |
 | `POST /setup/staff-source/sign-in` | `/first-run` | Not applicable: It answers the directory's own sign-in page for the setup code's holder and writes nothing. | Not applicable: Nothing changes when a sign-in page is asked for, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
 | `POST /setup/staff-source/trial` | `/first-run` | Not applicable: A read of a staff list writes nothing: nobody is added, and the client secret it signs in with is not kept. | Not applicable: A read changes nothing an administrator manages, so there is nothing to record. | `test_a_directory_is_chosen_signed_in_to_and_its_list_pulled` in `tests/unit/test_setup_staff_routes.py` |
+| `PUT /api/v1/install/settings/{name}` | `/settings` | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` | **None.** The route sets the audit attribution 0059's trigger reads, which BRANDING_SAVED asserts over a stub; no scratch-Postgres test yet reads the ledger entry back. | `test_saving_a_company_name_writes_its_row_and_the_console_header_draws_it_next` in `tests/unit/test_settings_routes.py` |
 | `PUT /api/v1/models/providers/{provider}` | `/models` | `test_the_stores_read_the_ladder_write_attempts_by_id_and_keep_a_switch` in `tests/unit/test_model_service.py` (database, in CI) | **None.** The write is an ops.setting row, which migration 0059's trigger records as a setting entry naming the key, the change and the writer, and no test follows this route's write to that entry. | `test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once` in `tests/unit/test_provider_routes.py` |
 
 ## The rules every screen is held to

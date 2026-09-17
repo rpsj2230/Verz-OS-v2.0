@@ -24,6 +24,7 @@ from typing import Any
 import yaml
 
 import brain.ops.realm_import as realm_import
+from brain.install import BY_NAME
 
 REPO = Path(__file__).resolve().parents[2]
 COMPOSE = REPO / "docker-compose.keycloak.yml"
@@ -70,6 +71,9 @@ def missing_settings(compose: dict[str, Any], needed: set[str]) -> list[str]:
         value = environment.get(name)
         if value is None:
             findings.append(f"{name} is not passed to {IMPORTER_SERVICE}")
+        elif value == f"${{{name}:-}}" and BY_NAME[name].default:
+            # A declared default answers a blank, which `brain.install.value_of` reads as unset.
+            continue
         elif not value.startswith(f"${{{name}:?"):
             findings.append(f"{name} is passed to {IMPORTER_SERVICE} without being required")
     return findings
@@ -120,4 +124,28 @@ def test_a_setting_left_off_the_importer_or_given_a_default_is_a_finding() -> No
 def test_the_importer_is_found_reading_its_setting_so_the_scan_is_not_blind() -> None:
     """The positive case for the scan. If the parser stopped finding `value_of` calls, the rule
     above would pass with nothing needed. Delete this and a scan reading the wrong file passes."""
-    assert settings_the_importer_reads() == {realm_import.ORIGIN_SETTING}
+    assert settings_the_importer_reads() == {
+        realm_import.ORIGIN_SETTING,
+        realm_import.REALM_SETTING,
+    }
+
+
+def test_a_blank_pass_through_is_accepted_only_for_a_setting_with_a_declared_default() -> None:
+    """`INSTALL_OIDC_REALM` has a default, so `${INSTALL_OIDC_REALM:-}` hands the importer a blank
+    it reads as the default. The redirect URIs have none, so the same spelling for them is still a
+    finding. Delete this and the exemption can widen to a required setting, and Keycloak waits on
+    an importer that exits 1 on a server nobody is watching."""
+    blank = {
+        "services": {
+            IMPORTER_SERVICE: {
+                "environment": {
+                    "INSTALL_OIDC_REALM": "${INSTALL_OIDC_REALM:-}",
+                    "INSTALL_OIDC_REDIRECT_URIS": "${INSTALL_OIDC_REDIRECT_URIS:-}",
+                }
+            }
+        }
+    }
+
+    assert missing_settings(blank, {"INSTALL_OIDC_REALM", "INSTALL_OIDC_REDIRECT_URIS"}) == [
+        "INSTALL_OIDC_REDIRECT_URIS is passed to keycloak-realm without being required"
+    ]

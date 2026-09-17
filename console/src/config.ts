@@ -58,7 +58,25 @@ interface ServedConfig {
   readonly issuer?: unknown;
   readonly clientId?: unknown;
   readonly accent?: unknown;
+  readonly brand?: unknown;
 }
+
+/**
+ * The names and logo the header draws, as `brain.console_static.served_brand` sends them from
+ * `INSTALL_COMPANY_NAME`, `INSTALL_PRODUCT_NAME` and `INSTALL_LOGO_URL`.
+ *
+ * Served rather than written into the header, because the header read "Company Brain" as a literal
+ * until 2026-09-17 and a company name saved by the wizard reached no screen anybody looks at.
+ */
+export interface InstallBrand {
+  readonly companyName: string;
+  readonly productName: string;
+  /** An https address or a path on this install, or empty when neither was sent. */
+  readonly logoUrl: string;
+}
+
+/** What the header says when the document carries no brand: the product, and no company. */
+export const UNBRANDED_TITLE = "Company Brain";
 
 /**
  * The install's accent, as `brain.locale.accent_set` derived it from `INSTALL_ACCENT_COLOUR`.
@@ -134,6 +152,8 @@ export interface Config {
    * install is reported.
    */
   readonly accent: InstallAccent | null;
+  /** The install's names and logo. Never a configuration problem, for the accent's reason. */
+  readonly brand: InstallBrand;
 }
 
 /** Whatever the served document put on the window, or an empty object when it served none. */
@@ -168,6 +188,32 @@ function readAccent(value: unknown): InstallAccent | null {
     accent[key] = colour;
   }
   return Object.freeze(accent as InstallAccent);
+}
+
+/**
+ * A logo address the header may put in an `img`: https, or a path on this origin. Anything else,
+ * `javascript:` and `data:` included, is dropped rather than drawn, because the value came from a
+ * setting and an image source is the one place in the header a scheme is interpreted.
+ */
+export function drawableLogo(raw: string): string {
+  if (raw.startsWith("https://")) {
+    return raw;
+  }
+  return raw.startsWith("/") && !raw.startsWith("//") ? raw : "";
+}
+
+function readBrand(value: unknown): InstallBrand {
+  const fields = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  return Object.freeze({
+    companyName: text(fields.companyName),
+    productName: text(fields.productName),
+    logoUrl: drawableLogo(text(fields.logoUrl)),
+  });
+}
+
+/** The header's title: the company and the product together, as `brain.install.installed_name`. */
+export function brandTitle(brand: InstallBrand): string {
+  return `${brand.companyName} ${brand.productName}`.trim() || UNBRANDED_TITLE;
 }
 
 function readIssuer(raw: string, problems: string[]): string {
@@ -220,6 +266,7 @@ export const config: Config = Object.freeze({
   issuer: readIssuer(text(document_.issuer), problems),
   clientId: text(document_.clientId) || KEYCLOAK_CLIENT_ID,
   accent: readAccent(document_.accent),
+  brand: readBrand(document_.brand),
 });
 
 /** Empty when the console is configured. Rendered as the whole page when it is not. */

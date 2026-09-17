@@ -125,6 +125,8 @@ services:
     # `tests/unit/test_realm_importer_settings.py` holds the list to what the importer reads.
     environment:
       INSTALL_OIDC_REDIRECT_URIS: ${INSTALL_OIDC_REDIRECT_URIS:?set INSTALL_OIDC_REDIRECT_URIS}
+      # Declared with a default, so a blank arrives as unset and the importer takes the default.
+      INSTALL_OIDC_REALM: ${INSTALL_OIDC_REALM:-}
     volumes:
       # Only the output. The reviewed realm arrives inside the image rather than through a
       # bind mount, because this Coolify installation deploys a stored compose with no

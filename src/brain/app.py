@@ -164,6 +164,7 @@ from brain.session_routes import router as session_router
 # process that needs a setting and not the application imports that instead. See
 # `brain.settings.SETTINGS_ARE_READ_WITHOUT_BUILDING_THE_APPLICATION`.
 from brain.settings import Settings as Settings
+from brain.settings_routes import router as settings_router
 from brain.setup_routes import router as setup_router
 from brain.setup_staff_routes import router as setup_staff_router
 from brain.sign_in_routes import router as sign_in_router
@@ -1130,6 +1131,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # is, behind `admin:storage` over everything. Never an object's name. See
     # `brain.storage_routes`.
     app.include_router(storage_router)
+    # Settings, under Install: every installation value with where it came from, and branding
+    # saved, behind `admin:install_setting` over everything. See `brain.settings_routes`.
+    app.include_router(settings_router)
     # Import and export: what the code can move and whether an install can move it now, and the
     # audit trail export, recorded in the ledger before the document is handed over. See
     # `brain.data_transfer_routes`.
