@@ -9,10 +9,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
 - 74 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
-- 118 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 123 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 66 console addresses, from the route table in `console/src/App.tsx`.
 - 43 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 51 routes.
-- 36 gaps recorded, and 4 routes no screen calls.
+- 36 gaps recorded, and 11 routes no screen calls.
 
 ## Area by area
 
@@ -27,7 +27,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/console/navigation` | `/department` |
 | `GET /api/v1/govern/access-review` | `/access_review` |
 | `GET /api/v1/govern/capabilities` | `/capabilities` |
-| `GET /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/elevation` | `/elevation` |
 | `GET /api/v1/govern/people` | `/people`, `/people/:subject` |
 | `GET /api/v1/govern/roles` | `/roles` |
@@ -39,7 +38,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `GET /api/v1/me` | `/` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` |
 | `POST /api/v1/govern/access-review/decisions` | `/access_review` |
-| `POST /api/v1/govern/data-steward` | `/people`, `/people/:subject` |
 | `POST /api/v1/govern/elevation/requests` | `/elevation` |
 | `POST /api/v1/govern/elevation/requests/{request_id}/decision` | `/elevation` |
 | `POST /api/v1/govern/grants` | `/people`, `/people/:subject` |
@@ -64,10 +62,18 @@ What an administrator would need to manage, read out of the schema, the routes a
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/govern/departments` | `/departments` |
+| `POST /api/v1/govern/departments` | **no screen** |
 | `POST /api/v1/govern/departments/lead` | `/departments` |
 | `POST /api/v1/govern/departments/membership` | `/departments` |
+| `POST /api/v1/govern/departments/rename` | **no screen** |
+| `POST /api/v1/govern/departments/retirement` | **no screen** |
+| `POST /api/v1/govern/departments/scopes` | **no screen** |
+| `POST /api/v1/govern/departments/scopes/retirement` | **no screen** |
+| `POST /api/v1/govern/departments/teams` | **no screen** |
+| `POST /api/v1/govern/departments/teams/rename` | **no screen** |
+| `POST /api/v1/govern/departments/teams/retirement` | **no screen** |
 
-- **Gap.** A department or a team cannot be created, renamed or removed. Recorded: No route and no module under src/brain writes gate.department or gate.team, so the screen places people in the teams that are there and leads the departments that are there, and there is no writer to call for the rest.
+- **Gap.** A department, a team or a scope cannot yet be created, renamed or retired from this screen. Recorded: brain.govern_people_routes serves the eight writes, audited by 0086's triggers, and Departments.tsx does not call them yet; the screen places people in the teams that are there and leads the departments that are there.
 - **Gap.** Nothing applies the staff list's teams and leads on a schedule. Recorded: brain.identity.organisation_sync plans them and brain.identity.organisation_store applies a plan, and no job runs either, which is true of the whole staff sync: dry_run is read by the Staff sources screen and nothing applies a roster.
 - **Gap.** The company's name, product name, logo and accent cannot be changed after setup. Recorded: Set by the first-run wizard, which saves them to ops.setting, and no route changes one afterwards; changing one today is editing the server's environment file or the row by hand.
 
@@ -120,7 +126,6 @@ What an administrator would need to manage, read out of the schema, the routes a
 | --- | --- |
 | `GET /api/v1/agent-templates` | `/agent-templates` |
 | `GET /api/v1/agents` | `/agents`, `/department` |
-| `GET /api/v1/agents/{agent_id}/about` | **no screen** |
 | `GET /api/v1/agents/{agent_id}/workspace` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 | `GET /api/v1/approvals` | `/approvals` |
 | `GET /api/v1/approvals/{suspension_id}` | `/approvals/:suspensionId` |

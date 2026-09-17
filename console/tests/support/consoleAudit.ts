@@ -232,8 +232,8 @@ export const AREAS: Readonly<Record<string, Area>> = {
     installation: ["INSTALL_COMPANY_NAME", "INSTALL_PRODUCT_NAME", "INSTALL_LOGO_URL", "INSTALL_ACCENT_COLOUR"],
     gaps: [
       {
-        what: "A department or a team cannot be created, renamed or removed.",
-        because: "No route and no module under src/brain writes gate.department or gate.team, so the screen places people in the teams that are there and leads the departments that are there, and there is no writer to call for the rest.",
+        what: "A department, a team or a scope cannot yet be created, renamed or retired from this screen.",
+        because: "brain.govern_people_routes serves the eight writes, audited by 0086's triggers, and Departments.tsx does not call them yet; the screen places people in the teams that are there and leads the departments that are there.",
       },
       {
         what: "Nothing applies the staff list's teams and leads on a schedule.",

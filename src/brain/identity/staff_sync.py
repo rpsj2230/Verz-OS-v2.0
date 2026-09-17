@@ -617,6 +617,32 @@ AUDIT_KIND_DECISIONS: Final[Mapping[str, AuditKindDecision]] = MappingProxyType(
                     "sees it undone on the Learning screen, which asks recall first."
                 ),
             ),
+            AuditKindDecision(
+                kind="department",
+                covered=False,
+                because=(
+                    "Not covered, and the owner's recommendation by default for the same reason "
+                    "as credential, since the kind was added on 2026-09-17, after item 48. A "
+                    "department is created or retired only by somebody holding admin:department "
+                    "and admin:scope over everything, and renamed, or given, renamed or relieved "
+                    "of a team, only by somebody holding admin:department over it, which "
+                    "brain.console.organisation argues. This sync grants a head neither, so none "
+                    "of a head's governing acts produces one of these entries, and whoever grants "
+                    "a head that authority can grant the audit read beside it."
+                ),
+            ),
+            AuditKindDecision(
+                kind="scope",
+                covered=False,
+                because=(
+                    "Not covered, for the reason department is not. A scope is created or "
+                    "retired only by somebody holding admin:scope over every row it bounds, which "
+                    "this sync never grants a head, and a scope over a named set of departments "
+                    "is about departments other than the head's own, so a standing reach over "
+                    "these entries would tell a head what boundaries exist elsewhere when none of "
+                    "their governing acts drew one."
+                ),
+            ),
         )
     }
 )
