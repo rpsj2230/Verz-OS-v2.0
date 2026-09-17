@@ -1,16 +1,43 @@
 """Live progress, generated from git history rather than typed by anyone.
 
-A task is done when a commit closing it is on `main` and CI passed. Nothing is marked done
-by hand, which is the only way a progress figure stays honest: a ticked checkbox is a
-claim, a merged commit is evidence.
+A task is done when what it asks for exists and works on an install, and the evidence this
+page counts is a commit on `main` that claims the task and carries its proof. Nothing is
+marked done by hand, which is the only way a progress figure stays honest: a ticked checkbox
+is a claim, a merged commit is evidence.
 
-The rule: a task id in a commit **subject**, or on a `Closes:` line, closes that task.
-Body prose closes nothing, and an ancestor id closes none of its children. Both of those
-restrictions were added after each let the number read higher than the truth.
+The rule: a task id in a commit **subject**, or on a `Closes:` line, closes that task, and a
+commit made from `PROOF_REQUIRED_FROM` onwards closes it only when the same commit also
+carries a `Proved-on-install:` or `Proved-in-ci:` line with words on it. Body prose closes
+nothing, and an ancestor id closes none of its children. All three restrictions were added
+after each let the number read higher than the truth.
 
-The deliberate consequence is that forgetting to write an id means the work does not
-count. That is a nuisance exactly once and then never again, and it fails in the safe
-direction.
+**The proof rule is here as well as in the commit hook, because the hook can be skipped.**
+On 2026-09-17 an audit reopened 1046 of the 1213 tasks this page counted as done, because
+the owner's install did not show them working: they had been claimed on the strength of unit
+tests over fakes. `brain.ops.conventions` now refuses a claim without proof, and `git commit
+--no-verify` walks past it. So this page applies the same rule itself, reading proof through
+the same `proofs_in`, and an unproved claim is not a claim here: it neither closes a task nor
+settles one that an older commit closed or reopened. See
+`brain.ops.conventions.A_CLAIM_NEEDS_PROOF`.
+
+**Earlier commits are judged as they were, and that is not leniency.** The audit read every
+claim made before the rule and reopened what the install did not bear out, so what stands
+from before `PROOF_REQUIRED_FROM` has already been judged against the install. Applying the
+rule to the whole history would reopen those 167 for want of a trailer that did not exist
+when they were written. See `A_CLAIM_IS_JUDGED_BY_THE_RULE_IN_FORCE_WHEN_IT_WAS_COMMITTED`.
+
+**`Reopens:` needs no proof.** Taking a claim back only lowers the count, which is never the
+direction a mistake flatters.
+
+The rule stops a forgotten proof, not a forged one. The instant compared is the committer
+date git records, which a person can set, and a trailer is words a person types. Reading an
+install from here was rejected: this runs in CI, where no install is reachable and none
+should be, and a status page that failed when an install was down would report an outage as
+lost work.
+
+The deliberate consequence is that forgetting to write an id, or its proof, means the work
+does not count. That is a nuisance exactly once and then never again, and it fails in the
+safe direction.
 
 Task ids: M38.3.1.1, M38.3.1.2, M38.3.1.3, M38.3.1.4
 """
@@ -26,7 +53,25 @@ from typing import Any, Final
 
 from pydantic import BaseModel
 
+from brain.ops.conventions import proofs_in
+
 TASK_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b")
+
+#: The first instant at which a claim counts only with proof on the same commit. Compared with
+#: the committer timestamp `git log` gives as `%ct`, which is in UTC seconds. The day after the
+#: audit that `brain.ops.conventions.A_CLAIM_NEEDS_PROOF` describes.
+PROOF_REQUIRED_FROM: Final = datetime(2026, 9, 18, tzinfo=UTC)
+
+#: Why the proof rule has a start rather than covering the whole history.
+A_CLAIM_IS_JUDGED_BY_THE_RULE_IN_FORCE_WHEN_IT_WAS_COMMITTED: Final = (
+    "Every claim committed before the rule was read by the 2026-09-17 audit, and the ones the "
+    "owner's install did not bear out were reopened with a Reopens: line, so what stands from "
+    "before has already been judged against an install. Requiring proof of those as well would "
+    "reopen them for want of a trailer that did not exist when they were written, and the page "
+    "would read lower than the audit found. A rebase or an amend rewrites the committer date, "
+    "so an old claim carried past the start is judged by the new rule, which is the safe "
+    "direction."
+)
 
 
 class WaveProgress(BaseModel):
@@ -129,6 +174,23 @@ def claimed_ids(subject: str, body: str) -> set[str]:
     return ids
 
 
+def counted_ids(subject: str, body: str, committed_at: int) -> set[str]:
+    """Task ids a commit's claim counts for on this page: `claimed_ids`, once proof is due.
+
+    A commit made at or after `PROOF_REQUIRED_FROM` with no `Proved-on-install:` or
+    `Proved-in-ci:` line in its body counts for nothing, as though it claimed nothing. Proof is
+    read from the body only, because that is where a trailer is: a subject line reading like one
+    is a sentence. `claimed_ids` keeps its meaning, what a commit says, and this is what the
+    tracker believes of it.
+
+    `committed_at` is the committer timestamp in UTC seconds, as `git log` prints `%ct`.
+    """
+    claimed = claimed_ids(subject, body)
+    if committed_at >= PROOF_REQUIRED_FROM.timestamp() and not proofs_in(body):
+        return set()
+    return claimed
+
+
 def _git(*args: str, cwd: Path | None = None) -> str:
     """Git's output as text, decoded as UTF-8 whatever the machine's codepage is.
 
@@ -163,7 +225,8 @@ def closed_task_ids(repo: Path, ref: str = "HEAD") -> tuple[set[str], list[dict[
     """Every task id claimed by a commit reachable from `ref`, newest first.
 
     See claimed_ids for what counts as a claim: the subject line and `Closes:` trailers,
-    never body prose.
+    never body prose. See counted_ids for when a claim counts: from `PROOF_REQUIRED_FROM`,
+    only with proof on the same commit.
     """
     raw = _git("log", ref, "--pretty=format:%H%x1f%ct%x1f%s%x1f%b%x1e", cwd=repo)
 
@@ -189,7 +252,15 @@ def closed_task_ids(repo: Path, ref: str = "HEAD") -> tuple[set[str], list[dict[
             continue
         sha, ts, subject = parts[0], parts[1], parts[2]
         body = parts[3] if len(parts) > 3 else ""
-        closes = set(claimed_ids(subject, body))
+        # Every record git writes starts with a hash and a number. One that does not came out
+        # of a commit message holding the separators, and it is text somebody typed rather than
+        # a commit: skipped, as `closed_since` skips it. Until the proof rule this was read only
+        # for a record that claimed something, and then raised, which took the page down.
+        try:
+            committed_at = int(ts)
+        except ValueError:
+            continue
+        closes = counted_ids(subject, body, committed_at)
         reopens = reopened_ids(body)
         # The most recent statement about an id wins, and `git log` walks newest first, so
         # the first commit to mention an id decides it. Without `decided`, an old `Closes:`
@@ -205,7 +276,7 @@ def closed_task_ids(repo: Path, ref: str = "HEAD") -> tuple[set[str], list[dict[
             recent.append(
                 {
                     "sha": sha[:7],
-                    "at": datetime.fromtimestamp(int(ts), UTC).isoformat(),
+                    "at": datetime.fromtimestamp(committed_at, UTC).isoformat(),
                     "subject": subject,
                     "closed": ",".join(ids),
                 }
@@ -257,11 +328,14 @@ def closed_since(repo: Path, when: datetime, ref: str = "HEAD") -> set[str]:
         if len(parts) < 2:
             continue
         try:
-            if int(parts[0]) < cutoff:
-                continue
+            committed_at = int(parts[0])
         except ValueError:
             continue
-        found.update(claimed_ids(parts[1], parts[2] if len(parts) > 2 else ""))
+        if committed_at < cutoff:
+            continue
+        # The tracker's rule rather than the bare claim, so "closed today" can never name a
+        # leaf `closed_task_ids` does not count.
+        found.update(counted_ids(parts[1], parts[2] if len(parts) > 2 else "", committed_at))
     return found
 
 
