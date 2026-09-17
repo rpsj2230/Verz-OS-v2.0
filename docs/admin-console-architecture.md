@@ -1234,17 +1234,23 @@ rebuilt page. The mapping was measured against `e3e2ec9`, `origin/main` on 2026-
 commits past the Part 0 code of record `273092a`. Where the two differ, the row says so; the
 differences that matter here are agent automations with start and stop, memory formation code,
 connector reading by the worker and paged lists. The AnyGen images were described in the owner's
-brief and not read, for the reason Part 0 gives. The About section below was added the same day at
-the owner's request and measured at `75d4f45`, which changes no source file since `e3e2ec9`.
+brief and not read, for the reason Part 0 gives. The About tab below was added the same day at the
+owner's request and measured at `75d4f45`, which changes no source file since `e3e2ec9`.
 
-**The shape: two views of one agent, and the tabs beside them.** Today `AgentWorkspace.tsx` puts
-the tab strip on the left and a Dashboard or Profile switch in a right-hand pane (`PANES`,
-`FIRST_PANE = "dashboard"`). The reference makes that switch the page's first level, and so does
-this design. `/agents/{id}` opens the Profile, `/agents/{id}/dashboard` the Dashboard, and each tab
+**The shape: three tabs of one agent, Dashboard, Profile and About, in the owner's order.** Today
+`AgentWorkspace.tsx` puts the tab strip on the left and a Dashboard or Profile switch in a right-hand
+pane (`PANES`, `FIRST_PANE = "dashboard"`). The reference makes that switch the page's first level,
+and the owner decided on 2026-09-17 that it has three tabs. **The header and its three figures sit
+above the tabs**, so all three views share them. Dashboard opens first because it is first in his
+order: `/agents/{id}` is the Dashboard, `/agents/{id}/profile` the Profile and `/agents/{id}/about`
+the About tab. `PANES` gains `about`, and `FIRST_PANE` stays `dashboard`. The switch is a three-way
+segmented control of links, so each tab has an address; at 375 pixels it takes the row in three equal
+columns of 44 pixels' height with every label whole, measured, so it needs no select. Each tab
 `tab_strip` returns for the reader (permitted and populated, never a count) keeps its own address
 under `/agents/{id}/{tab}`, reached from a Sections menu beside the switch. The property
-`agent-workspace.test.tsx` holds, that switching views loses no tab state, is restated over the two
-views in the same commit, and `FIRST_PANE` becomes `profile`.
+`agent-workspace.test.tsx` holds, that switching views loses no tab state, is restated over the three
+views in the same commit. Spend moves off the Dashboard's own figures, because the shared header
+already carries it.
 
 **How to read the tables.** Routes are under `/api/v1`. "Workspace" means
 `GET /agents/{agent_id}/workspace` (`WorkspaceView`), which admits a caller by the agent's audience
@@ -1258,7 +1264,7 @@ what an agent without that element gets (R1, R2).
 
 | # | AnyGen element | This product's entity or field | Read today by | Changed by | Status | Permission | When the reader may not see it |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Dashboard and Profile switch, top left | two views of one agent: `AgentWorkspace` `PANES` | nothing of its own; the views draw the workspace | navigation only | exists as a right-hand pane; partial as the page's first level | the audience, to open the agent at all | the agent is absent: the 404 a missing agent gets |
+| 1 | Dashboard and Profile switch, top left | three views of one agent, Dashboard, Profile and About, under the shared header: `AgentWorkspace` `PANES`, gaining `about` | nothing of its own; the views draw the workspace | navigation only | exists as a two-way right-hand pane; partial as the page's first level; About is new | the audience, to open the agent at all | the agent is absent: the 404 a missing agent gets |
 | 2 | Avatar | initials of `AgentRecord.display_name`. There is no image field and none is proposed, because an uploaded image is a file an install must store and scan | workspace `agent.display_name` | never changed on its own | exists | audience | as row 1 |
 | 3 | Agent name | `AgentRecord.display_name`; the slug is fixed at creation | workspace | a draft and the publish gate (W2.6) | exists to read; missing to change | audience; changing needs `admin:agent` over the agent's department (to build) | as row 1 |
 | 4 | Settings cog | the Settings tab (`Tab.SETTINGS`, `read:agent`) and the lifecycle actions | workspace `tabs` (Settings is in `POPULATED_HERE`) | edit instructions: `POST /govern/prompts/{agent_id}` and `.../give-back` (`admin:agent_instructions`; editing, not giving back, needs the feature `prompt_editing`). Enable, disable, archive, transfer, duplicate, edit as a draft: none, because `agents.lifecycle` has no route (W2.6) | partial | the Settings read to see the menu; each item its own authority | no cog: a reader without the Settings tab has nothing to open, and a disabled cog would say there is something |
@@ -1266,7 +1272,7 @@ what an agent without that element gets (R1, R2).
 | 6 | "Credits used 379 >" | spend over a period: `HeadlineView` (`spend_minor`, `runs`, `basis`, a `range` of 30 days) from `ops.spend_actual` through `console/workspace.headline`. The link opens H1 Usage and cost (`GET /report/spend?dimension=agent`). "Credits" is not this product's word (2.4) | workspace `headline` | an agent budget: `ops/budget_store.append` exists with no route (W3.5) | partial. **Nothing writes `ops.spend_actual`** at either commit (`spend_store.record` has no caller), so every install reads 0.00 and 0 runs. The page says "not recorded yet" rather than drawing nought (`A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`), which needs a served statement that calls are not metered. No money response carries a currency (`INSTALL_CURRENCY` exists and `locale.currency()` has no caller), so the figure has no sign | everybody's runs with the budget screen's read held unrestricted (`basis_for`); otherwise the reader's own runs, labelled as theirs. The link needs `read:usage` | never withheld: the narrower basis is the reader's own figure, labelled. The link is absent without `read:usage` |
 | 7 | "Skills 12" | the number of pinned skills sent (`WorkspaceView.skills`) | workspace | assigning, row 12 | partial: counted from what is sent, and no skill is read by a run (row 12) | the Settings read and the Skills screen read (`read:skill`) | no figure, rather than nought. A count of the pins sent is a count of what was shown |
 | 8 | "Days on board 23" | days since `agent.created_at` (`AgentRow` has it through `TimestampMixin`); for an installed agent `template_instance.created_at` is the install. Labelled "Days since created", because an agent is not staff | none. `AgentRecord` has no creation field, `record_of` does not copy it, and `AgentHeaderView` sends none | never changed | missing on the wire; the column exists | audience. A date names nobody, which is why it can travel where the builder (`created_by`) cannot | as row 1 |
-| 9 | Description paragraph | `identity.summary` of the effective manifest, drawn as the summary of the About section below rather than in the header | workspace `agent.summary` | a draft and the publish gate (W2.6) | exists; null for an agent with no install that constructs, and empty in all 23 built-in templates | audience | no sentence |
+| 9 | Description paragraph | `identity.summary` of the effective manifest, drawn as the summary of the About tab below rather than in the header | workspace `agent.summary` | a draft and the publish gate (W2.6) | exists; null for an agent with no install that constructs, and empty in all 23 built-in templates | audience | no sentence |
 | 10 | "Adaptive learning" card with a switch | memory formation and the learning review: `brain.memory` (`tiers.Tier` session, automatic, promoted, gated; `formation`; `review`; `digest.undo`) and the Learning screen | `GET /govern/learning` (`read:learning`); `GET /govern/memory?subject=` (`read:memory`, by person) | undo: `POST /govern/learning/undo` (`admin:learning`). A per-agent switch: none | partial, and **the switch is not offered as drawn.** New at `e3e2ec9`, `memory/turn.py` and `StoredFormations.after_turn` form a person's memories from an answered turn, and nothing on a running install calls `after_turn` yet. `mem.persistent` and `mem.adaptive` are keyed by person with no agent column; only `mem.learning.agent_id` names an agent. No manifest field, feature or setting switches learning, per agent or for the install. A single on and off switch is the memory-poisoning path SCREEN 13 rejects, so the card shows the four tiers, what each may change, and a link to the review. A per-agent pause would be new (a field `after_turn` reads) and may only narrow | the tier text is product text for the audience; the review link needs `read:learning`, on the content plane and withheld from the first administrator by design | the card's product text still shows; the review link is absent |
 | 11 | Capabilities: Connectors, round icons, "7+", "+" | the connectors the manifest declares, as `ConnectorRow`: `Presence.ATTACHED` (a tool from the source is in `allowed_tools`) or `REQUESTED` (named, no tool bound), narrowed to sources the reader could be told about (`reachable_sources`). `ICONS_ON_THE_ROW = 5`, and the overflow is counted over the reader's own rows. The install's own state (connected, and new at `e3e2ec9` last read and next read) is `ops.connector_connection` and `ops.connector_sync` | workspace `connectors` (`shown`, `overflow`); `GET /connectors` for connected and last read (`read:connector`) | "+": none. An agent's connectors change through its manifest, a draft and the publish gate (W2.6); `agents.install.bind_tool` runs only inside `install.complete`, which has no route. Connecting a source for the whole install is `POST /connectors` (`admin:connector` over that source), a different act on the Connectors screen | partial. The row exists. The "7+" list needs the rows past the strip, which the workspace does not send (to build). New at `e3e2ec9` the worker reads a connected source on its interval, and no question is answered from what it keeps (`WHAT_CONNECTING_A_SOURCE_STARTS`); only xero and hubspot can be connected from the console (`ops/connectable.py`) | the row: audience and `reachable_sources`. Connected and last read: `read:connector` | a source the reader cannot reach makes no row and is not in the overflow (`AN_OVERFLOW_COUNTS_WHAT_IS_OFF_THE_ROW_AND_NEVER_WHAT_IS_OUT_OF_REACH`). No row says "restricted", and none carries a health word (`AN_UNPROBED_CONNECTOR_IS_NOT_A_HEALTHY_ONE`) |
 | 12 | Capabilities: Skills, pill chips, "6+" with a chevron, "+" | pinned skills (`SkillRef` name and digest) on the effective manifest, from `agent.skill_assignment` | workspace `skills` | "+": `POST /skills/{digest}/assignments` with `agent_id` in the body (the Skills screen read, `admin:skill` over a scope admitting the agent, the agent in the caller's audience, an approved digest). Removing a chip: none, detachment is W2.8 | partial. **An assigned skill has no effect at run time.** Nothing in the answer path reads an assignment: `offered_cards` and `body_of` have no caller, `SkillScriptTool` is never built, `build_registry` registers no skill, and the model lane new at `e3e2ec9` reads none. The page says so on the row and beside the Skills figure until W3.1. The served sentence 4.2 names, `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN`, does not exist yet and is added with W2.8 | the Settings read and `read:skill` | no row and no figure. No chip reads "approved" (`A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`) |
@@ -1297,9 +1303,13 @@ Knowledge (the scope predicate, `read:document`), Memory (`GET /govern/memory` i
 route serves an agent's memory) and Artifacts (`GET /govern/artifacts`, with no agent filter, and
 nothing keeps an artifact yet) stay tabs, as C1 lists them.
 
-**About this agent, at the top of the Profile.** Added at the owner's request on 2026-09-17, so that
-anybody opening an agent reads what it is for, how it works and what it will never do. It sits under
-the header and figures, before Capabilities, and takes the header's description (row 9). It has
+**About this agent: the third tab.** Added at the owner's request on 2026-09-17, so that anybody
+opening an agent reads what it is for, how it works and what it will never do. It is its own tab,
+after Dashboard and Profile and under the shared header and figures, and it takes the header's
+description (row 9); the Profile starts with Capabilities. It links both ways to how the agent is
+set up: "See how it is set up" opens the Profile, and each action in step 3 opens its row in the
+Profile's approval settings (the leash), which is marked and scrolled into view. An action with no
+leash entry links to the leash card, because its Shadow rung is the default and has no row. It has
 three parts. The overview is text a person writes. **The flow and the "never" sentences are computed
 from the agent's configuration and nothing else**, so they cannot describe something the agent is
 not set up to do: a step names only channels the agent is offered on, automations it has, sources it
@@ -1340,7 +1350,7 @@ note.
 as the same drawing. But the module says no route hands it a drawing, nothing outside it calls
 `skill_markdown`, `read_drawing` or `procedure_from_skill_markdown`, no table or manifest path holds a
 procedure, and no page mounts `ProcedureCanvas.tsx`. A saved drawing would become a skill through
-the review queue, so the About section shows a drawing in place of the flow only once the agent's
+the review queue, so the About tab shows a drawing in place of the flow only once the agent's
 assigned skills include one made from a drawing; until then it says drawing is not available.
 
 | About part | Derived from | Read today by | Status | Permission | When the reader may not see it |
@@ -1358,7 +1368,8 @@ assigned skills include one made from a drawing; until then it says drawing is n
 
 | Control | Calls | On the page |
 | --- | --- | --- |
-| Dashboard and Profile switch; Sections menu | navigation | live |
+| Dashboard, Profile and About switch; Sections menu | navigation | live |
+| About: "See how it is set up"; each action in step 3 | navigation to the Profile, and for an action to its leash row | live |
 | Settings cog: Open settings; Edit instructions | navigation; `POST /govern/prompts/{agent_id}` | live |
 | Settings cog: Edit as a draft, Duplicate, Hand to a new steward, Switch on or off, Archive | none | disabled items under "Coming soon", W2.6 |
 | About: edit the overview | none | not drawn until `identity.overview` exists; then a draft, W2.6 |
@@ -1388,8 +1399,9 @@ them. **Every note on the page is written for an administrator**, at the owner's
 with "Coming soon:" for something a person will be able to do, or "Not available yet:" for something
 the page is not sent, and it carries no package code, WBS id, route or internal name. The package
 codes in this section are for whoever builds it and never reach the page; the screenshot script
-found none, and no API path, in the page's visible text. A thing the product does not offer is a sentence, never a disabled switch. A figure
-nothing stores reads "not recorded yet", never nought. No number on the page counts what the reader
+found none, and no API path, in the page's visible text, on any of the three tabs. A thing the
+product does not offer is a sentence, never a disabled switch. A figure nothing stores reads "not
+recorded yet", never nought. No number on the page counts what the reader
 cannot see: the connector overflow is over the reader's own rows, the Skills figure over the pins
 sent, approvals over the cards the reader could decide. Channels and connectors are computed at
 `E_run`, never at the ceiling, and the page computes no reach of its own.
@@ -1398,28 +1410,31 @@ sent, approvals over the cards the reader could decide. Channels and connectors 
 for a Settings reader, the lifecycle state, the audience level, the tier, the leash entries and the
 ceiling in words, with capability names under `CEILING_DISCLOSURE`; for the About flow, each tool in
 `allowed_tools` with its source and side effect, and `max_side_effect`; the manifest path
-`identity.overview`, with its schema version and migration; the connector rows past the strip; a served statement that model calls are not metered (until W3.5), so the headline is not read
-as nought; the sentence `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN` (W2.8); an agent id on
+`identity.overview`, with its schema version and migration; the connector rows past the strip; a
+served statement that model calls are not metered (until W3.5), so the headline is not read as
+nought; the sentence `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN` (W2.8); an agent id on
 approval cards, with a filter (W3.6); and a subject filter on `GET /audit` (G1).
 
 **The rebuilt page.** Built on the base 5.7 records, in the spike under
-`.scratch/ui-spike/app-radix/` (`src/pages/agents/AgentDetailPage.tsx`, `AgentProfile.tsx`,
-`AgentDashboard.tsx`, `about.ts` for the derived flow and "never" sentences, `profile-parts.tsx`,
-`profile-data.ts`), which is outside version control.
+`.scratch/ui-spike/app-radix/` (`src/pages/agents/AgentDetailPage.tsx` for the header and the three
+tabs, `AgentDashboard.tsx`, `AgentProfile.tsx`, `AgentAbout.tsx`, `about.ts` for the derived flow
+and "never" sentences, `profile-parts.tsx`, `profile-data.ts`), which is outside version control.
 Every figure, person and skill name is a marked example; the connector and channel names are the
 product's own connector and adapter keys, drawn with generic bundled icons and no brand logos. The
 screenshots were taken with headless Chrome by `.scratch/ui-spike/tools/shoot-profile.mjs`, with no
-request leaving the local server, no console error, and a 375-pixel page measuring 375 wide.
+request leaving the local server, no console error, a 375-pixel page measuring 375 wide on both the
+Profile and About tabs, and the first action link in step 3 landing on its marked leash row in view.
 
 | Screen | File under `.scratch/ui-spike/shots/` |
 | --- | --- |
+| Dashboard, the first tab, desktop, light | `radix-agent-dashboard-desktop-light.png` |
 | Profile, desktop, light | `radix-agent-profile-desktop-light.png` |
-| Top of the Profile through the About section, desktop, light | `radix-agent-profile-about-desktop-light.png` |
-| Top of the Profile through the About section, phone, 375 wide | `radix-agent-profile-about-phone-375.png` |
 | Profile, desktop, dark | `radix-agent-profile-desktop-dark.png` |
-| Dashboard, desktop, light | `radix-agent-dashboard-desktop-light.png` |
-| Profile, phone, 375 wide | `radix-agent-profile-phone-375.png` |
-| Connectors overflow open | `radix-agent-capabilities-overflow-desktop.png` |
+| Profile, phone, 375 wide, with the three tabs | `radix-agent-profile-phone-375.png` |
+| About, desktop, light | `radix-agent-about-desktop-light.png` |
+| About, desktop, dark | `radix-agent-about-desktop-dark.png` |
+| About, phone, 375 wide | `radix-agent-about-phone-375.png` |
+| Connectors overflow open, on the Profile | `radix-agent-capabilities-overflow-desktop.png` |
 
 ### 4.2 The skills model
 
