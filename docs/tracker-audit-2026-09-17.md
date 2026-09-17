@@ -1,6 +1,6 @@
 # Tracker audit against the owner's install, 2026-09-17
 
-Every task the tracker showed as done was checked against the install at https://brain.194.233.66.89.sslip.io, which runs commit f32c385. The standard is the owner's: a page in the console is not done; a task is done only when what it asks for exists and works on the install. Unit tests over fakes are not evidence.
+Every task the tracker showed as done was checked against the owner's install, which runs commit f32c385. The standard is the owner's: a page in the console is not done; a task is done only when what it asks for exists and works on the install. Unit tests over fakes are not evidence.
 
 ## What the install is
 
@@ -1175,7 +1175,7 @@ Every task the tracker showed as done was checked against the install at https:/
 | M35.2.2.4 | Form labels and error association | reopen unproven | Served forms tie errors to inputs (FirstRun, SchemaForm, DataStewardCard use aria-invalid and aria-describedby; wizard errors carry a field), but nothing on the install shows a field error was ever rendered, and the wizard is now unreachable there. To prove it: Submit an invalid value in a console form on the install and see the message announced with its field (aria-describedby).. |
 | M35.3.1.1 | Console usable on a phone for approvals at minimum | reopen not wired | The Approvals screen and decide route are mounted, but nothing in src/ calls put_suspension, so no approval can ever be pending on the install to decide from a phone. |
 | M35.3.1.2 | Approval cards readable without horizontal scroll | reopen not wired | The approval card is laid out for a phone, but no production code raises a suspension (put_suspension has no caller), so no card can render on the install. |
-| M35.3.2.1 | Installable shell | reopen unproven | The bundle index.html links /manifest.webmanifest with start_url and scope at the root, and the console fallback serves unhashed bundle files at the root, but nobody has installed the console from the install origin. To prove it: Open https://brain.194.233.66.89.sslip.io on a phone or in Chrome and see the install prompt and a valid manifest in DevTools.. |
+| M35.3.2.1 | Installable shell | reopen unproven | The bundle index.html links /manifest.webmanifest with start_url and scope at the root, and the console fallback serves unhashed bundle files at the root, but nobody has installed the console from the install origin. To prove it: Open the install on a phone or in Chrome and see the install prompt and a valid manifest in DevTools.. |
 | M35.3.2.2 | Push for approvals, deferred with a stated trigger | reopen not wired | The deferral (locale.PUSH_FOR_APPROVALS, 4-hour trigger) is written, but triggered has no caller and nothing measures approval wait, so the trigger can never fire; no approval has ever been raised on the install. |
 
 ### M36 Scaling triggers and performance
