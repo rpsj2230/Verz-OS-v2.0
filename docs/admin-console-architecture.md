@@ -105,10 +105,11 @@ structure of `docs/screens.html`, with the brand accent read from the install's 
 `INSTALL_ACCENT_COLOUR` rather than written into the source (Verz sets its orange on its install;
 another company sets theirs). Add a small set of shared components: a grouped sidebar with global
 search, breadcrumbs, a list page with a server-side query contract, a detail page with tabs, a
-drawer, a toast region and empty, loading and failure states. Adopt **React Aria Components** as
-unstyled accessible primitives for dialogs, menus, comboboxes, tabs and selectable tables, and
-reject a full design system (MUI, Ant, Mantine) because each brings its own theme and fights the
-token and lock rules this console already enforces. Part 5 argues the trade-off.
+drawer, a toast region and empty, loading and failure states. Build them from **shadcn/ui on its
+Radix base, with Tailwind CSS v4**, which the owner chose on 2026-09-17: the components are copied
+into the console, mapped onto the design's tokens and adopted page by page. Reject a packaged design
+system (MUI, Ant, Mantine) because each brings its own theme engine and fights the token and lock
+rules this console already enforces. Part 5.7 records the decision, its reasons and its risks.
 
 ### The plan, in waves
 
@@ -1223,6 +1224,136 @@ it nothing can be installed. An install with no vault (the lite profile) has now
 signing key, so installing a template is unavailable there and the catalogue says so rather than
 signing with a key kept somewhere weaker (`credentials.NO_VAULT_IS_NOT_A_REASON_TO_USE_A_TABLE`).
 
+### 4.1a The agent profile page
+
+**Why this section exists.** On 2026-09-17 the owner reviewed the shadcn/ui spike's agent page and
+found it missed connectors and other key things. He sent AnyGen's agent page as the reference, to be
+adapted and not copied. This section maps every element of that page onto this product's real
+entities, routes and state, adds what AnyGen lacks and this product must show, and records the
+rebuilt page. The mapping was measured against `e3e2ec9`, `origin/main` on 2026-09-17, which is 16
+commits past the Part 0 code of record `273092a`. Where the two differ, the row says so; the
+differences that matter here are agent automations with start and stop, memory formation code,
+connector reading by the worker and paged lists. The AnyGen images were described in the owner's
+brief and not read, for the reason Part 0 gives.
+
+**The shape: two views of one agent, and the tabs beside them.** Today `AgentWorkspace.tsx` puts
+the tab strip on the left and a Dashboard or Profile switch in a right-hand pane (`PANES`,
+`FIRST_PANE = "dashboard"`). The reference makes that switch the page's first level, and so does
+this design. `/agents/{id}` opens the Profile, `/agents/{id}/dashboard` the Dashboard, and each tab
+`tab_strip` returns for the reader (permitted and populated, never a count) keeps its own address
+under `/agents/{id}/{tab}`, reached from a Sections menu beside the switch. The property
+`agent-workspace.test.tsx` holds, that switching views loses no tab state, is restated over the two
+views in the same commit, and `FIRST_PANE` becomes `profile`.
+
+**How to read the tables.** Routes are under `/api/v1`. "Workspace" means
+`GET /agents/{agent_id}/workspace` (`WorkspaceView`), which admits a caller by the agent's audience
+(`visible_agent_ids`) and gives one 404 for a missing agent and a hidden one. Status is **exists** (a
+route serves it and it takes effect), **partial** (served in part, or served and not yet in effect),
+**missing** (domain code or a column may exist, but no route) or **not offered** (the product has no
+such thing). The last column says what a reader who may not see the element gets, which is always
+what an agent without that element gets (R1, R2).
+
+**The reference, element by element.**
+
+| # | AnyGen element | This product's entity or field | Read today by | Changed by | Status | Permission | When the reader may not see it |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Dashboard and Profile switch, top left | two views of one agent: `AgentWorkspace` `PANES` | nothing of its own; the views draw the workspace | navigation only | exists as a right-hand pane; partial as the page's first level | the audience, to open the agent at all | the agent is absent: the 404 a missing agent gets |
+| 2 | Avatar | initials of `AgentRecord.display_name`. There is no image field and none is proposed, because an uploaded image is a file an install must store and scan | workspace `agent.display_name` | never changed on its own | exists | audience | as row 1 |
+| 3 | Agent name | `AgentRecord.display_name`; the slug is fixed at creation | workspace | a draft and the publish gate (W2.6) | exists to read; missing to change | audience; changing needs `admin:agent` over the agent's department (to build) | as row 1 |
+| 4 | Settings cog | the Settings tab (`Tab.SETTINGS`, `read:agent`) and the lifecycle actions | workspace `tabs` (Settings is in `POPULATED_HERE`) | edit instructions: `POST /govern/prompts/{agent_id}` and `.../give-back` (`admin:agent_instructions`; editing, not giving back, needs the feature `prompt_editing`). Enable, disable, archive, transfer, duplicate, edit as a draft: none, because `agents.lifecycle` has no route (W2.6) | partial | the Settings read to see the menu; each item its own authority | no cog: a reader without the Settings tab has nothing to open, and a disabled cog would say there is something |
+| 5 | "Add to (chat app) groups" | installing the agent into a shared conversation: `console/agent_tabs.install_to_group`, answered at the floor of everybody present (`channels/room.plan`) | none | none. No adapter declares `Feature.GROUP_INSTALL`, so `install_to_group` refuses on every surface, and no table stores a channel for an agent (E1, W4.1). Which groups one company's agent sits in is install data and never source (`docs/needs-rupash.md`) | missing | to build with E1: an authority over the channel binding. Installing into a room grants the room nothing (`INSTALLING_INTO_A_ROOM_IS_NOT_A_GRANT_TO_THE_ROOM`) | until W4.1 a disabled control with its reason, the same for everybody; afterwards absent without the channel authority |
+| 6 | "Credits used 379 >" | spend over a period: `HeadlineView` (`spend_minor`, `runs`, `basis`, a `range` of 30 days) from `ops.spend_actual` through `console/workspace.headline`. The link opens H1 Usage and cost (`GET /report/spend?dimension=agent`). "Credits" is not this product's word (2.4) | workspace `headline` | an agent budget: `ops/budget_store.append` exists with no route (W3.5) | partial. **Nothing writes `ops.spend_actual`** at either commit (`spend_store.record` has no caller), so every install reads 0.00 and 0 runs. The page says "not recorded yet" rather than drawing nought (`A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`), which needs a served statement that calls are not metered. No money response carries a currency (`INSTALL_CURRENCY` exists and `locale.currency()` has no caller), so the figure has no sign | everybody's runs with the budget screen's read held unrestricted (`basis_for`); otherwise the reader's own runs, labelled as theirs. The link needs `read:usage` | never withheld: the narrower basis is the reader's own figure, labelled. The link is absent without `read:usage` |
+| 7 | "Skills 12" | the number of pinned skills sent (`WorkspaceView.skills`) | workspace | assigning, row 12 | partial: counted from what is sent, and no skill is read by a run (row 12) | the Settings read and the Skills screen read (`read:skill`) | no figure, rather than nought. A count of the pins sent is a count of what was shown |
+| 8 | "Days on board 23" | days since `agent.created_at` (`AgentRow` has it through `TimestampMixin`); for an installed agent `template_instance.created_at` is the install. Labelled "Days since created", because an agent is not staff | none. `AgentRecord` has no creation field, `record_of` does not copy it, and `AgentHeaderView` sends none | never changed | missing on the wire; the column exists | audience. A date names nobody, which is why it can travel where the builder (`created_by`) cannot | as row 1 |
+| 9 | Description paragraph | `identity.summary` of the effective manifest | workspace `agent.summary` | a draft and the publish gate (W2.6) | exists; null for an agent with no install that constructs | audience | no paragraph |
+| 10 | "Adaptive learning" card with a switch | memory formation and the learning review: `brain.memory` (`tiers.Tier` session, automatic, promoted, gated; `formation`; `review`; `digest.undo`) and the Learning screen | `GET /govern/learning` (`read:learning`); `GET /govern/memory?subject=` (`read:memory`, by person) | undo: `POST /govern/learning/undo` (`admin:learning`). A per-agent switch: none | partial, and **the switch is not offered as drawn.** New at `e3e2ec9`, `memory/turn.py` and `StoredFormations.after_turn` form a person's memories from an answered turn, and nothing on a running install calls `after_turn` yet. `mem.persistent` and `mem.adaptive` are keyed by person with no agent column; only `mem.learning.agent_id` names an agent. No manifest field, feature or setting switches learning, per agent or for the install. A single on and off switch is the memory-poisoning path SCREEN 13 rejects, so the card shows the four tiers, what each may change, and a link to the review. A per-agent pause would be new (a field `after_turn` reads) and may only narrow | the tier text is product text for the audience; the review link needs `read:learning`, on the content plane and withheld from the first administrator by design | the card's product text still shows; the review link is absent |
+| 11 | Capabilities: Connectors, round icons, "7+", "+" | the connectors the manifest declares, as `ConnectorRow`: `Presence.ATTACHED` (a tool from the source is in `allowed_tools`) or `REQUESTED` (named, no tool bound), narrowed to sources the reader could be told about (`reachable_sources`). `ICONS_ON_THE_ROW = 5`, and the overflow is counted over the reader's own rows. The install's own state (connected, and new at `e3e2ec9` last read and next read) is `ops.connector_connection` and `ops.connector_sync` | workspace `connectors` (`shown`, `overflow`); `GET /connectors` for connected and last read (`read:connector`) | "+": none. An agent's connectors change through its manifest, a draft and the publish gate (W2.6); `agents.install.bind_tool` runs only inside `install.complete`, which has no route. Connecting a source for the whole install is `POST /connectors` (`admin:connector` over that source), a different act on the Connectors screen | partial. The row exists. The "7+" list needs the rows past the strip, which the workspace does not send (to build). New at `e3e2ec9` the worker reads a connected source on its interval, and no question is answered from what it keeps (`WHAT_CONNECTING_A_SOURCE_STARTS`); only xero and hubspot can be connected from the console (`ops/connectable.py`) | the row: audience and `reachable_sources`. Connected and last read: `read:connector` | a source the reader cannot reach makes no row and is not in the overflow (`AN_OVERFLOW_COUNTS_WHAT_IS_OFF_THE_ROW_AND_NEVER_WHAT_IS_OUT_OF_REACH`). No row says "restricted", and none carries a health word (`AN_UNPROBED_CONNECTOR_IS_NOT_A_HEALTHY_ONE`) |
+| 12 | Capabilities: Skills, pill chips, "6+" with a chevron, "+" | pinned skills (`SkillRef` name and digest) on the effective manifest, from `agent.skill_assignment` | workspace `skills` | "+": `POST /skills/{digest}/assignments` with `agent_id` in the body (the Skills screen read, `admin:skill` over a scope admitting the agent, the agent in the caller's audience, an approved digest). Removing a chip: none, detachment is W2.8 | partial. **An assigned skill has no effect at run time.** Nothing in the answer path reads an assignment: `offered_cards` and `body_of` have no caller, `SkillScriptTool` is never built, `build_registry` registers no skill, and the model lane new at `e3e2ec9` reads none. The page says so on the row and beside the Skills figure until W3.1. The served sentence 4.2 names, `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN`, does not exist yet and is added with W2.8 | the Settings read and `read:skill` | no row and no figure. No chip reads "approved" (`A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`) |
+| 13 | Capabilities: Channels, icons, "+" | the surfaces a run could be carried on: `offered_channels` at `E_run(caller, agent)` over the six adapters (email, lark, slack, teams, telegram, whatsapp), each with `rendering_profile` (card, attachment, plain) | workspace `channels` | "+": none. `agent_tabs.channel_rows` and `enable` are logic with no table; `ops.channel_binding` and the E1 screen are W4.1 | partial: offered, never "enabled" | audience; computed at the run's reach, so two readers can see different rows | a surface that may not carry what this reader's run could reach is absent, not greyed |
+| 14 | "Availability" card: authorised users can find it and add it to groups | `AgentAudience`: `level` (`Visibility` personal, department, company), `owner_id` (the steward), `department` (one, and only at the department level). Discovery, never authority (`AUDIENCE_IS_NOT_AUTHORITY`) | workspace `agent.owner_id`; roster `department`; no route sends `level` | none. `agents.lifecycle.publish` (widening to company, `approve:agent.visibility`) and `transfer_ownership` exist with no route; any other audience change is a draft (W2.6) | partial | the card: audience. The level word: the Settings read (to add to the workspace). Changing: `admin:agent`; widening to company: `approve:agent.visibility` | the level is not shown; the steward and department still are, because the workspace and roster already tell every audience member |
+| 15 | Availability: Users, chips, "+" | **nothing: there is no per-agent list of people.** At the personal level the audience is the steward alone, at department everybody placed in it, at company everybody. So "Users" honestly means the steward, and who else can find the agent is a level, not a list | steward: workspace `owner_id` | "+": not offered. A named allow-list would be a new `AgentAudience` shape, and it is what SCREEN 13's "Users added individually" draws with nothing behind it. If the owner wants one, it stays discovery and grants nothing | not offered (the steward exists) | audience | listing the people a department level reaches is not offered: it would hand a directory and a count of a department to a reader with no `read:grant` over it. That question belongs to the People tab (`Tab.PEOPLE`, `read:grant`), which no route populates |
+| 16 | Availability: Departments, a chip with "x", "+" | `AgentAudience.department` | roster `department` | "x": none, because removing it changes the level (a draft, W2.6). "+": not offered, because an audience holds exactly one department; a second is a new audience shape, not a missing button (`AgentViewer` takes a set, the record does not) | partial | audience | absent for personal and company agents, whose record holds none |
+| 17 | "Browser use" card with a switch | `brain/browsing` (M19): a planner that cannot read the page, a policy fixed for the run, credentials injected at the tool boundary and never given to the model, a rubric written before the run; a gVisor sandbox started by `launcher`; capabilities `read:browser_surface` and `write:browser_surface`; table `agent.browser_envelope` | none | none: no route, no feature switch and no field on an agent. Putting the browser capabilities in a ceiling would do nothing, because no handler is registered | missing: written and tested, never run ("the runner is specified and has never run"). Part 7 has no package for it, which is a WBS decision | when built, browser use is the agent's ceiling holding the browser tools, set through the publish gate, never a switch beside the ceiling | today a disabled switch with its reason, the same for everybody; when built, the card goes where the ceiling goes. Never a person's own signed-in session (SCREEN 13) |
+| 18 | "Computer use" card with a switch | **nothing.** No module, table, route, capability or WBS leaf operates a desktop, its windows, keyboard or mouse. The only mentions are M19's title, "Browser and computer use", with no desktop leaf under it, and a docstring in `core/envelope.py` naming desktop as a surface | none | none | **not offered** | none | no switch, because a switch that does nothing is fake functionality. One sentence says the product does not offer it and why: an agent acts through tools that pass the gate, and a desktop operator acts with whatever the machine's session holds, which is SCREEN 13's objection to riding a person's session, made larger. Offering it is the owner's decision, not a missing button |
+
+**What AnyGen lacks and this product shows.**
+
+| Element | Entity or field | Read today by | Changed by | Status | Permission | Where it sits |
+| --- | --- | --- | --- | --- | --- | --- |
+| Leash, the autonomy rung | `gate/leash.Leash` entries (agent, target, scope, and a rung `AutonomyTier` shadow, assisted or autonomous) with `MISSING_ENTRY_RUNG = SHADOW`, sealed at `guardrails.leash`; `console/reach_view.leash_matrix` and `rung_history` | none: no route serves the leash | lowering: an insert-only `agent.leash_change` (W3.8). Raising: a publish with `may_raise` evidence, allowed by `may_move_rung` (`approve:action` over the entry's scope) | missing | the Settings read to see; `approve:action` to move | header chip (the widest rung, "leash up to"); Profile, "Model and autonomy" card, per target; Leash history tab (`rung_history`, breaker demotions) |
+| The ceiling in plain words | `AgentAuthority`: `scope`, `capabilities` (with `records_implied_by`), `allowed_tools`, `required_tools`, `max_side_effect` (`SideEffect` none, draft, write, send, money) | roster `ceiling` (the scope predicate as JSON, for the Agents screen read); `reach_view.ceiling_block` has no route | a draft and the publish gate; a widened ceiling publishes at Shadow and waits for a second approver who is not the author (`builder/publish.decide`) | missing as words: nothing renders an agent's ceiling as sentences. The parts exist: `member/approvals.effect_sentence` for a side effect, `ops/starter.described_by_grammar` for a capability | `read:agent` for the card; capability names whole or as the lock by `read:capability` (`CEILING_DISCLOSURE`); "Preview as a person" through `reach_view.run_preview` (`PREVIEW_DISCLOSURE`, no route, W2.3) | Profile, "Permissions" card |
+| Model tier | `AgentRecord.tier` (`Tier` small, main, heavy; `DEFAULT_TIER` main) and the chain the tier walks (`ops.routing_rung`) | tier: no route. Chain: `GET /routing/rungs` (`read:routing_matrix`) | tier: a draft (W2.6). Rungs: `PATCH /routing/rungs/{rung_id}` (`admin:routing_matrix`), shared by every agent | partial: **stored and not obeyed.** At `e3e2ec9` `gate/model_lane` builds a `RoutingRequest` with no `requested_tier` and says no agent is on that path (W3.1) | the Settings read; the chain `read:routing_matrix` | Profile, "Model and autonomy" card; the chain links to C6 |
+| Owner and steward | one field. `AgentAudience.owner_id` is the steward, who answers for the agent now; `AgentRecord.created_by` is the builder, history that never moves. Neither is 6.1's data steward, a person appointed to grant data capabilities | workspace `agent.owner_id` (audience) and `agent.created_by` (the Settings read only, `THE_BUILDER_TRAVELS_WITH_THE_AUDIT_AND_THE_STEWARD_TRAVELS_WITH_THE_AGENT`) | transfer: `agents.lifecycle.transfer_ownership`, no route (W2.6); `identity/lifecycle.adopt` calls it for a leaver | partial | as read | header subline ("steward"); Profile, "Availability" card ("Steward", "Built by") |
+| Template and version | `template_instance` (template id and version, content digest, overlay, field owners); `divergent_parts`; upgrade offers in `agents/upgrade` (`UpgradeBadge`) | workspace `agent.template_id` and `template_version`, and with the Settings read `composition` and `divergent` | accepting or declining an upgrade: none (W2.7); `agent.upgrade_decline` has no writer | partial | audience for the lineage; the Settings read for the composition | header subline ("from Queue triager v2"); Versions tab (`CompositionDiff.tsx`, the upgrade offer) |
+| Enabled, disabled, archived | `AgentRecord.state`, derived from `disabled_at` and `archived_at`; archived is terminal and beats disabled | none: no route sends a state word | `agents.lifecycle.enable`, `disable`, `archive`, no route (W2.6) | missing on the wire | the Settings read. A member of the audience is not told a state, for `runnable_agent_ids`' reason: nobody is told why an agent they used yesterday is not chosen today | header state pill for a Settings reader; no pill otherwise |
+| Approvals waiting | `gate.suspension`, which carries `agent_id` | `GET /approvals`, paged at `e3e2ec9`, with no agent filter; `ApprovalCardView` carries no agent id. Deciding is `POST /approvals/{suspension_id}/decision` | decided by a person, once | missing for this page: the queue answers 500 until W0.3 (`suspension_store_for` is handed no ledger), and nothing stores a suspension (`put_suspension` has no caller, W3.6) | the action's own capability over its row (`pending_for`); the first administrator holds no `approve:action` (R8) | Dashboard figure and list, counting only cards this reader could decide; absent, not nought, for a reader who could decide none |
+| Automations | `agent.automation`, `gate.automation_owner`, and new at `e3e2ec9` `agent.automation_run` with a worker runner | `GET /agents/{agent_id}/automations` (new at `e3e2ec9`); the gallery `GET /agents/{agent_id}/automation-templates` (`read:queue`) | install `POST /agents/{agent_id}/automations` (`admin:automation`); start and stop `POST /agents/{agent_id}/automations/{automation_id}/start` and `.../stop` (`admin:automation`; stopping also the person it runs as) | exists at `e3e2ec9`; changing a schedule and removing are still to build | the Automations tab read (`read:queue`) | Dashboard "Automations" block; Automations tab |
+| Recent runs | nothing per agent. `obs.request_telemetry.agent_version` is always null because `POST /answer` answers as the caller with no agent; `ops.model_attempt` names no agent; spend rows are never written; `agent.automation_run` covers automations only | none | none | missing: no route runs an agent and none lists an agent's runs | who asked and what: the Conversations tab read (`read:question`, content plane); cost on the budget basis | Dashboard "Recent runs"; Conversations tab |
+| Instructions | the persona and its install overlay | `GET /govern/prompts` (the Settings read) | `POST /govern/prompts/{agent_id}` and `.../give-back` (`admin:agent_instructions`; editing needs the feature `prompt_editing`) | partial: the override is stored and served, and at `e3e2ec9` the answer lane uses its own `ANSWER_LANE_PERSONA`, so no run reads an agent's persona yet | as changed | Instructions tab; the Settings menu |
+| History | ledger entries about this agent: `compose_change`, `instructions`, `leash_change` (no emitter), `approval` | `GET /audit?q={agent_id}` (`read:audit`; `q` is new at `e3e2ec9` and is a text search, not a subject filter); `GET /audit/history` is fixed to permission actions | written by the acts themselves | partial: no subject filter (G1), and publish, lifecycle and leash moves have no emitter | `read:audit` | History tab; absent without the grant |
+
+Knowledge (the scope predicate, `read:document`), Memory (`GET /govern/memory` is by person, so no
+route serves an agent's memory) and Artifacts (`GET /govern/artifacts`, with no agent filter, and
+nothing keeps an artifact yet) stay tabs, as C1 lists them.
+
+**Every "+" and "x" on the page, and every other control.**
+
+| Control | Calls | On the page |
+| --- | --- | --- |
+| Dashboard and Profile switch; Sections menu | navigation | live |
+| Settings cog: Open settings; Edit instructions | navigation; `POST /govern/prompts/{agent_id}` | live |
+| Settings cog: Edit as a draft, Duplicate, Transfer stewardship, Enable or Disable, Archive | none | disabled items marked "not built yet", W2.6 |
+| Add to a chat group | none | disabled, W4.1 |
+| Spend figure's link | opens H1 over `GET /report/spend?dimension=agent` | live for `read:usage` |
+| Connectors "+" | none (a manifest edit through a draft) | disabled, W2.6 |
+| Connectors "N more" | none: needs the rows past the strip | opens the list, which says those rows are not sent yet |
+| Skills "+" | `POST /skills/{digest}/assignments` | live, beside the sentence that a run does not read an assignment |
+| Skills "N more" | none: every pin is already sent | live |
+| Remove a skill ("x") | none | not drawn: detachment is W2.8, said in the list |
+| Channels "+" | none | disabled, W4.1 |
+| Availability: Change level; Transfer; remove the department ("x") | none | disabled, W2.6 |
+| Availability: add a department ("+") | none | disabled, with the reason that an audience holds one department |
+| Availability: add people ("+") | none | not drawn: not offered (row 15) |
+| Learning: a per-agent pause | none | not drawn: would be new. The review link is live for `read:learning` |
+| Browser use switch | none | disabled, with its reason (M19) |
+| Computer use | none | no control: a sentence (row 18) |
+| Permissions: Change the ceiling; Preview as a person | none | disabled, W2.6 and W2.3 |
+| Model and autonomy: Change a rung | none | disabled, W3.8 |
+| Dashboard: an automation's Start and Stop | `POST /agents/{agent_id}/automations/{automation_id}/start` and `.../stop` | live at `e3e2ec9` |
+| Dashboard: Approvals link | opens C4 over `GET /approvals` | live; the queue faults until W0.3 |
+
+**The rules the page keeps.** A control whose route does not exist is `aria-disabled`, drawn dashed,
+does nothing when pressed, and its tooltip names what is missing and the package that adds it; the
+rebuilt page carries ten, and pressing each was measured to change the address and open a dialog in
+none of them. A thing the product does not offer is a sentence, never a disabled switch. A figure
+nothing stores reads "not recorded yet", never nought. No number on the page counts what the reader
+cannot see: the connector overflow is over the reader's own rows, the Skills figure over the pins
+sent, approvals over the cards the reader could decide. Channels and connectors are computed at
+`E_run`, never at the ceiling, and the page computes no reach of its own.
+
+**What the API has to add for this page** (W2.6 unless named): `created_at` on `AgentHeaderView`;
+for a Settings reader, the lifecycle state, the audience level, the tier, the leash entries and the
+ceiling in words, with capability names under `CEILING_DISCLOSURE`; the connector rows past the
+strip; a served statement that model calls are not metered (until W3.5), so the headline is not read
+as nought; the sentence `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN` (W2.8); an agent id on
+approval cards, with a filter (W3.6); and a subject filter on `GET /audit` (G1).
+
+**The rebuilt page.** Built on the base 5.7 records, in the spike under
+`.scratch/ui-spike/app-radix/` (`src/pages/agents/AgentDetailPage.tsx`, `AgentProfile.tsx`,
+`AgentDashboard.tsx`, `profile-parts.tsx`, `profile-data.ts`), which is outside version control.
+Every figure, person and skill name is a marked example; the connector and channel names are the
+product's own connector and adapter keys, drawn with generic bundled icons and no brand logos. The
+screenshots were taken with headless Chrome by `.scratch/ui-spike/tools/shoot-profile.mjs`, with no
+request leaving the local server, no console error, and a 375-pixel page measuring 375 wide.
+
+| Screen | File under `.scratch/ui-spike/shots/` |
+| --- | --- |
+| Profile, desktop, light | `radix-agent-profile-desktop-light.png` |
+| Profile, desktop, dark | `radix-agent-profile-desktop-dark.png` |
+| Dashboard, desktop, light | `radix-agent-dashboard-desktop-light.png` |
+| Profile, phone, 375 wide | `radix-agent-profile-phone-375.png` |
+| Connectors overflow open | `radix-agent-capabilities-overflow-desktop.png` |
+
 ### 4.2 The skills model
 
 **What a skill is.** A folder with `SKILL.md` and optional scripts, identified by the digest over
@@ -1372,7 +1503,7 @@ filter the reader cannot reach (`screens.offerable`), the reason a record was re
 | --- | --- | --- |
 | List page | every module list | `DataTable` (TanStack, no client paging) in a toolbar with search, filters, sort and a cursor pager bound to the server list contract (W1.3) |
 | Detail page with tabs | an entity with several aspects (person, agent, connector, skill, template) | a new `DetailPage` with header facts (`Facts`), actions menu, tabs as child routes so each tab has an address |
-| Drawer | a short create or edit that keeps the list in view (grant, register webhook, connect a source) | React Aria `Modal` and `Dialog` styled as a side sheet |
+| Drawer | a short create or edit that keeps the list in view (grant, register webhook, connect a source) | shadcn/ui `Sheet` (a Radix dialog) with focus returned to the opener |
 | In-page confirmation | a destructive act on one row | the existing `ConfirmAction` (in place, focus to the safe choice, Escape cancels), kept |
 | Wizard | agent creation, template install, first run | the seven builder sections as steps with a persistent draft, `ManifestForm` per step |
 | Empty, loading, unreachable, failed | every page | `FailureNotice`, `Notice`, and the four sentences `tests/screen-states.test.tsx` already holds, plus an empty state that says what would put a row here and who may |
@@ -1402,7 +1533,7 @@ commit with the replacement property written down:
 | Test or guard | What it holds that the redesign must respect |
 | --- | --- |
 | `scripts/check-boundaries.mjs` | no token parsing, no role checks in the browser, no `fetch` outside the client, `localStorage` only for the theme (so global search keeps no recent-search history), no `type="password"`, no positive `tabIndex`, no click handler on a non-control |
-| `bundle-split.test.ts` | `@tanstack/react-table`, `@rjsf/*`, `@xyflow/react` unreachable statically from `main.tsx`: **every module page that mounts `DataTable` is a lazy route**, and React Aria is added to the same check |
+| `bundle-split.test.ts` | `@tanstack/react-table`, `@rjsf/*`, `@xyflow/react` unreachable statically from `main.tsx`: **every module page that mounts `DataTable` is a lazy route**, and the form libraries the template brings (`react-hook-form`, `zod`) are added to the same check |
 | `destructive-confirmed.test.ts` | a destructive write is reachable only through an element literally named `ConfirmAction`: a drawer that removes something still confirms through it |
 | `validated-before-write.test.tsx` | a fixed table of forms per writing file: each new form is added to it |
 | `long-lists.test.tsx` | the `MISSING` table must match the page exactly: each server search, filter, sort or pager that lands removes its entry |
@@ -1460,22 +1591,78 @@ with the runtime configuration, and its test runs it over a pale, a mid and a da
 themes. The design's own figures are the worked example: `#F47936` as text on white fails and is
 darkened to `#B75315`, which passes.
 
-### 5.7 A component library: React Aria Components, and why not a design system
+### 5.7 A component library: shadcn/ui on Radix, decided by the owner on 2026-09-17
 
-**Recommendation: adopt React Aria Components (unstyled primitives) and no design system.**
+**Decision (owner, 2026-09-17): shadcn/ui on its Radix base, with Tailwind CSS v4, is the console's
+component and template layer, adopted page by page.** It replaces this section's earlier
+recommendation, React Aria Components as unstyled primitives with no design system. The owner asked
+for a modern, enterprise-grade interface built from pre-made templates with the Verz palette in
+mind; a comparison of nine candidates and a working spike of the two strongest followed. Both were
+built under `.scratch/` (`ui_template_choice.md`, `ui-spike/`), which is outside version control,
+so the reasons and risks that decide the choice are recorded here rather than pointed at.
 
-| Option | For | Against | Verdict |
-| --- | --- | --- | --- |
-| Stay hand-rolled | no dependency; the current tests pass | drawers, menus, comboboxes, tabs with roving focus, date ranges and selectable tables are each an accessibility project; the console avoided modals precisely because a focus trap is easy to get wrong (`ConfirmAction`) | rejected for the new patterns; kept for what exists |
-| **React Aria Components** | unstyled, so `tokens.css` and the single lock appearance stay the only styling; strong keyboard, screen reader and touch behaviour; locale-aware dates and numbers match `INSTALL_LOCALES` and `INSTALL_TIME_ZONE`; no `eval`, so no CSP cost; selectable `Table` fits bulk actions | a real dependency to pin and upgrade; its own component vocabulary to learn; weight must be measured against `tests/bundle-split.test.ts` | **adopt**, pinned exact like every other dependency, imported per route |
-| Radix primitives with shadcn copies | popular, small packages | shadcn copies bring Tailwind utility classes, a second styling system beside tokens; primitives alone overlap React Aria with weaker date and locale support | rejected |
-| MUI, Ant Design, Mantine | complete, fast to assemble | each has its own theme engine and CSS-in-JS or class vocabulary that fights `tokens.css`, the lock rule (a withheld field is replaced whole) and the no-password-input boundary; large bundles | rejected |
+**What is adopted, and how.** shadcn/ui's components and blocks, and its data table on TanStack
+Table v9, copied into `console/` rather than installed as a package. satnaing/shadcn-admin (MIT) is
+a reference for the patterns it adds (bulk action bar, settings layout, error pages, command menu)
+and is not adopted as an application, because its router, table version and authentication are not
+this console's. The design of record's tokens are mapped onto shadcn's CSS variables, Tailwind's
+default palette is removed so a class can only name a token, and the accent stays install
+configuration (5.6). The existing stylesheets sit in a `legacy` cascade layer, so an old page keeps
+its look and a new component is not overridden by its element selectors; a page leaves that layer
+when it moves with its module package in wave 2. There is no big-bang reskin, and no purchase: every
+part is MIT, ISC, Apache-2.0 or OFL-1.1.
 
-**The trade-off in one sentence:** React Aria costs a dependency and a vocabulary, and buys the
-accessibility of the dozen interaction patterns this console needs next without surrendering the
-styling and security rules it already enforces. Before adoption, a spike mounts a `Dialog`, a
-`ComboBox` and a selectable `Table` on one route and records the gzipped weight in
-`console/README.md`'s measurement table, as the grid and form libraries were.
+**The three reasons.**
+
+1. **It is the largest pool of pre-made admin material that fits the console's pins as they stand.**
+   The spike built a list page, a detail page and a validated create sheet on React 19.1.0, Vite
+   6.4.3, react-router-dom 6.30.6 and TanStack Table 9.2.4 without changing one of them, and the set
+   ships a sidebar, command palette, breadcrumbs, sheet, alert dialog, toasts, tabs and empty states.
+2. **Theming is CSS variables throughout**, so the design's palette and a runtime accent work without
+   forking a component. In the spike every colour on screen came from the tokens, one build drew
+   the Verz orange from install configuration and a teal from another, and the generated components
+   held three colour literals, all one overlay, which were replaced.
+3. **The code is copied in, so the console's rules are enforced inside it.** The spike removed a
+   cookie write, fixed a checkbox that drew a tick for "some selected", stripped every total from the
+   data table (R2) and added focus return to a dialog opened from state, each in a few lines of its
+   own copy. A packaged design system would have needed a wrapper or a fork for each.
+
+| Option | Verdict | Why |
+| --- | --- | --- |
+| **shadcn/ui, Radix base, Tailwind v4** | **adopted** | the three reasons above; `check-boundaries.mjs` ran clean over the spike and no request left the local server |
+| shadcn/ui, React Aria base | the fallback base | the same components, but few pre-made templates paste into it, it measured heavier (Agents route 103.80 kB gzipped against 73.49 kB), and its grid rows take focus, which `keyboard-access.test.tsx` refuses as written. Its locale-aware date fields are its real advantage, and one such control can sit beside the Radix base where a module needs it |
+| React Aria Components with no template (this section's earlier recommendation) | superseded | unstyled primitives answer accessibility and leave every page to be designed by hand, which is the opposite of what the owner asked for |
+| MUI, Ant Design, Mantine | rejected | each has its own theme engine or runtime styling that fights `tokens.css` and the lock rule; Ant Design Pro builds with umi rather than Vite; no maintained Vite admin template for Mantine |
+| TailAdmin, Refine, Tailwind Plus Catalyst | rejected | TailAdmin hard-codes colours and hand-rolls dialogs with no focus management; Refine sends telemetry by default and replaces the data layer the console keeps; Catalyst's licence does not plainly allow a product many companies install and own, so it is not bought without Tailwind Labs' written answer |
+
+**The risks, and what each costs.**
+
+- **The four jsdom layout tests move with the first restyled page.** `phone-width.test.tsx`,
+  `approvals-phone.test.tsx`, `status-primitives.test.tsx` and the stylesheet half of
+  `theme.test.ts` read the console's own stylesheets, and Tailwind utilities are not in a stylesheet
+  they can see, so a page styled by utility classes would pass or fail them for reasons unrelated to
+  how it renders. In the commit that restyles the first page they are re-pointed at CSS compiled by
+  Tailwind for the rendered class names, or their layout claims move to the W1.6 browser harness.
+  Done later, the console loses its phone-width and colour guarantees silently.
+- **A second styling vocabulary beside the tokens**, which was this section's objection to shadcn.
+  The tokens stay the only values; the cost is that a class naming no token renders no colour and
+  fails silently, so a colour-class check joins `check-boundaries.mjs`.
+- **The first load gets heavier**: about 80 kB gzipped over React and the router, plus about 25 kB of
+  CSS, before the command palette and the toaster are made lazy.
+- **Copied code is ours to maintain.** An upstream fix arrives by diffing, not by upgrading, and each
+  local change (the cookie, focus return, the indeterminate checkbox) is re-applied by hand.
+  `shadcn eject` runs before the dependency list is committed, so the CLI is not a build dependency.
+- **Radix moves more slowly than React Aria or Base UI.** shadcn/ui ships the same components on all
+  three, so a later change of base is component by component rather than a redesign, but the React
+  Aria base has a different component API.
+- **The Content-Security-Policy keeps `style-src 'unsafe-inline'`**, because the toaster and the scroll
+  lock inject style elements, or moves to nonces.
+
+**Rules carried across unchanged.** `check-boundaries.mjs` runs over every copied component and gains
+a rule refusing `document.cookie`; `ConfirmAction` wraps the alert dialog, with focus starting on the
+safe choice and returning to the opener; the data table registers no client row model and prints no
+total; the lock stays the one `span.lock`, restyled from the tokens; every page mounting the table
+stays a lazy route. The agent profile page in 4.1a was rebuilt on this base as its first worked page.
 
 ### 5.8 What to check against the AnyGen screenshots
 
@@ -1566,7 +1753,7 @@ mutation run over any guard it adds, the console audit regenerated
 | Package | What | Files and entities | Tests |
 | --- | --- | --- | --- |
 | **W1.1** Navigation | Groups become a registry field in `brain.console.screens` and the API serves the company menu too; update `docs/screens.html` SCREEN 1 and SCREEN 2 menus first (the design of record moves before the code), then `brain.ops.console_design` compares the new groups | `console/screens.py`, `department_console.py`, `navigation_routes.py`, `Shell.tsx`, `navigationQuery.ts`, `docs/screens.html` | `shell-navigation`, `department-console`, `console_design` report with no gaps; department console never offered Platform |
-| **W1.2** Shared components | Sidebar with the phone-width Menu button, header, breadcrumbs, list page, toolbar, detail page, tabs, drawer, toast region, empty state, explanation panel, KPI strip, card, button variants, bulk bar, secret field; the 19 private failure components replaced by `ui/FailureNotice`; CSS for the six classes that have none; a cross-tab refresh lock (F10); React Aria spike first; every page mounting `DataTable` made a lazy route | `console/src/layout/*`, `components/*`, `styles/app.css`, `auth/session.ts`, `package.json` | a test per component for keyboard, focus return, phone width; `bundle-split` extended to React Aria; `phone-width` and `approvals-phone` changed to the Menu-button property in the same commit (5.1) |
+| **W1.2** Shared components | Sidebar with the phone-width Menu button, header, breadcrumbs, list page, toolbar, detail page, tabs, drawer, toast region, empty state, explanation panel, KPI strip, card, button variants, bulk bar, secret field; the 19 private failure components replaced by `ui/FailureNotice`; CSS for the six classes that have none; a cross-tab refresh lock (F10); built on shadcn/ui and Radix with Tailwind v4 (5.7), the existing stylesheets held in a `legacy` cascade layer; every page mounting `DataTable` made a lazy route | `console/src/layout/*`, `components/*`, `styles/app.css`, `auth/session.ts`, `package.json` | a test per component for keyboard, focus return, phone width; `bundle-split` extended to the template's form libraries; the four jsdom layout tests re-pointed in the commit that restyles the first page (5.7); `phone-width` and `approvals-phone` changed to the Menu-button property in the same commit (5.1) |
 | **W1.3** Server list contract | One query model: `cursor`, `q`, repeated `filter`, `sort` from a declared set; options from `screens.offerable`; never a total. Applied first to people, sessions, access review, elevation, agents, skills, templates, connectors, library, webhooks | `brain/api.py` (a `ListQuery` dependency), each named route, `console/src/components/useServerPage.ts` | cursor stability under inserts; a filter value outside the reader's reach answers exactly as a value that does not exist; `long-lists.test.tsx` entries removed as each lands |
 | **W1.4** Theme | Tokens restructured to the design of record; accent from `INSTALL_ACCENT_COLOUR` via the runtime configuration document (`/api/console.js`) with contrast-chosen text; bundled IBM Plex | `theme/tokens.css`, `styles/app.css`, `console_static.py`, `config.ts`, `brain.locale` | `theme.test.ts` for three states; `test_locale.py` still green over the fixed tokens; a contrast test over the accent derivation with a pale, a mid and a dark accent in both themes |
 | **W1.5** Global search | `GET /api/v1/console/search?q=` over each module's own read | new `search_routes.py`, `layout/CommandSearch.tsx` | "no match" and "not permitted" are one answer; results narrowed per module; no counts |
