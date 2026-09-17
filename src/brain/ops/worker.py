@@ -166,8 +166,14 @@ from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.gate.context import TrafficClass
-from brain.knowledge.embed_policy import policy_gaps
-from brain.knowledge.embed_queue import embed_batch_gaps
+from brain.knowledge.chunk_store import run_embed_job
+from brain.knowledge.embed_policy import embedding_revision, policy_gaps
+from brain.knowledge.embed_queue import (
+    EMBED_TASK,
+    EMBED_TRAFFIC_CLASS,
+    EmbeddingService,
+    embed_batch_gaps,
+)
 from brain.knowledge.parse_budget import (
     PARSE_WORKER_COMPONENT,
     parse_budget_note,
@@ -180,6 +186,7 @@ from brain.ops.connections import (
     client_named,
 )
 from brain.ops.inference import inference_gaps
+from brain.ops.inference_client import make_client
 from brain.ops.queue import (
     DEPLOY_PLAN,
     DRIVER_SCHEMA,
@@ -213,7 +220,7 @@ from brain.ops.schedule_control import chosen_this_tick, paused_controls, run_re
 from brain.ops.schedule_runner import RunnerError, due_now, next_tick, runner_for, start_control
 from brain.ops.schedule_store import clocks, record_finish, record_start, take_the_lock
 from brain.ops.wiring import WiringError, component
-from brain.session import make_app_engine, make_session_factory
+from brain.session import make_app_engine, make_application_sessions, make_session_factory
 from brain.settings import process_environment, settings_from
 from brain.tables.schedule import DETAIL_CHARS
 
@@ -1039,7 +1046,7 @@ def run(env: Mapping[str, str], *, worker_component: str, slot_class: SlotClass)
         # Only a worker that schedules registers the control run, for the reason it is the only
         # one that ticks: a control reads the application's tables, and the parse worker has
         # neither that connection nor the memory for a sweep.
-        register_tasks(app, database_url=database_url)
+        register_tasks(app, database_url=database_url, env=env)
     shards = worker_shards(allocation, slot_class)
     # Asked of the tasks that are ours rather than of the registry, because the driver puts a
     # housekeeping task of its own on every app it builds. Asking the registry made this
@@ -1300,13 +1307,55 @@ async def run_control_job(
     return f"control {name}: {ticked.ticked.value}"
 
 
-def register_tasks(app: Any, *, database_url: str) -> None:
-    """Put this worker's tasks on the queue driver. Today that is the control run."""
+def register_tasks(
+    app: Any,
+    *,
+    database_url: str,
+    embedding_service: EmbeddingService | None = None,
+    env: Mapping[str, str] | None = None,
+) -> None:
+    """Put this worker's tasks on the queue driver: the control run and the embedding of a window.
+
+    The embedding service is built on the first job that needs one and kept for the life of the
+    worker, rather than per job, because `InferenceEmbeddingClient` holds the breaker, and a
+    breaker rebuilt for every job never opens: a queue of jobs would each spend a slot on a
+    server already known to be down. Built lazily rather than here, so a worker whose install
+    has a malformed endpoint still starts and runs its controls, and every embedding job it is
+    handed fails with the refusal naming the setting. `embedding_service` is a parameter so a
+    test can stand one in; nothing else passes it.
+
+    The sessions run as the application role, because `know.chunk`'s policy binds that role and
+    the job reads and writes as the document's owner: see
+    `brain.knowledge.chunk_store.THE_STORE_RUNS_AS_THE_OWNER_AND_NEVER_AS_ITSELF`.
+    """
+    held: list[EmbeddingService] = [] if embedding_service is None else [embedding_service]
 
     async def run_control(name: str) -> str:
         return await run_control_job(name, database_url=database_url)
 
+    async def run_embed(
+        document_id: str, first_ordinal: int, last_ordinal: int, model: str, owner_id: str
+    ) -> str:
+        if not held:
+            held.append(make_client(env=env))
+        engine = make_app_engine(database_url)
+        try:
+            return await run_embed_job(
+                document_id=document_id,
+                first_ordinal=first_ordinal,
+                last_ordinal=last_ordinal,
+                model=model,
+                owner_id=owner_id,
+                sessions=make_application_sessions(engine),
+                service=held[0],
+                revision=embedding_revision(env),
+                now=_utc_now(),
+            )
+        finally:
+            await engine.dispose()
+
     register_task(app, CONTROL_TASK, run_control, traffic_class=TrafficClass.SYSTEM)
+    register_task(app, EMBED_TASK, run_embed, traffic_class=EMBED_TRAFFIC_CLASS)
 
 
 async def enqueue_control(app: Any, name: str) -> int:
@@ -1461,7 +1510,7 @@ def run_control_text(
         app = queue_app(
             (env.get(QUEUE_URL_ENV) or "").strip(), pool_max=share, schema=DRIVER_SCHEMA
         )
-        register_tasks(app, database_url=database_url)
+        register_tasks(app, database_url=database_url, env=env)
         job_id = asyncio.run(enqueue_control(app, name), loop_factory=_loop_factory())
     except (QueueError, RunnerError) as exc:
         return EXIT_MISCONFIGURED, f"the control was not enqueued: {exc}"

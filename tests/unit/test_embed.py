@@ -11,7 +11,7 @@ disagreement is asserted in both directions: a step declared as an orphan that h
 caller is a finding, and so is a step declared as wired that has lost one.
 
 **The width refusal is asserted by moving the column, not by moving the constant.** Asserting
-that `embed_chunks` refuses when `dimension_gaps` returns something, with `dimension_gaps`
+that `embed_units` refuses when `dimension_gaps` returns something, with `dimension_gaps`
 patched, would test the `if`. Patching the column's declared width instead exercises the real
 comparison and the real call site, and the service's call count is what says the refusal
 happened before anything left the process rather than after.
@@ -24,7 +24,7 @@ Task ids: none
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -38,16 +38,25 @@ from brain.knowledge.embed import (
     EXIT_REFUSED,
     Piece,
     WiringError,
-    embed_chunks,
+    embed_question,
+    embed_units,
     main,
     wiring_gaps,
 )
-from brain.knowledge.embed_policy import COLUMN_DIMENSIONS, ENDPOINT_SETTING, dimension_gaps
-from brain.knowledge.embed_queue import Embedded, EmbeddingBatch
+from brain.knowledge.embed_policy import (
+    COLUMN_DIMENSIONS,
+    ENDPOINT_SETTING,
+    QUESTION_UNIT_ID,
+    REVISION_SETTING,
+    dimension_gaps,
+    served_embedding_model,
+)
+from brain.knowledge.embed_queue import Embedded, EmbeddingBatch, EmbeddingUnit, units_for
 from brain.knowledge.embedding import EmbeddedVector, EmbeddingError
 from brain.knowledge.item import KnowledgeItem
 from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.controls import call_sites
+from brain.ops.inference import InferenceRefused
 
 A_REVISION = "v1.0.0"
 
@@ -73,39 +82,47 @@ def _chunks(text: str = "Deployments go out on a Tuesday.") -> tuple[Chunk, ...]
     )
 
 
+def _units(text: str = "Deployments go out on a Tuesday.") -> tuple[EmbeddingUnit, ...]:
+    """The passages a worker reads back, as units of chunks the one function made."""
+    return units_for(_chunks(text))
+
+
 @dataclass
 class FakeService:
     """An `EmbeddingService` that answers every id it was asked about, and counts being asked."""
 
     calls: int = 0
 
+    @staticmethod
+    def values() -> tuple[float, ...]:
+        return tuple([1.0 / (COLUMN_DIMENSIONS**0.5)] * COLUMN_DIMENSIONS)
+
     def embed(self, batch: EmbeddingBatch) -> tuple[Embedded, ...]:
         self.calls += 1
-        values = tuple([1.0 / (COLUMN_DIMENSIONS**0.5)] * COLUMN_DIMENSIONS)
-        vector = EmbeddedVector(model=batch.model, values=values)
+        vector = EmbeddedVector(model=batch.model, values=self.values())
         return tuple(Embedded(chunk_id=unit.chunk_id, vector=vector) for unit in batch.units)
 
 
 # ------------------------------------------------------ the sequence, in one place
 
 
-def test_chunks_become_writes_carrying_the_vector_and_the_model_that_produced_it() -> None:
-    """The positive case, and the only test that says the four calls are in an order that
-    works at all. Every refusal below is satisfied by a function that refuses everything.
+def test_passages_become_writes_carrying_the_vector_and_the_model_that_produced_it() -> None:
+    """The positive case, and the only test that says the calls are in an order that works at
+    all. Every refusal below is satisfied by a function that refuses everything.
 
     The write's columns are asserted rather than its existence, because the property the
     sequence has to preserve is that a vector and the identity recorded beside it are filled
     from one object.
 
-    Delete this and `embed_chunks` can be reordered into something that never produces a
+    Delete this and `embed_units` can be reordered into something that never produces a
     write, with every refusal test still green."""
-    chunks = _chunks()
+    units = _units()
     service = FakeService()
-    run = embed_chunks(chunks, service=service, revision=A_REVISION)
+    run = embed_units(units, service=service, revision=A_REVISION)
 
     assert run.is_complete
     assert service.calls == 1
-    assert [write.chunk_id for write in run.writes] == [one.chunk_id for one in chunks]
+    assert [write.chunk_id for write in run.writes] == [one.chunk_id for one in units]
     assert run.writes[0].vector.model.revision == A_REVISION
 
 
@@ -132,7 +149,7 @@ def test_nothing_is_sent_when_this_install_cannot_store_what_its_model_produces(
     service = FakeService()
 
     with pytest.raises(EmbeddingError, match="nothing was sent"):
-        embed_chunks(_chunks(), service=service, revision=A_REVISION)
+        embed_units(_units(), service=service, revision=A_REVISION)
     assert service.calls == 0
 
 
@@ -143,7 +160,7 @@ def test_an_install_whose_column_holds_what_its_model_produces_is_not_refused() 
 
     Delete this and the width refusal can be made unconditional, which is an embedding leg
     that never runs on any install and a test suite that says so nowhere."""
-    assert embed_chunks(_chunks(), service=FakeService(), revision=A_REVISION).is_complete
+    assert embed_units(_units(), service=FakeService(), revision=A_REVISION).is_complete
 
 
 def test_a_request_to_embed_no_chunks_is_refused_rather_than_reported_as_complete() -> None:
@@ -153,7 +170,7 @@ def test_a_request_to_embed_no_chunks_is_refused_rather_than_reported_as_complet
 
     Delete this and a scan that found nothing is indistinguishable from work that was done."""
     with pytest.raises(EmbeddingError, match="report success"):
-        embed_chunks((), service=FakeService(), revision=A_REVISION)
+        embed_units((), service=FakeService(), revision=A_REVISION)
 
 
 def test_a_run_is_cut_into_as_many_batches_as_the_bound_allows() -> None:
@@ -166,13 +183,62 @@ def test_a_run_is_cut_into_as_many_batches_as_the_bound_allows() -> None:
 
     Delete this and the batching parameters can stop being passed on, and the failure radius
     of one interrupted request becomes the whole job."""
-    chunks = _chunks("One. Two. Three. " * 400)
+    units = _units("One. Two. Three. " * 400)
     service = FakeService()
-    run = embed_chunks(chunks, service=service, revision=A_REVISION, max_chunks=1)
+    run = embed_units(units, service=service, revision=A_REVISION, max_chunks=1)
 
-    assert len(chunks) > 1
-    assert service.calls == len(chunks)
+    assert len(units) > 1
+    assert service.calls == len(units)
     assert run.is_complete
+
+
+# ------------------------------------------------------ a question, which is not a passage
+
+
+@dataclass
+class Answering:
+    """An `EmbeddingService` answering every batch with what it was told to, and keeping them."""
+
+    answer: tuple[Embedded, ...] = ()
+    asked: list[EmbeddingBatch] = field(default_factory=list)
+
+    def embed(self, batch: EmbeddingBatch) -> tuple[Embedded, ...]:
+        self.asked.append(batch)
+        return self.answer
+
+
+def test_a_question_travels_as_one_input_under_the_served_model_and_comes_back_a_vector() -> None:
+    """The query leg's positive case. The question is sent as a batch of one whose id no chunk
+    can hold, under the model identity a passage is written with, and what comes back is the
+    vector alone.
+
+    Delete this and `embed_question` can send the question under a model the corpus was not
+    written with, which `vector_query` answers by finding nothing, for every question."""
+    model = served_embedding_model(revision=A_REVISION)
+    vector = EmbeddedVector(model=model, values=FakeService.values())
+    service = Answering(answer=(Embedded(chunk_id=QUESTION_UNIT_ID, vector=vector),))
+
+    found = embed_question("When do deployments go out?", service=service, revision=A_REVISION)
+
+    assert found == vector
+    [batch] = service.asked
+    assert [(unit.chunk_id, unit.text) for unit in batch.units] == [
+        (QUESTION_UNIT_ID, "When do deployments go out?")
+    ]
+    assert batch.model.identity == model.identity
+
+
+def test_a_question_answered_with_a_vector_for_something_else_is_refused() -> None:
+    """The refusal beside it, reached through the real call. A server answering a batch of one
+    with a vector for another id is answering another question.
+
+    Delete this and `embed_question` can take whatever vector came back first."""
+    model = served_embedding_model(revision=A_REVISION)
+    vector = EmbeddedVector(model=model, values=FakeService.values())
+    service = Answering(answer=(Embedded(chunk_id="k_sop.0000", vector=vector),))
+
+    with pytest.raises(InferenceRefused):
+        embed_question("When?", service=service, revision=A_REVISION)
 
 
 # ------------------------------------------------------ what is written and what runs it
@@ -197,25 +263,23 @@ def test_every_step_on_this_path_is_listed_with_the_state_the_source_is_actually
             assert callers, f"{piece.symbol} is listed as wired and nothing calls it"
 
 
-def test_the_sequence_this_module_assembles_gave_five_steps_a_caller() -> None:
-    """The measurable half of what building `embed_chunks` was for. Four planning functions and
-    the width check had no caller anywhere in `src/brain`; they are called from one place now,
-    and that place is named rather than assumed.
+def test_the_sequence_is_assembled_here_and_run_from_the_store_the_worker_and_the_tool() -> None:
+    """Where each piece of the path is called from, read out of the source. The run, the width
+    check and the question's reader are called from this module alone, so the order they run in
+    is decided in one place; the store calls that order for a stored window, the worker calls
+    the store, and the search tool embeds a question.
 
     Asserted from `call_sites` rather than from `EMBED_PATH`, so this cannot pass by the
     declaration being edited.
 
     Delete this and the assembly can be inlined back into whichever caller arrives first, and
-    the four functions go back to being reachable only by reading four files."""
-    reached = {
-        "brain.knowledge.embed_queue:units_for",
-        "brain.knowledge.embed_queue:plan_batches",
-        "brain.knowledge.embed_policy:served_embedding_model",
-        "brain.knowledge.embed_policy:embed_all",
-        "brain.knowledge.embed_policy:dimension_gaps",
-    }
-    for symbol in sorted(reached):
-        assert call_sites(symbol) == ("brain.knowledge.embed",)
+    the pieces go back to being reachable only by reading five files."""
+    assert call_sites("brain.knowledge.embed_policy:embed_all") == ("brain.knowledge.embed",)
+    assert call_sites("brain.knowledge.embed_policy:dimension_gaps") == ("brain.knowledge.embed",)
+    assert call_sites("brain.knowledge.embed_policy:question_vector") == ("brain.knowledge.embed",)
+    assert call_sites("brain.knowledge.embed:embed_units") == ("brain.knowledge.chunk_store",)
+    assert call_sites("brain.knowledge.chunk_store:run_embed_job") == ("brain.ops.worker",)
+    assert call_sites("brain.knowledge.embed:embed_question") == ("brain.knowledge.document_tools",)
 
 
 def test_the_report_names_a_step_and_what_it_needs_rather_than_counting_them() -> None:
@@ -239,7 +303,7 @@ def test_a_step_that_is_reached_produces_no_finding() -> None:
     missing on the day it is finished.
 
     Delete this and the list stops being able to shrink."""
-    reached = Piece(symbol="brain.knowledge.embed:embed_chunks", step="it runs")
+    reached = Piece(symbol="brain.knowledge.embed:embed_units", step="it runs")
 
     assert wiring_gaps((reached,)) == ()
 
@@ -252,7 +316,7 @@ def test_a_step_cannot_be_declared_reached_and_waiting_at_the_same_time() -> Non
     Delete this and a row can say both, and the report and the code disagree with nobody able
     to say which is true."""
     with pytest.raises(WiringError, match="does not say what it does"):
-        Piece(symbol="brain.knowledge.embed:embed_chunks", step="  ")
+        Piece(symbol="brain.knowledge.embed:embed_units", step="  ")
 
 
 def test_a_step_whose_symbol_nothing_could_be_asked_about_is_refused() -> None:
@@ -263,7 +327,7 @@ def test_a_step_whose_symbol_nothing_could_be_asked_about_is_refused() -> None:
 
     Delete this and a mistyped module path reads as a step nothing calls."""
     with pytest.raises(WiringError, match="module:function"):
-        Piece(symbol="brain.knowledge.embed.embed_chunks", step="it runs")
+        Piece(symbol="brain.knowledge.embed.embed_units", step="it runs")
 
 
 def test_the_address_this_product_ships_resolves_to_the_service_this_product_ships() -> None:
@@ -382,6 +446,44 @@ def test_an_install_with_nothing_wrong_is_told_so_rather_than_shown_an_empty_hea
     main(["--check"], {ENDPOINT_SETTING: AN_ENDPOINT})
 
     assert "nothing wrong with this install" in capsys.readouterr().out
+
+
+def test_the_check_says_nothing_is_embedded_while_the_revision_is_unset(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An install that has not said which weights its server holds has no vector leg, and the
+    operator asking whether this install embeds is owed that sentence rather than an address
+    that reads as though text is being sent there.
+
+    Delete this and the check can print a healthy report for an install that embeds nothing."""
+    main(["--check"], {ENDPOINT_SETTING: AN_ENDPOINT})
+
+    assert f"nothing is embedded on this install: {REVISION_SETTING} is unset" in (
+        capsys.readouterr().out
+    )
+
+
+def test_the_check_names_the_identity_vectors_are_recorded_under_once_a_revision_is_declared(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The positive sibling. Delete this and the unset sentence can be printed for every
+    install, which tells an operator who set the revision that it did nothing."""
+    main(["--check"], {ENDPOINT_SETTING: AN_ENDPOINT, REVISION_SETTING: A_REVISION})
+    printed = capsys.readouterr().out
+
+    assert served_embedding_model(revision=A_REVISION).identity in printed
+    assert "nothing is embedded" not in printed
+
+
+def test_a_revision_the_corpus_cannot_record_is_refused_by_the_check(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A value somebody wrote that is not a revision is refused, not read as unset. Delete this
+    and a typo in the setting switches the vector leg off with the check calling it a choice."""
+    code = main(["--check"], {ENDPOINT_SETTING: AN_ENDPOINT, REVISION_SETTING: "not a revision"})
+
+    assert code == EXIT_REFUSED
+    assert REVISION_SETTING in capsys.readouterr().err
 
 
 def test_the_check_prints_what_is_missing_as_a_fraction_of_the_whole_path(

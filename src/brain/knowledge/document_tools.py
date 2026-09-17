@@ -36,13 +36,25 @@ with knowledge" false for everything that was not company-wide. Now each chunk s
 `Reach` builds both walls, so they cannot be built for two different callers. See
 `THE_SECOND_WALL_IS_RAISED_BY_EVERY_CHUNK_STATEMENT`.
 
-**The iterative scan settings are not carried, because nothing here reads the vector index.**
-`brain.knowledge.search.iterative_scan_statements` tunes how the HNSW index is walked under a
-filter, and only `vector_query` walks it. These tools fuse the lexical legs with an empty vector
-leg, because this process has no embedding of the question to search with, so carrying them
-would set two index parameters on statements that never touch the index. The day a vector leg is
-added here, its statement carries both, and a test fails first to say so. See
-`NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX`.
+**The vector leg runs when this install embeds questions, and only that statement carries the
+iterative scan settings.** Until 2026-09-17 these tools fused the lexical legs with an empty
+vector leg, because nothing embedded a question. A `QuestionEmbedder` is handed in now when the
+install has declared which weights its inference server holds, and the question's vector is
+searched by `brain.knowledge.search.vector_query`, whose WHERE clause is `reach_predicate` for
+the same `Reach` as every other statement here, with the asker's department branch compiled by
+`brain.core.scope_sql`. The top-k is therefore drawn from what the asker may already read and
+nothing is filtered afterwards. `iterative_scan_statements` tunes how the HNSW index is walked
+under that filter and is carried by that statement alone, because it is the only one that walks
+the index. See `ONLY_THE_VECTOR_LEG_WALKS_THE_INDEX_AND_IT_CARRIES_THE_SCAN_SETTINGS`.
+
+**A question that could not be embedded is a degraded answer, and it is raised rather than
+answered from half the retrieval.** `embed_policy.OUTAGE_POLICY` says the query leg's outage is
+`Outcome.DEGRADED` and never `OK`, and `TypedResult` has no field that could say "these passages
+came from text search alone". So an install that embeds questions and cannot embed this one
+raises `Degraded`, whose public message names no document and no count. Rejected: answering from
+the lexical legs and saying nothing, which is the silent degradation that policy is written
+against; and a field on `TypedResult`, which is every tool's contract and not this module's to
+widen. See `A_QUESTION_THAT_COULD_NOT_BE_EMBEDDED_IS_DEGRADED_AND_SAYS_SO`.
 
 **The departments are read from `gate.department`, on each call.** `reach_for` needs the
 registry of departments, because a grant with no department clause reaches every department
@@ -78,7 +90,9 @@ Task ids: M15.2.6, M15.3.2
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final
@@ -90,8 +104,13 @@ from sqlalchemy.sql import Select
 
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import Entity, IdentityMode, SideEffect, ToolDefinition, TypedResult
+from brain.core.errors import Degraded
 from brain.core.scope import Clause, Op, Scope
 from brain.knowledge.assembly import RetrievedChunk, by_chunk, by_document
+from brain.knowledge.embed import embed_question
+from brain.knowledge.embed_policy import EmbeddingLeg, outage_response
+from brain.knowledge.embed_queue import EmbeddingService
+from brain.knowledge.embedding import EmbeddedVector, EmbeddingError
 from brain.knowledge.item import ITEM_ID_PATTERN
 from brain.knowledge.rows import RowQuery, RowSource
 from brain.knowledge.search import (
@@ -100,13 +119,16 @@ from brain.knowledge.search import (
     KNOWLEDGE_READ,
     RETRIEVABLE_STATE_VALUES,
     Reach,
+    SearchError,
     cjk_lexical_query,
     hybrid,
+    iterative_scan_statements,
     lexical_legs,
     lexical_query,
     reach_for,
     reach_predicate,
     session_settings,
+    vector_query,
 )
 from brain.tables.gate import DepartmentRow
 
@@ -131,12 +153,23 @@ THE_SECOND_WALL_IS_RAISED_BY_EVERY_CHUNK_STATEMENT: Final = (
     "runs them in the statement's own transaction."
 )
 
-#: Why the iterative scan settings are not carried. See the module docstring.
-NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX: Final = (
-    "iterative_scan_statements tunes how the HNSW index is walked under a filter, and only a "
-    "vector leg walks it. These tools fuse the lexical legs with an empty vector leg, so the "
-    "settings would tune an index no statement here reads. A vector leg added here carries "
-    "them with its statement."
+#: Why exactly one statement carries the iterative scan settings. See the module docstring.
+ONLY_THE_VECTOR_LEG_WALKS_THE_INDEX_AND_IT_CARRIES_THE_SCAN_SETTINGS: Final = (
+    "iterative_scan_statements tunes how the HNSW index is walked under a filter, and only the "
+    "vector leg walks it. Without them a narrow caller gets whatever fraction of one ef_search "
+    "window passes the reach predicate, which is fewer passages than asked for with nothing "
+    "saying so. So the vector statement carries them beside the caller's settings, and no "
+    "other statement carries them, because tuning an index a statement never reads is a "
+    "setting nobody can say the purpose of."
+)
+
+#: Why an embedding outage on a question is raised. See the module docstring.
+A_QUESTION_THAT_COULD_NOT_BE_EMBEDDED_IS_DEGRADED_AND_SAYS_SO: Final = (
+    "An install that embeds questions answers from two legs, and a question the server could "
+    "not embed has one. Returned as an ordinary result, the passages from text search alone "
+    "read exactly like a full answer, and nothing repairs an answer somebody has already read. "
+    "The result envelope has no field to say it, so the handler raises Degraded, which says a "
+    "system could not be reached and names no document, no question and no count."
 )
 
 #: Why the definitions leave `source` empty.
@@ -335,7 +368,59 @@ def document_query(document_id: str, *, reach: Reach, limit: int) -> RowQuery:
     )
 
 
+def vector_search_query(vector: EmbeddedVector, *, reach: Reach) -> RowQuery:
+    """The nearest-neighbour leg, under the reach, with the settings its index walk needs.
+
+    `vector_query` conjoins `reach_predicate` and the model the vector came from, so a question
+    embedded by a model the corpus was not written with finds nothing rather than something
+    meaningless. The settings are the caller's and then the scan's, in that order, all in the
+    statement's own transaction. See
+    `ONLY_THE_VECTOR_LEG_WALKS_THE_INDEX_AND_IT_CARRIES_THE_SCAN_SETTINGS`.
+    """
+    statement = vector_query(
+        vector.values, reach=reach, model=vector.model.identity, depth=CANDIDATE_DEPTH
+    )
+    return _query(
+        KNOWLEDGE_ENTITY,
+        ("chunk_id", "distance"),
+        statement,
+        empty=False,
+        settings=(*session_settings(reach), *iterative_scan_statements()),
+    )
+
+
 # ------------------------------------------------------------------ the handlers
+@dataclass(frozen=True)
+class QuestionEmbedder:
+    """What turns a question into a vector for this install: its service and declared weights.
+
+    Built by `brain.tools.startup.question_embedder` when the install has declared an embedding
+    revision, and absent otherwise, which is an install whose knowledge search is text search.
+    """
+
+    service: EmbeddingService
+    revision: str
+
+    async def vector(self, question: str) -> EmbeddedVector:
+        """The question's vector, off the event loop, because the service is a blocking call.
+
+        An outage and a response that cannot be searched with are both `Degraded`; see
+        `A_QUESTION_THAT_COULD_NOT_BE_EMBEDDED_IS_DEGRADED_AND_SAYS_SO`. The detail is the
+        outage policy's sentence and the exception's type, never the question.
+        """
+
+        # Called by name inside the function handed to the thread, for the reason
+        # `brain.knowledge.chunk_store.run_embed_job` gives about its own.
+        def embed() -> EmbeddedVector:
+            return embed_question(question, service=self.service, revision=self.revision)
+
+        try:
+            return await asyncio.to_thread(embed)
+        except (EmbeddingError, SearchError) as exc:
+            detail = f"{outage_response(EmbeddingLeg.QUERY).reason} ({type(exc).__name__})"
+            raise Degraded(detail) from exc
+
+
 async def reach_through(
     records: RowSource, entitlement: EntitlementSet, now: datetime | None
 ) -> Reach | None:
@@ -391,11 +476,15 @@ def _result(
     )
 
 
-def searcher(records: RowSource) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]]:
+def searcher(
+    records: RowSource, embedder: QuestionEmbedder | None = None
+) -> Callable[..., Awaitable[TypedResult[KnowledgePassage]]]:
     """The handler for `knowledge.search_documents`, bound to where the chunks are read.
 
     A closure, as `RowTool.reader` is, so the signature a registry inspects carries only what a
-    model may pass.
+    model may pass. With no embedder the vector leg is empty, which is an install that has not
+    declared its embedding weights; with one, the question is embedded after the reach is known
+    and before any chunk is read, so a caller who reaches nothing sends nothing to be embedded.
     """
 
     async def search(
@@ -407,13 +496,18 @@ def searcher(records: RowSource) -> Callable[..., Awaitable[TypedResult[Knowledg
         reach = await reach_through(records, entitlement, now)
         if reach is None:
             return _result((), now, truncated=False)
+        vector = None if embedder is None else await embedder.vector(request.question)
         legs = [
             await records.rows(query) for query in search_queries(request.question, reach=reach)
         ]
         # One ranking from the legs in the order they arrived, each passage once: a chunk that
         # matches in two scripts is one passage, and `Ranking` refuses it listed twice.
         lexical = tuple(dict.fromkeys(str(row["chunk_id"]) for rows in legs for row in rows))
-        page = [one.ref for one in hybrid(lexical=lexical, vector=(), limit=request.limit)]
+        nearest: tuple[str, ...] = ()
+        if vector is not None:
+            found = await records.rows(vector_search_query(vector, reach=reach))
+            nearest = tuple(dict.fromkeys(str(row["chunk_id"]) for row in found))
+        page = [one.ref for one in hybrid(lexical=lexical, vector=nearest, limit=request.limit)]
         bodies = passages_query(page, reach=reach)
         rows = () if bodies.certainly_empty else await records.rows(bodies)
         return _result(_passages(page, rows), now, truncated=len(page) == request.limit)
@@ -469,7 +563,13 @@ def read_definition() -> ToolDefinition:
 
 
 def knowledge_tools(
-    records: RowSource,
+    records: RowSource, embedder: QuestionEmbedder | None = None
 ) -> tuple[tuple[ToolDefinition, Callable[..., Awaitable[TypedResult[KnowledgePassage]]]], ...]:
-    """Both tools, each with its handler bound to `records`, for `build_registry` to register."""
-    return ((search_definition(), searcher(records)), (read_definition(), reader(records)))
+    """Both tools, each with its handler bound to `records`, for `build_registry` to register.
+
+    The embedder reaches the search alone: reading one document by its reference ranks nothing.
+    """
+    return (
+        (search_definition(), searcher(records, embedder)),
+        (read_definition(), reader(records)),
+    )

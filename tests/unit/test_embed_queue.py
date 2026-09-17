@@ -517,7 +517,9 @@ def test_an_embedding_job_names_a_window_because_the_chunk_ids_are_records() -> 
 
     Delete this and the ids can be packed into an argument, which is refused at enqueue for a
     small batch and accepted for a smaller one, so the shape works until it does not."""
-    job = embed_job(document_id="k_sop", first_ordinal=0, last_ordinal=199, model=MODEL)
+    job = embed_job(
+        document_id="k_sop", first_ordinal=0, last_ordinal=199, model=MODEL, owner_id="p_owner"
+    )
 
     assert job.task == EMBED_TASK
     assert job.args["document_id"] == "k_sop"
@@ -538,7 +540,9 @@ def test_embedding_work_is_queued_where_it_cannot_take_an_interactive_slot() -> 
 
     Delete this and embedding can be moved onto the async queue for throughput, where it
     competes with replies somebody is waiting for."""
-    job = embed_job(document_id="k_sop", first_ordinal=0, last_ordinal=1, model=MODEL)
+    job = embed_job(
+        document_id="k_sop", first_ordinal=0, last_ordinal=1, model=MODEL, owner_id="p_owner"
+    )
 
     assert job.traffic_class is TrafficClass.SYSTEM
     assert queue_name_for(job.traffic_class) == EMBED_QUEUE
@@ -553,7 +557,9 @@ def test_an_embedding_job_may_be_re_driven_because_its_write_is_an_update() -> N
 
     Delete this and the default takes over, which is `UNSAFE`, and every worker that dies
     mid-batch sends a re-embed to quarantine for a person to decide about by hand."""
-    job = embed_job(document_id="k_sop", first_ordinal=0, last_ordinal=1, model=MODEL)
+    job = embed_job(
+        document_id="k_sop", first_ordinal=0, last_ordinal=1, model=MODEL, owner_id="p_owner"
+    )
 
     assert job.redrive is Redrive.SAFE
 
@@ -565,7 +571,9 @@ def test_a_window_that_ends_before_it_starts_is_refused() -> None:
     Delete this and an off-by-one in a caller's windowing is invisible: the counters move and
     the corpus does not."""
     with pytest.raises(EmbeddingError, match="ends before it starts"):
-        embed_job(document_id="k_sop", first_ordinal=5, last_ordinal=4, model=MODEL)
+        embed_job(
+            document_id="k_sop", first_ordinal=5, last_ordinal=4, model=MODEL, owner_id="p_owner"
+        )
 
 
 def test_a_rebuild_job_carries_the_position_the_cursor_is_at() -> None:
@@ -712,3 +720,21 @@ def test_the_worker_preflight_asks_whether_a_batch_would_fit(
     )
 
     assert "a batch would not fit this slot" in preflight(environment)
+
+
+def test_an_embedding_job_names_who_it_runs_for_and_refuses_to_run_for_nobody() -> None:
+    """The worker reads a window back under the owner's reach, so the owner travels as a
+    reference beside the window. A job with no owner would read back company documents only,
+    and a department's chunks would never be embedded with every job reporting a failure
+    nobody could place.
+
+    Delete this and the owner can be dropped from the arguments, and the worker reads a window
+    under nobody's reach."""
+    job = embed_job(
+        document_id="k_sop", first_ordinal=0, last_ordinal=1, model=MODEL, owner_id="p_owner"
+    )
+
+    assert job.args["owner_id"] == "p_owner"
+    assert job.args["model"] == MODEL.identity
+    with pytest.raises(EmbeddingError, match="names nobody"):
+        embed_job(document_id="k_sop", first_ordinal=0, last_ordinal=1, model=MODEL, owner_id=" ")

@@ -776,6 +776,49 @@ def embedding_endpoint(env: Mapping[str, str] | None = None) -> str:
     return address
 
 
+#: The setting naming which weights the inference server holds. Read through
+#: `brain.install.value_of` and nowhere else, for the reason `ENDPOINT_SETTING` is.
+REVISION_SETTING: Final = "INSTALL_EMBEDDING_REVISION"
+
+#: The value meaning nobody has said, which is the declared default. A word rather than an empty
+#: string because `value_of` reads a blank as unset and substitutes the default, so an empty value
+#: could never be told apart from one nobody wrote; `INSTALL_STAFF_SOURCE_LOCATION` uses the same
+#: word for the same reason.
+REVISION_UNSET: Final = "unset"
+
+#: Why an undeclared revision turns the vector leg off rather than refusing a start.
+AN_UNDECLARED_REVISION_IS_AN_INSTALL_WITH_NO_VECTOR_LEG: Final = (
+    "Every vector is recorded under name, revision and width, and writes_for refuses a response "
+    "whose model is not the batch's, so an install that has not said which weights its server "
+    "holds cannot store a single vector: every batch would be sent, answered, and refused. So an "
+    "unset revision is read as an install with no vector leg at all. Nothing is enqueued, no "
+    "question is embedded, and the lexical leg answers alone, which is what the product did "
+    "before this leg was wired. Refusing to start instead would take text search down over a "
+    "setting that only the nearest-neighbour leg reads, and guessing a revision would be a "
+    "promise about a volume nobody here has looked at."
+)
+
+
+def embedding_revision(env: Mapping[str, str] | None = None) -> str | None:
+    """Which weights this install's server holds, or None when the install has not said.
+
+    None is not a default revision and cannot become one: see
+    `AN_UNDECLARED_REVISION_IS_AN_INSTALL_WITH_NO_VECTOR_LEG`. A value that is set and is not a
+    revision `EmbeddingModel` accepts is refused by name rather than read as unset, because
+    somebody wrote it meaning something and the leg silently switching off is not what they
+    meant.
+    """
+    declared = value_of(REVISION_SETTING, env).strip()
+    if declared == REVISION_UNSET:
+        return None
+    try:
+        served_embedding_model(revision=declared)
+    except EmbeddingError as exc:
+        msg = f"{REVISION_SETTING}={declared!r} is not a revision this system can record: {exc}"
+        raise EmbeddingError(msg) from exc
+    return declared
+
+
 def endpoint_conflicts(*, endpoint: str, configured: str) -> tuple[str, ...]:
     """Whether the address that is checked at startup is the address text is actually sent to.
 

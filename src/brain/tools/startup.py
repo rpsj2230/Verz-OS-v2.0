@@ -135,7 +135,8 @@ from typing import Final
 
 from brain import demo
 from brain.knowledge.columns import PRICE_LIST, TableClassification
-from brain.knowledge.document_tools import KNOWLEDGE_PIN, knowledge_tools
+from brain.knowledge.document_tools import KNOWLEDGE_PIN, QuestionEmbedder, knowledge_tools
+from brain.knowledge.embed_policy import embedding_revision
 from brain.knowledge.rows import RowSource, RowTool
 from brain.tools.registry import ResultContract, ToolRegistry
 
@@ -247,6 +248,28 @@ def description_for(source: str, entity: str) -> str:
     return {**ROW_TOOL_DESCRIPTIONS, **SOURCE_ROW_DESCRIPTIONS.get(source, {})}[entity]
 
 
+def question_embedder(env: Mapping[str, str] | None = None) -> QuestionEmbedder | None:
+    """How this process embeds a question, or None when the install has declared no weights.
+
+    None is an install whose knowledge search is text search, which is every install until its
+    owner sets `INSTALL_EMBEDDING_REVISION`; see
+    `brain.knowledge.embed_policy.AN_UNDECLARED_REVISION_IS_AN_INSTALL_WITH_NO_VECTOR_LEG`.
+
+    **A declared revision with an address that is not one stops the start**, through
+    `make_client`'s refusal naming `INSTALL_MODEL_ENDPOINT`. The worker builds its client lazily
+    and keeps starting, because a worker runs controls that have nothing to do with embedding;
+    this process would otherwise answer every knowledge search degraded over a value somebody
+    typed, and the sentence saying why would be in no response a person reads. Imported here
+    rather than at the top so a process with no declared revision never builds an HTTP client.
+    """
+    revision = embedding_revision(env)
+    if revision is None:
+        return None
+    from brain.ops.inference_client import make_client
+
+    return QuestionEmbedder(service=make_client(env=env), revision=revision)
+
+
 def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegistry:
     """Every tool this application offers, checked and frozen (M12.1.5).
 
@@ -284,7 +307,7 @@ def build_registry(*, source: str, records: RowSource | None = None) -> ToolRegi
             )
         # The document plane, for every source. See
         # `THE_DOCUMENT_PLANE_IS_REGISTERED_WHEREVER_ROWS_ARE`.
-        for definition, handler in knowledge_tools(records):
+        for definition, handler in knowledge_tools(records, question_embedder()):
             registry.register(
                 definition,
                 handler,

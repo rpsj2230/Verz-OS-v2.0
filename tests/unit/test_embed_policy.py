@@ -46,6 +46,8 @@ from brain.knowledge.embed_policy import (
     FP16_ACCUMULATED_ERROR,
     QUESTION_UNIT_ID,
     QWEN3_EMBEDDING_DIMENSIONS,
+    REVISION_SETTING,
+    REVISION_UNSET,
     VECTOR_NORM_TOLERANCE,
     EmbeddingLeg,
     EmbeddingUnavailable,
@@ -54,6 +56,7 @@ from brain.knowledge.embed_policy import (
     dimension_gaps,
     embed_all,
     embedding_endpoint,
+    embedding_revision,
     endpoint_conflicts,
     endpoint_refusals,
     outage_response,
@@ -763,3 +766,35 @@ def test_a_replaced_run_is_checked_again_rather_than_trusted() -> None:
     run = embed_all((_batch("k_a.0000"),), FakeService())
     with pytest.raises(EmbeddingError):
         replace(run, completed=0)
+
+
+# ------------------------------------------ which weights the server holds
+
+
+def test_an_install_that_has_not_said_which_weights_it_serves_has_no_vector_leg() -> None:
+    """**An unset revision is no vector leg, not a guessed one.** Read through the setting's own
+    declared default, so an install that never wrote the line and one that wrote the declared
+    word both get None, and the default is asserted against `brain.install` rather than against
+    the constant beside the reader.
+
+    Delete this and a default revision can be filled in here, which records every vector under
+    a promise about weights nobody looked at, and every batch is refused by `writes_for` the
+    moment a server states the weights it actually holds."""
+    assert BY_NAME[REVISION_SETTING].default == "unset"
+    assert embedding_revision({}) is None
+    assert embedding_revision({REVISION_SETTING: REVISION_UNSET}) is None
+    assert embedding_revision({REVISION_SETTING: ""}) is None
+
+
+def test_a_declared_revision_is_the_one_vectors_are_recorded_under() -> None:
+    """The positive sibling, and the one that says the setting is read at all. Delete this and
+    the reader can return None for everything, which is an install that set the revision and
+    embeds nothing."""
+    assert embedding_revision({REVISION_SETTING: A_REVISION}) == A_REVISION
+
+
+def test_a_revision_the_identity_cannot_hold_is_refused_naming_the_setting() -> None:
+    """A value somebody wrote meaning something is refused rather than read as unset. Delete
+    this and a typo switches the vector leg off with nothing saying which value did it."""
+    with pytest.raises(EmbeddingError, match=REVISION_SETTING):
+        embedding_revision({REVISION_SETTING: "not a revision"})

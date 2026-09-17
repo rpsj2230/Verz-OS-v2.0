@@ -38,17 +38,17 @@ again at full cost; that is a contract failure and reads as `InferenceRefused`, 
 `outage_response` is written about. The two are separate so an operator is not sent to look at
 a server that is fine.
 
-**Nothing calls anything in this module, and the reason changed on 2026-09-11.** It used to be
-the address: `make_client` took one as a parameter and read `Settings.inference_url` nowhere,
-so there was no answer to where a client's text goes. That half is closed, and closed in the
-one place an installation value may be read: the address is `INSTALL_MODEL_ENDPOINT`, resolved
-by `brain.knowledge.embed_policy.embedding_endpoint`, and this module has no parameter that
-could name another. What is still absent is a caller: `embed` needs a batch, and nothing
-enqueues one because `brain.knowledge.embed_queue.embed_job` has no caller either.
-`brain.knowledge.embed.wiring_gaps` names both by symbol. It has never been run against a
-server, only against a fake, and the fake exercises the refusals rather than standing in for a
-service. That is the same refusal `docker-compose.inference.yml` makes about M7.3.3 and this
-module does not change it.
+**Who calls this, and what it has never been run against.** The address was the first gap:
+`make_client` took one as a parameter until 2026-09-11 and read `Settings.inference_url`
+nowhere, so there was no answer to where a client's text goes. That was closed in the one place
+an installation value may be read: the address is `INSTALL_MODEL_ENDPOINT`, resolved by
+`brain.knowledge.embed_policy.embedding_endpoint`, and this module has no parameter that could
+name another. The caller was the second gap, and since 2026-09-17 there are two:
+`brain.ops.worker.register_tasks` builds one client for the life of a worker, for the embedding
+task, and `brain.tools.startup.question_embedder` builds one for the search tool when the
+install has declared its embedding revision. It has still never been run against a server, only
+against stand-ins, which is the same refusal `docker-compose.inference.yml` makes about M7.3.3
+and this module does not change it.
 
 Scope: the client half. This module opens a connection and reads a clock, and it is the only
 one on this leg that may.
@@ -293,7 +293,7 @@ class _HttpxTransport:
 def make_client(
     *, env: Mapping[str, str] | None = None, timeout_seconds: float = EMBED_TIMEOUT_SECONDS
 ) -> InferenceEmbeddingClient:
-    """An embedding client pointed at this install's inference server. Nothing calls this.
+    """An embedding client pointed at this install's inference server.
 
     **There is no `base_url` parameter, and its absence is the point.** It took one until
     2026-09-11 and nothing supplied it, so the address a client's document text is posted to

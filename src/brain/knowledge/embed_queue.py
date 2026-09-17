@@ -15,8 +15,9 @@ was decided on 2026-09-06 as Option A: the models live in a separate service and
 it over the network, so the machine-learning stack measured there at roughly 1.5 GB never
 becomes a dependency of this repository. What is left here is a seam. `EmbeddingService` is the
 whole of what this module may ask of that service, declared the way
-`brain.knowledge.rows.RowSource` and `brain.tools.run_skill.ScriptRunner` are declared, and
-**nothing in this repository implements it**. See `NOTHING_IMPLEMENTS_THE_EMBEDDING_SERVICE`.
+`brain.knowledge.rows.RowSource` and `brain.tools.run_skill.ScriptRunner` are declared, and its
+one implementation is `brain.ops.inference_client`, which decides nothing. See
+`NOTHING_IMPLEMENTS_THE_EMBEDDING_SERVICE` for the shape it has to fit.
 
 **An embedding writes two columns and can never write a third, which is how a re-embed cannot
 lose a scope.** The catastrophic version of this leaf is quiet: a rebuild re-embeds the text,
@@ -59,19 +60,16 @@ And a metered provider would make the second run a second invoice, which is a si
 world can see; that one is not true of a local inference server and is the reason Option A
 matters here beyond the memory it saves.
 
-**What has no caller yet, stated plainly rather than implied.** `embed_batch_gaps` is called by
-`brain.ops.worker.preflight`, which is the process that would run these batches, and it is
-checked there rather than on the parse worker's condition because a slot is a slot: any
-container draining the queue may be handed an embedding batch. Everything else here has no
-caller and cannot have one today, and there are three separate reasons rather than one.
-`units_for`, `plan_batches`, `embed_batch` and `writes_for` need an `EmbeddingService`, and
-nothing implements one. `embed_job` and `rebuild_job` build a job nobody enqueues, and that
-reason changed on 2026-09-11: it used to be that there was no driver, and M32.4.1.1 installed
-one, so the queue these jobs would go on now exists and is drained. What is missing is one step
-further in, a caller that constructs either job and hands it over. And `EmbeddingWrite` is an
-update nobody applies, because there is no chunk repository in this repository: `know.chunk` is
-a table and a set of queries, with no writer. Naming the three is worth more than a mechanism
-that looks wired.
+**Who calls what, stated plainly rather than implied.** `embed_batch_gaps` is called by
+`brain.ops.worker.preflight`, which is the process that runs these batches, and it is checked
+there rather than on the parse worker's condition because a slot is a slot: any container
+draining the queue may be handed an embedding batch. Since 2026-09-17 the rest of the ingest
+leg has callers too. `brain.knowledge.chunk_store` writes `know.chunk`, builds `embed_job` when
+it writes a document's chunks, and applies every `EmbeddingWrite` the worker's run returns;
+`brain.ops.inference_client` implements `EmbeddingService`. What still has no caller is
+`rebuild_job`: nothing constructs a rebuild, which is `brain.knowledge.embedding`'s command and
+not this leaf. `brain.knowledge.embed.wiring_gaps` is the list of what is still missing, held to
+the source by a test, and it is the place to look rather than this paragraph.
 
 The driver's own name is deliberately not written here, and that is not squeamishness:
 `tests/unit/test_queue.py` fails the build when any module outside `brain.ops.queue` names an
@@ -555,7 +553,7 @@ def writes_for(batch: EmbeddingBatch, embedded: Sequence[Embedded]) -> tuple[Emb
 
 
 def embed_batch(batch: EmbeddingBatch, service: EmbeddingService) -> tuple[EmbeddingWrite, ...]:
-    """Send one batch and return the updates it produced. Nothing calls this yet.
+    """Send one batch and return the updates it produced.
 
     The budget was enforced when the batch was built, which is the point of enforcing it there:
     by the time a request is being made there is nothing useful left to check, and a bound
@@ -593,11 +591,19 @@ REEMBED_TASK: Final = "knowledge.reembed"
 #: whatever the default would have been.
 MODEL_ARGUMENT: Final = "model"
 
+#: How the principal a job runs for is spelled in its arguments, for the same reason.
+OWNER_ARGUMENT: Final = "owner_id"
+
 
 def embed_job(
-    *, document_id: str, first_ordinal: int, last_ordinal: int, model: EmbeddingModel
+    *,
+    document_id: str,
+    first_ordinal: int,
+    last_ordinal: int,
+    model: EmbeddingModel,
+    owner_id: str,
 ) -> Job:
-    """Queue the embedding of one document's chunks, by ordinal window. Nothing calls this yet.
+    """Queue the embedding of one document's chunks, by ordinal window.
 
     **Identifiers and never records**, which `brain.ops.queue.Job` enforces and this shape is
     built for. The obvious argument list is the chunk ids, and two hundred of them is a copy of
@@ -605,6 +611,13 @@ def embed_job(
     window names exactly the same chunks in four values, because `chunk_document` builds ids as
     the document id and the ordinal, and the worker fetches them through the same gate as
     everything else at the time it runs.
+
+    **The owner is who the job runs for, and it is a reference rather than a reach.** `Job` says
+    what to run, for whom, and which identifiers it needs, and `know.chunk`'s policy admits a
+    reader only through `app.principal_id` and `app.departments`. So the worker resolves the
+    owner's grants as they stand when the job runs, `brain.knowledge.chunk_store.run_embed_job`
+    does exactly that, and nothing about what the owner may reach is written into the queue row,
+    where a grant revoked after the enqueue would still be sitting.
 
     `Redrive.SAFE`, which is the only one in this repository: see the module docstring for what
     makes that true and the two changes that would end it.
@@ -618,6 +631,13 @@ def embed_job(
             "chunks and the job would report success having embedded nothing"
         )
         raise EmbeddingError(msg)
+    if not owner_id.strip():
+        msg = (
+            f"the embedding of {document_id!r} names nobody to run for; the chunks are read back "
+            "under a person's reach, and a job with no person reaches nothing but company "
+            "documents, so a department's chunks would never be embedded"
+        )
+        raise EmbeddingError(msg)
     return Job(
         task=EMBED_TASK,
         traffic_class=EMBED_TRAFFIC_CLASS,
@@ -626,6 +646,7 @@ def embed_job(
             "first_ordinal": first_ordinal,
             "last_ordinal": last_ordinal,
             MODEL_ARGUMENT: model.identity,
+            OWNER_ARGUMENT: owner_id,
         },
         redrive=Redrive.SAFE,
     )
@@ -644,7 +665,8 @@ def rebuild_job(*, plan: RebuildPlan, cursor: RebuildCursor) -> Job | None:
     another leaves the corpus holding both, plus whatever it started on.
 
     Nothing calls this yet, and since M32.4.1.1 that is no longer because there is nowhere to
-    send it: there is a driver and a worker draining a queue. Nothing constructs this job.
+    send it: there is a driver, a worker draining a queue, and since 2026-09-17 a registered
+    task for the ingest job beside it. Nothing constructs a rebuild.
     """
     batch = next_batch(plan=plan, cursor=cursor)
     if batch.is_finished:

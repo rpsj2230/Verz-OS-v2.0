@@ -1,14 +1,14 @@
-"""The sequence from a chunk needing an embedding to the writes that store one, and what is
-still missing before anything runs it.
+"""The sequence from a chunk needing an embedding to the writes that store one, the question's
+own leg beside it, and what is still missing before anything runs either.
 
 `brain.knowledge.embed_queue` cuts work into batches, `brain.knowledge.embed_policy` holds
 every decision taken before a socket is opened, `brain.ops.inference` holds the wire contract
 and `brain.ops.inference_client` is the only thing that speaks to the server. Four modules,
 each correct, and **until this one there was no order in which to call them**. A caller had to
-know to build the model with `served_embedding_model`, drop the permissions with `units_for`,
-cut the work with `plan_batches` against that same model, and stop at the first failure with
-`embed_all`. Four calls in one order, discoverable only by reading four files, which is the
-shape of thing that gets assembled differently by the second person to need it.
+know to build the model with `served_embedding_model`, cut the work with `plan_batches` against
+that same model, and stop at the first failure with `embed_all`. Calls in one order,
+discoverable only by reading four files, which is the shape of thing that gets assembled
+differently by the second person to need it.
 
 **The width is refused here rather than reported here, and that is the decision in this
 module.** `dimension_gaps` compares what the served model produces against what
@@ -21,32 +21,43 @@ one request per batch, for vectors PostgreSQL will refuse at the insert. So the 
 the operator and this refuses before the first request. See
 `A_WIDTH_THE_COLUMN_CANNOT_HOLD_IS_REPORTED_AT_STARTUP_AND_REFUSED_HERE`.
 
+**The worker's run starts from stored rows, not from `Chunk` objects, and that changed the entry
+point on 2026-09-17.** `embed_chunks` took `Chunk` because `chunk_document` is the only thing that
+copies a document's permissions onto a passage. The queued job names an ordinal window rather
+than the chunks, so what the worker has in hand is rows read back from `know.chunk`, and a
+`Chunk` cannot be rebuilt from a row, by design. `embed_units` is therefore the sequence and
+takes `EmbeddingUnit`s, which carry an id and a text and nothing else. The guarantee `Chunk` gave
+is kept one step earlier: `brain.knowledge.chunk_store` is the only writer of `know.chunk` and it
+writes nothing `chunk_document` did not produce, so a row read back is a chunk that came through
+the one door. Rejected: keeping `embed_chunks` beside it, which would have been a function with
+tests and no caller, the exact thing `wiring_gaps` exists to report.
+
 **What leaves this system on this path, exactly.** One POST per batch, to the one address
 `embedding_endpoint` resolves, carrying `brain.ops.inference.embedding_request`'s two keys: a
 model block of name, revision and width, and one input per chunk of an id and a text.
-`EmbeddingUnit` has two fields and no third that could hold a scope, `units_for` takes `Chunk`
-objects and keeps two of their nine attributes, and the request is `MappingProxyType` at every
-level so nothing can add a key to it on the way out. Three things stop it sending more and all
-three are structural rather than a convention: the value cannot carry a permission, the mapping
-cannot grow one, and the network the server sits on is declared `internal: true`, so a
-container on it has no route off the host. What is **not** structural is the host: nothing here
-can tell an internal name from a public one, and `endpoint_refusals` says so rather than
-shipping a list of provider hostnames.
+`EmbeddingUnit` has two fields and no third that could hold a scope, and the request is
+`MappingProxyType` at every level so nothing can add a key to it on the way out. A question
+travels the same way, as a batch of one whose id no chunk can have. Three things stop either
+sending more and all three are structural rather than a convention: the value cannot carry a
+permission, the mapping cannot grow one, and the network the server sits on is declared
+`internal: true`, so a container on it has no route off the host. What is **not** structural is
+the host: nothing here can tell an internal name from a public one, and `endpoint_refusals`
+says so rather than shipping a list of provider hostnames.
 
-**Nothing calls `embed_chunks`, and that is a fact about the queue rather than about this
-module.** `embed_job` builds the job and nothing enqueues one; `know.chunk` is a table and a
-set of queries with no writer, so the writes this returns have nowhere to be applied; and the
-inference server has no published image. `wiring_gaps` names each of those by symbol, in the
-order the path runs, and `tests/unit/test_embed.py` holds every entry to what
-`brain.ops.controls.call_sites` reads out of the source, so a step that gains a caller and is
-still listed here is a red test. That is the shape `brain.ops.schedule_runner.runner_gaps`
-takes for twelve controls, and the reason is the same: a written-down omission is not a check.
+**The embedder is this company's own server on every profile, and a hosted provider is not an
+option here.** `embed_policy.EMBEDDING_IS_LOCAL_ON_EVERY_MODEL_PROFILE` argues it and a test holds
+the endpoint to one value under both profiles: an embedder is handed every passage of every
+document, including the ones nobody may read, so the boundary item 31 drew for a memory reason
+is kept for a stronger one. A hosted embedder is a decision for the owner, not an edit here.
 
-**M7.3.3 is not claimed and cannot be**, which is why `Task ids` below says none. The leaf is
-"local embedding via Qwen3 through the inference server" and nothing here has ever embedded
-anything: `docker-compose.inference.yml` names an image that does not exist, item 25 records
-the container as roughly 3.3 GB over what the host has, and no weights have been pulled. What
-is finished is everything on this side of the socket.
+**M7.3.3 is not claimed**, which is why `Task ids` below says none. The leaf is "local embedding
+via Qwen3 through the inference server" and nothing here has ever embedded anything against a
+server: `docker-compose.inference.yml` names an image that does not exist, item 25 records the
+container as roughly 3.3 GB over what the host has, and no weights have been pulled. What is
+finished is everything on this side of the socket, run end to end against a stand-in service.
+`wiring_gaps` names what is still not called by anything, by symbol, and
+`tests/unit/test_embed.py` holds every entry to what `brain.ops.controls.call_sites` reads out
+of the source, so a step that gains a caller and is still listed here is a red test.
 
 Scope: domain logic. Nothing here opens a connection, loads a model or reads a clock. The
 command reads an environment it is handed, which is what `brain.ops.worker.main` does.
@@ -62,21 +73,24 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from brain.knowledge.chunking import Chunk
 from brain.knowledge.embed_policy import (
     APP_ENDPOINT_SETTING,
     ENDPOINT_SETTING,
+    REVISION_SETTING,
     EmbeddingUnavailable,
     EmbedRun,
     dimension_gaps,
     embed_all,
     embedding_endpoint,
+    embedding_revision,
     endpoint_conflicts,
     policy_gaps,
+    question_batch,
+    question_vector,
     served_embedding_model,
 )
-from brain.knowledge.embed_queue import EmbeddingService, plan_batches, units_for
-from brain.knowledge.embedding import DEFAULT_BATCH_SIZE, EmbeddingError
+from brain.knowledge.embed_queue import EmbeddingService, EmbeddingUnit, plan_batches
+from brain.knowledge.embedding import DEFAULT_BATCH_SIZE, EmbeddedVector, EmbeddingError
 
 # ------------------------------------------------------------------ written-down reasons
 
@@ -108,30 +122,29 @@ EMBEDDING_NOTHING_IS_A_JOB_THAT_REPORTS_SUCCESS_HAVING_DONE_NOTHING: Final = (
 # ------------------------------------------------------ the sequence, in order (M7.3.3)
 
 
-def embed_chunks(
-    chunks: Sequence[Chunk],
+def embed_units(
+    units: Sequence[EmbeddingUnit],
     *,
     service: EmbeddingService,
     revision: str,
     max_chunks: int = DEFAULT_BATCH_SIZE,
     budget_bytes: int | None = None,
 ) -> EmbedRun:
-    """Embed these chunks and return the writes, or stop at the first batch that fails.
+    """Embed these passages and return the writes, or stop at the first batch that fails.
 
-    Takes `Chunk` rather than text for the reason `units_for` does: `chunk_document` is the
-    only thing in this system that copies a document's permissions onto a passage, and a
-    caller that could assemble embedding work out of loose strings is a caller that can embed
-    text no row will ever be found by.
+    Takes `EmbeddingUnit` rather than `Chunk`; see the module docstring for why the queued run
+    starts from rows. The units are expected to be read back from `know.chunk`, whose one writer
+    is `brain.knowledge.chunk_store`.
 
     The revision is the caller's, because it is the one part nothing here can know: it is which
     weights are in the volume. `served_embedding_model` refuses an empty one rather than
     defaulting to a first version, and the width is neither of theirs.
 
     Returns the writes rather than applying them, matching `embed_batch` and `embed_all`: this
-    module has no session, and the caller is what holds a transaction to take row locks in.
-    There is no such caller today; see `wiring_gaps`.
+    module has no session, and the caller is what holds a transaction to take row locks in,
+    which is `brain.knowledge.chunk_store.run_embed_job`.
     """
-    if not chunks:
+    if not units:
         raise EmbeddingError(EMBEDDING_NOTHING_IS_A_JOB_THAT_REPORTS_SUCCESS_HAVING_DONE_NOTHING)
     findings = dimension_gaps()
     if findings:
@@ -141,10 +154,26 @@ def embed_chunks(
         )
         raise EmbeddingError(msg)
     model = served_embedding_model(revision=revision)
-    batches = plan_batches(
-        units_for(chunks), model=model, max_chunks=max_chunks, budget_bytes=budget_bytes
-    )
+    batches = plan_batches(units, model=model, max_chunks=max_chunks, budget_bytes=budget_bytes)
     return embed_all(batches, service)
+
+
+def embed_question(question: str, *, service: EmbeddingService, revision: str) -> EmbeddedVector:
+    """A question's vector, from the same service and model a passage is embedded with.
+
+    Never a write, for the reason `embed_policy.A_QUESTIONS_VECTOR_IS_NEVER_A_WRITE` gives, and
+    that is why this returns an `EmbeddedVector` and not an `EmbedRun`: there is no value on this
+    path that could be applied to `know.chunk`.
+
+    The width refusal is not repeated here and does not need to be. `EmbeddedVector` refuses a
+    vector whose length disagrees with the model the server named, and
+    `brain.knowledge.search.to_vector_literal` refuses one the column cannot be compared with,
+    before a statement is built. An outage raises `EmbeddingUnavailable`, and what that means to
+    the person waiting is `embed_policy.outage_response(EmbeddingLeg.QUERY)`, which the caller
+    holds.
+    """
+    model = served_embedding_model(revision=revision)
+    return question_vector(service.embed(question_batch(question, model=model)))
 
 
 # ------------------------------------------------ what is written and what runs it (M7.3.3)
@@ -200,22 +229,54 @@ class Piece:
 #: `call_sites` whether each claim is still true in both directions.
 #:
 #: **A caller inside the same module does not count**, because `call_sites` cannot see one: it
-#: deliberately ignores a module calling its own function, so `embed_chunks` being called by
-#: the command at the bottom of this file leaves it an orphan by that tool's definition, which
-#: is the right answer to the question being asked. Nothing schedules it.
+#: deliberately ignores a module calling its own function, which is the right answer to the
+#: question being asked. That is why the path is split across modules the way it is: the
+#: writer, the worker and the tool that asks a question are each somebody else's caller.
+#:
+#: **The list was rewritten on 2026-09-17 rather than shortened.** Eleven steps, six of them
+#: called by nothing, became the fourteen the path actually takes once it runs, and the one
+#: that is still an orphan is the first: see `chunk_store:ingest_document`.
 EMBED_PATH: Final[tuple[Piece, ...]] = (
     Piece(
-        symbol="brain.knowledge.chunking:chunk_document",
-        step="a parsed document becomes chunks carrying the document's permissions",
+        symbol="brain.knowledge.chunk_store:ingest_document",
+        step=(
+            "an item and its chunks are written under the owner's reach, and a job to embed "
+            "them is handed to the queue once they are committed"
+        ),
         needs=(
-            "a parse. brain.knowledge.ingest decides what may be admitted and nothing turns an "
-            "admitted file into blocks: M7.2.1 is Docling, which item 31 put behind the same "
-            "inference server this leaf is waiting on"
+            "a door that hands it a document. Everything behind the door runs: a route or a "
+            "connector sync that has an item's text in hand calls this and nothing else. None "
+            "exists yet. brain.member_library.upload and "
+            "brain.connectors.lark_wiki.WikiDocument.as_knowledge_item both build the item and "
+            "neither is called, and a web process holds no queue app to enqueue with, which is "
+            "brain.app's to build"
         ),
     ),
     Piece(
+        symbol="brain.knowledge.chunking:chunk_document",
+        step="a document's text becomes chunks carrying the document's permissions",
+    ),
+    Piece(
         symbol="brain.knowledge.embed_queue:units_for",
-        step="the chunks become an id and a text each, with the permissions left behind",
+        step=(
+            "the chunks become an id and a text each, so a chunk no batch could carry is "
+            "refused at the door rather than by every job after it"
+        ),
+    ),
+    Piece(
+        symbol="brain.knowledge.embed_queue:embed_job",
+        step="the work is queued as an ordinal window and the owner it runs for",
+    ),
+    Piece(
+        symbol="brain.knowledge.chunk_store:run_embed_job",
+        step=(
+            "a worker reads the window back under the owner's reach as it stands, embeds it, "
+            "and writes two columns of each row or nothing"
+        ),
+    ),
+    Piece(
+        symbol="brain.knowledge.embed:embed_units",
+        step="the calls below, in the one order that produces a resumable run",
     ),
     Piece(
         symbol="brain.knowledge.embed_policy:served_embedding_model",
@@ -236,46 +297,20 @@ EMBED_PATH: Final[tuple[Piece, ...]] = (
     Piece(
         symbol="brain.ops.inference_client:make_client",
         step="the one implementation of EmbeddingService, pointed at this install's server",
-        needs=(
-            "a process that holds a queue slot and a batch. The address is resolved now, by "
-            "embedding_endpoint, and what is absent is anything that would build a client: no "
-            "embedding job has ever been enqueued, because embed_job has no caller"
-        ),
     ),
     Piece(
-        symbol="brain.knowledge.embed_queue:embed_job",
-        step="the work is queued as an ordinal window rather than a list of chunk ids",
-        needs=(
-            "an ingestion path that enqueues one when a document's chunks are written. "
-            "chunk_document is where those chunks would come from and nothing calls it either, "
-            "so this is the same gap one step earlier"
-        ),
-    ),
-    Piece(
-        symbol="brain.knowledge.embed:embed_chunks",
-        step="the four calls above, in the one order that produces a resumable run",
-        needs=(
-            "a worker task registered against knowledge.embed, and somewhere to apply what it "
-            "returns. know.chunk is a table and a set of queries with no writer in this "
-            "repository, so an EmbeddingWrite is an update nobody performs"
-        ),
+        symbol="brain.knowledge.embed:embed_question",
+        step="the other leg: a question's vector, from the same model, which is never a write",
     ),
     Piece(
         symbol="brain.knowledge.embed_policy:question_vector",
-        step="the other leg: a question's vector, which is never a write",
-        needs=(
-            "a retrieval path that embeds the question before it searches. brain.knowledge."
-            "assembly composes an answer out of rows somebody else fetched, and nobody fetches "
-            "them"
-        ),
+        step="the response to a question is read as one vector for the one id that was sent",
     ),
     Piece(
         symbol="brain.knowledge.search:vector_query",
-        step="the nearest-neighbour leg, asked with a vector and a model identity",
-        needs=(
-            "the same retrieval path, plus a session. It is still called with a vector nobody "
-            "produces, which is the sentence brain.knowledge.embed_policy has carried since the "
-            "seam was declared"
+        step=(
+            "the nearest-neighbour leg, asked with that vector and its model, the asker's "
+            "reach conjoined before the limit"
         ),
     ),
 )
@@ -285,8 +320,8 @@ def wiring_gaps(pieces: Sequence[Piece] = EMBED_PATH) -> tuple[str, ...]:
     """Every step on this path that nothing calls, and what each one is waiting for.
 
     A report rather than a gate, in the shape `brain.ops.schedule_runner.runner_gaps` takes and
-    for the same reason: most of this path is unwired today and a check asserting otherwise
-    would be red on arrival and switched off within the week.
+    for the same reason: a check asserting the path complete would be red on arrival for as
+    long as any step is missing, and switched off within the week.
 
     **Deliberately not folded into `policy_gaps`**, and the reason is a test somebody else
     wrote. `policy_gaps` is what `brain.ops.worker.advisories` prints on every worker start,
@@ -333,12 +368,14 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None) -> int:
     """`python -m brain.knowledge.embed --check`: can this install embed, and what is missing.
 
-    Three questions and they fail in different places, so they are printed separately rather
-    than as one list. Where the text would go is this install's configuration and is the only
-    one that can refuse. What is wrong that starting will not fix is `policy_gaps`, which is
-    the same list `brain.ops.worker.advisories` prints, repeated here because somebody asking
-    this question is not usually reading a worker's startup output. What is not built is
-    `wiring_gaps`, which is a property of the product and is the same on every install.
+    Four questions and they fail in different places, so they are printed separately rather
+    than as one list. Where the text would go is this install's configuration and is one of the
+    two that can refuse. Which weights the server holds is the other: an unset revision is an
+    install with no vector leg, said in a sentence, and a revision that is not one is refused.
+    What is wrong that starting will not fix is `policy_gaps`, which is the same list
+    `brain.ops.worker.advisories` prints, repeated here because somebody asking this question is
+    not usually reading a worker's startup output. What is not built is `wiring_gaps`, which is
+    a property of the product and is the same on every install.
 
     The environment is a parameter defaulting to the real one, matching
     `brain.ops.worker.main`, so every mode can be tested without one.
@@ -350,7 +387,8 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
 
     try:
         endpoint = embedding_endpoint(environment)
-    except EmbeddingUnavailable as exc:
+        revision = embedding_revision(environment)
+    except (EmbeddingUnavailable, EmbeddingError) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return EXIT_REFUSED
     print(f"text to be embedded is sent to {ENDPOINT_SETTING}={endpoint}, and nowhere else")
@@ -358,6 +396,13 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
         endpoint=endpoint, configured=environment.get(APP_ENDPOINT_SETTING, "")
     ):
         print(f"  - {finding}")
+    if revision is None:
+        print(
+            f"nothing is embedded on this install: {REVISION_SETTING} is unset, so documents "
+            "are found by text search alone"
+        )
+    else:
+        print(f"vectors are recorded as {served_embedding_model(revision=revision).identity}")
 
     advisories = policy_gaps()
     print(

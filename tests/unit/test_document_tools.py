@@ -14,15 +14,18 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.sql.visitors import iterate
 
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.envelope import TypedResult
+from brain.core.errors import Degraded
 from brain.core.scope import Clause, Op, Scope
 from brain.knowledge.document_tools import (
     DEFAULT_PASSAGES,
@@ -30,17 +33,26 @@ from brain.knowledge.document_tools import (
     KNOWLEDGE_PIN,
     LEXICAL_LEG_QUERIES,
     MAX_PASSAGES,
-    NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX,
+    ONLY_THE_VECTOR_LEG_WALKS_THE_INDEX_AND_IT_CARRIES_THE_SCAN_SETTINGS,
     PASSAGE_COLUMNS,
     DocumentRead,
     DocumentSearch,
     KnowledgePassage,
+    QuestionEmbedder,
     departments_query,
     passages_query,
     reach_through,
     reader,
     searcher,
 )
+from brain.knowledge.embed_policy import (
+    COLUMN_DIMENSIONS,
+    QUESTION_UNIT_ID,
+    EmbeddingUnavailable,
+    served_embedding_model,
+)
+from brain.knowledge.embed_queue import Embedded, EmbeddingBatch
+from brain.knowledge.embedding import EmbeddedVector
 from brain.knowledge.rows import RowQuery
 from brain.knowledge.search import (
     CANDIDATE_DEPTH,
@@ -49,6 +61,7 @@ from brain.knowledge.search import (
     KNOWLEDGE_READ,
     RETRIEVABLE_STATE_VALUES,
     Reach,
+    iterative_scan_statements,
     lexical_legs,
     reach_predicate,
     session_settings,
@@ -70,8 +83,9 @@ DEPARTMENTS = ("finance", "web")
 class Recording:
     """A row source that answers by what it was asked for and remembers every statement.
 
-    The department registry for the departments query, the next ranking for a lexical leg, and
-    every body it holds for anything else, whatever that statement asked for.
+    The department registry for the departments query, the next ranking for a lexical leg, the
+    nearest chunks for the vector leg, and every body it holds for anything else, whatever that
+    statement asked for.
     """
 
     def __init__(
@@ -79,9 +93,11 @@ class Recording:
         *,
         ranked: Sequence[Sequence[str]] = (),
         bodies: Sequence[Mapping[str, Any]] = (),
+        nearest: Sequence[str] = (),
     ) -> None:
         self.ranked = [tuple(leg) for leg in ranked]
         self.bodies = tuple(bodies)
+        self.nearest = tuple(nearest)
         self.asked: list[RowQuery] = []
 
     async def rows(self, query: RowQuery) -> Sequence[Mapping[str, Any]]:
@@ -91,6 +107,8 @@ class Recording:
         if query.columns == ("chunk_id", "relevance"):
             leg = self.ranked.pop(0) if self.ranked else ()
             return [{"chunk_id": ref, "relevance": 1.0} for ref in leg]
+        if query.columns == ("chunk_id", "distance"):
+            return [{"chunk_id": ref, "distance": 0.1} for ref in self.nearest]
         return list(self.bodies)
 
     def chunk_statements(self) -> list[RowQuery]:
@@ -314,14 +332,20 @@ def test_the_department_registry_is_read_with_no_settings() -> None:
     assert departments_query().settings == ()
 
 
-def test_no_statement_here_walks_the_vector_index() -> None:
-    """**Why the iterative scan settings are not carried.** They tune how the HNSW index is
-    walked, and only a statement ordering by the embedding walks it. Asserted by walking each
-    statement's expression tree for the embedding column itself, with a positive sibling built
-    from `vector_query`, so the walk is known to find the column when it is there.
+def walks(statement: Any) -> bool:
+    """Whether a statement's expression tree reaches the embedding column itself."""
+    return any(element is CHUNK.c.embedding for element in iterate(statement))
 
-    Delete this and a vector leg can be added here without its iterative scan settings, which
-    returns fewer passages than asked for under a narrow reach and says nothing."""
+
+def test_an_install_that_embeds_no_questions_walks_no_vector_index() -> None:
+    """**With no embedder there is no vector leg**, which is every install that has not
+    declared its embedding weights, and none of its statements reads the embedding. Asserted by
+    walking each statement's expression tree for the embedding column itself, with a positive
+    sibling built from `vector_query`, so the walk is known to find the column when it is there.
+
+    Delete this and a vector statement can be sent by an install with no vectors in it, which
+    also breaks `test_document_second_wall.py`, whose table has no embedding column because no
+    statement of these tools reads one there."""
     reach = Reach(principal_id="u_reader", departments=DEPARTMENTS)
     source = Recording(
         ranked=[("c_leave_1",)], bodies=(body("c_leave_1", "doc_leave", 0, "Leave."),)
@@ -329,14 +353,129 @@ def test_no_statement_here_walks_the_vector_index() -> None:
     search(source, "leave", READER)
     settle(reader(source)(DocumentRead(document_id="doc_leave"), entitlement=READER, now=NOW))
 
-    def walks(statement: Any) -> bool:
-        return any(element is CHUNK.c.embedding for element in iterate(statement))
-
     width = EMBEDDING_DIMENSIONS
     assert walks(vector_query([0.0] * width, reach=reach, model=f"m@1:{width}"))
     assert source.chunk_statements()
     assert not any(walks(query.statement) for query in source.chunk_statements())
-    assert "vector" in NO_STATEMENT_HERE_WALKS_THE_VECTOR_INDEX
+
+
+# ------------------------------------------------------------------ a question's vector
+A_REVISION = "v1.0.0"
+
+
+def unit_vector(hot: int) -> tuple[float, ...]:
+    """A normalised vector pointing along one axis, which the client's check accepts."""
+    values = [0.0] * COLUMN_DIMENSIONS
+    values[hot] = 1.0
+    return tuple(values)
+
+
+@dataclass
+class Embedding:
+    """An `EmbeddingService` answering a question with one vector, or failing as a server does."""
+
+    down: bool = False
+    asked: list[EmbeddingBatch] = field(default_factory=list)
+
+    def embed(self, batch: EmbeddingBatch) -> tuple[Embedded, ...]:
+        self.asked.append(batch)
+        if self.down:
+            msg = "the inference server did not answer"
+            raise EmbeddingUnavailable(msg)
+        vector = EmbeddedVector(model=batch.model, values=unit_vector(0))
+        return (Embedded(chunk_id=QUESTION_UNIT_ID, vector=vector),)
+
+
+def search_embedding(
+    source: Recording, question: str, entitlement: EntitlementSet, service: Embedding
+) -> TypedResult[KnowledgePassage]:
+    handler = searcher(source, QuestionEmbedder(service=service, revision=A_REVISION))
+    return settle(handler(DocumentSearch(question=question), entitlement=entitlement, now=NOW))
+
+
+def test_a_passage_only_the_vector_leg_found_is_handed_back() -> None:
+    """**The vector leg reaches the answer.** A question that shares no word with a passage and
+    is near it in meaning comes back with it, which is the whole of what embedding a question is
+    for, and the question is sent to the service under the model passages are written with.
+
+    Delete this and the vector leg can be run and its ranking thrown away, which leaves every
+    other test here green and an install that embeds questions answering from text search."""
+    service = Embedding()
+    source = Recording(
+        ranked=[()],
+        nearest=("c_leave_1",),
+        bodies=(body("c_leave_1", "doc_leave", 0, "Annual leave is 25 days."),),
+    )
+
+    result = search_embedding(source, "holiday allowance", READER, service)
+
+    assert [passage.id for passage in result.records] == ["c_leave_1"]
+    [batch] = service.asked
+    assert batch.model.identity == served_embedding_model(revision=A_REVISION).identity
+
+
+def test_the_vector_leg_carries_the_callers_reach_and_both_sets_of_settings() -> None:
+    """**The asker's reach is inside the vector query, and the scan settings travel with it and
+    with nothing else.** The one statement that walks the embedding carries `reach_predicate`
+    for this caller's reach, the caller's session settings and then the iterative scan
+    settings, in that order; no other statement carries the scan settings.
+
+    Asked of a caller reaching one department, so the predicate and `app.departments` are held
+    to that reach rather than to any reach.
+
+    Delete this and the nearest neighbours can be taken from the whole corpus and filtered
+    afterwards, or taken under a narrow reach without iterative scan, and either hands a narrow
+    caller fewer passages than they may read with nothing saying why."""
+    web = holding(KNOWLEDGE_READ.value, scope=Scope.department("web"))
+    reach = Reach(principal_id="u_reader", departments=("web",))
+    predicate = str(reach_predicate(reach).compile(dialect=POSTGRES))
+    source = Recording(
+        ranked=[("c_leave_1",)],
+        nearest=("c_leave_1",),
+        bodies=(body("c_leave_1", "doc_leave", 0, "Leave."),),
+    )
+
+    search_embedding(source, "leave", web, Embedding())
+
+    walking = [query for query in source.chunk_statements() if walks(query.statement)]
+    [vector] = walking
+    assert predicate in compiled(vector)
+    assert rendered(vector.settings) == rendered(
+        (*session_settings(reach), *iterative_scan_statements())
+    )
+    scan = rendered(iterative_scan_statements())
+    for query in source.chunk_statements():
+        if query is not vector:
+            assert not any(one in scan for one in rendered(query.settings)), compiled(query)
+    assert "vector" in ONLY_THE_VECTOR_LEG_WALKS_THE_INDEX_AND_IT_CARRIES_THE_SCAN_SETTINGS
+
+
+def test_a_question_the_server_could_not_embed_is_a_degraded_answer_and_reads_no_chunk() -> None:
+    """**An outage on the query leg is declared, not absorbed.** The handler raises `Degraded`
+    before any chunk statement is sent, so no passages from text search alone are handed back
+    reading like a full answer.
+
+    Delete this and the handler can swallow the failure and answer from the lexical legs, which
+    is the silent degradation `embed_policy.OUTAGE_POLICY` says the query leg never has."""
+    source = Recording(ranked=[("c_leave_1",)], bodies=(body("c_leave_1", "doc_leave", 0, "L."),))
+
+    with pytest.raises(Degraded):
+        search_embedding(source, "leave", READER, Embedding(down=True))
+    assert source.chunk_statements() == []
+
+
+def test_a_caller_with_no_read_of_the_plane_sends_nothing_to_be_embedded() -> None:
+    """A question from somebody who reaches no document is not sent anywhere: there is nothing
+    it could be compared with that they may read.
+
+    Delete this and the embedding can move ahead of the reach, which posts every question from
+    every caller to the server, including the ones who are about to be handed nothing."""
+    service = Embedding()
+
+    result = search_embedding(Recording(), "leave", NO_PLANE, service)
+
+    assert result.records == ()
+    assert service.asked == []
 
 
 def test_the_bodies_are_asked_for_by_exactly_the_references_the_ranking_returned() -> None:

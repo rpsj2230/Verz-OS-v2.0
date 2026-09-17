@@ -328,3 +328,37 @@ def test_every_column_of_every_classified_entity_can_be_filtered_on() -> None:
     widest = max(len(c.columns()) for c in every_row_classification())
 
     assert widest <= MAX_FILTERS
+
+
+def test_an_install_that_has_declared_no_embedding_weights_searches_its_documents_by_text() -> None:
+    """**No revision, no embedder.** Every install until its owner declares which weights its
+    inference server holds registers the search tool with an empty vector leg, and builds no
+    client to a server that may not exist.
+
+    Delete this and every process can build an embedding client at start whatever the install
+    has said, and on the `lite` profile, which deploys no inference server, every knowledge
+    search is a degraded answer."""
+    from brain.knowledge.embed_policy import REVISION_SETTING
+    from brain.tools.startup import question_embedder
+
+    assert question_embedder({}) is None
+    assert question_embedder({REVISION_SETTING: "unset"}) is None
+
+
+def test_an_install_that_has_declared_its_weights_embeds_questions_with_them() -> None:
+    """The positive sibling. The embedder carries the declared revision and a client pointed at
+    the declared endpoint, and nothing is dialled by building it.
+
+    Delete this and `question_embedder` can return None for everything, which is an install that
+    declared its weights and whose knowledge search never runs its vector leg."""
+    from brain.knowledge.embed_policy import ENDPOINT_SETTING, REVISION_SETTING
+    from brain.ops.inference_client import InferenceEmbeddingClient, embed_url
+    from brain.tools.startup import question_embedder
+
+    endpoint = "http://192.0.2.9:8080"
+    built = question_embedder({REVISION_SETTING: "v1.0.0", ENDPOINT_SETTING: endpoint})
+
+    assert built is not None
+    assert built.revision == "v1.0.0"
+    assert isinstance(built.service, InferenceEmbeddingClient)
+    assert built.service.url == embed_url(endpoint)

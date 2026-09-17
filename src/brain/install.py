@@ -308,6 +308,22 @@ INSTALLATION: Final[tuple[Setting, ...]] = (
         # is what stops the two drifting into two answers about one model.
         default="1024",
     ),
+    Setting(
+        name="INSTALL_EMBEDDING_REVISION",
+        belongs=Belongs.MODELS,
+        meaning=(
+            "Which weights of the embedding model the inference server holds, as the server "
+            "itself states them. It is recorded beside every vector, and a vector the server "
+            "returns under any other revision is refused rather than stored. `unset` is the "
+            "value meaning nobody has said, and while it is unset nothing is embedded: "
+            "documents are still chunked and found by text search, and questions are "
+            "answered without the nearest-neighbour leg."
+        ),
+        # No real default is possible, for the reason `EmbeddingModel` refuses an empty
+        # revision: a default would be a promise about which weights are in a volume, made on
+        # behalf of an install nobody here has looked at.
+        default="unset",
+    ),
     # --- storage, M41.1.7
     Setting(
         name="INSTALL_OBJECT_STORE_URL",

@@ -81,11 +81,15 @@ def test_a_control_nobody_can_run_is_refused_at_the_door() -> None:
 
 def test_the_control_task_is_ours_and_is_registered_on_the_queue_its_class_derives() -> None:
     """Delete this and the task can be registered under the driver's own prefix, where
-    `tasks_of_ours` hides it, or on a queue the parse worker drains."""
+    `tasks_of_ours` hides it, or on a queue the parse worker drains. The embedding of a window is
+    the general worker's second task and is held to its own class's queue beside it."""
+    from brain.knowledge.embed_queue import EMBED_QUEUE, EMBED_TASK
+
     app = an_app()
 
-    assert tasks_of_ours(app.tasks) == (CONTROL_TASK,)
+    assert tasks_of_ours(app.tasks) == tuple(sorted((CONTROL_TASK, EMBED_TASK)))
     assert app.tasks[CONTROL_TASK].queue == queue_name_for(TrafficClass.SYSTEM)
+    assert app.tasks[EMBED_TASK].queue == EMBED_QUEUE
 
 
 def test_a_task_registered_twice_or_under_the_drivers_own_prefix_is_refused() -> None:
@@ -304,7 +308,9 @@ def test_the_general_worker_registers_the_control_run_and_the_parse_worker_does_
         database_url="",
     )
 
-    assert tasks_of_ours(general.tasks) == (CONTROL_TASK,)
+    from brain.knowledge.embed_queue import EMBED_TASK
+
+    assert tasks_of_ours(general.tasks) == tuple(sorted((CONTROL_TASK, EMBED_TASK)))
     assert tasks_of_ours(parse.tasks) == ()
 
 
