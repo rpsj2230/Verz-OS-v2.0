@@ -13,6 +13,7 @@ const MODS = [].concat(
 );
 const SCH = require(path.join(__dirname, "schedule.js"));
 const ACT = require(path.join(__dirname, "acts.js"));
+const PROG = require(path.join(__dirname, "progress.js"));
 
 // Leaf numbering must match render.js exactly, or a commit closing M0.2.4 would tick a
 // different box in the tracker than the one the status page counts.
@@ -67,6 +68,8 @@ MODS.forEach((m) => {
 // Throws rather than writing a stale `wbs.json`, so a leaf that moved under a flag is a build
 // failure and not a checklist quietly listing different work. See the header of acts.js.
 const COUNTS = ACT.check((id) => ALL_TEXTS[id]);
+// The same refusal for the hand-set statuses: an unknown id or status is a build failure.
+PROG.check((id) => ALL_TEXTS[id], SCH.NAMES);
 
 const modules = MODS.map((m) => {
   const pairs = [];
@@ -82,6 +85,13 @@ const modules = MODS.map((m) => {
   });
   const leaf_acts = {};
   const leaf_decided = {};
+  // Hand-set statuses for this module's leaves. `brain.status` shows a closed leaf as DONE
+  // whatever this says, so it is exported as written and settled there.
+  const leaf_progress = {};
+  ids.forEach((id) => {
+    const entry = PROG.PROGRESS[id];
+    if (entry) leaf_progress[id] = { status: entry.status, why: entry.why || "", updated: entry.updated };
+  });
   const act_groups = {};
   ids.forEach((id) => {
     const flag = ACT.ACTS[id];
@@ -123,6 +133,8 @@ const modules = MODS.map((m) => {
     // is not holding the tracker open. Only the ancestors of a flagged leaf, so a module with
     // no acts carries nothing.
     act_groups,
+    // Leaves a person has marked OPEN, IN PROGRESS, READY FOR TESTING or BLOCKED, by id.
+    leaf_progress,
   };
 });
 
@@ -130,6 +142,8 @@ const out = {
   generated_by: "docs/wbs/export.js",
   start: SCH.START,
   wave_names: SCH.NAMES,
+  // The deployed commit each wave closed at, by wave. See docs/wbs/progress.js.
+  wave_records: PROG.WAVE_RECORDS,
   modules,
 };
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from brain.wave_report import build_wave_report, render_markdown
+from brain.wave_report import build_wave_report, render_markdown, report_for
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
@@ -179,3 +179,54 @@ def test_the_headline_states_both_numbers(repo: Path) -> None:
     text = render_markdown(build_wave_report(repo, WBS, 0, now=NOW))
     assert "1 of 2" in text
     assert "1 still open" in text
+
+
+# ------------------------------------------------ statuses and the /build count (M38.2.1.6)
+def test_a_report_splits_what_is_not_closed_by_its_hand_set_status() -> None:
+    """The owner asked for closed, open, in progress, ready for testing and blocked per wave.
+    Built from ids alone, as `/build/waves` builds it from the status baked into the image.
+    A closed leaf marked IN PROGRESS counts closed. Delete this and the page can count a
+    delivered leaf twice, or lose a blocked one."""
+    wbs = {
+        **WBS,
+        "modules": [
+            {
+                **WBS["modules"][0],  # type: ignore[index]
+                "leaf_progress": {
+                    "M90.1.1": {"status": "IN PROGRESS", "why": "", "updated": "2026-09-17"},
+                    "M90.1.2": {"status": "BLOCKED", "why": "a token", "updated": "2026-09-17"},
+                },
+            }
+        ],
+    }
+
+    report = report_for(wbs, 0, {"M90.1.1"}, [], now=NOW)
+
+    assert report.closed_count == 1
+    assert report.leaves_with("BLOCKED") == ["M90.1.2"]
+    assert report.count_of("IN PROGRESS") == 0
+    assert report.count_of("OPEN") == 0
+    text = render_markdown(report)
+    assert "## Blocked: 1" in text
+    assert "- `M90.1.2`: a token" in text
+
+
+def test_a_report_leaves_acts_and_decided_leaves_out_of_its_totals_as_the_status_page_does() -> (
+    None
+):
+    """`/build` counts buildable leaves only, and two pages giving a wave two totals is a bug
+    this repository has had. Delete this and the wave report counts client tasks as open work."""
+    wbs = {
+        **WBS,
+        "modules": [
+            {
+                **WBS["modules"][0],  # type: ignore[index]
+                "leaf_acts": {"M90.1.2": {"kind": "ACT", "gate": False}},
+                "leaf_decided": {"M90.1.1": {"kind": "DECIDED", "why": "not needed"}},
+            }
+        ],
+    }
+
+    report = report_for(wbs, 0, set(), [], now=NOW)
+
+    assert (report.total, report.acts, report.decided) == (0, 1, 1)

@@ -10,6 +10,7 @@
   "5": "Hands, delivery, go-live",
   "6": "Client template"
  },
+ "wave_records": {},
  "modules": [
   {
    "id": "M0",
@@ -104,7 +105,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M1",
@@ -224,7 +226,8 @@
      "why": "Merged into M27.7.2, which asks for the same outcome: Staff source: choose it, configure it and try it before it runs. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M2",
@@ -276,7 +279,8 @@
      "why": "Merged into M27.11.1, which asks for the same outcome: Departments, teams and scopes created, renamed and retired from the console, each change audited. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M3",
@@ -371,7 +375,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M4",
@@ -422,7 +427,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M5",
@@ -497,7 +503,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M6",
@@ -571,7 +578,8 @@
      "why": "Merged into M3.7.2, which asks for the same outcome: Static tool prefix with deferred loading so the provider cache is shared. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M7",
@@ -664,7 +672,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M8",
@@ -710,7 +719,8 @@
      "why": "Merged into M4.3.3, which asks for the same outcome: Permission-denied indistinguishable from nothing-found at record level. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M9",
@@ -744,7 +754,8 @@
      "why": "Merged into M4.3.1, which asks for the same outcome: Structural lock rendering, identical for every viewer. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M10",
@@ -827,7 +838,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M11",
@@ -988,7 +1000,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M12",
@@ -1090,7 +1103,8 @@
      "why": "Merged into M0.5.6, which asks for the same outcome: Registry sweep: tool naming grammar. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M13",
@@ -1334,7 +1348,8 @@
      "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M14",
@@ -1435,7 +1450,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M15",
@@ -1484,7 +1500,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M16",
@@ -1595,7 +1612,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M17",
@@ -1690,7 +1708,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M18",
@@ -1747,7 +1766,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M19",
@@ -1861,7 +1881,8 @@
      "why": "Merged into M22.1.1, which asks for the same outcome: Global budgets: concurrent model calls, source calls per connector, browser sessions, long-running tasks, document jobs, embedding jobs, tokens per minute. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M20",
@@ -1943,7 +1964,8 @@
      "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M21",
@@ -2000,7 +2022,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M22",
@@ -2041,7 +2064,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M23",
@@ -2077,7 +2101,8 @@
      "why": "Merged into M10.5.5, which asks for the same outcome: Web widget with session minting and abuse guard. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M24",
@@ -2124,7 +2149,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M25",
@@ -2171,7 +2197,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M26",
@@ -2223,7 +2250,8 @@
      "why": "Merged into M16.4.4, which asks for the same outcome: Entitlement expiry: memories stop matching when capabilities change. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M27",
@@ -2779,7 +2807,8 @@
      "why": "Merged into M17.5.3, which asks for the same outcome: Subscriber management in the console. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M28",
@@ -2827,7 +2856,8 @@
      "why": "Merged into M0.6.4, which asks for the same outcome: Golden questions: twenty questions across three personas with known answers. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M29",
@@ -2929,7 +2959,8 @@
      "why": "item 58, Option B. The register answers CONFIGURATION: a pack is a source of grants by definition and entitlements are additive, so a pack from outside the company is refused. Packs are set during setup"
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M30",
@@ -3081,7 +3112,8 @@
    },
    "act_groups": {
     "M30.6": "Found by tracing every requirement to a task"
-   }
+   },
+   "leaf_progress": {}
   },
   {
    "id": "M31",
@@ -3183,7 +3215,8 @@
      "why": "Merged into M0.4.3, which asks for the same outcome: Documented environment example with every variable explained. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M32",
@@ -3303,7 +3336,8 @@
      "why": "Merged into M17.2.2, which asks for the same outcome: Our own re-drive driver for crash recovery. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M33",
@@ -3419,7 +3453,8 @@
      "why": "Merged into M1.2.4, which asks for the same outcome: Partner principal with zero standing entitlement. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M34",
@@ -3495,7 +3530,8 @@
      "why": "Merged into M42.2.5, which asks for the same outcome: Configuration guide: every value a new client must set, in one table, with where each comes from. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M35",
@@ -3559,7 +3595,8 @@
      "why": "Merged into M35.3.1.1, which asks for the same outcome: Console usable on a phone for approvals at minimum. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M36",
@@ -3633,7 +3670,8 @@
      "why": "Merged into M36.1.1.1, which asks for the same outcome: Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M37",
@@ -4065,7 +4103,8 @@
     "M37.6": "Go-live hardening",
     "M37.6.1": "Administrative consoles",
     "M37.7": "Found by tracing every requirement to a task"
-   }
+   },
+   "leaf_progress": {}
   },
   {
    "id": "M38",
@@ -4230,6 +4269,23 @@
    "act_groups": {
     "M38.2": "Deploy at the end of every wave",
     "M38.2.1": "Wave close ritual"
+   },
+   "leaf_progress": {
+    "M38.2.1.1": {
+     "status": "READY FOR TESTING",
+     "why": "WAVE_RECORDS in docs/wbs/progress.js and the /build/waves page that lists it; no wave has closed yet, so the record is empty",
+     "updated": "2026-09-17"
+    },
+    "M38.2.1.6": {
+     "status": "READY FOR TESTING",
+     "why": "/build/waves: per wave closed, open, in progress, ready for testing and blocked with reasons, from the status baked into the image",
+     "updated": "2026-09-17"
+    },
+    "M38.3.1.2": {
+     "status": "READY FOR TESTING",
+     "why": "the Status file workflow commits status.json to the status branch after each green CI on main; it has not run yet, so the first merge after this lands is the test",
+     "updated": "2026-09-17"
+    }
    }
   },
   {
@@ -4414,7 +4470,8 @@
      "why": "Merged into M39.3.1.4, which asks for the same outcome: Worked preview: pick a person, see exactly what their run of this agent would return. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M40",
@@ -4564,7 +4621,8 @@
      "why": "Merged into M35.3.1.1, which asks for the same outcome: Console usable on a phone for approvals at minimum. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M41",
@@ -4621,7 +4679,8 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   },
   {
    "id": "M42",
@@ -4765,7 +4824,8 @@
    },
    "leaf_acts": {},
    "leaf_decided": {},
-   "act_groups": {}
+   "act_groups": {},
+   "leaf_progress": {}
   }
  ]
 }

@@ -3,6 +3,7 @@ const SCH = require(__dirname + "/schedule.js");
 const SPR = {LAUNCH:{},WAVE:{},NAMES:{},START:"2026-09-08",LEAVES_PER_TRACK_DAY:14,INTEGRATION_DAYS:1};
 const MODS = [].concat(require(__dirname + "/wbs-a.js"), require(__dirname + "/wbs-b.js"), require(__dirname + "/wbs-c.js"), require(__dirname + "/wbs-d.js"), require(__dirname + "/wbs-e.js"), require(__dirname + "/wbs-f.js"));
 const ACT = require(__dirname + "/acts.js");
+const PROG = require(__dirname + "/progress.js");
 // ---- scheduling helpers
 // Guarded, because a non-finite count here is an infinite loop with no error and no
 // output. On 2026-09-07 a wave holding leaves but no module of its own made `days`
@@ -45,6 +46,8 @@ TREE.forEach(m => {
 });
 // Throws rather than rendering a tracker whose flags point at work nobody chose.
 const COUNTS = ACT.check(id => TEXT_OF[id]);
+// The hand-set statuses, refused on the same terms as in export.js.
+PROG.check(id => TEXT_OF[id], SCH.NAMES);
 const ACT_COUNT = COUNTS.acts;
 //: Leaves decided as not needed as written. Counted on their own, never as client tasks.
 const DECIDED_COUNT = COUNTS.decided;
@@ -187,7 +190,15 @@ function renderNode(node, id, depth) {
   const actChip = !act ? ""
     : isDecided ? `<span class="act decided" title="${esc("Decided, not needed as written: " + act.why)}">DECIDED · NOT AS WRITTEN</span>`
     : `<span class="act${act.gate ? " gate" : ""}" title="${esc(act.gate ? "Gates the cutover: " + act.why : act.why || "Work for a person on the week of the migration, not a commit")}">${act.kind === "UNBUILDABLE" ? "NOT CODE HERE" : "ON THE WEEK"}${act.gate ? " · GATES CUTOVER" : ""}</span>`;
-  h += leaf ? `<input type="checkbox" class="cb" id="cb-${id}" data-id="${id}" data-wave="${waveOfLeaf(id, MODWAVE[id.split(".")[0]])}" data-due="${dt?iso(dt):""}"${actAttrs}><label class="lbl" for="cb-${id}"><span class="tid">${id}</span><span class="txt">${esc(node.n)}</span>${actChip}<span class="due" data-due="${dt?iso(dt):""}">${dt?fmt(dt):""}</span></label>`
+  // Every leaf carries a status chip: the hand-set one from progress.js, else OPEN. A leaf a
+  // commit closed gets li.done, and the stylesheet hides this chip under it, so DONE always
+  // wins whatever progress.js says.
+  const prog = leaf ? PROG.PROGRESS[id] : undefined;
+  const st = prog ? prog.status : "OPEN";
+  const stCls = st.toLowerCase().replace(/ /g, "-");
+  const stTitle = prog ? `${st} since ${prog.updated}${prog.why ? ": " + prog.why : ""}` : "Not started, and no commit has closed it";
+  const stChip = `<span class="pst st-${stCls}" title="${esc(stTitle)}">${st}</span>` + (st === "BLOCKED" ? `<span class="pwhy">${esc(prog.why)}</span>` : "");
+  h += leaf ? `<input type="checkbox" class="cb" id="cb-${id}" data-id="${id}" data-wave="${waveOfLeaf(id, MODWAVE[id.split(".")[0]])}" data-due="${dt?iso(dt):""}" data-status="${st}"${actAttrs}><label class="lbl" for="cb-${id}"><span class="tid">${id}</span><span class="txt">${esc(node.n)}</span>${stChip}${actChip}<span class="due" data-due="${dt?iso(dt):""}">${dt?fmt(dt):""}</span></label>`
             : `<span class="tid">${id}</span><span class="txt grp">${esc(node.n)}</span><span class="prog" data-for="${id}"></span>`;
   h += `</div>`;
   if (!leaf) {
@@ -209,11 +220,13 @@ for (const m of TREE) {
   body += `</ul>\n</section>\n`;
 }
 
+//: The statuses counted per wave beside Done, in the order a reader acts on them.
+const STATUS_COLS = ["IN PROGRESS", "READY FOR TESTING", "BLOCKED", "OPEN"];
 let waveRows = "";
 for (const w of Object.keys(waves).sort()) {
   const ms = TREE.filter(m => m.wave == w).map(m => m.id).join(" · ");
   const win = WIN[w];
-  waveRows += `<tr><td class="k">W${w} · ${SCH.NAMES[w]||""}</td><td class="m">${fmt(win.start)} – ${fmt(win.end)}</td><td class="m">${win.tracks}</td><td class="m" data-wavecount="${w}">${wavesBuildable[w]}</td><td class="m" data-wavedone="${w}">0</td><td>${ms}</td></tr>
+  waveRows += `<tr><td class="k">W${w} · ${SCH.NAMES[w]||""}</td><td class="m">${fmt(win.start)} – ${fmt(win.end)}</td><td class="m">${win.tracks}</td><td class="m" data-wavecount="${w}">${wavesBuildable[w]}</td><td class="m" data-wavedone="${w}">0</td>${STATUS_COLS.map(one => `<td class="m" data-wavest="${w}|${one}">0</td>`).join("")}<td>${ms}</td></tr>
 `;
 }
 
@@ -293,6 +306,12 @@ li.leaf.done .lbl::after{content:"DONE";font-family:var(--mono);font-size:8.5px;
 li.leaf .cb[data-act]{accent-color:var(--warn)}
 .act.decided{color:var(--muted);background:var(--sunk)}
 li.leaf .cb[data-decided]{accent-color:var(--muted)}
+.pst{font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.06em;padding:2px 5px;border-radius:2px;align-self:flex-start;margin-top:1px;flex:none;white-space:nowrap;cursor:help;background:var(--sunk);color:var(--muted)}
+.pst.st-in-progress{background:var(--accent-w);color:var(--accent)}
+.pst.st-ready-for-testing{background:var(--warn-bg);color:var(--warn)}
+.pst.st-blocked{color:#B4342E;background:var(--warn-bg);box-shadow:inset 0 0 0 1px #B4342E}
+.pwhy{font-size:12px;color:#B4342E;align-self:flex-start;margin-top:1px}
+li.leaf.done .pst,li.leaf.done .pwhy{display:none}
 .prog{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none;padding-top:3px}
 .prog.full{color:var(--ok);font-weight:700}
 .due{font-family:var(--mono);font-size:9.5px;color:var(--muted);flex:none;padding-top:3px;margin-left:auto;white-space:nowrap}
@@ -325,7 +344,8 @@ td.m{font-family:var(--mono);font-size:11.5px;color:var(--ink);width:9%}
 .rule{border-left:4px solid var(--accent);background:var(--surface);padding:12px 16px;max-width:78ch;font-family:var(--display);font-size:17px;line-height:1.45;color:var(--ink);margin-top:12px}
 p{margin:0;max-width:72ch}p+p{margin-top:9px}
 footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-family:var(--mono);font-size:10px;line-height:1.7;color:var(--muted);max-width:86ch}
-@media(max-width:760px){.page{padding:0 13px 70px}nav.toc ol{columns:1}.tid{min-width:70px;font-size:9px}ul.c{margin-left:8px;padding-left:7px}}
+.tscroll{overflow-x:auto}
+@media(max-width:760px){.lbl{flex-wrap:wrap;column-gap:6px;row-gap:2px}.lbl .txt{flex:1 1 calc(100% - 80px)}.page{padding:0 13px 70px}nav.toc ol{columns:1}.tid{min-width:70px;font-size:9px}ul.c{margin-left:8px;padding-left:7px}}
 @media (prefers-reduced-motion:reduce){.fill{transition:none}}
 </style>
 <div class="page">
@@ -345,6 +365,7 @@ footer{margin-top:48px;padding-top:15px;border-top:1px solid var(--rule);font-fa
       <span title="Work for a person on the week of the migration, which no commit can close. Listed below, not counted in the percentage."><b id="cActs">${ACT_COUNT}</b> client tasks, not counted</span>
       <span title="Leaves the owner decided are not needed as written. Nobody's work on any week, so neither in the percentage nor among the client tasks."><b id="cDecided">${DECIDED_COUNT}</b> decided, not needed as written</span>
       <span><b id="cMods">0</b>/${TREE.length} modules complete</span>
+      <span title="Buildable leaves by status. DONE comes from commits; the rest are set in docs/wbs/progress.js."><b id="cInProgress">0</b> in progress · <b id="cReady">0</b> ready for testing · <b id="cBlocked">0</b> blocked · <b id="cOpen">0</b> open</span>
     </div>
     <div class="acts">
       <button id="bLeft">Not done yet</button>
@@ -370,8 +391,8 @@ ${toc}</ol></nav>
 <div class="rule">Every leaf is a deliverable with a checkbox. A module is complete when every leaf under it is ticked <em>and</em> its invariants pass. Nothing is done because it looks finished.</div>
 <p>Ids run four and five levels deep - <code>M0.2.1</code> is a subtask, <code>M31.1.1.3</code> a step within one. Put the id in the commit message and the traceability file so progress is a query rather than a meeting.</p>
 <p>Ticks are stored in this browser only, so each person tracks their own view. Use <strong>Export</strong> to produce a JSON snapshot for the traceability file or to share with the team.</p>
-<table><thead><tr><th>Wave</th><th>Dates</th><th>Tracks</th><th>Items</th><th>Done</th><th>Modules</th></tr></thead><tbody>
-${waveRows}</tbody></table>
+<div class="tscroll"><table><thead><tr><th>Wave</th><th>Dates</th><th>Tracks</th><th>Items</th><th>Done</th><th>In progress</th><th>Ready for testing</th><th>Blocked</th><th>Open</th><th>Modules</th></tr></thead><tbody>
+${waveRows}</tbody></table></div>
 </section>
 
 ${body}
@@ -407,7 +428,7 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     // migration and is shown beside the figure. Folded together the figure stops rising
     // short of 100 and the stop does not mean the build stalled. brain.status counts the
     // same way, so /build and this page agree.
-    var buildDone=0, actsLeft=0;
+    var buildDone=0, actsLeft=0, byStatus={};
     boxes.forEach(function(b){
       var id=b.getAttribute("data-id");
       var mod=id.split(".")[0];
@@ -430,7 +451,9 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
       // was not used here. No backticks in this comment: it sits inside a template string.
       var w=b.getAttribute("data-wave");
       if(w===null||w==="")w=String(waveOf[mod]);
-      byWave[w]=byWave[w]||{d:0,t:0}; byWave[w].t++;
+      byWave[w]=byWave[w]||{d:0,t:0,s:{}}; byWave[w].t++;
+      // A closed leaf is DONE whatever progress.js says; only an open one counts by its status.
+      if(!state[id]){var st=b.getAttribute("data-status")||"OPEN";byWave[w].s[st]=(byWave[w].s[st]||0)+1;byStatus[st]=(byStatus[st]||0)+1}
       byMod[mod]=byMod[mod]||{d:0,t:0}; byMod[mod].t++;
       if(state[id]){done++;byWave[w].d++;byMod[mod].d++;b.checked=true;b.closest("li.leaf").classList.add("done")}
       else{b.checked=false;b.closest("li.leaf").classList.remove("done")}
@@ -455,6 +478,10 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     document.getElementById("cLeft").textContent=total-done;
     document.getElementById("cBuild").textContent=buildDone;
     document.getElementById("cActs").textContent=actsLeft;
+    document.getElementById("cInProgress").textContent=byStatus["IN PROGRESS"]||0;
+    document.getElementById("cReady").textContent=byStatus["READY FOR TESTING"]||0;
+    document.getElementById("cBlocked").textContent=byStatus["BLOCKED"]||0;
+    document.getElementById("cOpen").textContent=byStatus["OPEN"]||0;
 
     // group progress
     [].slice.call(document.querySelectorAll(".prog")).forEach(function(el){
@@ -479,8 +506,10 @@ Derived from the Company Brain architecture, module by module, so coverage is tr
     var chips="",current=null;
     Object.keys(byWave).sort().forEach(function(w){
       var o=byWave[w],v=o.t?Math.round(o.d/o.t*100):0;
-      chips+='<span class="wchip'+(v===100?' done':'')+'">Wave '+w+' <b>'+o.d+'/'+o.t+'</b> '+v+'%</span>';
+      var extra=["IN PROGRESS","READY FOR TESTING","BLOCKED"].filter(function(k){return o.s[k]}).map(function(k){return o.s[k]+" "+k.toLowerCase()}).join(" · ");
+      chips+='<span class="wchip'+(v===100?' done':'')+'">Wave '+w+' <b>'+o.d+'/'+o.t+'</b> '+v+'%'+(extra?' · '+extra:'')+'</span>';
       var dc=document.querySelector('[data-wavedone="'+w+'"]');if(dc)dc.textContent=o.d;
+      ["IN PROGRESS","READY FOR TESTING","BLOCKED","OPEN"].forEach(function(k){var c=document.querySelector('[data-wavest="'+w+'|'+k+'"]');if(c)c.textContent=o.s[k]||0});
       if(current===null&&v<100)current=w;
     });
     document.getElementById("waveChips").innerHTML=chips;

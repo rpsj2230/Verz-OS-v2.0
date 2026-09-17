@@ -39,7 +39,14 @@ The deliberate consequence is that forgetting to write an id, or its proof, mean
 does not count. That is a nuisance exactly once and then never again, and it fails in the
 safe direction.
 
-Task ids: M38.3.1.1, M38.3.1.2, M38.3.1.3, M38.3.1.4
+**Every other status is typed, in one file, and cannot say DONE.** The owner asked on 2026-09-17
+for each task to read OPEN, IN PROGRESS, READY FOR TESTING, BLOCKED with its reason, or DONE.
+The first four are a person's statement about work in flight, which no commit can make, so they
+live in `docs/wbs/progress.js`, reach `wbs.json` through `export.js`, and are read here by
+`progress_of`. A leaf a commit closed is DONE whatever that file says: see
+`A_CLOSED_LEAF_IS_DONE_WHATEVER_THE_PROGRESS_FILE_SAYS`.
+
+Task ids: M38.3.1.1, M38.3.1.2, M38.3.1.3, M38.3.1.4, M38.2.1.1
 """
 
 from __future__ import annotations
@@ -47,7 +54,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Final
 
@@ -74,12 +81,56 @@ A_CLAIM_IS_JUDGED_BY_THE_RULE_IN_FORCE_WHEN_IT_WAS_COMMITTED: Final = (
 )
 
 
+#: The statuses a person may set in `docs/wbs/progress.js`. A leaf with no entry is OPEN.
+OPEN: Final = "OPEN"
+IN_PROGRESS: Final = "IN PROGRESS"
+READY_FOR_TESTING: Final = "READY FOR TESTING"
+BLOCKED: Final = "BLOCKED"
+HAND_SET_STATUSES: Final = (OPEN, IN_PROGRESS, READY_FOR_TESTING, BLOCKED)
+
+#: The one status computed rather than typed.
+DONE: Final = "DONE"
+
+#: Why the progress file cannot hold DONE and cannot override it.
+A_CLOSED_LEAF_IS_DONE_WHATEVER_THE_PROGRESS_FILE_SAYS: Final = (
+    "DONE means a commit on main claimed the leaf with proof, which is evidence; the progress "
+    "file is a person's word about work in flight. A file entry that could say DONE would mark "
+    "a task done by hand, and one that could hold a closed leaf at IN PROGRESS would hide "
+    "delivered work, so DONE is refused in the file and a closed leaf's entry is ignored"
+)
+
+#: A commit as `docs/wbs/progress.js` accepts one: an abbreviated or full lowercase hash.
+COMMIT_RE = re.compile(r"^[0-9a-f]{7,40}$")
+
+
+class LeafProgress(BaseModel):
+    """A hand-set status for one leaf, as `docs/wbs/progress.js` states it."""
+
+    status: str
+    why: str = ""
+    updated: str
+
+
+class WaveRecord(BaseModel):
+    """The deployed commit a wave closed at, recorded by whoever accepted it on staging."""
+
+    commit: str
+    recorded: str
+    note: str = ""
+
+
 class WaveProgress(BaseModel):
     wave: int
     name: str
     total: int
     done: int
     percent: float = 0.0
+    #: Buildable leaves in this wave that no commit closed, by hand-set status. With `done`
+    #: they sum to `total`, because a closed leaf counts only as done.
+    in_progress: int = 0
+    ready_for_testing: int = 0
+    blocked: int = 0
+    open: int = 0
     #: Leaves in this wave a person does on the week of a migration, left out of `total`.
     acts: int = 0
     #: Leaves in this wave decided as not needed as written, left out of `total` and `acts`.
@@ -118,6 +169,12 @@ class Status(BaseModel):
     waves: list[WaveProgress] = []
     modules: list[ModuleProgress] = []
     done_task_ids: list[str] = []
+    #: Hand-set statuses of leaves no commit has closed, by id. A closed leaf is absent here
+    #: whatever the progress file says, so a reader of this field cannot show it as anything
+    #: but DONE.
+    leaf_status: dict[str, LeafProgress] = {}
+    #: The deployed commit each wave closed at, by wave number as a string.
+    wave_records: dict[str, WaveRecord] = {}
     #: How many leaves closed since midnight UTC. Zero is a real and common answer, and
     #: showing it is the point: a page that only ever shows movement cannot show a stall.
     closed_today: int = 0
@@ -426,6 +483,67 @@ def decided_of(module: dict[str, Any]) -> dict[str, Any]:
     return flags
 
 
+def _is_day(raw: object) -> bool:
+    """Whether a value is a calendar day written YYYY-MM-DD."""
+    if not isinstance(raw, str) or len(raw) != 10:
+        return False
+    try:
+        date.fromisoformat(raw)
+    except ValueError:
+        return False
+    return True
+
+
+def progress_of(module: dict[str, Any]) -> dict[str, LeafProgress]:
+    """The hand-set statuses a module carries in the exported work breakdown, keyed by leaf id.
+
+    Refuses what `docs/wbs/progress.js` refuses, because `wbs.json` can be edited by hand or left
+    behind by a failed export: an id that is not this module's leaf, a status outside
+    `HAND_SET_STATUSES` (DONE included), BLOCKED with no reason, and an undated entry.
+    """
+    raw: dict[str, Any] = module.get("leaf_progress", {}) or {}
+    leaves = set(module.get("leaf_ids", []))
+    wrong: list[str] = []
+    found: dict[str, LeafProgress] = {}
+    for leaf, entry in raw.items():
+        state = entry.get("status")
+        why = str(entry.get("why") or "").strip()
+        if leaf not in leaves:
+            wrong.append(f"{leaf} is not a leaf of {module['id']}")
+        if state not in HAND_SET_STATUSES:
+            wrong.append(f"{leaf} has status {state!r}, which is none of {HAND_SET_STATUSES}")
+        if state == BLOCKED and not why:
+            wrong.append(f"{leaf} is BLOCKED with no reason")
+        if not _is_day(entry.get("updated")):
+            wrong.append(f"{leaf} has no updated day")
+        if not wrong:
+            found[leaf] = LeafProgress(status=state, why=why, updated=entry["updated"])
+    if wrong:
+        raise ValueError(f"{module['id']}: " + "; ".join(wrong))
+    return found
+
+
+def wave_records_of(wbs: dict[str, Any]) -> dict[str, WaveRecord]:
+    """The recorded end-of-wave commits, refusing a wave that does not exist or a bad record."""
+    names: dict[str, str] = wbs.get("wave_names", {})
+    wrong: list[str] = []
+    found: dict[str, WaveRecord] = {}
+    for wave, rec in (wbs.get("wave_records", {}) or {}).items():
+        if wave not in names:
+            wrong.append(f"wave {wave} is not a wave")
+        if not COMMIT_RE.match(str(rec.get("commit", ""))):
+            wrong.append(f"wave {wave} records {rec.get('commit')!r}, which is not a commit")
+        if not _is_day(rec.get("recorded")):
+            wrong.append(f"wave {wave} has no recorded day")
+        if not wrong:
+            found[wave] = WaveRecord(
+                commit=rec["commit"], recorded=rec["recorded"], note=str(rec.get("note") or "")
+            )
+    if wrong:
+        raise ValueError("; ".join(wrong))
+    return found
+
+
 def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     closed, recent = closed_task_ids(repo, ref)
     wave_names: dict[str, str] = wbs.get("wave_names", {})
@@ -435,6 +553,9 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
     per_wave: dict[int, list[int]] = {}
     total = done = acts = decided = 0
     matched: set[str] = set()
+    #: Wave to hand-set status to how many unclosed buildable leaves hold it.
+    per_wave_status: dict[int, dict[str, int]] = {}
+    leaf_status: dict[str, LeafProgress] = {}
 
     for m in wbs.get("modules", []):
         leaves: list[str] = m.get("leaf_ids", [])
@@ -446,12 +567,16 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         leaf_waves: dict[str, int] = m.get("leaf_waves", {})
         flags = acts_of(m)
         decisions = decided_of(m)
+        hand_set = progress_of(m)
         m_total = m_done = m_acts = m_decided = 0
         for leaf in leaves:
             leaf_done = _is_closed(leaf, closed)
             if leaf_done:
                 # Still listed as closed even for an act, so the tracker ticks it.
                 matched.add(leaf)
+            elif leaf in hand_set:
+                # Only when not closed. See A_CLOSED_LEAF_IS_DONE_WHATEVER_THE_PROGRESS_FILE_SAYS.
+                leaf_status[leaf] = hand_set[leaf]
             bucket = per_wave.setdefault(int(leaf_waves.get(leaf, wave)), [0, 0, 0, 0])
             # Before the act test, and neither in `total` nor in `acts`. See
             # A_LEAF_DECIDED_AGAINST_IS_NEITHER_BUILDABLE_NOR_A_CLIENT_TASK.
@@ -467,6 +592,10 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             m_done += int(leaf_done)
             bucket[0] += 1
             bucket[1] += int(leaf_done)
+            if not leaf_done:
+                state = hand_set[leaf].status if leaf in hand_set else OPEN
+                counts = per_wave_status.setdefault(int(leaf_waves.get(leaf, wave)), {})
+                counts[state] = counts.get(state, 0) + 1
         modules.append(
             ModuleProgress(
                 module=m["id"],
@@ -492,6 +621,10 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
             percent=round(100 * d / t, 1) if t else 0.0,
             acts=a,
             decided=x,
+            in_progress=per_wave_status.get(w, {}).get(IN_PROGRESS, 0),
+            ready_for_testing=per_wave_status.get(w, {}).get(READY_FOR_TESTING, 0),
+            blocked=per_wave_status.get(w, {}).get(BLOCKED, 0),
+            open=per_wave_status.get(w, {}).get(OPEN, 0),
         )
         for w, (t, d, a, x) in sorted(per_wave.items())
     ]
@@ -539,6 +672,8 @@ def build_status(repo: Path, wbs: dict[str, Any], ref: str = "HEAD") -> Status:
         waves=waves,
         modules=modules,
         done_task_ids=sorted(matched),
+        leaf_status=leaf_status,
+        wave_records=wave_records_of(wbs),
         closed_today=closed_today,
         next_up=next_up,
         recent=recent,

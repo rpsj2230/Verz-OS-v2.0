@@ -3,10 +3,10 @@
 Task ids: M38.3.1.1, M38.3.1.3, M38.3.1.4,
 M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5
 
-Deliberately not claimed: M38.3.1.2, which asks for the status file to be written back
-to the repository on each merge. It is generated in CI and baked into the image, and
-committing it back would store a derived value in the tree it is derived from - a bot
-commit on every merge, each of which is itself a merge. See the note on it below.
+M38.3.1.2 is tested at the end: the status file is committed to the `status` branch rather than
+to main, because a commit to main would store a derived value in the tree it is derived from and
+start CI and Deploy again for every merge. M38.2.1.6 and M38.2.1.1 are tested through
+/build/waves.
 """
 
 from __future__ import annotations
@@ -1568,3 +1568,322 @@ def test_the_tracker_offers_the_filter_that_shows_only_what_is_left() -> None:
     assert "body.leftonly li.leaf.done{display:none}" in page
     assert "body.leftonly li.n:not(.leaf):not(:has(li.leaf:not(.done))){display:none}" in page
     assert "body.leftonly section[data-mod]:not(:has(li.leaf:not(.done))){display:none}" in page
+
+
+# --- statuses other than DONE, set by hand in docs/wbs/progress.js ----------------------------
+#
+#: The repository this file sits in.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# The owner asked on 2026-09-17 for every task to show OPEN, IN PROGRESS, READY FOR TESTING,
+# BLOCKED with its reason, or DONE. DONE stays computed from commits; the rest are typed.
+
+
+def _with_progress(entries: dict[str, dict[str, str]]) -> dict[str, Any]:
+    """The fixture plan with hand-set statuses on M0 and M1, as `export.js` writes them."""
+    by_module: dict[str, dict[str, dict[str, str]]] = {}
+    for leaf, entry in entries.items():
+        by_module.setdefault(leaf.split(".")[0], {})[leaf] = entry
+    modules: list[dict[str, Any]] = json.loads(json.dumps(WBS["modules"]))
+    for module in modules:
+        module["leaf_progress"] = by_module.get(str(module["id"]), {})
+    return {**WBS, "modules": modules}
+
+
+@pytest.mark.parametrize(
+    ("leaf", "entry", "reason"),
+    [
+        ("M9.1.1", {"status": "OPEN", "updated": "2026-09-17"}, "is not a leaf"),
+        ("M0.2.1", {"status": "STARTED", "updated": "2026-09-17"}, "none of"),
+        ("M0.2.1", {"status": "DONE", "updated": "2026-09-17"}, "none of"),
+        ("M0.2.1", {"status": "BLOCKED", "why": "  ", "updated": "2026-09-17"}, "no reason"),
+        ("M0.2.1", {"status": "IN PROGRESS", "updated": "17/09/2026"}, "no updated day"),
+    ],
+)
+def test_a_progress_entry_the_file_would_refuse_is_refused_in_the_export_too(
+    leaf: str, entry: dict[str, str], reason: str
+) -> None:
+    """`progress.js` throws on each of these, and `wbs.json` can still hold one: edited by hand
+    or left behind by a failed export. DONE is here because a file that could say DONE would mark
+    a task done by hand, which M38.3.1.3 forbids. Delete this and an unknown id or status is
+    shown to the owner as though it meant something."""
+    module = {"id": "M0", "name": "Foundation", "wave": 0, "leaf_ids": ["M0.1.1", "M0.2.1"]}
+
+    with pytest.raises(ValueError, match=reason):
+        status.progress_of({**module, "leaf_progress": {leaf: entry}})
+
+
+def test_a_well_formed_progress_entry_is_read_with_its_reason() -> None:
+    """The positive sibling: a validator refusing everything passes every test above."""
+    module = {
+        "id": "M0",
+        "leaf_ids": ["M0.1.1", "M0.2.1"],
+        "leaf_progress": {
+            "M0.2.1": {"status": "BLOCKED", "why": "needs a token", "updated": "2026-09-17"},
+            "M0.1.1": {"status": "READY FOR TESTING", "updated": "2026-09-17"},
+        },
+    }
+
+    found = status.progress_of(module)
+
+    assert found["M0.2.1"] == status.LeafProgress(
+        status="BLOCKED", why="needs a token", updated="2026-09-17"
+    )
+    assert found["M0.1.1"].status == "READY FOR TESTING"
+
+
+def test_a_closed_leaf_is_done_whatever_the_progress_file_says(repo: Path) -> None:
+    """**The rule the owner stated: DONE comes from commits, and nothing typed overrides it.**
+    M0.1.1 is closed by a commit in the fixture and marked IN PROGRESS by hand. Delete this and a
+    stale entry can hold delivered work at IN PROGRESS on both pages."""
+    wbs = _with_progress({"M0.1.1": {"status": "IN PROGRESS", "updated": "2026-09-17"}})
+
+    s = status.build_status(repo, wbs)
+
+    assert "M0.1.1" in s.done_task_ids
+    assert "M0.1.1" not in s.leaf_status
+    wave_zero = next(w for w in s.waves if w.wave == 0)
+    assert (wave_zero.done, wave_zero.in_progress) == (2, 0)
+
+
+def test_each_wave_counts_its_unclosed_leaves_by_status_and_the_counts_sum_to_the_total(
+    repo: Path,
+) -> None:
+    """Per wave, because the owner asked for a count per status per wave. The sum is the property
+    that makes the columns trustworthy: a leaf counted under two statuses, or under none, makes
+    the row add up to something other than the wave. Delete this and the columns on /build can
+    disagree with the percentage beside them."""
+    wbs = _with_progress(
+        {
+            "M0.2.1": {"status": "BLOCKED", "why": "waits on a token", "updated": "2026-09-17"},
+            "M1.1.2": {"status": "READY FOR TESTING", "why": "", "updated": "2026-09-17"},
+        }
+    )
+
+    s = status.build_status(repo, wbs)
+
+    by_wave = {w.wave: w for w in s.waves}
+    assert (by_wave[0].blocked, by_wave[0].open, by_wave[0].done) == (1, 0, 2)
+    assert (by_wave[1].ready_for_testing, by_wave[1].open, by_wave[1].done) == (1, 0, 1)
+    for w in s.waves:
+        assert w.done + w.in_progress + w.ready_for_testing + w.blocked + w.open == w.total
+    assert s.leaf_status["M0.2.1"].why == "waits on a token"
+
+
+def test_every_hand_set_status_in_the_repository_is_a_known_status_on_a_real_leaf() -> None:
+    """The committed export, read the way the status page reads it. `export.js` refuses these
+    first; this is the refusal a Python run sees when `wbs.json` was edited instead. Delete this
+    and an unknown id or status in the file the image ships reaches the owner's page."""
+    wbs = status.load_wbs(REAL_WBS)
+    entries = {
+        leaf: entry
+        for module in wbs["modules"]
+        for leaf, entry in status.progress_of(module).items()
+    }
+
+    assert all(entry.status in status.HAND_SET_STATUSES for entry in entries.values())
+    assert status.wave_records_of(wbs) is not None
+
+
+def test_the_tracker_shows_each_leaf_the_status_the_work_breakdown_gives_it() -> None:
+    """Every leaf checkbox carries one status, OPEN unless `progress.js` says otherwise, so the
+    tracker and /build read one file. Delete this and `render.js` can badge a different leaf, or
+    none, with the status page still right."""
+    html = (REPO_ROOT / "docs" / "tracker.html").read_text(encoding="utf-8")
+    wbs = status.load_wbs(REAL_WBS)
+    expected = {
+        leaf: status.progress_of(module)[leaf].status
+        if leaf in status.progress_of(module)
+        else status.OPEN
+        for module in wbs["modules"]
+        for leaf in module["leaf_ids"]
+    }
+
+    boxes = re.findall(r'<input type="checkbox" class="cb"[^>]*>', html)
+    shown: dict[str, str] = {}
+    for box in boxes:
+        leaf, state = re.search(r'data-id="([^"]+)"', box), re.search(r'data-status="([^"]+)"', box)
+        assert leaf is not None, box
+        shown[leaf.group(1)] = state.group(1) if state is not None else "no status"
+
+    assert shown == expected
+    # A closed leaf gets li.done from the live status, and its status chip is hidden under it.
+    assert "li.leaf.done .pst,li.leaf.done .pwhy{display:none}" in html
+
+
+def test_the_status_page_shows_each_waves_count_per_status(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """/build is the other page the owner named. Delete this and the columns can vanish from it
+    while the tracker keeps them."""
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    wave = {"wave": 0, "name": "Foundation", "total": 10, "done": 4, "percent": 40.0}
+    counts = {"in_progress": 3, "ready_for_testing": 2, "blocked": 1, "open": 0}
+    body = {"commit": "abc1234", "waves": [{**wave, **counts}], "done_task_ids": []}
+    (docs / "status.json").write_text(json.dumps(body), encoding="utf-8")
+    monkeypatch.setattr(docs_routes, "DOCS", docs)
+
+    with TestClient(create_app(Settings(env="production"))) as client:
+        page = client.get("/build").text
+
+    row = re.search(r"<tr><td>Wave 0</td>.*?</tr>", page)
+    assert row is not None
+    cells = re.findall(r'<td class="n">([^<]*)</td>', row.group(0))
+    assert cells == ["4/10", "40.0%", "3", "2", "1", "0"]
+    assert '<th style="text-align:right">Blocked</th>' in page
+
+
+# --- the wave reports page (M38.2.1.6) and the end-of-wave record (M38.2.1.1) ---------------
+
+
+def _waves_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, records: dict[str, Any] | None = None
+) -> TestClient:
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    wbs = {
+        "wave_names": {"0": "Foundation", "1": "The gate"},
+        "wave_records": records or {},
+        "modules": [
+            {
+                "id": "M0",
+                "name": "Foundation",
+                "wave": 0,
+                "leaf_ids": ["M0.1.1", "M0.1.2", "M0.1.3"],
+                "leaf_texts": ["first", "second", "third <b>"],
+                "leaf_progress": {
+                    "M0.1.2": {
+                        "status": "BLOCKED",
+                        "why": "waits on <token>",
+                        "updated": "2026-09-17",
+                    },
+                    "M0.1.1": {"status": "IN PROGRESS", "why": "", "updated": "2026-09-17"},
+                },
+            },
+            {
+                "id": "M1",
+                "name": "Identity",
+                "wave": 1,
+                "leaf_ids": ["M1.1.1"],
+                "leaf_texts": ["x"],
+            },
+        ],
+    }
+    (docs / "wbs.json").write_text(json.dumps(wbs), encoding="utf-8")
+    (docs / "status.json").write_text(
+        json.dumps({"commit": "abc1234", "done_task_ids": ["M0.1.1"], "recent": []}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(docs_routes, "DOCS", docs)
+    return TestClient(create_app(Settings(env="production")))
+
+
+def test_the_wave_reports_page_counts_each_status_and_names_every_block_with_its_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M38.2.1.6, as the owner reads it at /build/waves. M0.1.1 is closed and marked IN PROGRESS,
+    so it counts closed; M0.1.2 is blocked, and its reason is shown escaped, because the progress
+    file is typed by a person and lands in markup. Delete this and the page can lose the reasons,
+    which is the half of a block somebody acts on."""
+    with _waves_client(tmp_path, monkeypatch) as client:
+        response = client.get("/build/waves")
+
+    assert response.status_code == 200
+    page = response.text
+    wave_zero = page[page.index('id="wave-0"') : page.index('id="wave-1"')]
+    assert "1 closed" in wave_zero
+    assert "0 in progress" in wave_zero
+    assert "1 blocked" in wave_zero
+    assert "1 open" in wave_zero
+    assert "waits on &lt;token&gt;" in wave_zero
+    assert "<token>" not in page
+    assert "No end-of-wave commit recorded yet" in wave_zero
+
+
+def test_the_wave_reports_page_shows_the_commit_a_wave_was_recorded_as_closing_at(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """M38.2.1.1: the record is shown where the wave is. Delete this and a recorded commit can be
+    in the file and on no page."""
+    records = {"0": {"commit": "fa53822", "recorded": "2026-09-20", "note": "accepted"}}
+    with _waves_client(tmp_path, monkeypatch, records=records) as client:
+        page = client.get("/build/waves").text
+
+    wave_zero = page[page.index('id="wave-0"') : page.index('id="wave-1"')]
+    assert "<code>fa53822</code> on 2026-09-20: accepted" in wave_zero
+    assert "No end-of-wave commit recorded yet" in page[page.index('id="wave-1"') :]
+
+
+@pytest.mark.parametrize(
+    ("records", "reason"),
+    [
+        ({"9": {"commit": "fa53822", "recorded": "2026-09-20"}}, "not a wave"),
+        ({"0": {"commit": "main", "recorded": "2026-09-20"}}, "not a commit"),
+        ({"0": {"commit": "fa53822", "recorded": "soon"}}, "no recorded day"),
+    ],
+)
+def test_a_wave_record_naming_no_wave_no_commit_or_no_day_is_refused(
+    records: dict[str, Any], reason: str
+) -> None:
+    """A record is what says which commit a wave ended at, now that tags are cut only for client
+    installs, so one naming a branch or a wave that does not exist is refused. Delete this and
+    `main` can be recorded as a wave's commit, which moves every day."""
+    with pytest.raises(ValueError, match=reason):
+        status.wave_records_of({"wave_names": {"0": "Foundation"}, "wave_records": records})
+
+
+def test_every_recorded_wave_commit_is_in_this_repositorys_history() -> None:
+    """A record that names a commit nobody can find is a record of nothing. Checked only where
+    the history is complete, since a shallow clone cannot tell a missing commit from an unfetched
+    one; CI's unit jobs fetch the whole history."""
+    records = status.wave_records_of(status.load_wbs(REAL_WBS))
+    shallow = subprocess.run(
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout.strip()
+    if shallow != "false":
+        pytest.skip("not a complete clone, so an absent commit may simply be unfetched")
+    for wave, record in records.items():
+        found = subprocess.run(
+            ["git", "cat-file", "-e", f"{record.commit}^{{commit}}"], cwd=REPO_ROOT, check=False
+        )
+        assert found.returncode == 0, f"wave {wave} records {record.commit}, which is not here"
+
+
+# --- the status file written to the repository (M38.3.1.2) ------------------------------------
+
+
+def _status_file_workflow() -> dict[Any, Any]:
+    import yaml
+
+    parsed: dict[Any, Any] = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "status-file.yml").read_text(encoding="utf-8")
+    )
+    return parsed
+
+
+def test_the_status_file_is_committed_after_each_green_ci_on_main_and_never_to_main() -> None:
+    """M38.3.1.2. After a green CI on main, because a task is done only when CI is green; to the
+    `status` branch, because a commit to main would start CI and Deploy again for every merge.
+    Delete this and the push can be pointed at main, or the trigger at every CI run whatever its
+    result, with the file still looking right."""
+    workflow = _status_file_workflow()
+    # PyYAML reads the bare key `on` as True.
+    trigger = workflow[True]["workflow_run"]
+    job = workflow["jobs"]["write"]
+    steps = job["steps"]
+    runs = "\n".join(str(step.get("run", "")) for step in steps)
+
+    assert trigger == {"workflows": ["CI"], "branches": ["main"], "types": ["completed"]}
+    assert "github.event.workflow_run.conclusion == 'success'" in job["if"]
+    assert workflow["permissions"] == {"contents": "write"}
+    assert "uv run python -m brain.status" in runs
+    assert "git push --quiet origin HEAD:refs/heads/status" in runs
+    assert not re.search(r"push[^\n]*\bmain\b", runs)
+    checkout = next(s for s in steps if "actions/checkout" in str(s.get("uses", "")))
+    assert checkout["with"]["fetch-depth"] == 0
+    assert checkout["with"]["ref"] == "${{ github.event.workflow_run.head_sha || github.sha }}"
