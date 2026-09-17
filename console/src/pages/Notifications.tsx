@@ -23,6 +23,8 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
@@ -46,7 +48,7 @@ import {
   type NoticeRow,
   type NotificationsBody,
 } from "./notificationsQuery";
-import { problemsFor, readProblems, type Problem } from "./webhooksQuery";
+import type { Problem } from "./webhooksQuery";
 
 export const NOTIFICATIONS_HEADING = "Notifications and email";
 export const NOTIFICATIONS_CRUMB = "Operate › Notifications and email";
@@ -67,30 +69,13 @@ export const KEEP_PASSWORD_LABEL = "Save password";
 export const SEND_TRIAL_LABEL = "Send test message";
 export const KEEP_LABEL = "Change nothing";
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
-function FieldProblems({ problems, field }: { readonly problems: readonly Problem[]; readonly field: string }) {
-  const found = problemsFor(problems, field);
-  if (found.length === 0) {
-    return null;
-  }
-  return (
-    <ul className="field-description" aria-label={`Problems with ${field}`}>
-      {found.map((one) => (
-        <li key={one}>{one}</li>
-      ))}
-    </ul>
-  );
-}
+/**
+ * The names this screen's inputs are sent under. Every one is unique across its three forms, so one
+ * list of problems serves all of them; a switch sends `on`, which no input holds, and a problem with
+ * it is listed under the notice.
+ */
+const NOTIFICATION_FIELDS: readonly string[] = ["host", "port", "security", "sender", "username", "password", "to"];
+const NOTIFICATIONS_FORM = "notifications";
 
 type Pending =
   | { readonly kind: "switch"; readonly row: NoticeRow; readonly on: boolean }
@@ -202,8 +187,9 @@ function NotificationsPageBody({
   const [password, setPassword] = useState("");
   const [to, setTo] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [blank, setBlank] = useState<Problem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const problems: readonly Problem[] = [...blank, ...(failure?.problems ?? [])];
   const [busy, setBusy] = useState(false);
 
   const send = useCallback(
@@ -226,12 +212,13 @@ function NotificationsPageBody({
         setBusy(false);
         setPending(null);
         if (!result.ok) {
-          const found = result.failure.status === 422 ? readProblems(result.body) : null;
-          setProblems(found ?? []);
-          setFailure(found === null ? result.failure : null);
+          // Drawn whole: the notice with the API's message and reference, and each problem beside
+          // the input it names.
+          setBlank([]);
+          setFailure(result.failure);
           return;
         }
-        setProblems([]);
+        setBlank([]);
         setFailure(null);
         const told = readTold(result.data);
         onChanged(
@@ -249,10 +236,10 @@ function NotificationsPageBody({
   function saveRelay(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFailure(null);
-    const blank = blankRelayProblems(host, port, sender);
-    setProblems(blank);
+    const found = blankRelayProblems(host, port, sender);
+    setBlank(found);
     const number = portNumber(port);
-    if (blank.length > 0 || number === null) {
+    if (found.length > 0 || number === null) {
       return;
     }
     setPending({ kind: "relay", host, port: number, security, sender, username });
@@ -261,9 +248,9 @@ function NotificationsPageBody({
   function keepPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFailure(null);
-    const blank = blankPasswordProblems(password);
-    setProblems(blank);
-    if (blank.length > 0) {
+    const found = blankPasswordProblems(password);
+    setBlank(found);
+    if (found.length > 0) {
       return;
     }
     setPending({ kind: "password", password });
@@ -272,9 +259,9 @@ function NotificationsPageBody({
   function sendTrial(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setFailure(null);
-    const blank = blankTrialProblems(to);
-    setProblems(blank);
-    if (blank.length > 0) {
+    const found = blankTrialProblems(to);
+    setBlank(found);
+    if (found.length > 0) {
       return;
     }
     setPending({ kind: "trial", to });
@@ -336,7 +323,7 @@ function NotificationsPageBody({
 
   return (
     <>
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} fields={NOTIFICATION_FIELDS} />}
       {confirmation}
 
       <NoticeTable
@@ -374,31 +361,37 @@ function NotificationsPageBody({
             <input
               className="form-control"
               type="text"
+              name="host"
               value={host}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "host")}
               onChange={(event) => {
                 setHost(event.target.value);
               }}
             />
           </label>
-          <FieldProblems problems={problems} field="host" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="host" />
           <label className="control-label">
             Port{" "}
             <input
               className="form-control"
               type="text"
               inputMode="numeric"
+              name="port"
               value={port}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "port")}
               onChange={(event) => {
                 setPort(event.target.value);
               }}
             />
           </label>
-          <FieldProblems problems={problems} field="port" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="port" />
           <label className="control-label">
             Security{" "}
             <select
               className="form-control"
+              name="security"
               value={security}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "security")}
               onChange={(event) => {
                 setSecurity(event.target.value);
               }}
@@ -410,33 +403,37 @@ function NotificationsPageBody({
               ))}
             </select>
           </label>
-          <FieldProblems problems={problems} field="security" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="security" />
           <p className="field-description">{page.plain_smtp_refused}</p>
           <label className="control-label">
             Sender address{" "}
             <input
               className="form-control"
               type="email"
+              name="sender"
               value={sender}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "sender")}
               onChange={(event) => {
                 setSender(event.target.value);
               }}
             />
           </label>
-          <FieldProblems problems={problems} field="sender" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="sender" />
           <label className="control-label">
             User name{" "}
             <input
               className="form-control"
               type="text"
               autoComplete="off"
+              name="username"
               value={username}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "username")}
               onChange={(event) => {
                 setUsername(event.target.value);
               }}
             />
           </label>
-          <FieldProblems problems={problems} field="username" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="username" />
           <div className="form-actions">
             <button type="submit" className="button" disabled={busy}>
               {SAVE_RELAY_LABEL}
@@ -457,13 +454,15 @@ function NotificationsPageBody({
               type="text"
               autoComplete="off"
               spellCheck={false}
+              name="password"
               value={password}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "password")}
               onChange={(event) => {
                 setPassword(event.target.value);
               }}
             />
           </label>
-          <FieldProblems problems={problems} field="password" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="password" />
           <p className="field-description">It is kept in the vault and never shown again.</p>
           <div className="form-actions">
             <button type="submit" className="button" disabled={busy}>
@@ -481,13 +480,15 @@ function NotificationsPageBody({
             <input
               className="form-control"
               type="email"
+              name="to"
               value={to}
+              {...problemAttributes(problems, NOTIFICATIONS_FORM, "to")}
               onChange={(event) => {
                 setTo(event.target.value);
               }}
             />
           </label>
-          <FieldProblems problems={problems} field="to" />
+          <FieldProblems problems={problems} form={NOTIFICATIONS_FORM} names="to" />
           <div className="form-actions">
             <button type="submit" className="button" disabled={busy}>
               {SEND_TRIAL_LABEL}
@@ -502,7 +503,7 @@ function NotificationsPageBody({
 function NotificationsList({ onChanged }: { readonly onChanged: (sentence: string) => void }) {
   const answer = useResource<unknown>(NOTIFICATIONS_API_PATH);
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (

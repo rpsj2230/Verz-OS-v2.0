@@ -110,6 +110,23 @@ describe("what the overview shows", () => {
     expect(valueBeside(container, "Channel")).toBe(A_CALLER.channel);
   });
 
+  test("the verbs a weak sign-in withholds and the flag arrive as the API spelled them", async () => {
+    // What breaks if this is deleted: the two fields the list above now declares can be dropped
+    // at render, because the sentinel test sends strings only. An empty list contributes no row,
+    // for the reason a missing department does, and the flag is the word the API sent.
+    const weak = await overviewAnswering({
+      body: { ...A_CALLER, withheld_verbs: ["admin", "approve"], second_factor_needed: true },
+    });
+    expect(valueBeside(weak, "Verbs withheld at this sign-in")).toBe("adminapprove");
+    expect(valueBeside(weak, "Second factor needed")).toBe("true");
+
+    const strong = await overviewAnswering({
+      body: { ...A_CALLER, withheld_verbs: [], second_factor_needed: false },
+    });
+    expect(valueBeside(strong, "Verbs withheld at this sign-in")).toBeNull();
+    expect(valueBeside(strong, "Second factor needed")).toBe("false");
+  });
+
   test("a caller with no department has no row where one would be", async () => {
     // What breaks if this is deleted: an empty row, which is a shape where a fact would be.
     // `primary_department` is nullable and a caller can legitimately have none, so absence

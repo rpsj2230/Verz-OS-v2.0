@@ -12,8 +12,8 @@
  * Task ids: M27.8.15
  */
 
-import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
+import { FailureNotice } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { STORAGE_API_PATH, heldNow, keptFor, readStorage } from "./storageQuery";
@@ -31,21 +31,10 @@ export const FROM_DEFAULT = "This is the address a new install starts with; nobo
 /** A store with no bucket declared, which is a sentence rather than a table with no rows. */
 export const NO_BUCKETS = "This install declares no bucket to keep files in.";
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
 function StorageBody() {
   const answer = useResource<unknown>(STORAGE_API_PATH);
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (

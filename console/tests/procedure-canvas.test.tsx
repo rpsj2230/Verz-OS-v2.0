@@ -352,7 +352,7 @@ describe("what comes out", () => {
       <ProcedureCanvas
         caption={CAPTION}
         tools={TOOLS}
-        failure={{ status: 422, message, traceId: "trace-abc", outcome: "" }}
+        failure={{ status: 422, message, traceId: "trace-abc", outcome: "", problems: [], secondFactorNeeded: false }}
       />,
     ).container;
     expect(refused.querySelector(".notice__body")?.textContent).toBe(message);

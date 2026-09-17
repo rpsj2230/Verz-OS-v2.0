@@ -37,7 +37,7 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
@@ -59,7 +59,6 @@ import {
   type MembershipBody,
   type TeamRow,
 } from "./governPeopleQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const DEPARTMENTS_HEADING = "Departments and teams";
 export const DEPARTMENTS_CRUMB = "Govern › Departments and teams";
@@ -97,17 +96,6 @@ export const CHOOSE_SOMEBODY_FIRST = "Choose who to place first; nothing has bee
 /** What a success says: what changed, for whom, and the instant the database recorded. */
 export function changedSentence(question: string, at: string): string {
   return `Done: ${question.replace(/\?$/, "")}, recorded at ${when(at)}.`;
-}
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
 }
 
 function readAt(payload: unknown): string {
@@ -202,7 +190,7 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
   );
 
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (
@@ -280,7 +268,7 @@ function Organisation({ onChanged }: { readonly onChanged: (sentence: string) =>
         </form>
       )}
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
 
       {pending === null ? null : (
         <ConfirmAction

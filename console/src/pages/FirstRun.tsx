@@ -37,6 +37,13 @@
  * drawn, because the server sends a path, a name and a reason and never a value. A 404 is one
  * constant sentence whatever its body said: see `A_SETUP_REFUSAL_NAMES_NO_REASON`.
  *
+ * **Every one of those carries its reference.** They are drawn by `ui/FailureNotice.tsx`, so the
+ * trace id the server minted for the request is under the sentence, or a sentence saying none came
+ * back. The 404's reference is no exception and names no reason either: it is minted for the
+ * request before the server has decided anything, so it reads the same for a finished install and
+ * a wrong code, and it is what lets the person who ran the installer find which one it was in the
+ * server's own log. The 404's body is still not read for anything else, its problems included.
+ *
  * **The finishing screen stops only for something the person has to do.** The key is kept in the
  * vault, which the installer runs since 2026-09-17, and the process that appointed uses it and
  * every saved answer at once. Where that process serves the console alone, nothing is left to do
@@ -96,7 +103,7 @@ import {
   type SignInView,
   type StepKey,
 } from "../setup/wizard";
-import { THE_BRAIN_COULD_NOT_BE_REACHED } from "../ui/FailureNotice";
+import { FailureNotice } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { StaffListCheck } from "../components/StaffListCheck";
 
@@ -191,8 +198,13 @@ const TOTAL_STEPS = SCREENS.length + 2;
 const NO_PROBLEMS: Placed = Object.freeze({ byField: {}, byStep: {} });
 
 type Told =
-  | { readonly kind: "refused" }
-  | { readonly kind: "unkept"; readonly reason: NotKeptReason; readonly variables: readonly string[] }
+  | { readonly kind: "refused"; readonly failure: ApiFailure }
+  | {
+      readonly kind: "unkept";
+      readonly reason: NotKeptReason;
+      readonly variables: readonly string[];
+      readonly failure: ApiFailure;
+    }
   | { readonly kind: "failure"; readonly failure: ApiFailure }
   | { readonly kind: "session_ended" }
   | null;
@@ -341,7 +353,11 @@ function Wizard() {
     if (!signed.ok) {
       setFinishing(false);
       setBusy(false);
-      setTold(signed.failure.status === 404 ? { kind: "refused" } : { kind: "failure", failure: signed.failure });
+      setTold(
+        signed.failure.status === 404
+          ? { kind: "refused", failure: signed.failure }
+          : { kind: "failure", failure: signed.failure },
+      );
       return;
     }
     setCode("");
@@ -389,7 +405,7 @@ function Wizard() {
     const problems = status === 422 ? problemsIn(result.body) : null;
     const unkept = status === 409 ? unkeptIn(result.body) : null;
     if (status === 404) {
-      setTold({ kind: "refused" });
+      setTold({ kind: "refused", failure: result.failure });
     } else if (problems && problems.length > 0) {
       const next = placeProblems(problems);
       setPlaced(next);
@@ -402,7 +418,7 @@ function Wizard() {
         setAt(first);
       }
     } else if (unkept) {
-      setTold({ kind: "unkept", reason: unkept.reason, variables: unkept.variables });
+      setTold({ kind: "unkept", reason: unkept.reason, variables: unkept.variables, failure: result.failure });
     } else {
       setTold({ kind: "failure", failure: result.failure });
     }
@@ -647,16 +663,18 @@ function ToldNotice({ told }: { readonly told: Told }) {
   }
   switch (told.kind) {
     case "refused":
-      // No trace id and no body: see `A_SETUP_REFUSAL_NAMES_NO_REASON`.
+      // The constant sentence and the request's reference, and nothing else from the body: its
+      // problems are dropped here rather than listed. See `A_SETUP_REFUSAL_NAMES_NO_REASON`.
       return (
-        <Notice title={NOT_CONTINUED_TITLE}>
-          <p>{SETUP_REFUSED_MESSAGE}</p>
-        </Notice>
+        <FailureNotice
+          failure={{ ...told.failure, problems: [] }}
+          title={NOT_CONTINUED_TITLE}
+          sentence={SETUP_REFUSED_MESSAGE}
+        />
       );
     case "unkept":
       return (
-        <Notice title={UNKEPT_TITLE}>
-          <p>{UNKEPT_SENTENCES[told.reason]}</p>
+        <FailureNotice failure={told.failure} title={UNKEPT_TITLE} sentence={UNKEPT_SENTENCES[told.reason]}>
           {told.reason === "no_vault" && told.variables.length > 0 ? (
             <ul className="first-run__names">
               {told.variables.map((name) => (
@@ -666,7 +684,7 @@ function ToldNotice({ told }: { readonly told: Told }) {
               ))}
             </ul>
           ) : null}
-        </Notice>
+        </FailureNotice>
       );
     case "session_ended":
       return (
@@ -678,15 +696,9 @@ function ToldNotice({ told }: { readonly told: Told }) {
         </Notice>
       );
     case "failure":
-      // A setup that never reached the API is told so under its own heading: the person's network
-      // is the thing to fix, and "not continued" over it reads as the server having refused them.
-      return (
-        <Notice
-          title={told.failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : NOT_CONTINUED_TITLE}
-          traceId={told.failure.traceId}
-        >
-          <p>{told.failure.message}</p>
-        </Notice>
-      );
+      // A setup that never reached the API is told so under its own heading, which `FailureNotice`
+      // puts over it whatever title it is given: the person's network is the thing to fix, and "not
+      // continued" over it reads as the server having refused them.
+      return <FailureNotice failure={told.failure} title={NOT_CONTINUED_TITLE} />;
   }
 }

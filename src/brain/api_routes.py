@@ -128,7 +128,7 @@ from brain.core.redaction import (
     serialise_for_channel,
 )
 from brain.core.scope import Clause, Op, Scope
-from brain.gate.admission import admit
+from brain.gate.admission import admit, second_factor_gives_back, verbs_withheld
 from brain.gate.answer import answer_lane, frames_of
 from brain.gate.caches import MAX_QUESTION_CHARS
 from brain.gate.context import Channel
@@ -345,6 +345,25 @@ class Asking:
     reach: EntitlementSet
     channel: Channel
     now: datetime
+    #: The verbs of the caller's own grants this channel and sign-in withhold, and never the
+    #: capabilities: see `brain.gate.admission.verbs_withheld`.
+    withheld_verbs: tuple[str, ...] = ()
+    #: Whether a sign-in with a second factor, on this channel, would give one of them back.
+    second_factor_gives_back: bool = False
+
+
+#: Where `asking` leaves the session's second-factor answer for the error handler to read.
+SECOND_FACTOR_STATE: Final = "second_factor_needed"
+
+
+def second_factor_needed(request: Request) -> bool:
+    """Whether `asking` found, for this request, that a second factor would restore a verb.
+
+    False for a request `asking` never ran for, such as an unmounted path, which is the direction
+    to fail in: the ordinary refusal. See
+    `brain.gate.admission.A_REFUSAL_TO_A_WEAK_SIGN_IN_IS_ABOUT_THE_SESSION`.
+    """
+    return getattr(request.state, SECOND_FACTOR_STATE, False) is True
 
 
 async def asking(request: Request) -> Asking:
@@ -389,11 +408,17 @@ async def asking(request: Request) -> Asking:
         now=now,
     )
     channel = channel_for(caller.claims)
+    restore = second_factor_gives_back(resolved.entitlements, channel, caller.assurance)
+    # Before any route reads anything, so a refusal later in this request is answered from the
+    # session and never from what was asked for.
+    setattr(request.state, SECOND_FACTOR_STATE, restore)
     return Asking(
         caller=caller,
         reach=admit(resolved.entitlements, channel, caller.assurance),
         channel=channel,
         now=now,
+        withheld_verbs=verbs_withheld(resolved.entitlements, channel, caller.assurance),
+        second_factor_gives_back=restore,
     )
 
 
@@ -427,6 +452,13 @@ class CallerView(BaseModel):
     employment: str
     assurance: str
     channel: str
+    #: The verbs this person's own grants hold that this channel and sign-in do not let them use.
+    #: Verbs and never capabilities, so it says what a stronger sign-in gives back and nothing
+    #: about which things the grants reach. Empty when nothing is withheld.
+    withheld_verbs: list[str] = []
+    #: True when signing in again with a second factor would give one of those verbs back. The
+    #: console's banner and "sign in again" action read this and nothing else.
+    second_factor_needed: bool = False
     #: Order-independent digest of the reach this request was computed at. Says nothing about
     #: what the reach contains, and is what a support conversation quotes beside a trace id
     #: when two people disagree about what they saw.
@@ -500,6 +532,8 @@ async def me(asked: Asked) -> CallerView:
         employment=str(asked.caller.principal.employment),
         assurance=asked.caller.assurance.name.lower(),
         channel=str(asked.channel),
+        withheld_verbs=list(asked.withheld_verbs),
+        second_factor_needed=asked.second_factor_gives_back,
         ent_hash=asked.reach.ent_hash(),
     )
 

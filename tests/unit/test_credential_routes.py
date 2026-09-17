@@ -28,7 +28,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from brain.api import API_PREFIX, KEPT_ERROR_KEYS
+from brain.api import API_PREFIX, KEPT_ERROR_KEYS, NOT_ACCEPTED
 from brain.app import Settings, create_app
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent
@@ -379,23 +379,25 @@ def test_a_body_in_the_wrong_shape_is_refused_without_repeating_what_was_sent(
     app: FastAPI, client: TestClient
 ) -> None:
     """FastAPI's own 422 quotes the input it refused, which for this route is the credential. Each
-    body puts the sentinel somewhere the model refuses it, and the answer keeps the location and the
-    type and drops the input. The positive half is the location, so an answer emptied of everything
-    would fail. Delete this and the router can be mounted without `NoEchoRoute`."""
+    body puts the sentinel somewhere the model refuses it, and the answer keeps the field and the
+    kind and words the problem without the input. The positive half is the field, so an answer
+    emptied of everything would fail. Delete this and the router can be mounted without
+    `NoEchoRoute`, or a problem's words can start quoting what they refused."""
     vault = Vault()
     holding(app, vault)
 
     for body, where in (
-        ({"value": KEY, "extra": KEY}, ["body", "extra"]),
-        ({"value": [KEY]}, ["body", "value"]),
-        ({"valu": KEY}, ["body", "value"]),
+        ({"value": KEY, "extra": KEY}, "extra"),
+        ({"value": [KEY]}, "value"),
+        ({"valu": KEY}, "value"),
     ):
         refused = put(client, "u_admin", body=body)
         assert refused.status_code == 422
         assert KEY not in refused.text
-        errors = refused.json()["detail"]
-        assert where in [one["loc"] for one in errors]
-        assert all(set(one) <= set(KEPT_ERROR_KEYS) for one in errors)
+        assert refused.json()["message"] == NOT_ACCEPTED
+        problems = refused.json()["problems"]
+        assert where in [one["field"] for one in problems]
+        assert all(set(one) == set(KEPT_ERROR_KEYS) for one in problems)
     assert vault.written == []
 
 

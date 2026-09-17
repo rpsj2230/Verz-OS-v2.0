@@ -12,7 +12,9 @@
 
 import { fireEvent } from "@testing-library/react";
 import { expect } from "vitest";
-import { transportFailure } from "../../src/api/errors";
+import { NOT_FOUND_MESSAGE, transportFailure } from "../../src/api/errors";
+import { NO_REFERENCE_CAME_BACK } from "../../src/ui/FailureNotice";
+import { SIGN_IN_AGAIN_WITH_YOUR_AUTHENTICATOR } from "../../src/ui/SignInAgain";
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
@@ -20,9 +22,12 @@ import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./navigation";
 import { PAGES } from "./pageCases";
 import {
   API_SENTENCE,
+  SECOND_FACTOR_SENTENCE,
   TRACE_SENTINEL,
+  collapse,
   mountIn,
   type Mounted,
+  type Reading,
   type RequestState,
 } from "./screenStates";
 
@@ -143,7 +148,8 @@ function onlyIn(mine: ReadonlySet<string>, others: readonly ReadonlySet<string>[
   return [...mine].filter((one) => others.every((other) => !other.has(one)));
 }
 
-async function reading(pattern: string, state: RequestState): Promise<Set<string>> {
+/** Mount `pattern` in `state`, do what the page needs doing before it asks, and read it. */
+async function readingOf(pattern: string, state: RequestState): Promise<Reading> {
   const page = PAGES[pattern];
   if (page === undefined) {
     throw new Error(`${pattern} has no page case.`);
@@ -155,10 +161,26 @@ async function reading(pattern: string, state: RequestState): Promise<Set<string
     expect(mounted.unanswered, `${pattern} asked for something its case does not answer`).toEqual([]);
   }
   if (act === undefined) {
-    return ownWords(mounted.sentences);
+    return mounted;
   }
   act(mounted);
-  return ownWords((await mounted.reread()).sentences);
+  return await mounted.reread();
+}
+
+async function reading(pattern: string, state: RequestState): Promise<Set<string>> {
+  return ownWords((await readingOf(pattern, state)).sentences);
+}
+
+/** The whole text of a reading, with its white space collapsed. */
+function textOf(read: Reading): string {
+  return collapse(read.root.textContent ?? "");
+}
+
+/** Whether a reading draws the control that sends a person to sign in again with a second factor. */
+function offersToSignInAgain(read: Reading): boolean {
+  return [...read.root.querySelectorAll("button")].some(
+    (one) => collapse(one.textContent ?? "") === SIGN_IN_AGAIN_WITH_YOUR_AUTHENTICATOR,
+  );
 }
 
 export const ASKING = Object.keys(PAGES).filter((pattern) => !(pattern in ASKS_NOTHING_ON_ARRIVAL));
@@ -175,7 +197,12 @@ export function shard(index: number, of: number): string[] {
 export async function holdsFourSentences(pattern: string): Promise<void> {
   const pending = await reading(pattern, { kind: "pending" });
   const unreachable = await reading(pattern, { kind: "unreachable" });
-  const failed = await reading(pattern, { kind: "failed" });
+  const failedReading = await readingOf(pattern, { kind: "failed" });
+  // The reference is checked here, on the mount the rule already makes, rather than on a sixth.
+  // See `ui/FailureNotice.A_FAILURE_WITHOUT_ITS_REFERENCE_IS_A_DEAD_END`.
+  expect(textOf(failedReading), `${pattern} drew a failure without its reference`).toContain(TRACE_SENTINEL);
+  expect(offersToSignInAgain(failedReading), `${pattern} offered a second factor nobody asked for`).toBe(false);
+  const failed = ownWords(failedReading.sentences);
   const page = PAGES[pattern];
   const answers = page?.answers ?? {};
   const hasList = ACTS[pattern] === undefined && emptyAnswers(pattern) !== null && !(pattern in NO_EMPTY_SENTENCE);
@@ -191,4 +218,29 @@ export async function holdsFourSentences(pattern: string): Promise<void> {
     const said = onlyIn(empty, [pending, unreachable, failed, full]).filter((one) => one.split(" ").length >= 3);
     expect(said, "empty").not.toEqual([]);
   }
+}
+
+/**
+ * Mount `pattern` with every request answered by a proxy that never reached the application, and
+ * hold it to saying that no reference came back, and to more than the old fallback.
+ */
+export async function saysNoReferenceCameBack(pattern: string): Promise<void> {
+  const read = await readingOf(pattern, { kind: "bodiless" });
+  const text = textOf(read);
+  expect(text, `${pattern} drew a failure with no reference and did not say so`).toContain(NO_REFERENCE_CAME_BACK);
+  expect(text, `${pattern} fell back to the sentence that told the staging install nothing`).not.toContain(
+    "Something went wrong.",
+  );
+}
+
+/**
+ * Mount `pattern` with every request refused with a 404 saying a second factor is needed, and hold
+ * it to the API's sentence and the control that signs in again, and never to "I could not find that".
+ */
+export async function asksForASecondFactor(pattern: string): Promise<void> {
+  const read = await readingOf(pattern, { kind: "refused", secondFactorNeeded: true });
+  const text = textOf(read);
+  expect(text, `${pattern} did not show the API's sentence about a second factor`).toContain(SECOND_FACTOR_SENTENCE);
+  expect(text, `${pattern} called a refusal for a weak sign-in an absence`).not.toContain(NOT_FOUND_MESSAGE);
+  expect(offersToSignInAgain(read), `${pattern} gave no way to sign in again`).toBe(true);
 }

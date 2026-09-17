@@ -10,8 +10,8 @@
  *
  * **Every write is confirmed, and the confirmation says what happens in the API's words.**
  * Registering, replacing a secret and switching off each open `ConfirmAction` with the sentence the
- * route served. A success says what changed and when; a refusal is the API's problems beside their
- * fields, or its message.
+ * route served. A success says what changed and when; a refusal is the API's message and reference
+ * above the forms, with each of its problems beside the field it names on the form that sent it.
  *
  * **A secret is typed into a plain text field and forgotten the moment it is sent.** A password
  * field is refused by `scripts/check-boundaries.mjs`, for the reason written there, so the field is
@@ -29,6 +29,8 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
@@ -42,8 +44,6 @@ import {
   blankRegistrationProblems,
   blankSecretProblems,
   dispatcherOutcome,
-  problemsFor,
-  readProblems,
   readWebhooks,
   registrationBody,
   secretApiPath,
@@ -80,35 +80,31 @@ export const REPLACE_LABEL = "Replace secret";
 export const SWITCH_OFF_LABEL = "Switch off";
 export const KEEP_LABEL = "Change nothing";
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
-function FieldProblems({ problems, field }: { readonly problems: readonly Problem[]; readonly field: string }) {
-  const found = problemsFor(problems, field);
-  if (found.length === 0) {
-    return null;
-  }
-  return (
-    <ul className="field-description" aria-label={`Problems with ${field}`}>
-      {found.map((one) => (
-        <li key={one}>{one}</li>
-      ))}
-    </ul>
-  );
-}
-
 type Pending =
   | { readonly kind: "register"; readonly id: string; readonly endpoint: string; readonly kinds: readonly string[]; readonly secret: string }
   | { readonly kind: "replace"; readonly id: string; readonly secret: string }
   | { readonly kind: "switch_off"; readonly id: string };
+
+/**
+ * Which write a set of problems or a refusal came from.
+ *
+ * Both forms on this page have a `secret`, and a problem with the replacement secret drawn under the
+ * registration form's secret too would be a sentence beside a box nobody filled in.
+ */
+type Write = Pending["kind"];
+
+interface Said {
+  readonly write: Write;
+  readonly problems: readonly Problem[];
+}
+
+const NOTHING_SAID: Said = { write: "register", problems: [] };
+
+/** The names the registration form's inputs are sent under, and the replacement form's one. */
+const REGISTER_FIELDS: readonly string[] = ["subscriber_id", "endpoint", "kinds", "secret"];
+const REPLACE_FIELDS: readonly string[] = ["secret"];
+const REGISTER_FORM = "webhook-register";
+const REPLACE_FORM = "webhook-replace";
 
 function readTold(payload: unknown): string {
   if (typeof payload !== "object" || payload === null) {
@@ -221,8 +217,16 @@ function WebhookPage({
   const [rotating, setRotating] = useState<string | null>(null);
   const [rotation, setRotation] = useState("");
   const [pending, setPending] = useState<Pending | null>(null);
-  const [problems, setProblems] = useState<Problem[]>([]);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // The blank fields found before anything was sent, and the refusal of what was, each with the
+  // write it belongs to.
+  const [blank, setBlank] = useState<Said>(NOTHING_SAID);
+  const [failure, setFailure] = useState<{ readonly failure: ApiFailure; readonly write: Write } | null>(null);
+  const problemsOn = (write: Write): readonly Problem[] => [
+    ...(blank.write === write ? blank.problems : []),
+    ...(failure !== null && failure.write === write ? failure.failure.problems : []),
+  ];
+  const registerProblems = problemsOn("register");
+  const replaceProblems = problemsOn("replace");
   const [busy, setBusy] = useState(false);
 
   const send = useCallback(
@@ -247,12 +251,13 @@ function WebhookPage({
         setBusy(false);
         setPending(null);
         if (!result.ok) {
-          const found = result.failure.status === 422 ? readProblems(result.body) : null;
-          setProblems(found ?? []);
-          setFailure(found === null ? result.failure : null);
+          // Drawn whole: the notice with the API's message and reference, and each problem beside
+          // the input it names on the form that sent it.
+          setBlank(NOTHING_SAID);
+          setFailure({ failure: result.failure, write: asked.kind });
           return;
         }
-        setProblems([]);
+        setBlank(NOTHING_SAID);
         setFailure(null);
         setRotating(null);
         onChanged(readTold(result.data));
@@ -267,9 +272,9 @@ function WebhookPage({
     event.preventDefault();
     setFailure(null);
     // Blank fields are said beside their fields before anything is confirmed or sent.
-    const blank = blankRegistrationProblems(id, endpoint, kinds, secret);
-    setProblems(blank);
-    if (blank.length > 0) {
+    const found = blankRegistrationProblems(id, endpoint, kinds, secret);
+    setBlank({ write: "register", problems: found });
+    if (found.length > 0) {
       return;
     }
     setPending({ kind: "register", id, endpoint, kinds, secret });
@@ -322,7 +327,14 @@ function WebhookPage({
 
   return (
     <>
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : (
+        <FailureNotice
+          failure={failure.failure}
+          fields={
+            failure.write === "register" ? REGISTER_FIELDS : failure.write === "replace" ? REPLACE_FIELDS : []
+          }
+        />
+      )}
       {confirmation}
 
       <section className="card">
@@ -405,7 +417,7 @@ function WebhookPage({
                                     aria-label={`${REPLACE_LABEL}: ${row.subscriber_id}`}
                                     disabled={busy}
                                     onClick={() => {
-                                      setProblems([]);
+                                      setBlank(NOTHING_SAID);
                                       setRotation("");
                                       setRotating(row.subscriber_id);
                                     }}
@@ -457,9 +469,9 @@ function WebhookPage({
             onSubmit={(event) => {
               event.preventDefault();
               setFailure(null);
-              const blank = blankSecretProblems(rotation);
-              setProblems(blank);
-              if (blank.length > 0) {
+              const found = blankSecretProblems(rotation);
+              setBlank({ write: "replace", problems: found });
+              if (found.length > 0) {
                 return;
               }
               setPending({ kind: "replace", id: rotating, secret: rotation });
@@ -470,15 +482,17 @@ function WebhookPage({
               <input
                 className="form-control"
                 type="text"
+                name="secret"
                 autoComplete="off"
                 spellCheck={false}
                 value={rotation}
+                {...problemAttributes(replaceProblems, REPLACE_FORM, "secret")}
                 onChange={(event) => {
                   setRotation(event.target.value);
                 }}
               />
             </label>
-            <FieldProblems problems={problems} field="secret" />
+            <FieldProblems problems={replaceProblems} form={REPLACE_FORM} names="secret" />
             <p className="field-description">
               At least {page.secret_minimum} characters, generated rather than typed. It is never shown again.
             </p>
@@ -514,32 +528,38 @@ function WebhookPage({
               <input
                 className="form-control"
                 type="text"
+                name="subscriber_id"
                 value={id}
+                {...problemAttributes(registerProblems, REGISTER_FORM, "subscriber_id")}
                 onChange={(event) => {
                   setId(event.target.value);
                 }}
               />
             </label>
-            <FieldProblems problems={problems} field="subscriber_id" />
+            <FieldProblems problems={registerProblems} form={REGISTER_FORM} names="subscriber_id" />
             <label className="control-label">
               Address it is told at{" "}
               <input
                 className="form-control"
                 type="url"
+                name="endpoint"
                 value={endpoint}
+                {...problemAttributes(registerProblems, REGISTER_FORM, "endpoint")}
                 onChange={(event) => {
                   setEndpoint(event.target.value);
                 }}
               />
             </label>
-            <FieldProblems problems={problems} field="endpoint" />
+            <FieldProblems problems={registerProblems} form={REGISTER_FORM} names="endpoint" />
             <fieldset className="form">
               <legend className="control-label">Told about</legend>
               {page.kinds.map((kind) => (
                 <label key={kind} className="control-label">
                   <input
                     type="checkbox"
+                    name="kinds"
                     checked={kinds.includes(kind)}
+                    {...problemAttributes(registerProblems, REGISTER_FORM, "kinds")}
                     onChange={(event) => {
                       setKinds(
                         event.target.checked
@@ -552,21 +572,23 @@ function WebhookPage({
                 </label>
               ))}
             </fieldset>
-            <FieldProblems problems={problems} field="kinds" />
+            <FieldProblems problems={registerProblems} form={REGISTER_FORM} names="kinds" />
             <label className="control-label">
               Signing secret{" "}
               <input
                 className="form-control"
                 type="text"
+                name="secret"
                 autoComplete="off"
                 spellCheck={false}
                 value={secret}
+                {...problemAttributes(registerProblems, REGISTER_FORM, "secret")}
                 onChange={(event) => {
                   setSecret(event.target.value);
                 }}
               />
             </label>
-            <FieldProblems problems={problems} field="secret" />
+            <FieldProblems problems={registerProblems} form={REGISTER_FORM} names="secret" />
             <p className="field-description">
               At least {page.secret_minimum} characters, generated rather than typed, and given to the
               receiver first. It is never shown again.
@@ -622,7 +644,7 @@ function WebhookPage({
 function WebhookList({ onChanged }: { readonly onChanged: (sentence: string) => void }) {
   const answer = useResource<unknown>(WEBHOOKS_API_PATH);
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (

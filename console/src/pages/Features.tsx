@@ -22,8 +22,7 @@ import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   CANNOT_SWITCH_HEADING,
   COMPONENTS_ARE_CHOSEN_BY_THE_PROFILE,
@@ -47,22 +46,10 @@ import {
   switchedSentence,
   switchPath,
   switchQuestion,
-  THE_BRAIN_COULD_NOT_BE_REACHED,
   UNREADABLE_ANSWER,
   type FeatureRow,
 } from "./featuresQuery";
 import { when } from "./sessionsQuery";
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
 
 function FeatureList({ onSwitched }: { readonly onSwitched: (sentence: string) => void }) {
   const answer = useResource<unknown>(FEATURES_API_PATH);
@@ -100,7 +87,7 @@ function FeatureList({ onSwitched }: { readonly onSwitched: (sentence: string) =
     );
   }
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   const body = readFeatures(answer.data);
   if (body === null) {
@@ -115,7 +102,7 @@ function FeatureList({ onSwitched }: { readonly onSwitched: (sentence: string) =
 
   return (
     <>
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
       {confirming === null ? null : (
         <ConfirmAction
           question={switchQuestion(confirming)}

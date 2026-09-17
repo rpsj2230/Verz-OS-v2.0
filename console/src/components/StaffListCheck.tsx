@@ -23,11 +23,18 @@
  * A 404 from any of the three routes is the wizard's one refusal sentence, for
  * `setup/wizard.ts`'s `A_SETUP_REFUSAL_NAMES_NO_REASON`.
  *
- * Task ids: M42.5.7
+ * **A refusal from the server is drawn by `ui/FailureNotice.tsx`, with its reference.** Until
+ * 2026-09-17 it was a sentence under this check's heading and nothing else, so a refused read was
+ * the one failure in the wizard nobody could quote to the person who runs the server. The 404
+ * keeps its constant sentence and drops its problems, and every other refusal draws each problem
+ * beside the input it names.
+ *
+ * Task ids: M42.5.7, M27.8.5
  */
 
 import { useEffect, useRef, useState } from "react";
 import { request } from "../api/client";
+import type { ApiFailure } from "../api/errors";
 import { SETUP_REFUSED_MESSAGE } from "../setup/wizard";
 import {
   REGISTRATION_PATH,
@@ -46,6 +53,8 @@ import {
   type TrialAsked,
 } from "../setup/staffList";
 import { readTrial, wasRead, type TrialAnswer, type TrialRun } from "../pages/staffSourcesQuery";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 
 export const CHECK_TITLE = "Check your staff list";
@@ -78,7 +87,26 @@ interface Props {
 type Shown =
   | { readonly kind: "run"; readonly run: TrialRun }
   | { readonly kind: "sentence"; readonly sentence: string }
+  | { readonly kind: "refused"; readonly failure: ApiFailure; readonly sentence?: string }
   | null;
+
+/** The names the check's inputs are sent under, and the prefix of the lists drawn beside them. */
+const CHECK_FIELDS: readonly string[] = ["sheet", "client_id", "client_secret"];
+const CHECK_FORM = "first-run-staff-list";
+
+/**
+ * A refusal from one of the three routes, as this check draws it.
+ *
+ * A 404 is the wizard's constant sentence with its problems dropped, because nothing in that body
+ * may be read: see `A_SETUP_REFUSAL_NAMES_NO_REASON`. `ui/FailureNotice.tsx` still shows the API's
+ * own message in its place when the API said a second factor is needed.
+ */
+function refusal(failure: ApiFailure, sentence?: string): Shown {
+  if (failure.status === 404) {
+    return { kind: "refused", failure: { ...failure, problems: [] }, sentence: SETUP_REFUSED_MESSAGE };
+  }
+  return sentence === undefined ? { kind: "refused", failure } : { kind: "refused", failure, sentence };
+}
 
 export function StaffListCheck({ setupCode, source, location }: Props) {
   const [registrations, setRegistrations] = useState<Registrations | null>(null);
@@ -119,10 +147,7 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
     const result = await request<TrialAnswer>(TRIAL_PATH, { method: "POST", body, atRoot: true });
     setBusy("");
     if (!result.ok) {
-      setShown({
-        kind: "sentence",
-        sentence: result.failure.status === 404 ? SETUP_REFUSED_MESSAGE : result.failure.message,
-      });
+      setShown(refusal(result.failure));
       return;
     }
     const found = readTrial(result.data);
@@ -158,15 +183,7 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
       popup.close();
       setBusy("");
       const problem = (started.body as { problem?: unknown } | null)?.problem;
-      setShown({
-        kind: "sentence",
-        sentence:
-          started.failure.status === 404
-            ? SETUP_REFUSED_MESSAGE
-            : typeof problem === "string" && problem !== ""
-              ? problem
-              : started.failure.message,
-      });
+      setShown(refusal(started.failure, typeof problem === "string" && problem !== "" ? problem : undefined));
       return;
     }
     if (listening.current) {
@@ -208,6 +225,7 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
   }
 
   const registration = registrations?.sources.find((one) => one.source === source);
+  const problems = shown?.kind === "refused" ? shown.failure.problems : [];
   return (
     <section className="first-run__section">
       <h2>{CHECK_TITLE}</h2>
@@ -220,9 +238,12 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
           <input
             id="first-run-staff-list-sheet"
             type="file"
+            name="sheet"
             accept=".csv,text/csv"
+            {...problemAttributes(problems, CHECK_FORM, "sheet")}
             onChange={(event) => setSheet(event.target.files?.[0] ?? null)}
           />
+          <FieldProblems problems={problems} form={CHECK_FORM} names="sheet" />
           <div className="form-actions">
             <button
               type="button"
@@ -260,11 +281,14 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
               id="first-run-staff-list-client-id"
               type="text"
               className="form-control"
+              name="client_id"
               value={clientId}
               autoComplete="off"
               spellCheck={false}
+              {...problemAttributes(problems, CHECK_FORM, "client_id")}
               onChange={(event) => setClientId(event.target.value)}
             />
+            <FieldProblems problems={problems} form={CHECK_FORM} names="client_id" />
           </div>
           <div className="rjsf-field">
             <label className="control-label" htmlFor="first-run-staff-list-client-secret">
@@ -274,11 +298,14 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
               id="first-run-staff-list-client-secret"
               type="text"
               className="form-control"
+              name="client_secret"
               value={clientSecret}
               autoComplete="off"
               spellCheck={false}
+              {...problemAttributes(problems, CHECK_FORM, "client_secret")}
               onChange={(event) => setClientSecret(event.target.value)}
             />
+            <FieldProblems problems={problems} form={CHECK_FORM} names="client_secret" />
           </div>
           <p className="note">{SECRET_IS_NOT_KEPT}</p>
           <div className="form-actions">
@@ -306,6 +333,16 @@ export function StaffListCheck({ setupCode, source, location }: Props) {
 function Shown({ shown }: { readonly shown: Shown }) {
   if (shown === null) {
     return null;
+  }
+  if (shown.kind === "refused") {
+    return (
+      <FailureNotice
+        failure={shown.failure}
+        title={NOT_READ_TITLE}
+        fields={CHECK_FIELDS}
+        {...(shown.sentence === undefined ? {} : { sentence: shown.sentence })}
+      />
+    );
   }
   if (shown.kind === "sentence") {
     return (

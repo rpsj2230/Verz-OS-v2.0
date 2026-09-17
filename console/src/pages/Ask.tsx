@@ -67,12 +67,19 @@
  * the same code; a control offered for one and not the other would be the distinction the
  * route spent a taxonomy removing.
  *
- * Task ids: M42.6.3, M35.2.1.3
+ * **A failure carries the request's reference wherever it arrives.** A request refused before
+ * the stream started is drawn by `ui/FailureNotice.tsx`, with the question's problems beside the
+ * field. A failure carried by a frame has no body of its own to hold a trace id, so the stream's
+ * own `x-trace-id` is kept from when it opened and drawn under the frame's sentence, which is the
+ * reference the server's log has that failure under.
+ *
+ * Task ids: M42.6.3, M35.2.1.3, M27.8.5
  */
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { openStream } from "../api/client";
 import type { ApiFailure } from "../api/errors";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
@@ -83,7 +90,7 @@ import {
   withEvent,
   type AnswerView,
 } from "./askQuery";
-import { FailureNotice } from "../ui/FailureNotice";
+import { FailureNotice, NO_REFERENCE_CAME_BACK } from "../ui/FailureNotice";
 
 /** The console address of this screen. */
 export const ASK_ADDRESS = "/ask";
@@ -150,9 +157,14 @@ interface Asking {
   readonly busy: boolean;
   /** A request that did not start a stream, in the API's own words. */
   readonly failure: ApiFailure | null;
+  /** The reference of the stream that was opened, for a failure one of its frames carries. */
+  readonly traceId: string;
 }
 
-const IDLE: Asking = Object.freeze({ view: NOTHING_ASKED, busy: false, failure: null });
+const IDLE: Asking = Object.freeze({ view: NOTHING_ASKED, busy: false, failure: null, traceId: "" });
+
+/** The name the question is sent under, and the prefix of the list drawn beside it. */
+const QUESTION_NAME = "question";
 
 export function Ask() {
   const [question, setQuestion] = useState("");
@@ -190,7 +202,7 @@ export function Ask() {
       const controller = new AbortController();
       inFlight.current = controller;
       focusWasInTheForm.current = form.current?.contains(document.activeElement) ?? false;
-      setAsking({ view: NOTHING_ASKED, busy: true, failure: null });
+      setAsking({ view: NOTHING_ASKED, busy: true, failure: null, traceId: "" });
 
       void (async () => {
         const opened = await openStream(ANSWER_API_PATH, {
@@ -201,9 +213,10 @@ export function Ask() {
           return;
         }
         if (!opened.ok) {
-          setAsking({ view: NOTHING_ASKED, busy: false, failure: opened.failure });
+          setAsking({ view: NOTHING_ASKED, busy: false, failure: opened.failure, traceId: "" });
           return;
         }
+        setAsking((one) => ({ ...one, traceId: opened.traceId }));
         for await (const event of opened.events) {
           if (controller.signal.aborted) {
             return;
@@ -218,7 +231,8 @@ export function Ask() {
     [question],
   );
 
-  const { view, busy, failure } = asking;
+  const { view, busy, failure, traceId } = asking;
+  const problems = failure?.problems ?? [];
   const asked = view.answer !== "" || view.citations.length > 0 || view.failed !== null;
   // What the skip control reaches: an answer, or the sentence a stream that failed carried.
   // Never a request that did not start a stream, which has no steps and no citations to skip.
@@ -250,10 +264,13 @@ export function Ask() {
           className="form-control ask__question"
           rows={3}
           maxLength={MAX_QUESTION_CHARS}
+          name={QUESTION_NAME}
           value={question}
           disabled={busy}
+          {...problemAttributes(problems, QUESTION_FIELD_ID, QUESTION_NAME)}
           onChange={(changed) => setQuestion(changed.target.value)}
         />
+        <FieldProblems problems={problems} form={QUESTION_FIELD_ID} names={QUESTION_NAME} />
         <div className="form-actions">
           <button
             type="submit"
@@ -314,16 +331,14 @@ export function Ask() {
           {view.answer !== "" ? <p className="ask__answer">{view.answer}</p> : null}
 
           {view.failed !== null ? (
-            <Notice title={SOMETHING_DID_NOT_WORK}>
+            <Notice title={SOMETHING_DID_NOT_WORK} traceId={traceId} withoutTrace={NO_REFERENCE_CAME_BACK}>
               <p>{view.failed}</p>
             </Notice>
           ) : null}
         </section>
       ) : null}
 
-      {failure ? (
-        <FailureNotice failure={failure} />
-      ) : null}
+      {failure ? <FailureNotice failure={failure} fields={[QUESTION_NAME]} /> : null}
 
       {!busy && !asked && failure === null ? <p className="note">{NOTHING_ASKED_YET}</p> : null}
     </article>

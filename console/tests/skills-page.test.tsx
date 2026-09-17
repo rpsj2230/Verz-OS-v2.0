@@ -350,15 +350,21 @@ describe("adding a skill", () => {
     expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
       { file_name: "SKILL.md", content: "---\nname: hosting-expiry\n---\n", encoding: "text" },
     ]);
-    expect(container.querySelector('[aria-label="Skills in the library"]')?.textContent).toContain(
-      "hosting-expiry",
-    );
+    // Waited for: the library is read again after the sentence is drawn, and under a loaded run
+    // the second answer can land a tick after the page has settled on the first.
+    await waitFor(() => {
+      expect(container.querySelector('[aria-label="Skills in the library"]')?.textContent).toContain(
+        "hosting-expiry",
+      );
+    });
     expect(sent.filter((one) => one.method === "GET").length).toBe(2);
   });
 
   test("a refusal is said in the API's words and the page is not read again", async () => {
     // What breaks if this is deleted: the reason a package was refused replaced by a generic
-    // sentence, or a refused write drawn as though it had worked.
+    // sentence, a refused write drawn as though it had worked, or the refusal drawn without the
+    // reference that finds it in the server's log. It is drawn in the add card, by the one failure
+    // notice, rather than as an alert above the page.
     const { container, sent } = await consoleAt("/skills", {
       [`GET ${SKILLS_OPERATION}`]: () => json(skillsPage([], { may_add: true })),
       [`POST ${SKILLS_OPERATION}`]: () =>
@@ -370,11 +376,14 @@ describe("adding a skill", () => {
     });
     fireEvent.click(button(container, ADD));
 
+    const card = container.querySelector('[aria-labelledby="skills-add"]') as HTMLElement;
     await waitFor(() => {
-      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      expect(card.querySelector(".notice__body > p")?.textContent).toBe(
         "this skill was not added: it declares scripts",
       );
     });
+    expect(card.querySelector(".notice__trace code")?.textContent).toBe("t");
+    expect(container.textContent).not.toContain("was added and is waiting for review");
     expect(sent.filter((one) => one.method === "GET").length).toBe(1);
   });
 
@@ -457,7 +466,11 @@ describe("what a skill is trusted to reach, and deciding about it", () => {
     expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
       { decision: "approve" },
     ]);
-    expect(() => button(container, APPROVE)).toThrow();
+    // Waited for, as the paste test above waits: the library is read again after the sentence is
+    // drawn, and under a loaded run that answer can land a tick after the page has settled.
+    await waitFor(() => {
+      expect(() => button(container, APPROVE)).toThrow();
+    });
   });
 });
 

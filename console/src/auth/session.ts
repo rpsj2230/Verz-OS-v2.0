@@ -185,6 +185,31 @@ function currentLocation(): string {
   return safeReturnTo(`${pathname}${search}${hash}`);
 }
 
+/** What a sign-in may be asked to do beyond the ordinary one. */
+export interface BeginSignInOptions {
+  /**
+   * Ask the identity provider to authenticate the person again even though its own session is
+   * alive: `prompt=login`. See `A_STRONGER_SIGN_IN_HAS_TO_ASK_AGAIN`.
+   */
+  readonly forceLogin?: boolean;
+}
+
+/**
+ * Why a sign-in started to gain a second factor carries `prompt=login`, and an ordinary one does not.
+ *
+ * The identity provider keeps a session of its own, and an authorisation request it can answer from
+ * that session it answers at once, with no page and no question: that is what makes a reload cheap.
+ * A person told that administration needs a second factor is exactly the person whose live session
+ * was made without one, so an ordinary request would come straight back at the same assurance and
+ * the button would appear to do nothing. `prompt=login` is the standard OIDC request for the
+ * provider to authenticate again. It is not sent on an ordinary sign-in, because there it would turn
+ * every reload and every expired token into a password prompt.
+ */
+export const A_STRONGER_SIGN_IN_HAS_TO_ASK_AGAIN =
+  "A sign-in started because a second factor is needed sends prompt=login, so the identity " +
+  "provider authenticates again rather than answering from the session that had no second factor. " +
+  "An ordinary sign-in never sends it.";
+
 /**
  * Send the browser to Keycloak. Nothing after this call runs in this page.
  *
@@ -192,7 +217,7 @@ function currentLocation(): string {
  * for a stable reason stops after `MAX_SIGN_IN_ATTEMPTS` instead of ping-ponging between
  * two hosts for ever.
  */
-export async function beginSignIn(returnTo = currentLocation()): Promise<void> {
+export async function beginSignIn(returnTo = currentLocation(), options: BeginSignInOptions = {}): Promise<void> {
   // Already leaving. React's strict mode runs an effect, tears it down and runs it again,
   // so the guard that starts sign-in fires twice on every mount in development. Without
   // this line that is two attempts against a counter that allows three, and the loop guard
@@ -228,6 +253,9 @@ export async function beginSignIn(returnTo = currentLocation()): Promise<void> {
     url.searchParams.set("state", signInState);
     url.searchParams.set("code_challenge", await challengeFor(verifier));
     url.searchParams.set("code_challenge_method", PKCE_CHALLENGE_METHOD);
+    if (options.forceLogin === true) {
+      url.searchParams.set("prompt", "login");
+    }
     // No `nonce`. A nonce binds an ID token to this request, and it is worth exactly what
     // the check on the way back is worth. This console never reads the ID token, so a
     // nonce it never verifies would be decoration that reads as protection. Anything that

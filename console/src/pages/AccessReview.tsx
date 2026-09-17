@@ -32,7 +32,7 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   DECISIONS,
   NO_REVIEW_FILTERS,
@@ -52,7 +52,6 @@ import {
   type ReviewFilters,
   type ReviewRow,
 } from "./governPeopleQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { scopeLines } from "./scopeText";
 
 export const REVIEW_HEADING = "Access review";
@@ -91,17 +90,6 @@ export function decidedSentence(row: ReviewRow, decision: ReviewDecisionWord, de
   const who = row.display_name ?? row.principal_id;
   const verb = decision === "keep" ? "kept" : "removed";
   return `${holdingName(row)} for ${who} was ${verb} at ${when(decidedAt)}.`;
-}
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
 }
 
 function readDecidedAt(payload: unknown): string {
@@ -146,7 +134,7 @@ function ReviewList({ onDecided }: { readonly onDecided: (sentence: string) => v
   );
 
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (
@@ -207,7 +195,7 @@ function ReviewList({ onDecided }: { readonly onDecided: (sentence: string) => v
         </form>
       )}
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
 
       {pending === null ? null : (
         <ConfirmAction

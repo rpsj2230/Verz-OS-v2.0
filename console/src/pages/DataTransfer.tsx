@@ -23,6 +23,8 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { Notice } from "../ui/Notice";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import {
@@ -39,7 +41,7 @@ import {
   type DataSetRow,
   type DataTransferBody,
 } from "./dataTransferQuery";
-import { problemsFor, readProblems, when, type Problem } from "./webhooksQuery";
+import { when, type Problem } from "./webhooksQuery";
 
 export const DATA_TRANSFER_HEADING = "Import and export";
 export const DATA_TRANSFER_CRUMB = "Govern › Import and export";
@@ -56,17 +58,6 @@ export const NO_EXPORTS = "You have not taken an export.";
 export const EXPORT_LABEL = "Export the audit trail";
 export const KEEP_LABEL = "Change nothing";
 export const NOT_A_WINDOW = "Choose a first and a last day.";
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
 
 function Catalogue({ title, rows }: { readonly title: string; readonly rows: readonly DataSetRow[] }) {
   return (
@@ -99,19 +90,13 @@ function Catalogue({ title, rows }: { readonly title: string; readonly rows: rea
   );
 }
 
-function FieldProblems({ problems, field }: { readonly problems: readonly Problem[]; readonly field: string }) {
-  const found = problemsFor(problems, field);
-  if (found.length === 0) {
-    return null;
-  }
-  return (
-    <ul className="field-description" aria-label={`Problems with ${field}`}>
-      {found.map((one) => (
-        <li key={one}>{one}</li>
-      ))}
-    </ul>
-  );
-}
+/**
+ * The names the export form's inputs are sent under. The two days are sent as `since` and `until`
+ * and are judged together as `window`, which is the name a problem with either is drawn under.
+ */
+const EXPORT_FIELDS: readonly string[] = ["reason", "reason_reference", "window", "since", "until", "data_set"];
+const EXPORT_FORM = "data-export";
+const WINDOW_NAMES: readonly string[] = ["window", "since", "until"];
 
 function TransferPage({
   page,
@@ -125,8 +110,9 @@ function TransferPage({
   const [firstDay, setFirstDay] = useState("");
   const [lastDay, setLastDay] = useState("");
   const [confirming, setConfirming] = useState(false);
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [blank, setBlank] = useState<Problem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const problems: readonly Problem[] = [...blank, ...(failure?.problems ?? [])];
   const [busy, setBusy] = useState(false);
 
   const span = windowOf(firstDay, lastDay);
@@ -144,12 +130,13 @@ function TransferPage({
       setBusy(false);
       setConfirming(false);
       if (!result.ok) {
-        const found = result.failure.status === 422 ? readProblems(result.body) : null;
-        setProblems(found ?? []);
-        setFailure(found === null ? result.failure : null);
+        // Drawn whole: the notice with the API's message and reference, and each problem beside
+        // the input it names.
+        setBlank([]);
+        setFailure(result.failure);
         return;
       }
-      setProblems([]);
+      setBlank([]);
       setFailure(null);
       const taken = readTaken(result.data);
       if (taken === null) {
@@ -165,7 +152,7 @@ function TransferPage({
     event.preventDefault();
     setFailure(null);
     if (span === null) {
-      setProblems([{ field: "window", code: "no_window", message: NOT_A_WINDOW }]);
+      setBlank([{ field: "window", code: "no_window", message: NOT_A_WINDOW }]);
       return;
     }
     setConfirming(true);
@@ -183,7 +170,7 @@ function TransferPage({
         <h2>{EXPORT_LABEL}</h2>
         <p>{page.export_told}</p>
         <p className="note">{page.document_told}</p>
-        {failure === null ? null : <Failure failure={failure} />}
+        {failure === null ? null : <FailureNotice failure={failure} fields={EXPORT_FIELDS} />}
         {!page.exportable ? (
           <p className="note">{NOT_EXPORTABLE}</p>
         ) : confirming && span !== null ? (
@@ -204,7 +191,9 @@ function TransferPage({
               Reason{" "}
               <select
                 className="form-control"
+                name="reason"
                 value={reason}
+                {...problemAttributes(problems, EXPORT_FORM, "reason")}
                 onChange={(event) => {
                   setReason(event.target.value);
                 }}
@@ -216,26 +205,30 @@ function TransferPage({
                 ))}
               </select>
             </label>
-            <FieldProblems problems={problems} field="reason" />
+            <FieldProblems problems={problems} form={EXPORT_FORM} names="reason" />
             <label className="control-label">
               Reference of the written request{" "}
               <input
                 className="form-control"
                 type="text"
+                name="reason_reference"
                 value={reference}
+                {...problemAttributes(problems, EXPORT_FORM, "reason_reference")}
                 onChange={(event) => {
                   setReference(event.target.value);
                 }}
               />
             </label>
             <p className="field-description">A ticket or matter number. Never a person&apos;s name.</p>
-            <FieldProblems problems={problems} field="reason_reference" />
+            <FieldProblems problems={problems} form={EXPORT_FORM} names="reason_reference" />
             <label className="control-label">
               First day{" "}
               <input
                 className="form-control"
                 type="date"
+                name="since"
                 value={firstDay}
+                {...problemAttributes(problems, EXPORT_FORM, WINDOW_NAMES)}
                 onChange={(event) => {
                   setFirstDay(event.target.value);
                 }}
@@ -246,14 +239,16 @@ function TransferPage({
               <input
                 className="form-control"
                 type="date"
+                name="until"
                 value={lastDay}
+                {...problemAttributes(problems, EXPORT_FORM, WINDOW_NAMES)}
                 onChange={(event) => {
                   setLastDay(event.target.value);
                 }}
               />
             </label>
-            <FieldProblems problems={problems} field="window" />
-            <FieldProblems problems={problems} field="data_set" />
+            <FieldProblems problems={problems} form={EXPORT_FORM} names={WINDOW_NAMES} />
+            <FieldProblems problems={problems} form={EXPORT_FORM} names="data_set" />
             <p className="field-description">
               Days are in UTC, and the last day is included. One export carries at most{" "}
               {page.max_entries} entries.
@@ -312,7 +307,7 @@ function TransferPage({
 function TransferBody({ onTaken }: { readonly onTaken: (sentence: string) => void }) {
   const answer = useResource<unknown>(DATA_TRANSFER_API_PATH);
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (

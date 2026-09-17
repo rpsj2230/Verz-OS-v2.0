@@ -34,7 +34,7 @@ import {
   type Connectable,
   type Connectors,
 } from "../pages/connectorsQuery";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import type { Answers, StepKey } from "./wizard";
 
 /** Why the step comes after the appointment rather than inside it. */
@@ -133,11 +133,7 @@ export function ConnectSourcesStep({
       <h1>{CONNECT_SOURCES_TITLE}</h1>
       {kept === null ? null : <p>{kept}</p>}
       <p>{CONNECT_LATER}</p>
-      {answer.failure ? (
-        <Notice title={SOURCES_NOT_READ} traceId={answer.failure.traceId}>
-          <p>{answer.failure.message}</p>
-        </Notice>
-      ) : null}
+      {answer.failure ? <FailureNotice failure={answer.failure} title={SOURCES_NOT_READ} /> : null}
       {answer.busy ? (
         <p className="note" role="status">
           Reading which sources this system can connect.

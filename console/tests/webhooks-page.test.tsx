@@ -28,7 +28,6 @@ import {
 } from "../src/pages/Webhooks";
 import { BLANK_SENTENCES, type SubscriberRow, type WebhooksBody } from "../src/pages/webhooksQuery";
 import { readRepoFile } from "./support/repo";
-import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredRequestBodySchema } from "./support/openapi";
 
@@ -411,7 +410,10 @@ describe("what the webhooks screen does", () => {
       );
     });
     expect(container.querySelector('[aria-label="Problems with secret"]')?.textContent).toContain("32 characters");
-    expect(container.textContent).not.toContain(SOMETHING_DID_NOT_WORK);
+    // Beside their fields and nowhere else: the notice above carries the refusal's reference, and
+    // does not list again a problem an input on the form holds.
+    expect((container.textContent ?? "").split("already registered")).toHaveLength(2);
+    expect(container.querySelector('[aria-label="What was not accepted"]')).toBeNull();
     expect(field(container, "Signing secret").value).toBe("");
   });
 

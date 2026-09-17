@@ -29,7 +29,7 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   END_SESSION_API_PATH,
   NO_SESSION_FILTERS,
@@ -47,7 +47,6 @@ import {
   type SessionRow,
   type Sort,
 } from "./sessionsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const SESSIONS_HEADING = "Sessions";
 export const SESSIONS_CRUMB = "Govern › Sessions";
@@ -80,17 +79,6 @@ export const EVERYONE = "Everyone";
 /** What a success says: whose, and the instant the database recorded. */
 export function endedSentence(row: SessionRow, endedAt: string): string {
   return `${row.display_name}'s session was ended at ${when(endedAt)}. The next request made with it is refused.`;
-}
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
 }
 
 function readEndedAt(payload: unknown): string | null {
@@ -131,7 +119,7 @@ function SessionList({ onEnded }: { readonly onEnded: (sentence: string) => void
   );
 
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (
@@ -192,7 +180,7 @@ function SessionList({ onEnded }: { readonly onEnded: (sentence: string) => void
         </form>
       )}
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
 
       {confirming === null ? null : (
         <ConfirmAction

@@ -20,7 +20,13 @@
  * **Nothing here decides who may connect.** A form is offered for a source the API said this
  * reader may connect, and the API decides again.
  *
- * Task ids: M42.6.5, M42.5.9
+ * **A refusal is drawn whole.** The notice carries the API's message and reference, each problem
+ * is drawn beside the input it names, and a problem naming none of them is listed under the
+ * notice. A setting answers to its own name, which is what the connectors routes' own documents
+ * use, and to its place in the body, `settings.` and the name, which is what a validation refusal
+ * of the body uses.
+ *
+ * Task ids: M42.6.5, M42.5.9, M27.8.5
  */
 
 import { useState, type FormEvent } from "react";
@@ -31,13 +37,12 @@ import {
   blankSettings,
   connectionBody,
   CONNECTORS_API_PATH,
-  problemsFor,
-  readProblems,
   readTold,
   type Connectable,
   type Problem,
 } from "../pages/connectorsQuery";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { ConfirmAction } from "./ConfirmAction";
 
 /** The heading over a refusal that is not a problem with a field. */
@@ -69,26 +74,9 @@ interface ConnectSourceProps {
   readonly onConnected: (told: string) => void;
 }
 
-function FieldProblems({
-  problems,
-  field,
-  id,
-}: {
-  readonly problems: readonly Problem[];
-  readonly field: string;
-  readonly id: string;
-}) {
-  const found = problemsFor(problems, field);
-  if (found.length === 0) {
-    return null;
-  }
-  return (
-    <ul id={id} className="field-description first-run__problem">
-      {found.map((one) => (
-        <li key={one}>{one}</li>
-      ))}
-    </ul>
-  );
+/** Every name a setting's input answers to: its own, and its place in the body. */
+function settingNames(name: string): readonly string[] {
+  return [name, `settings.${name}`];
 }
 
 export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onConnected }: ConnectSourceProps) {
@@ -96,10 +84,12 @@ export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onC
   const [key, setKey] = useState("");
   const [pending, setPending] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [blank, setBlank] = useState<Problem[]>([]);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const problems: readonly Problem[] = [...blank, ...(failure?.problems ?? [])];
 
   const prefix = `connect-${source.name}`;
+  const fields = ["connector", "credential", ...source.settings.flatMap((one) => settingNames(one.name))];
 
   function ask(event: FormEvent<HTMLFormElement>): void {
     // Never a native submission: a GET with the key in the query string.
@@ -107,9 +97,9 @@ export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onC
     setFailure(null);
     // Blank fields are said beside their fields, in the API's words, before anything is confirmed
     // or sent. See `blankConnectionProblems`.
-    const blank = blankConnectionProblems(source, settings, key, keyBlank);
-    setProblems(blank);
-    if (blank.length > 0) {
+    const found = blankConnectionProblems(source, settings, key, keyBlank);
+    setBlank(found);
+    if (found.length > 0) {
       return;
     }
     setPending(true);
@@ -125,29 +115,21 @@ export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onC
       setBusy(false);
       setPending(false);
       if (!result.ok) {
-        const found = result.failure.status === 422 ? readProblems(result.body) : null;
-        setProblems(found ?? []);
-        setFailure(found === null ? result.failure : null);
+        setBlank([]);
+        setFailure(result.failure);
         return;
       }
-      setProblems([]);
+      setBlank([]);
       setFailure(null);
       setSettings(blankSettings(source));
       onConnected(readTold(result.data));
     })();
   }
 
-  const described = (field: string) =>
-    problemsFor(problems, field).length > 0 ? { "aria-describedby": `${prefix}-${field}-problem` } : {};
-
   return (
     <div className="form" aria-label={connectLabel(source)} role="group">
-      {failure === null ? null : (
-        <Notice title={NOT_CONNECTED} traceId={failure.traceId}>
-          <p>{failure.message}</p>
-        </Notice>
-      )}
-      <FieldProblems problems={problems} field="connector" id={`${prefix}-connector-problem`} />
+      {failure === null ? null : <FailureNotice failure={failure} title={NOT_CONNECTED} fields={fields} />}
+      <FieldProblems problems={problems} form={prefix} names="connector" />
       <form className="form" noValidate autoComplete="off" onSubmit={ask}>
         {source.settings.map((one) => (
           <div className="rjsf-field" key={one.name}>
@@ -158,19 +140,19 @@ export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onC
               id={`${prefix}-${one.name}`}
               className="form-control"
               type="text"
+              name={`settings.${one.name}`}
               value={settings[one.name] ?? ""}
               maxLength={one.max_chars}
               autoComplete="off"
               spellCheck={false}
-              aria-invalid={problemsFor(problems, one.name).length > 0}
-              {...described(one.name)}
+              {...problemAttributes(problems, prefix, settingNames(one.name))}
               disabled={busy || pending}
               onChange={(event) => {
                 setSettings({ ...settings, [one.name]: event.target.value });
               }}
             />
             <p className="field-description">{one.hint}</p>
-            <FieldProblems problems={problems} field={one.name} id={`${prefix}-${one.name}-problem`} />
+            <FieldProblems problems={problems} form={prefix} names={settingNames(one.name)} />
           </div>
         ))}
         <div className="rjsf-field">
@@ -181,19 +163,19 @@ export function ConnectSource({ source, confirmation, keyMaxChars, keyBlank, onC
             id={`${prefix}-credential`}
             className="form-control"
             type="text"
+            name="credential"
             value={key}
             maxLength={keyMaxChars}
             autoComplete="off"
             spellCheck={false}
-            aria-invalid={problemsFor(problems, "credential").length > 0}
-            {...described("credential")}
+            {...problemAttributes(problems, prefix, "credential")}
             disabled={busy || pending}
             onChange={(event) => {
               setKey(event.target.value);
             }}
           />
           <p className="field-description">{source.credential_hint}</p>
-          <FieldProblems problems={problems} field="credential" id={`${prefix}-credential-problem`} />
+          <FieldProblems problems={problems} form={prefix} names="credential" />
         </div>
         {pending ? null : (
           <div className="form-actions">

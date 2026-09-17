@@ -32,7 +32,8 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   ASK_BLANKS,
   ELEVATION_DECISIONS,
@@ -51,7 +52,6 @@ import {
   type ElevationDecisionWord,
   type ElevationRequestRow,
 } from "./governPeopleQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const ELEVATION_HEADING = "Elevation requests";
 export const ELEVATION_CRUMB = "Govern › Elevation requests";
@@ -87,17 +87,6 @@ export function decidedSentence(row: ElevationRequestRow, decision: ElevationDec
   return `${row.capability} for ${who} was ${decision} at ${when(at)}.`;
 }
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
 function stamp(payload: unknown, key: "requested_at" | "decided_at"): string {
   if (typeof payload !== "object" || payload === null) {
     return "";
@@ -118,13 +107,20 @@ const EMPTY_ASK: ElevationAsk = Object.freeze({
   hours: 1,
 });
 
+/** The names a request's inputs are sent under, which are `ElevationAsked`'s five keys. */
+const ASK_FIELDS: readonly string[] = ["capability", "scope_slug", "reason", "explanation", "hours"];
+const ASK_FORM = "elevation-ask";
+
 function Requests({ onChanged }: { readonly onChanged: (sentence: string) => void }) {
   const answer = useResource<unknown>(elevationApiPath());
   const [ask, setAsk] = useState<ElevationAsk>(EMPTY_ASK);
   const [blanks, setBlanks] = useState<readonly (keyof typeof ASK_BLANKS)[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // The refusal, and whether it was of a request, whose problems are drawn beside the form, or of a
+  // decision, which has no input and whose problems are all listed under the notice.
+  const [failure, setFailure] = useState<{ readonly failure: ApiFailure; readonly asked: boolean } | null>(null);
+  const problems = failure !== null && failure.asked ? failure.failure.problems : [];
 
   const send = useCallback(
     (chosen: Pending) => {
@@ -140,7 +136,7 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
         setBusy(false);
         setPending(null);
         if (!result.ok) {
-          setFailure(result.failure);
+          setFailure({ failure: result.failure, asked: chosen.kind === "ask" });
           return;
         }
         setFailure(null);
@@ -155,7 +151,7 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
   );
 
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (
@@ -191,7 +187,9 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
         <p>{page.prompt}</p>
       </section>
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : (
+        <FailureNotice failure={failure.failure} {...(failure.asked ? { fields: ASK_FIELDS } : {})} />
+      )}
 
       {pending === null ? null : (
         <ConfirmAction
@@ -221,29 +219,37 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
               Capability{" "}
               <input
                 className="form-control"
+                name="capability"
                 value={ask.capability}
+                {...problemAttributes(problems, ASK_FORM, "capability")}
                 onChange={(event) => {
                   field("capability")(event.target.value);
                 }}
               />
             </label>
             {blanks.includes("capability") ? <p className="note">{ASK_BLANKS.capability}</p> : null}
+            <FieldProblems problems={problems} form={ASK_FORM} names="capability" />
             <label className="control-label">
               Scope{" "}
               <input
                 className="form-control"
+                name="scope_slug"
                 value={ask.scope_slug}
+                {...problemAttributes(problems, ASK_FORM, "scope_slug")}
                 onChange={(event) => {
                   field("scope_slug")(event.target.value);
                 }}
               />
             </label>
             {blanks.includes("scope_slug") ? <p className="note">{ASK_BLANKS.scope_slug}</p> : null}
+            <FieldProblems problems={problems} form={ASK_FORM} names="scope_slug" />
             <label className="control-label">
               Why{" "}
               <select
                 className="form-control"
+                name="reason"
                 value={ask.reason}
+                {...problemAttributes(problems, ASK_FORM, "reason")}
                 onChange={(event) => {
                   setAsk({ ...ask, reason: event.target.value });
                 }}
@@ -257,22 +263,28 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
               </select>
             </label>
             {blanks.includes("reason") ? <p className="note">{ASK_BLANKS.reason}</p> : null}
+            <FieldProblems problems={problems} form={ASK_FORM} names="reason" />
             <label className="control-label">
               What it is for{" "}
               <textarea
                 className="form-control"
+                name="explanation"
                 value={ask.explanation}
+                {...problemAttributes(problems, ASK_FORM, "explanation")}
                 onChange={(event) => {
                   field("explanation")(event.target.value);
                 }}
               />
             </label>
             {blanks.includes("explanation") ? <p className="note">{ASK_BLANKS.explanation}</p> : null}
+            <FieldProblems problems={problems} form={ASK_FORM} names="explanation" />
             <label className="control-label">
               Hours{" "}
               <select
                 className="form-control"
+                name="hours"
                 value={String(ask.hours)}
+                {...problemAttributes(problems, ASK_FORM, "hours")}
                 onChange={(event) => {
                   setAsk({ ...ask, hours: Number(event.target.value) });
                 }}
@@ -284,6 +296,7 @@ function Requests({ onChanged }: { readonly onChanged: (sentence: string) => voi
                 ))}
               </select>
             </label>
+            <FieldProblems problems={problems} form={ASK_FORM} names="hours" />
             <div className="form-actions">
               <button type="submit" className="button" disabled={busy}>
                 {ASK_LABEL}

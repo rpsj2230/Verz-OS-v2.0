@@ -311,6 +311,24 @@ class HeldRows:
 
 
 @dataclass(frozen=True)
+class ReadableSuspensions:
+    """`gate.suspension` read at a reach, on a process with nowhere durable to record a decision.
+
+    Implements `brain.approval_routes.SuspensionReader`, and is what `app.state.suspensions` holds
+    on a process with a database and no ledger writer that survives a restart. The queue and the
+    card are reads and need no ledger, so they are served; a decision is refused in words by
+    `brain.approval_routes._require_store`, identically for every caller and every id. Until
+    2026-09-17 such a process held nothing at all, and the Approvals screen answered every person
+    with a 500. See `brain.app.suspension_store_for`.
+    """
+
+    sessions: async_sessionmaker[AsyncSession]
+
+    def reading_as(self, reach: EntitlementSet, now: datetime) -> ReachedSuspensions:
+        return ReachedSuspensions(self.sessions, reach, now)
+
+
+@dataclass(frozen=True)
 class StoredSuspensions:
     """`gate.suspension`, and the ledger its decisions are recorded to.
 

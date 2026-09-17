@@ -20,17 +20,31 @@
  * part of a failure the page did not write. Each element that holds text of its own gives one
  * sentence, whole, so a test can remove the API's words and ask what is left.
  *
- * Task ids: M27.8.3
+ * **Two more ways to fail, both from the staging install on 2026-09-17.** A proxy's answer when
+ * the application never ran, which has no body and no trace id (`bodiless`), and the 404 the API
+ * gives a sign-in with no second factor, with and without its flag (`refused`). The first is what
+ * drew "Something went wrong." with nothing to quote; the second is what drew "I could not find
+ * that." for work the person holds.
+ *
+ * **The shell's own read of `/me` is answered like the menu's**, with a caller who needs no second
+ * factor and without being recorded, for every page whose case does not read `/me` itself. The
+ * shell asks on every page for the banner in `layout/SignInStrength.tsx`, and a page that asks for
+ * nothing would otherwise be recorded asking. The one page that reads `/me` for itself, the
+ * Overview, has its states applied to both reads, since the two cannot be told apart by address.
+ *
+ * Task ids: M27.8.3, M27.8.5
  */
 
 import { createMemoryRouter, RouterProvider, type RouteObject } from "react-router-dom";
 import { cleanup, render } from "@testing-library/react";
 import { vi } from "vitest";
+import { NOT_FOUND_MESSAGE } from "../../src/api/errors";
 import { CALLBACK_PATH, SIGNED_OUT_PATH } from "../../src/auth/constants";
 import { RETURN_PATH as STAFF_LIST_RETURN_PATH } from "../../src/setup/staffList";
 import { FIRST_RUN_PATH } from "../../src/setup/wizard";
 import { fakeIdentityProvider, ISSUER, loadConsole, signIn } from "./auth";
 import { COMPANY_CONSOLE, NAVIGATION_ADDRESS } from "./navigation";
+import { PAGES } from "./pageCases";
 
 export const CONSOLE_ORIGIN = "https://console.test";
 
@@ -39,12 +53,29 @@ export type RequestState =
   | { readonly kind: "pending" }
   | { readonly kind: "unreachable" }
   | { readonly kind: "failed" }
+  | { readonly kind: "bodiless" }
+  | { readonly kind: "refused"; readonly secondFactorNeeded: boolean }
   | { readonly kind: "answered"; readonly answers: Readonly<Record<string, unknown>> };
 
 /** The API's own sentence for a fault, which a page shows and did not write. */
 export const API_SENTENCE = "FAULT-SENTINEL the API explained itself here";
 /** The reference a failed answer carries. */
 export const TRACE_SENTINEL = "trace-sentinel-0001";
+/** The API's sentence on a 404 that says a sign-in with a second factor is needed. */
+export const SECOND_FACTOR_SENTENCE =
+  "SECOND-FACTOR-SENTINEL Administration and approvals need a sign-in with a second factor.";
+/** Where the shell asks for the caller's own facts. */
+export const ME_ADDRESS = "/api/v1/me";
+/** The caller the shell is told about on a page that does not read `/me` itself. */
+export const A_CALLER_WITH_NOTHING_WITHHELD = Object.freeze({
+  principal_id: "u_reader",
+  display_name: "A reader",
+  assurance: "strong",
+  channel: "web",
+  ent_hash: "f".repeat(64),
+  withheld_verbs: [],
+  second_factor_needed: false,
+});
 
 /** One mounted page in one state. */
 export interface Reading {
@@ -188,6 +219,7 @@ export async function mountIn(
   const asked: string[] = [];
   const unanswered: string[] = [];
   const sent: Sent[] = [];
+  const readsMe = ME_ADDRESS in (PAGES[pattern]?.answers ?? {});
   const fetch = vi.fn(async (input: unknown, init?: RequestInit): Promise<Response> => {
     const url = String(input);
     if (url.startsWith(new URL(ISSUER).origin)) {
@@ -196,6 +228,9 @@ export async function mountIn(
     const path = new URL(url, CONSOLE_ORIGIN).pathname;
     if (path === NAVIGATION_ADDRESS) {
       return json(state.kind === "answered" ? (state.answers[NAVIGATION_ADDRESS] ?? navigation) : navigation, 200);
+    }
+    if (path === ME_ADDRESS && !readsMe) {
+      return json(A_CALLER_WITH_NOTHING_WITHHELD, 200);
     }
     const method = (init?.method ?? "GET").toUpperCase();
     const body: unknown = typeof init?.body === "string" && init.body !== "" ? JSON.parse(init.body) : null;
@@ -208,6 +243,19 @@ export async function mountIn(
         throw new TypeError("Failed to fetch");
       case "failed":
         return json({ message: API_SENTENCE, trace_id: TRACE_SENTINEL }, 500);
+      case "bodiless":
+        // What a reverse proxy sends when the application behind it did not answer at all.
+        return new Response(null, { status: 502 });
+      case "refused":
+        return json(
+          {
+            message: state.secondFactorNeeded ? SECOND_FACTOR_SENTENCE : NOT_FOUND_MESSAGE,
+            trace_id: TRACE_SENTINEL,
+            problems: [],
+            second_factor_needed: state.secondFactorNeeded,
+          },
+          404,
+        );
       case "answered": {
         const key = method === "GET" ? path : `${method} ${path}`;
         if (!(key in state.answers)) {

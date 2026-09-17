@@ -11,14 +11,24 @@
  * The fallback sentences are read out of the Python source rather than compared with
  * themselves, so a drift in either direction fails here.
  *
- * Task ids: M32.5.1.1
+ * **A failure with no message says what was observed, and "Something went wrong." is never the
+ * whole of it.** The API puts a message on every failing response it writes, so a failure with
+ * none came from something in front of it. The statuses whose outcome sentence is the API's own
+ * keep that sentence exactly; every other status says by its class what answered and what to do.
+ *
+ * Task ids: M32.5.1.1, M27.8.5
  */
 
 import { render } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import {
+  A_FAULT_WITH_NO_EXPLANATION,
+  NOT_ACCEPTED_WITHOUT_A_REASON,
   NOT_FOUND_MESSAGE,
+  THE_BRAIN_DID_NOT_ANSWER,
+  TOO_LARGE_TO_ACCEPT,
   failureFrom,
+  readFieldProblems,
   transportFailure,
   type ApiFailure,
 } from "../src/api/errors";
@@ -39,22 +49,67 @@ function screenText(failure: ApiFailure, title = "That did not work"): string {
   return container.textContent ?? "";
 }
 
+/** The base class's sentence, which an outcome with none of its own inherits. */
+const THE_BASE_SENTENCE = "Something went wrong.";
+
 describe("the fallback messages", () => {
-  test("every fallback is the API's own sentence for that status", () => {
-    // What breaks if this is deleted: the console starts speaking for the API. These
-    // sentences exist for a response that carried no body at all, which is what a proxy
-    // returns when it never reached the application, and a console that invented its own
-    // wording there would be describing an outcome it did not observe. Both the status
-    // table and the sentences are read out of the Python source, so this is not a constant
-    // compared with itself.
+  test("every outcome with a sentence of its own falls back to exactly that sentence", () => {
+    // What breaks if this is deleted: the console starts speaking for the API where the API has
+    // words. A proxy's 404 and the application's 404 must read the same, or the difference is a
+    // disclosure, so the fallback for a status the taxonomy owns is the taxonomy's sentence. Both
+    // the status table and the sentences are read out of the Python source, so this is not a
+    // constant compared with itself.
     const statuses = backendOutcomeStatuses();
     const messages = backendPublicMessages();
     expect(Object.keys(statuses).length).toBeGreaterThan(0);
 
+    let owned = 0;
     for (const [outcome, status] of Object.entries(statuses)) {
       const expected = messages[outcome];
       expect(expected, `no public message parsed for ${outcome}`).toBeDefined();
+      if (expected === THE_BASE_SENTENCE) {
+        continue;
+      }
+      owned += 1;
       expect(failureFrom(response(status), null).message).toBe(expected);
+    }
+    // DENIED, ABSENT, UNRESOLVED and DEGRADED each have one; a parser that found none would pass
+    // the loop above by skipping everything.
+    expect(owned).toBeGreaterThanOrEqual(4);
+  });
+
+  test("a failure with no message is never only the sentence that told the staging install nothing", () => {
+    // What breaks if this is deleted: "That did not work. Something went wrong." on screen after
+    // screen, which is what a proxy's bodiless 502 and the application's own bodiless 500 both drew
+    // on 2026-09-17, with no reference and no hint whose fault it was.
+    const statuses = [400, 401, 403, 405, 413, 422, 429, 500, 501, 502, 503, 504];
+    for (const status of statuses) {
+      const message = failureFrom(response(status), null).message;
+      expect(message, String(status)).not.toBe(THE_BASE_SENTENCE);
+      expect(message.split(" ").length, String(status)).toBeGreaterThan(5);
+    }
+  });
+
+  test("a bodiless failure says by its status class what answered", () => {
+    // What breaks if this is deleted: a gateway's 502 read as a fault in the Brain's code, or a 413
+    // from the proxy read as a refusal of what was in the request rather than of its size.
+    expect(failureFrom(response(502), null).message).toBe(THE_BRAIN_DID_NOT_ANSWER);
+    expect(failureFrom(response(504), null).message).toBe(THE_BRAIN_DID_NOT_ANSWER);
+    expect(failureFrom(response(500), null).message).toBe(A_FAULT_WITH_NO_EXPLANATION);
+    expect(failureFrom(response(507), null).message).toBe(A_FAULT_WITH_NO_EXPLANATION);
+    expect(failureFrom(response(413), null).message).toBe(TOO_LARGE_TO_ACCEPT);
+    expect(failureFrom(response(400), null).message).toBe(NOT_ACCEPTED_WITHOUT_A_REASON);
+    expect(failureFrom(response(405), null).message).toBe(NOT_ACCEPTED_WITHOUT_A_REASON);
+  });
+
+  test("a message in the body is shown whatever the status, and no fallback replaces it", () => {
+    // What breaks if this is deleted: the positive sibling of the three above. A console that chose
+    // its sentence from the status even when the API had written one would pass all of them, and
+    // would put "the Brain did not answer" over an answer the Brain wrote.
+    for (const status of [404, 413, 500, 502, 503, 504]) {
+      expect(failureFrom(response(status), { message: "THE-API-SAID-THIS" }).message, String(status)).toBe(
+        "THE-API-SAID-THIS",
+      );
     }
   });
 
@@ -99,6 +154,8 @@ describe("a failed request", () => {
       message: NOT_FOUND_MESSAGE,
       traceId: "t-1",
       outcome: "denied",
+      problems: [],
+      secondFactorNeeded: false,
     };
     const absent: ApiFailure = { ...denied, outcome: "absent" };
 
@@ -160,5 +217,40 @@ describe("a failed request", () => {
     expect(failure.status).toBe(0);
     expect(failure.traceId).toBe("");
     expect(failure.message).not.toBe(NOT_FOUND_MESSAGE);
+    expect(failure.problems).toEqual([]);
+    expect(failure.secondFactorNeeded).toBe(false);
+  });
+});
+
+describe("the problems a failure carries", () => {
+  test("every well-formed problem is read, and an entry of another shape is passed over without losing the rest", () => {
+    // What breaks if this is deleted: one odd entry, such as the setup appointment's own
+    // `{step, field, key}`, throwing away every problem a form could have drawn, which is what the
+    // Webhooks screen's first reader did by returning nothing for the whole list.
+    const body = {
+      message: "Some of what was sent was not accepted.",
+      problems: [
+        { field: "attempts", code: "less_than_equal", message: "At most ten." },
+        { step: "company", field: "company_name", key: "setup.blank" },
+        "not an object",
+        null,
+        { field: "", code: "json_invalid", message: "The body is not JSON." },
+        { field: "hours", code: 7, message: "A code that is not a string." },
+      ],
+    };
+    expect(readFieldProblems(body)).toEqual([
+      { field: "attempts", code: "less_than_equal", message: "At most ten." },
+      { field: "", code: "json_invalid", message: "The body is not JSON." },
+    ]);
+    expect(failureFrom(response(422), body).problems).toEqual(readFieldProblems(body));
+  });
+
+  test("a body with no list of problems carries none", () => {
+    // What breaks if this is deleted: a failure whose `problems` is undefined, which every form
+    // reading it would crash on, for the commonest body there is.
+    expect(readFieldProblems(null)).toEqual([]);
+    expect(readFieldProblems({ message: "x" })).toEqual([]);
+    expect(readFieldProblems({ problems: "attempts" })).toEqual([]);
+    expect(failureFrom(response(500), null).problems).toEqual([]);
   });
 });

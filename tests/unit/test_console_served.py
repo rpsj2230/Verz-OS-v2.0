@@ -28,7 +28,7 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from brain.api import API_PREFIX
+from brain.api import API_PREFIX, NOT_FOUND
 from brain.app import Settings, create_app
 from brain.console_static import (
     CONSOLE_CONFIG_GLOBAL,
@@ -614,3 +614,23 @@ def _extracted(path: Path, pattern: str) -> str:
     found = re.search(pattern, path.read_text(encoding="utf-8"), re.M)
     assert found is not None, f"{pattern} no longer matches anything in {path.name}"
     return found.group(1)
+
+
+def test_an_api_address_nothing_serves_is_a_refusal_in_words_and_not_the_console(
+    served: TestClient,
+) -> None:
+    """A GET under the API's prefix that no route serves answers 404 with a sentence and a
+    reference, and a console address beside it still reloads as the console.
+
+    Delete this and a console one release ahead of its server is answered with the entry document
+    and a 200, which it reads as a success with no body, so the screen draws nothing and says
+    nothing. See `brain.console_static.AN_API_ADDRESS_NOTHING_SERVES_IS_NOT_A_PAGE`."""
+    missing: Response = served.get(f"{API_PREFIX}/a-screen-this-server-does-not-have")
+    page: Response = served.get("/a-screen-this-server-does-not-have")
+
+    assert missing.status_code == 404
+    assert ENTRY_MARK not in missing.text
+    assert missing.json()["message"] == NOT_FOUND
+    assert missing.json()["trace_id"] == missing.headers["x-trace-id"]
+    assert page.status_code == 200
+    assert ENTRY_MARK in page.text

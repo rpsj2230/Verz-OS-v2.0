@@ -7,9 +7,10 @@
  * **Nothing here holds the relay's password after it is sent**: the page clears the field the
  * moment a write is confirmed, whatever the answer, and no body the API sends carries it.
  *
- * **Problems are read by field**, with `readProblems` and `problemsFor` from the Webhooks screen's
- * module rather than a second copy, and blank fields are said before a confirmation opens in the
- * API's own words, which `tests/notifications-page.test.tsx` holds to the Python.
+ * **Problems are read by field**, by `api/errors.readFieldProblems` and drawn by
+ * `ui/FieldProblems.tsx` as on every form rather than by a second copy, and blank fields are said
+ * before a confirmation opens in the API's own words, which `tests/notifications-page.test.tsx`
+ * holds to the Python.
  *
  * Task ids: M27.8.11, M27.8.5
  */

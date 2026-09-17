@@ -32,6 +32,7 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { ANSWER_EVENTS, EVENT_STREAM, eventIn, framesIn } from "../src/api/events";
 import { NOT_FOUND_MESSAGE } from "../src/api/errors";
+import { NO_REFERENCE_CAME_BACK } from "../src/ui/FailureNotice";
 import {
   ASK_ADDRESS,
   ASK_HEADING,
@@ -569,14 +570,17 @@ describe("a request the API refused", () => {
     // What breaks if this is deleted: "not found" written here, which is the console's own
     // wording for the one status this API spends a taxonomy making ambiguous. The fallback is
     // the sentence copied from `brain.core.errors`, which is the same for denied and absent.
+    // Where a reference would be, the notice says none came back rather than drawing one or
+    // leaving a gap: see `ui/FailureNotice.A_FAILURE_WITHOUT_ITS_REFERENCE_IS_A_DEAD_END`.
     const { container } = await askScreen(() => new Response("", { status: 404 }));
 
     ask(container, QUESTION);
 
     await waitFor(() => {
-      expect(container.querySelector(".notice__body")?.textContent).toBe(NOT_FOUND_MESSAGE);
+      expect(container.querySelector(".notice__body > p")?.textContent).toBe(NOT_FOUND_MESSAGE);
     });
-    expect(container.querySelector(".notice__trace")).toBeNull();
+    expect(container.querySelector(".notice__trace")?.textContent).toBe(NO_REFERENCE_CAME_BACK);
+    expect(container.querySelector(".notice__trace code")).toBeNull();
   });
 });
 
