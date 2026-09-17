@@ -9,16 +9,15 @@ shortcuts, which are a first-class way out of whatever folder you scoped. None o
 differences touch the *shape* below. What would differ for Microsoft 365 is listed at the
 end of this docstring, and it is a table and an error map rather than a redesign.
 
-**There are no recordings for this source, and there is no way to add one here.**
-`tests/fixtures/cassettes.py` has no `Source.GOOGLE_DRIVE`, that file is shared, and
-`tests/invariants/test_cassettes.py` asserts over it. So **every vendor fact in this module
-comes from Google's published documentation and none of it from a recorded exchange**, which
-is a weaker footing than Freshdesk and Xero stand on and is said here rather than implied.
-The facts a recording would settle and currently does not are named in
-`WHAT_A_RECORDING_WOULD_SETTLE`. The shape is arranged so that a recording can be added
-later without touching this module: `Reply` carries the same three fields a `Cassette`
-records, `error_reason` reads both shapes Google's error envelope takes, and every threshold
-is a named constant rather than a literal at a call site.
+**Its recordings are Google's documented shapes, and no live capture exists.**
+`tests/fixtures/cassettes.py` records a listing page, a file read, a throttling 403, a 429, a
+401 and a 404, each written to the shape Google's API reference publishes, and
+`tests/unit/test_cassette_replay.py` replays them through this module. That is the footing
+every connector here stands on: **no vendor fact in this module has been seen from a live
+account**. The facts only a live capture would settle are named in
+`WHAT_A_RECORDING_WOULD_SETTLE`. `Reply` carries the same three fields a `Cassette` records,
+`error_reason` reads both shapes Google's error envelope takes, and every threshold is a named
+constant rather than a literal at a call site.
 
 **Scope at connect is the whole of this connector.** A Drive credential usually reaches
 everything the company has ever written, so a connector scoped to "whatever the token
@@ -335,7 +334,7 @@ NOTHING_HERE_MAKES_A_DOCUMENT_SAFE_TO_READ = (
 #: Why this connector runs against no measured ceiling, said rather than implied.
 THERE_IS_NO_MEASURED_CEILING_HERE = (
     "brain.ops.limits records verified figures for Xero, Freshdesk and Lark Base and none "
-    "for this source, and there is no recording to derive one from either. So the manifest "
+    "for this source, and no live capture to derive one from either. So the manifest "
     "declares no ceiling and throttle.limits_for refuses rather than inventing a number, "
     "which is the correct refusal and is also a real gap: nothing paces this connector, so "
     "twenty concurrent agent runs are twenty concurrent listings. The remedy is a measured "
@@ -345,8 +344,9 @@ THERE_IS_NO_MEASURED_CEILING_HERE = (
 
 #: The vendor facts here that a recording would settle and documentation cannot.
 WHAT_A_RECORDING_WOULD_SETTLE = (
-    "Four things are taken from Google's documentation and would be facts if a cassette "
-    "existed. Which reason strings actually arrive on a throttling 403, and whether a "
+    "Four things are taken from Google's documentation and would be facts only if a live "
+    "capture existed; the recordings are documented shapes. Which reason strings actually "
+    "arrive on a throttling 403, and whether a "
     "deployment ever sees one this module does not list. Whether the error envelope carries "
     "error.errors[0].reason, error.status, or both, which is why error_reason reads either. "
     "Whether a shared-drive listing returns a permissions array to a service account that is "
@@ -1364,10 +1364,10 @@ def first_page(connection: DriveConnection, *, modified_after: str = "") -> List
 class Reply:
     """What came back, as a value. The same three fields a cassette records.
 
-    Deliberately identical in shape to `tests.fixtures.cassettes.Cassette`, so that the day a
-    Google Drive recording exists it becomes one of these with no translation step that could
-    disagree with the recording. This module never constructs one: it is what a transport
-    hands over, which is what keeps every rule here testable without a socket.
+    Deliberately identical in shape to `tests.fixtures.cassettes.Cassette`, so a recording
+    becomes one of these with no translation step that could disagree with it. This module
+    never constructs one: it is what a transport hands over, which is what keeps every rule
+    here testable without a socket.
     """
 
     status: int
@@ -1395,7 +1395,8 @@ class PageReader(Protocol):
     `brain.knowledge.scanning.Scanner` gives about its own: the cases that decide whether
     this is right are a throttling 403, a 404 that means either of two things, and a
     shared-drive listing that came back empty because of a missing parameter. None of the
-    three can be arranged reliably against a real Drive, and none of them is recorded.
+    three can be arranged reliably against a real Drive, and only the first two have a
+    documented shape recorded.
     """
 
     def read(self, request: ListingRequest) -> Reply: ...
@@ -1406,7 +1407,7 @@ def error_reason(reply: Reply) -> str:
 
     Both envelope shapes are read, and that is deliberate rather than defensive: the classic
     Drive error carries `error.errors[0].reason` and the newer one carries `error.status`,
-    the documentation shows both, and no recording exists to say which a deployment will
+    the documentation shows both, and no live capture exists to say which a deployment will
     meet. Reading either is the shape that does not have to change when one turns out to be
     the truth. See `WHAT_A_RECORDING_WOULD_SETTLE`.
 

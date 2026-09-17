@@ -68,7 +68,7 @@ Rejected: a "connect" verb here. This package writes nothing, and connecting a s
 Scope: reads values and returns values. Nothing here opens a connection, reads a clock of its
 own or writes anything.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M38.4.1.1
 """
 
 from __future__ import annotations
@@ -93,6 +93,7 @@ from brain.console.screens import offerable, screen
 from brain.core.entitlement import EntitlementSet
 from brain.core.projection import MAX_LABEL_CHARS, MAX_PROJECTED_FIELDS
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_recordings import recorded_in_words
 from brain.ops.connector_store import Connection
 from brain.ops.connector_sync import SyncState, plan_for, sync_in_words
 from brain.ops.credentials import Held, VaultState
@@ -736,5 +737,79 @@ def connected_rows(
                 next_sync_at=next_sync,
                 sync=said,
             )
+        )
+    return tuple(rows)
+
+
+# ------------------------------------------------- what each connector was tested against
+
+#: Why the recordings half and the live half of a connector's evidence are two sentences.
+RECORDED_IS_NOT_LIVE: Final = (
+    "Whether a connector was tested against recorded responses is a fact about this release, the "
+    "same on every install. Whether a live credential is held, and whether the worker has ever "
+    "read the source to the end with it, are facts about this install. A screen that joined them "
+    "would let a tested connector read as a working one, so each is its own sentence, and a live "
+    "read is claimed only from the worker's own record of having finished one."
+)
+
+#: Said for a source this reader may not be told is connected, and for one that is not, alike.
+LIVE_NOT_SHOWN: Final = (
+    "There is no connection of this source that this screen can show you, so no live credential "
+    "is shown and no live read is claimed."
+)
+LIVE_NOTHING_LOOKED: Final = (
+    "Nothing here can say which sources are connected, so no live credential is shown and no "
+    "live read is claimed."
+)
+LIVE_KEY_HELD: Final = "A live credential for it is held in the vault."
+LIVE_KEY_NOT_HELD: Final = "No live credential for it is held in the vault."
+LIVE_KEY_NOT_KNOWN: Final = (
+    "The vault could not be asked, so whether a live credential for it is held is not known."
+)
+NEVER_READ_LIVE: Final = "It has never been read live on this install."
+READ_LIVE: Final = "It was last read live, to the end, at the time shown."
+
+
+@dataclass(frozen=True)
+class EvidenceRow:
+    """One connector in this release: what it was tested against, and what this install holds."""
+
+    name: str
+    label: str
+    recorded: str
+    credential: str
+    live_read: str
+    #: When the worker last read it to the end, or None when that has never happened here.
+    last_read_live_at: datetime | None
+
+
+def evidence_rows(
+    connections: Sequence[ConnectedRow] | None, labels: Mapping[str, str]
+) -> tuple[EvidenceRow, ...]:
+    """Every connector named in `labels`, each with both halves. See `RECORDED_IS_NOT_LIVE`.
+
+    `connections` is `connected_rows`' answer, already narrowed to what this reader may be told
+    of, or None when nothing looked. A source it does not hold gets `LIVE_NOT_SHOWN`, which is the
+    same sentence whether it is unconnected or connected and withheld, so the list of every
+    connector in the release discloses nothing about this install.
+    """
+    by_name = {} if connections is None else {one.name: one for one in connections}
+    rows: list[EvidenceRow] = []
+    for name, label in labels.items():
+        one = by_name.get(name)
+        if one is None:
+            told = LIVE_NOTHING_LOOKED if connections is None else LIVE_NOT_SHOWN
+            rows.append(EvidenceRow(name, label, recorded_in_words(name), told, "", None))
+            continue
+        credential = (
+            LIVE_KEY_NOT_KNOWN
+            if one.key_held is None
+            else LIVE_KEY_HELD
+            if one.key_held
+            else LIVE_KEY_NOT_HELD
+        )
+        live = NEVER_READ_LIVE if one.last_synced_at is None else READ_LIVE
+        rows.append(
+            EvidenceRow(name, label, recorded_in_words(name), credential, live, one.last_synced_at)
         )
     return tuple(rows)

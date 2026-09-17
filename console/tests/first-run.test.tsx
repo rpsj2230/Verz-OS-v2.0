@@ -748,6 +748,7 @@ describe("connecting the sources named during setup", () => {
       },
     ],
     not_connectable: [{ name: "freshdesk", label: "Freshdesk", why: "FRESHDESK-WHY-SENTINEL" }],
+    evidence: [],
     key_max_chars: 1000,
     key_blank: "KEY-BLANK-SENTINEL",
   };

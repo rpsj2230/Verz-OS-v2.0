@@ -61,7 +61,7 @@ module calling them with values of its own would be this repository holding a cl
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
-Task ids: M42.6.5, M27.9.9
+Task ids: M42.6.5, M27.9.9, M38.4.1.1
 """
 
 from __future__ import annotations
@@ -86,9 +86,11 @@ from brain.console.connector_trust import (
     NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED,
     NOTHING_HERE_COUNTS_TODAYS_CALLS,
     ConnectedRow,
+    EvidenceRow,
     TrustRow,
     admitted_connections,
     connected_rows,
+    evidence_rows,
 )
 from brain.console.reads import permitted
 from brain.console.screens import screen
@@ -274,6 +276,27 @@ class NotConnectableView(BaseModel):
     why: str
 
 
+class EvidenceView(BaseModel):
+    """One connector in this release: tested against recorded responses, and live on this install.
+
+    `brain.console.connector_trust.EvidenceRow`, field by field. Every connector in the release is
+    listed, connected or not, and a source this reader may not be told of carries the same live
+    sentence as one nobody connected. See `brain.console.connector_trust.RECORDED_IS_NOT_LIVE`.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    label: str
+    #: What this release tested it against, from `brain.ops.connector_recordings`.
+    recorded: str
+    #: Whether a live credential is held on this install, or why that is not shown.
+    credential: str
+    #: Whether it has been read live here. Empty when no connection is shown.
+    live_read: str
+    last_read_live_at: datetime | None
+
+
 class ConnectorsView(BaseModel):
     """The connected sources this reader may be told exist, or why there is no list.
 
@@ -310,6 +333,8 @@ class ConnectorsView(BaseModel):
     vault_told: str
     connectable: list[ConnectableView]
     not_connectable: list[NotConnectableView]
+    #: Every connector in this release, tested against recorded responses or not, and live or not.
+    evidence: list[EvidenceView]
     #: The longest key the form accepts, which the server refuses above in words.
     key_max_chars: int
     #: What the connect route answers for a blank key, for the reason `SettingView.blank` gives.
@@ -392,6 +417,25 @@ def trust_view(one: TrustRow) -> TrustView:
         reaches=one.reaches,
         access=one.access,
         permission_sync=one.permission_sync,
+    )
+
+
+def evidence_views(rows: tuple[ConnectedRow, ...] | None) -> list[EvidenceView]:
+    """Every connector this release names, with both halves of its evidence, in the form's order."""
+    labels = {one.name: one.label for one in CONNECTABLE.values()}
+    labels.update({one.name: one.label for one in NOT_FROM_THE_CONSOLE.values()})
+    return [evidence_view(one) for one in evidence_rows(rows, labels)]
+
+
+def evidence_view(one: EvidenceRow) -> EvidenceView:
+    """One row, copied field by field, for `TrustView`'s reason."""
+    return EvidenceView(
+        name=one.name,
+        label=one.label,
+        recorded=one.recorded,
+        credential=one.credential,
+        live_read=one.live_read,
+        last_read_live_at=one.last_read_live_at,
     )
 
 
@@ -509,6 +553,7 @@ def _page(
     *,
     connections: list[ConnectedView] | None,
     vault: VaultState,
+    evidence: list[EvidenceView],
 ) -> ConnectorsView:
     return ConnectorsView(
         connectors=connections,
@@ -547,6 +592,7 @@ def _page(
             NotConnectableView(name=one.name, label=one.label, why=one.why)
             for one in NOT_FROM_THE_CONSOLE.values()
         ],
+        evidence=evidence,
         key_max_chars=MAX_CREDENTIAL_CHARS,
         key_blank=KEY_SENTENCES["blank"],
     )
@@ -576,7 +622,9 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     records = records_of(request)
     if records is None:
         vault = VaultState.READY if credentials.configured else VaultState.ABSENT
-        return _page(asked.reach, asked.now, connections=None, vault=vault)
+        return _page(
+            asked.reach, asked.now, connections=None, vault=vault, evidence=evidence_views(None)
+        )
     found: tuple[Connection, ...] = await records.connected()
     shown = admitted_connections(found, asked.reach, asked.now)
     vault, held = await asyncio.to_thread(keys_held, credentials, [one.connector for one in shown])
@@ -591,6 +639,7 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
             for one in rows
         ],
         vault=vault,
+        evidence=evidence_views(rows),
     )
 
 
