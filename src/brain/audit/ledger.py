@@ -318,8 +318,10 @@ class AuditAction(enum.StrEnum):
     COMPOSE_CHANGE by `0056`'s third trigger; CERTIFICATION is a grant reviewed, and a skill
     confers no grant, which is the whole of `brain.tools.skills`; APPROVAL is a suspended
     action decided, and an imported skill is not an action; PUBLISH is an artefact an agent
-    produced. One member for its three changes, imported, approved and rejected, with the
-    change in the details, for the reason APPROVAL carries its verdict there. The subject is
+    produced. One member for its changes, imported, approved and rejected, and since `0088`
+    retired, with the change in the details, for the reason APPROVAL carries its verdict there.
+    A retirement is a change to the library and not to an agent, so it is this member; taking a
+    skill off an agent is COMPOSE_CHANGE, as putting one on is. The subject is
     the skill's name, so every version of one procedure is one subject, and the digest of the
     bytes the change was about rides in the details: a skill's digest is over its whole text,
     which is not an enumerable input, so it is recordable for `_is_recordable`'s reason about a

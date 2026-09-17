@@ -19,7 +19,13 @@ application's own OpenAPI document rather than off a constant in the module unde
 asked of every view type, and the narrow-reader test compares two responses byte for byte
 rather than reading a number off one of them.
 
-Task ids: M42.6.4
+**Retiring, detaching, the library listing and the ceiling check are M27.11.8**, and each is
+driven through the same application: a retired version refused a new agent and kept by the agents
+that run it until one is detached, what agents run a version never naming or counting an agent the
+reader cannot see, a search or a filter that finds nothing hidden, and a tool outside an agent's
+ceiling reported on the page and refused until somebody says they read it.
+
+Task ids: M42.6.4, M27.11.8
 """
 
 from __future__ import annotations
@@ -60,7 +66,10 @@ from brain.console.skill_library import (
     REVIEW_AUTHORITY,
     SKILL_AUTHORITY,
     Assignment,
+    AssignmentChange,
+    Detachment,
     LibrarySkill,
+    SkillEvent,
     added,
     decided,
     read_package,
@@ -78,9 +87,15 @@ from brain.prompt_routes import installed
 from brain.skill_routes import (
     AgentChoiceView,
     AssignedView,
+    AssignmentEventView,
+    CeilingGapView,
+    CurrentAssignmentView,
+    DetachedView,
     FoundAgent,
     LibrarySkillView,
     QueueEntryView,
+    RetiredView,
+    SkillLibraryPage,
     SkillPinView,
     SkillQueueView,
     SkillRow,
@@ -288,10 +303,12 @@ class Stored:
 class Library:
     """A `brain.skill_routes.SkillLibrary` over a dictionary, keyed and refusing as the tables do.
 
-    A second import of one digest and a second decision about one are refused, as the keys refuse
-    them. An assignment writes the install into the stub rows the catalogue reads, so a test can
-    follow an assignment to the pin the Skills screen lists afterwards, and refuses when the hash it
-    was handed is not the stored one, as the store does under its lock. Every call is noted.
+    A second import of one digest, a second decision about one and a second retirement of one
+    are refused, as the keys refuse them. An assignment and a detachment write the install into
+    the stub rows the catalogue reads, so a test can follow either to the pins the Skills screen
+    lists afterwards, and each refuses when the hash it was handed is not the stored one, as the
+    store does under its lock. Each write that lands leaves the history event the store's rows
+    would read back as. Every call is noted.
     """
 
     def __init__(self, stored: Stored) -> None:
@@ -299,6 +316,33 @@ class Library:
         self.skills: dict[str, LibrarySkill] = {}
         self.calls: list[str] = []
         self.assigned: list[Assignment] = []
+        self.detached: list[Detachment] = []
+        self.events: list[SkillEvent] = []
+
+    def _event(
+        self, digest: str, name: str, agent_id: str, change: AssignmentChange, by: str
+    ) -> None:
+        # Newest first, each a minute after the last, as `StoredSkills.history` orders them.
+        at = NOW + timedelta(minutes=len(self.events))
+        self.events.insert(
+            0,
+            SkillEvent(
+                digest=digest, skill_name=name, agent_id=agent_id, change=change, by=by, at=at
+            ),
+        )
+
+    def _write_install(self, made: Assignment | Detachment, expected_hash: str) -> bool:
+        instance_row, _ = self.stored.installs[made.agent_id]
+        if instance_row.effective_hash != expected_hash:
+            return False
+        instance_row.overlay = dict(made.instance.overlay)
+        instance_row.field_owners = {
+            path: owner.model_dump(mode="json")
+            for path, owner in made.instance.overlay_owners.items()
+        }
+        instance_row.effective_document = dict(made.effective_document)
+        instance_row.effective_hash = made.effective_hash
+        return True
 
     async def library(self, limit: int = 500) -> tuple[LibrarySkill, ...]:
         self.calls.append("library")
@@ -326,18 +370,44 @@ class Library:
         self, made: Assignment, *, expected_hash: str, ent_hash: str, trace_id: str
     ) -> bool:
         self.calls.append("assign")
-        instance_row, _ = self.stored.installs[made.agent_id]
-        if instance_row.effective_hash != expected_hash:
+        if not self._write_install(made, expected_hash):
             return False
-        instance_row.overlay = dict(made.instance.overlay)
-        instance_row.field_owners = {
-            path: owner.model_dump(mode="json")
-            for path, owner in made.instance.overlay_owners.items()
-        }
-        instance_row.effective_document = dict(made.effective_document)
-        instance_row.effective_hash = made.effective_hash
         self.assigned.append(made)
+        if made.replaces_digest is not None:
+            self._event(
+                made.replaces_digest,
+                made.skill_name,
+                made.agent_id,
+                AssignmentChange.REPLACED,
+                made.assigned_by,
+            )
+        self._event(
+            made.digest, made.skill_name, made.agent_id, AssignmentChange.ASSIGNED, made.assigned_by
+        )
         return True
+
+    async def retire(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
+        self.calls.append("retire")
+        if self.skills[one.digest].retirement is not None:
+            return False
+        self.skills[one.digest] = one
+        return True
+
+    async def detach(
+        self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
+    ) -> bool:
+        self.calls.append("detach")
+        if not self._write_install(made, expected_hash):
+            return False
+        self.detached.append(made)
+        self._event(
+            made.digest, made.skill_name, made.agent_id, AssignmentChange.DETACHED, made.detached_by
+        )
+        return True
+
+    async def history(self, limit: int = 1000) -> tuple[SkillEvent, ...]:
+        self.calls.append("history")
+        return tuple(self.events[:limit])
 
 
 class Installs:
@@ -696,16 +766,18 @@ def test_a_reader_holding_only_the_existence_plane_is_refused_a_configuration_sc
     assert existence_only.json()["message"] == nothing.json()["message"]
 
 
-def test_a_caller_with_no_grant_cannot_tell_whether_this_process_has_a_database() -> None:
-    """The screen's question is asked before the session factory is reached for, read out of
-    the route's own source.
+@pytest.mark.parametrize("route", [skill_routes.skills, skill_routes.skill_library])
+def test_a_caller_with_no_grant_cannot_tell_whether_this_process_has_a_database(
+    route: Any,
+) -> None:
+    """In both reads the screen's question is asked before the screen's data is reached for, and
+    reaching for it is what asks for the session factory, read out of the routes' own source.
 
     Delete this and the two lines can be swapped by somebody tidying, after which a caller
     holding nothing is refused on an instance with a database and told this process is broken
     on one without, which is the deployment's state readable by anybody who can reach the
     port."""
-    source = inspect.getsource(skill_routes.skills)
-    tree = ast.parse(source.lstrip())
+    tree = ast.parse(inspect.getsource(route).lstrip())
     refusal = next(
         node.lineno
         for node in ast.walk(tree)
@@ -714,10 +786,13 @@ def test_a_caller_with_no_grant_cannot_tell_whether_this_process_has_a_database(
     session = next(
         node.lineno
         for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and ast.unparse(node).startswith("_require_sessions")
+        if isinstance(node, ast.Call) and ast.unparse(node).startswith("read_screen")
     )
+    reader = ast.parse(inspect.getsource(skill_routes.read_screen))
+    first_call = next(ast.unparse(node) for node in ast.walk(reader) if isinstance(node, ast.Call))
 
     assert refusal < session
+    assert first_call.startswith("_require_sessions")
 
 
 def test_a_process_with_no_database_is_a_fault_and_not_an_empty_catalogue(
@@ -873,21 +948,25 @@ def test_a_queue_entry_carries_no_body_and_no_reviewer() -> None:
 # --------------------------------------------------------------- what it will not say
 
 
-def test_the_writes_are_three_posts_and_no_read_answers_one_skill_by_name(
+def test_the_writes_are_five_posts_and_no_read_answers_one_skill_by_name(
     client: TestClient,
 ) -> None:
-    """Under `/skills` there is one GET, which takes no path parameter, and three POSTs: add a
-    skill, decide about one, and assign one. Read off the application's own document.
+    """Under `/skills` there are two GETs, neither taking a path parameter, and five POSTs: add a
+    skill, decide about one, assign one, detach one and retire a version. Read off the
+    application's own document.
 
-    Delete this and a fourth write, an approval folded into an import say, or a GET answering one
+    Delete this and a sixth write, an approval folded into an import say, or a GET answering one
     skill by name, can arrive without anybody arguing for it."""
     paths = client.app.openapi()["paths"]  # type: ignore[attr-defined]
     mine = {path: set(operations) for path, operations in paths.items() if path.startswith(SKILLS)}
 
     assert mine == {
         SKILLS: {"get", "post"},
+        f"{SKILLS}/library": {"get"},
         f"{SKILLS}/{{digest}}/review": {"post"},
         f"{SKILLS}/{{digest}}/assignments": {"post"},
+        f"{SKILLS}/{{digest}}/detachments": {"post"},
+        f"{SKILLS}/{{digest}}/retirement": {"post"},
     }
     assert [path for path, methods in mine.items() if "get" in methods and "{" in path] == []
 
@@ -925,11 +1004,17 @@ def test_no_answer_carries_a_count_of_what_the_reader_was_not_shown(
         SkillRow,
         SkillPinView,
         SkillsPage,
+        SkillLibraryPage,
         SkillQueueView,
         LibrarySkillView,
         ToolReachView,
         AgentChoiceView,
         AssignedView,
+        CurrentAssignmentView,
+        AssignmentEventView,
+        CeilingGapView,
+        DetachedView,
+        RetiredView,
     )
     assert hidden_count_fields(views) == ()
     assert body["total"] is None
@@ -1098,11 +1183,23 @@ def a_package(text: str = SKILL_MD) -> dict[str, str]:
     return {"file_name": "SKILL.md", "content": text, "encoding": "text"}
 
 
-def an_assignable_agent(stored: Stored, agent_id: str = "company_desk", **row: Any) -> None:
-    """An agent whose ceiling reads client names through the client tool, with an install."""
+#: Both tools `SKILL_MD` names, so an assignment of it to an agent allowed these is clear.
+BOTH_TOOLS = ("crm.read_client", "desk.read_ticket")
+
+
+def an_assignable_agent(
+    stored: Stored,
+    agent_id: str = "company_desk",
+    *,
+    allowed_tools: tuple[str, ...] = BOTH_TOOLS,
+    **row: Any,
+) -> None:
+    """An agent allowed both tools the sample skill names and holding only the client capability,
+    with an install. So the skill is clear of its tool ceiling and reaches the client tool alone,
+    for a caller holding client names: the ceiling check and the reach are two questions."""
     stored.agents[agent_id] = agent_row(
         agent_id,
-        allowed_tools=("crm.read_client",),
+        allowed_tools=allowed_tools,
         capabilities=(CLIENT_NAMES,),
         **row,
     )
@@ -1382,3 +1479,320 @@ def test_an_install_changed_since_it_was_read_is_refused_and_the_change_is_kept(
     assert refused.status_code == 404
     assert "changed this agent after you opened it" in refused.json()["message"]
     assert stored.library.assigned == []
+
+
+# ------------------------------------------------------------------ the skills lifecycle
+def library(c: TestClient, pid: str, query: str = "") -> Response:
+    return get(c, pid, f"{SKILLS}/library{query}")
+
+
+def an_approved_digest(c: TestClient, text: str = SKILL_MD) -> str:
+    """A skill added by the administrator and approved by the second person, by its digest."""
+    digest = str(post(c, "u_admin", SKILLS, a_package(text)).json()["digest"])
+    decided_ = post(c, "u_wide", f"{SKILLS}/{digest}/review", {"decision": "approve"})
+    assert decided_.status_code == 200, decided_.text
+    return digest
+
+
+def library_row(response: Response, digest: str) -> dict[str, Any]:
+    rows = [one for one in response.json()["library"] if one["digest"] == digest]
+    assert len(rows) == 1, response.text
+    return dict(rows[0])
+
+
+def test_a_retired_version_is_refused_a_new_agent_in_words_and_kept_by_its_agents_until_detached(
+    client: TestClient, stored: Stored
+) -> None:
+    """**Retired cannot be assigned; detach removes it from current and keeps it in history.**
+    An approved version is assigned to one agent and retired. A second retirement is refused, an
+    assignment to another agent is refused saying the version is retired, and the library row says
+    retired, offers neither assignment nor retirement, and still lists the agent running it with a
+    Detach offered. Detaching it from that agent takes it off: the row lists no agent, the skills in
+    use are empty, and the history says it was assigned and then detached, by whom. Detaching again
+    is refused.
+
+    Delete this and retiring a version withdraws nothing, or it silently takes the version off the
+    agents already running it, or a detachment leaves no trace of the assignment it ended."""
+    an_assignable_agent(stored, "company_desk")
+    an_assignable_agent(stored, "web_desk")
+    digest = an_approved_digest(client)
+    assigned = post(
+        client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "company_desk"}
+    )
+    assert assigned.status_code == 201, assigned.text
+
+    retired_ = post(client, "u_admin", f"{SKILLS}/{digest}/retirement", {})
+    again = post(client, "u_admin", f"{SKILLS}/{digest}/retirement", {})
+    refused = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "web_desk"})
+    before = library_row(get(client, "u_admin"), digest)
+
+    assert retired_.status_code == 201, retired_.text
+    assert (retired_.json()["retired_by"], retired_.json()["name"]) == ("u_admin", "hosting-expiry")
+    assert again.status_code == 404
+    assert "already retired" in again.json()["message"]
+    assert refused.status_code == 404
+    assert "is retired, so it cannot be newly assigned" in refused.json()["message"]
+    assert [one.agent_id for one in stored.library.assigned] == ["company_desk"]
+    assert (before["retired"], before["retired_by"]) == (True, "u_admin")
+    assert (before["assignable"], before["retirable"], before["reviewable"]) == (
+        False,
+        False,
+        False,
+    )
+    assert before["assignments"] == [
+        {"agent_id": "company_desk", "display_name": "Company Desk", "detachable": True}
+    ]
+
+    detached = post(
+        client, "u_admin", f"{SKILLS}/{digest}/detachments", {"agent_id": "company_desk"}
+    )
+    twice = post(client, "u_admin", f"{SKILLS}/{digest}/detachments", {"agent_id": "company_desk"})
+    page = get(client, "u_admin").json()
+    after = library_row(get(client, "u_admin"), digest)
+
+    assert detached.status_code == 201, detached.text
+    assert (detached.json()["agent_id"], detached.json()["digest"]) == ("company_desk", digest)
+    assert after["assignments"] == []
+    assert page["items"] == []
+    assert [(one["agent_id"], one["change"], one["by"]) for one in after["history"]] == [
+        ("company_desk", "detached", "u_admin"),
+        ("company_desk", "assigned", "u_admin"),
+    ]
+    assert twice.status_code == 404
+    assert "does not run this version" in twice.json()["message"]
+
+
+def test_retiring_and_detaching_are_refused_to_a_caller_without_the_authority_before_a_read(
+    client: TestClient, stored: Stored
+) -> None:
+    """A reader of the screen, a reviewer, and a department's administrator retiring a version all
+    get the screen's one refusal; a reader of the screen detaching, and a department's
+    administrator detaching from an agent outside their department, get it too; and none of them
+    reaches the library. The permitted cases are the test above.
+
+    Delete this and opening the screen is enough to withdraw a version from every agent, or a
+    department's administrator takes skills off every department's agents, or a digest typed by
+    anybody answers whether that version exists."""
+    an_assignable_agent(stored, "company_desk")
+    digest = "d" * 64
+
+    refusals = [
+        post(client, "u_narrow", f"{SKILLS}/{digest}/retirement", {}),
+        post(client, "u_wide", f"{SKILLS}/{digest}/retirement", {}),
+        post(client, "u_elsewhere", f"{SKILLS}/{digest}/retirement", {}),
+        post(client, "u_narrow", f"{SKILLS}/{digest}/detachments", {"agent_id": "company_desk"}),
+        post(client, "u_elsewhere", f"{SKILLS}/{digest}/detachments", {"agent_id": "company_desk"}),
+    ]
+    weak = post(client, "u_admin", f"{SKILLS}/{digest}/retirement", {}, strong=False)
+
+    assert [one.status_code for one in refusals] == [404] * len(refusals)
+    assert {one.json()["message"] for one in refusals} == {screen_refusal(client)}
+    assert weak.status_code == 404
+    assert stored.library.calls == []
+
+
+def test_a_tool_outside_the_agents_ceiling_is_reported_refused_until_acknowledged_and_not_granted(
+    client: TestClient, stored: Stored
+) -> None:
+    """**A tool outside the ceiling is reported before the write, refused unacknowledged, and never
+    granted.** The sample skill names the client tool and the ticket tool. Before anything is sent,
+    the library row names the ticket tool against the agent allowed only the client tool, and names
+    nothing against the agent allowed both. Assigned to the narrow agent unacknowledged, it is
+    refused in words naming the tool and nothing is written. Acknowledged, it is assigned, the
+    answer names the tool again, what it reaches for the administrator is the client tool alone,
+    and the agent is still allowed exactly what it was.
+
+    Delete this and a skill naming a tool its agent is not allowed is pinned with nobody told, or
+    the acknowledgement is taken as a reason to allow the tool."""
+    an_assignable_agent(stored, "narrow_desk", allowed_tools=("crm.read_client",))
+    an_assignable_agent(stored, "wide_desk")
+    digest = an_approved_digest(client)
+    install_before = stored.installs["narrow_desk"][0].effective_hash
+
+    row = library_row(get(client, "u_admin"), digest)
+    refused = post(client, "u_admin", f"{SKILLS}/{digest}/assignments", {"agent_id": "narrow_desk"})
+    unchanged = stored.installs["narrow_desk"][0].effective_hash
+    acknowledged = post(
+        client,
+        "u_admin",
+        f"{SKILLS}/{digest}/assignments",
+        {"agent_id": "narrow_desk", "acknowledge_outside_ceiling": True},
+    )
+
+    assert row["outside_ceiling"] == [{"agent_id": "narrow_desk", "tools": ["desk.read_ticket"]}]
+    assert refused.status_code == 404
+    assert "is not allowed desk.read_ticket" in refused.json()["message"]
+    assert "grants none of them" in refused.json()["message"]
+    assert unchanged == install_before
+    assert acknowledged.status_code == 201, acknowledged.text
+    assert acknowledged.json()["outside_ceiling"] == ["desk.read_ticket"]
+    assert acknowledged.json()["unregistered_tools"] == []
+    assert acknowledged.json()["reach"] == ["crm.read_client"]
+    assert [one.agent_id for one in stored.library.assigned] == ["narrow_desk"]
+    assert stored.agents["narrow_desk"].allowed_tools == ["crm.read_client"]
+    assert record_of(stored.agents["narrow_desk"]).authority.allowed_tools == frozenset(  # type: ignore[union-attr]
+        {"crm.read_client"}
+    )
+
+
+def _a_hidden_agent_runs(stored: Stored, digest: str, name: str) -> None:
+    """A sales department's agent pinned to these bytes, with a history event, which `u_narrow`
+    in web may not see and `u_wide` in sales may."""
+    stored.agents["sales_helper"] = agent_row(
+        "sales_helper", level=Visibility.DEPARTMENT, department="sales"
+    )
+    stored.installs["sales_helper"] = skilled_rows(
+        "sales_helper", skills=(SkillRef(name=name, digest=digest),)
+    )
+    stored.library.events.insert(
+        0,
+        SkillEvent(
+            digest=digest,
+            skill_name=name,
+            agent_id="sales_helper",
+            change=AssignmentChange.ASSIGNED,
+            by="u_wide",
+            at=NOW,
+        ),
+    )
+
+
+def test_which_agents_run_a_version_never_names_or_counts_an_agent_the_reader_cannot_see(
+    client: TestClient, stored: Stored
+) -> None:
+    """**Current assignments never reveal hidden agents.** A version run by a company agent: the
+    Skills page and the library listing answer `u_narrow` byte for byte the same whether or not a
+    sales department's agent also runs it and has a history event on it, and `u_wide`, whose
+    audience covers sales, is listed both agents and the event.
+
+    Delete this and a library row tells a reader which agents in other departments run a procedure,
+    or how many, through the list of agents running it or its history."""
+    an_assignable_agent(stored, "company_desk")
+    digest = an_approved_digest(client)
+    stored.installs["company_desk"] = skilled_rows(
+        "company_desk", skills=(SkillRef(name="hosting-expiry", digest=digest),)
+    )
+
+    page_without = get(client, "u_narrow")
+    listing_without = library(client, "u_narrow")
+    _a_hidden_agent_runs(stored, digest, "hosting-expiry")
+    page_with = get(client, "u_narrow")
+    listing_with = library(client, "u_narrow")
+    wide = library_row(get(client, "u_wide"), digest)
+
+    assert page_with.status_code == listing_with.status_code == 200
+    assert page_with.content == page_without.content
+    assert listing_with.content == listing_without.content
+    assert [one["agent_id"] for one in library_row(page_with, digest)["assignments"]] == [
+        "company_desk"
+    ]
+    assert [one["agent_id"] for one in wide["assignments"]] == ["company_desk", "sales_helper"]
+    assert [one["agent_id"] for one in wide["history"]] == ["sales_helper"]
+
+
+def test_a_library_search_or_filter_finds_nothing_the_reader_cannot_see(
+    client: TestClient, stored: Stored
+) -> None:
+    """**Search finds nothing the reader cannot see.** One version run by a company agent, another
+    run only by a hidden sales agent: for `u_narrow`, searching for the hidden agent, filtering on
+    it and filtering to versions in use each answer exactly what they answer on an install without
+    that agent, and never the hidden agent's version as in use. For `u_wide` the same questions find
+    it, which is the positive half.
+
+    Delete this and a search box is a way to ask, one guess at a time, which procedures an agent in
+    another department runs."""
+    an_assignable_agent(stored, "company_desk")
+    hosting = an_approved_digest(client)
+    quoting = an_approved_digest(
+        client, text_with(name="quote-format", description="Formats a quote for a client")
+    )
+    stored.installs["company_desk"] = skilled_rows(
+        "company_desk", skills=(SkillRef(name="hosting-expiry", digest=hosting),)
+    )
+    questions = ("?q=sales_helper", "?filter=agents:sales_helper", "?filter=in_use:true")
+
+    without = [library(client, "u_narrow", one) for one in questions]
+    _a_hidden_agent_runs(stored, quoting, "quote-format")
+    hidden = [library(client, "u_narrow", one) for one in questions]
+    seen = [library(client, "u_wide", one) for one in questions]
+
+    assert [one.status_code for one in hidden] == [200, 200, 200]
+    assert [one.content for one in hidden] == [one.content for one in without]
+    assert [[row["name"] for row in one.json()["items"]] for one in hidden] == [
+        [],
+        [],
+        ["hosting-expiry"],
+    ]
+    assert [[row["name"] for row in one.json()["items"]] for one in seen] == [
+        ["quote-format"],
+        ["quote-format"],
+        ["hosting-expiry", "quote-format"],
+    ]
+
+
+def test_the_library_is_searched_and_filtered_by_name_review_state_and_retirement_on_the_server(
+    client: TestClient, stored: Stored
+) -> None:
+    """Three versions, one approved and retired, one waiting, one rejected: each filter and a search
+    answers exactly the versions it names, a reverse order reverses them, the answer carries no
+    total, and a column the listing does not declare is refused before a row is read.
+
+    Delete this and the library's filters can be declared and never applied, or applied in the
+    browser over one page, which says nothing about the versions on the next."""
+    hosting = an_approved_digest(client)
+    post(client, "u_admin", f"{SKILLS}/{hosting}/retirement", {})
+    post(
+        client,
+        "u_admin",
+        SKILLS,
+        a_package(text_with(name="quote-format", description="Formats a quote for a client")),
+    )
+    rejected = str(
+        post(
+            client,
+            "u_admin",
+            SKILLS,
+            a_package(text_with(name="xero-reconcile", description="Reconciles an invoice run")),
+        ).json()["digest"]
+    )
+    post(client, "u_wide", f"{SKILLS}/{rejected}/review", {"decision": "reject"})
+
+    def names_for(query: str) -> list[str]:
+        response = library(client, "u_admin", query)
+        assert response.status_code == 200, response.text
+        assert response.json()["total"] is None
+        return [row["name"] for row in response.json()["items"]]
+
+    assert names_for("") == ["hosting-expiry", "quote-format", "xero-reconcile"]
+    assert names_for("?filter=retired:true") == ["hosting-expiry"]
+    assert names_for("?filter=retired:false") == ["quote-format", "xero-reconcile"]
+    assert names_for("?filter=review:pending") == ["quote-format"]
+    assert names_for("?filter=review:rejected") == ["xero-reconcile"]
+    assert names_for("?filter=name:quote-format") == ["quote-format"]
+    assert names_for("?q=invoice") == ["xero-reconcile"]
+    assert names_for("?filter=in_use:true") == []
+    assert names_for("?sort=-name") == ["xero-reconcile", "quote-format", "hosting-expiry"]
+    assert library(client, "u_admin", "?filter=submitted_by:u_admin").status_code == 422
+
+
+def test_the_library_listing_is_the_screens_refusal_without_it_and_empty_without_the_library(
+    client: TestClient, stored: Stored
+) -> None:
+    """Nobody holding the screen is refused as every read here refuses; a reader granted the screen
+    in finance alone is answered an empty page, as `GET /skills` answers them no library; a reader
+    of the screen over everything is listed it.
+
+    Delete this and the listing opens to anybody, or hands a department's reader the whole library
+    the page beside it withholds."""
+    an_approved_digest(client)
+
+    refused = library(client, "u_none")
+    narrow = library(client, "u_elsewhere")
+    listed = library(client, "u_narrow")
+
+    assert refused.status_code == 404
+    assert refused.json()["message"] == screen_refusal(client)
+    assert narrow.status_code == 200
+    assert narrow.json()["items"] == []
+    assert get(client, "u_elsewhere").json()["library"] == []
+    assert [row["name"] for row in listed.json()["items"]] == ["hosting-expiry"]

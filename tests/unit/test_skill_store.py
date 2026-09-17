@@ -1,5 +1,5 @@
-"""The skill library's tables and store: what `0056` builds, what its triggers record, and what the
-store sends.
+"""The skill library's tables and store: what `0056` and `0088` build, what their triggers record,
+and what the store sends.
 
 The first half needs no database. The migration is rendered offline and compared with the models,
 the trigger functions are read and held to `AuditRecorder`'s own entries, a stored row is read back
@@ -7,14 +7,15 @@ through `library_skill_of`, and the store's statements and their order are check
 session that notes each one. The second half runs against a scratch PostgreSQL and **skips without
 a server**, which is every run on the machine this was written on.
 
-Task ids: M42.6.4
+Task ids: M42.6.4, M27.11.8
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import psycopg
@@ -24,46 +25,65 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.schema import CreateTable
 
+from brain.agents.template import SkillRef
 from brain.audit.ledger import DIGEST, IDENTIFIER, AuditAction, AuditChain, AuditEntry
 from brain.audit.record import AuditRecorder, SkillChange
 from brain.console.skill_library import (
     ASSIGN_REASON,
+    DETACH_REASON,
     REPLACE_REASON,
     SKILL_AUTHORITY,
     SKILLS_PATH,
+    AssignmentChange,
     LibrarySkill,
+    SkillEvent,
     added,
     assignment,
     decided,
+    detachment,
     ledger_reference,
     read_package,
+    retired,
 )
 from brain.console.workspace import Part
 from brain.db import metadata
 from brain.ops.skill_store import (
+    MAX_HISTORY,
     StoredSkills,
     adding,
     assignment_values,
     deciding,
+    detachment_values,
+    events_of,
     install_hash_locked,
     install_values,
     library_skill_of,
+    retirement_values,
+    retiring,
     review_values,
     skill_values,
 )
 from brain.session import make_session_factory
 from brain.tables import skill as table_module
-from brain.tables.skill import SkillReviewRow, SkillRow
+from brain.tables.skill import (
+    SkillAssignmentRow,
+    SkillDetachmentRow,
+    SkillRetirementRow,
+    SkillReviewRow,
+    SkillRow,
+)
 from brain.tools.skills import SKILL_NAME_RE, Skill, SkillSource, SkillState
 from tests.fixtures.retirable import has_pgvector, retirable
 from tests.fixtures.scratch_postgres import migrate, run, sql
 from tests.unit.test_automation_owner_store import app_engine, as_app
 from tests.unit.test_skill_library import (
     AGENT,
+    BOTH_TOOLS,
     IMPORTER,
     REVIEWER,
     SKILL_MD,
     a_recorder,
+    a_registry,
     an_install,
     reach,
     text_with,
@@ -73,11 +93,13 @@ from tests.unit.test_tables import VERSIONS, migration_module, rendered, squash
 DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 
 MIGRATION = VERSIONS / "0056_skill_library.py"
+LIFECYCLE = VERSIONS / "0088_skill_lifecycle.py"
 
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 NOW = datetime(2019, 3, 6, 9, 0, tzinfo=UTC)
 
 TABLES = ("agent.skill", "agent.skill_review", "agent.skill_assignment")
+LIFECYCLE_TABLES = ("agent.skill_retirement", "agent.skill_detachment")
 
 
 def compiled(statement: Any) -> str:
@@ -429,7 +451,7 @@ def test_an_assignment_writes_only_when_the_install_is_the_one_it_was_decided_ab
     Delete this and two administrators assigning at once overwrite each other's install, or an
     instruction edit made while somebody was choosing a skill is lost without a word."""
     one = approved()
-    signed, instance, record = an_install()
+    signed, instance, record = an_install(allowed=BOTH_TOOLS)
     made = assignment(
         one,
         record=record,
@@ -438,6 +460,8 @@ def test_an_assignment_writes_only_when_the_install_is_the_one_it_was_decided_ab
         library=(one,),
         by=reach(SKILL_AUTHORITY.value),
         recorder=a_recorder(AuditChain()),
+        registry=a_registry(),
+        acknowledged=False,
         now=NOW,
     )
     matched: list[str] = []
@@ -605,6 +629,424 @@ def test_the_database_refuses_a_decision_by_the_importer_and_an_assignment_nobod
                 "reference": "quote_format",
                 "direction": "attached",
                 "reason_code": ASSIGN_REASON,
+            },
+        )
+    ]
+    assert AuditChain(chain).verify() is None
+
+
+# ---------------------------------------------------------------------- the lifecycle, 0088
+def test_the_lifecycle_migration_holds_the_grammars_words_and_lock_it_copied() -> None:
+    """`0088` copies the identifier grammar, the width of a person's id, the part and reason code an
+    entry records, the change word a retirement writes and the ledger's advisory lock, each held to
+    its owner here, and each written literally where the trigger uses it.
+
+    Delete this and the retirement trigger can record a change word `SkillChange` does not have, the
+    detachment trigger a reason the recorder never writes, or the refusal of a retired assignment a
+    lock the ledger's append never takes, which looks like serialisation and serialises nothing."""
+    migration = migration_module(LIFECYCLE)
+    found = re.search(r"pg_advisory_xact_lock\((\d+)\)", migration_module(MIGRATION)._APPEND)
+    assert found is not None
+    ledger_lock = int(found.group(1))
+
+    assert migration.TABLES == LIFECYCLE_TABLES
+    assert migration.down_revision == "0083"
+    assert migration.IDENTIFIER == IDENTIFIER
+    assert migration.PRINCIPAL_ID_CHARS == table_module.PRINCIPAL_ID_CHARS
+    assert migration.PART == Part.SKILLS.value == SKILLS_PATH
+    assert migration.DETACH_REASON == DETACH_REASON
+    assert SkillChange.RETIRED.value == migration.RETIRED
+    assert ledger_lock == migration.LEDGER_LOCK
+    assert f"pg_advisory_xact_lock({ledger_lock});" in migration.REFUSE_RETIRED_ASSIGNMENT_FUNCTION
+    assert f"'reason_code', '{DETACH_REASON}'" in migration.SKILL_DETACHMENT_TRIGGER_FUNCTION
+    assert f"'change', '{SkillChange.RETIRED.value}'" in migration.SKILL_RETIREMENT_TRIGGER_FUNCTION
+
+
+@pytest.mark.parametrize("qualified", LIFECYCLE_TABLES)
+def test_the_lifecycle_migration_builds_each_table_exactly_as_the_model_declares_it(
+    qualified: str,
+) -> None:
+    """Compared as rendered DDL, for `0056`'s test's reason. Delete this and the model can gain a
+    column or lose a key with the database built the old way."""
+    expected = squash(str(CreateTable(metadata.tables[qualified]).compile(dialect=DIALECT)))
+
+    assert expected in squash(rendered("upgrade", LIFECYCLE))
+
+
+def test_a_retirement_and_a_detachment_are_written_in_their_writers_name_and_never_edited() -> None:
+    """Row-level security on both, SELECT and INSERT only, each insert policy in the session's own
+    name, an audit trigger after each insert, the refusal before an assignment, a retirement keyed
+    by its digest and a detachment held to the skill by name and digest, and a downgrade that drops
+    the triggers before the tables.
+
+    Delete this and an UPDATE grant, a retirement in somebody else's name, a detachment with no
+    ledger entry or an assignment of retired bytes by a hand-written statement can ship with every
+    other test here green."""
+    emitted = squash(rendered("upgrade", LIFECYCLE))
+    principal = "current_setting('app.principal_id', true)"
+    retirement = squash(
+        str(CreateTable(metadata.tables["agent.skill_retirement"]).compile(dialect=DIALECT))
+    )
+    detached = squash(
+        str(CreateTable(metadata.tables["agent.skill_detachment"]).compile(dialect=DIALECT))
+    )
+
+    for qualified, column in (
+        ("agent.skill_retirement", "retired_by"),
+        ("agent.skill_detachment", "detached_by"),
+    ):
+        assert f"ALTER TABLE {qualified} ENABLE ROW LEVEL SECURITY" in emitted
+        assert f"GRANT SELECT, INSERT ON {qualified} TO brain_app" in emitted
+        assert f"UPDATE ON {qualified}" not in emitted
+        assert f"DELETE ON {qualified}" not in emitted
+        assert f"FOR INSERT TO brain_app WITH CHECK ({column} = {principal})" in emitted
+    assert (
+        "CREATE TRIGGER skill_retirement_is_audited AFTER INSERT ON agent.skill_retirement "
+        "FOR EACH ROW EXECUTE FUNCTION agent.record_skill_retirement()"
+    ) in emitted
+    assert (
+        "CREATE TRIGGER skill_detachment_is_audited AFTER INSERT ON agent.skill_detachment "
+        "FOR EACH ROW EXECUTE FUNCTION agent.record_skill_detachment()"
+    ) in emitted
+    assert (
+        "CREATE TRIGGER a_retired_skill_is_not_assigned BEFORE INSERT ON agent.skill_assignment "
+        "FOR EACH ROW EXECUTE FUNCTION agent.refuse_assigning_a_retired_skill()"
+    ) in emitted
+    assert "PRIMARY KEY (digest)" in retirement
+    assert "FOREIGN KEY(digest) REFERENCES agent.skill (digest)" in retirement
+    assert "FOREIGN KEY(digest, skill_name) REFERENCES agent.skill (digest, name)" in detached
+    # Nothing in 0088 widens or narrows the ledger's lists: see its docstring.
+    assert "audit_entry" not in squash(rendered("downgrade", LIFECYCLE))
+    down = squash(rendered("downgrade", LIFECYCLE))
+    assert down.index("DROP TRIGGER a_retired_skill_is_not_assigned") < down.index(
+        "DROP TABLE agent.skill_detachment"
+    )
+
+
+def test_the_lifecycle_triggers_write_what_the_recorder_writes_and_name_the_row_actor() -> None:
+    """**Each write leaves a ledger entry naming the actor**, as far as can be read without a
+    server: a retirement is the `skill` entry `AuditRecorder.skill` writes for `retired`, about the
+    skill the key names, by the person the row names; a detachment is the `compose_change` entry
+    `compose_change` writes for a detachment, under the folded name, with `skill_detach`, by the
+    person the row names. The database test below runs both.
+
+    Delete this and a deployed database's entry for a retirement or a detachment and the entry the
+    recorder writes can come apart, or be attributed to whoever the session happened to be."""
+    migration = migration_module(LIFECYCLE)
+    one = approved()
+    recorder = AuditRecorder(
+        AuditChain(), actor_id="u_admin", ent_hash="0" * 32, trace_id="t", clock=lambda: NOW
+    )
+    retirement_entry = recorder.skill(name=one.name, digest=one.digest, change=SkillChange.RETIRED)
+    detachment_entry = recorder.compose_change(
+        agent_id=AGENT,
+        part=SKILLS_PATH,
+        reference=ledger_reference("hosting-expiry"),
+        attached=False,
+        reason_code=DETACH_REASON,
+    )
+    retiring_body = " ".join(migration.SKILL_RETIREMENT_TRIGGER_FUNCTION.split())
+    detaching_body = " ".join(migration.SKILL_DETACHMENT_TRIGGER_FUNCTION.split())
+    refusing_body = " ".join(migration.REFUSE_RETIRED_ASSIGNMENT_FUNCTION.split())
+
+    assert (retirement_entry.subject, dict(retirement_entry.details)) == (
+        f"skill:{one.name}",
+        {"change": "retired", "digest": one.digest},
+    )
+    assert "jsonb_build_object('change', 'retired', 'digest', NEW.digest);" in retiring_body
+    assert (
+        "SELECT 'skill:' || s.name INTO v_subject FROM agent.skill s WHERE s.digest = NEW.digest;"
+        in retiring_body
+    )
+    assert "v_seq, v_at, NEW.retired_by, 'skill', v_subject" in retiring_body
+    assert dict(detachment_entry.details) == {
+        "part": "skills",
+        "reference": "hosting_expiry",
+        "direction": "detached",
+        "reason_code": DETACH_REASON,
+    }
+    assert "v_subject text := 'agent:' || NEW.agent_id;" in detaching_body
+    assert (
+        "jsonb_build_object( 'part', 'skills', 'reference', replace(NEW.skill_name, '-', '_'), "
+        "'direction', 'detached', 'reason_code', 'skill_detach' );"
+    ) in detaching_body
+    assert "v_seq, v_at, NEW.detached_by, 'compose_change', v_subject" in detaching_body
+    assert refusing_body.index("pg_advisory_xact_lock(") < refusing_body.index(
+        "IF EXISTS (SELECT 1 FROM agent.skill_retirement r WHERE r.digest = NEW.digest) THEN"
+    )
+    assert "ERRCODE = 'restrict_violation'" in refusing_body
+    assert refusing_body.endswith("RETURN NEW; END; $$")
+
+
+def test_a_retirement_inserts_once_on_its_key_and_says_what_it_wrote() -> None:
+    """The retirement's values are the digest and the person, and the insert does nothing on the
+    key and returns the key it wrote; a skill with no retirement on it writes nothing.
+
+    Delete this and a second retirement conflicts into a fault, or overwrites who retired it, or a
+    library row with no retirement reaches the insert with an empty name."""
+    one = retired(approved(), by="u_admin", at=NOW)
+
+    assert retirement_values(one) == {"digest": one.digest, "retired_by": "u_admin"}
+    assert compiled(retiring(one)).endswith(
+        "ON CONFLICT (digest) DO NOTHING RETURNING agent.skill_retirement.digest"
+    )
+    with pytest.raises(ValueError, match="no retirement"):
+        retirement_values(approved())
+    with pytest.raises(ValueError, match="no retirement"):
+        run(
+            lambda: StoredSkills(lambda: _Session([], answer=None)).retire(  # type: ignore[arg-type]
+                approved(), ent_hash="e" * 32, trace_id="t"
+            )
+        )
+
+
+def test_a_stored_retirement_reads_back_onto_the_skill_and_its_absence_as_none() -> None:
+    """Delete this and a retired version reads back as on offer, which is every refusal of a retired
+    assignment answered by a skill the store says was never retired."""
+    skill_row, review_row = rows_for(approved())
+    retirement_row = SkillRetirementRow(
+        digest=skill_row.digest, retired_by="u_admin", created_at=NOW
+    )
+
+    held = library_skill_of(skill_row, review_row, retirement_row)
+    offered = library_skill_of(skill_row, review_row, None)
+
+    assert held is not None and held.retirement is not None
+    assert (held.retirement.by, held.retirement.at) == ("u_admin", NOW)
+    assert offered is not None and offered.retirement is None
+
+
+def test_a_retirement_and_a_detachment_name_their_writer_before_they_insert() -> None:
+    """A retirement sets the person who retired it, the trace and the reach, then inserts. A
+    detachment sets the person who detached it, reads the install hash under the lock, and on a
+    match records the detachment and writes the install, and on a mismatch writes neither.
+
+    Delete this and either insert is refused by its own policy, or is written in the importer's
+    name, or a detachment overwrites an install somebody changed while it was being decided."""
+    one = approved()
+    signed, instance, record = an_install(
+        skills=(SkillRef(name="hosting-expiry", digest=one.digest),)
+    )
+    made = detachment(
+        one,
+        record=record,
+        signed=signed,
+        instance=instance,
+        by=reach(SKILL_AUTHORITY.value, principal="u_detacher"),
+        recorder=a_recorder(AuditChain()),
+        now=NOW,
+    )
+    retiring_log: list[str] = []
+    matched: list[str] = []
+    moved: list[str] = []
+
+    wrote_retirement = run(
+        lambda: StoredSkills(lambda: _Session(retiring_log, answer="d" * 64)).retire(  # type: ignore[arg-type]
+            retired(one, by="u_retirer", at=NOW), ent_hash="e" * 32, trace_id="t"
+        )
+    )
+    wrote = run(
+        lambda: StoredSkills(lambda: _Session(matched, answer="h" * 64)).detach(  # type: ignore[arg-type]
+            made, expected_hash="h" * 64, ent_hash="e" * 32, trace_id="t"
+        )
+    )
+    refused = run(
+        lambda: StoredSkills(lambda: _Session(moved, answer="other")).detach(  # type: ignore[arg-type]
+            made, expected_hash="h" * 64, ent_hash="e" * 32, trace_id="t"
+        )
+    )
+
+    assert (wrote_retirement, wrote, refused) == (True, True, False)
+    assert retiring_log == [
+        "BEGIN",
+        "set app.principal_id",
+        "set brain.trace_id",
+        "set brain.ent_hash",
+        "INSERT INTO agent.skill_retirement",
+        "COMMIT",
+    ]
+    assert matched[4:] == [
+        "SELECT agent.template_instance.effective_hash FROM",
+        "INSERT INTO agent.skill_detachment",
+        "UPDATE agent.template_instance SET",
+        "COMMIT",
+    ]
+    assert moved[4:] == ["SELECT agent.template_instance.effective_hash FROM", "COMMIT"]
+    assert detachment_values(made) == {
+        "agent_id": AGENT,
+        "skill_name": "hosting-expiry",
+        "digest": one.digest,
+        "detached_by": "u_detacher",
+    }
+    assert install_values(made)["overlay"][SKILLS_PATH] == []
+
+
+def _assignment_row(
+    digest: str, at: datetime, *, replaces: str | None = None, agent: str = AGENT
+) -> SkillAssignmentRow:
+    return SkillAssignmentRow(
+        agent_id=agent,
+        skill_name="hosting-expiry",
+        digest=digest,
+        replaces_digest=replaces,
+        assigned_by="u_admin",
+        created_at=at,
+    )
+
+
+def test_history_is_every_assignment_replacement_and_detachment_newest_first_within_the_bound() -> (
+    None
+):
+    """An assignment of one version, an assignment of another that replaced it, and a detachment of
+    the second: four events, newest first, the replacement an event for the bytes it replaced at the
+    same instant and by the same person, and the bound cutting the oldest.
+
+    Delete this and the history can drop the moment an agent stopped running a version because a
+    newer one replaced it, order events by table rather than by time, or ignore its bound."""
+    first, second = "a" * 64, "b" * 64
+    assigned = [
+        _assignment_row(second, NOW + timedelta(hours=1), replaces=first),
+        _assignment_row(first, NOW),
+    ]
+    detached = [
+        SkillDetachmentRow(
+            agent_id=AGENT,
+            skill_name="hosting-expiry",
+            digest=second,
+            detached_by="u_detacher",
+            created_at=NOW + timedelta(hours=2),
+        )
+    ]
+
+    events = events_of(assigned, detached, MAX_HISTORY)
+
+    assert [(one.digest, one.change, one.by, one.at) for one in events] == [
+        (second, AssignmentChange.DETACHED, "u_detacher", NOW + timedelta(hours=2)),
+        (second, AssignmentChange.ASSIGNED, "u_admin", NOW + timedelta(hours=1)),
+        (first, AssignmentChange.REPLACED, "u_admin", NOW + timedelta(hours=1)),
+        (first, AssignmentChange.ASSIGNED, "u_admin", NOW),
+    ]
+    assert all(isinstance(one, SkillEvent) for one in events)
+    assert events_of(assigned, detached, 2) == events[:2]
+
+
+@contextmanager
+def through_0088(database: str) -> Iterator[str]:
+    """`through_0056`'s database with `0088` applied: `0057` to `0083` stamped, because nothing
+    `0088` builds points at anything they built."""
+    with retirable(database) as url:
+        if not has_pgvector(url):
+            migrate(database, "upgrade", "0049")
+            migrate(database, "stamp", "0053")
+            migrate(database, "upgrade", "0056")
+            migrate(database, "stamp", "0083")
+            migrate(database, "upgrade", "0088")
+        yield url
+
+
+def test_a_retirement_and_a_detachment_each_leave_one_entry_naming_the_actor_in_the_database() -> (
+    None
+):
+    """M27.11.8 against PostgreSQL, as the application role. An approved skill is assigned; retired
+    through the store by one person, once; the table then refuses a second assignment of the retired
+    bytes; the agent is detached by another person, and a detachment in somebody else's name is
+    refused by its policy; the store reads the retirement back and the history as detached then
+    assigned; and the ledger holds a `skill` entry saying retired by the person who retired it and a
+    `compose_change` entry saying detached by the person who detached it, with the chain verifying.
+    **Skips without a server.**
+
+    Delete this and the retirement, the refusal and the two entries are claims about triggers and
+    policies nobody has run."""
+    with through_0088("brain_skill_lifecycle") as url:
+        one = a_skill(text_with(name="quote-format", description="Formats a quote for a client"))
+        good = decided(one, reviewer=REVIEWER, approve=True, at=NOW)
+
+        async def library_writes() -> None:
+            engine = app_engine(url)
+            try:
+                store = StoredSkills(make_session_factory(engine))
+                await store.add(one, ent_hash="a" * 32, trace_id="trace-add")
+                await store.decide(good, ent_hash="b" * 32, trace_id="trace-decide")
+            finally:
+                await engine.dispose()
+
+        run(library_writes)
+        assign = (
+            "INSERT INTO agent.skill_assignment (agent_id, skill_name, digest, assigned_by)"
+            " VALUES (%s, %s, %s, 'u_admin')"
+        )
+        with as_app(url, ("app.principal_id", "u_admin")) as conn:
+            conn.execute(assign, (AGENT, one.name, one.digest))
+
+        async def retire() -> tuple[bool, bool]:
+            engine = app_engine(url)
+            try:
+                store = StoredSkills(make_session_factory(engine))
+                gone = retired(good, by="u_retirer", at=NOW)
+                first = await store.retire(gone, ent_hash="c" * 32, trace_id="trace-retire")
+                again = await store.retire(gone, ent_hash="c" * 32, trace_id="trace-again")
+                return first, again
+            finally:
+                await engine.dispose()
+
+        first, again = run(retire)
+        with (
+            as_app(url, ("app.principal_id", "u_admin")) as conn,
+            pytest.raises(psycopg.errors.RestrictViolation),
+        ):
+            conn.execute(assign, ("another_desk", one.name, one.digest))
+        detach = (
+            "INSERT INTO agent.skill_detachment (agent_id, skill_name, digest, detached_by)"
+            " VALUES (%s, %s, %s, 'u_detacher')"
+        )
+        with (
+            as_app(url, ("app.principal_id", "u_somebody_else")) as conn,
+            pytest.raises(psycopg.errors.InsufficientPrivilege),
+        ):
+            conn.execute(detach, (AGENT, one.name, one.digest))
+        with as_app(url, ("app.principal_id", "u_detacher")) as conn:
+            conn.execute(detach, (AGENT, one.name, one.digest))
+
+        async def reads() -> tuple[tuple[LibrarySkill, ...], tuple[SkillEvent, ...]]:
+            engine = app_engine(url)
+            try:
+                store = StoredSkills(make_session_factory(engine))
+                return await store.library(), await store.history()
+            finally:
+                await engine.dispose()
+
+        library, history = run(reads)
+        chain = entries(url)
+
+    assert (first, again) == (True, False)
+    assert [one_held.retirement.by for one_held in library if one_held.retirement] == ["u_retirer"]
+    assert [(event.change, event.agent_id, event.by) for event in history] == [
+        (AssignmentChange.DETACHED, AGENT, "u_detacher"),
+        (AssignmentChange.ASSIGNED, AGENT, "u_admin"),
+    ]
+    retirements = [
+        entry
+        for entry in chain
+        if entry.action is AuditAction.SKILL and entry.details.get("change") == "retired"
+    ]
+    assert [(entry.actor_id, entry.subject, dict(entry.details)) for entry in retirements] == [
+        ("u_retirer", "skill:quote-format", {"change": "retired", "digest": one.digest})
+    ]
+    detachments = [
+        entry
+        for entry in chain
+        if entry.action is AuditAction.COMPOSE_CHANGE
+        and entry.details.get("direction") == "detached"
+    ]
+    assert [(entry.actor_id, entry.subject, dict(entry.details)) for entry in detachments] == [
+        (
+            "u_detacher",
+            f"agent:{AGENT}",
+            {
+                "part": "skills",
+                "reference": "quote_format",
+                "direction": "detached",
+                "reason_code": DETACH_REASON,
             },
         )
     ]

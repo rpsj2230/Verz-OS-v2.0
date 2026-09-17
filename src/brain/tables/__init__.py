@@ -103,7 +103,13 @@ from brain.tables.retention import LegalHoldRow, RetentionReleaseRow, RetentionR
 from brain.tables.review import ReviewDecisionRow
 from brain.tables.routing import ModelAttemptRow, RoutingRungRow, RoutingTierRow
 from brain.tables.schedule import ControlRunRow
-from brain.tables.skill import SkillAssignmentRow, SkillReviewRow, SkillRow
+from brain.tables.skill import (
+    SkillAssignmentRow,
+    SkillDetachmentRow,
+    SkillRetirementRow,
+    SkillReviewRow,
+    SkillRow,
+)
 from brain.tables.spend import ReportRefreshRow, SpendActualRow
 from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
@@ -282,6 +288,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0068_connector_sync. Points at nothing: the connection an attempt read with is named by its
     # id as a value, so a source connected again starts a history of its own.
     "ops.connector_sync",
+    # 0088_skill_lifecycle. A retirement points at the version it retires and a detachment at the
+    # skill it took off an agent, so both follow `agent.skill`; the agent and the people are values.
+    "agent.skill_retirement",
+    "agent.skill_detachment",
 )
 
 __all__ = [
@@ -351,6 +361,8 @@ __all__ = [
     "SettingRow",
     "SettingType",
     "SkillAssignmentRow",
+    "SkillDetachmentRow",
+    "SkillRetirementRow",
     "SkillReviewRow",
     "SkillRow",
     "SpendActualRow",

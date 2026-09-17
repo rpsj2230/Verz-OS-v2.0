@@ -31,10 +31,18 @@ rejected, names no decision row and is refused. Its key into the skill table is 
 name together, so the name the ledger entry records is the name of the skill that was assigned.
 
 **No `updated_at`, no `deleted_at`, and no key into `auth.principal`**, for the reasons
-`brain.tables.credential` gives: nothing here is updated, nothing is retired, and an actor is a
-value so the record outlives the person.
+`brain.tables.credential` gives: nothing here is updated, and an actor is a value so the record
+outlives the person.
 
-Task ids: M42.6.4
+**Retiring a version and detaching a skill from an agent are rows of their own, not edits.**
+`migrations/versions/0088_skill_lifecycle.py` argues both. A retirement is one row per digest, so a
+second retirement of the same bytes is refused by the key; `agent.skill` keeps no status column,
+because a status written onto the skill row would be the one update this table was built never to
+take. A detachment is a row beside the assignment table rather than a second meaning of an
+assignment row, and it is held to the skill it names by the same digest-and-name key an assignment
+is, so the name its ledger entry records is the name of the skill that was detached.
+
+Task ids: M42.6.4, M27.11.8
 """
 
 from __future__ import annotations
@@ -199,6 +207,55 @@ class SkillAssignmentRow(Base):
             ["digest", "approval"],
             ["agent.skill_review.digest", "agent.skill_review.decision"],
         ),
+        ForeignKeyConstraint(
+            ["digest", "skill_name"],
+            ["agent.skill.digest", "agent.skill.name"],
+        ),
+        {"schema": "agent"},
+    )
+
+
+class SkillRetirementRow(Base):
+    """`agent.skill_retirement`. One version the library no longer offers, and who said so."""
+
+    __tablename__ = "skill_retirement"
+
+    #: The version retired, and the key: a version is retired once.
+    digest: Mapped[str] = mapped_column(String(DIGEST_CHARS), primary_key=True)
+    #: Who retired it. The ledger entry's actor, read off this column by the trigger.
+    retired_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"retired_by ~ '{IDENTIFIER}'", name="retired_by_is_an_identifier"),
+        ForeignKeyConstraint(["digest"], ["agent.skill.digest"]),
+        {"schema": "agent"},
+    )
+
+
+class SkillDetachmentRow(Base):
+    """`agent.skill_detachment`. One skill taken off one agent, by one person."""
+
+    __tablename__ = "skill_detachment"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
+    )
+    agent_id: Mapped[str] = mapped_column(String(AGENT_ID_CHARS), nullable=False)
+    skill_name: Mapped[str] = mapped_column(String(NAME_CHARS), nullable=False)
+    #: The bytes the agent was pinned to when they were taken off it.
+    digest: Mapped[str] = mapped_column(String(DIGEST_CHARS), nullable=False)
+    #: Who detached it. The ledger entry's actor, read off this column by the trigger.
+    detached_by: Mapped[str] = mapped_column(String(PRINCIPAL_ID_CHARS), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        CheckConstraint(f"agent_id ~ '{IDENTIFIER}'", name="agent_id_is_an_identifier"),
+        CheckConstraint(f"detached_by ~ '{IDENTIFIER}'", name="detached_by_is_an_identifier"),
         ForeignKeyConstraint(
             ["digest", "skill_name"],
             ["agent.skill.digest", "agent.skill.name"],

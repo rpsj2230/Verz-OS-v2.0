@@ -248,6 +248,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "agent.automation_schedule",
         "agent.skill",
         "agent.skill_assignment",
+        # Who took a skill off an agent, and who retired a version: actors, not owners.
+        "agent.skill_detachment",
+        "agent.skill_retirement",
         "agent.skill_review",
         "agent.template_instance",
         "agent.template_version",

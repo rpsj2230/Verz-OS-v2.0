@@ -43,9 +43,16 @@ export type AgentChoice = components["schemas"]["AgentChoiceView"];
 export type Assigned = components["schemas"]["AssignedView"];
 /** The body adding a skill sends, as `SkillPackageAsked` declares it. */
 export type PackageBody = components["schemas"]["SkillPackageAsked"];
+/** An agent running a version now, as `CurrentAssignmentView` sends it. */
+export type CurrentAssignment = components["schemas"]["CurrentAssignmentView"];
+/** What a detachment answered, as `DetachedView` sends it. */
+export type Detached = components["schemas"]["DetachedView"];
+/** What a retirement answered, as `RetiredView` sends it. */
+export type Retired = components["schemas"]["RetiredView"];
 
-/** Where the API keeps this screen, and its three writes. */
+/** Where the API keeps this screen, the library listing, and its writes. */
 export const SKILLS_API_PATH = "/skills";
+export const SKILL_LIBRARY_API_PATH = "/skills/library";
 
 export function reviewPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/review`;
@@ -53,6 +60,14 @@ export function reviewPath(digest: string): string {
 
 export function assignPath(digest: string): string {
   return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/assignments`;
+}
+
+export function detachPath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/detachments`;
+}
+
+export function retirePath(digest: string): string {
+  return `${SKILLS_API_PATH}/${encodeURIComponent(digest)}/retirement`;
 }
 
 /** The console addresses. The second is one skill open. */
@@ -74,6 +89,35 @@ export const SKILL_SORTS: readonly SortChoice[] = [
   { value: "", label: "By name" },
   { value: "-name", label: "By name, last first" },
 ];
+
+/** The library's filters, over values on rows drawn. "In use" is about agents the reader can see. */
+export const LIBRARY_FILTERS: readonly FilterChoice<LibrarySkill>[] = [
+  { column: "review", label: "Review", everything: "Any review", read: (row) => row.review, describe: (value) => reviewWords(value) },
+  {
+    column: "retired",
+    label: "Retired",
+    everything: "Retired or not",
+    read: (row) => row.retired,
+    describe: (value) => (value === "true" ? "Retired" : "Not retired"),
+  },
+  {
+    column: "in_use",
+    label: "In use",
+    everything: "In use or not",
+    read: (row) => row.assignments.length > 0,
+    describe: (value) => (value === "true" ? "Run by an agent you can see" : "Run by no agent you can see"),
+  },
+];
+
+export const LIBRARY_SORTS: readonly SortChoice[] = [
+  { value: "", label: "By name" },
+  { value: "-submitted_at", label: "Newest first" },
+];
+
+/** Whether the library listing's load came back full. Never how much more there is. */
+export function libraryTruncated(payload: unknown): boolean {
+  return typeof payload === "object" && payload !== null && (payload as { truncated?: unknown }).truncated === true;
+}
 
 /**
  * The largest package the API reads, in bytes. `brain.console.skill_library.MAX_PACKAGE_BYTES`,
@@ -298,4 +342,62 @@ export function assignedSentence(done: Assigned, agent: AgentChoice | undefined)
       ? "Through that agent it can use none of the tools it names for you."
       : `Through that agent it can use, for you: ${done.reach.join(", ")}.`;
   return `${done.skill_name} was assigned to ${who}. ${reach}`;
+}
+
+/**
+ * What the API reported this skill names that the chosen agent cannot use, in words, or null when
+ * nothing. The API's own lists (`outside_ceiling`, `unregistered_tools`), never a comparison made here.
+ */
+export function ceilingReport(one: LibrarySkill, agentId: string): string | null {
+  const outside = one.outside_ceiling.find((gap) => gap.agent_id === agentId)?.tools ?? [];
+  const said: string[] = [];
+  if (outside.length > 0) {
+    said.push(`that agent is not allowed ${outside.join(", ")}`);
+  }
+  if (one.unregistered_tools.length > 0) {
+    said.push(`this install has no tool called ${one.unregistered_tools.join(", ")}`);
+  }
+  if (said.length === 0) {
+    return null;
+  }
+  return (
+    `${one.name} names tools it cannot use through this agent, because ${said.join("; and ")}. ` +
+    "Assigning it grants none of them."
+  );
+}
+
+/** A retired version, said beside it. Its agents keep it until each is detached. */
+export const RETIRED_PINS_STAY =
+  "Retired: it cannot be assigned to another agent. An agent listed below still runs it until it " +
+  "is detached from that agent.";
+
+export function retireQuestion(one: LibrarySkill): string {
+  return `Retire ${one.name} ${one.version}?`;
+}
+
+export function retireConsequence(one: LibrarySkill): string {
+  return (
+    `${one.name} ${one.version} can no longer be assigned to an agent. Agents already running it ` +
+    "keep it until it is detached from each of them. The retirement is recorded in the audit trail " +
+    "under your name and cannot be undone here."
+  );
+}
+
+export function retiredSentence(done: Retired): string {
+  return `${done.name} ${done.version} is retired.`;
+}
+
+export function detachQuestion(one: LibrarySkill, agent: CurrentAssignment): string {
+  return `Detach ${one.name} ${one.version} from ${agent.display_name}?`;
+}
+
+export function detachConsequence(one: LibrarySkill, agent: CurrentAssignment): string {
+  return (
+    `${agent.display_name} stops being configured with ${one.name} from its next request. The change ` +
+    "is recorded in the audit trail."
+  );
+}
+
+export function detachedSentence(done: Detached, agent: CurrentAssignment): string {
+  return `${done.skill_name} was detached from ${agent.display_name}.`;
 }

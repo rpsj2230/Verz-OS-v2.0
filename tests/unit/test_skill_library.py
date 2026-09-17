@@ -10,7 +10,7 @@ than about a stand-in built to agree.
 about a guard tested only by its refusals: a function that refused everything would pass every
 refusal below.
 
-Task ids: M42.6.4
+Task ids: M42.6.4, M27.11.8
 """
 
 from __future__ import annotations
@@ -45,28 +45,35 @@ from brain.console.screens import screen
 from brain.console.skill_library import (
     A_SCRIPT_THE_DIGEST_DOES_NOT_COVER_IS_A_SCRIPT_NOBODY_APPROVED,
     ASSIGN_REASON,
+    DETACH_REASON,
     MAX_PACKAGE_BYTES,
     NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED,
     REPLACE_REASON,
     REVIEW_AUTHORITY,
     SKILL_AUTHORITY,
     SKILLS_PATH,
+    Assignment,
     LibrarySkill,
     SkillLibraryError,
     ToolReach,
     added,
     another_spelling,
     assignment,
+    ceiling_report,
     decided,
+    detachment,
     ledger_reference,
     may_add,
     may_assign,
+    may_detach,
     may_read_library,
+    may_retire,
     may_review,
     moved_authority,
     queue_entries,
     reach_through,
     read_package,
+    retired,
     trusted_reach,
 )
 from brain.console.workspace import intersections_in
@@ -99,6 +106,10 @@ tools: [crm.read_client, desk.read_ticket]
 ---
 Look up the domain, then open a ticket.
 """
+
+
+#: The two tools `SKILL_MD` names. An agent allowed both is one the sample skill is clear of.
+BOTH_TOOLS = ("crm.read_client", "desk.read_ticket")
 
 
 def text_with(**lines: str) -> str:
@@ -498,16 +509,17 @@ def test_the_queue_is_every_undecided_skill_oldest_first_and_an_edit_is_diffed()
 # --------------------------------------------------------------------------- the authorities
 @pytest.mark.parametrize(
     ("question", "authority"),
-    [(may_add, SKILL_AUTHORITY), (may_review, REVIEW_AUTHORITY)],
+    [(may_add, SKILL_AUTHORITY), (may_review, REVIEW_AUTHORITY), (may_retire, SKILL_AUTHORITY)],
 )
-def test_adding_and_reviewing_need_the_screen_and_their_authority_over_everything(
+def test_adding_reviewing_and_retiring_need_the_screen_and_their_authority_over_everything(
     question: Callable[[EntitlementSet, datetime], bool], authority: Capability
 ) -> None:
     """Held over everything is admitted; held in one department, or not held, or held without the
     screen's configuration plane, is not.
 
-    Delete this and a department's administrator adds a procedure to every department's queue, or
-    approves one, or somebody holding only the authority does either without the screen."""
+    Delete this and a department's administrator adds a procedure to every department's queue,
+    approves one, or withdraws a version every department's agents are offered, or somebody holding
+    only the authority does any of them without the screen."""
     everywhere = reach(authority.value)
     in_one = reach(authority.value, scope=Scope.department("web"))
     without_screen = EntitlementSet(
@@ -541,6 +553,27 @@ def test_assigning_needs_the_skill_authority_in_a_scope_admitting_the_agent() ->
     assert may_assign(web, {"agent_id": AGENT}, NOW) is False
     assert may_assign(reach(SKILL_AUTHORITY.value), {"agent_id": AGENT}, NOW) is True
     assert may_assign(reach(), {"agent_id": AGENT}, NOW) is False
+
+
+def test_detaching_is_asked_exactly_as_assigning_is_over_the_agent() -> None:
+    """The same five readers and rows answer the same for taking a skill off as for putting one on.
+
+    Delete this and detaching can be widened to anybody who opens the screen, so a reader who may
+    configure no agent takes skills off every agent, or narrowed so a department's administrator can
+    put a skill on their agent and never take it off again."""
+    web = reach(SKILL_AUTHORITY.value, scope=Scope.department("web"))
+    cases = [
+        (web, {"agent_id": AGENT, "department": "web"}),
+        (web, {"agent_id": AGENT, "department": "finance"}),
+        (web, {"agent_id": AGENT}),
+        (reach(SKILL_AUTHORITY.value), {"agent_id": AGENT}),
+        (reach(), {"agent_id": AGENT}),
+    ]
+
+    assert [may_detach(who, row, NOW) for who, row in cases] == [True, False, False, True, False]
+    assert [may_detach(who, row, NOW) for who, row in cases] == [
+        may_assign(who, row, NOW) for who, row in cases
+    ]
 
 
 def test_the_library_is_listed_only_to_a_reader_of_the_screen_over_everything() -> None:
@@ -673,7 +706,7 @@ def test_an_approved_skill_is_assigned_as_a_pin_of_its_bytes_and_recorded_as_att
 
     Delete this and every refusal below is satisfied by an assignment that writes nothing."""
     one = an_approved_skill()
-    signed, instance, record = an_install()
+    signed, instance, record = an_install(allowed=BOTH_TOOLS)
     chain = AuditChain()
 
     made = assignment(
@@ -684,6 +717,8 @@ def test_an_approved_skill_is_assigned_as_a_pin_of_its_bytes_and_recorded_as_att
         library=(one,),
         by=reach(SKILL_AUTHORITY.value),
         recorder=a_recorder(chain),
+        registry=a_registry(),
+        acknowledged=False,
         now=NOW,
     )
     after = materialise(signed, made.instance, audience=AUDIENCE)
@@ -725,6 +760,8 @@ def test_a_skill_nobody_approved_or_somebody_rejected_is_never_assigned(
             library=(one,),
             by=reach(SKILL_AUTHORITY.value),
             recorder=a_recorder(AuditChain()),
+            registry=a_registry(),
+            acknowledged=False,
             now=NOW,
         )
 
@@ -740,7 +777,7 @@ def test_the_same_bytes_twice_is_refused_and_another_version_replaces_the_first_
     older = an_approved_skill(text_with(version="0.9.0"))
     newer = an_approved_skill()
     signed, instance, record = an_install(
-        skills=(SkillRef(name="hosting-expiry", digest=older.digest),)
+        skills=(SkillRef(name="hosting-expiry", digest=older.digest),), allowed=BOTH_TOOLS
     )
 
     with pytest.raises(SkillLibraryError, match="already runs this version"):
@@ -752,6 +789,8 @@ def test_the_same_bytes_twice_is_refused_and_another_version_replaces_the_first_
             library=(older, newer),
             by=reach(SKILL_AUTHORITY.value),
             recorder=a_recorder(AuditChain()),
+            registry=a_registry(),
+            acknowledged=False,
             now=NOW,
         )
     chain = AuditChain()
@@ -763,6 +802,8 @@ def test_the_same_bytes_twice_is_refused_and_another_version_replaces_the_first_
         library=(older, newer),
         by=reach(SKILL_AUTHORITY.value),
         recorder=a_recorder(chain),
+        registry=a_registry(),
+        acknowledged=False,
         now=NOW,
     )
 
@@ -793,6 +834,8 @@ def test_a_skill_whose_description_cannot_route_is_refused_at_assignment() -> No
             library=(weak,),
             by=reach(SKILL_AUTHORITY.value),
             recorder=a_recorder(AuditChain()),
+            registry=a_registry(),
+            acknowledged=False,
             now=NOW,
         )
 
@@ -870,3 +913,203 @@ def test_a_skill_carries_nothing_through_which_an_assignment_could_widen_an_agen
     }
 
     assert set(Skill.model_fields) & forbidden == set()
+
+
+# ---------------------------------------------------------------------- retiring a version
+def test_a_version_is_retired_once_by_a_named_person_at_an_aware_instant() -> None:
+    """The positive case, then the three refusals: retired by nobody, at a naive instant, and a
+    second time.
+
+    Delete this and a retirement can be written with no name on it, which is a ledger entry nobody
+    can answer for, or a second press records a retirement that did not happen."""
+    one = an_approved_skill()
+
+    done = retired(one, by="u_admin", at=NOW)
+
+    assert done.retirement is not None
+    assert (done.retirement.by, done.retirement.at) == ("u_admin", NOW)
+    assert (done.digest, done.imported) == (one.digest, one.imported)
+    assert one.retirement is None
+    with pytest.raises(SkillLibraryError, match="named person"):
+        retired(one, by=" ", at=NOW)
+    with pytest.raises(SkillLibraryError, match="timezone-aware"):
+        retired(one, by="u_admin", at=NOW.replace(tzinfo=None))
+    with pytest.raises(SkillLibraryError, match="already retired by u_admin"):
+        retired(done, by="u_other", at=NOW)
+
+
+def _assign(
+    one: LibrarySkill,
+    install: tuple[SignedManifest, TemplateInstance, AgentRecord],
+    *,
+    acknowledged: bool = False,
+    registry: ToolRegistry | None = None,
+) -> Assignment:
+    signed, instance, record = install
+    return assignment(
+        one,
+        record=record,
+        signed=signed,
+        instance=instance,
+        library=(one,),
+        by=reach(SKILL_AUTHORITY.value),
+        recorder=a_recorder(AuditChain()),
+        registry=a_registry() if registry is None else registry,
+        acknowledged=acknowledged,
+        now=NOW,
+    )
+
+
+def test_a_retired_version_is_never_newly_assigned_and_the_same_version_unretired_is() -> None:
+    """**Retired cannot be assigned.** The same approved bytes, to the same agent that is clear of
+    the skill's tools: retired, the assignment is refused, even acknowledged, saying so and saying
+    the agents already running it keep it; not retired, it is assigned.
+
+    Delete this and retiring a version withdraws nothing, because the next assignment puts it in
+    front of another agent anyway."""
+    one = an_approved_skill()
+    install = an_install(allowed=BOTH_TOOLS)
+
+    with pytest.raises(
+        SkillLibraryError, match="is retired, so it cannot be newly assigned"
+    ) as told:
+        _assign(retired(one, by="u_admin", at=NOW), install, acknowledged=True)
+
+    assert "keeps it until it is detached" in str(told.value)
+    assert _assign(one, install).digest == one.digest
+
+
+# ----------------------------------------------------------------------- detaching a skill
+def test_a_detachment_takes_exactly_those_bytes_off_and_records_it_and_moves_no_authority() -> None:
+    """**Detach removes it from what the agent runs.** An agent running two skills has one taken
+    off: the install's skills path holds only the other, the materialised agent carries only the
+    other, one `compose_change` entry says detached with `skill_detach`, and the authority is
+    what it was. A retired version is detached like any other.
+
+    Delete this and every refusal below is satisfied by a detachment that writes nothing, or one
+    that empties the agent's skills."""
+    one = retired(an_approved_skill(), by="u_admin", at=NOW)
+    other = an_approved_skill(text_with(name="quote-format", description="Formats a quote"))
+    signed, instance, record = an_install(
+        skills=(
+            SkillRef(name="hosting-expiry", digest=one.digest),
+            SkillRef(name="quote-format", digest=other.digest),
+        )
+    )
+    chain = AuditChain()
+
+    made = detachment(
+        one,
+        record=record,
+        signed=signed,
+        instance=instance,
+        by=reach(SKILL_AUTHORITY.value),
+        recorder=a_recorder(chain),
+        now=NOW,
+    )
+    after = materialise(signed, made.instance, audience=AUDIENCE)
+
+    assert made.instance.overlay[SKILLS_PATH] == [{"name": "quote-format", "digest": other.digest}]
+    assert [(pin.skill_name, pin.digest) for pin in after.skill_pins] == [
+        ("quote-format", other.digest)
+    ]
+    assert (made.agent_id, made.skill_name, made.digest, made.detached_by) == (
+        AGENT,
+        "hosting-expiry",
+        one.digest,
+        "u_admin",
+    )
+    assert made.effective_hash == after.config_hash
+    assert after.record.authority == record.authority
+    assert [
+        (entry.action, entry.details["direction"], entry.details["reason_code"])
+        for entry in chain.entries
+    ] == [(AuditAction.COMPOSE_CHANGE, "detached", DETACH_REASON)]
+
+
+def test_bytes_the_agent_does_not_run_are_refused_detachment_and_nothing_is_recorded() -> None:
+    """An agent running another version of the skill, and an agent running no version of it, are
+    each refused, and the recorder holds no entry.
+
+    Delete this and a detachment of bytes an agent no longer runs takes the version it does run off
+    it, or records a removal that never happened."""
+    older = an_approved_skill(text_with(version="0.9.0"))
+    newer = an_approved_skill()
+    moved_on = an_install(skills=(SkillRef(name="hosting-expiry", digest=older.digest),))
+    bare = an_install()
+    chain = AuditChain()
+
+    for signed, instance, record in (moved_on, bare):
+        with pytest.raises(SkillLibraryError, match="does not run this version"):
+            detachment(
+                newer,
+                record=record,
+                signed=signed,
+                instance=instance,
+                by=reach(SKILL_AUTHORITY.value),
+                recorder=a_recorder(chain),
+                now=NOW,
+            )
+
+    assert list(chain.entries) == []
+
+
+# ------------------------------------------------------------- the tools against the ceiling
+def test_a_tool_outside_the_ceiling_is_refused_until_acknowledged_and_nothing_is_granted() -> None:
+    """**Reported before the write, acknowledged, never granted.** The skill names the client tool,
+    the ticket tool and a third that nothing registers; the agent is allowed only the client tool.
+    Unacknowledged, the assignment is refused naming the ticket tool as not allowed and the third as
+    absent, and nothing is returned to write. Acknowledged, it is assigned, the report travels with
+    it, the agent's authority is exactly what it was, and what the skill reaches through the agent
+    for a caller holding both capabilities is still the client tool alone.
+
+    Delete this and either a skill naming a tool outside the ceiling is assigned with nobody told,
+    or the acknowledgement becomes a way to widen what the agent reaches."""
+    one = an_approved_skill(
+        text_with(tools="[crm.read_client, desk.read_ticket, erp.read_invoice]")
+    )
+    install = an_install()
+    signed, _, record = install
+    registry = a_registry()
+
+    with pytest.raises(SkillLibraryError) as refused:
+        _assign(one, install, registry=registry)
+    made = _assign(one, install, registry=registry, acknowledged=True)
+    after = materialise(signed, made.instance, audience=AUDIENCE)
+    caller = reach("read:client.name", "read:ticket.status")
+
+    assert "is not allowed desk.read_ticket" in str(refused.value)
+    assert "no tool called erp.read_invoice" in str(refused.value)
+    assert "grants none of them" in str(refused.value)
+    assert made.ceiling.outside == ("desk.read_ticket",)
+    assert made.ceiling.unregistered == ("erp.read_invoice",)
+    assert after.record.authority == record.authority
+    assert after.record.authority.allowed_tools == frozenset({"crm.read_client"})
+    assert reach_through(one.imported.skill, registry, caller, after.record, NOW) == (
+        "crm.read_client",
+    )
+
+
+def test_the_ceiling_report_never_calls_a_tool_it_cannot_resolve_clear() -> None:
+    """Allowed and registered is clear; registered and not allowed is outside; not registered is
+    unregistered and not also outside; and with no registry at all every tool is unregistered, so a
+    process that cannot tell never reports a skill clear.
+
+    Delete this and the report can be satisfied by one that is always clear, which assigns every
+    skill with nobody told, or one that treats an unknown tool as allowed."""
+    registry = a_registry()
+    three = a_library_skill(
+        text_with(tools="[crm.read_client, desk.read_ticket, erp.read_invoice]")
+    ).imported.skill
+    two = a_library_skill().imported.skill
+    _, _, narrow = an_install()
+    _, _, wide = an_install(allowed=BOTH_TOOLS)
+
+    assert ceiling_report(two, registry, wide).clear is True
+    assert ceiling_report(two, registry, narrow).outside == ("desk.read_ticket",)
+    assert ceiling_report(two, registry, narrow).clear is False
+    assert ceiling_report(three, registry, wide).outside == ()
+    assert ceiling_report(three, registry, wide).unregistered == ("erp.read_invoice",)
+    assert ceiling_report(three, registry, wide).clear is False
+    assert ceiling_report(two, None, wide).unregistered == BOTH_TOOLS
+    assert ceiling_report(two, None, wide).clear is False

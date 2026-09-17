@@ -27,7 +27,17 @@ about anybody's reach.
 operator broke by hand should not take the library away from the person who came to find out what
 is wrong with it.
 
-Task ids: M42.6.4
+**A retirement is written as a decision is, and a detachment as an assignment is** (`0088`). The
+retirement's key answers a second press; the detachment writes the install only if it is the
+install the decision was made about, under the same lock and the same comparison.
+
+**History is two bounded reads folded into one order.** The newest assignments and the newest
+detachments, each bounded by `MAX_HISTORY`, become events newest first, cut to the same bound,
+so an event is never dropped from the middle of what is returned: anything older than the oldest
+event kept is older than everything either read held. The caller is told the bound was reached and
+never how much lies past it.
+
+Task ids: M42.6.4, M27.11.8
 """
 
 from __future__ import annotations
@@ -42,10 +52,24 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql.dml import ReturningInsert
 
-from brain.console.skill_library import Assignment, LibrarySkill
+from brain.console.skill_library import (
+    Assignment,
+    AssignmentChange,
+    Detachment,
+    LibrarySkill,
+    Retirement,
+    SkillEvent,
+)
 from brain.ops.automation_owner_store import PRINCIPAL_SETTING
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
-from brain.tables.skill import APPROVED, SkillAssignmentRow, SkillReviewRow, SkillRow
+from brain.tables.skill import (
+    APPROVED,
+    SkillAssignmentRow,
+    SkillDetachmentRow,
+    SkillRetirementRow,
+    SkillReviewRow,
+    SkillRow,
+)
 from brain.tables.template import TemplateInstanceRow
 from brain.tools.skills import ImportedSkill, Skill, SkillSource, SkillState, SourceKind
 
@@ -55,6 +79,9 @@ log = structlog.get_logger()
 #: caller is told the load came back full without being told what was in the rest of it.
 MAX_LIBRARY: Final = 500
 
+#: The most events one reading of the assignment history holds, for `MAX_LIBRARY`'s reason.
+MAX_HISTORY: Final = 1000
+
 
 def _set_config(name: str, value: str) -> Any:
     # Transaction-local, as `brain.ops.agent_automation_store` sets the same settings.
@@ -62,22 +89,24 @@ def _set_config(name: str, value: str) -> Any:
 
 
 # ------------------------------------------------------------------------- the statements
-def library_of(limit: int) -> Select[tuple[SkillRow, SkillReviewRow]]:
-    """Every skill with its decision, if it has one, newest first, bounded."""
-    # The outer join's right side is None for an undecided skill, whatever the type says.
+def library_of(limit: int) -> Select[tuple[SkillRow, SkillReviewRow, SkillRetirementRow]]:
+    """Every skill with its decision and its retirement, if it has either, newest first, bounded."""
+    # Each outer join's right side is None for a skill without one, whatever the type says.
     return (
-        select(SkillRow, SkillReviewRow)
+        select(SkillRow, SkillReviewRow, SkillRetirementRow)
         .outerjoin(SkillReviewRow, SkillReviewRow.digest == SkillRow.digest)
+        .outerjoin(SkillRetirementRow, SkillRetirementRow.digest == SkillRow.digest)
         .order_by(SkillRow.created_at.desc(), SkillRow.digest)
         .limit(limit)
     )
 
 
-def one_skill(digest: str) -> Select[tuple[SkillRow, SkillReviewRow]]:
-    """One skill by the digest it is stored under, with its decision."""
+def one_skill(digest: str) -> Select[tuple[SkillRow, SkillReviewRow, SkillRetirementRow]]:
+    """One skill by the digest it is stored under, with its decision and its retirement."""
     return (
-        select(SkillRow, SkillReviewRow)
+        select(SkillRow, SkillReviewRow, SkillRetirementRow)
         .outerjoin(SkillReviewRow, SkillReviewRow.digest == SkillRow.digest)
+        .outerjoin(SkillRetirementRow, SkillRetirementRow.digest == SkillRow.digest)
         .where(SkillRow.digest == digest)
     )
 
@@ -153,7 +182,104 @@ def install_hash_locked(agent_id: str) -> Select[tuple[str]]:
     )
 
 
-def install_values(made: Assignment) -> dict[str, Any]:
+def retirement_values(one: LibrarySkill) -> dict[str, Any]:
+    """What a retirement writes: the version and who retired it. The instant is the table's."""
+    if one.retirement is None:
+        msg = "a skill with no retirement on it writes no retirement row"
+        raise ValueError(msg)
+    return {"digest": one.digest, "retired_by": one.retirement.by}
+
+
+def retiring(one: LibrarySkill) -> ReturningInsert[tuple[str]]:
+    """The insert, which writes nothing and returns nothing when the version is already retired."""
+    return (
+        insert(SkillRetirementRow)
+        .values(**retirement_values(one))
+        .on_conflict_do_nothing(index_elements=["digest"])
+        .returning(SkillRetirementRow.digest)
+    )
+
+
+def detachment_values(made: Detachment) -> dict[str, Any]:
+    """What a detachment records: the agent, the skill and its bytes, and who took it off."""
+    return {
+        "agent_id": made.agent_id,
+        "skill_name": made.skill_name,
+        "digest": made.digest,
+        "detached_by": made.detached_by,
+    }
+
+
+def detaching(made: Detachment) -> Any:
+    return insert(SkillDetachmentRow).values(**detachment_values(made))
+
+
+def assignments_newest(limit: int) -> Select[tuple[SkillAssignmentRow]]:
+    """The newest assignments, bounded, with the key breaking a tie in the instant."""
+    return (
+        select(SkillAssignmentRow)
+        .order_by(SkillAssignmentRow.created_at.desc(), SkillAssignmentRow.id)
+        .limit(limit)
+    )
+
+
+def detachments_newest(limit: int) -> Select[tuple[SkillDetachmentRow]]:
+    """The newest detachments, bounded, with the key breaking a tie in the instant."""
+    return (
+        select(SkillDetachmentRow)
+        .order_by(SkillDetachmentRow.created_at.desc(), SkillDetachmentRow.id)
+        .limit(limit)
+    )
+
+
+def events_of(
+    assigned: Sequence[SkillAssignmentRow], detached: Sequence[SkillDetachmentRow], limit: int
+) -> tuple[SkillEvent, ...]:
+    """Assignment and detachment rows as what happened to each version, newest first, bounded.
+
+    An assignment is an event for the bytes it names, and, when it replaced another version, an
+    event for the bytes it replaced, at the same instant and by the same person: that is when those
+    bytes stopped being what the agent ran. A detachment is an event for the bytes it names.
+    """
+    events: list[SkillEvent] = []
+    for row in assigned:
+        events.append(
+            SkillEvent(
+                digest=row.digest,
+                skill_name=row.skill_name,
+                agent_id=row.agent_id,
+                change=AssignmentChange.ASSIGNED,
+                by=row.assigned_by,
+                at=row.created_at,
+            )
+        )
+        if row.replaces_digest is not None:
+            events.append(
+                SkillEvent(
+                    digest=row.replaces_digest,
+                    skill_name=row.skill_name,
+                    agent_id=row.agent_id,
+                    change=AssignmentChange.REPLACED,
+                    by=row.assigned_by,
+                    at=row.created_at,
+                )
+            )
+    events.extend(
+        SkillEvent(
+            digest=row.digest,
+            skill_name=row.skill_name,
+            agent_id=row.agent_id,
+            change=AssignmentChange.DETACHED,
+            by=row.detached_by,
+            at=row.created_at,
+        )
+        for row in detached
+    )
+    events.sort(key=lambda one: one.at, reverse=True)
+    return tuple(events[:limit])
+
+
+def install_values(made: Assignment | Detachment) -> dict[str, Any]:
     """The install's overlay, owners and cached effective document, written together, as
     `brain.prompt_routes.write_install` writes them."""
     return {
@@ -167,7 +293,7 @@ def install_values(made: Assignment) -> dict[str, Any]:
     }
 
 
-def writing_install(made: Assignment) -> Any:
+def writing_install(made: Assignment | Detachment) -> Any:
     return (
         update(TemplateInstanceRow)
         .where(TemplateInstanceRow.id == made.agent_id)
@@ -176,11 +302,14 @@ def writing_install(made: Assignment) -> Any:
 
 
 # ------------------------------------------------------------------------ rows to the domain
-def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySkill | None:
+def library_skill_of(
+    row: SkillRow, review: SkillReviewRow | None, retirement: SkillRetirementRow | None = None
+) -> LibrarySkill | None:
     """The stored skill as the library holds it, or None when it does not construct.
 
     The approved digest is the key the decision row names, never the digest of the fields, so a
     row edited after its approval reads as moved: `ImportedSkill.is_executable` compares the two.
+    A retirement is read off its own row and never off the skill's.
     """
     try:
         skill = Skill(
@@ -215,11 +344,16 @@ def library_skill_of(row: SkillRow, review: SkillReviewRow | None) -> LibrarySki
         digest=row.digest,
         submitted_by=row.submitted_by,
         submitted_at=row.created_at,
+        retirement=(
+            None
+            if retirement is None
+            else Retirement(by=retirement.retired_by, at=retirement.created_at)
+        ),
     )
 
 
 def _constructed(rows: Sequence[Any]) -> tuple[LibrarySkill, ...]:
-    found = (library_skill_of(skill_row, review_row) for skill_row, review_row in rows)
+    found = (library_skill_of(*row) for row in rows)
     return tuple(one for one in found if one is not None)
 
 
@@ -277,3 +411,42 @@ class StoredSkills:
             await session.execute(assigning(made))
             await session.execute(writing_install(made))
         return True
+
+    async def retire(self, one: LibrarySkill, *, ent_hash: str, trace_id: str) -> bool:
+        """Write the retirement, or say the version was already retired."""
+        if one.retirement is None:
+            msg = "a skill with no retirement on it writes no retirement row"
+            raise ValueError(msg)
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, one.retirement.by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            written = (await session.execute(retiring(one))).scalar_one_or_none()
+        return written is not None
+
+    async def detach(
+        self, made: Detachment, *, expected_hash: str, ent_hash: str, trace_id: str
+    ) -> bool:
+        """Record the detachment and write the install, or say the install has changed since.
+
+        `assign`'s lock and comparison, for its reason.
+        """
+        async with self._sessions() as session, session.begin():
+            await session.execute(_set_config(PRINCIPAL_SETTING, made.detached_by))
+            await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
+            await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            current = (
+                await session.execute(install_hash_locked(made.agent_id))
+            ).scalar_one_or_none()
+            if current != expected_hash:
+                return False
+            await session.execute(detaching(made))
+            await session.execute(writing_install(made))
+        return True
+
+    async def history(self, limit: int = MAX_HISTORY) -> tuple[SkillEvent, ...]:
+        """What happened to every version on every agent, newest first, bounded. Nobody narrowed."""
+        async with self._sessions() as session:
+            assigned = (await session.execute(assignments_newest(limit))).scalars().all()
+            detached = (await session.execute(detachments_newest(limit))).scalars().all()
+        return events_of(assigned, detached, limit)

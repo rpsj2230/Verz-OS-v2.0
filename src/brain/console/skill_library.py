@@ -41,14 +41,35 @@ and after anyway and refuses a difference, because the cost of the check is one 
 failure it names is the one this platform exists to prevent. See
 `A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER`.
 
+**Retiring a version is a row, and a retired version is never newly assigned.** `retired` adds a
+retirement to a skill that has none, and `assignment` refuses a retired one before it asks anything
+else. An agent already pinned to the version keeps it until somebody detaches it from that agent,
+because taking it away as a side effect of a library act would change what an agent is configured
+with without anybody pressing anything on that agent. See
+`A_RETIRED_VERSION_IS_NEVER_NEWLY_ASSIGNED_AND_STAYS_WHERE_IT_IS_PINNED`.
+
+**Detaching is `brain.console.agent_tabs.detach` on the agent's current pins, then the same install
+write an assignment makes.** `detachment` refuses bytes the agent does not run, so a detachment is
+never recorded for a pin that was not there, and compares the authority before and after for
+`A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER`'s reason. `detach` itself asks for no capability,
+which that module argues; who may change this agent's configuration is the route's question, and
+it is `may_detach`, the assignment's own authority.
+
+**A tool outside the agent's ceiling is reported before the write and assigned only when the person
+says they have read it, and nothing is granted either way.** Measured against the gate the skill
+meets at run time rather than chosen: see
+`A_TOOL_OUTSIDE_THE_CEILING_IS_ACKNOWLEDGED_AND_NEVER_GRANTED` and `ceiling_report`.
+
 Scope: domain logic. Nothing here opens a connection or reads a clock; rows, the registry and the
 instant arrive as arguments.
 
-Task ids: M42.6.4
+Task ids: M42.6.4, M27.11.8
 """
 
 from __future__ import annotations
 
+import dataclasses
+import enum
 import hashlib
 import io
 import zipfile
@@ -139,6 +160,31 @@ A_SKILL_IS_RECORDED_UNDER_THE_NAME_A_READER_FOLDS_IT_TO: Final = (
     "folded name names one skill."
 )
 
+#: Why a retired version is refused a new agent and left on the agents that already run it.
+A_RETIRED_VERSION_IS_NEVER_NEWLY_ASSIGNED_AND_STAYS_WHERE_IT_IS_PINNED: Final = (
+    "Retiring a version is the library saying these bytes are not to be put in front of another "
+    "agent. It is a row beside the skill and never an edit to it or a removal of it, so the "
+    "approval, the assignments and the ledger go on saying what was read and when. An agent "
+    "already pinned to the version keeps it until somebody detaches it from that agent: taking it "
+    "away as a side effect would change what an agent is configured with without anybody pressing "
+    "anything on that agent, so each one is listed and detaching it is a decision of its own."
+)
+
+#: The choice made about a tool the agent's ceiling does not admit, and why it is this one.
+A_TOOL_OUTSIDE_THE_CEILING_IS_ACKNOWLEDGED_AND_NEVER_GRANTED: Final = (
+    "An assignment whose skill names a tool the agent is not allowed, or a tool this install does "
+    "not have, is reported before anything is written and is written only when the person "
+    "assigning it says they have read the report. Refusing it outright was measured against the "
+    "gate a skill meets at run time and rejected: brain.tools.skills.skill_reach drops a tool "
+    "outside the catalogue rather than refusing the skill, because a procedure mentioning a step "
+    "this agent cannot take is ordinary and what it must never do is take it, and "
+    "brain.console.agent_tabs.attach already treats a configuration outside the ceiling as one "
+    "that does nothing rather than one that is unsafe. So the acknowledgement changes what is "
+    "written and nothing about what the agent may reach: the ceiling is not read from the skill, "
+    "the assignment compares the authority before and after, and widening a ceiling is a "
+    "manifest edit through the publish gate."
+)
+
 #: Why a refusal to add a skill says what to do.
 A_PACKAGE_REFUSAL_SAYS_WHAT_TO_CHANGE: Final = (
     "The person adding a skill holds the authority to add it and is looking at the package, so "
@@ -169,6 +215,7 @@ SKILLS_PATH: Final = "skills"
 #: Why an assignment reached the ledger, as `AuditRecorder.compose_change` records a reason.
 ASSIGN_REASON: Final = "skill_assign"
 REPLACE_REASON: Final = "skill_replace"
+DETACH_REASON: Final = "skill_detach"
 
 #: The largest package, in bytes, arrived or unpacked. A skill is a page of instructions.
 MAX_PACKAGE_BYTES: Final = 256 * 1024
@@ -220,10 +267,42 @@ def may_assign(
     return _library_screen_read(reach, now) and _in_reach(reach, SKILL_AUTHORITY, where, now)
 
 
+def may_detach(
+    reach: EntitlementSet, where: Mapping[str, str], now: datetime | None = None
+) -> bool:
+    """Whether this reader may take a skill off the agent `where` describes.
+
+    The assignment's own question, asked again rather than restated, because both are a change to
+    one agent's configuration, and a second authority for the reverse of an act would be a person
+    who can put a skill on an agent and not take it off, or the other way round. No separate
+    capability was argued for: detaching narrows what an agent carries, and the domain's `detach`
+    asks for nothing, so the only question is who may configure this agent at all.
+    """
+    return may_assign(reach, where, now)
+
+
+def may_retire(reach: EntitlementSet, now: datetime | None = None) -> bool:
+    """Whether this reader may retire a version: the screen and the skill authority over everything.
+
+    Over everything for `may_add`'s reason: a version in the library is offered to every agent, so
+    withdrawing that offer is a decision about every department's agents at once.
+    """
+    return _library_screen_read(reach, now) and _in_reach(reach, SKILL_AUTHORITY, NOWHERE, now)
+
+
 # ------------------------------------------------------------------------- one stored skill
 @dataclass(frozen=True)
+class Retirement:
+    """Who retired a version, and when."""
+
+    by: str
+    at: datetime
+
+
+@dataclass(frozen=True)
 class LibrarySkill:
-    """One skill in the library: what arrived, who added it and when, and any decision.
+    """One skill in the library: what arrived, who added it and when, any decision, and whether the
+    version is retired.
 
     `digest` is the key it is stored under, carried beside the skill rather than recomputed,
     because the difference between the two is the signal: a row whose fields were edited in place
@@ -235,6 +314,7 @@ class LibrarySkill:
     digest: str
     submitted_by: str
     submitted_at: datetime
+    retirement: Retirement | None = None
 
     @property
     def name(self) -> str:
@@ -439,6 +519,28 @@ def decided(one: LibrarySkill, *, reviewer: str, approve: bool, at: datetime) ->
     )
 
 
+# ------------------------------------------------------------------------ retiring a version
+def retired(one: LibrarySkill, *, by: str, at: datetime) -> LibrarySkill:
+    """The version with a retirement on it, by a named person, or a refusal.
+
+    Any version may be retired, whatever its review: a version waiting for a reviewer that nobody
+    wants is the library's to withdraw too. A version already retired is refused rather than
+    retired again, because a second retirement would record a change that did not happen; the
+    table's key refuses the same row for a statement that never came through here. See
+    `A_RETIRED_VERSION_IS_NEVER_NEWLY_ASSIGNED_AND_STAYS_WHERE_IT_IS_PINNED`.
+    """
+    if not by.strip():
+        raise SkillLibraryError("a version is retired by a named person, never by an empty string")
+    if at.tzinfo is None:
+        raise SkillLibraryError("the time a version was retired must be timezone-aware")
+    if one.retirement is not None:
+        raise SkillLibraryError(
+            f"nothing was retired: {one.name!r} {one.imported.skill.version} was already retired "
+            f"by {one.retirement.by}"
+        )
+    return dataclasses.replace(one, retirement=Retirement(by=by, at=at))
+
+
 def queue_entries(library: Sequence[LibrarySkill], now: datetime) -> tuple[Placed[QueueEntry], ...]:
     """Every skill waiting for a decision, oldest first, placed nowhere.
 
@@ -532,6 +634,66 @@ def reach_through(
         return ()
 
 
+# ------------------------------------------------------------- the tools against the ceiling
+@dataclass(frozen=True)
+class CeilingReport:
+    """What a skill names that this agent cannot use: tools outside its ceiling, and tools nothing
+    on this install registers. Both sorted, and both names and never capabilities."""
+
+    outside: tuple[str, ...]
+    unregistered: tuple[str, ...]
+
+    @property
+    def clear(self) -> bool:
+        return not self.outside and not self.unregistered
+
+
+#: A report with nothing in it, for an assignment made before anything was checked.
+NOTHING_OUTSIDE: Final = CeilingReport(outside=(), unregistered=())
+
+
+def ceiling_report(
+    skill: Skill, registry: ToolRegistry | None, record: AgentRecord
+) -> CeilingReport:
+    """Each tool the skill names, held to the agent's `allowed_tools` and to the registry.
+
+    A tool the registry holds and the ceiling does not list is outside. A tool the registry does
+    not hold is unregistered, and is not also listed as outside, because what is wrong with it is
+    that it does not exist here. On a process with no registry no tool can be resolved, so every
+    tool is unregistered: the report says it cannot tell rather than saying the skill is clear.
+
+    Names compared with names, and nothing here asks what anybody holds, so it is not a second
+    reach: what the skill actually reaches for a caller is `reach_through`.
+    """
+    if registry is None:
+        return CeilingReport(outside=(), unregistered=tuple(sorted(set(skill.tools))))
+    allowed = record.authority.allowed_tools
+    return CeilingReport(
+        outside=tuple(
+            sorted({name for name in skill.tools if registry.has(name) and name not in allowed})
+        ),
+        unregistered=unknown_tools(skill, registry),
+    )
+
+
+def ceiling_refusal(one: LibrarySkill, record: AgentRecord, report: CeilingReport) -> str:
+    """The sentence an unacknowledged assignment is refused with: what, and what to do.
+
+    Addressed to somebody who may assign skills to this agent and is looking at it, so naming the
+    tools it is not allowed discloses nothing they could not already read on the agent.
+    """
+    said: list[str] = []
+    if report.outside:
+        said.append(f"{record.agent_id!r} is not allowed {', '.join(report.outside)}")
+    if report.unregistered:
+        said.append(f"this install has no tool called {', '.join(report.unregistered)}")
+    return (
+        f"nothing was assigned: {one.name!r} names tools it cannot use through this agent, because "
+        f"{'; and '.join(said)}. Assigning it grants none of them and changes nothing this agent "
+        "may reach. Confirm that you have read this to assign it anyway."
+    )
+
+
 # ------------------------------------------------------------------------ assigning a skill
 @dataclass(frozen=True)
 class Assignment:
@@ -548,6 +710,25 @@ class Assignment:
     digest: str
     replaces_digest: str | None
     assigned_by: str
+    instance: TemplateInstance
+    effective_document: Mapping[str, JsonValue]
+    effective_hash: str
+    #: What the skill names that this agent cannot use, as it was acknowledged. Empty when clear.
+    ceiling: CeilingReport = NOTHING_OUTSIDE
+
+
+@dataclass(frozen=True)
+class Detachment:
+    """One skill taken off one agent: the install to write, and who took it off.
+
+    The ledger entry a deployed database keeps is `0088`'s trigger's on the detachment row, for
+    `Assignment`'s reason.
+    """
+
+    agent_id: str
+    skill_name: str
+    digest: str
+    detached_by: str
     instance: TemplateInstance
     effective_document: Mapping[str, JsonValue]
     effective_hash: str
@@ -586,6 +767,51 @@ def moved_authority(before: AgentRecord, after: AgentRecord) -> bool:
     return after.authority != before.authority
 
 
+@dataclass(frozen=True)
+class _Written:
+    """An install with its skills path set to a composition, materialised and checked."""
+
+    instance: TemplateInstance
+    effective_document: Mapping[str, JsonValue]
+    effective_hash: str
+
+
+def _written(
+    composition: Composition,
+    *,
+    record: AgentRecord,
+    signed: SignedManifest,
+    instance: TemplateInstance,
+    by: EntitlementSet,
+    now: datetime,
+    verb: str,
+) -> _Written:
+    """The install with `skills` set to exactly these pins, or a refusal if the authority moved.
+
+    `set_field` on `skills` and nothing else, materialised again, and the authority before and after
+    compared, for an assignment and a detachment alike. See
+    `A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER`.
+    """
+    before = materialise(signed, instance, audience=record.audience)
+    skills: list[JsonValue] = [
+        {"name": pin.ref, "digest": pin.version}
+        for pin in sorted(
+            composition.attached_to(Part.SKILLS), key=lambda pin: (pin.ref, pin.version)
+        )
+    ]
+    changed = set_field(instance, SKILLS_PATH, skills, by=by.principal_id, at=now)
+    after = materialise(signed, changed, audience=record.audience)
+    if moved_authority(before.record, after.record):
+        raise SkillLibraryError(
+            f"nothing was {verb}: {A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER}"
+        )
+    return _Written(
+        instance=changed,
+        effective_document=dict(after.document),
+        effective_hash=after.config_hash,
+    )
+
+
 def assignment(
     one: LibrarySkill,
     *,
@@ -595,9 +821,15 @@ def assignment(
     library: Sequence[LibrarySkill],
     by: EntitlementSet,
     recorder: AuditRecorder,
+    registry: ToolRegistry | None,
+    acknowledged: bool,
     now: datetime,
 ) -> Assignment:
     """Assign one approved skill to one agent through `register_skill`, or refuse.
+
+    A retired version first, whatever else is true, so a person assigning retired bytes is told
+    that before anything about the bytes. See
+    `A_RETIRED_VERSION_IS_NEVER_NEWLY_ASSIGNED_AND_STAYS_WHERE_IT_IS_PINNED`.
 
     The composition is the agent's current pins. The same bytes already there is refused, because
     an assignment that changes nothing would record a change. Another version of the same skill is
@@ -606,10 +838,18 @@ def assignment(
     the library's copies of what the agent carries, and `attach_skill`, whose `pin_skill` refuses a
     skill that is not approved by a named person and unchanged since.
 
-    The install is `set_field` on `skills` and nothing else, materialised again, and the authority
-    before and after is compared. See `A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER`.
+    Then the tools against the ceiling, after the approval, so that a skill nobody approved is
+    refused for that and never offered an acknowledgement. A report that is not clear refuses an
+    assignment nobody acknowledged. See
+    `A_TOOL_OUTSIDE_THE_CEILING_IS_ACKNOWLEDGED_AND_NEVER_GRANTED`.
+
+    The install write is `_written`'s.
     """
-    before = materialise(signed, instance, audience=record.audience)
+    if one.retirement is not None:
+        raise SkillLibraryError(
+            f"nothing was assigned: {one.name!r} {one.imported.skill.version} is retired, so it "
+            "cannot be newly assigned. An agent already running it keeps it until it is detached."
+        )
     composition = pins_on(signed, instance, record)
     same = [pin for pin in composition.attached_to(Part.SKILLS) if pin.ref == one.name]
     if any(pin.version == one.digest for pin in same):
@@ -636,25 +876,101 @@ def assignment(
     except SkillError as refused:
         raise SkillLibraryError(f"nothing was assigned: {refused}") from None
 
-    skills: list[JsonValue] = [
-        {"name": pin.ref, "digest": pin.version}
-        for pin in sorted(
-            composed.composition.attached_to(Part.SKILLS), key=lambda pin: (pin.ref, pin.version)
-        )
-    ]
-    changed = set_field(instance, SKILLS_PATH, skills, by=by.principal_id, at=now)
-    after = materialise(signed, changed, audience=record.audience)
-    if moved_authority(before.record, after.record):
-        raise SkillLibraryError(
-            f"nothing was assigned: {A_SKILL_NEVER_WIDENS_AN_AGENT_PAST_ITS_CALLER}"
-        )
+    report = ceiling_report(one.imported.skill, registry, record)
+    if not report.clear and not acknowledged:
+        raise SkillLibraryError(ceiling_refusal(one, record, report))
+
+    written = _written(
+        composed.composition,
+        record=record,
+        signed=signed,
+        instance=instance,
+        by=by,
+        now=now,
+        verb="assigned",
+    )
     return Assignment(
         agent_id=record.agent_id,
         skill_name=one.name,
         digest=one.digest,
         replaces_digest=replaces,
         assigned_by=by.principal_id,
-        instance=changed,
-        effective_document=dict(after.document),
-        effective_hash=after.config_hash,
+        instance=written.instance,
+        effective_document=written.effective_document,
+        effective_hash=written.effective_hash,
+        ceiling=report,
     )
+
+
+# ------------------------------------------------------------------------ detaching a skill
+def detachment(
+    one: LibrarySkill,
+    *,
+    record: AgentRecord,
+    signed: SignedManifest,
+    instance: TemplateInstance,
+    by: EntitlementSet,
+    recorder: AuditRecorder,
+    now: datetime,
+) -> Detachment:
+    """Take one version of one skill off one agent through `detach`, or refuse.
+
+    Refused unless the agent's current pins hold exactly these bytes under this name, so a
+    detachment is never recorded for a pin that was not there, and the refusal is about the version
+    rather than the name: taking a version off an agent that has since moved to another is a
+    decision about bytes nobody is looking at. Retirement and review are not asked about, because
+    detaching is how a retired version, or one nobody should have approved, leaves an agent.
+    """
+    composition = pins_on(signed, instance, record)
+    if not any(
+        pin.ref == one.name and pin.version == one.digest
+        for pin in composition.attached_to(Part.SKILLS)
+    ):
+        raise SkillLibraryError(
+            f"nothing was detached: {record.agent_id!r} does not run this version of {one.name!r}"
+        )
+    detached = detach(
+        composition, Part.SKILLS, one.name, recorder=recorder, reason_code=DETACH_REASON
+    )
+    written = _written(
+        detached.composition,
+        record=record,
+        signed=signed,
+        instance=instance,
+        by=by,
+        now=now,
+        verb="detached",
+    )
+    return Detachment(
+        agent_id=record.agent_id,
+        skill_name=one.name,
+        digest=one.digest,
+        detached_by=by.principal_id,
+        instance=written.instance,
+        effective_document=written.effective_document,
+        effective_hash=written.effective_hash,
+    )
+
+
+# ------------------------------------------------------------------- what happened, in order
+class AssignmentChange(enum.StrEnum):
+    """What a row of history says happened to one version of a skill on one agent."""
+
+    #: An assignment row naming these bytes.
+    ASSIGNED = "assigned"
+    #: An assignment row naming other bytes of the same skill in place of these.
+    REPLACED = "replaced"
+    #: A detachment row naming these bytes.
+    DETACHED = "detached"
+
+
+@dataclass(frozen=True)
+class SkillEvent:
+    """One thing that happened to one version on one agent, by whom and when."""
+
+    digest: str
+    skill_name: str
+    agent_id: str
+    change: AssignmentChange
+    by: str
+    at: datetime

@@ -255,11 +255,13 @@ class LegalHoldChange(enum.StrEnum):
 
 
 class SkillChange(enum.StrEnum):
-    """What happened to a skill in the library. The three values `0056`'s triggers write."""
+    """What happened to a skill in the library. The three values `0056`'s triggers write, and the
+    one `0088`'s retirement trigger writes."""
 
     IMPORTED = "imported"
     APPROVED = "approved"
     REJECTED = "rejected"
+    RETIRED = "retired"
 
 
 class ConnectorChange(enum.StrEnum):
@@ -844,13 +846,14 @@ class AuditRecorder:
         )
 
     def skill(self, *, name: str, digest: str, change: SkillChange) -> AuditEntry:
-        """Record that a skill was added to the library, or approved or rejected.
+        """Record that a skill was added to the library, approved, rejected or retired.
 
         Written in a deployed database by `0056`'s triggers, on an insert into `agent.skill` for
-        an import and into `agent.skill_review` for a decision, and held to this method's details
-        by a test. The subject is the skill's name, so every version of one procedure is one
-        subject; the digest names the bytes the change was about, which is what an approval is an
-        approval of. The actor is whoever the row names: the importer, or the reviewer.
+        an import and into `agent.skill_review` for a decision, and by `0088`'s on an insert into
+        `agent.skill_retirement`, and held to this method's details by a test. The subject is the
+        skill's name, so every version of one procedure is one subject; the digest names the bytes
+        the change was about, which is what an approval is an approval of. The actor is whoever the
+        row names: the importer, the reviewer, or the person who retired the version.
 
         `digest` is refused unless it is a sha256, because the ledger admits a digest by its
         shape and anything else in that field would be stored as the marker, which is an entry

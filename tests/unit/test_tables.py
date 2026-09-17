@@ -113,6 +113,7 @@ MIGRATION_APPLICATION_LOG = VERSIONS / "0063_application_log.py"
 MIGRATION_QUESTION_GAP = VERSIONS / "0064_question_gap.py"
 MIGRATION_AUTOMATION_RUN = VERSIONS / "0067_automation_run.py"
 MIGRATION_CONNECTOR_SYNC = VERSIONS / "0068_connector_sync.py"
+MIGRATION_SKILL_LIFECYCLE = VERSIONS / "0088_skill_lifecycle.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -307,6 +308,9 @@ AUTOMATION_RUN_TABLES: tuple[str, ...] = ("agent.automation_run", "agent.automat
 #: And the one 0068 adds: every attempt the worker made to read a connected source.
 CONNECTOR_SYNC_TABLES: tuple[str, ...] = ("ops.connector_sync",)
 
+#: And the two 0088 adds: a skill version retired, and a skill taken off an agent.
+SKILL_LIFECYCLE_TABLES: tuple[str, ...] = ("agent.skill_retirement", "agent.skill_detachment")
+
 ALL_TABLES = (
     CORE_TABLES
     + RESOLVER_TABLES
@@ -349,6 +353,7 @@ ALL_TABLES = (
     + QUESTION_GAP_TABLES
     + AUTOMATION_RUN_TABLES
     + CONNECTOR_SYNC_TABLES
+    + SKILL_LIFECYCLE_TABLES
 )
 
 
@@ -1088,6 +1093,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert automation_run.TABLES == AUTOMATION_RUN_TABLES
     connector_sync = migration_module(MIGRATION_CONNECTOR_SYNC)
     assert connector_sync.TABLES == CONNECTOR_SYNC_TABLES
+    skill_lifecycle = migration_module(MIGRATION_SKILL_LIFECYCLE)
+    assert skill_lifecycle.TABLES == SKILL_LIFECYCLE_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1153,6 +1160,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(question_gap.TABLES)
         + tuple(automation_run.TABLES)
         + tuple(connector_sync.TABLES)
+        + tuple(skill_lifecycle.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1199,6 +1207,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(question_gap.TABLES),
         set(automation_run.TABLES),
         set(connector_sync.TABLES),
+        set(skill_lifecycle.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"
