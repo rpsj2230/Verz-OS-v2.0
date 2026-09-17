@@ -36,7 +36,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from brain.api import API_PREFIX
+from brain.api import API_PREFIX, NOT_FOUND
 from brain.app import Settings, create_app
 from brain.firstrun import GRANTED_BY
 from brain.identity.first_administrator import (
@@ -363,15 +363,15 @@ def test_problems_with_the_answers_are_told_by_screen_and_field_and_appoint_nobo
         )
 
     blank_key = step_for(StepId.COMPANY).questions[0].field.errors["blank"]
-    assert (bad_field.status_code, bad_field.json()) == (
+    assert (bad_field.status_code, own_fields(bad_field)) == (
         422,
         {"problems": [{"step": "company", "field": "company_name", "key": blank_key}]},
     )
-    assert (unanswered.status_code, unanswered.json()) == (
+    assert (unanswered.status_code, own_fields(unanswered)) == (
         422,
         {"problems": [{"step": "staff_source", "field": "", "key": NOT_GIVEN}]},
     )
-    assert (skipped.status_code, skipped.json()) == (
+    assert (skipped.status_code, own_fields(skipped)) == (
         422,
         {"problems": [{"step": "administrator", "field": "", "key": NOT_GIVEN}]},
     )
@@ -465,7 +465,7 @@ def test_a_vault_that_is_silent_or_refuses_appoints_nobody_and_says_which(
     with serving(store, credentials=Credentials(Vault(fail=raised), environ=env)) as c:
         answer = appointing(c, body(answers=HOSTED))
 
-    assert (answer.status_code, answer.json()) == (
+    assert (answer.status_code, own_fields(answer)) == (
         409,
         {"unkept": ["providers/anthropic"], "variables": [VARIABLE], "reason": reason},
     )
@@ -503,7 +503,7 @@ def test_an_install_with_no_vault_is_told_so_and_appoints_nobody(
     with serving(store) as c:
         answer = appointing(c, body(answers=HOSTED))
 
-    assert (answer.status_code, answer.json()) == (
+    assert (answer.status_code, own_fields(answer)) == (
         409,
         {
             "unkept": ["providers/anthropic"],
@@ -698,15 +698,27 @@ def test_a_local_install_has_no_key_to_keep_whatever_its_environment_or_vault_sa
     assert slot_for(applied) is None
 
 
+def own_fields(answer: Any) -> dict[str, Any]:
+    """A refusal document without the sentence and the reference every failure carries.
+
+    Both are asserted present, so this narrows what is compared and never what is required: see
+    `brain.api.A_DOCUMENT_A_ROUTE_WROTE_STILL_CARRIES_THE_TWO_FIELDS_EVERY_FAILURE_DOES`.
+    """
+    document = dict(answer.json())
+    assert isinstance(document.pop("message"), str)
+    assert document.pop("trace_id") == answer.headers["x-trace-id"]
+    return document
+
+
 # ------------------------------------------------------------------------------ the wiring
 
 
 def test_the_appointment_is_served_by_the_application() -> None:
     """`create_app` mounts the router itself. Held by what the path answers, for the reason
     `test_app_wiring` gives about the sign-in routes: this FastAPI does not list an included
-    router's paths on `app.routes`, an unmounted path is the framework's `{"detail": ...}` 404,
-    and only a mounted route answers a process with no store in `ErrorBody`. Delete this and the
-    router can go unmounted, which is how every setup route before it shipped."""
+    router's paths on `app.routes`, an unmounted path is a 404, and only a mounted route answers
+    a process with no store with a 500. Both are `ErrorBody` since every failure is. Delete this
+    and the router can go unmounted, which is how every setup route before it shipped."""
     with TestClient(create_app(Settings(env="development")), raise_server_exceptions=False) as c:
         served = c.post(APPOINTMENT_PATH, json=body())
         nowhere = c.post(f"{APPOINTMENT_PATH}-not-mounted", json=body())
@@ -714,7 +726,7 @@ def test_the_appointment_is_served_by_the_application() -> None:
     assert served.status_code == 500
     assert set(served.json()) == {"message", "trace_id"}
     assert nowhere.status_code == 404
-    assert "message" not in nowhere.json()
+    assert nowhere.json()["message"] == NOT_FOUND
 
 
 def test_the_lifespan_builds_the_store_only_where_the_finishing_screen_is_built(

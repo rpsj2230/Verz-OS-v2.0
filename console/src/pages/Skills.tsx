@@ -28,20 +28,27 @@
  * **Nothing here decides who may see or do anything.** Every control is drawn from a flag the API
  * sent, and every write is decided again on the server.
  *
+ * **A refused write is drawn where it was made, by `ui/FailureNotice.tsx`.** Until 2026-09-17 a
+ * refusal was the API's sentence alone at the top of the page, as an alert, with its reference
+ * dropped and every problem the API named thrown away. Each of the three writes now draws its own
+ * failure in its own card, with the reference and with each problem beside the input it names.
+ *
  * Imported statically rather than split, which is `Roles.tsx`'s rule.
  *
- * Task ids: M42.6.4, M27.8.6
+ * Task ids: M42.6.4, M27.8.5, M27.8.6
  */
 
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { request } from "../api/client";
+import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   addedSentence,
   assignConsequence,
@@ -155,6 +162,11 @@ export function queueCount(waiting: number, edits: number, stale: number): strin
   return `${String(waiting)} waiting, ${String(edits)} of them edits, ${String(stale)} overdue.`;
 }
 
+/** The names a package is sent under, and the prefix of the lists drawn beside its two inputs. */
+const PACKAGE_FIELDS: readonly string[] = ["content", "file_name", "encoding"];
+const PACKAGE_FILE_NAMES: readonly string[] = ["file_name", "encoding"];
+const PACKAGE_FORM = "skills-add";
+
 /** What the last write said, kept above the page while it is read again. */
 interface Told {
   readonly ok: boolean;
@@ -194,8 +206,10 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
   const [text, setText] = useState("");
   const [file, setFile] = useState<PackageBody | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const body = file ?? (text.trim() === "" ? null : pasted(text));
   const problem = packageProblem(body);
+  const problems = failure?.problems ?? [];
 
   async function onChoose(event: ChangeEvent<HTMLInputElement>) {
     const one = event.target.files?.[0];
@@ -217,6 +231,7 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
       return;
     }
     setBusy(true);
+    setFailure(null);
     const result = await request<LibrarySkill>(SKILLS_API_PATH, { method: "POST", body });
     setBusy(false);
     if (result.ok) {
@@ -224,7 +239,7 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
       setFile(null);
       onTold({ ok: true, sentence: addedSentence(result.data) });
     } else {
-      onTold({ ok: false, sentence: result.failure.message });
+      setFailure(result.failure);
     }
   }
 
@@ -232,6 +247,7 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
     <section className="card" aria-labelledby="skills-add">
       <h2 id="skills-add">{ADD_HEADING}</h2>
       <p className="note">{ADD_LEDE}</p>
+      {failure === null ? null : <FailureNotice failure={failure} fields={PACKAGE_FIELDS} />}
       <form className="form" aria-label={ADD_HEADING} onSubmit={(event) => void onSubmit(event)}>
         <label className="control-label" htmlFor="skills-paste">
           {PASTE_LABEL}
@@ -239,13 +255,16 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
         <textarea
           id="skills-paste"
           className="form-control"
+          name="content"
           rows={8}
           value={text}
           disabled={file !== null}
+          {...problemAttributes(problems, PACKAGE_FORM, "content")}
           onChange={(event) => {
             setText(event.target.value);
           }}
         />
+        <FieldProblems problems={problems} form={PACKAGE_FORM} names="content" />
         <label className="control-label" htmlFor="skills-file">
           {FILE_LABEL}
         </label>
@@ -253,9 +272,12 @@ function AddSkill({ onTold }: { readonly onTold: Tell }) {
           id="skills-file"
           className="form-control"
           type="file"
+          name="file_name"
           accept=".md,.zip"
+          {...problemAttributes(problems, PACKAGE_FORM, PACKAGE_FILE_NAMES)}
           onChange={(event) => void onChoose(event)}
         />
+        <FieldProblems problems={problems} form={PACKAGE_FORM} names={PACKAGE_FILE_NAMES} />
         {body === null ? null : problem === null ? null : (
           <p className="note" role="alert">
             {problem}
@@ -300,20 +322,22 @@ function Reach({ one, registryIsAbsent }: { readonly one: LibrarySkill; readonly
 function Decide({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: Tell }) {
   const [asking, setAsking] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
 
   async function decide(approve: boolean) {
     setBusy(true);
+    setFailure(null);
     const result = await request<LibrarySkill>(reviewPath(one.digest), {
       method: "POST",
       body: { decision: approve ? "approve" : "reject" },
     });
     setBusy(false);
     setAsking(null);
-    onTold(
-      result.ok
-        ? { ok: true, sentence: decidedSentence(result.data) }
-        : { ok: false, sentence: result.failure.message },
-    );
+    if (result.ok) {
+      onTold({ ok: true, sentence: decidedSentence(result.data) });
+    } else {
+      setFailure(result.failure);
+    }
   }
 
   if (asking !== null) {
@@ -332,28 +356,31 @@ function Decide({ one, onTold }: { readonly one: LibrarySkill; readonly onTold: 
     );
   }
   return (
-    <div className="form-actions">
-      <button
-        type="button"
-        className="button"
-        aria-label={`${APPROVE}: ${one.name} ${one.version}`}
-        onClick={() => {
-          setAsking(true);
-        }}
-      >
-        {APPROVE}
-      </button>{" "}
-      <button
-        type="button"
-        className="button"
-        aria-label={`${REJECT}: ${one.name} ${one.version}`}
-        onClick={() => {
-          setAsking(false);
-        }}
-      >
-        {REJECT}
-      </button>
-    </div>
+    <>
+      {failure === null ? null : <FailureNotice failure={failure} />}
+      <div className="form-actions">
+        <button
+          type="button"
+          className="button"
+          aria-label={`${APPROVE}: ${one.name} ${one.version}`}
+          onClick={() => {
+            setAsking(true);
+          }}
+        >
+          {APPROVE}
+        </button>{" "}
+        <button
+          type="button"
+          className="button"
+          aria-label={`${REJECT}: ${one.name} ${one.version}`}
+          onClick={() => {
+            setAsking(false);
+          }}
+        >
+          {REJECT}
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -369,25 +396,28 @@ function Assign({
   const [agentId, setAgentId] = useState(agents[0]?.agent_id ?? "");
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<ApiFailure | null>(null);
   const agent = agents.find((candidate) => candidate.agent_id === agentId);
   const fieldId = `assign-${one.digest}`;
+  const problems = failure?.problems ?? [];
 
   async function assign() {
     if (agent === undefined) {
       return;
     }
     setBusy(true);
+    setFailure(null);
     const result = await request<Assigned>(assignPath(one.digest), {
       method: "POST",
       body: { agent_id: agent.agent_id },
     });
     setBusy(false);
     setAsking(false);
-    onTold(
-      result.ok
-        ? { ok: true, sentence: assignedSentence(result.data, agent) }
-        : { ok: false, sentence: result.failure.message },
-    );
+    if (result.ok) {
+      onTold({ ok: true, sentence: assignedSentence(result.data, agent) });
+    } else {
+      setFailure(result.failure);
+    }
   }
 
   if (asking && agent !== undefined) {
@@ -414,13 +444,16 @@ function Assign({
         setAsking(true);
       }}
     >
+      {failure === null ? null : <FailureNotice failure={failure} fields={["agent_id"]} />}
       <label className="control-label" htmlFor={fieldId}>
         {ASSIGN_LABEL}
       </label>
       <select
         id={fieldId}
         className="form-control"
+        name="agent_id"
         value={agentId}
+        {...problemAttributes(problems, fieldId, "agent_id")}
         onChange={(event) => {
           setAgentId(event.target.value);
         }}
@@ -431,6 +464,7 @@ function Assign({
           </option>
         ))}
       </select>
+      <FieldProblems problems={problems} form={fieldId} names="agent_id" />
       <div className="form-actions">
         <button type="submit" className="button" disabled={agent === undefined}>
           {ASSIGN}

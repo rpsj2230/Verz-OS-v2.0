@@ -66,7 +66,7 @@ from typing import Final
 import structlog
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import Select, func, select
+from sqlalchemy import Row, Select, String, column, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import (
@@ -85,7 +85,7 @@ from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.core.errors import Absent, Failed
 from brain.estate_routes import MAX_MEMORIES_CONSIDERED, RememberedAbout, remembered_about
-from brain.knowledge.item import RETRIEVABLE_STATES
+from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.member.shell import disclosure_line, member_screen
 from brain.member_activity import my_agents, personal_budget
 from brain.ops.budget_store import in_force
@@ -94,7 +94,6 @@ from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
 from brain.tables.adoption import QuestionAskedRow
 from brain.tables.agent import AgentRow
-from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.spend import SpendActualRow
 
 log = structlog.get_logger()
@@ -278,17 +277,39 @@ def runs_by(principal_id: str, since: datetime, limit: int) -> Select[tuple[Spen
     )
 
 
-def items_stewarded_by(principal_id: str, limit: int) -> Select[tuple[KnowledgeItemRow]]:
-    """The retrievable knowledge items this person stewards, in reference order, bounded."""
-    return (
-        select(KnowledgeItemRow)
-        .where(
-            KnowledgeItemRow.owner_id == principal_id,
-            KnowledgeItemRow.state.in_(sorted(one.value for one in RETRIEVABLE_STATES)),
-        )
-        .order_by(KnowledgeItemRow.item_id)
-        .limit(limit)
+def items_stewarded(limit: int) -> Select[tuple[str, str, str, str | None]]:
+    """The retrievable knowledge items this person stewards, in reference order, bounded.
+
+    **Read through `know.items_stewarded_by_the_session`, with the session told who is present.**
+    `know.item`'s policy is the corpus's reach and admits a personal item or a draft only to a
+    session naming its owner, and this load named nobody, so a person's own personal items and
+    drafts were absent from what they keep. `0069`'s function returns the rows whose owner is the
+    principal `principal_setting` names, and `is_own` is still asked of each. See
+    `WHAT_A_PERSON_STEWARDS_IS_READ_AS_THEM`.
+    """
+    items = func.know.items_stewarded_by_the_session(limit).table_valued(
+        column("item_id", String),
+        column("owner_id", String),
+        column("visibility", String),
+        column("department", String),
+        name="item",
     )
+    return select(items.c.item_id, items.c.owner_id, items.c.visibility, items.c.department)
+
+
+def principal_setting(principal_id: str) -> Select[tuple[str]]:
+    """The statement that tells this transaction who is present, for the stewardship read."""
+    return select(func.set_config(PRINCIPAL_SETTING, principal_id, True))
+
+
+#: Why the stewardship read names the person to the database first.
+WHAT_A_PERSON_STEWARDS_IS_READ_AS_THEM: Final = (
+    "know.item's row-level security admits a personal item or a draft only to a session naming "
+    "its owner, and My workspace named nobody, so the list of what a person keeps left out their "
+    "own personal items and drafts. The load sets app.principal_id to the person asking, in the "
+    "same transaction, and reads through know.items_stewarded_by_the_session, which returns the "
+    "rows that principal owns and no title."
+)
 
 
 # ------------------------------------------------------------------------ the wiring
@@ -334,16 +355,15 @@ async def workspace(request: Request, asked: Asked) -> MineWorkspaceView:
         int,
         list[SpendActualRow],
         list[AgentRow],
-        list[KnowledgeItemRow],
+        list[Row[tuple[str, str, str, str | None]]],
         RememberedAbout,
         list[BudgetRow],
     ]:
         questions = int((await session.execute(questions_asked(me, this_month, now))).scalar_one())
         runs = list((await session.execute(runs_by(me, runs_since, MAX_OWN_RUNS))).scalars().all())
         agents = list((await session.execute(every_agent())).scalars().all())
-        items = list(
-            (await session.execute(items_stewarded_by(me, MAX_OWN_ITEMS + 1))).scalars().all()
-        )
+        await session.execute(principal_setting(me))
+        items = list((await session.execute(items_stewarded(MAX_OWN_ITEMS + 1))).all())
         remembered = await remembered_about(session, me, MAX_MEMORIES_CONSIDERED)
         ceilings: list[BudgetRow] = []
         for period in (BudgetPeriod.DAY, BudgetPeriod.MONTH):

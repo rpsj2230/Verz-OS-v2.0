@@ -41,7 +41,8 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import { when } from "./artifactsQuery";
 import {
   CONTROLS_API_PATH,
@@ -75,7 +76,6 @@ import {
   type Report,
   type RetentionAnswer,
 } from "./retentionQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const RETENTION_HEADING = "Retention and erasure";
 export const RETENTION_CRUMB = "Govern › Retention and erasure";
@@ -152,17 +152,6 @@ export function filedSentence(subject: string, at: string): string {
   );
 }
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
 function stamp(payload: unknown, key: string): string {
   if (typeof payload !== "object" || payload === null) {
     return "";
@@ -171,10 +160,25 @@ function stamp(payload: unknown, key: string): string {
   return typeof found === "string" ? found : "";
 }
 
-/** One write, its busy flag and its failure, so every control reports the same way. */
+/** The names each form's inputs are sent under, and the prefix of the lists drawn beside them. */
+const HOLD_FIELDS: readonly string[] = ["hold_id", "reason_code", "subjects", "actors", "all_subjects"];
+const LIFT_FIELDS: readonly string[] = ["hold_id"];
+const ERASURE_FIELDS: readonly string[] = ["subject_id", "reason_reference"];
+const HOLD_FORM = "retention-hold";
+const LIFT_FORM = "retention-lift";
+const ERASURE_FORM = "retention-erasure";
+
+/**
+ * One write, its busy flag and its failure, so every control reports the same way.
+ *
+ * `failedAt` is the path the failure came from, because the hold card has two forms that both send a
+ * `hold_id`, and a problem with the one being lifted drawn under the one being placed would be a
+ * sentence beside a box nobody filled in.
+ */
 function useWrite(onDone: (sentence: string) => void) {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [failedAt, setFailedAt] = useState("");
   const send = useCallback(
     (path: string, body: unknown, sentence: (payload: unknown) => string, after: () => void) => {
       setBusy(true);
@@ -184,6 +188,7 @@ function useWrite(onDone: (sentence: string) => void) {
         after();
         if (!result.ok) {
           setFailure(result.failure);
+          setFailedAt(path);
           return;
         }
         setFailure(null);
@@ -192,7 +197,9 @@ function useWrite(onDone: (sentence: string) => void) {
     },
     [onDone],
   );
-  return { busy, failure, setFailure, send };
+  /** What the API refused in the last write, when that write was sent to `path`. */
+  const problemsAt = (path: string) => (failure !== null && failedAt === path ? failure.problems : []);
+  return { busy, failure, failedAt, setFailure, send, problemsAt };
 }
 
 function Row({ label, children }: { readonly label: string; readonly children: ReactNode }) {
@@ -297,7 +304,7 @@ function Sweep({
         </ul>
       )}
 
-      {write.failure === null ? null : <Failure failure={write.failure} />}
+      {write.failure === null ? null : <FailureNotice failure={write.failure} />}
 
       {confirming === "release" ? (
         <ConfirmAction
@@ -395,6 +402,8 @@ function Holds({
   const [liftTrouble, setLiftTrouble] = useState<readonly string[]>([]);
   const [liftingNow, setLiftingNow] = useState<string | null>(null);
   const write = useWrite(onDone);
+  const placed = write.problemsAt(HOLD_API_PATH);
+  const lifted = write.problemsAt(LIFT_API_PATH);
   const set = (name: keyof HoldForm) => (value: string | boolean) => {
     setForm({ ...form, [name]: value });
   };
@@ -419,7 +428,14 @@ function Holds({
       )}
       <p className="note">{HOLDS_AS_CITED}</p>
 
-      {write.failure === null ? null : <Failure failure={write.failure} />}
+      {write.failure === null ? null : (
+        <FailureNotice
+          failure={write.failure}
+          fields={
+            write.failedAt === HOLD_API_PATH ? HOLD_FIELDS : write.failedAt === LIFT_API_PATH ? LIFT_FIELDS : []
+          }
+        />
+      )}
 
       {!controls.may_hold ? (
         <p className="note">{HOLD_NOT_YOURS}</p>
@@ -444,52 +460,67 @@ function Holds({
                 Reference{" "}
                 <input
                   className="form-control"
+                  name="hold_id"
                   value={form.holdId}
+                  {...problemAttributes(placed, HOLD_FORM, "hold_id")}
                   onChange={(event) => {
                     set("holdId")(event.target.value);
                   }}
                 />
               </label>
+              <FieldProblems problems={placed} form={HOLD_FORM} names="hold_id" />
               <label className="control-label">
                 Reason code{" "}
                 <input
                   className="form-control"
+                  name="reason_code"
                   value={form.reasonCode}
+                  {...problemAttributes(placed, HOLD_FORM, "reason_code")}
                   onChange={(event) => {
                     set("reasonCode")(event.target.value);
                   }}
                 />
               </label>
+              <FieldProblems problems={placed} form={HOLD_FORM} names="reason_code" />
               <label className="control-label">
                 People it covers, by reference{" "}
                 <textarea
                   className="form-control"
+                  name="subjects"
                   value={form.subjects}
+                  {...problemAttributes(placed, HOLD_FORM, "subjects")}
                   onChange={(event) => {
                     set("subjects")(event.target.value);
                   }}
                 />
               </label>
+              <FieldProblems problems={placed} form={HOLD_FORM} names="subjects" />
               <label className="control-label">
                 People whose actions it covers, by reference{" "}
                 <textarea
                   className="form-control"
+                  name="actors"
                   value={form.actors}
+                  {...problemAttributes(placed, HOLD_FORM, "actors")}
                   onChange={(event) => {
                     set("actors")(event.target.value);
                   }}
                 />
               </label>
+              <FieldProblems problems={placed} form={HOLD_FORM} names="actors" />
               <label className="control-label">
                 <input
                   type="checkbox"
+                  name="all_subjects"
                   checked={form.everybody}
+                  {...problemAttributes(placed, HOLD_FORM, "all_subjects")}
                   onChange={(event) => {
                     set("everybody")(event.target.checked);
                   }}
                 />{" "}
                 Hold everybody
               </label>
+              <FieldProblems problems={placed} form={HOLD_FORM} names="all_subjects" />
               {problems.length === 0 ? null : (
                 <ul role="alert" aria-label="What to change before placing the hold">
                   {problems.map((one) => (
@@ -547,12 +578,15 @@ function Holds({
                 <input
                   className="form-control"
                   list="cited-holds"
+                  name="hold_id"
                   value={lifting}
+                  {...problemAttributes(lifted, LIFT_FORM, "hold_id")}
                   onChange={(event) => {
                     setLifting(event.target.value);
                   }}
                 />
               </label>
+              <FieldProblems problems={lifted} form={LIFT_FORM} names="hold_id" />
               <datalist id="cited-holds">
                 {(report?.holds ?? []).map((one) => (
                   <option key={one.hold_id} value={one.hold_id} />
@@ -604,7 +638,7 @@ function ExportsTaken() {
   const log = useResource<ExportLog>(EXPORT_LOG_API_PATH);
 
   if (log.failure !== null) {
-    return <Failure failure={log.failure} />;
+    return <FailureNotice failure={log.failure} />;
   }
   if (log.busy || log.data === null) {
     return (
@@ -669,6 +703,7 @@ function Erasures({
   const [problems, setProblems] = useState<readonly string[]>([]);
   const [filing, setFiling] = useState<ErasureBody | null>(null);
   const write = useWrite(onDone);
+  const erased = write.problemsAt(ERASURES_API_PATH);
 
   return (
     <section className="card">
@@ -719,7 +754,7 @@ function Erasures({
         </div>
       )}
 
-      {write.failure === null ? null : <Failure failure={write.failure} />}
+      {write.failure === null ? null : <FailureNotice failure={write.failure} fields={ERASURE_FIELDS} />}
 
       {!controls.may_erase ? (
         <p className="note">{ERASE_NOT_YOURS}</p>
@@ -742,22 +777,28 @@ function Erasures({
             Person, by reference{" "}
             <input
               className="form-control"
+              name="subject_id"
               value={form.subject}
+              {...problemAttributes(erased, ERASURE_FORM, "subject_id")}
               onChange={(event) => {
                 setForm({ ...form, subject: event.target.value });
               }}
             />
           </label>
+          <FieldProblems problems={erased} form={ERASURE_FORM} names="subject_id" />
           <label className="control-label">
             Matter or ticket reference{" "}
             <input
               className="form-control"
+              name="reason_reference"
               value={form.reference}
+              {...problemAttributes(erased, ERASURE_FORM, "reason_reference")}
               onChange={(event) => {
                 setForm({ ...form, reference: event.target.value });
               }}
             />
           </label>
+          <FieldProblems problems={erased} form={ERASURE_FORM} names="reason_reference" />
           {problems.length === 0 ? null : (
             <ul role="alert" aria-label="What to change before filing the request">
               {problems.map((one) => (
@@ -808,7 +849,7 @@ function RetentionBody({ onDone }: { readonly onDone: (sentence: string) => void
   if (failure) {
     return (
       <section className="card">
-        <Failure failure={failure} />
+        <FailureNotice failure={failure} />
       </section>
     );
   }

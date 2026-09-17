@@ -75,7 +75,25 @@ export const CALLER_FIELDS: readonly {
   { name: "assurance", label: "Assurance", as: "chip" },
   { name: "channel", label: "Channel", as: "chip" },
   { name: "ent_hash", label: "Entitlement digest", as: "code" },
+  // Both rendered as the API spelled them: each verb its own chip, the flag as the word `true` or
+  // `false`. What they mean for a person is the shell's banner's to say, not this page's.
+  { name: "withheld_verbs", label: "Verbs withheld at this sign-in", as: "chip" },
+  { name: "second_factor_needed", label: "Second factor needed", as: "chip" },
 ];
+
+/** The words one field arrived as: a string, each entry of a list, or a flag spelled out. */
+export function spelled(value: unknown): readonly string[] {
+  if (typeof value === "string") {
+    return value === "" ? [] : [value];
+  }
+  if (typeof value === "boolean") {
+    return [String(value)];
+  }
+  if (Array.isArray(value)) {
+    return value.filter((one): one is string => typeof one === "string" && one !== "");
+  }
+  return [];
+}
 
 /** One value, in the appearance its row asked for. Never a value this file composed. */
 function CallerValue({ value, as }: { readonly value: string; readonly as: "text" | "chip" | "code" }) {
@@ -112,17 +130,20 @@ export function Overview() {
         {caller.data ? (
           <dl className="fields">
             {CALLER_FIELDS.map((field) => {
-              const value = caller.data?.[field.name];
-              // Absent stays absent. A row rendered with nothing in it is a shape where a
-              // fact would be, and two people comparing screens can read a shape.
-              if (typeof value !== "string" || value === "") {
+              const values = spelled(caller.data?.[field.name]);
+              // Absent stays absent, and so does an empty list. A row rendered with nothing in
+              // it is a shape where a fact would be, and two people comparing screens can read a
+              // shape.
+              if (values.length === 0) {
                 return null;
               }
               return (
                 <div className="fields__row" key={field.name}>
                   <dt>{field.label}</dt>
                   <dd>
-                    <CallerValue value={value} as={field.as} />
+                    {values.map((value) => (
+                      <CallerValue key={value} value={value} as={field.as} />
+                    ))}
                   </dd>
                 </div>
               );

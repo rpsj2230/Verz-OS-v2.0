@@ -161,6 +161,18 @@ code {
   flex: 1;
 }
 
+/*
+ * The banner for a sign-in without a second factor. The notice inside it has the one appearance
+ * every notice has; this only gives it room under the header, and lets it use the width a phone has.
+ */
+.shell__banner {
+  padding: var(--space-3) var(--space-4) 0;
+}
+
+.shell__banner .notice {
+  max-width: none;
+}
+
 .shell__nav {
   display: flex;
   gap: var(--space-4);
@@ -1034,9 +1046,19 @@ code {
  * words say what to change, and `aria-describedby` ties them to the input they belong to.
  */
 .first-run__problem,
-.first-run__step-problems {
+.first-run__step-problems,
+.field-problems {
   margin: var(--space-1) 0 0;
   font-size: var(--text-sm);
+}
+
+/*
+ * The problems a failure notice lists because no input on the screen holds them. Each may begin
+ * with the place in the request it names, which is an identifier and can be long on a phone.
+ */
+.failure-problems {
+  padding-left: var(--space-4);
+  overflow-wrap: anywhere;
 }
 
 .first-run__names {

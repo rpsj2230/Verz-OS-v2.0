@@ -14,13 +14,18 @@
  * carries one.
  *
  * **Problems are read by field.** A 422 carries every problem at once, each with a field, a code
- * and a sentence, and the form shows each sentence beside its own field. A body that is not that
- * shape is not a set of problems, and the page shows the API's message instead.
+ * and a sentence, and the form shows each sentence beside its own field. The reading and the
+ * matching were written here first and are `api/errors.readFieldProblems` and `api/problems.ts`
+ * now, for every form in the console; `Problem` and `problemsFor` are kept under their old names
+ * for the query modules that build blank-field problems in the same shape.
  *
  * Task ids: M27.8.12, M27.8.5
  */
 
+import type { FieldProblem } from "../api/problems";
 import type { components } from "../api/schema";
+
+export { problemsFor } from "../api/problems";
 
 export type WebhooksBody = components["schemas"]["WebhooksView"];
 export type SubscriberRow = components["schemas"]["WebhookSubscriberView"];
@@ -77,12 +82,8 @@ export function readWebhooks(payload: unknown): WebhooksBody | null {
   return payload as WebhooksBody;
 }
 
-/** One problem the API found with what was sent. */
-export interface Problem {
-  readonly field: string;
-  readonly code: string;
-  readonly message: string;
-}
+/** One problem the API found with what was sent: `api/errors.FieldProblem`, under its first name. */
+export type Problem = FieldProblem;
 
 /**
  * What `brain.ops.webhook_admin` tells a person for each field left blank, in its own words.
@@ -127,34 +128,6 @@ export function blankRegistrationProblems(
 /** A replacement secret left blank, as the problem the API would have answered with. */
 export function blankSecretProblems(secret: string): Problem[] {
   return secret.trim() === "" ? [{ field: "secret", code: "blank", message: BLANK_SENTENCES.secret }] : [];
-}
-
-/** The problems in a 422's body, or null when the body is not a list of them. */
-export function readProblems(payload: unknown): Problem[] | null {
-  if (typeof payload !== "object" || payload === null) {
-    return null;
-  }
-  const problems = (payload as { problems?: unknown }).problems;
-  if (!Array.isArray(problems)) {
-    return null;
-  }
-  const read: Problem[] = [];
-  for (const one of problems) {
-    if (typeof one !== "object" || one === null) {
-      return null;
-    }
-    const { field, code, message } = one as Record<string, unknown>;
-    if (typeof field !== "string" || typeof code !== "string" || typeof message !== "string") {
-      return null;
-    }
-    read.push({ field, code, message });
-  }
-  return read;
-}
-
-/** The sentences for one field, in the order the API gave them. */
-export function problemsFor(problems: readonly Problem[], field: string): string[] {
-  return problems.filter((one) => one.field === field).map((one) => one.message);
 }
 
 /** What a person sees in the "When" columns. */

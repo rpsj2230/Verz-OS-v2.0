@@ -21,11 +21,9 @@
  */
 
 import { useState } from "react";
-import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import { SUBSCRIBERS_API_PATH, narrowedSubscribers, readSubscribers, when } from "./governPeopleQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const SUBSCRIBERS_HEADING = "Subscribers and notifications";
 export const SUBSCRIBERS_CRUMB = "Govern › Subscribers and notifications";
@@ -50,24 +48,13 @@ export const STATE_LABELS: Readonly<Record<"" | "active" | "off", string>> = Obj
   off: "Switched off",
 });
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
 function SubscriberList() {
   const answer = useResource<unknown>(SUBSCRIBERS_API_PATH);
   const [kind, setKind] = useState("");
   const [state, setState] = useState<"" | "active" | "off">("");
 
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   if (answer.busy) {
     return (

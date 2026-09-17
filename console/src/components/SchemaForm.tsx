@@ -45,13 +45,25 @@
  * fields all arrive from the API. There is no route that sends any of them yet: see the
  * README for what that leaves unverified.
  *
- * Task ids: M32.5.2.2
+ * **A refused submission is drawn on the fields the API named.** The failure's problems go to
+ * the library as `extraErrors`, which draws each under its own field through the one error
+ * slot every widget's `aria-describedby` already names, and the input is marked `aria-invalid`.
+ * A problem the form has no input for is listed under the failure notice instead, by
+ * `ui/FailureNotice.tsx`. Two things are kept out on purpose. The list at the top, "Check these
+ * answers", stays about what was typed into this screen: the library merges `extraErrors` into
+ * it, so the API's sentences are filtered back out there, because a refusal is the API's and
+ * already has a notice with its reference. And the error slot is this console's own plain list
+ * rather than the library's, whose markup carries a `text-danger` class that is a severity
+ * variant of the thing `ui/Notice.tsx` has exactly one of.
+ *
+ * Task ids: M32.5.2.2, M27.8.5
  */
 
 import Form from "@rjsf/core";
-import { getSubmitButtonOptions } from "@rjsf/utils";
+import { errorId, getSubmitButtonOptions } from "@rjsf/utils";
 import type {
   ErrorListProps,
+  FieldErrorProps,
   FieldProps,
   RegistryFieldsType,
   RJSFSchema,
@@ -59,11 +71,11 @@ import type {
   UiSchema,
 } from "@rjsf/utils";
 import validator from "@rjsf/validator-ajv8";
-import { useMemo } from "react";
-import type { ApiFailure } from "../api/errors";
+import { useEffect, useMemo, useRef } from "react";
+import type { ApiFailure, FieldProblem } from "../api/errors";
 import { Lock } from "../ui/Lock";
 import { Notice } from "../ui/Notice";
-import { formShape, LOCK_FIELD, withoutWithheld } from "./formSchema";
+import { formShape, LOCK_FIELD, problemsOnFields, withoutWithheld } from "./formSchema";
 import { FailureNotice } from "../ui/FailureNotice";
 
 /** The one heading over any failure a form reports. The API's own sentence goes underneath. */
@@ -134,11 +146,20 @@ function SubmitButton({ uiSchema }: SubmitButtonProps) {
  * required and has no widget to validate. `Notice` has one appearance and no severity
  * variants, for the reason its own file gives.
  */
-function ErrorList({ errors }: ErrorListProps) {
+function ErrorList({ errors, registry }: ErrorListProps) {
+  // The API's sentences are merged into `errors` by the library and are taken back out here: they
+  // are drawn beside their fields and belong to the failure notice, which carries the reference.
+  const fromTheApi = apiProblemsOf(registry.formContext);
+  const typed = errors.filter(
+    (error) => !fromTheApi.some((one) => `.${one.field}` === error.property && one.message === error.message),
+  );
+  if (typed.length === 0) {
+    return null;
+  }
   return (
     <Notice title={CHECK_THESE_ANSWERS}>
       <ul>
-        {errors.map((error) => (
+        {typed.map((error) => (
           <li key={`${error.property ?? ""} ${error.message ?? ""}`}>{error.stack}</li>
         ))}
       </ul>
@@ -146,7 +167,45 @@ function ErrorList({ errors }: ErrorListProps) {
   );
 }
 
-const TEMPLATES = { ButtonTemplates: { SubmitButton }, ErrorListTemplate: ErrorList };
+/**
+ * The sentences under one field, in the one plain list every problem in this console is drawn as.
+ *
+ * The id is the library's own `errorId`, which is the id each widget's `aria-describedby` already
+ * names, so a screen reader reads the sentence with the input without anything else wiring it.
+ */
+function FieldErrors({ errors = [], fieldPathId }: FieldErrorProps) {
+  const shown = errors.filter((one) => one !== "");
+  if (shown.length === 0) {
+    return null;
+  }
+  return (
+    <ul id={errorId(fieldPathId)} className="field-description field-problems">
+      {shown.map((one, at) => (
+        <li key={at}>{one}</li>
+      ))}
+    </ul>
+  );
+}
+
+/** What this console passes the library as `formContext`: the API's problems, and nothing else. */
+interface Context {
+  readonly apiProblems: readonly FieldProblem[];
+}
+
+function apiProblemsOf(context: unknown): readonly FieldProblem[] {
+  // A cast at the library boundary: `formContext` is typed `any` by the library, and the only value
+  // this console ever passes is `Context`, read back through an `Array.isArray` check.
+  const listed = (context as Partial<Context> | undefined)?.apiProblems;
+  return Array.isArray(listed) ? listed : [];
+}
+
+const TEMPLATES = {
+  ButtonTemplates: { SubmitButton },
+  ErrorListTemplate: ErrorList,
+  FieldErrorTemplate: FieldErrors,
+};
+
+const NO_PROBLEMS: readonly FieldProblem[] = Object.freeze([]);
 
 interface SchemaFormProps {
   /** What the form is, for a screen reader and for anybody reading it. */
@@ -195,9 +254,35 @@ export function SchemaForm({
   // and because handing the library a new schema object on every keystroke is how a generated
   // form becomes slow enough that somebody switches the validation off.
   const shape = useMemo(() => formShape(schema, locked, uiSchema), [schema, locked, uiSchema]);
+  const problems = failure?.problems ?? NO_PROBLEMS;
+  // Memoised on the failure, because the library re-merges `extraErrors` whenever its identity
+  // changes, and a new object on every render would put a refusal back after it was corrected.
+  const placed = useMemo(() => problemsOnFields(shape, problems), [shape, problems]);
+  const context = useMemo<Context>(() => ({ apiProblems: problems }), [problems]);
+  const form = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // `aria-invalid` on each control whose described-by list names a drawn problem. The core
+    // widgets write their own `aria-describedby` and take no `aria-invalid`, so it is set here,
+    // after the library has drawn the lists, rather than by replacing every widget it ships.
+    const root = form.current;
+    if (root === null) {
+      return;
+    }
+    for (const control of root.querySelectorAll("input, select, textarea")) {
+      const named = (control.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .some((id) => id !== "" && root.ownerDocument.getElementById(id)?.classList.contains("field-problems") === true);
+      if (named) {
+        control.setAttribute("aria-invalid", "true");
+      } else {
+        control.removeAttribute("aria-invalid");
+      }
+    }
+  });
 
   return (
-    <div className="form">
+    <div className="form" ref={form}>
       <p className="form__caption">{caption}</p>
 
       <Form
@@ -208,6 +293,8 @@ export function SchemaForm({
         validator={validator}
         fields={FIELDS}
         templates={TEMPLATES}
+        extraErrors={placed.errors}
+        formContext={context}
         disabled={busy}
         // The library's own HTML5 validation would put the browser's wording on the screen in
         // the browser's own language, next to this console's. One source of sentences.
@@ -217,9 +304,7 @@ export function SchemaForm({
         }}
       />
 
-      {failure ? (
-        <FailureNotice failure={failure} />
-      ) : null}
+      {failure ? <FailureNotice failure={failure} fields={placed.placed} /> : null}
     </div>
   );
 }

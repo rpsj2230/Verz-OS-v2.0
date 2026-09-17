@@ -42,7 +42,7 @@ from brain.console.workspace import Tab, tab
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
-from brain.gate.admission import Assurance, admit
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE, Assurance, admit
 from brain.gate.context import Channel
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
@@ -478,10 +478,14 @@ def test_installing_twice_is_told_the_first_and_writes_nothing_more(
 
     assert first.status_code == 201
     assert second.status_code == 409, second.text
+    # The sentence a failure carries is the document's own, and its reference is the header's:
+    # see `brain.api.A_DOCUMENT_A_ROUTE_WROTE_STILL_CARRIES_THE_TWO_FIELDS_EVERY_FAILURE_DOES`.
     assert second.json() == {
         "outcome": routes.ALREADY_INSTALLED,
         "sentence": routes.ALREADY_YOURS,
         "automation_id": first.json()["automation_id"],
+        "message": routes.ALREADY_YOURS,
+        "trace_id": second.headers["x-trace-id"],
     }
     assert len(installs.rows) == 1
 
@@ -509,14 +513,17 @@ def test_an_install_without_the_authority_over_this_agent_is_refused_as_a_missin
 def test_a_session_without_a_second_factor_cannot_install_and_the_same_person_with_one_can(
     client: TestClient, installs: Installs
 ) -> None:
-    """`brain.gate.admission` withholds `admin:` from a password-only session. Delete this and the
-    authority can be renamed to a verb such a session carries."""
+    """`brain.gate.admission` withholds `admin:` from a password-only session, which is told what
+    its sign-in lacks identically for this agent and for one that does not exist. Delete this and
+    the authority can be renamed to a verb such a session carries."""
     body = confirmed(client, "u_admin")
 
     weak = install_as(client, "u_admin", body, strong=False)
     strong = install_as(client, "u_admin", body)
 
-    assert refusal(weak) == refusal(install_as(client, "u_admin", body, "no_such_agent"))
+    missing = install_as(client, "u_admin", body, "no_such_agent", strong=False)
+    assert refusal(weak) == refusal(missing)
+    assert refusal(weak)["message"] == SECOND_FACTOR_NEEDED_MESSAGE
     assert strong.status_code == 201, strong.text
     assert len(installs.rows) == 1
 

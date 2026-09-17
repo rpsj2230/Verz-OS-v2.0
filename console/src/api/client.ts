@@ -152,7 +152,15 @@ export async function request<T>(
  * JSON shape, and `AnswerEvent` is the wire's own vocabulary rather than a model's.
  */
 export type StreamResult =
-  | { readonly ok: true; readonly events: AsyncIterable<AnswerEvent> }
+  | {
+      readonly ok: true;
+      readonly events: AsyncIterable<AnswerEvent>;
+      /**
+       * The stream's own `x-trace-id`, or empty. A failure that arrives as a frame has no body to
+       * carry a reference in, and this is the one the server's log holds that failure under.
+       */
+      readonly traceId: string;
+    }
   | { readonly ok: false; readonly failure: ApiFailure; readonly body: unknown };
 
 /**
@@ -212,5 +220,5 @@ export async function openStream(
     return { ok: false, failure: failureFrom(response, payload), body: payload };
   }
 
-  return { ok: true, events: eventsOf(response) };
+  return { ok: true, events: eventsOf(response), traceId: response.headers.get("x-trace-id") ?? "" };
 }

@@ -19,7 +19,7 @@ anyone a capability they did not already hold, so an operator who widens a chann
 by mistake grants nothing; they only stop taking something away. Getting this backwards, so
 that a channel could *add*, would make the channel a place to escalate from.
 
-Task ids: M3.3.3, M3.3.4
+Task ids: M3.3.3, M3.3.4, M27.9.2
 """
 
 from __future__ import annotations
@@ -187,3 +187,49 @@ def would_lose(held: EntitlementSet, channel: Channel, assurance: Assurance) -> 
     """
     admitted = {g.capability.value for g in admit(held, channel, assurance).grants}
     return tuple(sorted({g.capability.value for g in held.grants} - admitted))
+
+
+#: Why a refusal to a session without a second factor may say so, and why that leaks nothing.
+A_REFUSAL_TO_A_WEAK_SIGN_IN_IS_ABOUT_THE_SESSION = (
+    "A request refused while the caller's own grants hold a verb this channel admits and this "
+    "sign-in's assurance does not is answered with a sentence saying administration and approvals "
+    "need a sign-in with a second factor, instead of 'I could not find that'. It is decided in "
+    "brain.api_routes.asking, before any route reads anything, from three facts: the assurance of "
+    "this sign-in, the channel, and the verbs of the caller's own grants. None of them is a fact "
+    "about a record, so every object on every route gets the same answer in the same session, "
+    "present or absent, permitted or not, and DENIED and ABSENT stay one answer. It names no "
+    "capability and no object, only that this sign-in lacks a factor, which /me already reports as "
+    "its assurance. It does not claim the missing factor caused this refusal, and cannot: finding "
+    "out would mean asking whether the object exists. It says the true thing a person can act on. "
+    "The rule itself is untouched: admin and approve still need STRONG assurance."
+)
+
+#: What a person refused in such a session is told. Plain, and about the sign-in alone.
+SECOND_FACTOR_NEEDED_MESSAGE = (
+    "Administration and approvals need a sign-in with a second factor, and this sign-in has "
+    "none. Sign in again with your authenticator."
+)
+
+
+def verbs_withheld(held: EntitlementSet, channel: Channel, assurance: Assurance) -> tuple[str, ...]:
+    """The verbs of the caller's own grants they cannot use here, sorted. `would_lose` by verb.
+
+    Verbs and never capabilities, so the answer is the shape of what a stronger sign-in or another
+    channel gives back and says nothing about which nouns, scopes or objects the grants name.
+    """
+    return tuple(sorted({one.split(":", 1)[0] for one in would_lose(held, channel, assurance)}))
+
+
+def second_factor_gives_back(held: EntitlementSet, channel: Channel, assurance: Assurance) -> bool:
+    """Whether signing in again with a second factor, on this same channel, gives back a verb.
+
+    False on a channel that withholds the verb whatever the sign-in: a service token on the API
+    channel holds `admin:` grants it can never use, and telling it to add a factor would be untrue.
+    See `A_REFUSAL_TO_A_WEAK_SIGN_IN_IS_ABOUT_THE_SESSION`.
+    """
+    if assurance >= Assurance.STRONG:
+        return False
+    return bool(
+        set(verbs_withheld(held, channel, assurance))
+        - set(verbs_withheld(held, channel, Assurance.STRONG))
+    )

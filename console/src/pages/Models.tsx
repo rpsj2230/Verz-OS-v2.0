@@ -52,7 +52,7 @@ import type { ApiFailure } from "../api/errors";
 import { useResource, type Resource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
 import { Chip } from "../ui/Chip";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import { chainApiPath, MATRIX_PATH, readMatrixPage, type RungRow } from "./matrixQuery";
 import {
   answerLatencyApiPath,
@@ -188,7 +188,7 @@ function Answered<T>({
     );
   }
   if (failure) {
-    return <Failure failure={failure} />;
+    return <FailureNotice failure={failure} />;
   }
   if (body === null) {
     return <p className="note">{UNREADABLE_ANSWER}</p>;
@@ -197,17 +197,6 @@ function Answered<T>({
 }
 
 /** A request that did not come back, with the heading that says which way it failed. */
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
 /** One rung in a table cell: the model, its provider, and whether it is in rotation. */
 function RungCell({ rung }: { readonly rung: RungRow | undefined }) {
   if (rung === undefined) {
@@ -623,7 +612,7 @@ function ProviderHealth({ models }: { readonly models: ModelsBody }) {
                 {switched}
               </p>
             )}
-            {failure === null ? null : <Failure failure={failure} />}
+            {failure === null ? null : <FailureNotice failure={failure} />}
             {asked === null ? null : (
               <ConfirmAction
                 question={asked.kind === "switch" ? switchQuestion(asked.provider, asked.on) : checkQuestion(asked.provider)}

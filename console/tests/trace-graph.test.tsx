@@ -537,7 +537,14 @@ describe("what the canvas draws", () => {
       <TraceGraph
         caption="A run"
         run={null}
-        failure={{ status: 404, message: sentence as string, traceId: "trace-abc", outcome: "" }}
+        failure={{
+          status: 404,
+          message: sentence as string,
+          traceId: "trace-abc",
+          outcome: "",
+          problems: [],
+          secondFactorNeeded: false,
+        }}
       />,
     ).container;
 

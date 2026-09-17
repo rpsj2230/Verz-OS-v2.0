@@ -25,7 +25,7 @@
  */
 
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import { when } from "./artifactsQuery";
 import {
   PROVISION_WORDS,
@@ -38,7 +38,6 @@ import {
   whereItRuns,
   type Workspace,
 } from "./myWorkspaceQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const WORKSPACE_HEADING = "My workspace";
 export const WORKSPACE_CRUMB = "Use › My workspace";
@@ -216,17 +215,16 @@ export function MyWorkspace() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice
-            title={
-              answer.failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK
-            }
-            traceId={answer.failure.traceId}
-          >
-            <p>{answer.failure.message}</p>
-            {answer.failure.status === 404 ? (
+          <FailureNotice failure={answer.failure}>
+            {/*
+             * Not said when the API asked for a second factor: that refusal is also a 404, and a
+             * note about the member grant under it would send a person looking for a grant they
+             * already hold. See `api/errors.THE_SECOND_FACTOR_IS_READ_FROM_ITS_FLAG`.
+             */}
+            {answer.failure.status === 404 && !answer.failure.secondFactorNeeded ? (
               <p className="note">{OPENS_ON_THE_MEMBER_GRANT}</p>
             ) : null}
-          </Notice>
+          </FailureNotice>
         </section>
       ) : null}
 

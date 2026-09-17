@@ -56,6 +56,7 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.redaction import LOCK_TEXT
 from brain.core.scope import Clause, Op, Scope
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.identity.bearer import SECOND_FACTOR_METHODS, TokenAuthority
 from brain.identity.oidc import SIGN_IN_PROMPT, KeySet, SigningKey
 from brain.knowledge.rows import ID_KEY, RowQuery
@@ -82,6 +83,7 @@ SUBJECTS: dict[str, str] = {
     "u_none": "1f2e3d4c-0000-4000-8000-00000000000d",
     "u_admin": "1f2e3d4c-0000-4000-8000-00000000000e",
     "u_elsewhere": "1f2e3d4c-0000-4000-8000-00000000000f",
+    "u_admin_only": "1f2e3d4c-0000-4000-8000-000000000010",
 }
 
 #: Two seeded rows, one in each prefix, so a scope that admits one of them can be shown to
@@ -157,6 +159,9 @@ GRANTS: dict[str, tuple[Grant, ...]] = {
     # Holds an admin capability company-wide, which the assurance ceiling must take away
     # from a session with no second factor in it.
     "u_admin": _grants("admin:grant", "read:price_list", "read:price_list.sku", scope=WHOLE),
+    # Holds an admin capability and no read of any entity, so the price list, which exists, is
+    # refused to them exactly as a table this company does not run is.
+    "u_admin_only": _grants("admin:grant", scope=WHOLE),
     # Reaches the entity in a scope no seeded row satisfies, so every request of theirs is
     # answered with an empty page that was nonetheless fetched.
     "u_elsewhere": _grants(
@@ -865,6 +870,8 @@ def test_me_publishes_no_list_of_what_the_caller_holds(client: TestClient) -> No
         "assurance",
         "channel",
         "ent_hash",
+        "withheld_verbs",
+        "second_factor_needed",
     }
     for banned in ("capabilities", "grants", "scopes", "roles", "permissions"):
         assert banned not in CallerView.model_fields
@@ -1281,9 +1288,9 @@ def test_a_malformed_term_is_refused_identically_whatever_entity_was_asked_for(
     lookup, and the same malformed term answers 422 for an entity that exists and 404 for one
     that does not, which is a two-request oracle over the whole install.
 
-    Compared as whole bodies, and the bodies are `HTTPValidationError` rather than `ErrorBody`
-    on purpose: the console mirrors the declared grammar for the same reason it mirrors the
-    declared limit bounds, so a person never meets this. It is what a hand-edited address
+    Compared as whole bodies less the reference, which is minted per request and says nothing
+    about what was asked. The console mirrors the declared grammar for the same reason it mirrors
+    the declared limit bounds, so a person rarely meets this. It is what a hand-edited address
     gets.
 
     Delete this and the parameter's pattern can move into the handler, which reads as putting
@@ -1294,7 +1301,8 @@ def test_a_malformed_term_is_refused_identically_whatever_entity_was_asked_for(
     unknown = ask(client, "u_wide", entity="finance_ledger", terms=["NOPE"])
 
     assert known.status_code == unknown.status_code == 422
-    assert known.content == unknown.content
+    assert {**known.json(), "trace_id": ""} == {**unknown.json(), "trace_id": ""}
+    assert known.json()["problems"]
     assert rows.asked == 0
 
 
@@ -1388,3 +1396,88 @@ def test_a_filtered_page_carries_no_count_of_what_the_filter_removed(client: Tes
     assert response.json()["total"] is None
     for banned in ("matching", "matches", "withheld", "hidden", "of 2", "1 of"):
         assert banned not in response.text.lower()
+
+
+# ------------------------------------------------------------- what a weak sign-in costs
+def test_me_names_the_verbs_a_weak_sign_in_withholds_and_whether_a_second_factor_restores_them(
+    client: TestClient,
+) -> None:
+    """`/me` says which of the caller's own verbs this sign-in cannot use, and never a capability.
+
+    The administrator without a second factor loses `admin` and is told a second factor gives it
+    back; with one, nothing is withheld; a reader holding no admin grant loses nothing; and a
+    token belonging to no session loses `admin` to the channel, which no factor restores, so it is
+    not told to add one. Delete this and the console's banner can tell a service token to sign in
+    again, or name a capability a person holds, which `CallerView` exists not to publish."""
+
+    def me(pid: str, claims: Mapping[str, object] | None = None) -> dict[str, Any]:
+        token = token_for(pid, claims=claims)
+        answer = client.get(f"{API_PREFIX}/me", headers={"authorization": f"Bearer {token}"})
+        body: dict[str, Any] = answer.json()
+        return body
+
+    weak = me("u_admin")
+    strong = me("u_admin", {"amr": ["otp"]})
+    reader = me("u_narrow")
+    headless = me("u_admin", {"sid": None})
+
+    assert (weak["withheld_verbs"], weak["second_factor_needed"]) == (["admin"], True)
+    assert (strong["withheld_verbs"], strong["second_factor_needed"]) == ([], False)
+    assert (reader["withheld_verbs"], reader["second_factor_needed"]) == ([], False)
+    assert (headless["withheld_verbs"], headless["second_factor_needed"]) == (["admin"], False)
+    assert "admin:grant" not in json.dumps(weak)
+
+
+def test_a_refusal_to_a_weak_sign_in_says_so_the_same_for_what_exists_and_what_does_not(
+    client: TestClient,
+) -> None:
+    """The administrator signed in without a second factor is refused the price list, which
+    exists and they cannot read, and a table this company does not run, and is answered the same
+    bytes for both, saying what their sign-in lacks. With a second factor the same person is told
+    they could not be found, and a caller holding no withheld verb is told that without one.
+
+    Delete this and the second-factor sentence can come to depend on what was asked for, which is
+    DENIED told apart from ABSENT; or it can reach callers a second factor would not help, which is
+    a sentence telling them to do something that changes nothing. See
+    `brain.gate.admission.A_REFUSAL_TO_A_WEAK_SIGN_IN_IS_ABOUT_THE_SESSION`."""
+    exists = ask(client, "u_admin_only")
+    does_not = ask(client, "u_admin_only", entity="finance_ledger")
+    strong = ask(client, "u_admin_only", entity="finance_ledger", claims={"amr": ["otp"]})
+    nobody = ask(client, "u_none", entity="finance_ledger")
+
+    assert exists.status_code == does_not.status_code == strong.status_code == 404
+    assert exists.json()["message"] == SECOND_FACTOR_NEEDED_MESSAGE
+    assert exists.json()["second_factor_needed"] is True
+    assert {**exists.json(), "trace_id": ""} == {**does_not.json(), "trace_id": ""}
+    assert exists.headers.get("content-length") == does_not.headers.get("content-length")
+    for ordinary in (strong, nobody):
+        assert ordinary.json()["message"] == "I could not find that."
+        assert "second_factor_needed" not in ordinary.json()
+
+
+def test_verbs_are_withheld_by_verb_and_a_second_factor_restores_only_what_the_channel_admits() -> (
+    None
+):
+    """The two functions `asking` reads, over grants written here rather than the fixture's.
+
+    Delete this and `verbs_withheld` can return capabilities, or `second_factor_gives_back` can
+    answer true on a channel that withholds the verb whatever the sign-in, or true at a sign-in
+    that already has its second factor."""
+    from brain.gate.admission import Assurance, second_factor_gives_back, verbs_withheld
+    from brain.gate.context import Channel
+
+    held = EntitlementSet(
+        principal_id="u_x",
+        grants=_grants("admin:storage", "approve:grant", "read:price_list", scope=WHOLE),
+    )
+    reader = EntitlementSet(principal_id="u_y", grants=_grants("read:price_list", scope=WHOLE))
+
+    assert verbs_withheld(held, Channel.CONSOLE, Assurance.AUTHENTICATED) == ("admin", "approve")
+    assert verbs_withheld(held, Channel.CONSOLE, Assurance.STRONG) == ()
+    assert verbs_withheld(held, Channel.API, Assurance.STRONG) == ("admin", "approve")
+    assert second_factor_gives_back(held, Channel.CONSOLE, Assurance.AUTHENTICATED)
+    assert second_factor_gives_back(held, Channel.LARK, Assurance.AUTHENTICATED)
+    assert not second_factor_gives_back(held, Channel.CONSOLE, Assurance.STRONG)
+    assert not second_factor_gives_back(held, Channel.API, Assurance.AUTHENTICATED)
+    assert not second_factor_gives_back(held, Channel.WHATSAPP, Assurance.BOUND)
+    assert not second_factor_gives_back(reader, Channel.CONSOLE, Assurance.AUTHENTICATED)

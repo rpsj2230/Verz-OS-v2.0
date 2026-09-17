@@ -31,6 +31,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.sql import operators
+from sqlalchemy.sql.functions import FunctionElement
 
 from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
@@ -41,6 +42,8 @@ from brain.console.screens import SCREENS
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.scope import Scope
 from brain.identity.bearer import TokenAuthority
+from brain.knowledge.item import RETRIEVABLE_STATES
+from brain.knowledge.search import PRINCIPAL_SETTING
 from brain.member.shell import DISCLOSURE_PREFIX
 from brain.mine_routes import (
     MAX_OWN_RUNS,
@@ -139,6 +142,9 @@ def ceiling(subject: str, period: BudgetPeriod, minor: int) -> BudgetVersionRow:
     )
 
 
+#: The states `know.items_stewarded_by_the_session` returns. Held to the migration's list.
+RETRIEVABLE: frozenset[str] = frozenset(one.value for one in RETRIEVABLE_STATES)
+
 #: Every row the stub database holds, keyed by table class. Replaced per test.
 ROWS: dict[type, list[Any]] = {}
 
@@ -175,10 +181,46 @@ class StubResult:
         return len(self._rows)
 
 
+def _function_called(statement: Any) -> tuple[str, list[Any]] | None:
+    """The function a statement selects, or selects from, with its arguments, or None."""
+    expression = statement.column_descriptions[0].get("expr")
+    for one in (expression, *statement.get_final_froms()):
+        called = getattr(one, "element", one)
+        if isinstance(called, FunctionElement):
+            return str(getattr(called, "name", "")), [
+                getattr(arg, "value", None) for arg in called.clauses
+            ]
+    return None
+
+
 class StubSession(AsyncSession):
+    """Answers each load by its table, and the stewardship read as `0069`'s function answers it.
+
+    The function is answered from its contract, the rows whose owner is the principal this
+    transaction set and whose state is retrievable, in reference order and bounded; that the
+    function keeps the contract is `tests/unit/test_application_reads_db.py`'s, against a server.
+    """
+
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         if not hasattr(statement, "column_descriptions"):
             return StubResult([])
+        called = _function_called(statement)
+        if called is not None and called[0] == "set_config":
+            name, value, _local = called[1]
+            self.info[name] = value
+            return StubResult([value])
+        if called is not None and called[0] == "items_stewarded_by_the_session":
+            (limit,) = called[1]
+            owner = self.info.get(PRINCIPAL_SETTING)
+            found = sorted(
+                (
+                    row
+                    for row in ROWS.get(KnowledgeItemRow, [])
+                    if row.owner_id == owner and row.state in RETRIEVABLE
+                ),
+                key=lambda row: row.item_id,
+            )
+            return StubResult(found[:limit])
         entity = statement.column_descriptions[0]["entity"]
         if entity is None:
             # The count of questions selects a function, so its table is read off its FROM.
@@ -333,16 +375,17 @@ def test_the_page_opens_on_the_member_grant_and_on_no_administrative_grant(
     content plane opens nothing here; the member grant without the member surface's own plane opens
     nothing either, even beside the console's content plane over everything, which opened it until
     2026-09-17; the member grant with its own plane opens the page. A refusal is the same whatever
-    the database holds.
+    the database holds, for each caller: the administrator's sign-in has no second factor and is
+    told so, before and after, and the other caller is told it could not be found, before and after.
 
     Delete this and the page could be gated on an administrative capability, which is a personal
     screen only administrators can open, or on nothing, which is `permitted` skipped."""
     for pid in ("u_admin", "u_prefix", "u_none"):
         assert get(client, pid).status_code == 404, pid
-    empty = get(client, "u_admin").json()["message"]
+    empty = {pid: {**get(client, pid).json(), "trace_id": ""} for pid in ("u_admin", "u_prefix")}
     two_people(rows)
-    assert get(client, "u_admin").json()["message"] == empty
-    assert get(client, "u_prefix").json()["message"] == empty
+    for pid, refused in empty.items():
+        assert {**get(client, pid).json(), "trace_id": ""} == refused, pid
     assert get(client, ME).status_code == 200
 
 

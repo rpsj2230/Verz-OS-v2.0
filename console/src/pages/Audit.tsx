@@ -31,7 +31,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   ADDRESS_PARAMETERS,
   ORDER_LABELS,
@@ -54,7 +54,6 @@ import {
   type AuditRow,
   type LedgerPage,
 } from "./auditQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const AUDIT_HEADING = "Audit";
 
@@ -98,17 +97,6 @@ export const ALL_KINDS = "All kinds";
 export const EVERYONE = "Everyone";
 
 /** The words over one failure. Unreachable and refused are two different sentences. */
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
-
 function Details({ details }: { readonly details: Readonly<Record<string, string>> }) {
   const entries = Object.entries(details);
   if (entries.length === 0) {
@@ -321,7 +309,7 @@ function Ledger({ filters, search }: { readonly filters: AuditFilters; readonly 
   }, [filters, now, last.nextCursor]);
 
   if (first.failure) {
-    return <Failure failure={first.failure} />;
+    return <FailureNotice failure={first.failure} />;
   }
   if (first.busy) {
     return (
@@ -337,7 +325,7 @@ function Ledger({ filters, search }: { readonly filters: AuditFilters; readonly 
       <section className="card">
         <h2>Entries</h2>
         {rows.length === 0 ? <p className="note">{NO_ENTRIES}</p> : <Rows rows={rows} search={search} />}
-        {moreFailure === null ? null : <Failure failure={moreFailure} />}
+        {moreFailure === null ? null : <FailureNotice failure={moreFailure} />}
         {last.nextCursor === null ? (
           rows.length === 0 ? null : <p className="note">{NO_MORE_ENTRIES}</p>
         ) : (
@@ -368,7 +356,7 @@ function History({
       <p>
         <Link to={withFilter(search, ADDRESS_PARAMETERS.subject, "")}>Close this history</Link>
       </p>
-      {answer.failure ? <Failure failure={answer.failure} /> : null}
+      {answer.failure ? <FailureNotice failure={answer.failure} /> : null}
       {answer.busy ? (
         <p className="note" role="status">
           {READING_THE_LEDGER}

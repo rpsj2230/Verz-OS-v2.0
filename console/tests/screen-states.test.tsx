@@ -29,11 +29,19 @@
  * `screen-states-second.test.tsx` and `screen-states-third.test.tsx`, because five mounts of sixty
  * pages in one file took a minute.
  *
+ * **What a failure says about itself is held here too, on the same mounts where it can be.** The
+ * failed state's answer carries a trace id, and every page must put it on the screen, which is
+ * `ui/FailureNotice.A_FAILURE_WITHOUT_ITS_REFERENCE_IS_A_DEAD_END`. Two more readings follow each
+ * page's four: every request answered by a proxy with no body, where the page must say that no
+ * reference came back, and every request refused with the 404 that says a second factor is needed,
+ * where the page must show the API's sentence and the control that signs in again, and must not say
+ * "I could not find that". The failed state is that test's sibling: a 500 must not offer the control.
+ *
  * **What this does not decide.** Which words a page uses, whether a 404 is worded as the API
  * worded it, and whether the failure headings are the same across pages: those are
  * `api/errors.A_404_IS_NOT_AN_EXPLANATION` and the page tests. Only that the four are told apart.
  *
- * Task ids: M27.8.3
+ * Task ids: M27.8.3, M27.8.5
  */
 
 import { beforeAll, describe, expect, test } from "vitest";
@@ -44,8 +52,10 @@ import {
   ASKING,
   ASKS_NOTHING_ON_ARRIVAL,
   NO_EMPTY_SENTENCE,
+  asksForASecondFactor,
   emptyAnswers,
   holdsFourSentences,
+  saysNoReferenceCameBack,
   shard,
 } from "./support/screenStateRules";
 import { mountIn, patternsOf } from "./support/screenStates";
@@ -99,5 +109,22 @@ describe("loading, empty, unreachable and failed on every registered page", () =
     // a page whose empty list is a blank panel that reads as still loading; or a page whose
     // loading sentence is the same as its empty one, so a slow answer reads as nothing there.
     await holdsFourSentences(pattern);
+  }, 60_000);
+});
+
+describe("what a failure says about itself on every registered page", () => {
+  test.each(shard(0, 3))("%s says no reference came back when a proxy answered without one", async (pattern) => {
+    // What breaks if this is deleted: the screen the staging install showed on 2026-09-17, a
+    // heading over "Something went wrong." and nothing a person could quote, on any page that draws
+    // a failure through a notice of its own rather than through `ui/FailureNotice.tsx`.
+    await saysNoReferenceCameBack(pattern);
+  }, 60_000);
+
+  test.each(shard(0, 3))("%s shows the API's sentence and a way to sign in again when a second factor is needed", async (pattern) => {
+    // What breaks if this is deleted: a person signed in without their second factor told "I could
+    // not find that" about work they hold, or told the right sentence with no way to act on it, on
+    // any page that words a 404 itself. The failed state in the test above is the sibling that
+    // proves the control is not drawn for every failure.
+    await asksForASecondFactor(pattern);
   }, 60_000);
 });

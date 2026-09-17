@@ -37,7 +37,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   END_SELECTED_QUESTION,
   END_SESSIONS_API_PATH,
@@ -57,7 +57,6 @@ import {
   when,
   type SessionRow,
 } from "./sessionsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const SESSIONS_HEADING = "Sessions";
 export const SESSIONS_CRUMB = "Govern › Sessions";
@@ -94,17 +93,6 @@ export const FILTERS_LABEL = "Narrow the sessions";
 /** What a success says: whose, and the instant the database recorded. */
 export function endedSentence(row: SessionRow, endedAt: string): string {
   return `${row.display_name}'s session was ended at ${when(endedAt)}. The next request made with it is refused.`;
-}
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
 }
 
 function readEndedAt(payload: unknown): string | null {
@@ -196,7 +184,7 @@ function SessionList({
     <>
       <ListControls label={FILTERS_LABEL} listing={listing} choices={choices} sorts={SESSION_SORTS} />
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
 
       {confirming === null ? null : (
         <ConfirmAction
@@ -240,7 +228,7 @@ function SessionList({
       <section className="card">
         <h2>Signed in now</h2>
         {listing.failure ? (
-          <Failure failure={listing.failure} />
+          <FailureNotice failure={listing.failure} />
         ) : listing.busy ? (
           <p className="note" role="status">
             {READING_SESSIONS}

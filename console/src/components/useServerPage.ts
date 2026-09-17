@@ -92,7 +92,7 @@ const NOTHING: Answer<never> = {
 };
 
 function unreadable(): ApiFailure {
-  return { status: 0, message: UNREADABLE_ANSWER, traceId: "", outcome: "failed" };
+  return { status: 0, message: UNREADABLE_ANSWER, traceId: "", outcome: "failed", problems: [], secondFactorNeeded: false };
 }
 
 export function useServerPage<T>(

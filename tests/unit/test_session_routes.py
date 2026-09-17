@@ -41,6 +41,7 @@ from brain.console.sign_in_links import (
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.identity.bearer import TokenAuthority
 from brain.identity.first_administrator import SIGN_IN_AUTHORITY
 from brain.identity.session_store import EndedSession, StoredSession
@@ -422,17 +423,24 @@ def test_an_administrator_ends_a_session_they_may_see_and_the_store_is_told_who_
 def test_a_reader_without_the_control_a_password_only_session_and_a_stranger_are_refused_alike(
     client: TestClient, sessions: Sessions
 ) -> None:
-    """`admin:session` is withheld by admission without a second factor. Delete this and the
-    control can be repointed at a verb a stolen password exercises, or the route can reach the
-    store for a caller holding nothing, which tells them whether the session exists."""
+    """`admin:session` is withheld by admission without a second factor. The reader and the stranger
+    get one refusal; the password-only session gets the sentence about its sign-in, the same for a
+    session that exists and one that does not. Delete this and the control can be repointed at a
+    verb a stolen password exercises, or the route can reach the store for a caller holding nothing,
+    which tells them whether the session exists."""
     sessions.live["s-sales"] = a_session("s-sales", "u_wide", "sales")
 
     reader = client.post(END, headers=auth("u_wide"), json={"session_id": "s-sales"})
     weak = client.post(END, headers=auth("u_admin", strong=False), json={"session_id": "s-sales"})
+    weak_missing = client.post(
+        END, headers=auth("u_admin", strong=False), json={"session_id": "s-nowhere"}
+    )
     stranger = client.post(END, headers=auth("u_none"), json={"session_id": "s-sales"})
 
     assert reader.status_code == weak.status_code == stranger.status_code == 404
-    assert refusal(reader) == refusal(weak) == refusal(stranger)
+    assert refusal(reader) == refusal(stranger)
+    assert refusal(weak) == refusal(weak_missing)
+    assert refusal(weak)["message"] == SECOND_FACTOR_NEEDED_MESSAGE
     assert [one for one in sessions.calls if "end" in one] == []
     assert "s-sales" in sessions.live
 
@@ -560,7 +568,9 @@ def test_the_links_screen_is_refused_to_anybody_not_holding_the_authority_over_e
     stranger = client.get(LINKS, headers=auth("u_none"))
 
     assert partial.status_code == weak.status_code == stranger.status_code == 404
-    assert refusal(partial) == refusal(weak) == refusal(stranger)
+    assert refusal(partial) == refusal(stranger)
+    # The password-only administrator is told what the sign-in lacks: about the session, not data.
+    assert refusal(weak)["message"] == SECOND_FACTOR_NEEDED_MESSAGE
     assert links.calls == []
 
 
@@ -597,10 +607,12 @@ def test_unlinking_the_last_administrators_own_link_is_refused_with_the_sentence
     answer = client.post(UNLINK, headers=auth("u_admin"), json={"principal_id": "u_admin"})
 
     assert answer.status_code == 409
-    assert answer.json() == {
+    assert refusal(answer) == {
         "principal_id": "u_admin",
         "outcome": "last_administrator",
         "sentence": THE_LAST_ADMINISTRATOR_KEEPS_THEIR_LINK,
+        "message": THE_LAST_ADMINISTRATOR_KEEPS_THEIR_LINK,
+        "trace_id": "<per request>",
     }
     assert "u_admin" in links.linked
 

@@ -89,12 +89,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from types import MappingProxyType
-from typing import Annotated, Final
+from typing import Annotated, Final, Protocol
 
 import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import Select, select
+from sqlalchemy import Select, String, column, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agent_routes import every_agent, one_agent, record_of, viewer_of
@@ -126,7 +126,6 @@ from brain.console.workspace import Basis
 from brain.core.entitlement import Capability
 from brain.core.errors import Absent, Failed
 from brain.core.scope import Scope
-from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.knowledge.visibility import KnowledgeVisibility, Visibility
 from brain.listing import Column, ListAsked, Listing
 from brain.memory.correction import Correction, Supersession
@@ -148,7 +147,6 @@ from brain.ops.memory_store import (
 from brain.ops.replica_store import ConsoleReads
 from brain.routing_routes import sessions_of
 from brain.tables.agent import AgentRow
-from brain.tables.knowledge import KnowledgeItemRow
 from brain.tables.learning import MEMORY_ID_CHARS, LearningRow
 from brain.tables.memory import PRINCIPAL_ID_CHARS, AdaptiveMemoryRow, PersistentMemoryRow
 
@@ -457,8 +455,25 @@ class SubjectMemoryView(BaseModel):
 
 # ---------------------------------------------------------------- the statements
 
+#: Why the library's load calls a function rather than selecting from the table.
+THE_LIBRARY_IS_READ_PAST_THE_CORPUS_POLICY: Final = (
+    "know.item's row-level security is the corpus's reach, keyed to a principal and a department "
+    "list the Knowledge library never sets, so selecting from the table as the application role "
+    "saw company items only, and the screen said it listed every retrievable item. Who may be "
+    "told an item exists is brain.console.govern_estate.library_rows, decided in Python by where "
+    "the item sits. know.library_items returns what that decision needs and no title."
+)
 
-def retrievable_items(limit: int) -> Select[tuple[KnowledgeItemRow]]:
+#: The columns `know.library_items` returns, typed as `know.item` declares them.
+_PLACE_COLUMNS: Final = (
+    column("item_id", String),
+    column("owner_id", String),
+    column("visibility", String),
+    column("department", String),
+)
+
+
+def retrievable_items(limit: int) -> Select[tuple[str, str, str, str | None]]:
     """Every item the system can draw on, in reference order, at most `limit` of them.
 
     `RETRIEVABLE_STATES` rather than every row, because the screen is "every document the
@@ -466,13 +481,15 @@ def retrievable_items(limit: int) -> Select[tuple[KnowledgeItemRow]]:
     listed at its old level would say it still reaches that audience. A load narrowing and not a
     permission one: nothing a reader holds changes it. Ordered, so two readings of an unchanged
     table are the same page and the rows that fall off a full load are always the same ones.
+
+    **Read through `know.library_items`, and not from `know.item`.** The table's policy is the
+    corpus's reach, and this load runs with no principal and no department list set, so it saw
+    company items and nothing else while the screen said it listed every item. The function is
+    `0069`'s, returns the four columns an item is placed by and never its title, and applies the
+    state list, the order and the bound itself. See `THE_LIBRARY_IS_READ_PAST_THE_CORPUS_POLICY`.
     """
-    return (
-        select(KnowledgeItemRow)
-        .where(KnowledgeItemRow.state.in_(sorted(one.value for one in RETRIEVABLE_STATES)))
-        .order_by(KnowledgeItemRow.item_id)
-        .limit(limit)
-    )
+    items = func.know.library_items(limit).table_valued(*_PLACE_COLUMNS, name="item")
+    return select(items.c.item_id, items.c.owner_id, items.c.visibility, items.c.department)
 
 
 def stated_about(subject_id: str, limit: int) -> Select[tuple[PersistentMemoryRow]]:
@@ -501,9 +518,23 @@ def bounded_agents(limit: int) -> Select[tuple[AgentRow]]:
 
 
 # ------------------------------------------------------------------ rows to records
+class ItemPlace(Protocol):
+    """What placing an item reads: a `know.library_items` row, or a stored item."""
+
+    @property
+    def item_id(self) -> str: ...
+
+    @property
+    def owner_id(self) -> str: ...
+
+    @property
+    def visibility(self) -> str: ...
+
+    @property
+    def department(self) -> str | None: ...
 
 
-def placed_item(row: KnowledgeItemRow) -> Placed[LibraryItem]:
+def placed_item(row: ItemPlace) -> Placed[LibraryItem]:
     """One stored item, as the pair `library_rows` narrows.
 
     `where` is the department the item sits in, which is the place question that function
@@ -858,8 +889,8 @@ async def library(request: Request, asked: Asked, listed: LibraryQuery) -> Libra
 
     reads = _require_console_reads(request)
 
-    async def load(session: AsyncSession) -> list[KnowledgeItemRow]:
-        return list((await session.execute(retrievable_items(limit))).scalars().all())
+    async def load(session: AsyncSession) -> list[ItemPlace]:
+        return list((await session.execute(retrievable_items(limit))).all())
 
     served = await reads.read(load, now=asked.now)
     rows = served.value

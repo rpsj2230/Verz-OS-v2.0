@@ -31,7 +31,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from brain.api import API_PREFIX
+from brain.api import API_PREFIX, NOT_FOUND
 from brain.api_routes import GateWiring
 from brain.app import (
     AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN,
@@ -378,7 +378,7 @@ def test_both_sign_in_routes_are_served_by_the_application_and_answer_as_routes(
 ) -> None:
     """`brain.sign_in_routes` is mounted by `create_app`, not only by its own tests. Held by what
     each path answers, because this FastAPI wraps an included router and does not list its paths
-    at the top of `app.routes`: an unmounted path is the framework's 404 `{"detail": "Not Found"}`,
+    at the top of `app.routes`: an unmounted path is a 404 saying it could not find that,
     and both of these refuse a request carrying no token as 401 with the one sign-in sentence in
     `ErrorBody`, which only a mounted route that checks a token can. Delete this and the router
     can be dropped from `create_app` with every test in `test_sign_in_routes.py` green, since that
@@ -394,7 +394,7 @@ def test_both_sign_in_routes_are_served_by_the_application_and_answer_as_routes(
         assert answered.json()["message"] == SIGN_IN_PROMPT
         assert set(answered.json()) == {"message", "trace_id"}
     assert nowhere.status_code == 404
-    assert "message" not in nowhere.json()
+    assert nowhere.json()["message"] == NOT_FOUND
     del realm
 
 

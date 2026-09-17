@@ -182,6 +182,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.approval_routes:HeldSuspensions.lock": Repeat.READS,
         "brain.approval_routes:HeldSuspensions.record": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.approval_routes:SuspensionStore.reading_as": Repeat.READS,
+        "brain.approval_routes:SuspensionReader.reading_as": Repeat.READS,
         "brain.approval_routes:SuspensionStore.holding": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.audit.record:LedgerWriter.append": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.automation_routes:RegistrationSource.registration": Repeat.READS,

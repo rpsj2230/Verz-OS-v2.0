@@ -214,6 +214,19 @@ class HeldSuspensions(Protocol):
 
 
 @runtime_checkable
+class SuspensionReader(Protocol):
+    """Suspensions read at a reach, with no way to hold one while it is decided.
+
+    `brain.gate.suspension_store.ReadableSuspensions` implements it. The queue and the card are
+    served from it; a decision is refused. See `DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS`.
+    """
+
+    def reading_as(self, reach: EntitlementSet, now: datetime) -> SuspensionSource:
+        """The suspensions as this reach may read them."""
+        ...
+
+
+@runtime_checkable
 class SuspensionStore(Protocol):
     """A store that reads at a reach and can hold a row while it is decided.
 
@@ -396,7 +409,9 @@ async def decide_once(
 # ------------------------------------------------------------------------- the wiring
 
 
-def suspensions_of(request: Request) -> SuspensionStore | SuspensionSource | None:
+def suspensions_of(
+    request: Request,
+) -> SuspensionStore | SuspensionReader | SuspensionSource | None:
     """The suspension store or source this process was built with, or None.
 
     `getattr` and an `isinstance`, in the shape `brain.api_routes.wiring_of` uses and for its
@@ -404,7 +419,9 @@ def suspensions_of(request: Request) -> SuspensionStore | SuspensionSource | Non
     reaches a caller as a 500 reading like a bug.
     """
     found = getattr(request.app.state, "suspensions", None)
-    return found if isinstance(found, SuspensionStore | SuspensionSource) else None
+    if isinstance(found, SuspensionStore | SuspensionReader | SuspensionSource):
+        return found
+    return None
 
 
 def _require_source(request: Request, reach: EntitlementSet, now: datetime) -> SuspensionSource:
@@ -414,7 +431,7 @@ def _require_source(request: Request, reach: EntitlementSet, now: datetime) -> S
     waiting on this person, and a process with no store has no evidence for that claim.
     """
     found = suspensions_of(request)
-    if isinstance(found, SuspensionStore):
+    if isinstance(found, SuspensionStore | SuspensionReader):
         return found.reading_as(reach, now)
     if found is None:
         raise Failed("no suspension store on this process")
@@ -424,9 +441,22 @@ def _require_source(request: Request, reach: EntitlementSet, now: datetime) -> S
 def _require_store(request: Request) -> SuspensionStore:
     """A store that can keep a decision, or one fault for every caller and every id."""
     found = suspensions_of(request)
-    if not isinstance(found, SuspensionStore):
-        raise Failed("no suspension store that keeps a decision on this process")
-    return found
+    if isinstance(found, SuspensionStore):
+        return found
+    if isinstance(found, SuspensionReader):
+        raise Failed(
+            "suspensions are readable and no ledger writer keeps a decision on this process",
+            public_message=DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS,
+        )
+    raise Failed("no suspension store that keeps a decision on this process")
+
+
+#: What a decision is told on a process that can read approvals and cannot keep a decision.
+#: Identical for every caller and every id, because it is asked before the approval is read.
+DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS: Final = (
+    "Approvals can be read here but not decided yet: this install has nowhere to keep a record of "
+    "a decision that would survive a restart, so none is taken."
+)
 
 
 def _no_approval_here() -> Absent:

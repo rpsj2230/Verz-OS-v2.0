@@ -69,6 +69,7 @@ from brain.console.workspace import intersections_in
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
 from brain.listing import MAX_PAGE_ROWS
@@ -1208,7 +1209,8 @@ def test_a_password_only_session_holds_no_authority_to_add_a_skill(
     strong = post(client, "u_admin", SKILLS, a_package())
 
     assert weak.status_code == 404
-    assert weak.json()["message"] == screen_refusal(client)
+    assert weak.json()["message"] == SECOND_FACTOR_NEEDED_MESSAGE
+    assert weak.json()["second_factor_needed"] is True
     assert strong.status_code == 201
 
 
