@@ -13,17 +13,26 @@ question, behind its own grant, and answering it here as well would be one set o
 decisions. See `YOUR_OWN_EXPORTS_AND_NOBODY_ELSES`.
 
 **Taking an export is refused in one sentence before anything is judged or read**, unless the
-reader holds `admin:export` and may read every entry the ledger could hold; see
-`brain.ops.data_transfer.A_WHOLE_LEDGER_READER_IS_ASKED_BEFORE_THE_LEDGER_IS`. Then every problem
-with the request is answered at once as a 422, of which an empty, oversized or broken window is
-one, because a window is a field the person changes. A 200 carries the record and the document,
-and only after the record has committed.
+reader holds `admin:export` and may open the audit trail; see
+`brain.ops.data_transfer.AN_EXPORT_CARRIES_WHAT_THE_AUDIT_TRAIL_SHOWS_ITS_EXPORTER`. Then every
+problem with the request is answered at once as a 422, of which an empty, oversized or broken
+window is one, because a window is a field the person changes. A 200 carries the record and the
+document, and only after the record has committed.
+
+**The form is asked once, from the reader's grants, before the store is.** `form_for` decides
+whether the reader takes the chain or the entries they may read, and the store is handed that form
+and what to keep of each chunk it reads. The listing names the form too, with the sentence for it,
+because a screen promising a chain a reader will not receive is a promise about somebody else's
+grants. See `brain.ops.data_transfer.THE_FORM_IS_DECIDED_BEFORE_THE_WINDOW_IS_READ`.
+
+**A readable export's filename names the export and never a window of sequence numbers**, for the
+reason `brain.tables.data_export.A_READABLE_EXPORT_NAMES_NO_WINDOW` gives about its record.
 
 **The document travels in the response body, once.** It is line-delimited JSON of at most
 `MAX_EXPORT_ENTRIES` lines and the console saves it as a file; nothing keeps it on the server. The
 record keeps its digest, so the file can be matched to this export later.
 
-Task ids: M27.8.16
+Task ids: M27.8.16, M27.9.4
 """
 
 from __future__ import annotations
@@ -45,6 +54,7 @@ from brain.ops.data_export_store import ExportRecords, StoredExports, TakenExpor
 from brain.ops.data_transfer import (
     AN_EXPORT_IS_A_COPY_THAT_LEAVES_EVERY_GUARD_BEHIND,
     CATALOGUE,
+    FORM_TOLD,
     MAX_EXPORT_ENTRIES,
     THE_DOCUMENT_IS_HANDED_OVER_ONCE,
     AuditExportRefusedError,
@@ -52,13 +62,15 @@ from brain.ops.data_transfer import (
     ExportField,
     ExportProblem,
     Produced,
+    form_for,
+    kept_by,
     may_take_audit_export,
     produce_audit_export,
     request_problems,
 )
 from brain.ops.export import ExportReason
 from brain.routing_routes import sessions_of
-from brain.tables.data_export import ExportDataSet
+from brain.tables.data_export import ExportDataSet, ExportForm
 
 log = structlog.get_logger()
 
@@ -108,10 +120,11 @@ class ExportRecordView(BaseModel):
     reason: ExportReason
     reason_reference: str
     produced_at: datetime
+    form: ExportForm
     first_seq: int | None
     last_seq: int | None
     entries: int
-    verified: bool
+    verified: bool | None
     document_digest: str
 
 
@@ -123,6 +136,9 @@ class DataTransferView(BaseModel):
     catalogue: list[DataSetView]
     reasons: list[ExportReason]
     exportable: bool
+    #: The form this reader's export would take, and the sentence for it. None when not exportable.
+    form: ExportForm | None
+    form_told: str | None
     exports: list[ExportRecordView]
     export_told: str
     document_told: str
@@ -199,6 +215,7 @@ def record_view(taken: TakenExport) -> ExportRecordView:
         reason=taken.reason,
         reason_reference=taken.reason_reference,
         produced_at=taken.produced_at,
+        form=taken.form,
         first_seq=taken.first_seq,
         last_seq=taken.last_seq,
         entries=taken.entries,
@@ -208,7 +225,13 @@ def record_view(taken: TakenExport) -> ExportRecordView:
 
 
 def filename_for(taken: TakenExport) -> str:
-    """The name the console saves the document under: the data set and the window, no person."""
+    """The name the console saves the document under, naming no person.
+
+    A chain is named by its data set and its window; a readable export by its data set and its
+    record, because it has no window of sequence numbers to name. See the module docstring.
+    """
+    if taken.form is ExportForm.READABLE:
+        return f"{taken.data_set.value}-{taken.export_id}.jsonl"
     return f"{taken.data_set.value}-{taken.first_seq}-{taken.last_seq}.jsonl"
 
 
@@ -232,6 +255,7 @@ router = APIRouter(prefix=API_PREFIX, tags=["data-transfer"])
 async def data_transfer(request: Request, asked: Asked) -> DataTransferView:
     """What can be imported and exported, whether this reader may export, and their own exports."""
     exportable = may_take_audit_export(asked.reach, asked.now)
+    form = form_for(asked.reach, asked.now) if exportable else None
     exports: list[ExportRecordView] = []
     if exportable:
         taken = await export_records_of(request).taken_by(
@@ -252,6 +276,8 @@ async def data_transfer(request: Request, asked: Asked) -> DataTransferView:
         ],
         reasons=list(ExportReason),
         exportable=exportable,
+        form=form,
+        form_told=None if form is None else FORM_TOLD[form],
         exports=exports,
         export_told=AN_EXPORT_IS_A_COPY_THAT_LEAVES_EVERY_GUARD_BEHIND,
         document_told=THE_DOCUMENT_IS_HANDED_OVER_ONCE,
@@ -283,6 +309,7 @@ async def take_export(request: Request, body: ExportAsked, asked: Asked) -> JSON
         return _problems(found)
     reason = ExportReason(body.reason)
     trace_id = _trace_id()
+    form = form_for(asked.reach, asked.now)
 
     def produce(entries: Sequence[AuditEntry]) -> Produced:
         return produce_audit_export(
@@ -291,6 +318,8 @@ async def take_export(request: Request, body: ExportAsked, asked: Asked) -> JSON
             reason=reason,
             trace_id=trace_id,
             at=asked.now,
+            since=body.since,
+            until=body.until,
         )
 
     try:
@@ -298,6 +327,8 @@ async def take_export(request: Request, body: ExportAsked, asked: Asked) -> JSON
             since=body.since,
             until=body.until,
             limit=MAX_EXPORT_ENTRIES,
+            form=form,
+            keep=kept_by(form, asked.reach, asked.now),
             actor=asked.reach.principal_id,
             ent_hash=asked.reach.ent_hash(),
             trace_id=trace_id,

@@ -51,7 +51,7 @@ from brain.ops.erasure_store import (
 )
 from brain.ops.export import ExportReason
 from brain.ops.retention import HORIZONS
-from brain.tables.data_export import ExportDataSet
+from brain.tables.data_export import ExportDataSet, ExportForm
 from brain.tables.erasure import ErasureOutcome
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
@@ -189,6 +189,7 @@ def an_export(export_id: str, by: str) -> TakenExport:
         reason=ExportReason.REGULATORY_REQUEST,
         reason_reference="MATTER-1",
         produced_at=LONG_AGO,
+        form=ExportForm.CHAIN,
         first_seq=0,
         last_seq=1,
         entries=2,

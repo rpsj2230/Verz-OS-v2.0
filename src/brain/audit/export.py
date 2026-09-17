@@ -33,7 +33,8 @@ verification or has to be shipped with the verification disabled, and an unverif
 document that looks like a verified one is the worst possible thing to hand a regulator.
 The export therefore covers a contiguous window or nothing. A filtered *view* is a
 different artefact with a different name (M24.1.5), and `cite_entry` is how one entry from
-it is tied back to a verifiable export.
+it is tied back to a verifiable export. The view taken away as a file, for somebody who may
+read only part of the ledger, is `brain.audit.readable_export`: not a chain, and it says so.
 
 **A broken chain still exports.** Refusing to export a ledger that fails verification would
 mean the one circumstance where an external copy matters most is the one where it cannot be
