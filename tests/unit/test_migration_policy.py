@@ -176,6 +176,27 @@ def test_schema_and_data_in_one_migration_is_flagged(tmp_path: Path) -> None:
     assert "schema and data change in one migration" in rules(check_file(p))
 
 
+def test_prose_that_reads_like_sql_is_not_a_data_change(tmp_path: Path) -> None:
+    """Measured on 2026-09-17: a migration's docstring said the sweep removes rows "only from a
+    table the application role may delete from", the data rule read that as `DELETE FROM`, and CI
+    failed on a migration that creates a table and changes no data. The positive sibling is the
+    test above: real SQL beside the same schema change is still flagged.
+
+    Delete this and every migration that explains itself in the words a DBA would use is refused
+    until its author rewords the explanation."""
+    body = migration(
+        [
+            "# The rows are removed by the sweep, which may delete from this table.",
+            "op.create_table('t', sa.Column('c', sa.String()))",
+        ],
+        ["op.drop_table('t')"],
+    )
+    prose = "Rows are removed by a sweep that may delete from this table and update t set nothing."
+    documented = f'"""{prose}"""' + chr(10) + body
+    p = write(tmp_path, documented)
+    assert "schema and data change in one migration" not in rules(check_file(p))
+
+
 def test_a_pure_data_migration_is_not_flagged(tmp_path: Path) -> None:
     """Data-only is allowed; it is the mixture that cannot be reversed by halves."""
     p = write(

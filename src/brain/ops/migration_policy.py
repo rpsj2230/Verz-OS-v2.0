@@ -132,6 +132,42 @@ class Finding:
         return f"{self.file}: {self.rule}, {self.detail}"
 
 
+def _without_prose(text: str) -> str:
+    """`text` with docstrings and comments blanked, so a rule reads the code and not the argument.
+
+    Measured on 2026-09-17: `0063_application_log.py` explains in its docstring that the retention
+    sweep removes rows "only from a table the application role may delete from", and the data
+    rule read "delete from" as a DML statement and failed CI on a migration that changes no data.
+    A migration here is expected to argue its shape in prose, so prose must never be evidence.
+    SQL passed to `op.execute` is an ordinary string rather than a docstring, so it is kept.
+    A file that does not parse is returned as it is, and the rules then over-report rather than
+    miss.
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return text
+    lines = text.splitlines(keepends=True)
+    blank: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            first = node.body[0] if node.body else None
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+                and first.end_lineno is not None
+            ):
+                blank.update(range(first.lineno, first.end_lineno + 1))
+    kept: list[str] = []
+    for number, line in enumerate(lines, start=1):
+        if number in blank or line.lstrip().startswith("#"):
+            kept.append(chr(10))
+        else:
+            kept.append(line)
+    return "".join(kept)
+
+
 def _function_body(text: str, name: str) -> str:
     """The source of one top-level function, or an empty string.
 
@@ -407,7 +443,7 @@ def check_file(path: Path) -> list[Finding]:
     has_schema = bool(
         ADD_COLUMN.search(text) or DROP_COLUMN.search(text) or "op.create_table" in text
     )
-    if has_schema and DML.search(text):
+    if has_schema and DML.search(_without_prose(text)):
         findings.append(
             Finding(
                 name,
