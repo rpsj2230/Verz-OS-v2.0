@@ -234,6 +234,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:connector` | running the system |
 | `admin:credential` | running the system |
 | `admin:data_steward` | running the system |
+| `admin:department` | running the system |
 | `admin:erasure` | running the system |
 | `admin:export` | running the system |
 | `admin:feature` | running the system |
@@ -248,6 +249,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:retention` | running the system |
 | `admin:routing_matrix` | running the system |
 | `admin:schedule` | running the system |
+| `admin:scope` | running the system |
 | `admin:session` | running the system |
 | `admin:sign_in` | running the system |
 | `admin:skill` | running the system |
@@ -261,6 +263,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:audit.agent` | reading how the system is run |
 | `read:audit.connector` | reading how the system is run |
 | `read:audit.credential` | reading how the system is run |
+| `read:audit.department` | reading how the system is run |
 | `read:audit.erasure` | reading how the system is run |
 | `read:audit.grant` | reading how the system is run |
 | `read:audit.leash` | reading how the system is run |
@@ -268,6 +271,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:audit.principal` | reading how the system is run |
 | `read:audit.retention` | reading how the system is run |
 | `read:audit.routing` | reading how the system is run |
+| `read:audit.scope` | reading how the system is run |
 | `read:audit.session` | reading how the system is run |
 | `read:audit.setting` | reading how the system is run |
 | `read:audit.skill` | reading how the system is run |

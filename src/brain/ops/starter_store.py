@@ -72,11 +72,13 @@ reconciliation carries, and the command's is `install.furnish.`, each followed b
 characters.
 
 **Audited per row, and not.** `ops.setting` is recorded by `0059`'s trigger, one `switched_on`
-entry. `gate.scope`, `gate.capability_registry` and `gate.capability_pack` have no ledger trigger
-in any migration. An insert into `gate.capability_pack` runs `0003`'s
-`bump_grants_version_for_pack`, which bumps `gate.policy_epoch` and the version of every principal
-the pack is assigned to, which on a furnishing is nobody, and records nothing. The furnishing's own
-entry is what the ledger has for all three.
+entry, and since `0086` the company-wide scope is recorded by that migration's trigger on
+`gate.scope`, one `organisation` entry under `scope:company` naming first run.
+`gate.capability_registry` and `gate.capability_pack` have no ledger trigger in any migration. An
+insert into `gate.capability_pack` runs `0003`'s `bump_grants_version_for_pack`, which bumps
+`gate.policy_epoch` and the version of every principal the pack is assigned to, which on a
+furnishing is nobody, and records nothing. The furnishing's own entry is what the ledger has for
+those two.
 
 **What W0.5 names that this does not write, and why each is absent rather than forgotten.**
 

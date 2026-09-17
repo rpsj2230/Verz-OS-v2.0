@@ -353,6 +353,33 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.identity.organisation_store:OrganisationRecords.stand_down": (
             Repeat.WRITES_THIS_SYSTEMS_DATABASE
         ),
+        # The same screen's structure. Each is this system's own rows in one transaction: a repeated
+        # creation meets the live name and is refused, a repeated rename or retirement no longer
+        # finds the name it expects or a live row, and nothing is written twice.
+        "brain.identity.organisation_store:StructureRecords.found_department": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.rename_department": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.retire_department": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.add_team": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.rename_team": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.retire_team": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.draw_scope": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
+        "brain.identity.organisation_store:StructureRecords.retire_scope": (
+            Repeat.WRITES_THIS_SYSTEMS_DATABASE
+        ),
         # The Elevation requests screen. A request is a row, and a repeat is a second request the
         # screen lists; a decision is one transaction on a pending row, and a repeat finds it
         # decided.

@@ -86,7 +86,7 @@ from typing import Annotated, Any, Final, Literal, Self
 
 import structlog
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -106,26 +106,43 @@ from brain.console.elevation import (
 )
 from brain.console.govern import Decision, GovernError, Placed, certify, recertifiable
 from brain.console.organisation import (
+    A_DEPARTMENTS_OWN_SCOPE_GOES_WITH_ITS_DEPARTMENT,
+    A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE,
+    A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE,
+    A_RETIRED_SCOPE_TAKES_NO_GRANT_AWAY,
+    A_RETIRED_TEAM_CHANGES_NOBODYS_ACCESS,
+    COMPANY_ID,
     DEPARTMENTS_SCREEN,
     ORGANISING_AUTHORITY,
+    SCOPE_AUTHORITY,
+    THE_COMPANY_WIDE_SCOPE_IS_NEVER_RETIRED,
     Department,
     Lead,
     Member,
     Membership,
     Organisation,
     Team,
+    drawn,
+    founded,
     may_appoint,
+    may_draw_scope,
+    may_found_or_retire_departments,
+    may_know_taken_scope,
     may_organise,
     may_place,
+    may_shape_department,
     organisation,
+    retired_with,
+    scope_retirement,
 )
 from brain.console.read_replica import StalenessBanner
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.subscribers import findings, subscriber_lines
-from brain.core.department import ScopeRecord
+from brain.core.department import SLUG_PATTERN, ScopeRecord
 from brain.core.entitlement import CAPABILITY_RE, Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
+from brain.core.scope import Scope
 from brain.core.scope_sql import PredicateRefusedError
 from brain.gate.elevation_store import (
     ElevationRecords,
@@ -143,15 +160,20 @@ from brain.gate.review_store import (
 )
 from brain.govern_routes import placed_assignment, placed_grant
 from brain.identity.organisation_store import (
+    Attribution,
     OrganisationRecords,
     Person,
     StoredOrganisation,
+    Structured,
+    StructureRecords,
+    StructureRefusal,
     live_leads,
     live_memberships,
 )
 from brain.identity.packs import SubjectGrant
-from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason
+from brain.identity.roles import BREAK_GLASS_MAX, BreakGlassReason, IdentityError
 from brain.identity.teams import PrincipalSubject
+from brain.identity.teams import Team as TeamRecord
 from brain.listing import MAX_SEVERAL, Column, ListAsked, Listing, each_of
 from brain.ops.outbox import EventKind, Subscriber, may_manage
 from brain.ops.outbox_store import last_delivered, subscribers
@@ -162,7 +184,7 @@ from brain.tables.elevation import (
     LONGEST_HOURS,
     ElevationDecision,
 )
-from brain.tables.gate import DepartmentRow, TeamRow
+from brain.tables.gate import LABEL_CHARS, SLUG_CHARS, DepartmentRow, TeamRow
 from brain.tables.identity import PrincipalRow
 from brain.tables.review import ReviewDecision
 
@@ -188,6 +210,29 @@ NOTHING_HERE_IS_COUNTED: Final = (
 ORGANISING_IS_THE_GRANT_AUTHORITY: Final = (
     "Placing somebody or appointing a lead takes the authority the Access review screen asks for, "
     "held over the department and over the department the person sits in."
+)
+
+#: What the structure's controls take, served beside the page.
+SHAPING_IS_ITS_OWN_AUTHORITY: Final = (
+    "Creating or retiring a department takes the authority over departments and over scopes, held "
+    "over the whole company. Renaming a department, and creating, renaming or retiring its teams, "
+    "takes the authority over departments held over that department. Creating or retiring a scope "
+    "takes the authority over scopes held over everything the scope reaches."
+)
+
+#: The readable refusals of a change to the structure, said only to a caller holding the authority.
+A_DEPARTMENT_NAME_IS_TAKEN: Final = (
+    "that short name is already used by a live department or a live scope, so choose another; a "
+    "retired department's short name can be used again"
+)
+A_TEAM_NAME_IS_TAKEN: Final = "that short name is already used by a live team in this department"
+A_SCOPE_NAME_IS_TAKEN: Final = "that short name is already used by a live scope, so choose another"
+IT_CHANGED_SINCE_YOU_OPENED_IT: Final = (
+    "somebody changed it after this page was opened, so nothing was written; reload the page to "
+    "see it as it is now"
+)
+A_SCOPE_NAMES_NO_LIVE_DEPARTMENT: Final = (
+    "a department the scope names is not a live department on this install"
 )
 
 #: What an elevation is, served on the Elevation screen.
@@ -315,6 +360,9 @@ class DepartmentView(BaseModel):
     members: list[MemberView]
     #: Null when none is recorded and when this reader may not name the one who is.
     lead: MemberView | None = None
+    #: Whether this reader holds the authority to rename it and change its teams. Presentation
+    #: only: the writes ask `may_shape_department` whatever this said.
+    shapeable: bool = False
 
 
 class OrganisationPage(BaseModel):
@@ -332,11 +380,23 @@ class OrganisationPage(BaseModel):
     #: Whether this reader holds the authority to place anybody anywhere. Presentation only: the
     #: writes ask `may_place` and `may_appoint` about the rows, whatever this said.
     may_organise: bool = False
+    #: Whether this reader may create and retire departments. Presentation only.
+    may_found: bool = False
+    #: Whether this reader holds the authority over scopes anywhere. Presentation only.
+    may_draw_scopes: bool = False
     staleness: StalenessBanner | None = None
     teams: str = A_TEAM_LISTS_WHO_YOU_MAY_SEE_IN_IT
     leads: str = A_LEAD_CONFERS_NOTHING
     counted: str = NOTHING_HERE_IS_COUNTED
     organising: str = ORGANISING_IS_THE_GRANT_AUTHORITY
+    shaping: str = SHAPING_IS_ITS_OWN_AUTHORITY
+    #: What retiring a department does to scopes and to grants, for its confirmation.
+    retiring_department: str = (
+        f"{A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE} "
+        f"{A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE}"
+    )
+    retiring_team: str = A_RETIRED_TEAM_CHANGES_NOBODYS_ACCESS
+    retiring_scope: str = A_RETIRED_SCOPE_TAKES_NO_GRANT_AWAY
 
 
 class MembershipChange(BaseModel):
@@ -381,6 +441,158 @@ class OrganisationChanged(BaseModel):
     principal_id: str | None
     change: str
     at: datetime
+
+
+#: A short name, as `brain.core.department` and `gate.scope`, `gate.department` and `gate.team`
+#: hold one. Checked here so a malformed one is a 422 naming the field.
+Slug = Annotated[str, Field(min_length=2, max_length=SLUG_CHARS, pattern=SLUG_PATTERN)]
+
+#: A name a person reads, trimmed, as the tables' `name_present` checks require.
+Name = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1, max_length=LABEL_CHARS)
+]
+
+#: The name a page showed, compared exactly, so it is not trimmed.
+Shown = Annotated[str, Field(min_length=1, max_length=LABEL_CHARS)]
+
+#: The most departments one scope may name. A bound on a form, not a permission.
+MOST_DEPARTMENTS_IN_A_SCOPE: Final = 50
+
+
+class DepartmentFounding(BaseModel):
+    """A new department: its short name and its name. Its scope is drawn from the short name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: Slug
+    name: Name
+
+    @model_validator(mode="after")
+    def _the_types_accept_it(self) -> Self:
+        founded(self.slug, self.name)
+        return self
+
+
+class DepartmentRenaming(BaseModel):
+    """Which department, the name the page showed, and its new name. Never its short name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: Slug
+    expected_name: Shown
+    name: Name
+
+    @model_validator(mode="after")
+    def _names_something_new(self) -> Self:
+        if self.name == self.expected_name:
+            msg = "the new name is the name it already has"
+            raise ValueError(msg)
+        return self
+
+
+class DepartmentRetirement(BaseModel):
+    """Which department, and the name the confirmation showed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: Slug
+    expected_name: Shown
+
+
+class TeamAdding(BaseModel):
+    """A new team in a department: its short name and its name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: Slug
+    slug: Slug
+    name: Name
+
+    @model_validator(mode="after")
+    def _the_type_accepts_it(self) -> Self:
+        team_record(self.department, self.slug, self.name)
+        return self
+
+
+class TeamRenaming(BaseModel):
+    """Which team of which department, the name the page showed, and its new name."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: Slug
+    slug: Slug
+    expected_name: Shown
+    name: Name
+
+    @model_validator(mode="after")
+    def _names_something_new(self) -> Self:
+        if self.name == self.expected_name:
+            msg = "the new name is the name it already has"
+            raise ValueError(msg)
+        return self
+
+
+class TeamRetirement(BaseModel):
+    """Which team of which department, and the name the confirmation showed."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: Slug
+    slug: Slug
+    expected_name: Shown
+
+
+class ScopeDrawing(BaseModel):
+    """A new scope over one department or a named set of them. Never a clause typed in a form."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: Slug
+    label: Name
+    departments: list[Slug] = Field(min_length=1, max_length=MOST_DEPARTMENTS_IN_A_SCOPE)
+
+    @model_validator(mode="after")
+    def _the_types_accept_it(self) -> Self:
+        if len(set(self.departments)) != len(self.departments):
+            msg = "a department is named twice"
+            raise ValueError(msg)
+        drawn(self.slug, self.label, self.departments)
+        return self
+
+
+class ScopeRetirement(BaseModel):
+    """Which scope, and the predicate the page showed, as `ScopeView.scope` carries it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    slug: Slug
+    expected_scope: dict[str, Any]
+
+    @model_validator(mode="after")
+    def _is_a_scope(self) -> Self:
+        Scope.model_validate(self.expected_scope)
+        return self
+
+
+class StructureChanged(BaseModel):
+    """What a change to a department, a team or a scope recorded, and the database's instant."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["department", "team", "scope"]
+    #: The department a team belongs to, and null for a department or a scope.
+    department: str | None
+    slug: str
+    change: Literal["created", "renamed", "retired"]
+    at: datetime
+
+
+def team_record(department: str, slug: str, name: str) -> TeamRecord:
+    """A team as `brain.identity.teams.Team` reads one, or `ValueError` naming what it refused."""
+    try:
+        return TeamRecord(company_id=COMPANY_ID, department_slug=department, slug=slug, name=name)
+    except IdentityError as refused:
+        raise ValueError(str(refused)) from None
 
 
 class ElevationRequestView(BaseModel):
@@ -753,6 +965,17 @@ def organisation_records_of(request: Request) -> OrganisationRecords:
     return StoredOrganisation(factory)
 
 
+def structure_records_of(request: Request) -> StructureRecords:
+    """`app.state.structure_records` when something put one there, and the database otherwise."""
+    found = getattr(request.app.state, "structure_records", None)
+    if isinstance(found, StructureRecords):
+        return found
+    factory = sessions_of(request)
+    if factory is None:
+        raise Failed("no database on this process")
+    return StoredOrganisation(factory)
+
+
 def elevation_records_of(request: Request) -> ElevationRecords:
     """`app.state.elevation_records` when something put one there, and the database otherwise."""
     found = getattr(request.app.state, "elevation_records", None)
@@ -787,14 +1010,24 @@ def member_view(one: Member) -> MemberView:
     )
 
 
+def _shapes_nothing(_department: str) -> bool:
+    return False
+
+
 def organisation_page(
-    shown: Organisation, *, full: bool, banner: StalenessBanner | None, may_organise: bool = False
+    shown: Organisation,
+    *,
+    full: bool,
+    banner: StalenessBanner | None,
+    may_organise: bool = False,
+    shapeable: Callable[[str], bool] = _shapes_nothing,
 ) -> OrganisationPage:
     return OrganisationPage(
         departments=[
             DepartmentView(
                 slug=line.slug,
                 name=line.name,
+                shapeable=shapeable(line.slug),
                 teams=[
                     TeamView(
                         slug=one.slug,
@@ -1021,11 +1254,17 @@ async def departments_page(
         memberships=loaded.memberships,
         leads=loaded.leads,
     )
+    reach, now = asked.reach, asked.now
+
+    def shapeable(department: str) -> bool:
+        return may_shape_department(reach, department=department, now=now)
+
     whole = organisation_page(
         shown,
         full=loaded.full,
         banner=served.banner,
-        may_organise=asked.reach.scope_for(ORGANISING_AUTHORITY, asked.now) is not None,
+        may_organise=reach.scope_for(ORGANISING_AUTHORITY, now) is not None,
+        shapeable=shapeable,
     )
     page = plan.page(whole.departments)
     unplaced = [] if listed.cursor is not None else remainder.matching(whole.unplaced)
@@ -1034,6 +1273,8 @@ async def departments_page(
             "departments": list(page.items),
             "next_cursor": page.next_cursor,
             "unplaced": unplaced,
+            "may_found": may_found_or_retire_departments(reach, now),
+            "may_draw_scopes": reach.scope_for(SCOPE_AUTHORITY, now) is not None,
         }
     )
 
@@ -1158,6 +1399,261 @@ async def change_lead(request: Request, body: LeadChange, asked: Asked) -> Organ
         change=body.change,
         at=at,
     )
+
+
+# ------------------------------------------------------------ the structure (M27.11.1)
+
+
+def _by(asked: Asking) -> Attribution:
+    """Who the triggers record: the caller from the token, their reach's digest, the request."""
+    return Attribution(
+        actor=asked.caller.principal.id, ent_hash=asked.reach.ent_hash(), trace_id=_trace_id()
+    )
+
+
+def _said(message: str) -> Absent:
+    """A refusal a caller holding the authority over the row may read, as `prompt_routes` says."""
+    return Absent(message, public_message=f"Nothing was changed: {message}.")
+
+
+def _structured(
+    outcome: Structured,
+    asked: Asking,
+    *,
+    kind: Literal["department", "team", "scope"],
+    slug: str,
+    change: Literal["created", "renamed", "retired"],
+    department: str | None = None,
+    taken: str = A_DEPARTMENT_NAME_IS_TAKEN,
+) -> StructureChanged:
+    """The answer to a change to the structure, or the refusal its outcome is.
+
+    `NOT_WRITABLE` is `_not_organisable_here`, the one refusal every placement makes, so a row out
+    of reach and a row that is not there answer alike. The others are sentences, and each can only
+    arrive for a caller the route and the store have already found holds the authority over the row.
+    """
+    if not isinstance(outcome, StructureRefusal):
+        return StructureChanged(
+            kind=kind, department=department, slug=slug, change=change, at=outcome
+        )
+    log.info("structure not changed", principal=asked.caller.principal.id, why=outcome.value)
+    match outcome:
+        case StructureRefusal.NAME_TAKEN:
+            raise _said(taken)
+        case StructureRefusal.CHANGED_SINCE:
+            raise _said(IT_CHANGED_SINCE_YOU_OPENED_IT)
+        case StructureRefusal.UNKNOWN_DEPARTMENT:
+            raise _said(A_SCOPE_NAMES_NO_LIVE_DEPARTMENT)
+        case StructureRefusal.COMPANY_WIDE_SCOPE:
+            raise _said(THE_COMPANY_WIDE_SCOPE_IS_NEVER_RETIRED.rstrip("."))
+        case StructureRefusal.DEPARTMENTS_OWN_SCOPE:
+            raise _said(A_DEPARTMENTS_OWN_SCOPE_GOES_WITH_ITS_DEPARTMENT.rstrip("."))
+        case StructureRefusal.NOT_WRITABLE:
+            raise _not_organisable_here()
+
+
+def _shaping_refused(asked: Asking, department: str) -> None:
+    """The authority over one department's name and teams, asked before any store is reached for."""
+    if not may_shape_department(asked.reach, department=department, now=asked.now):
+        log.info("department not shapeable", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+
+
+def _founding_refused(asked: Asking) -> None:
+    """The whole company's authority over departments and scopes, asked before any store."""
+    if not may_found_or_retire_departments(asked.reach, asked.now):
+        log.info("department not foundable", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+
+
+@router.post(
+    "/govern/departments",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+    status_code=201,
+)
+async def found_department(
+    request: Request, body: DepartmentFounding, asked: Asked
+) -> StructureChanged:
+    """Create a department and the scope it is defined by. Two rows and two ledger entries.
+
+    The whole company's authority, asked before the store: see
+    `brain.console.organisation.FOUNDING_OR_RETIRING_A_DEPARTMENT_IS_THE_WHOLE_COMPANYS_ACT`. A
+    short name a live department or scope already has is said, because a caller holding that
+    authority governs every department and scope there is.
+    """
+    _founding_refused(asked)
+    department, scope = founded(body.slug, body.name)
+    outcome = await structure_records_of(request).found_department(
+        department=department, scope=scope, by=_by(asked)
+    )
+    return _structured(outcome, asked, kind="department", slug=body.slug, change="created")
+
+
+@router.post(
+    "/govern/departments/rename", response_model=StructureChanged, responses=COMMON_RESPONSES
+)
+async def rename_department(
+    request: Request, body: DepartmentRenaming, asked: Asked
+) -> StructureChanged:
+    """Change a department's name, never its short name, if it still has the name the page showed.
+
+    The short name is the value every grant's scope carries, so it is not in the body at all.
+    """
+    _shaping_refused(asked, body.slug)
+    outcome = await structure_records_of(request).rename_department(
+        slug=body.slug, expected_name=body.expected_name, name=body.name, by=_by(asked)
+    )
+    return _structured(outcome, asked, kind="department", slug=body.slug, change="renamed")
+
+
+@router.post(
+    "/govern/departments/retirement",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+)
+async def retire_department(
+    request: Request, body: DepartmentRetirement, asked: Asked
+) -> StructureChanged:
+    """Retire a department, its teams and every live scope that names it. Grants stay.
+
+    See `brain.console.organisation.A_RETIRED_DEPARTMENT_IS_NAMED_BY_NO_LIVE_SCOPE` and
+    `A_RETIRED_DEPARTMENT_LEAVES_EVERY_GRANT_ALREADY_WRITTEN_IN_FORCE`. Which scopes go with it is
+    `retired_with`, asked by the store about each live scope under its lock.
+    """
+    _founding_refused(asked)
+    slug = body.slug
+
+    def takes(scope_slug: str, record: ScopeRecord | None, defining: str) -> bool:
+        return retired_with(scope_slug, record, department=slug, defining=defining)
+
+    outcome = await structure_records_of(request).retire_department(
+        slug=slug, expected_name=body.expected_name, takes=takes, by=_by(asked)
+    )
+    return _structured(outcome, asked, kind="department", slug=slug, change="retired")
+
+
+@router.post(
+    "/govern/departments/teams",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+    status_code=201,
+)
+async def add_team(request: Request, body: TeamAdding, asked: Asked) -> StructureChanged:
+    """Create a team in a department. One row and one ledger entry under the department."""
+    _shaping_refused(asked, body.department)
+    outcome = await structure_records_of(request).add_team(
+        team=team_record(body.department, body.slug, body.name), by=_by(asked)
+    )
+    return _structured(
+        outcome,
+        asked,
+        kind="team",
+        department=body.department,
+        slug=body.slug,
+        change="created",
+        taken=A_TEAM_NAME_IS_TAKEN,
+    )
+
+
+@router.post(
+    "/govern/departments/teams/rename",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+)
+async def rename_team(request: Request, body: TeamRenaming, asked: Asked) -> StructureChanged:
+    """Change a team's name, if it still has the name the page showed."""
+    _shaping_refused(asked, body.department)
+    outcome = await structure_records_of(request).rename_team(
+        department=body.department,
+        slug=body.slug,
+        expected_name=body.expected_name,
+        name=body.name,
+        by=_by(asked),
+    )
+    return _structured(
+        outcome, asked, kind="team", department=body.department, slug=body.slug, change="renamed"
+    )
+
+
+@router.post(
+    "/govern/departments/teams/retirement",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+)
+async def retire_team(request: Request, body: TeamRetirement, asked: Asked) -> StructureChanged:
+    """Retire a team. Its placements stay on record and nobody's access changes."""
+    _shaping_refused(asked, body.department)
+    outcome = await structure_records_of(request).retire_team(
+        department=body.department,
+        slug=body.slug,
+        expected_name=body.expected_name,
+        by=_by(asked),
+    )
+    return _structured(
+        outcome, asked, kind="team", department=body.department, slug=body.slug, change="retired"
+    )
+
+
+@router.post(
+    "/govern/departments/scopes",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+    status_code=201,
+)
+async def draw_scope(request: Request, body: ScopeDrawing, asked: Asked) -> StructureChanged:
+    """Create a scope over one department or a named set of them. One row and one ledger entry.
+
+    Containment first, before the store: `may_draw_scope` over the scope drawn, so nobody draws a
+    boundary wider than their own and a caller outside it learns nothing about the departments it
+    names. A taken short name is said only when `may_know_taken_scope` finds the live scope holding
+    it inside the caller's authority, and a department named that no live row carries is said,
+    because the caller's authority already reaches it.
+    """
+    reach, now = asked.reach, asked.now
+    record = drawn(body.slug, body.label, body.departments)
+    if not may_draw_scope(reach, record.scope, now):
+        log.info("scope not drawable", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+
+    def may_know(held: ScopeRecord | None) -> bool:
+        return may_know_taken_scope(reach, held, now)
+
+    outcome = await structure_records_of(request).draw_scope(
+        scope=record, departments=tuple(body.departments), may_know=may_know, by=_by(asked)
+    )
+    return _structured(
+        outcome, asked, kind="scope", slug=body.slug, change="created", taken=A_SCOPE_NAME_IS_TAKEN
+    )
+
+
+@router.post(
+    "/govern/departments/scopes/retirement",
+    response_model=StructureChanged,
+    responses=COMMON_RESPONSES,
+)
+async def retire_scope(request: Request, body: ScopeRetirement, asked: Asked) -> StructureChanged:
+    """Retire a scope, if it still bounds what the page showed. Grants over it stay.
+
+    The authority is asked cheaply before the store; `scope_retirement` then asks it properly about
+    the row under its lock, and refuses the company-wide scope and a department's own with a
+    sentence. See `brain.console.organisation.A_RETIRED_SCOPE_TAKES_NO_GRANT_AWAY`.
+    """
+    reach, now = asked.reach, asked.now
+    if reach.scope_for(SCOPE_AUTHORITY, now) is None:
+        log.info("scope not retirable", principal=asked.caller.principal.id)
+        raise _not_organisable_here()
+
+    def judge(record: ScopeRecord, defines: bool) -> StructureRefusal | None:
+        return scope_retirement(reach, record, defines_a_live_department=defines, now=now)
+
+    outcome = await structure_records_of(request).retire_scope(
+        slug=body.slug,
+        expected=Scope.model_validate(body.expected_scope),
+        judge=judge,
+        by=_by(asked),
+    )
+    return _structured(outcome, asked, kind="scope", slug=body.slug, change="retired")
 
 
 # ------------------------------------------------------------------ elevation

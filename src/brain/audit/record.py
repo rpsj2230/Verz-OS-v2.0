@@ -37,7 +37,7 @@ typing are imported under `TYPE_CHECKING` only, so the audit package stays under
 layers that record into it and a future import of this module from `brain.gate` cannot
 produce a cycle.
 
-Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8
+Task ids: M24.1.3, M24.1.4, M42.6.5, M27.7.21, M27.7.4, M27.7.8, M27.11.1
 """
 
 from __future__ import annotations
@@ -330,15 +330,26 @@ class MemoryChange(enum.StrEnum):
 
 
 class OrganisationChange(enum.StrEnum):
-    """What happened to where somebody sits. The four values `0062`'s triggers write."""
+    """What happened to where somebody sits, or to the structure they sit in.
+
+    The first four are the values `0062`'s triggers write about a placement. The last four are
+    the values `0086`'s triggers write about a department, a team or a scope: `RENAMED` is the name
+    column moving, which is the one change the console makes to a live row; `CHANGED` is any other
+    column moving, which only a statement typed by hand does, and names the columns; `RETIRED` is
+    `deleted_at` being set. A scope has no name the console changes, so a scope is never renamed.
+    """
 
     JOINED = "joined"
     LEFT = "left"
     APPOINTED = "appointed"
     STOOD_DOWN = "stood_down"
+    CREATED = "created"
+    RENAMED = "renamed"
+    CHANGED = "changed"
+    RETIRED = "retired"
 
 
-#: Which of the four changes are about a team, and which about leading a department. Two sets
+#: Which of the placement changes are about a team, and which about leading a department. Two sets
 #: rather than a property on the enum, so `organisation` can refuse a team change naming a
 #: department and the reverse, which is the pair of details `0062`'s two triggers never mix.
 TEAM_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
@@ -346,6 +357,17 @@ TEAM_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
 )
 LEAD_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
     {OrganisationChange.APPOINTED, OrganisationChange.STOOD_DOWN}
+)
+
+#: The changes to the structure itself, which `0086`'s triggers write under the department or the
+#: scope rather than under a person.
+STRUCTURE_CHANGES: Final[frozenset[OrganisationChange]] = frozenset(
+    {
+        OrganisationChange.CREATED,
+        OrganisationChange.RENAMED,
+        OrganisationChange.CHANGED,
+        OrganisationChange.RETIRED,
+    }
 )
 
 
@@ -990,23 +1012,47 @@ class AuditRecorder:
     def organisation(
         self,
         *,
-        principal_id: str,
         change: OrganisationChange,
+        principal_id: str = "",
         team: str = "",
         department: str = "",
+        scope: str = "",
+        fields: Sequence[str] = (),
+        actor_inferred: bool = False,
     ) -> AuditEntry:
-        """Record that somebody was placed in a team or taken out, or made a lead or stood down.
+        """Record that somebody was placed in a team or taken out, or made a lead or stood down, or
+        that a department, one of its teams or a scope was created, renamed, changed or retired.
 
-        Written in a deployed database by `0062`'s triggers on `gate.team_membership` and
-        `gate.department_lead`, on the insert and on the update that ends the row, and held to this
-        method's details by a test. The subject is the person, so every change to where somebody
-        sits is on their own subject. `team` is the team's path, `<department>.<team>`, which is a
-        field name to the ledger and survives redaction; `department` is a department's slug.
+        **A placement** is written in a deployed database by `0062`'s triggers on
+        `gate.team_membership` and `gate.department_lead`, on the insert and on the update that ends
+        the row. The subject is the person, so every change to where somebody sits is on their own
+        subject. `team` is the team's path, `<department>.<team>`, which is a field name to the
+        ledger and survives redaction; `department` is a department's slug. Exactly one of the two,
+        and the one the change is about: a join or a departure names a team, an appointment or a
+        standing down names a department. The triggers never mix them, and an entry that did would
+        say somebody left a department they were never a member of.
 
-        Exactly one of the two, and the one the change is about: a join or a departure names a
-        team, an appointment or a standing down names a department. The triggers never mix them,
-        and an entry that did would say somebody left a department they were never a member of.
+        **A change to the structure** is written by `0086`'s triggers on `gate.department`,
+        `gate.team` and `gate.scope` (M27.11.1), and names nobody. The subject is `department` for a
+        department and each of its teams, whose path rides in `team`, or `scope` for a scope, and
+        never both. `fields` names the columns a hand-typed change moved, and only on a change, for
+        `routing`'s reason; `actor_inferred` is the trigger's mark for a statement nobody named an
+        actor for. A scope has no teams and is never renamed. **Never a name, a label or a
+        predicate**: the row keeps them, and a name is whatever somebody typed.
+
+        One method for both, because the ledger holds one member for both and the recorder is held
+        to one method per member. Held to both triggers' details by tests.
         """
+        if change in STRUCTURE_CHANGES:
+            return self._structure(
+                change=change,
+                principal_id=principal_id,
+                team=team,
+                department=department,
+                scope=scope,
+                fields=fields,
+                actor_inferred=actor_inferred,
+            )
         about_team = change in TEAM_CHANGES
         if about_team != bool(team) or about_team == bool(department):
             msg = (
@@ -1014,12 +1060,51 @@ class AuditRecorder:
                 f"only that, and this names team={team!r} and department={department!r}"
             )
             raise ValueError(msg)
+        if not principal_id or scope or fields or actor_inferred:
+            msg = f"a {change.value} change is about a person, and names nothing about a structure"
+            raise ValueError(msg)
         details: dict[str, object] = {"change": change.value}
         if about_team:
             details["team"] = team
         else:
             details["department"] = department
         return self._write(AuditAction.ORGANISATION, subject("principal", principal_id), details)
+
+    def _structure(
+        self,
+        *,
+        change: OrganisationChange,
+        principal_id: str,
+        team: str,
+        department: str,
+        scope: str,
+        fields: Sequence[str],
+        actor_inferred: bool,
+    ) -> AuditEntry:
+        """`organisation` for a change to the structure. See its docstring."""
+        if principal_id or bool(department) == bool(scope):
+            msg = (
+                f"a {change.value} change is about one department or one scope and names nobody; "
+                f"this names principal={principal_id!r}, department={department!r}, scope={scope!r}"
+            )
+            raise ValueError(msg)
+        if scope and (team or change is OrganisationChange.RENAMED):
+            msg = f"a scope has no teams and is never renamed; this is {change.value} team={team!r}"
+            raise ValueError(msg)
+        if (change is OrganisationChange.CHANGED) != bool(fields):
+            msg = (
+                "a change typed by hand names the columns that moved, and nothing else names any; "
+                f"this is {change.value} with fields={list(fields)!r}"
+            )
+            raise ValueError(msg)
+        details: dict[str, object] = {"change": change.value}
+        if team:
+            details["team"] = team
+        _with_names(details, "fields", fields)
+        if actor_inferred:
+            details["actor"] = INFERRED_ACTOR
+        kind, slug = ("department", department) if department else ("scope", scope)
+        return self._write(AuditAction.ORGANISATION, subject(kind, slug), details)
 
     def elevation(
         self,

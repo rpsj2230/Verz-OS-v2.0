@@ -34,7 +34,7 @@ Scope: M24.1 is the chain logic only. Nothing here touches a database. The table
 eventually persists these entries stores the same fields and runs `verify` as its check
 job (M24.1.2).
 
-Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5, M27.7.21
+Task ids: M24.1.1, M24.1.2, M24.1.3, M24.1.4, M24.2.1, M42.6.5, M27.7.21, M27.11.1
 """
 
 from __future__ import annotations
@@ -127,6 +127,9 @@ SUBJECT_KINDS = frozenset(
         "erasure",
         # A memory a correction marked, since 2026-09-17. See MEMORY below.
         "memory",
+        # A department with its teams, and a scope, since 2026-09-17. See ORGANISATION below.
+        "department",
+        "scope",
     }
 )
 
@@ -471,6 +474,28 @@ class AuditAction(enum.StrEnum):
     decided, and a request for more access is not an agent's action. One member for the three
     changes, requested, approved and denied, with the capability and the reason code in the
     details, and the requester as the subject. Nine characters.
+
+    **ORGANISATION widened on 2026-09-17 to the structure the placements sit in, with no new
+    member.** The Departments and teams screen creates, renames and retires departments and their
+    teams, and creates and retires the scopes grants are written over (M27.11.1), and until then no
+    table under those acts had a trigger: `gate.department`, `gate.team` and `gate.scope` were
+    written by hand, by the demo seed and by furnishing, and "who retired finance, and who made the
+    scope our contractors are granted over" had no answer at all. **Recorded by the database, from
+    `0086`'s triggers on the three tables**, on the insert, on a rename, on any other column moved
+    by hand, and on retirement.
+
+    A member of its own was tried and rejected. The act is organising, which is what this member
+    already records: an auditor asking who put her in the design team asks next who made the design
+    team, and splitting the two would put them in two filters. GRANT and REVOKE were the near miss
+    for a scope and are wrong for the reason ORGANISATION's first paragraph gives about a placement:
+    a scope confers nothing until a grant names it, and a grant written over one records its own
+    GRANT. What changes is the subject, and so **two subject kinds**: `department:<slug>`, for a
+    department and each of its teams, whose path rides in the details as it does on a placement, so
+    everything that happened to a department and its parts is one subject; and `scope:<slug>`, for a
+    scope, because a scope over a named set of departments belongs to none of them. The subject is
+    the slug rather than the row id, because the slug is the value every grant's predicate carries,
+    so a department retired and created again under the same name is the same history to anybody
+    asking what reached it.
     """
 
     GRANT = "grant"
@@ -539,7 +564,9 @@ class AuditAction(enum.StrEnum):
     MEMORY = "memory"
     #: A person was placed in a team or taken out of one, or appointed to lead a department or
     #: stood down. Which is in the details, with the team's path or the department's slug. Written
-    #: by `0062`'s triggers on `gate.team_membership` and `gate.department_lead`.
+    #: by `0062`'s triggers on `gate.team_membership` and `gate.department_lead`. Since `0086`, also
+    #: a department, a team or a scope created, renamed, changed by hand or retired, written by the
+    #: triggers on `gate.department`, `gate.team` and `gate.scope` under its own subject.
     ORGANISATION = "organisation"
     #: Somebody asked for a capability they do not hold, or somebody else approved or denied the
     #: request. Which is in the details, with the capability and the reason code. Written by

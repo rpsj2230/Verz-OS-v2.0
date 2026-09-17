@@ -266,6 +266,15 @@ def entries(url: str) -> list[AuditEntry]:
     return [AuditEntry(**dict(zip(names, row, strict=True))) for row in rows]
 
 
+def placements(chain: list[AuditEntry]) -> list[AuditEntry]:
+    """The entries about where somebody sits, which are filed under the person.
+
+    Since `0086` the seeded scopes, departments and team are recorded too, under `department:` and
+    `scope:` and as the database role that inserted them; these tests are about the placements.
+    """
+    return [one for one in chain if one.subject.startswith("principal:")]
+
+
 def placing(reach: EntitlementSet, department: str = "web") -> Any:
     def may(person: Person) -> bool:
         return may_place(reach, department=department, person=member_of(person), now=LATER)
@@ -383,7 +392,7 @@ def test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_pa
     assert web_only.lead is not None and web_only.lead.principal_id == "u_new"
     assert memberships == [("u_grace", "u_admin", None), ("u_wei", "u_admin", "u_admin")]
     assert leads == [("u_wei", "u_admin", "u_admin"), ("u_new", "u_admin", "u_admin")]
-    assert [(one.subject, one.actor_id, one.details) for one in chain] == [
+    assert [(one.subject, one.actor_id, one.details) for one in placements(chain)] == [
         ("principal:u_wei", "u_admin", {"change": "joined", "team": "web.design"}),
         ("principal:u_grace", "u_admin", {"change": "joined", "team": "web.design"}),
         ("principal:u_wei", "u_admin", {"change": "appointed", "department": "web"}),
@@ -470,7 +479,7 @@ def test_every_refused_placement_writes_nothing() -> None:
 
     assert refused == [None, None, None, None, None, None]
     assert (rows, lead_rows) == (1, 0)
-    assert len(chain) == 1
+    assert len(placements(chain)) == 1
 
 
 def test_the_sync_places_where_the_source_says_and_ends_only_what_it_made() -> None:
@@ -536,7 +545,7 @@ def test_the_sync_places_where_the_source_says_and_ends_only_what_it_made() -> N
             " ORDER BY principal_id",
         )
         leads = sql(url, "SELECT principal_id, appointed_by, ended_by FROM gate.department_lead")
-        actors = [one.actor_id for one in entries(url)]
+        actors = [one.actor_id for one in placements(entries(url))]
 
     sync = f"{SYNC_ACTOR_PREFIX}lark"
     assert memberships == [("u_grace", "u_admin", None), ("u_wei", sync, sync)]

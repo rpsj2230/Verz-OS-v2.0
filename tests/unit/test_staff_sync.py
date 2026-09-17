@@ -721,7 +721,9 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
     `erasure`, a request to erase somebody's data, filed only by somebody holding
     `admin:erasure` over everything; and
     `memory`, a correction naming a memory, whose existence is recall's to disclose and never an
-    actor-scoped audit grant's.
+    actor-scoped audit grant's; and
+    `department` and `scope`, the structure grants are written against, changed only under
+    `admin:department` or `admin:scope`, neither of which this sync grants a head.
 
     Delete this and the set can be widened one kind at a time by whoever finds a page thin,
     and the widening is invisible because every other test here is about the shape of a grant
@@ -733,6 +735,7 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
         "artifact",
         "connector",
         "credential",
+        "department",
         "entity",
         "erasure",
         "grant",
@@ -740,6 +743,7 @@ def test_a_head_holds_the_three_governance_kinds_and_none_of_the_other_eight() -
         "memory",
         "retention",
         "routing",
+        "scope",
         "session",
         "setting",
         "skill",
