@@ -194,7 +194,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M1.6.11": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.2, which asks for the same outcome: Staff source: choose it, configure it and try it before it runs. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -225,7 +230,24 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M2.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.2.2, which asks for the same outcome: Scope model as jsonb predicate, evaluator, conjunction-only composition. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M2.1.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.2.2, which asks for the same outcome: Scope model as jsonb predicate, evaluator, conjunction-only composition. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M2.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.2.2, which asks for the same outcome: Scope model as jsonb predicate, evaluator, conjunction-only composition. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M2.2.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.1, which asks for the same outcome: Departments, teams and scopes created, renamed and retired from the console, each change audited. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -479,7 +501,20 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M6.2.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M3.5.1, which asks for the same outcome: Key from question, entitlement hash, agent config hash, policy epoch, source epochs. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M6.3.6": {
+     "kind": "DECIDED",
+     "why": "Merged into M3.5.3, which asks for the same outcome: Hit surfaced to the user with its age. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M6.4.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M3.7.2, which asks for the same outcome: Static tool prefix with deferred loading so the provider cache is shared. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -583,7 +618,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M8.2.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M4.3.3, which asks for the same outcome: Permission-denied indistinguishable from nothing-found at record level. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -612,7 +652,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M9.2.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M4.3.1, which asks for the same outcome: Structural lock rendering, identical for every viewer. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -815,7 +860,16 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M12.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.2.6, which asks for the same outcome: ToolDefinition: name, args schema, result contract, required capability, side effect, identity mode. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M12.1.6": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.5.6, which asks for the same outcome: Registry sweep: tool naming grammar. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -934,7 +988,68 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M13.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.1.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.6": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.3.7": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.6.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.6.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.6.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.6.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.6.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M13.6.6": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.7, which asks for the same outcome: Agent templates installed, authored from an agent through the leak scan, and withdrawn. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1326,7 +1441,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M19.6.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M22.1.1, which asks for the same outcome: Global budgets: concurrent model calls, source calls per connector, browser sessions, long-running tasks, document jobs, embedding jobs, tokens per minute. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1377,7 +1497,32 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M20.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M20.3.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M20.3.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M20.3.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M20.3.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M20.4.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.11.6, which asks for the same outcome: Agents created from a template or from scratch through saved drafts, a rehearsal and a publish a second person approves, then enabled, disabled, archived, duplicated and handed over. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1492,7 +1637,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M23.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M10.5.5, which asks for the same outcome: Web widget with session minting and abuse guard. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1607,7 +1757,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M26.2.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M16.4.4, which asks for the same outcome: Entitlement expiry: memories stop matching when capabilities change. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1920,7 +2075,84 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M27.3.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.3, which asks for the same outcome: People: who is here, what each holds, and the reach that follows from it. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.5, which asks for the same outcome: Roles: the six, what each is for, and who holds it. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.6, which asks for the same outcome: The capability catalogue: everything that can be granted at all. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.2, which asks for the same outcome: Staff source: choose it, configure it and try it before it runs. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.6": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.9, which asks for the same outcome: Access review: each department lead recertifies what their people hold. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.8": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.10, which asks for the same outcome: Sessions, with a control to end one, because revoking a grant does not close a session. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.9": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.24, which asks for the same outcome: Exports, retention and erasure, with the deletion queue. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.10": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.24, which asks for the same outcome: Exports, retention and erasure, with the deletion queue. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.14": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.20, which asks for the same outcome: Knowledge library across every department, with per-item visibility scope. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.15": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.21, which asks for the same outcome: Learning review across every department, tiers separated and tier one undoable. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.16": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.23, which asks for the same outcome: Artifacts produced, with provenance and retention. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.3.17": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.22, which asks for the same outcome: Memory viewer with change history. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.4.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.14, which asks for the same outcome: Usage and tokens by person, department, model and agent. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.4.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.15, which asks for the same outcome: Spend, budgets and what happens at the ceiling. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.4.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.19, which asks for the same outcome: Quality and the permission canaries. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.6.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.26, which asks for the same outcome: Backup, last verified restore and the recovery drill. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.6.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.27, which asks for the same outcome: Rate limits and capacity: what is throttled now, and connections, memory and pools against what is deployed. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.6.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.7.27, which asks for the same outcome: Rate limits and capacity: what is throttled now, and connections, memory and pools against what is deployed. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M27.8.12": {
+     "kind": "DECIDED",
+     "why": "Merged into M17.5.3, which asks for the same outcome: Subscriber management in the console. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -1955,7 +2187,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M28.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.6.4, which asks for the same outcome: Golden questions: twenty questions across three personas with known answers. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2013,6 +2250,10 @@
    "leaf_waves": {},
    "leaf_acts": {},
    "leaf_decided": {
+    "M29.1.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M10.1.1, which asks for the same outcome: Channel adapter interface with normalise, send, capabilities. Owner approved merging duplicates on 2026-09-17."
+    },
     "M29.1.6": {
      "kind": "DECIDED",
      "why": "item 58, Option B. The register answers UNDECIDED: no module defines a retriever contract, and the reach predicate is what decides which rows exist for a caller. A contract is written when a real retriever plug-in exists"
@@ -2136,7 +2377,44 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M30.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M42.1.1, which asks for the same outcome: Per-client variables in a separate private repository, one file per install, documented field by field. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.1.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M42.1.2, which asks for the same outcome: Secrets minted per install and never copied between clients, enforced by a check that refuses a shared value. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.2.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M38.1.2.1, which asks for the same outcome: Actions workflow: lint, type check, unit tests, invariant suite, schema sweeps. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.2.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M38.1.2.4, which asks for the same outcome: Image signing. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.2.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M38.1.2.5, which asks for the same outcome: Push to the registry. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.2.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M42.1.4, which asks for the same outcome: Release pinning per client, so one client can hold a version back without forking. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.2.7": {
+     "kind": "DECIDED",
+     "why": "Merged into M42.3.6, which asks for the same outcome: Update script pinning a release tag, and a rollback script re-pinning the previous one. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.2.8": {
+     "kind": "DECIDED",
+     "why": "Merged into M42.3.7, which asks for the same outcome: Deployment checklist: pre-deployment, server, application, database, environment, integrations, security, testing, go-live and post-deployment. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M30.4.8": {
+     "kind": "DECIDED",
+     "why": "Merged into M17.3.5, which asks for the same outcome: Kill-after-side-effect test proving exactly-once. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2225,7 +2503,16 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M31.2.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.3.5, which asks for the same outcome: PgBouncer session-mode pool for the worker, for LISTEN and NOTIFY. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M31.3.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.4.3, which asks for the same outcome: Documented environment example with every variable explained. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2326,7 +2613,20 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M32.4.1.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M17.1.2, which asks for the same outcome: Procrastinate integration on Postgres. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M32.4.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M17.2.1, which asks for the same outcome: LangGraph checkpointer on Postgres. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M32.4.1.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M17.2.2, which asks for the same outcome: Our own re-drive driver for crash recovery. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2419,7 +2719,24 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M33.1.1.4": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.12.4, which asks for the same outcome: The stop button halts the install from the console and the halt survives a restart. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M33.1.2.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.5.5, which asks for the same outcome: Super Admin self-grant writes a loud audit event and notifies the steward. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M33.6.1.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M27.3.7, which asks for the same outcome: Approvals queue: what is waiting on a human. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M33.7.1.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M1.2.4, which asks for the same outcome: Partner principal with zero standing entitlement. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2476,7 +2793,24 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M34.2.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M7.4.7, which asks for the same outcome: Verification badge surfaced in the answer. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M34.2.1.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M7.4.6, which asks for the same outcome: Scheduled job opening re-verification tasks from review_by. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M34.3.2.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M30.4.1, which asks for the same outcome: Failure-mode matrix covering every component. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M34.3.3.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M42.2.5, which asks for the same outcome: Configuration guide: every value a new client must set, in one table, with where each comes from. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2523,7 +2857,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M35.3.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M35.3.1.1, which asks for the same outcome: Console usable on a phone for approvals at minimum. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2586,7 +2925,16 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M36.1.1.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M36.1.1.1, which asks for the same outcome: Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M36.1.1.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M36.1.1.1, which asks for the same outcome: Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -2944,7 +3292,24 @@
      "why": "conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off"
     }
    },
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M37.4.2.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M30.5.4, which asks for the same outcome: RPO and RTO per profile written into the client agreement. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M37.4.3.1": {
+     "kind": "DECIDED",
+     "why": "Merged into M34.3.2.1, which asks for the same outcome: Runbook per console screen. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M37.4.3.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M30.4.1, which asks for the same outcome: Failure-mode matrix covering every component. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M37.5.3.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M21.2.4, which asks for the same outcome: Estimator correction from actuals. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {
     "M37.2": "Replacing AnyGen",
     "M37.2.1": "What is actually in there",
@@ -3110,7 +3475,12 @@
      "why": "a drill is somebody restoring a real backup onto real hardware and timing it. The machinery it exercises is code and is the recovery screen leaf under M27; the drill is the act, and `brain.launch.service_level` already refuses to report a recovery figure that rests on a schedule rather than on a copy somebody made"
     }
    },
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M38.1.2.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M0.5.3, which asks for the same outcome: Migration forward and rollback against production-shaped data. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {
     "M38.2": "Deploy at the end of every wave",
     "M38.2.1": "Wave close ritual"
@@ -3270,7 +3640,12 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M39.3.1.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M39.3.1.4, which asks for the same outcome: Worked preview: pick a person, see exactly what their run of this agent would return. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {
@@ -3387,7 +3762,24 @@
    ],
    "leaf_waves": {},
    "leaf_acts": {},
-   "leaf_decided": {},
+   "leaf_decided": {
+    "M40.2.1.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M9.1.2, which asks for the same outcome: Thread continuity across channels. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M40.3.3.2": {
+     "kind": "DECIDED",
+     "why": "Merged into M39.5.1.5, which asks for the same outcome: Re-download re-checks the requester entitlement rather than trusting the original link. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M40.4.1.3": {
+     "kind": "DECIDED",
+     "why": "Merged into M16.5.1, which asks for the same outcome: Weekly digest of tier one and two learning with one-click undo. Owner approved merging duplicates on 2026-09-17."
+    },
+    "M40.6.1.5": {
+     "kind": "DECIDED",
+     "why": "Merged into M35.3.1.1, which asks for the same outcome: Console usable on a phone for approvals at minimum. Owner approved merging duplicates on 2026-09-17."
+    }
+   },
    "act_groups": {}
   },
   {

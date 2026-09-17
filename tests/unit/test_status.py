@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
@@ -260,8 +261,19 @@ def test_the_decided_leaves_are_the_register_points_that_are_not_plugins() -> No
     wbs = status.load_wbs(repo / "docs" / "wbs.json")
     decided = {leaf: flag for m in wbs["modules"] for leaf, flag in status.decided_of(m).items()}
 
-    assert set(decided) == {one.leaf for one in POINTS if one.answer is not Answer.PLUGIN}
-    assert all(flag["kind"] == "DECIDED" and "item 58" in flag["why"] for flag in decided.values())
+    register = {leaf: flag for leaf, flag in decided.items() if "item 58" in flag["why"]}
+    assert set(register) == {one.leaf for one in POINTS if one.answer is not Answer.PLUGIN}
+    assert all(flag["kind"] == "DECIDED" for flag in decided.values())
+
+    # The only other decision is a duplicate merged on the owner's approval of 2026-09-17, and
+    # it names the leaf that carries the work, which must exist and must not be retired too.
+    leaves = {leaf for m in wbs["modules"] for leaf in m["leaf_ids"]}
+    for leaf, flag in decided.items():
+        if leaf in register:
+            continue
+        merged = re.match(r"Merged into (M\d+(?:\.\d+)+),", flag["why"])
+        assert merged, f"{leaf} is decided for a reason that is neither item 58 nor a merge"
+        assert merged.group(1) in leaves and merged.group(1) not in decided, (leaf, flag["why"])
 
 
 def test_an_act_is_never_named_as_the_next_thing_to_build(repo: Path) -> None:
