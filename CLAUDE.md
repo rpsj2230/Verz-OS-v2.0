@@ -380,6 +380,12 @@ tests for the consumer unless you write the producer's from the raw payload.
   done and why. These messages are the design record; there is no other one.
 - `Closes: M12.2.4, M12.2.6` claims WBS leaves. One id per leaf, and only leaves you can point
   at a test for.
+- **A claim carries its proof on the same commit.** A `Proved-on-install:` line says what was
+  done on an install and what was seen, and never names an address; for a leaf that lives only
+  in the repository, `Proved-in-ci:` names the CI job that runs it. `brain.ops.conventions`
+  refuses a claim without one, and from `brain.status.PROOF_REQUIRED_FROM` the tracker does not
+  count one even when the hook was skipped. A test over fakes is not proof: on 2026-09-17 an
+  audit reopened 1046 of 1213 closed tasks that the owner's install did not show working.
 - **Do not claim a leaf that is already closed.** `ops/hooks/commit-msg` calls
   `brain.ops.conventions.already_closed` and warns; it is advisory rather than blocking, and it
   has caught this twice.

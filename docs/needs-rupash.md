@@ -38,6 +38,61 @@ Tell me when they are on and I close this item.
 
 # Answered
 
+## 68. The owner's architecture review - DECIDED
+
+**Recorded 2026-09-17, from your review of the architecture.** You approved the changes and the six
+decisions below.
+
+**In plain words.** This item is where those decisions are written down, so that nobody building
+from here follows an older rule that the code still states. Nothing in the code changes in this
+item. Where the code writes down a rule that a decision overturns, the rule is named below by file
+and name, and it changes when the work that needs it is built, together with its tests.
+
+**The changes.**
+
+- **An agent's reach only ever narrows.** An agent sees what the person asking can see, cut down
+  further by the agent's own ceiling, and never more. The channels and connectors listed on an agent
+  are compiled into that ceiling rather than checked on their own.
+- **A connector attached to an agent is a setting, not a second permission system.** Attaching one
+  decides what the agent may use. Who may see what is still decided in one place.
+- **Pricing stays as table rows,** classified like every other row.
+- **Several agents working together is built last.** Workflow steps that run side by side come
+  first.
+- **One context assembler, reading the stores that already exist.** Project context and a person's
+  own context are read again every time, never kept from an earlier request.
+- **Computer use is a last resort.** Website checks use plain web requests and a browser that only
+  reads.
+- **Approvals happen only in the console or on Lark cards.**
+- **A thumbs up or down is counted, and changes nothing on its own.**
+- **Depth before breadth.** One complete maintenance agent working on your install comes first.
+
+**The decisions.**
+
+- **D1. A workflow may contain model steps and skill steps,** and they run only through the one
+  agent runtime, so they are leashed, permitted, approved and audited like any agent run. This
+  overturns `DETERMINISTIC_ONLY` in `ops/automation.py`, which keeps anything needing judgement out
+  of a flow, and `NodeKind` in `builder/compose.py`, whose five kinds of node leave no place for
+  one.
+- **D2. A specialist that another agent hands work to runs at the asking person's reach intersected
+  with the specialist's own ceiling,** and only along delegation links an administrator has set.
+  This overturns `EVERY_HOP_ONLY_NARROWS` and `AN_AGENT_IS_NEVER_THE_CALLER` in
+  `orchestration/delegation.py`, and the fold `chain_reaches` computes there, which narrow the
+  specialist's reach by the ceiling of every agent on the way to it.
+- **D3. Connector keys live in the vault,** deployed with the worker on the install.
+- **D4. The two-person rule stays for irreversible actions, and an administrator may approve a
+  skill they imported,** with that approval recorded. This overturns
+  `NOBODY_DECIDES_ABOUT_A_SKILL_THEY_ADDED` in `console/skill_library.py`, which refuses the person
+  who added a skill whatever they hold.
+- **D5. A correction may carry the right answer.** It is held as a learning candidate, with
+  permissions like any other record, until it is approved. This overturns `Correction` in
+  `chat/turns.py`, which has no field for the corrected content on purpose, and
+  `A_FREE_TEXT_NOTE_IS_WHERE_THE_ANSWER_GETS_PASTED` in `ops/feedback.py`, which keeps a flag to a
+  closed list with no free text.
+- **D6. Computer use is deferred.** Browser checks come first.
+
+**Until that work is built,** a reader who meets one of the rules named above should read it as the
+rule this item replaced, not as the current decision.
+
 ## 67. Nobody on an install could ever be given a read of the company's data: where does the first one come from? - DECIDED: Option A, a data steward is named in setup
 
 **Your answer, 2026-09-17:** "go with option A. Name a data steward in setup (recommended)".

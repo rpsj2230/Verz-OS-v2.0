@@ -1,8 +1,8 @@
 """The repository conventions that are checkable, checked.
 
-Three of them, and they share one property: each is the kind of rule that a team agrees
-to, follows for a fortnight, and then stops following without anybody deciding to. A
-convention nothing enforces is a convention that describes the past.
+They share one property: each is the kind of rule that a team agrees to, follows for a
+fortnight, and then stops following without anybody deciding to. A convention nothing
+enforces is a convention that describes the past.
 
 **A commit message names the leaf ids it closes.** The status page is generated from
 those ids, so a commit that closes a task without saying so leaves the plan describing
@@ -26,6 +26,26 @@ same fault. A `Found-on:` line without its reason is refused. A message that mer
 about an install gets a note, because words cannot tell a finding from a mention and a rule
 that refused on a guess would be switched off. See `AN_INSTALL_IS_NOT_THE_PRODUCT` and the
 section of `CLAUDE.md` it names.
+
+**A claim carries its proof on the same commit.** On 2026-09-17 an audit reopened 1046 of the
+1213 tasks the tracker counted as done. Every one had been closed by a claim, most of them
+backed by unit tests over fakes, and the owner's install showed none of the 1046 working. The
+standard since is that a task is done when what it asks for exists and works on an install, so
+a message that claims a leaf, on a `Closes:` line or in its subject, also carries a
+`Proved-on-install:` line saying what was done on an install and what was seen, or, for a leaf
+that lives only in the repository, a `Proved-in-ci:` line naming the CI job that runs it. See
+`A_CLAIM_NEEDS_PROOF`. A proof names what was done and seen and never where: see
+`A_PROOF_NAMES_NO_ADDRESS`.
+
+**The hook is half of that rule and `brain.status` is the other half.** `git commit
+--no-verify` skips this module entirely, so the tracker refuses to count an unproved claim on
+its own, from `brain.status.PROOF_REQUIRED_FROM`. Both read proof through `proofs_in`, so the
+hook cannot accept a trailer the tracker then ignores. What the hook adds is the moment: a
+refusal here costs one retry, and a claim the tracker silently declines to count costs a task
+that looks done to its author and open to everybody else.
+
+**Taking a claim back needs no proof.** A `Reopens:` line only ever lowers the count, which is
+never the direction a mistake flatters, and an id the same message reopens is not a claim.
 
 Rejected: enforcing any of this in CI alone. CI runs after the commit exists, so the
 message is already written and the fix is a rebase. A hook that refuses at commit time
@@ -57,7 +77,47 @@ ANY_ID_RE = re.compile(r"\bM\d+(?:\.\d+){0,4}\b")
 #: The one line a commit may close tasks on. Deliberately not "anywhere in the message":
 #: a message that discusses M12.1.1 in a paragraph about why it was *not* done would
 #: otherwise close it.
-CLOSES_LINE_RE = re.compile(r"^\s*Closes:\s*(.+)$", re.M)
+#:
+#: Case-insensitive, as `brain.status.CLOSES_RE` is, and kept equal to it by a test. Until
+#: 2026-09-17 this read `Closes:` only, so a `closes:` line was a claim the tracker counted and
+#: a line this module never checked: a group id on it closed the group, and an unproved claim
+#: on it would have passed the proof rule below.
+CLOSES_LINE_RE = re.compile(r"^\s*closes:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+
+#: The line a mistaken claim is taken back on. Kept equal to `brain.status.REOPENS_RE` by a
+#: test, for the reason `SUBJECT_ID_RE` gives: this module runs in a commit hook.
+REOPENS_LINE_RE = re.compile(r"^\s*reopens:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+
+#: Why a claim is refused without proof on the same commit.
+A_CLAIM_NEEDS_PROOF = (
+    "On 2026-09-17 an audit reopened 1046 of the 1213 tasks the tracker counted as done: each "
+    "had been closed by a claim backed by tests over fakes, and the owner's install did not show "
+    "it working. A task is done when what it asks for exists and works on an install. So a claim "
+    "carries a Proved-on-install: line saying what was done on an install and what was seen, "
+    "or, for a leaf that lives only in the repository, a Proved-in-ci: line naming the CI job "
+    "that runs it. The tracker does not count a claim without one, whether or not this hook ran."
+)
+
+#: The two trailers that prove a claim. Case-insensitive like every other trailer the tracker
+#: reads, and read from the body only, as git's `%b` is: see `body_of`.
+PROOF_RE = re.compile(r"^\s*proved-(?:on-install|in-ci):(.*)$", re.IGNORECASE | re.MULTILINE)
+
+#: Why a proof may not carry an address.
+A_PROOF_NAMES_NO_ADDRESS = (
+    "A proof says what was done on an install and what was seen, never where. A commit message "
+    "is pushed and kept for ever, and the audit commit that prompted the proof rule named the "
+    "install by its address in its own body. An address is configuration of one install, which "
+    "CLAUDE.md keeps out of everything committed, and the proof is no weaker without it."
+)
+
+#: A bare IPv4, kept equal to `brain.ops.independence.IPV4` by a test rather than imported:
+#: that module pulls in the settings loader, which costs a second on every commit.
+IPV4_RE = re.compile(
+    r"\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b"
+)
+
+#: Where git's subject ends and its body begins: the first line holding nothing but spaces.
+PARAGRAPH_BREAK_RE = re.compile(r"\n[ \t]*\n")
 
 #: The ids `brain.status.claimed_ids` reads out of a subject line: at least one dot, so a
 #: module id such as `M27` in a subject is prose and a group id such as `M27.9` is a claim.
@@ -131,6 +191,42 @@ def leaf_ids_in(message: str) -> tuple[str, ...]:
     return tuple(ids)
 
 
+def body_of(message: str) -> str:
+    """Everything after the subject paragraph, which is what git's `%b` hands the tracker.
+
+    Git's subject is the first paragraph rather than the first line: a message with no blank
+    line after its first line has a subject running on into whatever follows and an empty body.
+    So a proof trailer typed directly under the subject is not in `%b`, and the tracker does not
+    see it. Splitting here on the first blank line rather than the first newline is what stops
+    this hook accepting a trailer the tracker then ignores, which would be a task that looks
+    proved to its author and open to everybody else.
+    """
+    parts = PARAGRAPH_BREAK_RE.split(message.strip(), maxsplit=1)
+    return parts[1] if len(parts) > 1 else ""
+
+
+def proofs_in(body: str) -> tuple[str, ...]:
+    """The words on every proof trailer in a commit body, in the order written.
+
+    An empty trailer is left out rather than counted. A colon with nothing after it is the
+    cheapest way to satisfy the letter of the rule, and it proves nothing, so neither this hook
+    nor `brain.status`, which reads proof through this function, treats one as proof.
+    """
+    return tuple(value.strip() for value in PROOF_RE.findall(body) if value.strip())
+
+
+def reopened_in(body: str) -> set[str]:
+    """Ids a commit body takes back on a `Reopens:` line, as `brain.status.reopened_ids` reads.
+
+    The body only. A subject reading `Reopens: M0.4.2` is a claim to the tracker, which reads
+    every id in a subject as one, so it is a claim here too and needs its proof.
+    """
+    ids: set[str] = set()
+    for line in REOPENS_LINE_RE.findall(body):
+        ids.update(SUBJECT_ID_RE.findall(line))
+    return ids
+
+
 def check_commit_message(message: str) -> Refusal | None:
     """None if the message may be committed, a Refusal otherwise.
 
@@ -161,13 +257,10 @@ def check_commit_message(message: str) -> Refusal | None:
                 subject,
             )
 
-    claimed = leaf_ids_in(message)
-    if not claimed:
-        # No claim, nothing to check. If the body mentions ids elsewhere, that is prose:
-        # a message explaining why M12.1.1 was left alone must not close it.
-        return None
-
-    for one in claimed:
+    # Only the Closes: line and the subject claim. If the body mentions ids elsewhere, that is
+    # prose: a message explaining why M12.1.1 was left alone must not close it.
+    closes = leaf_ids_in(message)
+    for one in closes:
         if LEAF_ID_RE.match(one):
             continue
         if ANY_ID_RE.fullmatch(one):
@@ -178,6 +271,22 @@ def check_commit_message(message: str) -> Refusal | None:
                 subject,
             )
         return Refusal(f"{one!r} on the Closes: line is not a task id", subject)
+
+    body = body_of(message)
+    proofs = proofs_in(body)
+    for proof in proofs:
+        if IPV4_RE.search(proof) or "://" in proof:
+            return Refusal(f"a proof names an address. {A_PROOF_NAMES_NO_ADDRESS}", subject)
+
+    # By here every id in the subject and on the Closes: line is a leaf. An id the same commit
+    # reopens is not counted by the tracker, so it needs no proof either.
+    claimed = (set(SUBJECT_ID_RE.findall(subject)) | set(closes)) - reopened_in(body)
+    if claimed and not proofs:
+        return Refusal(
+            f"{', '.join(sorted(claimed))} claimed with no Proved-on-install: or Proved-in-ci: "
+            f"line saying what proves it. {A_CLAIM_NEEDS_PROOF}",
+            subject,
+        )
     return None
 
 
