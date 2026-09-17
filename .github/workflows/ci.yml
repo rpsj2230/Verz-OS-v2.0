@@ -524,6 +524,24 @@ jobs:
           fi
           echo "after removal the demo answers nothing"
 
+      - name: The reset command refuses an install, then drops and rebuilds a development one
+        # M0.4.5, run rather than described. The refusals come first and are proved harmless by
+        # the schema still being at head after them; then the reset runs over the database this
+        # job just used, and the demo it reloads answers again. `if` for the refusals, because
+        # the default shell is `bash -e`.
+        run: |
+          if BRAIN_ENV=production uv run python -m brain.tasks reset; then
+            echo "::error::reset ran against an install declaring production"; exit 1
+          fi
+          if env -u BRAIN_ENV uv run python -m brain.tasks reset; then
+            echo "::error::reset ran in a shell that declared no environment"; exit 1
+          fi
+          uv run alembic current | grep -q "(head)" || { echo "::error::a refused reset changed the schema"; exit 1; }
+          BRAIN_ENV=development uv run python -m brain.tasks reset
+          uv run alembic current | grep -q "(head)" || { echo "::error::reset did not rebuild to head"; exit 1; }
+          uv run python -m brain.seed --smoke
+          echo "reset refused twice, then dropped, rebuilt and reseeded"
+
   stack:
     name: The whole stack starts
     runs-on: ubuntu-latest

@@ -15,47 +15,49 @@
 help:  ## Show this list
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | sort | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n",$$1,$$2}'
 
+# Every target below that M0.1.5 or M0.4.5 names is one line calling `brain.tasks`, which holds
+# the command itself. `make` is not installed on the machine this is developed on, so the
+# commands live where the interpreter can run them: `uv run python -m brain.tasks <task>` is
+# the same thing without make. See the module docstring for why there is one copy.
 dev:  ## Run the app locally with reload
-	uv run python -m uvicorn brain.app:app --reload --port 8000
+	uv run python -m brain.tasks dev
 
 test:  ## Every test, with the coverage floor
-	uv run python -m pytest --cov
+	uv run python -m brain.tasks test
 
 invariants:  ## Only the rules that must never break
-	uv run python -m pytest tests/invariants -q
+	uv run python -m brain.tasks invariants
 
 lint:  ## Ruff
-	uv run python -m ruff check src tests migrations
+	uv run python -m brain.tasks lint
 
-# `--platform linux` rather than this machine's. mypy narrows `sys.platform` to the platform it
-# runs on, so on 2026-09-11 a Windows machine reported Success on a function whose other half
-# was unreachable on the runner, CI went red on it, and because CI gates Deploy production sat
-# on the previous commit. Linux is the only platform this ships on. `make types-here` is the
-# native run for anybody debugging a development machine.
+# `brain.tasks` passes `--platform linux` rather than this machine's. mypy narrows `sys.platform`
+# to the platform it runs on, so on 2026-09-11 a Windows machine reported Success on a function
+# whose other half was unreachable on the runner, CI went red on it, and because CI gates Deploy
+# production sat on the previous commit. `make types-here` is the native run for debugging.
 types:  ## Mypy, strict, against the platform this ships on
-	uv run python -m mypy --platform linux
+	uv run python -m brain.tasks types
 
 types-here:  ## Mypy, strict, against this machine's own platform
-	uv run python -m mypy
+	uv run python -m brain.tasks types-here
 
 fmt:  ## Format in place
-	uv run python -m ruff format src tests migrations
-	uv run python -m ruff check src tests migrations --fix
+	uv run python -m brain.tasks fmt
 
-check: fmt lint types invariants  ## Everything the pre-push hook runs
-	@echo "all gates green"
+check:  ## Everything the pre-push hook runs
+	uv run python -m brain.tasks check
 
 migrate:  ## Apply migrations to DATABASE_URL
-	uv run python -m alembic upgrade head
+	uv run python -m brain.tasks migrate
 
 revision:  ## New migration: make revision m="what it does"
 	uv run python -m alembic revision -m "$(m)"
 
 seed:  ## Load the synthetic company into the database
-	uv run python -m brain.seed
+	uv run python -m brain.tasks seed
 
-reset:  ## Drop everything and rebuild. Destroys local data.
-	uv run python -m alembic downgrade base && uv run python -m alembic upgrade head && $(MAKE) seed
+reset:  ## Drop everything and rebuild. Refuses any install that is not a development one.
+	uv run python -m brain.tasks reset
 
 deploy:  ## Push the current published image to the VPS
 	sh ops/deploy.sh

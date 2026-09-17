@@ -1,0 +1,16 @@
+#!/bin/sh
+# Ruff's format and lint over the staged Python files, before the commit exists.
+#
+# A shim, for the reason `commit-msg` gives: the rule is `brain.ops.precommit`, which reads the
+# staged blobs rather than the working tree and has tests. mypy and the invariants are in
+# `pre-push`, because a commit hook that takes a minute is one people skip.
+#
+# Install: git config core.hooksPath ops/hooks
+# Task ids: M0.1.3
+
+set -eu
+
+if ! uv run python -m brain.ops.precommit; then
+    echo "To commit anyway: git commit --no-verify" >&2
+    exit 1
+fi

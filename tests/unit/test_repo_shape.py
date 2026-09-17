@@ -23,6 +23,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from brain.deployment.postgres_settings import EXPLICIT_SETTINGS, command_settings
+
 REPO = Path(__file__).resolve().parents[2]
 
 
@@ -82,14 +84,19 @@ def test_the_gate_does_not_import_a_connector() -> None:
 
 # ------------------------------------------------ the task runner (M0.1.5)
 @pytest.mark.parametrize(
-    "target", ["dev", "test", "migrate", "seed", "lint", "invariants", "types", "check"]
+    "target", ["dev", "test", "migrate", "seed", "lint", "invariants", "types", "check", "reset"]
 )
-def test_the_task_runner_offers_every_named_command(target: str) -> None:
+def test_every_make_target_the_runner_names_calls_that_task_and_nothing_else(target: str) -> None:
     """A runner missing a target means everybody invents their own incantation, and the
     invocation CI runs stops being the invocation a person runs. The two then drift, and the
-    difference is discovered on a red build nobody can reproduce locally."""
+    difference is discovered on a red build nobody can reproduce locally.
+
+    The recipe is asserted whole, as the one line calling `brain.tasks`, so a Makefile that
+    grows its own copy of a command fails here rather than drifting from the one CI runs."""
     makefile = (REPO / "Makefile").read_text(encoding="utf-8")
-    assert re.search(rf"^{target}:", makefile, re.M), f"make {target} does not exist"
+    recipe = re.search(rf"^{re.escape(target)}:.*\n\t(.+)$", makefile, re.M)
+    assert recipe, f"make {target} does not exist"
+    assert recipe.group(1) == f"uv run python -m brain.tasks {target}"
 
 
 # --------------------------------------------- lint, types, floor (M0.5.1, M0.5.2)
@@ -243,31 +250,6 @@ def test_every_declared_dependency_is_in_the_lock() -> None:
     assert not missing, f"declared in pyproject.toml and absent from uv.lock: {missing}"
 
 
-# -------------------------------------------------- the reset command (M0.4.5)
-def test_reset_drops_everything_then_rebuilds_then_reseeds_in_that_order() -> None:
-    """`make reset` is the remedy `brain.seed` names when it refuses a database the demo has
-    been loaded into and removed from, so a reset that stops short is a refusal with no way
-    out. The order is the property: seeding before the downgrade writes rows that are then
-    dropped, and upgrading before it is a no-op that leaves the old schema standing.
-
-    Joined by `&&` and asserted that way, because a downgrade that fails half way and is
-    followed by an upgrade anyway rebuilds on top of whatever it left, which is the one state a
-    reset exists to get out of.
-
-    Delete this and the recipe can be reordered, or lose a step, and still be a target that
-    `test_the_task_runner_offers_every_named_command` would accept if it listed it."""
-    makefile = (REPO / "Makefile").read_text(encoding="utf-8")
-    recipe = re.search(r"^reset:.*\n\t(.+)$", makefile, re.M)
-    assert recipe, "make reset does not exist"
-
-    steps = [step.strip() for step in recipe.group(1).split("&&")]
-    assert steps == [
-        "uv run python -m alembic downgrade base",
-        "uv run python -m alembic upgrade head",
-        "$(MAKE) seed",
-    ]
-
-
 # ------------------------------------------------ the database (M0.3.1, M0.3.3, M0.3.6)
 @pytest.mark.parametrize("extension", ["vector", "pg_trgm", "fuzzystrmatch", "unaccent"])
 def test_the_first_migration_installs_every_extension_the_system_needs(extension: str) -> None:
@@ -295,14 +277,21 @@ def test_the_application_role_cannot_bypass_row_level_security() -> None:
     assert "NOSUPERUSER" in text
 
 
-@pytest.mark.parametrize("setting", ["shared_buffers", "work_mem"])
+@pytest.mark.parametrize("setting", EXPLICIT_SETTINGS)
 def test_every_compose_profile_sets_its_memory_explicitly(setting: str) -> None:
     """Postgres defaults are sized for a machine from a decade ago, and this host runs a
     second production system belonging to a different project. An unset `shared_buffers` is
-    not a performance problem here, it is a neighbour's outage."""
+    not a performance problem here, it is a neighbour's outage.
+
+    Read off the parsed `command:` of the database service rather than the file's text: the
+    text search this replaced passed on a setting named in a comment, and staging's file lacked
+    `autovacuum_work_mem` with nothing noticing. The profiles' figures are held to their sizing
+    by `tests/unit/test_postgres_settings.py`; staging is a separate deployment and is held here
+    to setting them at all."""
     for name in ("docker-compose.yml", "docker-compose.lite.yml", "docker-compose.staging.yml"):
-        text = (REPO / name).read_text(encoding="utf-8")
-        assert setting in text, f"{name} does not set {setting}"
+        document = yaml.safe_load((REPO / name).read_text(encoding="utf-8"))
+        stated = command_settings(document["services"]["db"].get("command"))
+        assert setting in stated, f"{name} does not set {setting}"
 
 
 # ------------------------------------------------ the environment example (M0.4.3)
