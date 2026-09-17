@@ -136,7 +136,7 @@ TOLD: Final[Mapping[RungSkip, str]] = MappingProxyType(
         ),
         RungSkip.NO_KEY: (
             "No key for this provider is held by the server process that answered. Put one in "
-            "on the credentials screen; other server processes use it from their next start."
+            "on the credentials screen; other server processes pick it up within a minute."
         ),
     }
 )

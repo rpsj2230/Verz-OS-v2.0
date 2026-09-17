@@ -68,7 +68,9 @@ Since 2026-09-17 `ops/install/install.sh` runs the vault on every profile (a `li
 decline it with `--no-vault`), and it does steps 1 to 6 below itself, in four steps of its own:
 it starts the vault, initialises it with the split above, **prints the five pieces once at the
 terminal**, opens it with three of them, turns on both audit devices, enables the `providers`,
-`webhooks` and `connector_keys` engines, loads the policies, mints the application's token and,
+`webhooks` and `connector_keys` engines, loads the policies, creates the `connector-run` token
+role a connector run's token is minted against, defines every source's key slot with its scopes and
+no key, mints the application's token and,
 on a profile with a worker, the worker's, each with a period of 768 hours, appends them and the
 vault's address to `/opt/brain/.env`, and revokes the root token. `brain.deployment.vault_setup`
 is the code and the argument.
@@ -101,7 +103,9 @@ person running the install with three of the holders:
    generate-root -init`, then the steps it prints. It leaves a record that it happened.
 3. With that token, do what the installer did not: `sh ops/openbao/enable-audit.sh`; enable any
    of `providers`, `webhooks` and `connector_keys` that `bao secrets list` does not show, each as
-   `bao secrets enable -path=<name> kv-v2`; `sh ops/openbao/load-policies.sh`.
+   `bao secrets enable -path=<name> kv-v2`; `sh ops/openbao/load-policies.sh`; then the
+   `connector-run` token role and the source slots, steps 3 and 4 of "A connected source's key" in
+   `ops/openbao/credential-slots.md`.
 4. Mint the tokens as `ops/openbao/credential-slots.md` says, and append `BRAIN_VAULT_ADDRESS`,
    `BRAIN_VAULT_TOKEN` and, on `standard` or `full`, `BRAIN_WORKER_VAULT_TOKEN` to
    `/opt/brain/.env`.

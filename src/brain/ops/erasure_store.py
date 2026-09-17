@@ -290,6 +290,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.routing_rung",
         "ops.routing_tier",
         "ops.setting",
+        # A vault call keeps a slot, an operation and the HMAC of a token's accessor: `0093` keeps
+        # no principal, and the digest names a token no candidate list can reverse without the key.
+        "ops.vault_access",
         "ops.webhook_change",
         "ops.webhook_subscriber",
         "proj.record",

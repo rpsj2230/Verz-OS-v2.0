@@ -181,6 +181,7 @@ const GROUPS: readonly NavGroup[] = [
       ...INSTALL_SECTIONS,
       { to: "/storage", label: "Storage" },
       { to: SETTINGS_PATH, label: "Settings" },
+      { to: "/vault", label: "Secrets vault" },
     ],
   },
 ];

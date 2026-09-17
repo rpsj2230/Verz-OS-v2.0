@@ -367,9 +367,9 @@ export const AREAS: Readonly<Record<string, Area>> = {
     ],
   },
   "API keys, credentials and secrets, held in the vault and never displayed": {
-    screens: ["/webhooks"],
-    routes: ["/api/v1/credentials*"],
-    tables: ["ops.credential_write"],
+    screens: ["/webhooks", "/vault"],
+    routes: ["/api/v1/credentials*", "/api/v1/vault"],
+    tables: ["ops.credential_write", "ops.vault_access"],
     installation: [],
     gaps: [
       {

@@ -46,10 +46,15 @@ else
     # `hmac_accessor=true`, also the default, so a token accessor in the log cannot be
     # replayed. The log is meant to answer "which identity did this", not to be a set of
     # working credentials.
+    #
+    # `mode=0644` so the worker, which runs as another user and mounts the log volume read-only,
+    # can ship the log into the ledger (brain.ops.vault_audit_ship). The default is 0600. A device
+    # enabled before this line existed keeps 0600: disable it and run this again.
     run bao audit enable -path=file file \
         file_path=/openbao/logs/audit.log \
         log_raw=false \
-        hmac_accessor=true
+        hmac_accessor=true \
+        mode=0644
 fi
 
 if run bao audit list 2>/dev/null | grep -q '^stderr/'; then

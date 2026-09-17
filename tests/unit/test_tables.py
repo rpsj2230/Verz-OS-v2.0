@@ -114,6 +114,7 @@ MIGRATION_QUESTION_GAP = VERSIONS / "0064_question_gap.py"
 MIGRATION_AUTOMATION_RUN = VERSIONS / "0067_automation_run.py"
 MIGRATION_CONNECTOR_SYNC = VERSIONS / "0068_connector_sync.py"
 MIGRATION_DEPLOYMENT_RECORD = VERSIONS / "0091_deployment_record.py"
+MIGRATION_VAULT_ACCESS = VERSIONS / "0093_vault_leases_and_audit.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -310,6 +311,8 @@ CONNECTOR_SYNC_TABLES: tuple[str, ...] = ("ops.connector_sync",)
 
 #: And the one 0091 adds: the deployment history, kept apart from the permission ledger.
 DEPLOYMENT_RECORD_TABLES: tuple[str, ...] = ("ops.deployment_record",)
+#: And the one 0093 adds: every call the secrets vault answered about a slot, from its audit log.
+VAULT_ACCESS_TABLES: tuple[str, ...] = ("ops.vault_access",)
 
 ALL_TABLES = (
     CORE_TABLES
@@ -354,6 +357,7 @@ ALL_TABLES = (
     + AUTOMATION_RUN_TABLES
     + CONNECTOR_SYNC_TABLES
     + DEPLOYMENT_RECORD_TABLES
+    + VAULT_ACCESS_TABLES
 )
 
 
@@ -1095,6 +1099,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert connector_sync.TABLES == CONNECTOR_SYNC_TABLES
     deployment_record = migration_module(MIGRATION_DEPLOYMENT_RECORD)
     assert deployment_record.TABLES == DEPLOYMENT_RECORD_TABLES
+    vault_access = migration_module(MIGRATION_VAULT_ACCESS)
+    assert vault_access.TABLES == VAULT_ACCESS_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1161,6 +1167,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(automation_run.TABLES)
         + tuple(connector_sync.TABLES)
         + tuple(deployment_record.TABLES)
+        + tuple(vault_access.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1208,6 +1215,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(automation_run.TABLES),
         set(connector_sync.TABLES),
         set(deployment_record.TABLES),
+        set(vault_access.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

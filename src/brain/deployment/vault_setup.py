@@ -54,7 +54,7 @@ the permanent, unattributable bypass `vault_quorum` already refuses to keep in a
 Rejected: auto-unsealing so a restarted vault opens itself. `UNSEAL.md` argues it: a key the
 machine can read opens the vault for whoever has the machine.
 
-Task ids: M42.6.2, M42.5.14, M31.3.2.1
+Task ids: M42.6.2, M42.5.14, M31.3.2.1, M31.3.2.3, M31.3.2.6, M38.4.1.3
 """
 
 from __future__ import annotations
@@ -71,7 +71,9 @@ from brain.deployment.app_environment import (
     worker_vault_overlays_for,
 )
 from brain.deployment.requirements import files_for
-from brain.ops.openbao import STATIC_PREFIXES
+from brain.ops.connector_lease import RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS, RUN_TOKEN_ROLE
+from brain.ops.connector_slots import SLOT_SCOPES, metadata_arguments
+from brain.ops.openbao import CONNECTOR_KEY_PREFIX, STATIC_PREFIXES
 from brain.ops.vault_quorum import DEFAULT_POLICY, VAULT_CONTAINER, init_args
 from brain.ops.wiring import PROFILES
 
@@ -131,6 +133,23 @@ NO_PIECE_REACHES_AN_ARGUMENT_LIST_OR_A_FILE: Final = (
     "builtin, into a pipe that docker exec -i reads as key=-, the root token reaches the vault "
     "through the docker client's own environment passed by name, and the tokens go straight into "
     "the environment file the installer already writes credentials to."
+)
+
+#: Why the file audit device is written readable by the worker.
+THE_AUDIT_LOG_IS_READABLE_BY_THE_PROCESS_THAT_SHIPS_IT: Final = (
+    "The worker ships the vault's audit log into the ledger, and reads it from the log volume "
+    "mounted read-only into its container, where it runs as a different user from the vault. The "
+    "file device writes 0600 unless told otherwise, which no other user can read, so it is enabled "
+    "with mode 0644. Every value in the log that could be used is an HMAC, raw logging stays off, "
+    "and only the worker's overlay mounts the volume."
+)
+
+#: Why the installer creates the connector-run token role and defines every source's slot.
+A_RUN_ROLE_AND_EMPTY_SLOTS_ARE_MADE_AT_INSTALL: Final = (
+    "Both are configuration only a policy-writing token can make, and the root token exists for "
+    "this one step. The role is what the worker mints a run token against, fixing its one policy, "
+    "its TTL ceiling and no renewal; the slots are each source's metadata with the scopes its key "
+    "must have, and no version, so the vault says what a key may do before one is issued."
 )
 
 #: Why a half-finished vault is not finished automatically.
@@ -324,7 +343,7 @@ def open_run(home: str, env_file: str) -> str:
             'case "$BRAIN_VAULT_AUDIT" in',
             '  *"file/"*) ;;',
             "  *) as_vault_root audit enable -path=file file file_path=/openbao/logs/audit.log "
-            "log_raw=false hmac_accessor=true >/dev/null ;;",
+            "log_raw=false hmac_accessor=true mode=0644 >/dev/null ;;",
             "esac",
             'case "$BRAIN_VAULT_AUDIT" in',
             '  *"stderr/"*) ;;',
@@ -344,6 +363,8 @@ def open_run(home: str, env_file: str) -> str:
             f'  tr -d "{backslash}015" < "$policy" | '
             'as_vault_root_reading policy write "$(basename "$policy" .hcl)" - >/dev/null',
             "done",
+            *run_token_role_lines(),
+            *slot_definition_lines(),
             f'BRAIN_VAULT_APP_TOKEN="$(as_vault_root token create -policy={APPLICATION_TOKEN[0]} '
             f'{minted})" || fail "the vault would not mint the application\'s token. Finish by '
             'hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"',
@@ -370,6 +391,29 @@ def open_run(home: str, env_file: str) -> str:
             'Finishing what the installer began"',
             "unset BRAIN_VAULT_INIT BRAIN_VAULT_APP_TOKEN BRAIN_VAULT_WORKER_TOKEN",
         )
+    )
+
+
+def run_token_role_lines() -> tuple[str, ...]:
+    """The token role a connector run's token is minted against. See the named constant."""
+    return (
+        f"as_vault_root write auth/token/roles/{RUN_TOKEN_ROLE} allowed_policies={RUN_POLICY} "
+        f"orphan=false renewable=false token_no_default_policy=true "
+        f"token_explicit_max_ttl={RUN_ROLE_MAX_TTL_SECONDS} >/dev/null "
+        '|| fail "the vault would not '
+        "create the connector-run token role. Finish by hand with ops/openbao/UNSEAL.md, under "
+        'Finishing what the installer began"',
+    )
+
+
+def slot_definition_lines() -> tuple[str, ...]:
+    """Every source's slot, defined with its scopes and no key. See `brain.ops.connector_slots`."""
+    mount = CONNECTOR_KEY_PREFIX.rstrip("/")
+    return tuple(
+        f"as_vault_root kv metadata put -mount={mount} {metadata_arguments(one)} {one.connector} "
+        '>/dev/null || fail "the vault would not define the credential slot for '
+        f'{one.connector}. Finish by hand with ops/openbao/credential-slots.md"'
+        for one in (SLOT_SCOPES[name] for name in sorted(SLOT_SCOPES))
     )
 
 

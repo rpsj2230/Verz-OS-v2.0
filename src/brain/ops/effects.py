@@ -316,6 +316,14 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.vault_renewal:SelfRenewing.token_standing": Repeat.READS,
         "brain.readiness:TokenLookup.token_standing": Repeat.READS,
         "brain.ops.vault_renewal:SelfRenewing.renew_self": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # The Secrets vault screen and the provider key refresh: the seal, a slot's metadata and a
+        # slot's fields are reads, and so is the count of what the audit shipper wrote.
+        "brain.ops.credentials:CredentialVault.read_static_kv": Repeat.READS,
+        "brain.ops.provider_keys:StaticKvReader.read_static_kv": Repeat.READS,
+        "brain.ops.vault_status:VaultStatusReader.seal_status": Repeat.READS,
+        "brain.ops.vault_status:VaultStatusReader.static_kv_defined": Repeat.READS,
+        "brain.ops.vault_status:VaultStatusReader.static_kv_version": Repeat.READS,
+        "brain.ops.vault_audit_ship:VaultAccessRecords.since": Repeat.READS,
         # The Webhooks screen. Each write is this system's own rows in one transaction; the vault
         # write inside a registration or a rotation goes through `CredentialVault.write_static_kv`,
         # classified above as the same result when repeated.
@@ -423,7 +431,17 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.connector_sync:SourceReading.allowance_spent": Repeat.READS,
         "brain.ops.connector_sync:SourceReading.projected": Repeat.READS,
         "brain.ops.connector_sync:SourceReading.document": Repeat.READS,
-        "brain.ops.connector_sync_run:ConnectorKeys.key_for": Repeat.READS,
+        # A run's vault lease (0093): a child token minted per attempt that expires at its own
+        # TTL, read through once and revoked at the attempt's end, where a second revoke finds it
+        # gone. See `brain.ops.connector_lease`.
+        "brain.ops.connector_sync_run:ConnectorKeys.lease": Repeat.EXPIRES_ON_ITS_OWN,
+        "brain.ops.connector_sync_run:KeyLease.key": Repeat.READS,
+        "brain.ops.connector_sync_run:KeyLease.close": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.connector_sync_run:RunTokenVault.mint_role_token": Repeat.EXPIRES_ON_ITS_OWN,
+        "brain.ops.connector_sync_run:RunTokenVault.holding": Repeat.READS,
+        "brain.ops.connector_sync_run:RunKeyReader.read_static_kv": Repeat.READS,
+        "brain.ops.connector_sync_run:RunKeyReader.revoke_self": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.connector_sync_store:LeaseCounts.tallies": Repeat.READS,
         "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
         "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
         # A delivery is a request somebody else's server acts on, so every one is made inside

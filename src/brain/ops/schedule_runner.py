@@ -86,6 +86,7 @@ from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
 from brain.ops.spend_store import refresh_spend_daily_now
+from brain.ops.vault_audit_ship import run_vault_audit_ship_now
 from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
 from brain.settings import process_environment, settings_from
@@ -439,6 +440,32 @@ def connector_sync(now: datetime, report_only: bool, database_url: str) -> str:
     return ran.summary()
 
 
+#: Why shipping the vault's log runs in report-only mode too.
+SHIPPING_A_LOG_IN_REPORT_ONLY_MODE_STILL_SHIPS: Final = (
+    "Report-only mode exists for controls that remove data, and shipping removes nothing: it "
+    "copies what the vault already wrote into the ledger. Declining when asked would leave a "
+    "stretch of the vault's log unrecorded for no safety gained, so the mode is honoured by "
+    "saying so."
+)
+
+
+def vault_audit_ship(now: datetime, report_only: bool, database_url: str) -> str:
+    """Ship the vault's audit log into the ledger from where the last run left it.
+
+    `brain.ops.vault_audit_ship.run_vault_audit_ship_now` is the literal call the registry reads,
+    on the worker's own connection, with the worker's vault address to tell an install with no
+    vault from one whose log is missing. Ships in report-only mode too, see
+    `SHIPPING_A_LOG_IN_REPORT_ONLY_MODE_STILL_SHIPS`.
+    """
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    said = run_vault_audit_ship_now(
+        database_url, vault_address=settings.vault_address, loop_factory=_loop_factory()
+    )
+    return f"report only, shipped anyway: {said}" if report_only else said
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
 #: Nine with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
@@ -543,6 +570,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     # Wired on 2026-09-17 with `ops.connector_sync`, the worker's reader of connector keys and the
     # readings `brain.ops.connector_sync` declares. See `brain.ops.connector_sync_run`.
     Runner(name="connector_sync", run=connector_sync),
+    # Wired on 2026-09-17 with `ops.vault_access` and the worker overlay's read-only mount of the
+    # vault's log. See `brain.ops.vault_audit_ship`.
+    Runner(name="vault_audit_ship", run=vault_audit_ship),
 )
 
 
@@ -587,6 +617,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return automation_run(now, report_only, database_url)
         case "connector_sync":
             return connector_sync(now, report_only, database_url)
+        case "vault_audit_ship":
+            return vault_audit_ship(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

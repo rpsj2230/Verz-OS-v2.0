@@ -24,8 +24,9 @@ export function StaffListSignedIn() {
   const { search } = useLocation();
 
   useEffect(() => {
-    const opener = window.opener as Window | null;
-    if (opener === null) {
+    // Null in a tab opened directly, undefined where no window opened this one at all.
+    const opener = window.opener as Window | null | undefined;
+    if (opener === null || opener === undefined) {
       return;
     }
     const given = new URLSearchParams(search);

@@ -5,12 +5,14 @@ what an attempt costs; `brain.ops.connector_sync_store` holds the SQL. This is t
 neither can hold, and `run_connector_sync_now` is what the worker's schedule starts as the
 `connector_sync` control.
 
-**The worker reads a source's key, and it is the only process that does.** The application writes a
-key when an administrator connects a source and reads only the slot's metadata, because it runs no
-connector. The worker runs them, so `ops/openbao/policies/worker.hcl` grants read on
-`connector_keys/data/+` and nothing else under that engine, and `WorkerConnectorKeys` refuses a
-reference outside `connector_keys/` and one not made for the worker's role before the vault is
-asked. The reference comes from the manifest the connection's own settings build
+**The worker reads a source's key, and it is the only process that does, through a lease per
+attempt.** The application writes a key when an administrator connects a source and reads only the
+slot's metadata, because it runs no connector. The worker runs them, and since 2026-09-17 its own
+token reads no key: each attempt mints a run token against the `connector-run` token role, reads the
+key with it and revokes it when the attempt ends, and the attempt's row records how the lease ended.
+`brain.ops.connector_lease` argues the shape. `WorkerConnectorKeys` refuses a reference outside
+`connector_keys/` and one not made for the worker's role before the vault is asked. The
+reference comes from the manifest the connection's own settings build
 (`brain.ops.connectable.key_reference`), never from a column somebody could edit to point at a
 provider key. See `THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES`.
 
@@ -39,7 +41,7 @@ closures take. It carries no headers and no status, so a key cannot be sent thro
 cannot come back through it as anything but an exception, which is the collapse
 `xero.AN_UNREACHABLE_LEDGER_IS_NOT_AN_EMPTY_ONE` refuses.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4
 """
 
 from __future__ import annotations
@@ -50,8 +52,8 @@ import json
 import ssl
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final, Protocol
 from urllib.parse import urlsplit
 
@@ -63,6 +65,12 @@ from brain.connectors.throttle import CallOutcome, classify
 from brain.knowledge.chunk_store import ChunkStoreError, ingest_document
 from brain.knowledge.item import KnowledgeItem
 from brain.ops.connectable import READING_ROLE
+from brain.ops.connector_lease import (
+    RUN_LEASE_TTL,
+    RUN_TOKEN_ROLE,
+    LeaseOutcome,
+    judge_minted,
+)
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
     DOCUMENTS_WITHHELD,
@@ -97,11 +105,12 @@ from brain.ops.connector_sync_store import (
     record_upsert,
 )
 from brain.ops.credentials import KEY_FIELD
+from brain.ops.leases import SealedSecret
 from brain.ops.limits import LimiterState, check
-from brain.ops.object_store import StaticKvReader
 from brain.ops.openbao import (
     CONNECTOR_KEY_PREFIX,
     OpenBaoVault,
+    RoleToken,
     VaultRefusedError,
     VaultUnreachableError,
 )
@@ -138,23 +147,108 @@ class ConnectorKeyAbsentError(SecretsUnavailableError):
 # ------------------------------------------------------------------------ the key
 
 
-class ConnectorKeys(Protocol):
-    """Whatever hands the worker one source's key for one run."""
+class KeyLease(Protocol):
+    """One attempt's hold on a source's key: the key, or why there is none, and its ending."""
 
-    def key_for(self, ref: SecretRef) -> str:
-        """The key at this reference, or a `SecretsUnavailableError` saying why there is none."""
+    def key(self) -> str:
+        """The key, or the `SecretsUnavailableError` saying why this attempt has none."""
         ...
+
+    def close(self, now: datetime) -> LeaseOutcome:
+        """Give the lease back and say how that went. A second call answers the first's outcome."""
+        ...
+
+
+class ConnectorKeys(Protocol):
+    """Whatever hands the worker one source's key for one attempt, leased for that attempt."""
+
+    def lease(self, ref: SecretRef, *, now: datetime) -> KeyLease:
+        """A lease on the key at this reference. Never raises: a failure is held for `key`."""
+        ...
+
+
+class RunKeyReader(Protocol):
+    """The vault as a run token presents to it: read one slot, and revoke the token."""
+
+    def read_static_kv(self, path: str) -> dict[str, Any]:
+        """The slot's fields, or a `SecretsUnavailableError`."""
+        ...
+
+    def revoke_self(self) -> None:
+        """Revoke the token presented, or raise a `SecretsUnavailableError`."""
+        ...
+
+
+class RunTokenVault(Protocol):
+    """The vault as the worker's own token presents to it: mint a run token, and hold one."""
+
+    def mint_role_token(self, role: str, *, ttl: timedelta, meta: Mapping[str, str]) -> RoleToken:
+        """A child token against the named token role, or a `SecretsUnavailableError`."""
+        ...
+
+    def holding(self, token: RoleToken) -> RunKeyReader:
+        """A client presenting the child token. Contacts nothing."""
+        ...
+
+
+class _Held:
+    """`KeyLease` over a run token, or over none. Private, and its representation names nothing."""
+
+    def __init__(
+        self,
+        *,
+        failure: SecretsUnavailableError | None,
+        reader: RunKeyReader | None = None,
+        expires_at: datetime | None = None,
+        key: SealedSecret | None = None,
+    ) -> None:
+        self._failure = failure
+        self._reader = reader
+        self._expires_at = expires_at
+        self._key = key
+        self._ended: LeaseOutcome | None = None
+
+    def __repr__(self) -> str:
+        return f"KeyLease(held={self._reader is not None}, ended={self._ended})"
+
+    __str__ = __repr__
+
+    def key(self) -> str:
+        if self._failure is not None:
+            raise self._failure
+        if self._key is None:
+            # Asked after `close`, which forgets the key with the token.
+            raise ConnectorKeyAbsentError(NO_KEY)
+        return self._key.reveal()
+
+    def close(self, now: datetime) -> LeaseOutcome:
+        if self._ended is not None:
+            return self._ended
+        reader, self._reader, self._key = self._reader, None, None
+        if reader is None:
+            self._ended = LeaseOutcome.NONE
+            return self._ended
+        try:
+            reader.revoke_self()
+        except SecretsUnavailableError:
+            # Refused or silent, the token was not confirmed taken back. Past its TTL there was
+            # nothing to take back; inside it, it lives until the TTL, and the row says so.
+            lapsed = self._expires_at is not None and now >= self._expires_at
+            self._ended = LeaseOutcome.EXPIRED if lapsed else LeaseOutcome.NOT_REVOKED
+            return self._ended
+        self._ended = LeaseOutcome.REVOKED
+        return self._ended
 
 
 class WorkerConnectorKeys:
     """`ConnectorKeys` over the worker's vault, or over no vault at all.
 
-    See `THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES`. The representation
-    names whether a vault is configured and nothing else, so a traceback holding this object prints
-    no address, token or key.
+    See `THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES` and
+    `brain.ops.connector_lease`. The representation names whether a vault is configured and nothing
+    else, so a traceback holding this object prints no address, token or key.
     """
 
-    def __init__(self, vault: StaticKvReader | None) -> None:
+    def __init__(self, vault: RunTokenVault | None) -> None:
         self._vault = vault
 
     def __repr__(self) -> str:
@@ -162,32 +256,57 @@ class WorkerConnectorKeys:
 
     __str__ = __repr__
 
-    def key_for(self, ref: SecretRef) -> str:
+    def lease(self, ref: SecretRef, *, now: datetime) -> KeyLease:
         if not ref.path.startswith(CONNECTOR_KEY_PREFIX) or ref.path == CONNECTOR_KEY_PREFIX:
             msg = (
                 f"a source's key is read from {CONNECTOR_KEY_PREFIX} and nowhere else, and this "
                 f"reference names the {ref.path.split('/', 1)[0]} engine. "
                 f"{THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES}"
             )
-            raise SecretsUnavailableError(msg)
+            return _Held(failure=SecretsUnavailableError(msg))
         if ref.role is not READING_ROLE:
             msg = (
                 f"this reference was made for the {ref.role.value} role and the worker reads "
                 f"only references made for {READING_ROLE.value}"
             )
-            raise SecretsUnavailableError(msg)
+            return _Held(failure=SecretsUnavailableError(msg))
         if self._vault is None:
-            raise SecretsUnavailableError(NO_VAULT)
+            return _Held(failure=SecretsUnavailableError(NO_VAULT))
         try:
-            fields = self._vault.read_static_kv(ref.path)
-        except VaultRefusedError as refused:
-            if refused.status == http.client.NOT_FOUND:
-                raise ConnectorKeyAbsentError(NO_KEY) from refused
-            raise
+            minted = self._vault.mint_role_token(
+                RUN_TOKEN_ROLE,
+                ttl=RUN_LEASE_TTL,
+                meta={"connector": ref.path.removeprefix(CONNECTOR_KEY_PREFIX)},
+            )
+        except SecretsUnavailableError as unavailable:
+            return _Held(failure=unavailable)
+        reader = self._vault.holding(minted)
+        expires_at = now + timedelta(seconds=minted.lease_seconds)
+        verdict = judge_minted(
+            renewable=minted.renewable,
+            policies=minted.policies,
+            lease_seconds=minted.lease_seconds,
+            asked=RUN_LEASE_TTL,
+        )
+        if verdict:
+            # Held so `close` revokes it at the attempt's end like any other, and never read with.
+            refused = VaultRefusedError(verdict, status=http.client.FORBIDDEN)
+            return _Held(failure=refused, reader=reader, expires_at=expires_at)
+        try:
+            fields = reader.read_static_kv(ref.path)
+        except VaultRefusedError as refused_read:
+            absent = refused_read.status == http.client.NOT_FOUND
+            failure: SecretsUnavailableError = (
+                ConnectorKeyAbsentError(NO_KEY) if absent else refused_read
+            )
+            return _Held(failure=failure, reader=reader, expires_at=expires_at)
+        except SecretsUnavailableError as unavailable:
+            return _Held(failure=unavailable, reader=reader, expires_at=expires_at)
         value = fields.get(KEY_FIELD)
         if not isinstance(value, str) or not value.strip():
-            raise ConnectorKeyAbsentError(NO_KEY)
-        return value
+            absent_key = ConnectorKeyAbsentError(NO_KEY)
+            return _Held(failure=absent_key, reader=reader, expires_at=expires_at)
+        return _Held(failure=None, reader=reader, expires_at=expires_at, key=SealedSecret(value))
 
 
 def worker_connector_keys(address: str, token: str) -> WorkerConnectorKeys:
@@ -389,6 +508,45 @@ async def attempt(
     clock: Callable[[], datetime],
     sleep: Callable[[float], Awaitable[object]],
 ) -> Attempt:
+    """Read one connection under a lease taken for this attempt, and give it back at the end.
+
+    The lease is closed in a `finally`, so an attempt that raised, or was cancelled, still gives its
+    run token back, and the row records how that went. See `brain.ops.connector_lease`.
+    """
+    manifest = plan.manifest
+    assert manifest is not None  # SyncPlan holds this for a runnable plan
+    lease = keys.lease(manifest.credential.ref, now=clock())
+    try:
+        done = await _read_under(
+            live,
+            plan,
+            lease,
+            previous=previous,
+            sessions=sessions,
+            documents=documents,
+            caller=caller,
+            resolver=resolver,
+            clock=clock,
+            sleep=sleep,
+        )
+    finally:
+        ended = lease.close(clock())
+    return replace(done, lease=ended)
+
+
+async def _read_under(
+    live: LiveConnection,
+    plan: SyncPlan,
+    lease: KeyLease,
+    *,
+    previous: SyncState | None,
+    sessions: async_sessionmaker[AsyncSession],
+    documents: DocumentSink,
+    caller: SourceCaller,
+    resolver: Resolver,
+    clock: Callable[[], datetime],
+    sleep: Callable[[float], Awaitable[object]],
+) -> Attempt:
     """Read one connection to the end, or as far as it can be read, and say what that came to."""
     manifest, reading = plan.manifest, plan.reading
     assert manifest is not None and reading is not None  # SyncPlan holds this for a runnable plan
@@ -412,7 +570,7 @@ async def attempt(
         )
 
     try:
-        key = keys.key_for(manifest.credential.ref)
+        key = lease.key()
     except SecretsUnavailableError as unavailable:
         return finish(SyncOutcome.FAILED, key_detail(unavailable))
     headers = {

@@ -34,9 +34,12 @@ per request. So there is nothing to hand back, and wrapping one in a lease with 
 expiry would be worse than admitting it: the caller would believe the key stops working at a
 time nothing enforces.
 
-They are therefore read once at startup, straight into the process environment where the
-provider SDK finds it, and never held by application code. Rotation is a restart, which
-costs three minutes here.
+They are therefore read at startup, straight into the process environment where the
+provider SDK finds it, and never held by application code. **Rotation needs no restart**
+since 2026-09-17: every application process reads each provider slot's metadata once a minute
+and loads a key whose version moved (`brain.ops.credentials.keep_refreshing`), so a key
+replaced from the console or with the vault's own command line is in use everywhere within a
+minute. A variable the environment file sets still outranks the vault.
 
 | Slot | Provider | Environment variable | Notes |
 |---|---|---|---|
@@ -170,17 +173,40 @@ The application's policy may create and update `connector_keys/data/+` and read
 cannot delete one: disconnecting a source leaves its key in the vault, so revoke the key in the
 source's own settings as well.
 
-The worker reads a connected source on a schedule (`brain.ops.connector_sync_run`), and its policy
-may read `connector_keys/data/+` and nothing else there: no write, no delete and no metadata. It asks
-only for the slot a live connection's own declaration names, and it needs its own token, minted
-against the worker policy, in `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN` in the worker's
-environment. Without one every due source is recorded as failed with a sentence saying the worker
+The worker reads a connected source on a schedule (`brain.ops.connector_sync_run`), and since
+2026-09-17 its own token reads no key. For each attempt it mints a run token against the
+`connector-run` token role, which carries the `connector-run` policy alone (read on
+`connector_keys/data/+`, and revoking itself), lives fifteen minutes and cannot be renewed; it reads
+the key with that token and revokes it when the attempt ends, and the attempt's row says whether the
+revocation was confirmed. The worker's policy may mint against that role and nothing else under
+`auth/token`. It asks only for the slot a live connection's own declaration names, and it needs its
+own token, minted against the worker policy, in `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN` in the
+worker's environment. The Secrets vault screen counts each source's leases over the last day. Without one every due source is recorded as failed with a sentence saying the worker
 has no vault, and the Connectors screen shows it.
 
 To let the application keep them and the worker read them, once per install that runs a vault:
 
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=connector_keys kv-v2`.
-2. Load the policies: `sh ops/openbao/load-policies.sh`, which also reloads the worker's rule.
+2. Load the policies: `sh ops/openbao/load-policies.sh`, which also loads `connector-run.hcl`.
+3. Create the token role the worker mints against, exactly as the installer does:
+   `bao write auth/token/roles/connector-run allowed_policies=connector-run orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600`.
+4. Define every source's slot with its scopes and no key, as the installer does, one
+   `bao kv metadata put -mount=connector_keys` per row of the table below, with the two columns as
+   `-custom-metadata='scopes=...'` and `-custom-metadata='not_requested=...'`. The Secrets vault
+   screen then says each slot is defined and empty, rather than missing.
+
+Where each source's key is kept, and what the installer defines it with (`brain.ops.connector_slots`
+is the catalogue, and a test holds this table to it):
+
+| Key slot | Source | Scopes | Not requested |
+|---|---|---|---|
+| `connector_keys/freshdesk` | freshdesk | an agent API key with read access | an admin key, which can change SLAs and delete tickets |
+| `connector_keys/google_drive` | google_drive | read on the named shared drive only | domain-wide delegation |
+| `connector_keys/hubspot` | hubspot | crm.objects.contacts.read; crm.objects.deals.read | crm.objects.*.write; anything touching settings |
+| `connector_keys/laravel` | laravel | SELECT on the allowlisted views only | SELECT on tables; any write |
+| `connector_keys/lark_base` | lark_base | bitable:app:readonly; base:record:read | base:record:write; drive:drive |
+| `connector_keys/lark_wiki` | lark_wiki | wiki:wiki:readonly | docs:document edit scopes |
+| `connector_keys/xero` | xero | accounting.transactions.read; accounting.contacts.read | any .write scope |
 
 Until both are done, connecting a source is refused with a sentence saying the vault refused, and
 nothing is recorded as connected.

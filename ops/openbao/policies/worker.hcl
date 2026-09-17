@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.12, M42.6.2, M42.6.5
+# Task ids: M31.3.2.2, M31.3.2.3, M27.8.12, M42.6.2, M42.6.5
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -35,22 +35,18 @@ path "webhooks/data/+" {
   capabilities = ["read"]
 }
 
-# The key a connected source's vendor issued, read to read that source and for nothing else. The
-# worker is the one process that runs a connector (brain.ops.connector_sync_run), so it is the one
-# policy that reads these; the application writes a key when an administrator connects a source and
-# reads only its metadata. Read and nothing more: no create, update or delete, because a process
-# nobody watches must not be able to replace the key a source checks, and no metadata, because the
-# worker has no screen to tell.
+# The key a connected source's vendor issued is NOT read under this policy. Until 2026-09-17 it was,
+# on connector_keys/data/+, which made this token, renewed for as long as the worker runs, a standing
+# read of every source's key. The worker now mints a run token per attempt against the connector-run
+# token role, whose policy (connector-run.hcl) is the only one that reads a key, and revokes it when
+# the attempt ends. See brain.ops.connector_lease.THE_WORKER_READS_A_KEY_ONLY_THROUGH_A_RUN_LEASE.
 #
-# One path segment for every source rather than a rule per source, and that is not the wildcard the
-# connectors/creds rules above refuse. Which sources are connected is decided in the console by an
-# administrator holding admin:connector over each, recorded in ops.connector_connection, and a rule
-# per source would mean every connection waits for somebody with a policy-writing token to reload
-# this file, which is the token the first-run steps revoke. The worker reads a key only through the
-# reference a live connection's own manifest names (brain.ops.connectable.key_reference), so a slot
-# with no connection is never asked for.
-path "connector_keys/data/+" {
-  capabilities = ["read"]
+# Minting one is all this grants: the role fixes the policy, the TTL ceiling and no renewal, and a
+# token role's allowed_policies is what lets a child carry a policy its parent does not. No other
+# role, no auth/token/create without a role, and nothing under auth/token/roles, so the worker
+# cannot widen the role it mints against.
+path "auth/token/create/connector-run" {
+  capabilities = ["create", "update"]
 }
 
 path "sys/leases/revoke" {

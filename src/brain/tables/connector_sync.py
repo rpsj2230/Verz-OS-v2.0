@@ -68,6 +68,10 @@ OUTCOMES: Final[tuple[str, ...]] = ("failed", "quota", "synced")
 #: the state of a source nothing has tried, and a row here is a try.
 HEALTH_STATES: Final[tuple[str, ...]] = ("degraded", "down", "ok")
 
+#: How the attempt's vault lease ended. See `brain.ops.connector_lease.LeaseOutcome`, which these
+#: mirror and a test holds equal. Added by `0093`.
+LEASE_OUTCOMES: Final[tuple[str, ...]] = ("expired", "none", "not_revoked", "revoked")
+
 #: A sentence for whoever reads the Connectors screen, and never a payload.
 DETAIL_CHARS: Final = 500
 
@@ -99,11 +103,14 @@ class ConnectorSyncRow(Base):
     next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     #: One of `brain.ops.connector_sync`'s sentences.
     detail: Mapped[str] = mapped_column(Text, nullable=False)
+    #: One of `LEASE_OUTCOMES`. `none` for an attempt that held no lease, and all before `0093`.
+    lease: Mapped[str] = mapped_column(String(16), nullable=False, server_default="none")
 
     __table_args__ = (
         CheckConstraint(f"connector ~ '{CONNECTOR_NAME_PATTERN}'", name="connector_shape"),
         CheckConstraint(one_of("outcome", OUTCOMES), name="outcome"),
         CheckConstraint(one_of("health", HEALTH_STATES), name="health"),
+        CheckConstraint(one_of("lease", LEASE_OUTCOMES), name="lease"),
         CheckConstraint(
             "records >= 0 AND documents >= 0 AND consecutive_failures >= 0",
             name="counts_are_not_negative",

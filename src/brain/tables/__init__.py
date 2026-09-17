@@ -110,6 +110,7 @@ from brain.tables.suspension import SuspensionRow
 from brain.tables.telemetry import RequestTelemetryRow
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tables.upgrade import UpgradeDeclineRow
+from brain.tables.vault_access import VaultAccessRow
 from brain.tables.webhook_change import WebhookChangeRow
 
 #: Every table, in the order a migration must create them: a table appears after everything
@@ -286,6 +287,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0091_deployment_record. Points at nothing: a deploy names an image and a commit as values,
     # and is kept apart from the permission ledger on purpose.
     "ops.deployment_record",
+    # 0093_vault_leases_and_audit. Points at nothing: a slot is a value, so the record of who read
+    # a key outlives the key.
+    "ops.vault_access",
 )
 
 __all__ = [
@@ -365,6 +369,7 @@ __all__ = [
     "TemplateInstanceRow",
     "TemplateVersionRow",
     "UpgradeDeclineRow",
+    "VaultAccessRow",
     "WebhookChangeRow",
     "WebhookSubscriberRow",
     "one_of",
