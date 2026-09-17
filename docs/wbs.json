@@ -2956,7 +2956,7 @@
     "restic for object store and configuration",
     "Off-host destination, mandatory",
     "Encryption at rest with a client-held key",
-    "Backups keep thirty daily copies and weekly copies to day thirty-five, and no copy outlives the thirty-five-day erasure horizon a deletion certificate states",
+    "Retention: thirty daily, twelve weekly, twelve monthly",
     "Weekly automated restore into a scratch container",
     "Smoke query and permission canary against the restored copy",
     "Measured RTO recorded from the drill",
