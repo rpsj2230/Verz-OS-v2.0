@@ -15,11 +15,13 @@ Task ids: M0.1.2, M0.4.5
 
 from __future__ import annotations
 
+import fnmatch
 import re
 import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -105,6 +107,58 @@ def test_the_coverage_floor_exists_and_is_a_real_number() -> None:
     report = tool["coverage"]["report"]
     assert isinstance(report["fail_under"], int)
     assert report["fail_under"] > 0
+
+
+def test_ci_enforces_the_floor_once_over_every_shard_combined() -> None:
+    """A floor in `pyproject.toml` is only a floor if CI reads it over the whole suite.
+
+    Since 2026-09-17 the unit suite runs in shards, and each shard passes
+    `--cov-fail-under=0` because a quarter of the suite covers a fraction of the code. That
+    makes the floor the job of exactly one step: the one that combines every shard's data and
+    then runs `coverage report`, which reads `fail_under` from here. So it is asserted that the
+    step combines before it reports, that it combines what the shards upload, that the job
+    waits for every shard, and that nothing on the command line overrides the number.
+
+    Delete this and the floor can be lowered on a command line, or reported over one shard's
+    data, and `fail_under` goes on existing in this file while enforcing nothing.
+    """
+    workflow = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    jobs = workflow["jobs"]
+    reporting = [
+        (name, job, step)
+        for name, job in jobs.items()
+        for step in job.get("steps", [])
+        if "coverage report" in str(step.get("run", ""))
+    ]
+    assert len(reporting) == 1, "the floor is judged in more than one place, or in none"
+    name, job, step = reporting[0]
+    lines = [
+        line.strip()
+        for line in str(step["run"]).splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    combine = next(i for i, line in enumerate(lines) if "coverage combine" in line)
+    report = next(i for i, line in enumerate(lines) if "coverage report" in line)
+    download = next(
+        one for one in job["steps"] if str(one.get("uses", "")).startswith("actions/download")
+    )
+    shards = jobs["tests"]["strategy"]["matrix"]["shard"]
+    uploaded = next(
+        one["with"]["name"]
+        for one in jobs["tests"]["steps"]
+        if str(one.get("uses", "")).startswith("actions/upload-artifact")
+    )
+
+    assert combine < report
+    assert "fail-under" not in lines[report] and "rcfile" not in lines[report]
+    assert "tests" in ([job["needs"]] if isinstance(job["needs"], str) else job["needs"])
+    for shard in shards:
+        artefact = str(uploaded).replace("${{ matrix.shard }}", str(shard))
+        assert fnmatch.fnmatch(artefact, download["with"]["pattern"]), artefact
+    assert download["with"]["path"] in lines[combine]
+    assert name != "tests", "the floor is judged inside a shard, over a fraction of the suite"
 
 
 def test_the_type_checker_is_strict_and_covers_the_tests_too() -> None:

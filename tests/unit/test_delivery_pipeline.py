@@ -536,6 +536,45 @@ def test_ci_takes_the_migrations_forward_back_and_forward_again() -> None:
     assert order[0] != order[2], "upgrade runs once; a non-idempotent migration would pass"
 
 
+def test_the_round_trip_runs_in_every_shard_over_the_database_its_tests_filled() -> None:
+    """**The order is the point, and it has already paid for itself.** On 2026-09-17 the round
+    trip ran `alembic downgrade base` over the database the unit tests had just filled and
+    stopped at `0059`, on a rollback every migration's docstring said was fine. A round trip
+    over an empty database would have passed.
+
+    The unit suite runs in shards since the same day, and each shard has a database of its
+    own, so the round trip and the schema check run in the shard job after its tests, with no
+    `if` to confine them to one shard: every shard's database is taken back and forward again
+    after its own tests have written to it.
+
+    Delete this and the migration step can move before the tests, or into a job of its own
+    with an empty database, and CI goes back to proving a rollback on a database nobody uses.
+    """
+    steps = _steps("ci.yml", "tests")
+    job = _workflow("ci.yml")["jobs"]["tests"]
+    suite = [
+        index
+        for index, step in enumerate(steps)
+        if any(
+            line.split()[:3] == ["uv", "run", "pytest"]
+            for line in _live(str(step.get("run", ""))).splitlines()
+        )
+    ]
+    migration = steps.index(_migration_step())
+    schema = [
+        index
+        for index, step in enumerate(steps)
+        if "brain.ops.schema_check" in _live(str(step.get("run", "")))
+    ]
+
+    assert len(job["strategy"]["matrix"]["shard"]) > 1
+    assert "postgres" in job["services"]
+    assert len(suite) == 1 and len(schema) == 1
+    assert suite[0] < migration < schema[0]
+    assert "if" not in steps[migration], "the round trip is confined to some shards"
+    assert "if" not in steps[schema[0]], "the schema check is confined to some shards"
+
+
 def test_the_round_trip_asserts_it_landed_at_head_rather_than_trusting_the_exit_code() -> None:
     """`alembic downgrade` followed by `alembic upgrade` can leave the database at a revision
     that is not head without either command failing, because a branch point resolves to

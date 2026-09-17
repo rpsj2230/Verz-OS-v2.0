@@ -54,9 +54,26 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+  # The unit suite, split into shards that run side by side.
+  #
+  # It ran as one job until 2026-09-17 and took longer than every other job in CI put together.
+  # `brain.ops.test_shards` decides which files each shard runs, from the tree alone, so every
+  # runner reaches the same split and every file lands in exactly one shard. Each shard has a
+  # database of its own and runs the migration round trip over what its own tests left there.
+  #
+  # **No shard enforces the coverage floor, and that is deliberate.** A quarter of the suite
+  # covers a fraction of the code, so each shard passes `--cov-fail-under=0` and keeps its data
+  # file instead; the `coverage` job below combines all of them and enforces the floor from
+  # `pyproject.toml` over the whole suite, which is the number the floor was always about.
   tests:
-    name: Unit tests and coverage
+    name: Unit tests, shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    strategy:
+      # A red shard does not cancel the others, so one run reports every failure in the suite
+      # rather than the first quarter's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         # CI has a database before the laptop does, so the DB-dependent suites run here
@@ -73,6 +90,10 @@ jobs:
           --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/brain_test
+      # Named for the shard, so the four files arrive at the `coverage` job side by side
+      # rather than overwriting one another. Absolute, so a test that changes directory
+      # still writes where the upload looks.
+      COVERAGE_FILE: ${{ github.workspace }}/coverage-shard-${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,8 +121,15 @@ jobs:
       - name: Install the automation piece's toolchain from its lockfile
         working-directory: ops/automation/piece
         run: npm ci --ignore-scripts
-      - name: Tests with coverage floor
-        run: uv run pytest --cov --cov-report=term-missing
+      - name: This shard's tests, with coverage recorded
+        # `files=$(...)` rather than a pipe, because `bash -e` stops on a failed assignment and
+        # does not stop on the left of a pipe. The emptiness check is the one that matters:
+        # pytest given no file runs `testpaths`, so an empty list would run the whole suite.
+        run: |
+          files=$(uv run python -m brain.ops.test_shards --shard ${{ matrix.shard }} --of ${{ strategy.job-total }})
+          [ -n "$files" ] || { echo "::error::shard ${{ matrix.shard }} has no test files"; exit 1; }
+          echo "shard ${{ matrix.shard }} of ${{ strategy.job-total }}: $(echo "$files" | wc -l) file(s)"
+          uv run pytest --cov --cov-report= --cov-fail-under=0 $files
 
       - name: Migrations go forward, back, and forward again
         # A migration that cannot be reversed is a deploy with no way home. This runs the
@@ -130,6 +158,52 @@ jobs:
           b=$(psql "$DATABASE_URL" -tAc "select count(*) from pg_roles where rolname like 'brain%' and rolbypassrls" | tr -d '[:space:]')
           [ "$b" = "0" ] || { echo "::error::a brain role can bypass row-level security"; exit 1; }
           echo "no role bypasses RLS"
+
+      - name: Keep this shard's coverage data for the floor
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: ${{ env.COVERAGE_FILE }}
+          if-no-files-found: error
+          # A re-run of a shard uploads under the same name, and without this the second
+          # upload is refused and the re-run goes red for a reason that is not a test.
+          overwrite: true
+          retention-days: 7
+
+  # The coverage floor, over every shard's data at once. It carries the name the single job had,
+  # so a check required under that name still means what it meant.
+  coverage:
+    name: Unit tests and coverage
+    runs-on: ubuntu-latest
+    needs: tests
+    # Runs when a shard failed as well, and fails itself. A job skipped because what it needs
+    # failed reports as passing a required check, so a skipped floor would read as a green one.
+    if: ${{ !cancelled() }}
+    steps:
+      - name: Every shard passed
+        env:
+          SHARDS: ${{ needs.tests.result }}
+        run: |
+          [ "$SHARDS" = "success" ] || { echo "::error::the unit test shards ended in $SHARDS"; exit 1; }
+          echo "every shard passed"
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --locked
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-shard-*
+          path: coverage-data
+          merge-multiple: true
+      - name: Coverage floor over the whole suite
+        # `coverage report` reads `fail_under` from `pyproject.toml` and exits non-zero below
+        # it. No `--fail-under` here: the floor has one home, and a second copy in a workflow is
+        # the one nobody raises.
+        run: |
+          uv run coverage combine coverage-data/coverage-shard-*
+          uv run coverage report
 
   sweeps:
     name: Schema and registry sweeps
