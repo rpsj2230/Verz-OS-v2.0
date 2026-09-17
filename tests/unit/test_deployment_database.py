@@ -259,6 +259,35 @@ def test_seed_on_a_migrated_database_hands_over_to_the_guarded_load(
     assert called == [URL]
 
 
+def test_seed_on_a_production_install_is_refused_before_the_database_is_asked_anything(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """M38.1.4.4. An install whose `BRAIN_ENV` is `production` never receives the demo, and the
+    refusal comes before the row guard, which waves an empty production database through.
+
+    Delete this and the command a client's runbook names can write a fictitious company into a
+    live install on the morning it was set up."""
+    called: list[str] = []
+    monkeypatch.setattr(database, "seed", _recording(called, 0))
+
+    env = {"DATABASE_URL": URL, "BRAIN_ENV": "production"}
+    assert database.main(["seed"], env=env) == EXIT_REFUSED
+    assert called == []
+    assert "BRAIN_ENV=staging" in capsys.readouterr().err
+
+
+def test_seed_on_a_staging_install_goes_on_to_the_guarded_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The positive half: staging is where seed data belongs. Delete this and the environment
+    check can refuse every install, which passes the test above."""
+    called: list[str] = []
+    monkeypatch.setattr(database, "seed", _recording(called, 0))
+
+    assert database.main(["seed"], env={"DATABASE_URL": URL, "BRAIN_ENV": "staging"}) == 0
+    assert called == [URL]
+
+
 def test_seed_offers_no_way_past_the_guard() -> None:
     """**No `--force` on the install command.** The flag exists on `python -m brain.seed`, whose
     refusal names the remedies before it names the flag.

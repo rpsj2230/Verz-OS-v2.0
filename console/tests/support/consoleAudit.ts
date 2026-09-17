@@ -559,7 +559,7 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Version, build and deployment information": {
     screens: ["/updates", "/install"],
     routes: ["/api/v1/install/updates"],
-    tables: [],
+    tables: ["ops.deployment_record"],
     installation: [],
     gaps: [],
   },

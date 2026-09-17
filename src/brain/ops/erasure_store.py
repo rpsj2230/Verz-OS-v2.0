@@ -274,6 +274,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.control_run",
         "ops.credential_write",
         "ops.data_export",
+        # A deploy keeps an image, a commit, task ids and digests: `0091` keeps no principal.
+        "ops.deployment_record",
         "ops.model_attempt",
         "ops.outbox_delivery",
         "ops.outbox_event",

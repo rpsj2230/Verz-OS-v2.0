@@ -54,8 +54,11 @@ DEFAULT_RECORD_PATH = Path("/var/lib/brain/deployments.jsonl")
 #: What a deploy can have concluded. Closed for the same reason `AuditAction` is: an open
 #: vocabulary means a new code path invents a string and nothing notices that no deployment
 #: was ever counted as failed.
+#:
+#: `held_back` is the health gate's (M38.1.3.3): the new image was started beside the running one
+#: and never reported ready, so nothing was stopped and the running version is untouched.
 OUTCOMES = frozenset(
-    {"deployed", "rolled_back", "failed_no_rollback", "rollback_failed", "refused"}
+    {"deployed", "held_back", "rolled_back", "failed_no_rollback", "rollback_failed", "refused"}
 )
 
 

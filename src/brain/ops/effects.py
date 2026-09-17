@@ -308,6 +308,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.data_export_store:ExportLog.recent": Repeat.READS,
         # The Retention screen's erasure queue: one insert into this system's own table, whose
         # trigger appends to the ledger, and whose open-request key refuses a second one.
+        "brain.ops.deployment_store:Connection.execute": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.erasure_store:ErasureRecords.file": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.ops.erasure_store:ErasureRecords.requests": Repeat.READS,
         # A process's own vault token: its standing is a read, and a second renewal inside the

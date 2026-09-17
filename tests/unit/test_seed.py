@@ -297,6 +297,33 @@ def test_main_needs_a_database_url(monkeypatch: pytest.MonkeyPatch) -> None:
     assert seed_mod.main([]) == 2
 
 
+def test_force_does_not_load_the_demo_into_an_install_that_says_it_is_production(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """M38.1.4.4. `--force` passes the row guard and must not pass the environment: a production
+    install is never seeded, whatever flag is on the command line.
+
+    Delete this and `--force`, which the row guard's own refusal names, becomes the way a demo
+    reaches a production database."""
+    loaded: list[str] = []
+
+    def fake_seed(url: str, force: bool = False) -> int:
+        loaded.append(url)
+        return 0
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://x")
+    monkeypatch.setattr(seed_mod, "seed", fake_seed)
+
+    monkeypatch.setenv("BRAIN_ENV", "production")
+    assert seed_mod.main(["--force"]) == 1
+    assert loaded == []
+
+    monkeypatch.setenv("BRAIN_ENV", "staging")
+    assert seed_mod.main([]) == 0
+    assert loaded == ["postgresql://x"]
+    assert seed_mod.refused_by_environment("development") is None
+
+
 # --------------------------------------------- the guard reads more than an estimate
 def test_the_guard_does_not_rely_on_statistics_alone() -> None:
     """`n_live_tup` is an estimate maintained by the statistics collector, not a count. It
