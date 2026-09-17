@@ -31,6 +31,10 @@ with `brain.ops.connector_admin.TOLD`'s sentence, and nothing recorded as connec
 three. A disconnect answers 200 or the one refusal: a source that is not connected is a 404 for a
 caller who may manage it, who can see the list, so the refusal hides nothing from them.
 
+**A connection grants the data steward the source's declared reads**, computed here from the
+manifest the connection is pinned to and written by the store in the connection's transaction.
+See `brain.identity.data_steward.A_CONNECTION_GRANTS_THE_STEWARD_WHAT_THE_SOURCE_DECLARES`.
+
 **No credential out, and none in a log.** The router is `brain.api.NoEchoRoute`, so a body refused
 by its model names the field and does not repeat the key. Every answer is built from a source's
 name, times, booleans and sentences. What is logged is the surface, the source's name and the
@@ -57,7 +61,7 @@ module calling them with values of its own would be this repository holding a cl
 configuration. The identifiers arrive from the person connecting the source, and are kept in that
 install's database.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M27.9.9
 """
 
 from __future__ import annotations
@@ -91,6 +95,7 @@ from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
 from brain.credential_routes import credentials_of
+from brain.identity.data_steward import declared_capabilities
 from brain.ops.connectable import (
     CONNECTABLE,
     MAX_SETTING_CHARS,
@@ -606,7 +611,8 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
         raise Failed("no database on this process")
     kind = CONNECTABLE[body.connector]
     settings = given(kind, body.settings)
-    digest = manifest_digest(kind.build(settings, key_reference(kind.name)))
+    manifest = kind.build(settings, key_reference(kind.name))
+    digest = manifest_digest(manifest)
     slot = connector_key_slot(kind.name)
     actor = asked.reach.principal_id
     trace_id = _trace_id()
@@ -629,6 +635,7 @@ async def connect(request: Request, body: ConnectAsked, asked: Asked) -> JSONRes
             trace_id=trace_id,
             ent_hash=ent_hash,
             keep_key=keep_key,
+            declared=declared_capabilities(manifest),
         )
     except ConnectorTakenError:
         return _problems(

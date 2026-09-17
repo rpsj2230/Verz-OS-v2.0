@@ -39,6 +39,7 @@ from fastapi.testclient import TestClient
 from brain.api import API_PREFIX, NOT_FOUND
 from brain.app import Settings, create_app
 from brain.firstrun import GRANTED_BY
+from brain.identity.data_steward import APPOINTED_WITH, STEWARD_GRANTOR, NamedSteward
 from brain.identity.first_administrator import (
     GRANTED_AT_APPOINTMENT,
     AppointmentRefusal,
@@ -71,6 +72,7 @@ from tests.fixtures.scratch_postgres import run, sql
 from tests.unit.test_app_wiring import Realm, wired_app
 from tests.unit.test_automation_owner_store import app_engine
 from tests.unit.test_credentials import KEY, Recorded, Vault
+from tests.unit.test_data_steward import connectable_install
 from tests.unit.test_keycloak_tokens import ISSUER, token
 from tests.unit.test_setup_wizard import (
     ADMIN_ANSWERS,
@@ -80,11 +82,11 @@ from tests.unit.test_setup_wizard import (
     LOCAL_ANSWERS,
     SECRET,
     SOURCE_ANSWERS,
+    STEWARD_ANSWERS,
     WRONG,
     an_enrolment,
     answered,
 )
-from tests.unit.test_sign_in_routes import audited
 
 #: The installer's own Keycloak subject. Opaque, as a `sub` is.
 INSTALLER = "9a8b7c6d-0000-4000-8000-0000000000cc"
@@ -92,6 +94,7 @@ INSTALLER = "9a8b7c6d-0000-4000-8000-0000000000cc"
 EVERY_SCREEN: Mapping[StepId, Mapping[str, str]] = {
     StepId.COMPANY: COMPANY_ANSWERS,
     StepId.ADMINISTRATOR: ADMIN_ANSWERS,
+    StepId.DATA_STEWARD: STEWARD_ANSWERS,
     StepId.STAFF_SOURCE: SOURCE_ANSWERS,
     StepId.MODEL_PROVIDER: LOCAL_ANSWERS,
 }
@@ -119,6 +122,7 @@ class Store:
     beaten: bool = False
     appointed: list[tuple[RoleGrant, str, str]] = field(default_factory=list)
     kept: list[Mapping[str, str]] = field(default_factory=list)
+    stewards: list[NamedSteward | None] = field(default_factory=list)
 
     async def administrators(self, now: datetime) -> int:
         del now
@@ -131,11 +135,13 @@ class Store:
         display_name: str,
         trace_id: str = "",
         settings: Mapping[str, str] | None = None,
+        steward: NamedSteward | None = None,
     ) -> None:
         if self.beaten or self.held:
             raise FirstAdministratorRefusedError(AppointmentRefusal.ALREADY_ADMINISTERED)
         self.appointed.append((grant, display_name, trace_id))
         self.kept.append(dict(settings or {}))
+        self.stewards.append(steward)
         self.held += 1
 
 
@@ -209,10 +215,11 @@ class Watching(Store):
         display_name: str,
         trace_id: str = "",
         settings: Mapping[str, str] | None = None,
+        steward: NamedSteward | None = None,
     ) -> None:
         self.held_when_appointed.append(list(self.vault.written))
         await super().appoint(
-            grant, display_name=display_name, trace_id=trace_id, settings=settings
+            grant, display_name=display_name, trace_id=trace_id, settings=settings, steward=steward
         )
 
 
@@ -236,6 +243,85 @@ def nothing_here() -> dict[str, Any]:
 
 
 # ------------------------------------------------------------------------------ the route
+
+
+def test_the_steward_is_another_person_under_their_own_id_unless_the_administrator_is_chosen(
+    carried: Mapping[str, str],
+) -> None:
+    """What the route hands the store. The steward screen answered with a name and an address is a
+    new principal, with an id the server minted that is not the administrator's; answered with the
+    administrator chosen, it is the administrator's own id and says so. Delete this and the route
+    can write the steward under the administrator's id by default, which is the one outcome the
+    owner's decision rules out, or drop the steward the wizard named."""
+    another = Store()
+    with serving(another) as c:
+        named_another = appointing(c, body())
+    same = Store()
+    chosen = {**EVERY_SCREEN, StepId.DATA_STEWARD: {"steward_is_administrator": "yes"}}
+    with serving(same) as c:
+        named_same = appointing(c, body(answers=chosen))
+
+    assert named_another.status_code == named_same.status_code == 200
+    [(grant, _, _)] = another.appointed
+    [steward] = another.stewards
+    assert steward is not None
+    assert steward.principal_id != grant.principal_id
+    assert steward.principal_id.startswith(PRINCIPAL_PREFIX)
+    assert (steward.display_name, steward.same_as_administrator) == (
+        STEWARD_ANSWERS["steward_full_name"],
+        False,
+    )
+    [(chosen_grant, _, _)] = same.appointed
+    assert same.stewards == [
+        NamedSteward(
+            principal_id=chosen_grant.principal_id, display_name="", same_as_administrator=True
+        )
+    ]
+
+
+def test_the_administrator_s_address_as_the_steward_s_is_told_against_that_box_and_appoints_nobody(
+    carried: Mapping[str, str],
+) -> None:
+    """The one rule across two screens reaches the person as a problem beside the steward's address,
+    and a name typed beside the administrator's choice as a problem beside the name, with nobody
+    appointed. Delete this and the route can appoint one human as two principals, or answer a
+    refusal the screen cannot put beside a box."""
+    store = Store()
+    same_address = {
+        **EVERY_SCREEN,
+        StepId.DATA_STEWARD: {
+            "steward_full_name": "A Person",
+            "steward_work_address": ADMIN_ANSWERS["work_address"],
+        },
+    }
+    named_beside = {
+        **EVERY_SCREEN,
+        StepId.DATA_STEWARD: {"steward_full_name": "A Person", "steward_is_administrator": "yes"},
+    }
+    with serving(store) as c:
+        told = appointing(c, body(answers=same_address))
+        beside = appointing(c, body(answers=named_beside))
+
+    assert told.status_code == beside.status_code == 422
+    assert own_fields(told) == {
+        "problems": [
+            {
+                "step": "data_steward",
+                "field": "steward_work_address",
+                "key": "setup.error.steward_is_administrator",
+            }
+        ]
+    }
+    assert own_fields(beside) == {
+        "problems": [
+            {
+                "step": "data_steward",
+                "field": "steward_full_name",
+                "key": "setup.error.steward_not_wanted",
+            }
+        ]
+    }
+    assert store.appointed == []
 
 
 def test_the_setup_code_holder_appoints_the_first_administrator_and_is_sent_to_finish(
@@ -799,6 +885,12 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     it, the answers are in `ops.setting` afterwards, and a session factory that never saw the
     write loads them back and resolves them through `value_of`.
 
+    **And the data steward the wizard named is appointed with them**, which is the half added on
+    2026-09-17: a principal other than the administrator, under the name the steward screen was
+    given, holding the steward's two grants over everything and nothing the administrator holds
+    by appointment. The database is built through `0057`, because an appointment reads the
+    connected sources.
+
     Delete this and the three routes can each pass alone while an install still cannot get from
     the wizard to a signed-in person, which is where every real install was before this route,
     or the settings can be written to a table nothing reads."""
@@ -806,7 +898,7 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     monkeypatch.setenv("INSTALL_OIDC_ISSUER", ISSUER)
     monkeypatch.setattr("brain.app.key_set_client", served.client)
 
-    with audited("brain_setup_routes_end_to_end") as url:
+    with connectable_install("brain_setup_routes_end_to_end") as url:
         app = create_app(minted_settings(database_url=url, run_migrations=False, valkey_url=""))
 
         async def walk() -> dict[str, Any]:
@@ -842,6 +934,13 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
         keys = sql(
             url, 'SELECT key FROM ops.setting WHERE deleted_at IS NULL ORDER BY key COLLATE "C"'
         )
+        stewarded = sql(
+            url,
+            "SELECT p.id, p.display_name, g.capability, g.scope = '{\"clauses\": []}'::jsonb"
+            " FROM gate.capability_grant g JOIN auth.principal p ON p.id = g.principal_id"
+            ' WHERE g.granted_by = %s ORDER BY g.capability COLLATE "C"',
+            STEWARD_GRANTOR,
+        )
         hold_saved({})
         elsewhere = read_back(url)
 
@@ -858,6 +957,10 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     assert [str(row[0]) for row in keys] == sorted(
         [*(key_for(name) for name in carried), FURNISHED_KEY]
     )
+    assert [row[2] for row in stewarded] == sorted(APPOINTED_WITH)
+    assert {(row[1], row[3]) for row in stewarded} == {(STEWARD_ANSWERS["steward_full_name"], True)}
+    assert {row[0] for row in stewarded} != {walked["principal_id"]}
+    assert all(str(row[0]).startswith(PRINCIPAL_PREFIX) for row in stewarded)
     assert elsewhere == dict(carried)
     assert value_of("INSTALL_COMPANY_NAME", {}) == COMPANY_ANSWERS["company_name"]
 

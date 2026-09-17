@@ -544,6 +544,7 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
     "setup.step.setup_code.title": {"en": "Enter the setup code", "zh-Hans": "输入安装码"},
     "setup.step.company.title": {"en": "Your company", "zh-Hans": "贵公司"},
     "setup.step.administrator.title": {"en": "The first administrator", "zh-Hans": "第一位管理员"},
+    "setup.step.data_steward.title": {"en": "The data steward", "zh-Hans": "数据管理人"},
     "setup.step.staff_source.title": {"en": "Your staff list", "zh-Hans": "员工名单"},
     "setup.step.model_provider.title": {
         "en": "How questions are answered",
@@ -565,6 +566,18 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
     "field.logo_url.label": {"en": "Web address of your logo", "zh-Hans": "贵公司标志的网址"},
     "field.full_name.label": {"en": "Full name", "zh-Hans": "姓名"},
     "field.work_address.label": {"en": "Work email address", "zh-Hans": "工作邮箱地址"},
+    "field.steward_full_name.label": {
+        "en": "The data steward's full name",
+        "zh-Hans": "数据管理人姓名",
+    },
+    "field.steward_work_address.label": {
+        "en": "The data steward's work email address",
+        "zh-Hans": "数据管理人工作邮箱地址",
+    },
+    "field.steward_is_administrator.label": {
+        "en": "The first administrator is the data steward as well",
+        "zh-Hans": "第一位管理员同时担任数据管理人",
+    },
     "field.staff_source.label": {
         "en": "Where your staff list comes from",
         "zh-Hans": "员工名单来源",
@@ -633,6 +646,18 @@ MESSAGES: Final[Mapping[str, Mapping[str, str]]] = {
     "setup.error.key_not_wanted": {
         "en": "Nothing would use a key here, because questions stay on your own hardware",
         "zh-Hans": "此处不会用到密钥 因为提问都留在贵公司自有硬件上",
+    },
+    "setup.error.steward_needed": {
+        "en": "Name the data steward here, or answer yes below if the administrator is the steward",
+        "zh-Hans": "请在此填写数据管理人 如由管理员担任 请在下方选择是",
+    },
+    "setup.error.steward_not_wanted": {
+        "en": "Leave this empty, because the administrator is the data steward",
+        "zh-Hans": "此处请留空 因为管理员即为数据管理人",
+    },
+    "setup.error.steward_is_administrator": {
+        "en": "That is the administrator's address. Name somebody else, or answer yes below",
+        "zh-Hans": "这是管理员的地址 请填写其他人 或在下方选择是",
     },
     "setup.error.refused": {
         "en": "That code was not accepted. Check the line the installer printed",

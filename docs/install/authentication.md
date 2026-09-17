@@ -233,6 +233,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:budget` | running the system |
 | `admin:connector` | running the system |
 | `admin:credential` | running the system |
+| `admin:data_steward` | running the system |
 | `admin:erasure` | running the system |
 | `admin:export` | running the system |
 | `admin:feature` | running the system |
@@ -317,6 +318,17 @@ Nor is any read of the company's data. What a person may read of that comes from
 writes for them. **If you were expecting the administrator account to be able to read everything,
 it cannot**, and that is the invariant the whole system serves rather than an omission in the
 wizard.
+
+**Reading your data begins with the data steward.** The screen after the administrator's names one
+person as the data steward, and the same appointment grants them `approve:grant` and
+`read:console.content` over everything, and, as each source is connected, every read that source
+declares, over everything. Everybody else's reads of your data are granted on the People screen by
+the steward or by somebody the steward granted, and nobody can grant what they do not hold. The
+steward is somebody other than the administrator unless you choose, on that screen, to make the
+administrator the steward as well. Disconnecting a source takes nothing away from the steward;
+removing a grant is something a person does on the People screen. An install set up before that
+screen existed names its steward on the People screen, which needs `admin:data_steward` over
+everything. A steward is named once, and the console does not replace one.
 
 **A capability added in a later release is granted at the next start, and one you take away stays
 away.** An administrator appointed before a capability existed does not hold it, so every start

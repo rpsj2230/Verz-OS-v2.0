@@ -38,6 +38,37 @@ Tell me when they are on and I close this item.
 
 # Answered
 
+## 67. Nobody on an install could ever be given a read of the company's data: where does the first one come from? - DECIDED: Option A, a data steward is named in setup
+
+**Your answer, 2026-09-17:** "go with option A. Name a data steward in setup (recommended)".
+
+**In plain words.** Nobody can grant a permission they do not hold themselves, and the first
+administrator holds every permission for running the system and none for reading the company's
+data, on purpose. Both rules are right, and together they meant that on every install nobody
+could ever be given a read of a client, a deal or anything a connected source holds. The admin
+console architecture (Part 6.1) put three ways out to you.
+
+**Option A (chosen): a data steward named in setup.** The setup wizard now has a screen after the
+administrator's that names one person as the data steward. That person is granted the right to
+grant and the console's content plane over everything, and every connected source's reads as the
+source is connected. Everybody else's reads of your data are granted by the steward, or by somebody
+the steward granted. The steward is somebody other than the administrator unless you choose, on
+that screen, to make the administrator the steward as well, and every grant is in the audit trail
+against whoever made the appointment.
+
+**Option B: grants from directory roles.** Not built: it needs the directory sync runner, and a
+spreadsheet staff list cannot say who holds which role.
+
+**Option C: let a company-wide granter grant anything.** Rejected: it breaks the rule that a grant
+never exceeds its granter, which is what makes handing out permissions safe.
+
+**What changed for an install set up before today, your staging install included.** Nothing is
+appointed there, so the People screen now carries a Data steward card. At the next start your
+administrator account is granted the one new permission that card needs. Open People, and in the
+Data steward card either name another person or appoint yourself as the administrator and the data
+steward. Sign in with your second factor first; the card does not appear without it. A steward is
+named once, and the console does not replace one.
+
 ## 66. One setting in Coolify so the Brain can check Keycloak sign-ins - DONE: readiness reports sign-in ready
 
 **What you do: add one environment variable in Coolify. Nothing is broken while it waits, but nobody

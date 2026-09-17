@@ -24,21 +24,29 @@ answer, which `brain.ops.openbao.TIMEOUT_SECONDS` bounds at five seconds, as
 key leaves a key at a path no connection names, with its own record in the ledger saying it was
 written; connecting that source again replaces it, because the path is the source's name.
 
+**A connection grants the data steward what the source declares, in the same transaction.** The
+steward's lock is taken after the key is kept and before the row is inserted, so it comes before
+the ledger's, and `brain.identity.data_steward.grant_declared_in` writes the grants after the row,
+attributed to the person connecting. With no steward appointed it writes nothing. A connection
+that fails at any point writes no grant, because the grants are in the transaction that failed.
+See `brain.identity.data_steward.A_CONNECTION_GRANTS_THE_STEWARD_WHAT_THE_SOURCE_DECLARES`.
+
 **Disconnecting is one update, attributed, and the key is not touched.** The application's vault
 policy grants no delete, which is argued in `ops/openbao/policies/application.hcl`, and the
-sentence the screen shows says to revoke the key in the source's own settings.
+sentence the screen shows says to revoke the key in the source's own settings. It retires no
+grant either: `brain.identity.data_steward.DISCONNECTING_A_SOURCE_TAKES_NOTHING_FROM_THE_STEWARD`.
 
 Rejected: checking for a live connection, keeping the key, and inserting, with nothing held between
 the check and the insert. Two administrators connecting one source at once would both pass the
 check and both write the vault, the last write would win the slot, and the insert that lost the
 race to the unique index would leave the live row's settings beside the loser's key.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M27.9.9
 """
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol, runtime_checkable
@@ -47,7 +55,8 @@ from sqlalchemy import Insert, Select, Update, func, insert, select, text, updat
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
+from brain.identity.data_steward import grant_declared_in, steward_lock
+from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.connector_connection import ConnectorConnectionRow
 
 # ------------------------------------------------------------ written-down reasons
@@ -104,8 +113,13 @@ class ConnectorRecords(Protocol):
         trace_id: str,
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
+        declared: Sequence[str] = (),
     ) -> Connection:
-        """Record a connection with its key kept, or nothing. See the module docstring."""
+        """Record a connection with its key kept, or nothing. See the module docstring.
+
+        `declared` is what the source's manifest declares, granted to the data steward in the same
+        transaction. Empty grants nothing.
+        """
         ...
 
     async def disconnect(
@@ -208,20 +222,28 @@ class StoredConnections:
         trace_id: str,
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
+        declared: Sequence[str] = (),
     ) -> Connection:
         async with self._sessions() as session, session.begin():
             await session.execute(lock_on(connector))
             if (await session.execute(live(connector))).scalar_one_or_none() is not None:
                 raise ConnectorTakenError(connector)
             await keep_key()
+            # Before the row's ledger entry, for
+            # `data_steward.THE_STEWARD_S_LOCK_COMES_BEFORE_THE_LEDGER_S`.
+            await session.execute(steward_lock())
             await session.execute(_set_config(TRACE_ID_SETTING, trace_id))
             await session.execute(_set_config(ENT_HASH_SETTING, ent_hash))
+            # Read by the grant trigger for the steward's grants; the connection's own trigger
+            # names the column it reads.
+            await session.execute(_set_config(ACTOR_SETTING, actor))
             try:
                 at = (
                     await session.execute(connected_row(connector, settings, digest, actor))
                 ).scalar_one()
             except IntegrityError as raced:
                 raise ConnectorTakenError(connector) from raced
+            await grant_declared_in(session, declared)
         return Connection(
             connector=connector,
             settings=dict(settings),

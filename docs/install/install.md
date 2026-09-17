@@ -218,11 +218,16 @@ First run is these screens, in this order.
    screen: it is checked when you send the review, and before a word about your answers is.
 3. **Your company.**
 4. **The first administrator.**
-5. **Your staff list.**
-6. **How questions are answered.**
-7. **Data sources.** The only screen you may skip.
-8. **Check this before anything is written.** The review. Sending it appoints you as the first
-   administrator, signs that sign-in in, and lands you on the console's overview.
+5. **The data steward.** The person every read of your company's data begins with. Somebody other
+   than you by default, by name and work email address; answer yes to make the administrator the
+   data steward as well. See [Reading your data begins with the data
+   steward](authentication.md#your-first-administrator-and-your-second).
+6. **Your staff list.**
+7. **How questions are answered.**
+8. **Data sources.** The only screen you may skip.
+9. **Check this before anything is written.** The review. Sending it appoints you as the first
+   administrator and the data steward you named, signs that sign-in in, and lands you on the
+   console's overview.
 
 When sending the review does not land you on the overview, you see one of three things.
 
@@ -246,7 +251,7 @@ the installer already has a shell on the server and could read the file directly
 
 ## After the wizard
 
-The wizard is eight screens with a back button on every one, and **nothing is written until you
+The wizard is nine screens with a back button on every one, and **nothing is written until you
 approve the review screen**. A wizard that committed each screen as it went could not be
 corrected, and the company name mistyped on screen two would be discovered on screen seven, by
 which time it is in the branding, in the realm and in the first notification you send.

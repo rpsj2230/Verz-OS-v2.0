@@ -1807,6 +1807,17 @@ reading its data a named, visible appointment rather than an accident of who ins
 Wave 0 dependency for any real use of People: W0.5 furnishes scopes, and this decides who can grant
 over them.
 
+**Decided 2026-09-17: the owner chose A** ("go with option A. Name a data steward in setup"), and
+it is built as M27.9.9. The wizard's data steward screen follows the administrator's and names
+another person by default, and the same person only as a separate answer that refuses the
+administrator's own address without it; the steward is appointed in the administrator's
+transaction, attributed to first run. A connection grants the steward its manifest's reads in the
+connection's transaction, and an appointment grants those of every source already connected;
+disconnecting retires nothing. An install set up before that screen names its steward on the People
+screen behind `admin:data_steward`, once. `brain.identity.data_steward` holds the rules and the
+record: the steward's content-plane grant under one fixed id is the appointment. B is still open
+for when the directory sync lands, and C stays rejected. See `docs/needs-rupash.md` item 67.
+
 ---
 
 ## Part 7. The build plan

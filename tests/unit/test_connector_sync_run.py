@@ -109,6 +109,11 @@ PUBLIC: Final = "93.184.216.34"
 #: The tables a sync reads and writes.
 SYNC_TABLES: Final = ("ops.connector_connection", "ops.connector_sync", "proj.record")
 
+#: What connecting through `StoredConnections.connect` reads besides the connection: the data
+#: steward's appointment, which a connection grants to in its own transaction, and the principals
+#: that grant names. Empty here, so no steward is appointed and connecting grants nothing.
+STEWARD_TABLES: Final = ("auth.principal", "gate.capability_grant")
+
 INVOICE_ID: Final = "b1f2-0447"
 MONEY_CANARY: Final = "CANARY-INVOICE-Z9KRT"
 
@@ -190,10 +195,11 @@ async def no_sleep(seconds: float) -> None:
 
 @contextmanager
 def a_database(name: str) -> Iterator[str]:
-    """A database holding the connections, the attempts and the projection, and nothing else."""
+    """A database holding the connections, the attempts, the projection and the steward's grants,
+    and nothing else."""
     url = fresh(name)
     try:
-        add_modelled(url, SYNC_TABLES)
+        add_modelled(url, (*SYNC_TABLES, *STEWARD_TABLES))
         yield url
     finally:
         drop(name)

@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Awaitable, Callable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
@@ -59,6 +59,7 @@ from brain.console.reads import Plane, plane_capability
 from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
+from brain.identity.data_steward import declared_capabilities
 from brain.ops.connectable import CONNECTABLE, manifest_for
 from brain.ops.connector_admin import (
     CONNECTED,
@@ -204,6 +205,8 @@ class Records:
         self.asked = 0
         self.connects: list[dict[str, Any]] = []
         self.disconnects: list[tuple[str, str]] = []
+        #: What each connect was asked to grant the data steward, in order.
+        self.declared: list[tuple[str, ...]] = []
 
     async def connected(self) -> tuple[Connection, ...]:
         self.asked += 1
@@ -219,8 +222,10 @@ class Records:
         trace_id: str,
         ent_hash: str,
         keep_key: Callable[[], Awaitable[datetime | None]],
+        declared: Sequence[str] = (),
     ) -> Connection:
         self.asked += 1
+        self.declared.append(tuple(declared))
         if connector in self.rows:
             raise ConnectorTakenError(connector)
         await keep_key()
@@ -689,6 +694,27 @@ def test_an_administrator_connects_a_source_and_its_key_is_kept_in_its_slot_and_
         ("connector_keys/xero", "u_admin")
     ]
     assert KEY not in answered.text
+
+
+def test_a_connection_hands_the_store_what_the_source_declares_for_the_data_steward(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The route computes the steward's grants from the manifest the connection is pinned to, and
+    the store writes them in the connection's transaction. Delete this and the route can hand the
+    store nothing, so every source connected from the console is a source whose data nobody on the
+    install can ever be granted, while `tests/unit/test_data_steward.py` stays green over the store
+    alone."""
+    records, vault = Records(), Vault()
+    attach(app, records, vault)
+    for name in ("xero", "hubspot"):
+        answered = post(client, "u_admin", LISTING, connection_body(name))
+        assert answered.status_code == 200, name
+
+    assert records.declared == [
+        declared_capabilities(manifest_for(name, settings_for(name)))
+        for name in ("xero", "hubspot")
+    ]
+    assert all(records.declared)
 
 
 def test_a_caller_who_may_not_connect_this_source_is_refused_before_anything_is_judged(
