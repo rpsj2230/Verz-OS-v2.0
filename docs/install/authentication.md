@@ -226,6 +226,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | Capability | Granted for |
 | --- | --- |
 | `admin:agent_instructions` | running the system |
+| `admin:application_log` | running the system |
 | `admin:automation` | running the system |
 | `admin:budget` | running the system |
 | `admin:connector` | running the system |

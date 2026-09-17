@@ -1,15 +1,12 @@
 """The Errors screen over HTTP: the failures this install keeps a durable record of, and what it
 keeps no record of at all.
 
-`docs/admin-console.md` asks for logs and errors readable without a shell on the server. What the
-application does with its log decides how much of that can be true, and it is less than the
-sentence asks. **Nothing configures structlog, so every log line is text on the container's
-standard output, and nothing keeps a copy anywhere the application can read.** A console screen
-of the process log would need a log store, and a log store needs a redactor on its way in:
-several call sites log `str(exc)`, which quotes whatever the exception quoted, and nothing strips
-values from a log line before it is written. Building one is a task with its own argument, and
-this module does not pretend it has been done. See
-`THE_PROCESS_LOG_IS_KEPT_BY_THE_CONTAINER_AND_NOT_BY_THE_APPLICATION`.
+`docs/admin-console.md` asks for logs and errors readable without a shell on the server. **The
+application's own warnings and errors are on the Logs screen, `brain.log_routes`**, kept by
+`brain.ops.log_capture` with a redactor on their way in, because several call sites log
+`str(exc)` and that quotes whatever the exception quoted. Until 2026-09-17 nothing kept a copy,
+and this screen said so; `process_log_is_not_kept` is false now and the page points at the Logs
+screen instead. See `THE_PROCESS_LOG_IS_ON_THE_LOGS_SCREEN_REDACTED`.
 
 **What is served is the two failure records the database already keeps, each behind the decision
 that already says who may see it.**
@@ -31,8 +28,6 @@ that already says who may see it.**
 **A list and never a count, and a full list says so.** Each list is bounded, newest first, and
 `truncated` says a list came back full. Because the bound applies only to rows the reader may
 see, a full list says nothing about rows they may not.
-
-**Not claimed: M27.8.14.** Errors are readable; the log is not, and the leaf names both.
 
 Task ids: none
 """
@@ -66,14 +61,12 @@ from brain.tables.telemetry import RequestTelemetryRow
 log = structlog.get_logger()
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why the process log is not on this screen.
-THE_PROCESS_LOG_IS_KEPT_BY_THE_CONTAINER_AND_NOT_BY_THE_APPLICATION: Final = (
-    "The application writes its log as text to its container's standard output and keeps no "
-    "copy, so a console cannot read it without a log store. A log store is not a table and a "
-    "select: several call sites log an exception's text, which can quote a value, and nothing "
-    "removes values from a log line before it is written. Serving the log without that would put "
-    "whatever an exception quoted on a screen, so the screen serves the failures the database "
-    "keeps and says where the log is."
+#: Why the process log is not on this screen, and where it is.
+THE_PROCESS_LOG_IS_ON_THE_LOGS_SCREEN_REDACTED: Final = (
+    "The application's warnings and errors are kept by brain.ops.log_capture and read on the Logs "
+    "screen, redacted on their way in, because several call sites log an exception's text and that "
+    "can quote a value. This screen serves the failures the database keeps as records of their "
+    "own, and points at the Logs screen for the rest."
 )
 
 # ------------------------------------------------------------------------ the figures
@@ -124,8 +117,8 @@ class ErrorsPage(BaseModel):
     jobs_truncated: bool
     requests: list[RequestFailureView]
     requests_truncated: bool
-    #: The process log is on the container's standard output and nowhere the console can read.
-    process_log_is_not_kept: bool = True
+    #: Whether the process log is kept nowhere the console can read. False since the Logs screen.
+    process_log_is_not_kept: bool = False
     #: A failed job's message stays in its run record on the server.
     failure_messages_stay_on_the_server: bool = True
 

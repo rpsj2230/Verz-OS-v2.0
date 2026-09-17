@@ -577,6 +577,10 @@ def test_the_sync_may_delete_from_its_own_table() -> None:
     assert expected in grants
 
 
+#: The tables the application role may delete from, each argued in the test below.
+DELETE_GRANTED = ("auth.directory_role_grant", "obs.application_log")
+
+
 def test_no_other_table_in_any_migration_grants_delete() -> None:
     """This is the one DELETE grant in the system, and this test is what stops it becoming a
     precedent. Every other table retires rows with `deleted_at`, because a hard delete
@@ -594,7 +598,14 @@ def test_no_other_table_in_any_migration_grants_delete() -> None:
     on 0014.
 
     The text scan is kept rather than replaced: a statement written inline in `upgrade`, or in
-    a constant under another name, is invisible to the module scan and visible to it."""
+    a constant under another name, is invisible to the module scan and visible to it.
+
+    **`obs.application_log` is the second, since `0063`, and it is named here rather than
+    cited.** A log row records no change to anything and no act by anybody, so there is no audit
+    trail for a hard delete to destroy; the audit chain is `obs.audit_entry`. Its rows leave by
+    age through the retention sweep, which removes only from a table the application role may
+    delete from, and by volume through `brain.ops.log_store`'s ceiling. A table that records what
+    somebody did still retires its rows, and a third name here needs the same argument."""
     offenders: list[str] = []
     for path in sorted(VERSIONS.glob("*.py")):
         for line in path.read_text(encoding="utf-8").splitlines():
@@ -603,7 +614,7 @@ def test_no_other_table_in_any_migration_grants_delete() -> None:
                 continue
             if "DELETE" not in stripped:
                 continue
-            if "auth.directory_role_grant" in stripped:
+            if any(table in stripped for table in DELETE_GRANTED):
                 continue
             offenders.append(f"{path.name}: {stripped}")
     checked = 0
@@ -613,7 +624,7 @@ def test_no_other_table_in_any_migration_grants_delete() -> None:
         offenders.extend(
             f"{path.name}: {statement}"
             for statement in grants
-            if "DELETE" in statement and "auth.directory_role_grant" not in statement
+            if "DELETE" in statement and not any(table in statement for table in DELETE_GRANTED)
         )
     assert offenders == [], f"a second DELETE grant: {offenders}"
     # Said out loud, because a scan that finds nothing and a scan that looks at nothing read

@@ -109,6 +109,7 @@ MIGRATION_ARTIFACT = VERSIONS / "0058_artifact_store.py"
 MIGRATION_ERASURE_REQUEST = VERSIONS / "0060_erasure_request.py"
 MIGRATION_LEARNING_AND_CORRECTION = VERSIONS / "0061_learning_and_correction.py"
 MIGRATION_ORGANISATION_AND_ELEVATION = VERSIONS / "0062_organisation_and_elevation.py"
+MIGRATION_APPLICATION_LOG = VERSIONS / "0063_application_log.py"
 
 #: The seven tables 0002 built, in the order it builds them. Written out here rather than
 #: read from `brain.tables.TABLES_IN_DEPENDENCY_ORDER`, which covers every table in the
@@ -275,6 +276,8 @@ SKILL_LIBRARY_TABLES: tuple[str, ...] = (
 )
 #: And the one 0058 adds: what an agent produced, pointing at its bytes in the object store.
 ARTIFACT_TABLES: tuple[str, ...] = ("agent.artifact",)
+#: And the one 0063 adds: the application's warnings and errors, for the Logs screen.
+APPLICATION_LOG_TABLES: tuple[str, ...] = ("obs.application_log",)
 
 #: And the one 0057 adds: a source connected from the console, and when that stopped.
 CONNECTOR_CONNECTION_TABLES: tuple[str, ...] = ("ops.connector_connection",)
@@ -330,6 +333,7 @@ ALL_TABLES = (
     + ERASURE_REQUEST_TABLES
     + LEARNING_AND_CORRECTION_TABLES
     + ORGANISATION_AND_ELEVATION_TABLES
+    + APPLICATION_LOG_TABLES
 )
 
 
@@ -1061,6 +1065,8 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
     assert learning_and_correction.TABLES == LEARNING_AND_CORRECTION_TABLES
     organisation_and_elevation = migration_module(MIGRATION_ORGANISATION_AND_ELEVATION)
     assert organisation_and_elevation.TABLES == ORGANISATION_AND_ELEVATION_TABLES
+    application_log = migration_module(MIGRATION_APPLICATION_LOG)
+    assert application_log.TABLES == APPLICATION_LOG_TABLES
     assert core.TABLES == CORE_TABLES
     assert resolver.TABLES == RESOLVER_TABLES
     assert registry.TABLES == REGISTRY_TABLES
@@ -1122,6 +1128,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         + tuple(erasure_request.TABLES)
         + tuple(learning_and_correction.TABLES)
         + tuple(organisation_and_elevation.TABLES)
+        + tuple(application_log.TABLES)
     )
     assert end_to_end == tables.TABLES_IN_DEPENDENCY_ORDER
     # Every table has a migration and every migration has a model. The union is the check
@@ -1164,6 +1171,7 @@ def test_the_migration_creates_exactly_the_tables_the_models_declare() -> None:
         set(erasure_request.TABLES),
         set(learning_and_correction.TABLES),
         set(organisation_and_elevation.TABLES),
+        set(application_log.TABLES),
     )
     assert set().union(*every) == set(metadata.tables)
     assert sum(len(s) for s in every) == len(set().union(*every)), "a table is created twice"

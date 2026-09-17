@@ -28,6 +28,7 @@ from brain.error_routes import router as error_router
 from brain.feature_routes import router as feature_router
 from brain.identity.bearer import TokenAuthority
 from brain.jobs_routes import router as jobs_router
+from brain.log_routes import router as log_router
 from brain.prompt_routes import router as prompt_router
 from tests.fixtures.http_client import Response
 from tests.fixtures.setting_rows import Result
@@ -43,7 +44,7 @@ from tests.unit.test_api_routes import (
 )
 
 #: The routers these tests are about.
-ROUTERS = (error_router, feature_router, jobs_router, prompt_router)
+ROUTERS = (error_router, feature_router, jobs_router, log_router, prompt_router)
 
 #: A function offered a statement, answering a result or None to pass it on.
 Answerer = Callable[[Any], Any]

@@ -65,6 +65,9 @@ const NARROWED_BY_CHOICE =
 const LEDGER_FILTERS =
   "The ledger is narrowed by the route's own action, kind, actor and period, and the route takes no " +
   "free text; a search over entry details is a query on the ledger the route does not offer yet.";
+const LOG_NEWEST_FIRST =
+  "The log is read newest first because what went wrong most recently is the question a log screen " +
+  "answers, the route takes no order, and a page of older rows follows from the cursor instead.";
 const CHAIN_IN_ORDER =
   "A routing chain is drawn in tier and position order because that order is the chain; any other " +
   "order would draw a fallback before the rung it falls back from.";
@@ -91,6 +94,7 @@ const MISSING: Readonly<Record<string, Partial<Record<Capability, string>>>> = {
   "/audit": { search: LEDGER_FILTERS, bulk: READ_ONLY },
   "/departments": { page: NO_CURSOR, filter: NO_NARROWING, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
   "/elevation": { page: NO_CURSOR, search: NO_NARROWING, filter: NO_NARROWING, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
+  "/logs": { sort: LOG_NEWEST_FIRST, bulk: READ_ONLY },
   "/access_review": { page: NO_CURSOR, search: NARROWED_BY_CHOICE, sort: NO_ORDER, bulk: ONE_ROW_AT_A_TIME },
 };
 

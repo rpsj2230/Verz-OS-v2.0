@@ -14,6 +14,7 @@ import {
   ERRORS_API_PATH,
   ERRORS_PATH,
   FULL_LIST,
+  LOG_IS_ON_THE_LOGS_SCREEN,
   NO_JOB_FAILURES,
   NO_REQUEST_FAILURES,
   PROCESS_LOG_IS_NOT_KEPT,
@@ -91,6 +92,8 @@ describe("what the Errors screen draws", () => {
     expect(container.textContent).toContain(NO_JOB_FAILURES);
     expect(container.textContent).toContain(NO_REQUEST_FAILURES);
     expect(container.textContent).not.toContain(PROCESS_LOG_IS_NOT_KEPT);
+    expect(container.textContent).toContain(LOG_IS_ON_THE_LOGS_SCREEN);
+    expect(container.querySelector('a[href="/logs"]')).not.toBeNull();
   });
 
   test("choosing a window asks for that window", async () => {

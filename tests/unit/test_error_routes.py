@@ -26,7 +26,7 @@ from brain.core.entitlement import Grant
 from brain.core.scope import Scope
 from brain.error_routes import (
     MAX_FAILURES,
-    THE_PROCESS_LOG_IS_KEPT_BY_THE_CONTAINER_AND_NOT_BY_THE_APPLICATION,
+    THE_PROCESS_LOG_IS_ON_THE_LOGS_SCREEN_REDACTED,
 )
 from brain.ops.controls import CONTROLS
 from tests.fixtures.console_http import Stub, console_client, get
@@ -122,8 +122,9 @@ def test_a_reader_of_both_screens_sees_a_failed_job_by_kind_and_a_failed_request
     assert body["requests"][0]["reference"] == REFERENCE
     assert set(body["requests"][0]) == {"reference", "received_at", "lane", "status", "duration_ms"}
     assert "someone@example.invalid" not in str(body)
-    assert body["process_log_is_not_kept"] is True
-    assert "standard output" in THE_PROCESS_LOG_IS_KEPT_BY_THE_CONTAINER_AND_NOT_BY_THE_APPLICATION
+    # The log is kept since `brain.ops.log_capture`, so the page points at the Logs screen.
+    assert body["process_log_is_not_kept"] is False
+    assert "Logs screen" in THE_PROCESS_LOG_IS_ON_THE_LOGS_SCREEN_REDACTED
 
 
 @pytest.mark.parametrize("pid", ["u_wide", "u_elsewhere", "u_none"])

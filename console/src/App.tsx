@@ -55,6 +55,7 @@ import { Department } from "./pages/Department";
 import { Errors } from "./pages/Errors";
 import { Features } from "./pages/Features";
 import { Jobs } from "./pages/Jobs";
+import { Logs } from "./pages/Logs";
 import { Prompts } from "./pages/Prompts";
 import { Roles } from "./pages/Roles";
 import { Scopes } from "./pages/Scopes";
@@ -252,6 +253,9 @@ export const routes: RouteObject[] = [
       // Errors: failed jobs by kind and failed questions by reference, and a sentence saying the
       // process log is kept nowhere the console can read. See `brain.error_routes`.
       { path: "errors", element: <Errors /> },
+      // Logs: the warnings and errors the application kept, redacted on their way in, searched by
+      // event name, level and period, and paged. See `brain.log_routes`.
+      { path: "logs", element: <Logs /> },
       // Models and health, SCREEN 11. One path and no parameter, at the screen's key. Its Edit
       // routing action is a link to `routing` below, where the chain's numbers are edited behind
       // the matrix's own grant, rather than a second editor here. Eager, for the same reason.

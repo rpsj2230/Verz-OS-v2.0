@@ -6,9 +6,9 @@
  * person is shown beside a failure. Each list is narrowed by the decision that already says who may
  * see that record, and neither carries a count.
  *
- * **The process log is not here, and the page says where it is.** The application writes its log
- * to its container's standard output and keeps no copy the console can read, and the answer carries
- * that as a field so the sentence leaves the page on the day a log store exists.
+ * **The process log is not here, and the page says where it is.** Since the log store, the
+ * application's own warnings and errors are on the Logs screen, and `process_log_is_not_kept` is
+ * false; the older sentence is kept for an API from before it, which sends true.
  *
  * Task ids: none
  */
@@ -45,6 +45,9 @@ export const LOG_HEADING = "What this screen cannot show";
 export const PROCESS_LOG_IS_NOT_KEPT =
   "The application's own log is written to its container's standard output on the server and is " +
   "not kept anywhere this console can read, so it is not shown here.";
+export const LOG_IS_ON_THE_LOGS_SCREEN =
+  "The application's own warnings and errors, with every value taken out, are on the Logs screen.";
+export const LOGS_LINK = "Open the Logs screen";
 export const FAILURE_MESSAGES_STAY_ON_THE_SERVER =
   "A failed job's message is kept in its run record on the server and not shown here, because a " +
   "message can quote a value.";

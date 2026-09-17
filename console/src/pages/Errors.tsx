@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { Notice } from "../ui/Notice";
 import {
@@ -23,6 +24,8 @@ import {
   JOBS_CAPTION,
   JOBS_HEADING,
   LOG_HEADING,
+  LOG_IS_ON_THE_LOGS_SCREEN,
+  LOGS_LINK,
   NO_JOB_FAILURES,
   NO_REQUEST_FAILURES,
   PROCESS_LOG_IS_NOT_KEPT,
@@ -35,6 +38,7 @@ import {
   UNREADABLE_ANSWER,
   WINDOWS,
 } from "./errorsQuery";
+import { LOGS_PATH } from "./logsQuery";
 import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { when } from "./sessionsQuery";
 
@@ -135,7 +139,13 @@ function Failures({ hours }: { readonly hours: number }) {
       </section>
       <section className="card" aria-labelledby="errors-log">
         <h2 id="errors-log">{LOG_HEADING}</h2>
-        {body.process_log_is_not_kept === false ? null : <p>{PROCESS_LOG_IS_NOT_KEPT}</p>}
+        {body.process_log_is_not_kept === false ? (
+          <p>
+            {LOG_IS_ON_THE_LOGS_SCREEN} <Link to={LOGS_PATH}>{LOGS_LINK}</Link>
+          </p>
+        ) : (
+          <p>{PROCESS_LOG_IS_NOT_KEPT}</p>
+        )}
         {body.failure_messages_stay_on_the_server === false ? null : (
           <p>{FAILURE_MESSAGES_STAY_ON_THE_SERVER}</p>
         )}

@@ -242,6 +242,7 @@ SIGN_IN_AUTHORITY: Final = Capability(value="admin:sign_in")
 #: a scan of `src/brain` by a test. See `AN_ADMINISTRATOR_GOVERNS_THE_SYSTEM_AND_READS_NO_DATA`.
 ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:agent_instructions",
+    "admin:application_log",
     "admin:automation",
     "admin:budget",
     "admin:connector",

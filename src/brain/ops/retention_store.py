@@ -77,8 +77,10 @@ the worker's tick reads. See `A_RELEASE_IS_A_DECISION_ABOUT_THE_NEWEST_REPORT`.
 What this finds on a database migrated to head, reasoned from the migrations rather than
 measured, because no server was reachable where this was written: the ledger store is reached
 and whatever is past five years in `obs.request_telemetry` is queued for partition removal; the
-trace and payload stores are reached with nothing due, because no table holds those classes;
-the audit store is reached with nothing due; every other store is refused by name.
+payload store is reached with nothing due, because no table holds that class; the trace store
+removes `obs.application_log` rows past its window since `0063`, and is refused while a hold names
+subjects, because a log row has no subject column to match one against; the audit store is reached
+with nothing due; every other store is refused by name.
 
 Rejected: a sync of each table's retention into a policy table the sweeper reads. It is a
 second declaration of the windows `brain.ops.retention` already declares, and the copy nobody
@@ -221,6 +223,7 @@ class ReleaseRefusedError(RetentionStoreError):
 #: Tables in a schema more than one store shares, and the store each belongs to.
 ATTRIBUTED: Final[Mapping[str, Store]] = MappingProxyType(
     {
+        "obs.application_log": Store.TRACE,
         "obs.audit_entry": Store.AUDIT,
         "obs.legal_hold": Store.AUDIT,
         "obs.request_telemetry": Store.LEDGER,
@@ -230,6 +233,7 @@ ATTRIBUTED: Final[Mapping[str, Store]] = MappingProxyType(
 #: The column a table's age is read from. Required for every table in a fixed-window store.
 CLOCKS: Final[Mapping[str, str]] = MappingProxyType(
     {
+        "obs.application_log": "at",
         "obs.audit_entry": "at",
         "obs.legal_hold": "placed_at",
         "obs.request_telemetry": "received_at",

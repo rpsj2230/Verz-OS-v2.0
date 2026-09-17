@@ -259,6 +259,8 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "gate.policy_epoch",
         "gate.scope",
         "gate.team",
+        # A log row keeps an event name, a place in the code and masked fields, never a person.
+        "obs.application_log",
         "ops.connector_connection",
         "ops.control_run",
         "ops.credential_write",
