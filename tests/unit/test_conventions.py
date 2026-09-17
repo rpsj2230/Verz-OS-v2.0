@@ -19,6 +19,7 @@ from pathlib import Path
 import pytest
 
 from brain.ops.conventions import (
+    SUBJECT_ID_RE,
     already_closed,
     check_branch_name,
     check_commit_message,
@@ -26,6 +27,8 @@ from brain.ops.conventions import (
     main,
     unmarked_install_finding,
 )
+from brain.status import TASK_ID_RE as STATUS_TASK_ID_RE
+from brain.status import claimed_ids as status_claimed_ids
 from brain.status import closed_task_ids
 
 REPO = Path(__file__).resolve().parents[2]
@@ -61,6 +64,42 @@ def test_a_group_id_closes_nothing_either() -> None:
     refusal = check_commit_message("Work\n\nCloses: M12.1")
     assert refusal is not None
     assert "module or group id" in refusal.reason
+
+
+def test_a_group_id_in_the_subject_is_refused_because_the_status_page_reads_it_as_closed() -> None:
+    """The hole the two tests above left: they guard the trailer, and `brain.status` also
+    counts every id in the subject. On 2026-09-17 a subject saying a plan was appended as
+    M27.9 to M27.14 passed this hook, closed two groups on the status page, and failed the
+    traceability test in CI after it was pushed.
+
+    The positive half is in the next test. Delete this and a subject can close a group again
+    with every local check green."""
+    refusal = check_commit_message("Append the plan as M27.9 to M27.14")
+    assert refusal is not None
+    assert "M27.9 in the subject" in refusal.reason
+    assert status_claimed_ids("Append the plan as M27.9 to M27.14", "") == {"M27.9", "M27.14"}
+
+
+def test_a_subject_naming_a_leaf_or_only_a_module_is_accepted() -> None:
+    """A leaf in the subject is a legitimate claim, and a bare module id is prose the status
+    page does not read as a claim, so neither may be refused. Without this sibling the rule
+    above is satisfied by refusing every subject with an id in it.
+
+    Delete this and the subject rule can be widened into refusing `M27` mentioned in passing,
+    which the status page has never counted."""
+    assert check_commit_message("Finish M12.1.1 properly") is None
+    assert check_commit_message("Rework the M27 console shell") is None
+    assert status_claimed_ids("Rework the M27 console shell", "") == set()
+
+
+def test_the_subject_rule_reads_ids_exactly_as_the_status_page_does() -> None:
+    """The rule copies the status page's id pattern rather than importing it, to keep the
+    hook light. A copy drifts, and a drift in either direction is silent: a narrower pattern
+    lets a group claim through again, a wider one refuses what the status page ignores.
+
+    Delete this and the two patterns can part without any test noticing."""
+    assert SUBJECT_ID_RE.pattern == STATUS_TASK_ID_RE.pattern
+    assert SUBJECT_ID_RE.flags == STATUS_TASK_ID_RE.flags
 
 
 def test_an_id_mentioned_in_prose_closes_nothing() -> None:

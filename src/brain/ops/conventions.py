@@ -59,6 +59,20 @@ ANY_ID_RE = re.compile(r"\bM\d+(?:\.\d+){0,4}\b")
 #: otherwise close it.
 CLOSES_LINE_RE = re.compile(r"^\s*Closes:\s*(.+)$", re.M)
 
+#: The ids `brain.status.claimed_ids` reads out of a subject line: at least one dot, so a
+#: module id such as `M27` in a subject is prose and a group id such as `M27.9` is a claim.
+#: Kept equal to `brain.status.TASK_ID_RE` by a test rather than imported, because this
+#: module runs in a commit hook and `brain.status` pulls in the work breakdown loader.
+SUBJECT_ID_RE = re.compile(r"\bM\d+(?:\.\d+){1,4}\b")
+
+#: Why a group id in a subject is refused and not merely noted.
+A_SUBJECT_IS_READ_AS_A_CLAIM = (
+    "The status page counts every id in a subject line as closed, so a subject naming a group "
+    "closes the group, and the traceability test fails in CI after the commit has deployed "
+    "nowhere. Measured on 2026-09-17, when a subject saying the plan was appended as M27.9 to "
+    "M27.14 turned CI red. Name leaves, or leave ids out of the subject."
+)
+
 #: `<module-id>/<short-name>`, e.g. `M12/tool-registry`. The module id first so the
 #: branch list sorts by module rather than by whoever named theirs "fix".
 BRANCH_RE = re.compile(r"^M\d+(?:\.\d+)*/[a-z][a-z0-9-]*$")
@@ -135,6 +149,17 @@ def check_commit_message(message: str) -> Refusal | None:
             "Generic-because: line. " + AN_INSTALL_IS_NOT_THE_PRODUCT,
             subject,
         )
+
+    # The subject is a claim too, because `brain.status.claimed_ids` reads ids from the
+    # subject as well as from the trailer. So a group id there closes a group exactly as a
+    # trailer would, and is refused for the same reason. See A_SUBJECT_IS_READ_AS_A_CLAIM.
+    for one in SUBJECT_ID_RE.findall(subject):
+        if not LEAF_ID_RE.match(one):
+            return Refusal(
+                f"{one} in the subject is a module or group id, and the subject is read as a "
+                f"claim. {A_SUBJECT_IS_READ_AS_A_CLAIM}",
+                subject,
+            )
 
     claimed = leaf_ids_in(message)
     if not claimed:
