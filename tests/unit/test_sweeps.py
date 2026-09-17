@@ -277,7 +277,7 @@ def test_a_claim_no_test_names_fails_the_sweep_and_a_claim_one_names_does_not(
             del pattern
             return [_Claiming(self._line)]
 
-    monkeypatch.setattr(sweeps, "_commit_claims_without_tests", lambda: 0)
+    monkeypatch.setattr(sweeps, "_commit_claims_without_tests", lambda: ())
     monkeypatch.setattr(sweeps, "_source_claims_never_closed_by_a_commit", lambda: 0)
     monkeypatch.setattr(sweeps, "_claims_that_name_no_leaf", lambda: ())
 
@@ -291,6 +291,49 @@ def test_a_claim_no_test_names_fails_the_sweep_and_a_claim_one_names_does_not(
 
     monkeypatch.setattr(sweeps, "SRC", _OneFile("M0.5.8"))
     sweeps.sweep_traceability()
+
+
+def test_a_leaf_closed_by_a_commit_with_no_test_fails_the_sweep(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**M0.5.8: nothing is proven without a test id, and a `Closes:` line is the claim the
+    tracker counts.** This was a printed note, so a leaf could go green on the status page
+    with no test anywhere and the sweep still said ok. The id is assembled at run time for the
+    reason the test above gives: written out here, this file would prove it.
+
+    Delete this and the gate can fall back to a note with every test green."""
+    untested = "M" + "999.8.7"
+    monkeypatch.setattr(sweeps, "_commit_claims_without_tests", lambda: (untested,))
+    monkeypatch.setattr(sweeps, "_source_claims_never_closed_by_a_commit", lambda: 0)
+    monkeypatch.setattr(sweeps, "_claims_that_name_no_leaf", lambda: ())
+    with pytest.raises(sweeps.SweepFailure) as raised:
+        sweeps.sweep_traceability()
+    assert any(
+        finding.startswith(f"{untested} is closed by a commit but no test names it")
+        for finding in raised.value.findings
+    )
+
+
+def test_untested_closures_counts_leaves_only_and_spares_a_named_one() -> None:
+    """A closed leaf a test names is proven, and a closed group is the phantom check's finding
+    rather than this one's, so neither is reported. Only the untested leaf is, in id order."""
+    first, second, named, group = (
+        "M" + tail for tail in ("998.1.2", "998.1.1", "998.1.3", "998.1")
+    )
+    closed = {first, second, named, group}
+    leaves = {first, second, named}
+    assert sweeps.untested_closures(closed, leaves, {named}) == (second, first)
+    assert sweeps.untested_closures(closed, leaves, {first, second, named}) == ()
+
+
+def test_every_leaf_closed_on_this_tree_has_a_test() -> None:
+    """The gate is live on the real history, not only on stand-ins: at least one leaf is
+    closed (so the comparison read something) and none is untested."""
+    from brain.status import closed_task_ids
+
+    closed, _ = closed_task_ids(sweeps.REPO)
+    assert len(closed) > 100, "almost nothing was closed, so an empty finding proves nothing"
+    assert sweeps._commit_claims_without_tests() == ()
 
 
 def test_a_leaf_proved_by_the_consoles_own_suite_counts_as_proved() -> None:

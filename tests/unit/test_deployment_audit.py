@@ -142,7 +142,8 @@ def test_both_workflows_take_the_address_from_the_repository_variable_and_nowher
     ]
 
     assert read == [expected], read
-    assert waited == [expected], waited
+    # Two steps read it: the wait for the deploy and the post-deploy checks (M38.5.1).
+    assert waited == [expected, expected], waited
 
 
 def test_a_configuration_area_with_nothing_in_it_is_reported_as_clean() -> None:

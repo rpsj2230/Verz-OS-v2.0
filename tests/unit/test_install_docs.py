@@ -17,7 +17,7 @@ The registers are read here rather than inside the module, in the split `brain.o
 `brain.deployment.requirements` both keep: `yaml.safe_load` and `Path.read_text` belong in the
 test, so what is checked is the deployment rather than a second copy of it kept in Python.
 
-Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8
+Task ids: M42.2.3, M42.2.4, M42.2.5, M42.2.6, M42.2.8, M34.3.3.2
 """
 
 from __future__ import annotations
@@ -974,6 +974,7 @@ def test_the_documents_the_checks_read_are_all_present() -> None:
         "checklist.md",
         "coolify.md",
         "scaling.md",
+        "threat-model.md",
     }
     assert {one.name for one in GUIDES.glob("*.md")} == expected
 

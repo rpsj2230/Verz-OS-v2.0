@@ -1,6 +1,6 @@
 # Installing this system
 
-Thirteen pages, written for somebody who has never met anybody who built this and is standing in
+Fourteen pages, written for somebody who has never met anybody who built this and is standing in
 front of a bare server. Nothing in them names another company's installation.
 
 | Page | What it covers |
@@ -18,6 +18,7 @@ front of a bare server. Nothing in them names another company's installation.
 | [checklist.md](checklist.md) | Everything above as one list to tick, in ten sections |
 | [coolify.md](coolify.md) | Deploying with the Coolify panel instead of the installer |
 | [scaling.md](scaling.md) | A read replica, and splitting the stack across two hosts |
+| [threat-model.md](threat-model.md) | Every surface an install exposes, and what stands in the way |
 
 ## Which half of this is checked
 

@@ -379,6 +379,41 @@ def test_main_is_exempt() -> None:
     assert check_branch_name("main") is None
 
 
+def test_the_command_line_refuses_a_misnamed_branch_and_passes_a_named_one(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--branch` is the rule's only caller, from CI's `branch_name` job. Delete this and the
+    flag can stop refusing, or refuse everything, with the rule's own tests green."""
+    assert main(["--branch", "feature/registry"]) == 1
+    assert "refused:" in capsys.readouterr().err
+    assert main(["--branch", "M12/tool-registry"]) == 0
+    assert main(["--branch"]) == 1
+
+
+def test_ci_calls_the_branch_rule_with_the_pull_requests_own_branch() -> None:
+    """A rule with a test and no caller is how this one sat until 2026-09-17. Delete this and
+    the job can be removed or pointed at the base branch, which is always `main` and exempt."""
+    import yaml
+
+    workflow = yaml.safe_load(
+        (Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
+    )
+    steps = workflow["jobs"]["branch_name"]["steps"]
+    step = next(one for one in steps if "brain.ops.conventions" in str(one.get("run", "")))
+    assert step["run"].split() == [
+        "uv",
+        "run",
+        "python",
+        "-m",
+        "brain.ops.conventions",
+        "--branch",
+        '"$HEAD_REF"',
+    ]
+    assert step["env"]["HEAD_REF"] == "${{ github.head_ref }}"
+
+
 # ------------------------------------- the files that carry the rest (M38.1.1.4, M38.1.1.5)
 #: Every file that can widen what an answer contains. Each needs a second reader, and the
 #: reason is the same for all of them: a mistake here returns a plausible answer that is
