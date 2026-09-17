@@ -93,6 +93,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol
 
+from brain.agents.model import AgentRecord
+from brain.console.skill_library import LibrarySkill, reach_through
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
@@ -125,6 +127,8 @@ from brain.models.adapter import is_refusal
 from brain.models.driver import DriverMessage, DriverResponse, Role
 from brain.models.metering import Meter
 from brain.models.routing import RoutingRequest, Tier, classify_tier
+from brain.tools.registry import ToolRegistry
+from brain.tools.skills import SkillCard, SkillError, SkillPin, offered_cards, resolve_pin
 
 # ------------------------------------------------------------------- written-down reasons
 
@@ -289,6 +293,42 @@ class DocumentSearchTool:
 
 
 @dataclass(frozen=True)
+class AgentRun:
+    """The agent a request runs with: its record, its current pins, and the library they name.
+
+    `pins` are `EffectiveAgent.skill_pins`, so a detached skill is simply not among them.
+    """
+
+    record: AgentRecord
+    pins: tuple[SkillPin, ...]
+    library: tuple[LibrarySkill, ...]
+    registry: ToolRegistry
+
+
+def skill_cards(agent: AgentRun, *, caller: EntitlementSet, now: datetime) -> tuple[SkillCard, ...]:
+    """The cards a run offers: pinned, approved, unmoved, and every tool inside the run reach.
+
+    The reach is `reach_through`, which intersects through `run_reach` and nowhere else. A row
+    whose stored text no longer digests to its key is skipped, so a moved body is never offered.
+    """
+    offered = []
+    for pin in agent.pins:
+        for one in agent.library:
+            if one.name != pin.skill_name or one.digest != pin.digest or one.moved:
+                continue
+            try:
+                skill = resolve_pin(pin, one.imported)
+            except SkillError:
+                continue
+            tools = skill.skill.tools
+            if set(tools) <= set(
+                reach_through(skill.skill, agent.registry, caller, agent.record, now)
+            ):
+                offered.append(skill)
+    return offered_cards(offered)
+
+
+@dataclass(frozen=True)
 class ModelLane:
     """What the answer lane needs to answer with a model: where passages come from, and the model.
 
@@ -299,6 +339,7 @@ class ModelLane:
     search: PassageSearch
     model: AnswerModel
     agent_version: str | None = None
+    agent: AgentRun | None = None
 
 
 @dataclass(frozen=True)
@@ -356,7 +397,14 @@ def passage_block(number: int, record: Mapping[str, Any]) -> str:
     return text[: PASSAGE_CHARS - len(SHORTENED)] + SHORTENED
 
 
-def prompt_for(question: str, payload: ChannelPayload) -> PromptLayout:
+def cards_block(cards: Sequence[SkillCard]) -> str:
+    """The skills a run may use, as cards only: a card type has nowhere to put a body."""
+    return "Skills:\n" + "\n".join(f"{one.name}: {one.description}" for one in cards)
+
+
+def prompt_for(
+    question: str, payload: ChannelPayload, cards: Sequence[SkillCard] = ()
+) -> PromptLayout:
     """The whole prompt: the shared prefix, then the question, the passages and the length.
 
     Takes a `ChannelPayload` and has no parameter that could carry anything the redactor has not
@@ -365,12 +413,10 @@ def prompt_for(question: str, payload: ChannelPayload) -> PromptLayout:
     passages = "\n\n".join(
         passage_block(number, record) for number, record in enumerate(payload.records, start=1)
     )
-    return lay_out(
-        PREFIX,
-        f"Question:\n{question[:MAX_QUESTION_CHARS]}",
-        f"Passages:\n\n{passages}",
-        settings_for(Lane.ANSWER).instruction,
-    )
+    parts = [f"Question:\n{question[:MAX_QUESTION_CHARS]}", f"Passages:\n\n{passages}"]
+    if cards:
+        parts.append(cards_block(cards))
+    return lay_out(PREFIX, *parts, settings_for(Lane.ANSWER).instruction)
 
 
 def messages_of(layout: PromptLayout) -> tuple[DriverMessage, DriverMessage]:
@@ -386,10 +432,14 @@ def prompt_bytes(messages: Sequence[DriverMessage]) -> int:
     return sum(len(one.content.encode("utf-8")) for one in messages)
 
 
-def tier_for(messages: Sequence[DriverMessage]) -> Tier:
-    """The tier the answer lane's call runs on, from the prompt's bytes as its token bound."""
+def tier_for(messages: Sequence[DriverMessage], requested: Tier | None = None) -> Tier:
+    """The answer lane's tier: an agent's own tier when one runs, else the prompt's bytes."""
     return classify_tier(
-        RoutingRequest(lane=Lane.ANSWER, estimated_context_tokens=prompt_bytes(messages))
+        RoutingRequest(
+            lane=Lane.ANSWER,
+            estimated_context_tokens=prompt_bytes(messages),
+            requested_tier=requested,
+        )
     ).tier
 
 
@@ -433,10 +483,12 @@ async def draft(
     if declined is not None:
         return Drafted(outcome=declined, asked=False)
 
-    messages = messages_of(prompt_for(question, payload))
+    agent = lane.agent
+    cards = () if agent is None else skill_cards(agent, caller=entitlement, now=now)
+    messages = messages_of(prompt_for(question, payload, cards))
     response = await lane.model.complete(
         messages,
-        tier=tier_for(messages),
+        tier=tier_for(messages, None if agent is None else agent.record.tier),
         lane=Lane.ANSWER,
         meter=meter,
         trace_id=trace_id,
