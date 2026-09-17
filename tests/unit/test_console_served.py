@@ -38,8 +38,11 @@ from brain.console_static import (
     bundle_entry,
     file_in_bundle,
     runtime_config,
+    served_accent,
 )
 from brain.docs_routes import COMING
+from brain.install import value_of
+from brain.locale import Theme, accent_set
 from tests.fixtures.http_client import Response
 
 REPO = Path(__file__).resolve().parents[2]
@@ -50,6 +53,10 @@ ENTRY_MARK = "<!doctype html><title>console entry</title><div id=root></div>"
 #: An issuer and a client id no company owns, to prove a served value is read back.
 A_DEPLOYMENTS_ISSUER = "https://idp.example.invalid/realms/brain"
 A_DEPLOYMENTS_CLIENT = "brain-console-elsewhere"
+
+#: An accent written in capitals, so the served fill proves it was read and normalised rather
+#: than defaulted. A green nobody's brand guide is known to name.
+A_DEPLOYMENTS_ACCENT = "#1F7A5C"
 
 
 @pytest.fixture
@@ -366,20 +373,77 @@ def test_the_served_document_carries_this_installs_values_and_no_others() -> Non
 
     Delete this and a document that names the right fields with the wrong values passes, which
     is a console signing in against whatever the defaults happen to be."""
-    document = _parsed_config(
-        runtime_config(
-            {
-                "INSTALL_OIDC_ISSUER": A_DEPLOYMENTS_ISSUER,
-                "INSTALL_OIDC_CLIENT_ID": A_DEPLOYMENTS_CLIENT,
-            }
-        )
-    )
+    env = {
+        "INSTALL_OIDC_ISSUER": A_DEPLOYMENTS_ISSUER,
+        "INSTALL_OIDC_CLIENT_ID": A_DEPLOYMENTS_CLIENT,
+        "INSTALL_ACCENT_COLOUR": A_DEPLOYMENTS_ACCENT,
+    }
+    document = _parsed_config(runtime_config(env))
 
     assert document == {
         "apiBaseUrl": API_PREFIX,
         "issuer": A_DEPLOYMENTS_ISSUER,
         "clientId": A_DEPLOYMENTS_CLIENT,
+        "accent": served_accent(env),
     }
+
+
+def test_the_served_accent_is_the_installs_colour_turned_into_what_the_console_draws() -> None:
+    """The accent arrives as six colours rather than one, and every one of them is the value
+    `brain.locale.accent_set` derived from what this install set, keyed the way
+    `console/src/config.ts` reads them. The fill is the configured colour itself, normalised,
+    because it is the company's and nothing about it is ours to change.
+
+    The expected keys are spelled here rather than read from `served_accent`, because a test
+    comparing the function's output with the function's output is green whatever the console
+    is sent. `console/tests/accent.test.ts` holds the same six names from the other side.
+
+    Delete this and the console can be sent the accent under names it does not read, and every
+    new component draws in the neutral fallback on every install with nothing reporting it."""
+    env = {"INSTALL_ACCENT_COLOUR": A_DEPLOYMENTS_ACCENT}
+    derived = accent_set(A_DEPLOYMENTS_ACCENT)
+
+    accent = _parsed_config(runtime_config(env))["accent"]
+
+    assert accent == {
+        "fill": "#1f7a5c",
+        "onFill": derived.on_fill,
+        "textLight": derived.text[Theme.LIGHT],
+        "textDark": derived.text[Theme.DARK],
+        "washLight": derived.wash[Theme.LIGHT],
+        "washDark": derived.wash[Theme.DARK],
+    }
+
+
+def test_an_install_that_sets_no_accent_is_served_the_products_default_derived() -> None:
+    """The positive sibling of the refusal below: an install that never set a colour still gets
+    six measured colours, from the default `brain.install` declares, so a fresh install's
+    components are drawn in something that reads rather than in nothing.
+
+    Delete this and `served_accent` can return None for every install, which the console survives
+    and which nobody would notice, because the fallback reads too."""
+    accent = _parsed_config(runtime_config({}))["accent"]
+
+    assert isinstance(accent, dict)
+    assert accent["fill"] == accent_set(value_of("INSTALL_ACCENT_COLOUR", {})).fill
+
+
+def test_an_accent_that_is_not_a_colour_is_served_as_none_and_the_console_still_starts() -> None:
+    """A tint is not worth a stopped console. The value is somebody's typing on install day, and
+    the console falls back to the design's own ink when it is sent none, so the right answer is
+    none, with the issuer and the client id still served beside it.
+
+    Delete this and a mistyped colour raises inside the document every page loads first, which is
+    a blank page for everybody on the install."""
+    env = {
+        "INSTALL_OIDC_ISSUER": A_DEPLOYMENTS_ISSUER,
+        "INSTALL_ACCENT_COLOUR": "brand orange",
+    }
+
+    document = _parsed_config(runtime_config(env))
+
+    assert document["accent"] is None
+    assert document["issuer"] == A_DEPLOYMENTS_ISSUER
 
 
 def test_an_install_that_has_not_said_who_its_identity_provider_is_serves_an_empty_issuer() -> None:
@@ -592,7 +656,7 @@ def _excluded(wanted: str, rules: list[str]) -> bool:
     return excluded
 
 
-def _parsed_config(document: str) -> dict[str, str]:
+def _parsed_config(document: str) -> dict[str, object]:
     """The object out of the served JavaScript, parsed as JSON rather than matched on.
 
     The document is one assignment of a frozen object literal, so the JSON is exactly the text
@@ -601,7 +665,7 @@ def _parsed_config(document: str) -> dict[str, str]:
     """
     found = re.search(r"Object\.freeze\((\{.*\})\);", document, re.S)
     assert found is not None, f"the served document is not one frozen object: {document!r}"
-    parsed: dict[str, str] = json.loads(found.group(1))
+    parsed: dict[str, object] = json.loads(found.group(1))
     return parsed
 
 

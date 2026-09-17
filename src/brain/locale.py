@@ -45,18 +45,19 @@ it is that the domain layer emits a completion event and the tokens carry no ann
 all. See `A_LIVE_REGION_ON_A_STREAM_READS_THE_ANSWER_LETTER_BY_LETTER`.
 
 Task ids: M35.1.1.1, M35.1.1.2, M35.1.1.3, M35.1.2.2, M35.2.1.1, M35.2.1.2
-Task ids: M35.2.2.3, M35.2.2.4, M35.3.2.2
+Task ids: M35.2.2.3, M35.2.2.4, M35.3.2.2, M27.10.4
 """
 
 from __future__ import annotations
 
 import enum
+import functools
 import re
 import unicodedata
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Final
 from zoneinfo import ZoneInfo
@@ -1242,6 +1243,26 @@ READ_PAIRS: Final[tuple[tuple[str, str], ...]] = (
     ("tone-positive-fg", "tone-positive-bg"),
     ("tone-caution-fg", "tone-caution-bg"),
     ("tone-critical-fg", "tone-critical-bg"),
+    # The design of record's half of the stylesheet (M27.10.4), which the components in
+    # `console/src/components/ui` are painted with. `faint` is absent on purpose: it measures
+    # below the floor on every surface in both themes, and no class in the console can name it.
+    ("ink", "ground"),
+    ("ink", "panel"),
+    ("ink", "sunk"),
+    ("body", "ground"),
+    ("body", "panel"),
+    ("body", "sunk"),
+    ("dim", "ground"),
+    ("dim", "panel"),
+    ("dim", "sunk"),
+    ("ok", "ok-w"),
+    ("ok", "panel"),
+    ("warn", "warn-w"),
+    ("warn", "panel"),
+    ("crit", "crit-w"),
+    ("crit", "panel"),
+    ("lock", "lock-w"),
+    ("lock", "panel"),
 )
 
 #: A CSS custom property holding a hex colour.
@@ -1254,6 +1275,7 @@ _COMMENT = re.compile(r"/\*.*?\*/", re.S)
 TOKENS_CSS: Final = Path("console") / "src" / "theme" / "tokens.css"
 
 
+@functools.cache
 def _luminance(colour: str) -> Decimal:
     """WCAG 2 relative luminance of a hex colour, 0 for black and 1 for white."""
     digits = colour.lstrip("#")
@@ -1472,3 +1494,156 @@ def presentation_gaps(repo: Path = REPO, env: Mapping[str, str] | None = None) -
         *contrast_gaps(palettes),
         *accent_gaps(value_of("INSTALL_ACCENT_COLOUR", env), palettes),
     )
+
+
+# ------------------------------------------------------------------ the accent, derived
+
+
+#: Why the colours drawn with a company's accent are computed and measured rather than chosen.
+AN_ACCENT_NOBODY_HERE_CHOSE_HAS_ITS_TEXT_MEASURED: Final = (
+    "The accent is set on install day by somebody holding a brand guideline and no contrast "
+    "meter, and the console draws it three ways: as a fill with text on it, as text on the "
+    "page, and as a wash behind that text. None of the three can be checked in this repository, "
+    "because the colour does not exist until the install sets it, so the text colours are "
+    "derived from it and each is measured against every surface it is drawn on, in both themes, "
+    "before the console is told them. The design of record's own accent failed as text on white "
+    "and had to be darkened by hand, which is the case that cannot be left to a hand on an "
+    "install nobody here will see."
+)
+
+#: Why a derived colour is measured as the hex that is served and not as the mix it came from.
+THE_COLOUR_MEASURED_IS_THE_COLOUR_SERVED: Final = (
+    "A step along the line from the accent to black lands between two representable colours, "
+    "and the console receives the rounded one. A candidate that clears 4.5 to 1 before rounding "
+    "can fall below it after, and the reader sees the rounded colour, so the rounded colour is "
+    "the one measured."
+)
+
+#: The surfaces an accent's text is drawn on, by theme: the design's `--panel`, `--ground` and
+#: `--sunk`, in that order.
+#:
+#: Copies of `console/src/theme/tokens.css`, and deliberately so: this is served by an image that
+#: carries the built console and not its source, so the stylesheet is not there to read at
+#: request time. `test_the_accent_is_measured_against_the_surfaces_the_stylesheet_declares`
+#: reads them out of the stylesheet, so the copy is checked rather than trusted.
+ACCENT_SURFACE_TOKENS: Final = ("panel", "ground", "sunk")
+ACCENT_SURFACES: Final[Mapping[Theme, tuple[str, str, str]]] = {
+    Theme.LIGHT: ("#ffffff", "#f6f4f1", "#efebe7"),
+    Theme.DARK: ("#1d1916", "#14110f", "#262019"),
+}
+
+#: The design's ink on the light ground, which text on an accent fill is tried in before white.
+#: `--ink` in the light block of `tokens.css`, checked by the same test as the surfaces.
+DESIGN_INK: Final = "#231f20"
+
+#: How much of the accent a wash carries, and what it is mixed into: the panel in the light theme
+#: and the ground in the dark one. Taken from the design of record, whose light wash is its accent
+#: at about a tenth over white.
+WASH_SHARE: Final[Mapping[Theme, Decimal]] = {
+    Theme.LIGHT: Decimal("0.12"),
+    Theme.DARK: Decimal("0.16"),
+}
+WASH_BASE: Final[Mapping[Theme, str]] = {
+    Theme.LIGHT: ACCENT_SURFACES[Theme.LIGHT][0],
+    Theme.DARK: ACCENT_SURFACES[Theme.DARK][1],
+}
+
+#: Where the accent is moved when it is too faint to read as text: toward black on the light
+#: surfaces, toward white on the dark ones.
+TEXT_TOWARD: Final[Mapping[Theme, str]] = {Theme.LIGHT: "#000000", Theme.DARK: "#ffffff"}
+
+#: How many steps the line from the accent to `TEXT_TOWARD` is cut into. Fifty is a two per cent
+#: step, finer than a person tells apart on adjacent swatches. When no step reads, the end of the
+#: line is served, and `test_the_end_of_each_line_clears_every_surface_a_wash_can_be` is what
+#: makes that a measured answer rather than a hope.
+ACCENT_TEXT_STEPS: Final = 50
+
+_HEX: Final = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+@dataclass(frozen=True)
+class AccentSet:
+    """The colours the console draws with one install's accent (M27.10.4).
+
+    `fill` is the accent as configured, used as a background, and `on_fill` is the text drawn on
+    it. `text` is the accent used as text, by theme, and `wash` the tint behind the current item
+    in a menu, by theme. The fill is the same in both themes because it is the company's colour
+    and a company's colour does not change at sunset; the things drawn beside it do.
+    """
+
+    fill: str
+    on_fill: str
+    text: Mapping[Theme, str]
+    wash: Mapping[Theme, str]
+
+
+def _channels(colour: str) -> tuple[int, int, int]:
+    digits = colour.lstrip("#")
+    if len(digits) == 3:
+        digits = "".join(one * 2 for one in digits)
+    return int(digits[0:2], 16), int(digits[2:4], 16), int(digits[4:6], 16)
+
+
+def _hex(channels: Sequence[int]) -> str:
+    return "#" + "".join(f"{one:02x}" for one in channels)
+
+
+def _mix(start: str, end: str, share: Decimal) -> str:
+    """The colour `share` of the way from `start` to `end`, rounded to a representable one."""
+    channels = []
+    for a, b in zip(_channels(start), _channels(end), strict=True):
+        exact = Decimal(a) + (Decimal(b) - Decimal(a)) * share
+        channels.append(int(exact.quantize(Decimal(1), ROUND_HALF_UP)))
+    return _hex(channels)
+
+
+def _readable_on(accent: str, surfaces: Sequence[str], toward: str) -> str:
+    """The accent, or the least move from it toward `toward` that reads on every surface.
+
+    The accent itself is the first candidate, so a colour that already reads is served as the
+    company chose it. See `THE_COLOUR_MEASURED_IS_THE_COLOUR_SERVED` for why the candidate
+    measured is the rounded one.
+    """
+    for step in range(ACCENT_TEXT_STEPS):
+        candidate = _mix(accent, toward, Decimal(step) / ACCENT_TEXT_STEPS)
+        if all(contrast_ratio(candidate, surface) >= MINIMUM_CONTRAST for surface in surfaces):
+            return candidate
+    return toward
+
+
+def _on_fill(fill: str) -> str:
+    """The text on the accent: the design's ink or white, or black or white when neither reads.
+
+    The design's pair first, whichever of the two stands off the fill further, because that is
+    the pair the design was drawn in. A mid-luminance accent defeats both: the ink is not quite
+    black, and near a relative luminance of 0.21 neither it nor white reaches 4.5 to 1. Pure black
+    and pure white meet at 4.58 to 1 in the worst case, so one of them always clears the floor.
+    """
+    designed = max((DESIGN_INK, "#ffffff"), key=lambda one: contrast_ratio(one, fill))
+    if contrast_ratio(designed, fill) >= MINIMUM_CONTRAST:
+        return designed
+    return max(("#000000", "#ffffff"), key=lambda one: contrast_ratio(one, fill))
+
+
+@functools.cache
+def accent_set(accent: str) -> AccentSet:
+    """Every colour the console draws with this accent, each measured before it is served.
+
+    See `AN_ACCENT_NOBODY_HERE_CHOSE_HAS_ITS_TEXT_MEASURED`. The wash is derived first because the
+    accent's text is drawn on it as well as on the three surfaces, in the current item of a menu,
+    so it is one of the surfaces the text is measured against.
+
+    Cached because the console's configuration document is served on every page load, the
+    measurement is a few hundred decimal powers, and the argument is one string.
+    """
+    written = accent.strip()
+    if not _HEX.match(written):
+        msg = f"{accent!r} is not a colour the console can draw: write it as #rrggbb"
+        raise LocaleError(msg)
+    fill = _hex(_channels(written))
+    wash = {theme: _mix(WASH_BASE[theme], fill, WASH_SHARE[theme]) for theme in Theme}
+    text = {
+        theme: _readable_on(fill, (*ACCENT_SURFACES[theme], wash[theme]), TEXT_TOWARD[theme])
+        for theme in Theme
+    }
+    return AccentSet(fill=fill, on_fill=_on_fill(fill), text=text, wash=wash)

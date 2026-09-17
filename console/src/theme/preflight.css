@@ -1,0 +1,156 @@
+/*
+ * Tailwind's reset, applied to the new components and not to the pages that already exist.
+ *
+ * Copied from `tailwindcss/preflight.css` at 4.3.3 and changed in one respect: every selector
+ * is narrowed to the scope below. Nothing else was altered except what is listed at the end.
+ *
+ * WHY IT IS NARROWED, MEASURED RATHER THAN SUPPOSED. Tailwind's reset takes the margin off
+ * every paragraph, the bullets off every list, the weight off every heading, the underline off
+ * every link and the grey face off every button, and it does that to the whole document. The
+ * pages built before 2026-09-17 were written against the browser's own defaults for all five:
+ * `styles/app.css` sets a heading's size and never its weight, and a link's colour and never
+ * its decoration. Loaded globally, the reset repaints every one of those pages, and the layer
+ * order cannot prevent it, because a layer only decides between two rules that both set a
+ * property and the old sheets never set these. The README records the before-and-after
+ * comparison of computed styles that this scoping was checked with.
+ *
+ * THE SCOPE, in three parts:
+ *
+ *   an element carrying `data-slot`         every shadcn/ui component marks its own elements
+ *   anything inside one                     an icon in a button, a row in a table
+ *   ...unless it sits in `[data-legacy]`    an old page rendered inside a new frame
+ *   ...and then again inside a component    a new button placed on that old page
+ *
+ * The third line is for the shell that comes next: the sidebar's provider wraps the whole
+ * application in a `data-slot` element, so without the exception every existing page inside it
+ * would fall under the reset the day the shell lands. The outlet that renders an old page
+ * carries `data-legacy`, and `tests/tailwind-foundation.test.ts` holds all four lines against
+ * the browser's own selector engine. Deeper alternation than this (an old page inside a new
+ * component inside an old page inside the shell) is not modelled, and nothing builds it.
+ *
+ * Rejected: no reset at all. shadcn/ui's classes assume it; `border` sets a width and relies
+ * on the reset for the style, so without it no component draws a border, and a ghost button
+ * wears the platform's grey button face. Rejected: Tailwind's `prefix()` option, which avoids
+ * collisions by renaming every class and so makes every component copied from shadcn/ui a
+ * rewrite, which was the whole reason for choosing a copied library.
+ *
+ * Left out of the copy: the `html` rule (the document's font and line height belong to
+ * `styles/app.css` until the shell moves), and the placeholder colour, which is a colour
+ * literal and which every input here sets from a token anyway.
+ */
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *),
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::after,
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::before,
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::backdrop,
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::file-selector-button {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(hr) {
+  height: 0;
+  color: inherit;
+  border-top-width: 1px;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(abbr[title]) {
+  text-decoration: underline dotted;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(h1, h2, h3, h4, h5, h6) {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(a) {
+  color: inherit;
+  text-decoration: inherit;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(b, strong) {
+  font-weight: bolder;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(code, kbd, samp, pre) {
+  font-family: var(--mono);
+  font-size: 1em;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(small) {
+  font-size: 80%;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(sub, sup) {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(sub) {
+  bottom: -0.25em;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(sup) {
+  top: -0.5em;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(table) {
+  text-indent: 0;
+  border-color: inherit;
+  border-collapse: collapse;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(progress) {
+  vertical-align: baseline;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(summary) {
+  display: list-item;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(ol, ul, menu) {
+  list-style: none;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(img, svg, video, canvas, audio, iframe, embed, object) {
+  display: block;
+  vertical-align: middle;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(img, video) {
+  max-width: 100%;
+  height: auto;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(button, input, select, optgroup, textarea),
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::file-selector-button {
+  font: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  border-radius: 0;
+  background-color: transparent;
+  opacity: 1;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::placeholder {
+  opacity: 1;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(textarea) {
+  resize: vertical;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where(button, input[type="button"], input[type="reset"], input[type="submit"]),
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *)::file-selector-button {
+  appearance: button;
+}
+
+:where([data-slot], [data-slot] :not([data-legacy], [data-legacy] *), [data-legacy] [data-slot] *):where([hidden]:not([hidden="until-found"])) {
+  display: none !important;
+}

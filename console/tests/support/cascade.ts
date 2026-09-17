@@ -128,6 +128,34 @@ function matches(element: Element, selector: string): boolean {
   }
 }
 
+/**
+ * A selector list split at its top-level commas.
+ *
+ * The console's own sheets never put a list inside `:where()` or `:is()`, so splitting at every
+ * comma was enough for them. The stylesheet Tailwind compiles for the component layer does
+ * (`theme/preflight.css` narrows every rule with `:where(a, b, c)`), and a naive split hands the
+ * browser's matcher an unbalanced fragment, which jsdom's matcher accepts and matches, so a reset
+ * meant for an image was reported as applying to a drawer.
+ */
+export function selectorList(selector: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (character === "(" || character === "[") {
+      depth += 1;
+    } else if (character === ")" || character === "]") {
+      depth -= 1;
+    } else if (character === "," && depth === 0) {
+      parts.push(selector.slice(start, index).trim());
+      start = index + 1;
+    }
+  }
+  parts.push(selector.slice(start).trim());
+  return parts;
+}
+
 /** The value of one property declared for this element at this width, or `undefined`. */
 export function declared(
   element: Element,
@@ -141,8 +169,7 @@ export function declared(
     if (value === undefined || !appliesAt(rule.atRule, width)) {
       continue;
     }
-    for (const part of rule.selector.split(",")) {
-      const selector = part.trim();
+    for (const selector of selectorList(rule.selector)) {
       if (!matches(element, selector)) {
         continue;
       }

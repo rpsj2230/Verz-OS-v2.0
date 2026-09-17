@@ -137,6 +137,81 @@
    */
   --canvas-height: 26rem;
   --canvas-node-width: 200px;
+
+  /* ======================================================= the design of record, light */
+  /*
+   * THE SECOND VOCABULARY, AND WHY IT HAS DIFFERENT NAMES.
+   *
+   * Everything above is what the pages built before 2026-09-17 are painted with, and
+   * `styles/app.css` reads it. Everything below is `docs/screens.html`, which the owner
+   * approved as the design of record, and only the parts in `components/ui/` read it, through
+   * the class names `theme/tailwind.css` maps onto it. The two sit side by side until a page
+   * moves, and the names are deliberately disjoint: shadcn/ui's own spelling of these is
+   * `--border`, `--accent` and `--radius`, which are already this file's, so redefining them
+   * would repaint every existing page in the design's colours in one commit, which is the
+   * big-bang reskin 5.7 of the console plan rules out. `tests/design-tokens.test.ts` holds the
+   * names apart.
+   *
+   * Every value is the design's own, with one exception, and the exception is measured.
+   * `--dim` is drawn as #7a716c, which is 4.34 to 1 on the ground and 4.02 to 1 on the sunk
+   * surface, below the 4.5 every text pair is held to (`brain.locale.READ_PAIRS`), and the
+   * sunk surface is exactly where a muted label sits in a tab list or a key hint. It is moved
+   * one tenth of the way to the design's own ink, which is the smallest step on that line that
+   * clears 4.5 on all three light surfaces: 5.38, 4.90 and 4.53.
+   *
+   * `--faint` is the design's and nothing may draw text in it. It measures 2.63, 2.39 and
+   * 2.22 to 1 on the three light surfaces and 3.07, 3.30 and 2.83 on the dark ones, so it
+   * fails the text floor everywhere and the non-text floor on most of them. No class names
+   * it: `theme/tailwind.css` maps every other token and not this one, so `text-faint`
+   * compiles to nothing, and `scripts/check-boundaries.mjs` refuses a colour class that names
+   * no token.
+   */
+  --ground: #f6f4f1;
+  --panel: #ffffff;
+  --sunk: #efebe7;
+  --line: #e3ddd7;
+  --ink: #231f20;
+  --body: #4a4441;
+  --dim: #716964;
+  --faint: #a79e98;
+
+  /* state, held clear of any accent: a state is never read off a company's brand colour */
+  --ok: #14724a;
+  --ok-w: #dcede3;
+  --warn: #8a6410;
+  --warn-w: #f5ecd6;
+  --crit: #a8231b;
+  --crit-w: #f8e2e0;
+  --lock: #5f4a9b;
+  --lock-w: #ece7f6;
+
+  /* the page dimmed behind a dialog or a sheet: the design's ink, most of the way clear */
+  --scrim: rgb(35 31 32 / 0.28);
+
+  /*
+   * THE ACCENT IS THE INSTALL'S, AND NO COLOUR FOR IT IS WRITTEN HERE.
+   *
+   * `docs/screens.html` draws one company's orange, and that orange is that company's
+   * configuration rather than this product's (`CLAUDE.md`: no company's details in the
+   * source). The four values arrive as `--install-accent-*`, set on the root element by
+   * `theme/accent.ts` from `/api/console.js`, where `brain.locale.accent_set` derived them
+   * from `INSTALL_ACCENT_COLOUR` and measured the text against these surfaces in both themes.
+   *
+   * The fallback when the document carries none is the design's own ink and surfaces, which
+   * is a neutral that already passes, and not a second default colour: a second default here
+   * would be a second place the product's accent is decided, and the one in
+   * `brain.install` is the one an install's owner can see and change.
+   */
+  --brand: var(--install-accent-fill, var(--ink));
+  --brand-ink: var(--install-accent-on-fill, var(--panel));
+  --acc-text: var(--install-accent-text-light, var(--ink));
+  --acc-wash: var(--install-accent-wash-light, var(--sunk));
+
+  /* type, bundled from @fontsource under the SIL Open Font Licence and never fetched */
+  --ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --brandfont: "Poppins", "IBM Plex Sans", system-ui, Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  --corner: 0.375rem;
 }
 
 /* --- dark values, copy 1 of 2: the machine is dark and nobody chose otherwise --------- */
@@ -174,6 +249,27 @@
     --tone-critical-bg: #2d1a1a;
     --tone-critical-fg: #f0a09b;
     --tone-critical-border: #4d2926;
+
+    /* design of record, dark: the design's own values, and the accent's dark half */
+    --ground: #14110f;
+    --panel: #1d1916;
+    --sunk: #262019;
+    --line: #332c25;
+    --ink: #f5f1ed;
+    --body: #cdc5be;
+    --dim: #948a83;
+    --faint: #6e655f;
+    --ok: #57be8c;
+    --ok-w: #10261b;
+    --warn: #d5a65a;
+    --warn-w: #2b2211;
+    --crit: #e58077;
+    --crit-w: #2e1815;
+    --lock: #a992e0;
+    --lock-w: #221c36;
+    --scrim: rgb(0 0 0 / 0.55);
+    --acc-text: var(--install-accent-text-dark, var(--ink));
+    --acc-wash: var(--install-accent-wash-dark, var(--sunk));
   }
 }
 
@@ -211,4 +307,25 @@
   --tone-critical-bg: #2d1a1a;
   --tone-critical-fg: #f0a09b;
   --tone-critical-border: #4d2926;
+
+  /* design of record, dark: the design's own values, and the accent's dark half */
+  --ground: #14110f;
+  --panel: #1d1916;
+  --sunk: #262019;
+  --line: #332c25;
+  --ink: #f5f1ed;
+  --body: #cdc5be;
+  --dim: #948a83;
+  --faint: #6e655f;
+  --ok: #57be8c;
+  --ok-w: #10261b;
+  --warn: #d5a65a;
+  --warn-w: #2b2211;
+  --crit: #e58077;
+  --crit-w: #2e1815;
+  --lock: #a992e0;
+  --lock-w: #221c36;
+  --scrim: rgb(0 0 0 / 0.55);
+  --acc-text: var(--install-accent-text-dark, var(--ink));
+  --acc-wash: var(--install-accent-wash-dark, var(--sunk));
 }

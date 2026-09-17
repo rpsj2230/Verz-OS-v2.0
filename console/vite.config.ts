@@ -22,10 +22,17 @@
  * names every endpoint it calls, so a source map discloses no new fact. It doubles the
  * static surface a host serves, and hosts serve `.map` files unauthenticated by default.
  * If a debugging session needs them, turn them on for that build and turn them off again.
+ *
+ * **Two plugins before React's, and their order is load-bearing.** `legacyLayer` moves the
+ * stylesheets the console had before the component layer into the `legacy` cascade layer as
+ * they are read, and `tailwindcss` compiles `src/theme/tailwind.css`. Both run in Vite's `pre`
+ * phase, in the order listed. `scripts/legacy-layer.mjs` and `src/theme/tailwind.css` argue each.
  */
 
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, loadEnv } from "vite";
+import { legacyLayer } from "./scripts/legacy-layer.mjs";
 
 /**
  * Where `npm run dev` sends `/api`. The application's own default port; see
@@ -48,7 +55,7 @@ export default defineConfig(({ mode }) => {
   const apiTarget = env.DEV_API_PROXY_TARGET || DEFAULT_DEV_API_TARGET;
 
   return {
-    plugins: [react()],
+    plugins: [legacyLayer(), tailwindcss(), react()],
     server: {
       port: DEV_PORT,
       strictPort: true,
