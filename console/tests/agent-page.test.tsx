@@ -452,14 +452,22 @@ describe("where the workspace is reachable", () => {
       "connectors",
       "divergent",
       "headline",
+      "profile",
       "skills",
       "tabs",
     ]);
+    // The creation time, the lifecycle word and the highest rung were declared on 2026-09-17 for
+    // the three-tab agent page, and the Profile beside them. The route sends the first to the
+    // audience and the rest where the Settings tab is, which `tests/unit/test_agent_routes.py`
+    // holds; this page reads none of them yet.
     expect(declaredPropertyNames(declaredProperty(workspace, "agent"))).toEqual([
       "agent_id",
+      "created_at",
       "created_by",
       "display_name",
+      "leash_up_to",
       "owner_id",
+      "state",
       "summary",
       "template_id",
       "template_version",

@@ -47,6 +47,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from brain.agent_about_routes import router as agent_about_router
 from brain.agent_routes import router as agent_router
 from brain.api import (
     ErrorBody,
@@ -982,6 +983,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # again: who may see an agent is its audience rather than a capability, and a hidden agent
     # and a missing one are one answer. The same `asking` dependency, imported.
     app.include_router(agent_router)
+    # One agent's About tab, which reads the agent's automations and so cannot sit on the
+    # workspace's router without an import cycle. The same audience and the same one 404.
+    app.include_router(agent_about_router)
     # The approvals queue and one approval's card. A fifth router because the refusal differs
     # again: who is offered an approval is `pending_for` over the action's own row, and an
     # approval out of reach, decided, lapsed or missing is one answer. GET only; see the module.

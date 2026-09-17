@@ -271,7 +271,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Agents and their configuration, including templates": {
     screens: ["/agents", "/agents/:agentId", "/agents/:agentId/:tab", "/agent-templates", "/approvals", "/approvals/:suspensionId"],
-    routes: ["/api/v1/agents", "/api/v1/agents/{agent_id}/workspace", "/api/v1/agent-templates", "/api/v1/approvals*"],
+    routes: [
+      "/api/v1/agents",
+      "/api/v1/agents/{agent_id}/workspace",
+      "/api/v1/agents/{agent_id}/about",
+      "/api/v1/agent-templates",
+      "/api/v1/approvals*",
+    ],
     tables: [
       "agent.agent",
       "agent.template_instance",
