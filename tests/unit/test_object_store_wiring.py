@@ -16,7 +16,7 @@ Task ids: M27.7.26
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -24,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import brain.app
+from brain.app import create_app
 from brain.console.installation import Source
 from brain.install_routes import (
     NOTHING_HERE_READS_THE_BACKUP_BUCKET,
@@ -33,7 +34,9 @@ from brain.ops.backup_manifest import DRILL_SUFFIX, MANIFEST_SUFFIX
 from brain.ops.object_store import ObjectStore, S3Backend, StoreCredential
 from brain.ops.recovery import Check, Coverage
 from brain.ops.storage import Backend, ObjectKind, bucket_for, config_for
+from brain.settings import Settings
 from tests.fixtures.fake_s3 import FakeS3
+from tests.fixtures.no_database import as_if_ci_had_a_database
 from tests.unit.test_install_routes import RECOVERY_PATH, _app, _wiring, get
 
 KEY = StoreCredential(access_key_id="brain-test-access", secret_access_key="brain-test-secret")
@@ -90,8 +93,8 @@ def a_bucket() -> FakeS3:
     )
 
 
-def connected_to(monkeypatch: pytest.MonkeyPatch, store: FakeS3) -> FastAPI:
-    """The real application, whose lifespan connects to `store` instead of reading the vault."""
+def _at_start(store: FakeS3) -> Callable[[str, str], ObjectStore]:
+    """What the lifespan calls instead of reading the vault: a client over `store`."""
 
     def at_start(_address: str, _token: str) -> ObjectStore:
         backend = S3Backend(
@@ -99,7 +102,12 @@ def connected_to(monkeypatch: pytest.MonkeyPatch, store: FakeS3) -> FastAPI:
         )
         return ObjectStore(backend=backend, prefix="brain")
 
-    monkeypatch.setattr(brain.app, "object_store_at_start", at_start)
+    return at_start
+
+
+def connected_to(monkeypatch: pytest.MonkeyPatch, store: FakeS3) -> FastAPI:
+    """The real application, whose lifespan connects to `store` instead of reading the vault."""
+    monkeypatch.setattr(brain.app, "object_store_at_start", _at_start(store))
     return _app()
 
 
@@ -196,7 +204,11 @@ def test_the_lifespan_builds_no_artifact_store_without_a_database_and_closes_the
     """The records are rows, so no database is no artifact store, and the store's HTTP client is
     closed at shutdown. Delete this and a process with no database lists nothing it can read, or
     leaks a client per restart in a test run."""
-    app = connected_to(monkeypatch, bucket)
+    # CI's environment carries a database, so "no database" is pinned rather than assumed; see
+    # `tests.fixtures.no_database`.
+    as_if_ci_had_a_database(monkeypatch)
+    monkeypatch.setattr(brain.app, "object_store_at_start", _at_start(bucket))
+    app = create_app(Settings(env="development", database_url=""))
     with TestClient(app, raise_server_exceptions=False):
         assert app.state.artifacts is None
         assert app.state.artifact_source is None

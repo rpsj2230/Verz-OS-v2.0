@@ -53,6 +53,7 @@ from brain.knowledge.visibility import Visibility
 from brain.ops.retention import DataClass, horizon_for
 from brain.tables.agent import AgentRow
 from tests.fixtures.http_client import Response
+from tests.fixtures.no_database import as_if_ci_had_a_database
 from tests.unit.test_agent_routes import agent_row
 from tests.unit.test_api_routes import (
     AUDIENCE,
@@ -170,9 +171,13 @@ class StubSession(AsyncSession):
 
 
 @pytest.fixture
-def client() -> Iterator[TestClient]:
-    """A process with no database, so nothing attached that reads the artifact records."""
-    app: FastAPI = create_app(Settings(env="development"))
+def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    """A process with no database, so nothing attached that reads the artifact records.
+
+    Pinned rather than assumed, because CI's environment carries a database and the lifespan would
+    otherwise attach a store; see `tests.fixtures.no_database`."""
+    as_if_ci_had_a_database(monkeypatch)
+    app: FastAPI = create_app(Settings(env="development", database_url=""))
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         yield c
