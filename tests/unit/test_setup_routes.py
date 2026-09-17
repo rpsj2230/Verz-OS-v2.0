@@ -53,6 +53,7 @@ from brain.ops.install_settings import key_for
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.leases import SealedSecret
 from brain.ops.openbao import VaultRefusedError, VaultUnreachableError
+from brain.ops.starter_store import FURNISHED_KEY
 from brain.session import make_session_factory
 from brain.setup_routes import (
     APPOINTMENT_PATH,
@@ -823,10 +824,12 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
         granted = sql(
             url,
             "SELECT capability FROM gate.capability_grant WHERE principal_id = %s"
-            " ORDER BY capability",
+            ' ORDER BY capability COLLATE "C"',
             walked["principal_id"],
         )
-        keys = sql(url, "SELECT key FROM ops.setting WHERE deleted_at IS NULL ORDER BY key")
+        keys = sql(
+            url, 'SELECT key FROM ops.setting WHERE deleted_at IS NULL ORDER BY key COLLATE "C"'
+        )
         hold_saved({})
         elsewhere = read_back(url)
 
@@ -838,7 +841,11 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     assert [str(row[0]) for row in granted] == sorted(
         {*GRANTED_AT_APPOINTMENT, MEMBER_SURFACE.value}
     )
-    assert [str(row[0]) for row in keys] == sorted(key_for(name) for name in carried)
+    # Every start furnishes the install (b8f6057), and the furnishing's own setting is what
+    # records that, so a fresh install through the routes holds it beside the wizard's.
+    assert [str(row[0]) for row in keys] == sorted(
+        [*(key_for(name) for name in carried), FURNISHED_KEY]
+    )
     assert elsewhere == dict(carried)
     assert value_of("INSTALL_COMPANY_NAME", {}) == COMPANY_ANSWERS["company_name"]
 

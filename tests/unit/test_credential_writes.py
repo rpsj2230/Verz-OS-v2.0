@@ -398,6 +398,9 @@ def test_a_process_built_with_a_database_records_every_key_its_store_keeps(
         run(walk)
         chain = entries(url)
 
-    assert [(one.action.value, one.actor_id, one.subject) for one in chain] == [
+    # Only the credential entries: every start also furnishes the install (b8f6057), and that
+    # leaves its own `setting` entry, which is what records it and is not this test's subject.
+    kept = [one for one in chain if one.action.value == "credential"]
+    assert [(one.action.value, one.actor_id, one.subject) for one in kept] == [
         ("credential", GRANTED_BY, "credential:providers.anthropic")
     ]

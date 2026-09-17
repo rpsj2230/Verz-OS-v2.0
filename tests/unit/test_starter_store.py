@@ -185,7 +185,7 @@ def test_furnishing_twice_writes_nothing_the_second_time() -> None:
         registry = sql(
             url,
             "SELECT capability, description, required_by_tool FROM gate.capability_registry "
-            "ORDER BY capability",
+            'ORDER BY capability COLLATE "C"',
         )
         scopes = sql(url, "SELECT slug, predicate, is_department, label FROM gate.scope")
         packs = sql(url, "SELECT name, description, capabilities FROM gate.capability_pack")
@@ -478,14 +478,17 @@ def started(url: str) -> int:
 def furniture(url: str) -> tuple[list[tuple[object, ...]], ...]:
     """Every row of the furnished tables and the furnishing's record, retired ones included."""
     return (
-        sql(url, "SELECT slug, deleted_at IS NULL FROM gate.scope ORDER BY slug"),
-        sql(url, "SELECT name, deleted_at IS NULL FROM gate.capability_pack ORDER BY name"),
+        sql(url, 'SELECT slug, deleted_at IS NULL FROM gate.scope ORDER BY slug COLLATE "C"'),
+        sql(
+            url,
+            'SELECT name, deleted_at IS NULL FROM gate.capability_pack ORDER BY name COLLATE "C"',
+        ),
         sql(
             url,
             "SELECT capability FROM gate.capability_registry WHERE deleted_at IS NULL "
-            "ORDER BY capability",
+            'ORDER BY capability COLLATE "C"',
         ),
-        sql(url, "SELECT key FROM ops.setting ORDER BY key"),
+        sql(url, 'SELECT key FROM ops.setting ORDER BY key COLLATE "C"'),
     )
 
 
