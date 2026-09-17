@@ -32,6 +32,7 @@ import {
   NOTHING_LOOKED,
   NOT_YOURS_TO_CONNECT,
   NO_SOURCE_TO_SHOW,
+  TESTED_AND_LIVE,
   WHAT_WE_COPY,
   WHICH_SOURCE,
 } from "../src/pages/Connectors";
@@ -150,6 +151,24 @@ function aBody(over: Partial<Connectors> = {}): Connectors {
     vault_told: "",
     connectable: [aSource(), aSource({ name: "hubspot", label: "HubSpot", may_connect: false })],
     not_connectable: [{ name: "freshdesk", label: "Freshdesk", why: sentinel("freshdesk-why") }],
+    evidence: [
+      {
+        name: "xero",
+        label: "Xero",
+        recorded: sentinel("xero-recorded"),
+        credential: sentinel("xero-credential"),
+        live_read: sentinel("xero-live"),
+        last_read_live_at: "2019-03-04T09:30:00Z",
+      },
+      {
+        name: "freshdesk",
+        label: "Freshdesk",
+        recorded: sentinel("freshdesk-recorded"),
+        credential: sentinel("freshdesk-credential"),
+        live_read: "",
+        last_read_live_at: null,
+      },
+    ],
     key_max_chars: 1000,
     key_blank: sentinel("key-blank"),
     ...over,
@@ -334,6 +353,22 @@ describe("the connectors screen", () => {
     expect(text).toContain("9 fields");
     expect(readRepoFile("docs/screens.html")).toContain(WHAT_WE_COPY);
     expect(text).toContain(WHAT_WE_COPY);
+  });
+
+  test("every connector says what it was tested against apart from whether it is live here", async () => {
+    // What breaks if this is deleted: the recordings sentence and the live one can be merged into
+    // one badge, and a connector tested against documented shapes reads as one working here.
+    const { container } = await mount(answering(aBody()));
+    const card = [...container.querySelectorAll("section")].find((one) =>
+      one.textContent?.includes(TESTED_AND_LIVE),
+    );
+    const text = card?.textContent ?? "";
+
+    for (const one of ["xero-recorded", "xero-credential", "xero-live", "freshdesk-recorded", "freshdesk-credential"]) {
+      expect(text).toContain(sentinel(one));
+    }
+    expect(text).toContain("2019-03-04 09:30");
+    expect(card?.querySelectorAll("dt").length).toBe(5);
   });
 
   test("the last read is the last time a source was read to the end, and never the last attempt", async () => {

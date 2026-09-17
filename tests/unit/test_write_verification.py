@@ -9,8 +9,8 @@ everything fails as surely as one that answers ABSENT for a 429. And discovery i
 against a second, independent list of connectors, so a connector added without an entry
 fails by existing.
 
-Drive is the one connector with no recording. Its replies below are Google's documented
-listing shape, and `NOTHING_IS_RECORDED` says so on its entry.
+Every connector has recordings now, and every one is a documented shape rather than a live
+capture; `tests/fixtures/cassettes.py` says which page each was written to.
 
 Task ids: M17.3.3
 """
@@ -62,7 +62,7 @@ from brain.ops.idempotency import (
     verify,
 )
 from brain.ops.secrets import SecretRef, VaultRole
-from tests.fixtures.cassettes import CASSETTES, Cassette, Source, for_source
+from tests.fixtures.cassettes import CASSETTES, Cassette, Kind, Protocol, Source, for_source
 from tests.invariants.test_cassettes import NOT_A_CONNECTOR
 
 #: A read time pinned far outside any plausible wall clock, because nothing here is about the
@@ -91,14 +91,18 @@ class Resolver:
 
 
 # ------------------------------------------------------------ each connector's own reply value
-def xero_answer(status: int | None, body: Any = None, **overrides: Any) -> Verification:
-    operation = xero.operation_for(xero.ENTITY_INVOICE, resolver=Resolver())
+def xero_answer(
+    status: int | None, body: Any = None, *, entity: str = xero.ENTITY_INVOICE, **overrides: Any
+) -> Verification:
+    operation = xero.operation_for(entity, resolver=Resolver())
     reply = xero.interpret(operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides)
     return verdict(reading("xero")(reply))
 
 
-def hubspot_answer(status: int | None, body: Any = None, **overrides: Any) -> Verification:
-    operation = hubspot.operation_for(hubspot.ENTITY_CLIENT, resolver=Resolver())
+def hubspot_answer(
+    status: int | None, body: Any = None, *, entity: str = hubspot.ENTITY_CLIENT, **overrides: Any
+) -> Verification:
+    operation = hubspot.operation_for(entity, resolver=Resolver())
     reply = hubspot.interpret(
         operation, status=status, body=body, fetched_at=FETCHED_AT, **overrides
     )
@@ -211,18 +215,81 @@ EXPECTED: Mapping[tuple[str, str], Verification] = {
     ("lark_base", "LARK-200-code-permission"): Verification.INCONCLUSIVE,
     ("lark_wiki", "LARK-200-records"): Verification.FOUND,
     ("lark_wiki", "LARK-200-code-permission"): Verification.INCONCLUSIVE,
+    ("xero", "XERO-200-contacts"): Verification.FOUND,
+    ("xero", "XERO-200-invoices-full-page"): Verification.FOUND,
+    ("hubspot", "HUBSPOT-200-companies-page"): Verification.FOUND,
+    ("hubspot", "HUBSPOT-200-contacts"): Verification.FOUND,
+    ("hubspot", "HUBSPOT-200-deals"): Verification.FOUND,
+    ("hubspot", "HUBSPOT-200-associations"): Verification.FOUND,
+    ("hubspot", "HUBSPOT-429"): Verification.INCONCLUSIVE,
+    ("hubspot", "HUBSPOT-401"): Verification.INCONCLUSIVE,
+    ("freshdesk", "FRESH-200-search-full-page"): Verification.FOUND,
+    # The read-back reads a search page. A by-id object is not one, so it proves nothing there.
+    ("freshdesk", "FRESH-200-ticket"): Verification.INCONCLUSIVE,
+    ("freshdesk", "FRESH-200-contact"): Verification.INCONCLUSIVE,
+    ("freshdesk", "FRESH-401"): Verification.INCONCLUSIVE,
+    # One record under data.record says nothing about more, so it is unreadable as a listing.
+    ("lark_base", "LARK-200-record"): Verification.INCONCLUSIVE,
+    ("lark_base", "LARK-429"): Verification.INCONCLUSIVE,
+    # The same for a wiki node read, which read ABSENT until the reading required has_more.
+    ("lark_wiki", "LARK-WIKI-200-node"): Verification.INCONCLUSIVE,
+    ("lark_wiki", "LARK-WIKI-200-nodes-page"): Verification.FOUND,
+    ("lark_wiki", "LARK-WIKI-200-code-permission"): Verification.INCONCLUSIVE,
+    ("lark_wiki", "LARK-WIKI-429"): Verification.INCONCLUSIVE,
+    ("google_drive", "DRIVE-200-files-page"): Verification.FOUND,
+    ("google_drive", "DRIVE-200-file"): Verification.FOUND,
+    ("google_drive", "DRIVE-403-user-rate-limit"): Verification.INCONCLUSIVE,
+    ("google_drive", "DRIVE-429"): Verification.INCONCLUSIVE,
+    ("google_drive", "DRIVE-401"): Verification.INCONCLUSIVE,
+    ("google_drive", "DRIVE-404"): Verification.INCONCLUSIVE,
+    ("laravel", "LARAVEL-rows-clients"): Verification.FOUND,
+    ("laravel", "LARAVEL-rows-users"): Verification.FOUND,
+    ("laravel", "LARAVEL-rows-at-cap"): Verification.FOUND,
+    ("laravel", "LARAVEL-1142"): Verification.INCONCLUSIVE,
+    ("laravel", "LARAVEL-1146"): Verification.INCONCLUSIVE,
+    ("laravel", "LARAVEL-3024"): Verification.INCONCLUSIVE,
+    ("laravel", "LARAVEL-2006"): Verification.INCONCLUSIVE,
 }
+
+
+def hubspot_entity(recorded: Cassette) -> str:
+    """Which operation a HubSpot recording was made against, read off its request line."""
+    for fragment, entity in (
+        ("/associations/", hubspot.ENTITY_ASSOCIATION),
+        ("/contacts", hubspot.ENTITY_CONTACT),
+        ("/deals", hubspot.ENTITY_DEAL),
+    ):
+        if fragment in recorded.request:
+            return entity
+    return hubspot.ENTITY_CLIENT
 
 
 def answer_for_recording(connector: str, recorded: Cassette) -> Verification:
     """Drive one recording through one connector's reading, in that connector's reply value."""
     match connector:
         case "xero":
-            return xero_answer(recorded.status, recorded.body)
+            entity = xero.ENTITY_CONTACT if "/Contacts" in recorded.request else xero.ENTITY_INVOICE
+            return xero_answer(recorded.status, recorded.body, entity=entity)
         case "hubspot":
-            return hubspot_answer(recorded.status, recorded.body)
+            return hubspot_answer(recorded.status, recorded.body, entity=hubspot_entity(recorded))
         case "laravel":
-            return laravel_answer(laravel.ViewReply(app_status=recorded.status))
+            if recorded.protocol is Protocol.HTTP:
+                return laravel_answer(laravel.ViewReply(app_status=recorded.status))
+            if "errno" in recorded.body:
+                fault = laravel.fault_for_mysql_error(recorded.body["errno"])
+                return laravel_answer(laravel.ViewReply(fault=fault))
+            return laravel_answer(laravel.ViewReply(rows=tuple(recorded.body["rows"])))
+        case "google_drive":
+            endpoint = (
+                google_drive.Endpoint.GET_FILE
+                if recorded.kind is Kind.READ
+                else google_drive.Endpoint.LIST_FILES
+            )
+            reply = google_drive.Reply(
+                status=recorded.status, headers=recorded.headers, body=recorded.body
+            )
+            operation = google_drive.operation_for(endpoint)
+            return verdict(reading("google_drive")(operation, reply))
         case "freshdesk":
             return freshdesk_answer(fresh_reply(recorded.cid))
         case "lark_base":
@@ -481,15 +548,17 @@ def brain_scope() -> Any:
 
 
 def test_an_entry_resting_on_no_recording_is_the_one_that_says_so() -> None:
-    """Drive is the connector with no recorded exchange, and the corpus is what says so, not
-    the table. Delete this and a recording added for Drive would leave its entry still
-    claiming there is none, or an entry for a recorded source could claim the same."""
+    """The corpus says which sources are recorded, not the table. Drive had none until its
+    documented shapes were recorded, and its entry stopped saying so in the same change.
+
+    Delete this and a recording added for a source would leave its entry still claiming there
+    is none, or an entry for a recorded source could claim the same."""
     recorded_sources = {source.value for source in Source}
     for name, entry in READ_BACKS.items():
         says_none = NOTHING_IS_RECORDED in entry.findings
         has_none = name not in recorded_sources and not entry.recorded
         assert says_none is has_none, name
-    assert NOTHING_IS_RECORDED in READ_BACKS["google_drive"].findings
+    assert READ_BACKS["google_drive"].recorded
 
 
 def test_the_drive_entry_states_that_a_not_found_cannot_prove_absence() -> None:

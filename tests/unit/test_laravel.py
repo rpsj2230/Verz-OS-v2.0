@@ -111,7 +111,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.provenance import Freshness, StalenessHorizon
 from brain.knowledge.rows import assert_takes_no_sql
 from brain.ops.secrets import SecretRef, VaultRole
-from tests.fixtures.cassettes import CASSETTES, Source, for_source, limit_for
+from tests.fixtures.cassettes import CASSETTES, Protocol, Source, for_source, limit_for
 from tests.fixtures.company import CANARIES
 
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
@@ -672,15 +672,14 @@ def test_a_refusal_and_an_outage_read_identically_to_a_person_and_differ_in_the_
     assert CONNECTOR_NAME in refused.trace_line()
 
 
-def test_the_only_recorded_laravel_exchange_is_a_failure_and_it_is_not_trusted() -> None:
-    """The corpus records one Laravel exchange and it is a 500 from the application's own
-    internal endpoint, recorded to say that being in-house is not a reason to trust an error
-    response. It is not a database error, which is why the reply carries it as an application
-    status rather than as an invented MySQL code.
+def test_the_recorded_application_failure_is_not_trusted() -> None:
+    """One Laravel recording is a 500 from the application's own internal endpoint, recorded to
+    say that being in-house is not a reason to trust an error response. It is not a database
+    error, which is why the reply carries it as an application status; the database's own
+    failures are recorded beside it with MySQL's documented error numbers.
 
-    Delete this and the one recording that exists for this source is compiled against
-    nothing."""
-    recorded = for_source(Source.LARAVEL)
+    Delete this and the recorded application failure is compiled against nothing."""
+    recorded = [c for c in for_source(Source.LARAVEL) if c.protocol is Protocol.HTTP]
     assert len(recorded) == 1
     failure = recorded[0]
     assert failure.status == 500

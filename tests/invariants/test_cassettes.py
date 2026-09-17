@@ -193,6 +193,17 @@ def test_every_connector_that_exists_is_tested_against_the_recordings(
         f"{test_file.name} never mentions the cassettes, so this connector is tested against "
         "fixtures its own author wrote rather than against the recorded shape"
     )
+    # The word is the weak half of this rule, and `test_google_drive.py` once passed it by
+    # saying no recording existed. The strong half is a replay: every connector has one in
+    # `tests/unit/test_cassette_replay.py`, which drives every recording through its own code.
+    from tests.unit.test_cassette_replay import REPLAYS
+
+    assert module in REPLAYS, (
+        f"brain.connectors.{module} has no replay, so no recording is ever run through it"
+    )
+    assert any(c.source.value == module for c in CASSETTES), (
+        f"brain.connectors.{module} has no recording at all"
+    )
 
 
 def test_the_source_excluded_from_that_comparison_really_is_measuring_something_else() -> None:
@@ -220,12 +231,36 @@ def test_the_freshdesk_ceiling_is_recorded_as_a_ceiling() -> None:
     assert "page size" in fresh.note.lower()
 
 
+#: Sources whose own documentation states the wait somewhere other than `Retry-After`, or not at
+#: all, with where. Listed rather than inferred: a recording that dropped the header to match a
+#: connector would otherwise pass as a vendor that never sends one.
+WAIT_NOT_IN_RETRY_AFTER: dict[Source, str] = {
+    Source.HUBSPOT: "no wait header documented; X-HubSpot-RateLimit-* state the allowance",
+    Source.LARK_BASE: "x-ogw-ratelimit-reset",
+    Source.LARK_WIKI: "x-ogw-ratelimit-reset",
+    Source.GOOGLE_DRIVE: "none documented; Google asks for exponential backoff",
+}
+
+
 def test_a_retry_after_is_present_on_every_rate_limit_response() -> None:
     """Backing off without one means guessing, and guessing low burns the remaining
-    budget faster."""
+    budget faster. Where the vendor documents no `Retry-After`, the recording must carry
+    what it does document rather than an invented header, and the exception is named.
+
+    Delete this and a 429 recording can lose its wait with nobody noticing."""
+    exempted_and_seen: set[Source] = set()
     for c in CASSETTES:
-        if c.status == 429:
-            assert "Retry-After" in c.headers, f"{c.cid} is a 429 with no Retry-After"
+        if c.status != 429:
+            continue
+        if c.source in WAIT_NOT_IN_RETRY_AFTER:
+            exempted_and_seen.add(c.source)
+            assert "Retry-After" not in c.headers, (
+                f"{c.cid} carries a Retry-After its vendor is recorded as not sending"
+            )
+            continue
+        assert "Retry-After" in c.headers, f"{c.cid} is a 429 with no Retry-After"
+    assert "Retry-After" in next(c for c in CASSETTES if c.cid == "XERO-429").headers
+    assert exempted_and_seen, "no exempted source has a 429 recording, so the list checks nothing"
 
 
 def test_absent_is_distinguishable_from_refused_and_unreachable() -> None:

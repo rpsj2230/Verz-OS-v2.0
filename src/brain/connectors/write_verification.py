@@ -161,8 +161,9 @@ LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL: Final = (
 LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY: Final = (
     "lark_wiki.assert_read_only refuses a credential bound for writing, so no write can be "
     "issued through this connector as built. The reading exists so that the day that changes, "
-    "the absence rule is already stated. The recordings it is driven by are Lark Base's, "
-    "which share the envelope."
+    "the absence rule is already stated. It is driven by the wiki's own recorded listing and "
+    "refusals and by Lark Base's, which share the envelope; a reply that does not say whether "
+    "there is more, such as a single node read, is not a listing and never reads as absent."
 )
 
 LARAVEL_THE_CREDENTIAL_IS_READ_ONLY: Final = (
@@ -182,11 +183,12 @@ FRESHDESK_ABSENCE_IS_A_SHORT_PAGE: Final = (
 HUBSPOT_THE_ONLY_RECORDED_ABSENCE: Final = (
     "HUBSPOT-200-empty is the only genuine absence in the recorded corpus, and it is a reply "
     "from the search endpoint, so it is subject to "
-    "A_SEARCH_THAT_LAGS_A_WRITE_MANUFACTURES_AN_ABSENCE. No HubSpot failure is recorded."
+    "A_SEARCH_THAT_LAGS_A_WRITE_MANUFACTURES_AN_ABSENCE. The recorded rate limit and "
+    "authentication failure both read as not having looked."
 )
 
 XERO_NO_ABSENCE_IS_RECORDED: Final = (
-    "The Xero recordings are one answered list and two failures. An empty ledger is not "
+    "The Xero recordings are answered lists and two failures. An empty ledger is not "
     "recorded, so the ABSENT branch for this connector is driven by the recorded envelope "
     "with its list emptied."
 )
@@ -315,9 +317,16 @@ def lark_base_reading(operation: RestOperation, reply: lark_base.LarkReply) -> R
 
 
 def lark_wiki_reading(reply: lark_wiki.LarkReply) -> Reading:
-    """One Lark Wiki listing, complete only when `next_cursor` finds no further page."""
+    """One Lark Wiki listing, complete only when `next_cursor` finds no further page.
+
+    A reply whose payload does not state `has_more` is not a listing, and `next_cursor` would
+    read its silence as the end: a node read replayed here came back ABSENT for a page that
+    exists. It is unreadable instead, as `lark_base.envelope_of` treats the same silence.
+    """
     try:
         lark_wiki.assert_answered(reply)
+        if not isinstance(reply.data.get("has_more"), bool):
+            return _unreadable()
         items = lark_wiki.items_of(reply.data)
         more = lark_wiki.next_cursor(reply.data)
     except (lark_wiki.LarkWikiUnreachableError, lark_wiki.LarkWikiRefusedError) as failure:
@@ -382,37 +391,86 @@ READ_BACKS: Final[Mapping[str, ReadBack]] = MappingProxyType(
     {
         "freshdesk": ReadBack(
             reading=freshdesk_reading,
-            recorded=("FRESH-200-search", "FRESH-429"),
+            recorded=(
+                "FRESH-200-search",
+                "FRESH-429",
+                "FRESH-200-search-full-page",
+                "FRESH-200-ticket",
+                "FRESH-200-contact",
+                "FRESH-401",
+            ),
             findings=(FRESHDESK_ABSENCE_IS_A_SHORT_PAGE,),
         ),
         "google_drive": ReadBack(
             reading=drive_reading,
-            recorded=(),
-            findings=(DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE, NOTHING_IS_RECORDED),
+            recorded=(
+                "DRIVE-200-files-page",
+                "DRIVE-200-file",
+                "DRIVE-403-user-rate-limit",
+                "DRIVE-429",
+                "DRIVE-401",
+                "DRIVE-404",
+            ),
+            findings=(DRIVE_A_NOT_FOUND_CANNOT_PROVE_ABSENCE,),
         ),
         "hubspot": ReadBack(
             reading=classified_reading,
-            recorded=("HUBSPOT-200-empty",),
+            recorded=(
+                "HUBSPOT-200-empty",
+                "HUBSPOT-200-companies-page",
+                "HUBSPOT-200-contacts",
+                "HUBSPOT-200-deals",
+                "HUBSPOT-200-associations",
+                "HUBSPOT-429",
+                "HUBSPOT-401",
+            ),
             findings=(HUBSPOT_THE_ONLY_RECORDED_ABSENCE,),
         ),
         "laravel": ReadBack(
             reading=classified_reading,
-            recorded=("LARAVEL-500",),
+            recorded=(
+                "LARAVEL-500",
+                "LARAVEL-rows-clients",
+                "LARAVEL-rows-users",
+                "LARAVEL-rows-at-cap",
+                "LARAVEL-1142",
+                "LARAVEL-1146",
+                "LARAVEL-3024",
+                "LARAVEL-2006",
+            ),
             findings=(LARAVEL_THE_CREDENTIAL_IS_READ_ONLY,),
         ),
         "lark_base": ReadBack(
             reading=lark_base_reading,
-            recorded=("LARK-200-records", "LARK-200-code-permission"),
+            recorded=(
+                "LARK-200-records",
+                "LARK-200-code-permission",
+                "LARK-200-record",
+                "LARK-429",
+            ),
             findings=(LARK_BASE_A_MISSING_RECORD_ARRIVES_AS_A_REFUSAL,),
         ),
         "lark_wiki": ReadBack(
             reading=lark_wiki_reading,
-            recorded=("LARK-200-records", "LARK-200-code-permission"),
+            recorded=(
+                "LARK-200-records",
+                "LARK-200-code-permission",
+                "LARK-WIKI-200-node",
+                "LARK-WIKI-200-nodes-page",
+                "LARK-WIKI-200-code-permission",
+                "LARK-WIKI-429",
+            ),
             findings=(LARK_WIKI_THE_CREDENTIAL_IS_READ_ONLY,),
         ),
         "xero": ReadBack(
             reading=classified_reading,
-            recorded=("XERO-200-invoices", "XERO-429", "XERO-401-expired"),
+            recorded=(
+                "XERO-200-invoices",
+                "XERO-429",
+                "XERO-401-expired",
+                "XERO-200-contacts",
+                "XERO-200-invoices-full-page",
+            ),
             findings=(XERO_NO_ABSENCE_IS_RECORDED,),
         ),
     }

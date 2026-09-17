@@ -1,15 +1,10 @@
-"""The Google Drive connector, driven by documentation because there is nothing else.
+"""The Google Drive connector, driven by Google's documented response shapes.
 
-**There is no Google Drive recording and there cannot be one here.**
-`tests/fixtures/cassettes.py` declares no `Source.GOOGLE_DRIVE`, that file is shared with
-every other connector, and `tests/invariants/test_cassettes.py` asserts over it, so adding a
-member would be editing a fixture this leaf does not own. Every Drive fact these tests pin
-therefore comes from Google's published documentation rather than from a recorded exchange,
-which is a weaker footing than `test_freshdesk.py` and `test_xero.py` stand on and is stated
-rather than left to be discovered. `test_no_recording_exists_for_this_source_and_the_reply_
-shape_is_ready_for_one` is where that is written down, and it proves the shape by taking an
-existing cassette from another source and reading it through this connector's own `Reply`
-without a translation step.
+**Drive's recordings are documented shapes, not live captures.** `tests/fixtures/cassettes.py`
+now holds them and `tests/unit/test_cassette_replay.py` replays every one through this
+connector; the tests here were written before they existed and build rows from the same
+documentation. `test_the_recordings_are_documented_shapes_and_read_through_this_connectors_reply`
+is where that is written down.
 
 What the absence actually costs is worth naming. The reason strings on a throttling 403, the
 exact error envelope, and whether a shared-drive listing returns permissions to a
@@ -145,7 +140,7 @@ from brain.knowledge.scanning import ScanReport
 from brain.knowledge.visibility import Visibility
 from brain.ops.limits import MAX_BACKOFF_SECONDS
 from brain.ops.secrets import SecretRef, VaultRole
-from tests.fixtures.cassettes import CASSETTES, Cassette, Source
+from tests.fixtures.cassettes import CASSETTES, Cassette, Origin
 
 FOLDER = "fld0447AbC-_x"
 OUTSIDE_FOLDER = "fld0447AbC-_xy"
@@ -1402,31 +1397,32 @@ def test_the_page_cursor_reaches_the_address_and_the_first_page_carries_none() -
     assert "pageToken=page2" in resumed
 
 
-def test_no_recording_exists_for_this_source_and_the_reply_shape_is_ready_for_one() -> None:
+def test_the_recordings_are_documented_shapes_and_read_through_this_connectors_reply() -> None:
     """**The honest statement about what this connector was built from.**
 
-    `tests/fixtures/cassettes.py` declares no `Source.GOOGLE_DRIVE` and this leaf may not add
-    one: the fixture is shared and `tests/invariants/test_cassettes.py` asserts over it. So
-    every Drive fact in the connector comes from Google's documentation, and the four that a
-    recording would settle rather than merely support are the throttling reason codes, which
-    shape the error envelope takes, whether a shared-drive listing returns permissions to a
-    non-manager, and whether a 404 on a shortcut target looks like any other 404.
+    Drive's recordings in `tests/fixtures/cassettes.py` are the shapes Google's documentation
+    publishes, not captures from a live account, and each names its page. Two of the four
+    things `WHAT_A_RECORDING_WOULD_SETTLE` lists are now documented shapes rather than guesses:
+    the classic error envelope carries `error.errors[0].reason`, and a throttle arrives as a 403
+    with `userRateLimitExceeded`. The other two, and whether a user grant carries a domain,
+    still need a live capture.
 
-    What is pinned here is that the absence costs nothing structural. `Reply` carries the
-    same three fields a `Cassette` records, so a recording becomes one with no translation
-    step that could disagree with it, and this proves it by reading an existing cassette from
-    another source straight through this connector's own hint reader.
+    `Reply` carries the same three fields a `Cassette` records, so a recording becomes one with
+    no translation step, and this reads the documented throttling 403 straight through this
+    connector's own classifier.
 
-    Delete this and the next reader has no way to tell that this connector is documented
-    rather than recorded, which is the one thing about it they most need to know."""
-    assert GOOGLE_DRIVE not in {source.value for source in Source}
-    assert not [c for c in CASSETTES if c.source.value == GOOGLE_DRIVE]
+    Delete this and the next reader cannot tell that this connector is documented rather than
+    recorded live, which is the one thing about it they most need to know."""
+    drive = [c for c in CASSETTES if c.source.value == GOOGLE_DRIVE]
+    assert drive
+    assert all(c.origin is Origin.DOCUMENTED_SHAPE and not c.captured_at for c in drive)
 
     recorded = {f.name for f in dataclasses.fields(Cassette)}
     assert {f.name for f in dataclasses.fields(Reply)} <= recorded
 
-    fresh = next(c for c in CASSETTES if c.cid == "FRESH-429")
-    borrowed = Reply(status=fresh.status, headers=fresh.headers, body=fresh.body)
+    throttle = next(c for c in drive if c.cid == "DRIVE-403-user-rate-limit")
+    documented = Reply(status=throttle.status, headers=throttle.headers, body=throttle.body)
 
-    assert retry_hint(borrowed) == 60.0
-    assert call_outcome(borrowed) is CallOutcome.QUOTA
+    assert error_reason(documented) == "userRateLimitExceeded"
+    assert call_outcome(documented) is CallOutcome.QUOTA
+    assert retry_hint(documented) == RETRY_AFTER_WHEN_UNSTATED

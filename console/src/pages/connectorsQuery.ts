@@ -23,7 +23,7 @@
  * key is put into anything, it is the request body and nothing else, and the form that holds it
  * clears it before the request leaves. See `A_KEY_IS_SENT_ONCE_AND_KEPT_BY_NOBODY_HERE`.
  *
- * Task ids: M42.6.5, M42.5.9
+ * Task ids: M42.6.5, M42.5.9, M38.4.1.1
  */
 
 import type { components } from "../api/schema";
@@ -45,6 +45,13 @@ export type Connectable = components["schemas"]["ConnectableView"];
 
 /** A source this release has a connector for that the console cannot connect, and why. */
 export type NotConnectable = components["schemas"]["NotConnectableView"];
+
+/**
+ * One connector in this release: what it was tested against, and whether it is live here, as
+ * `brain.connector_routes.EvidenceView` sends it. Two sentences, never one badge: see
+ * `brain.console.connector_trust.RECORDED_IS_NOT_LIVE`.
+ */
+export type Evidence = components["schemas"]["EvidenceView"];
 
 /** One line of what this system copies out of a source and what it never does. */
 export type CopyLine = components["schemas"]["CopyLineView"];

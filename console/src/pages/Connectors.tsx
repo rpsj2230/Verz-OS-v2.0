@@ -36,7 +36,11 @@
  * caller may not read this screen: saying so would be the console explaining a refusal it did
  * not observe and cannot tell apart from an absence.
  *
- * Task ids: M42.6.5
+ * **Every connector in the release says what it was tested against, apart from whether it is live
+ * here.** The evidence card lists all of them, connected or not, with the release's recordings
+ * sentence and this install's credential and live-read sentences side by side, never merged.
+ *
+ * Task ids: M42.6.5, M38.4.1.1
  */
 
 import { useCallback, useState } from "react";
@@ -65,6 +69,7 @@ import {
   when,
   type Connected,
   type Connectors as ConnectorsBody,
+  type Evidence,
   type Trust,
 } from "./connectorsQuery";
 
@@ -76,6 +81,9 @@ export const NOTHING_LOOKED = "Nothing here can say which sources are connected"
 
 /** The copy policy card's heading, in `docs/screens.html` SCREEN 9's own words. */
 export const WHAT_WE_COPY = "What we copy, and what we never copy";
+
+/** The heading over what each connector was tested against and whether it is live here. */
+export const TESTED_AND_LIVE = "Tested against recordings, and live here";
 
 /** The heading over connecting a source. */
 export const CONNECTING_A_SOURCE = "Connecting a source";
@@ -326,6 +334,47 @@ function ConnectCard({
   );
 }
 
+/**
+ * Every connector in this release, each with the API's three sentences in their own rows. The
+ * recordings sentence is the same on every install; the credential and live-read ones are this
+ * install's, and a live read carries the worker's own time rather than a word.
+ */
+function EvidenceCard({ rows }: { readonly rows: readonly Evidence[] }) {
+  return (
+    <section className="card">
+      <h2>{TESTED_AND_LIVE}</h2>
+      {rows.map((one) => (
+        <div key={one.name}>
+          <h3>{one.label}</h3>
+          <dl className="fields" aria-label={one.label}>
+          <div className="fields__row">
+            <dt>Tested against</dt>
+            <dd>
+              <span>{one.recorded}</span>
+            </dd>
+          </div>
+          <div className="fields__row">
+            <dt>Live credential</dt>
+            <dd>
+              <span>{one.credential}</span>
+            </dd>
+          </div>
+          {one.live_read === "" ? null : (
+            <div className="fields__row">
+              <dt>Live read</dt>
+              <dd>
+                <span>{one.live_read}</span>
+                {one.last_read_live_at ? <p className="note">{when(one.last_read_live_at)}</p> : null}
+              </dd>
+            </div>
+          )}
+          </dl>
+        </div>
+      ))}
+    </section>
+  );
+}
+
 function ConnectorsPage({
   page,
   onChanged,
@@ -407,6 +456,8 @@ function ConnectorsPage({
        * whether a source is safe to leave connected.
        */}
       {wasRead(list) ? list.rows.map((row) => <ConnectedDetail key={`trust-${row.name}`} row={row} />) : null}
+
+      {page.evidence.length === 0 ? null : <EvidenceCard rows={page.evidence} />}
 
       <ConnectCard page={page} onConnected={onChanged} />
 

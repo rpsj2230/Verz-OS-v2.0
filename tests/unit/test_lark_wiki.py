@@ -32,8 +32,9 @@ window is a quota refusal rather than ill health.
 
 The fixtures are the cassettes. `LARK-200-code-permission` and `LARK-200-records` are Lark Base
 recordings, and what carries over from them is the tenant's envelope and the tenant's ceiling
-rather than one product's API. The last test in this file states exactly which claims here
-rest on a recording and which rest on a model of a source nobody has recorded.
+rather than one product's API. The wiki's own documented shapes are recorded too, and
+`tests/unit/test_cassette_replay.py` replays them. The last test in this file states which
+claims rest on a documented recording and which still rest on a model.
 
 Task ids: M11.6.4
 """
@@ -138,7 +139,7 @@ from brain.knowledge.visibility import KnowledgeVisibility, Visibility, Visibili
 from brain.ops.limits import SOURCE_CEILINGS
 from brain.ops.secrets import SecretRef, VaultRole
 from brain.tools import sop_import
-from tests.fixtures.cassettes import CASSETTES, Cassette, Source, for_source, limit_for
+from tests.fixtures.cassettes import CASSETTES, Cassette, Origin, Source, for_source, limit_for
 
 FETCHED_AT = "2026-09-06T09:00:00+00:00"
 NOW = datetime(2026, 9, 6, 9, 0, tzinfo=UTC)
@@ -1549,41 +1550,37 @@ def test_a_wiki_node_identifier_is_never_spelled_like_a_credential() -> None:
 
 
 # ----------------------------------------- what was recorded, and what was not
-def test_no_lark_wiki_recording_exists_and_the_tests_say_which_claims_are_modelled() -> None:
+def test_the_wiki_recordings_are_documented_shapes_and_say_what_they_do_not_settle() -> None:
     """**The honest statement about the evidence, and the reason it is a test rather than a
-    comment.** `tests/fixtures/cassettes.py` has no `Source.LARK_WIKI` and this connector did
-    not add one: the fixtures are shared and other connectors are being written against them at
-    the same time.
+    comment.** `Source.LARK_WIKI` has recordings now: a node read, a listing page, the wiki's
+    own permission code and the tenant's 429, each written to the shape Lark's documentation
+    publishes and none captured from a live tenant.
 
-    What the Lark Base recordings genuinely establish carries over unchanged, because it is the
-    tenant's envelope and the tenant's ceiling rather than one product's API: the 200 carrying a
-    non-zero code, the `code: 0` success with its `has_more` and `page_token` paging, and the
-    hundred a minute that cannot be raised. Every test above that names a cassette rests on
-    one of those.
-
-    What no recording covers, so that nothing here is read as evidence of it: a wiki node
-    listing, a node tree of any shape, a moved page, a per-node permission override, a Lark 429,
-    and the wiki endpoints' own page-size ceiling. Those are modelled from Lark's published
-    documentation and from what this estate already knows about the bot's read-only token, and
-    the tests drive the model rather than the source.
+    What they settle: the node listing's field names and `has_more` / `page_token` paging, and
+    that the wiki refuses with 131006 rather than Lark Base's 91403. What they do not: the
+    documented node carries no `has_member_setting`, so whether a real tenant ever tells this
+    connector a page inherits its space is still unverified, and every documented page is
+    withheld. The Lark Base recordings still establish the envelope and the shared minute.
 
     Delete this and the next reader takes the whole file as recorded behaviour, which would make
-    the page size and the node payload look verified when they are the two things that are
-    not."""
-    assert "LARK_WIKI" not in {member.name for member in Source}
-    assert not any(c.source.value == LARK_WIKI for c in CASSETTES)
+    the member setting look verified when it is the one thing that is not."""
+    wiki = for_source(Source.LARK_WIKI)
+    assert {"LARK-WIKI-200-nodes-page", "LARK-WIKI-429"} <= {c.cid for c in wiki}
+    assert all(c.origin is Origin.DOCUMENTED_SHAPE for c in wiki)
+
+    listed = cassette("LARK-WIKI-200-nodes-page").body["data"]
+    assert listed["has_more"] is True and listed["page_token"]
+    assert all(MEMBER_SETTING_KEY not in item for item in listed["items"])
+    assert cassette("LARK-WIKI-200-code-permission").body["code"] not in ENVELOPE_CODES
 
     recorded = {c.cid for c in for_source(Source.LARK_BASE)}
     assert {"LARK-200-records", "LARK-200-code-permission"} <= recorded
-
     assert cassette("LARK-200-code-permission").body["code"] == 91403
     assert cassette("LARK-200-records").body["code"] == LARK_OK_CODE
-    assert cassette("LARK-200-records").body["data"]["has_more"] is True
 
     tenant = limit_for(Source.LARK_BASE)
     assert tenant.calls == 100
     assert tenant.per == "minute"
     assert tenant.raisable is False
     assert ceiling_for(a_manifest()).per_minute == tenant.calls
-
-    assert not any(c.status == 429 for c in for_source(Source.LARK_BASE))
+    assert limit_for(Source.LARK_WIKI).calls == tenant.calls

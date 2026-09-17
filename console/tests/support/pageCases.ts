@@ -1376,6 +1376,16 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           },
         ],
         not_connectable: [{ name: UNBROKEN, label: UNBROKEN, why: UNBROKEN }],
+        evidence: [
+          {
+            name: UNBROKEN,
+            label: UNBROKEN,
+            recorded: UNBROKEN,
+            credential: UNBROKEN,
+            live_read: UNBROKEN,
+            last_read_live_at: null,
+          },
+        ],
         key_max_chars: 1000,
         key_blank: "Paste the key the source issued for this connection.",
       },

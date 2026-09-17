@@ -52,6 +52,10 @@ from brain.console.connector_trust import (
     DECLARATION_UNREADABLE,
     KEY_HELD,
     KEY_NOT_KNOWN,
+    LIVE_KEY_HELD,
+    LIVE_NOT_SHOWN,
+    LIVE_NOTHING_LOOKED,
+    NEVER_READ_LIVE,
     NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED,
     NOTHING_HERE_COUNTS_TODAYS_CALLS,
 )
@@ -60,7 +64,7 @@ from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.identity.data_steward import declared_capabilities
-from brain.ops.connectable import CONNECTABLE, manifest_for
+from brain.ops.connectable import CONNECTABLE, NOT_FROM_THE_CONSOLE, manifest_for
 from brain.ops.connector_admin import (
     CONNECTED,
     CONNECTING_A_SOURCE,
@@ -70,6 +74,7 @@ from brain.ops.connector_admin import (
     VAULT_SAYS,
     WHAT_CONNECTING_A_SOURCE_STARTS,
 )
+from brain.ops.connector_recordings import recorded_in_words
 from brain.ops.connector_store import Connection, ConnectorTakenError, NotConnectedError
 from brain.ops.connector_sync import (
     KEY_DECLINED,
@@ -453,6 +458,37 @@ def test_the_attempts_are_asked_for_only_when_there_is_a_connection_to_describe(
     assert records.asked == 1
 
 
+def test_every_connector_says_what_it_was_tested_against_apart_from_what_is_live_here(
+    app: FastAPI, client: TestClient
+) -> None:
+    """The release's recordings and this install's credential are two sentences, and a source the
+    reader may not be told of reads exactly like one nobody connected.
+
+    Delete this and a connector tested against recordings can render as one that works here, or
+    the evidence list can tell a narrowed reader that hubspot is connected."""
+    attach(app, None, held_vault())
+    unread = {one["name"]: one for one in get(client, "u_wide").json()["evidence"]}
+    attach(app, Records((a_connection("xero"), a_connection("hubspot"))), held_vault())
+    wide = {one["name"]: one for one in get(client, "u_wide").json()["evidence"]}
+    narrow = {one["name"]: one for one in get(client, "u_narrow").json()["evidence"]}
+
+    every = set(CONNECTABLE) | set(NOT_FROM_THE_CONSOLE)
+    assert set(wide) == set(narrow) == set(unread) == every
+    assert all(one["recorded"] == recorded_in_words(name) for name, one in wide.items())
+    assert (wide["xero"]["credential"], wide["xero"]["live_read"]) == (
+        LIVE_KEY_HELD,
+        NEVER_READ_LIVE,
+    )
+    assert wide["xero"]["last_read_live_at"] is None
+    assert narrow["hubspot"] == narrow["freshdesk"] | {
+        "name": "hubspot",
+        "label": narrow["hubspot"]["label"],
+        "recorded": recorded_in_words("hubspot"),
+    }
+    assert narrow["hubspot"]["credential"] == LIVE_NOT_SHOWN
+    assert unread["xero"]["credential"] == LIVE_NOTHING_LOOKED
+
+
 def test_a_body_carries_no_count_of_the_sources_that_were_left_out(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -549,6 +585,7 @@ def test_a_list_and_a_sentence_cannot_both_be_sent() -> None:
         "vault_told": "",
         "connectable": [],
         "not_connectable": [],
+        "evidence": [],
         "key_max_chars": 1,
         "key_blank": "x",
     }

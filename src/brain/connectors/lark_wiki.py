@@ -66,11 +66,14 @@ To an operator that distinction is the whole point of the sweep; to a person ask
 question it must read exactly like an absence, because a refusal that named what it refused
 would disclose the page. See `ABSENT_REFUSED_UNREACHABLE_AND_WITHHELD`.
 
-**What there were recordings for, and what there were not.** `tests/fixtures/cassettes.py`
-has no `Source.LARK_WIKI` and this module did not add one: the fixtures are shared and other
-connectors are being written against them at the same time. The closest recordings are
-`Source.LARK_BASE`, and what they genuinely establish carries over unchanged, because it is
-the tenant's envelope and the tenant's ceiling rather than one product's API:
+**What there were recordings for, and what there were not.** This module was written when
+`tests/fixtures/cassettes.py` had no `Source.LARK_WIKI`. It has one now: a node read, a node
+listing, the wiki's 131006 refusal and the tenant's 429, each written to the shape Lark's
+documentation publishes rather than captured live, and replayed through this module by
+`tests/unit/test_cassette_replay.py`. The documented node carries no `has_member_setting`, so
+every documented page reads as UNDETERMINED and is withheld; that is the finding the listing
+recording pins. What the `Source.LARK_BASE` recordings establish still carries over, because
+it is the tenant's envelope and the tenant's ceiling rather than one product's API:
 
 - `LARK-200-code-permission`: a permission failure delivered as HTTP 200 with a non-zero
   `code`. Verified, and the whole of `envelope_outcome`.
@@ -79,12 +82,13 @@ the tenant's envelope and the tenant's ceiling rather than one product's API:
 - `RATE_LIMITS[LARK_BASE]`: 100 a minute, tenant-wide, recorded as not raisable. Verified,
   and read from `brain.ops.limits` rather than restated here.
 
-What there was no recording of, stated so nobody reads a test here as evidence: a wiki node
-listing, a node tree of any shape, a moved page, a per-node permission override, a Lark 429,
-and the wiki endpoints' own page-size ceiling. Every one of those is modelled from Lark's
-published documentation and from what this estate already knows about the bot's `read`-only
-token, and every test below drives the model rather than the source. The page size is the
-only unverified *number* that reaches an address, and it is deliberately the one place where
+What there is still no recording of, stated so nobody reads a test here as evidence: a node
+tree deeper than one page, a moved page, a per-node permission override, and anything captured
+from a live tenant. Every one of those is modelled from Lark's published documentation and
+from what this estate already knows about the bot's `read`-only token, and every test below
+drives the model rather than the source. The page size of fifty is the documented maximum but
+no live capture confirms it, so it is the one *number* reaching an address that nothing live
+has checked, and it is deliberately the one place where
 being wrong is cheap: Lark states continuation in the body, so a clamped page size costs
 extra calls and cannot truncate an answer. That is the opposite of Freshdesk, where the same
 mistake is silent and wrong, and the difference is `THE_END_OF_DATA_SIGNAL_IS_STATED_HERE`.
@@ -351,8 +355,8 @@ LARK_OK_CODE: Final = 0
 #: adding a row is a decision somebody makes rather than a default that admits one.
 #:
 #: 91403 is recorded in `LARK-200-code-permission`. 99991400 is Lark's published tenant rate
-#: limit code and no recording in this repository carries it, which is why it is a quota
-#: refusal here and not a guess about how long to wait: the wait is the platform's.
+#: limit code, carried by the documented `LARK-WIKI-429` recording. It is a quota refusal here
+#: and nothing more: how long to wait is the platform's arithmetic.
 ENVELOPE_CODES: Final[MappingProxyType[int, CallOutcome]] = MappingProxyType(
     {
         91403: CallOutcome.REJECTED,
@@ -366,7 +370,7 @@ ENVELOPE_CODES: Final[MappingProxyType[int, CallOutcome]] = MappingProxyType(
 UNREACHABLE_FRESHNESS: Final = Freshness.UNSTATED
 
 #: How many nodes one listing call asks for. Lark's documented ceiling for the wiki node
-#: endpoints, and the one number in this module that no recording confirms. Being wrong about
+#: endpoints, and the one number in this module that no live capture confirms. Being wrong about
 #: it costs calls and cannot truncate an answer, because the source states continuation. See
 #: `THE_END_OF_DATA_SIGNAL_IS_STATED_HERE`.
 NODE_PAGE_SIZE: Final = 50
@@ -445,9 +449,10 @@ class LarkReply:
     **There is deliberately no headers field**, which is a departure from
     `brain.connectors.freshdesk.Reply` and is the honest shape rather than a smaller one.
     Freshdesk carries headers because it reads `Retry-After` out of them and the recorded 429
-    states it. Neither Lark recording in this repository carries a header at all, so a header
-    field here would be one nothing reads, and a field nothing reads is one somebody starts
-    reading later with no recording to check the parsing against. What a wait should be is
+    states it. Lark's documented 429 states its wait in `x-ogw-ratelimit-reset` instead, and
+    this connector does not read it, so a header field here would be one nothing reads, and a
+    field nothing reads is one somebody starts reading later without deciding to. What a wait
+    should be is
     the platform's arithmetic in `brain.connectors.throttle.retry_delay`, which needs nothing
     from this value.
 

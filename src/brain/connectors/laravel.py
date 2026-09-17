@@ -100,7 +100,7 @@ Scope: domain logic. Nothing here opens a connection, imports a driver, holds a 
 a clock. The reader is a protocol, `fetched_at` and `checked_at` are parameters, and
 `assert_holds_no_credential` runs on the connection at construction.
 
-Task ids: M11.6.1
+Task ids: M11.6.1, M38.4.1.1
 """
 
 from __future__ import annotations
@@ -1126,6 +1126,42 @@ DETAIL_FOR_FAULT: Final[Mapping[DatabaseFault, str]] = MappingProxyType(
         DatabaseFault.UNAVAILABLE: DETAIL_UNAVAILABLE,
     }
 )
+
+
+#: Why an error number this connector does not recognise is read as the database not answering.
+AN_UNRECOGNISED_DATABASE_ERROR_IS_NOT_AN_ANSWER: Final = (
+    "An error number outside the table below is neither of the two withdrawn contracts, "
+    "which have documented numbers of their own, and it is never an empty view. It is read "
+    "as the database not answering this read: DOWN, like both refusals, so nobody is paged "
+    "less for it, and no rows can be reported from it."
+)
+
+#: MySQL's documented error numbers for the four faults, from the server and client error
+#: references. 1142 and 1143 are the grant; 1146 is the view gone; 3024 is our own
+#: `max_execution_time`; the rest are a connection that could not be made or was lost.
+MYSQL_ERRNO_FAULTS: Final[Mapping[int, DatabaseFault]] = MappingProxyType(
+    {
+        1142: DatabaseFault.ACCESS_DENIED,
+        1143: DatabaseFault.ACCESS_DENIED,
+        1146: DatabaseFault.UNKNOWN_VIEW,
+        3024: DatabaseFault.TIMED_OUT,
+        1040: DatabaseFault.UNAVAILABLE,
+        2002: DatabaseFault.UNAVAILABLE,
+        2003: DatabaseFault.UNAVAILABLE,
+        2006: DatabaseFault.UNAVAILABLE,
+        2013: DatabaseFault.UNAVAILABLE,
+    }
+)
+
+
+def fault_for_mysql_error(errno: int) -> DatabaseFault:
+    """The fault a MySQL error number is, so a reader hands over a `ViewReply` and not a guess.
+
+    The one translation between a driver's exception and this module's vocabulary, written
+    here so a live reader and a recording replayed in a test go through the same table. See
+    `AN_UNRECOGNISED_DATABASE_ERROR_IS_NOT_AN_ANSWER` for the number nobody listed.
+    """
+    return MYSQL_ERRNO_FAULTS.get(errno, DatabaseFault.UNAVAILABLE)
 
 
 class LaravelOutcome(enum.StrEnum):
