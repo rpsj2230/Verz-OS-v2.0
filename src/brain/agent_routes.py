@@ -84,6 +84,35 @@ pinned references, behind the Skills screen's own read. Channels are `offered_ch
 profile. Nothing here re-decides any of it and nothing here intersects two entitlement sets:
 `run_reach` is the console's one route into the intersection and this module calls it.
 
+**The header's creation time goes to the audience, and its lifecycle word and highest rung go
+where the Settings tab does.** `docs/admin-console-architecture.md` 4.1a draws all three above
+the page's three tabs. A date names nobody, so `created_at` travels as the steward does. A
+state is `brain.agents.model.runnable_agent_ids`' question, and that function's reason for
+telling nobody why an agent they used yesterday is not chosen today is why the word reaches only
+a reader of the agent's configuration. The highest rung is the leash, which is configuration.
+See `THE_HEADER_DATES_THE_AGENT_FOR_EVERYBODY_AND_STATES_IT_FOR_THE_SETTINGS_READ`.
+
+**The Profile travels exactly where the Settings tab does, and its capability names only where
+the capability vocabulary does.** The tier, the ceiling in words, the tools the ceiling names
+and the leash by target are the agent's own decisions, which is what that tab is, so
+`ProfileView` is null for everybody else, as the composition is empty. Inside it the sentences
+naming capabilities come from `brain.console.reach_view.ceiling_block`, which discloses the
+ceiling whole to a reader holding `CEILING_DISCLOSURE` and as a lock to anybody else and never
+narrows it to what the reader holds. The words themselves are `brain.console.agent_profile`'s,
+and this module decides only who is handed them. See
+`THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS`.
+
+**The figure at the top of the page is sent with the statement that nothing records it.**
+`HeadlineView.recorded` is `brain.console.agent_profile.RUN_SPEND_IS_RECORDED`, which a test
+holds against the source for a writer of a run's cost, so the page can say "not recorded yet"
+instead of drawing nought as a measurement. The figures themselves are unchanged, so the day a
+writer lands nothing about the headline has to move but that constant.
+
+**The connector strip carries every row it was cut from.** `ConnectorStripView.rows` is the
+list the strip's `shown` is the head of and its `overflow` counts the tail of, so the page's
+"N more" opens the reader's own rows and never a row the strip did not already count. See
+`brain.console.workspace_capabilities.AN_OVERFLOW_COUNTS_WHAT_IS_OFF_THE_ROW_AND_NEVER_WHAT_IS_OUT_OF_REACH`.
+
 **Four things SCREEN 13 and SCREEN 4 ask for are absent rather than guessed, and each is
 absent because nothing stores it.** A channel row says which surfaces a run could be carried
 on and never whether the install has one switched on, because no table holds a per-agent
@@ -150,7 +179,7 @@ from __future__ import annotations
 
 import enum
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Annotated, Any, Final
 
@@ -161,6 +190,7 @@ from sqlalchemy import Select, and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agents.catalogue import CATALOGUE
+from brain.agents.install import bind_tools, bound_leash
 from brain.agents.model import (
     AgentAudience,
     AgentAuthority,
@@ -186,8 +216,19 @@ from brain.channels.slack import SlackAdapter
 from brain.channels.teams import TeamsAdapter
 from brain.channels.telegram import TelegramAdapter
 from brain.channels.whatsapp import WhatsAppAdapter
+from brain.console.agent_profile import (
+    RUN_SPEND_IS_RECORDED,
+    LeashRow,
+    ToolRow,
+    ceiling_words,
+    leash_rows,
+    leash_up_to,
+    rung_key,
+    tool_rows,
+)
 from brain.console.agent_tabs import SKILL_SCREEN, rendering_profile
 from brain.console.automation_gallery import GALLERY_TAB
+from brain.console.reach_view import ceiling_block
 from brain.console.reads import permitted
 from brain.console.screens import screen
 from brain.console.workspace import (
@@ -202,19 +243,21 @@ from brain.console.workspace import (
     window,
 )
 from brain.console.workspace_capabilities import (
+    ConnectorRow,
     connector_rows,
     connector_strip,
     offered_channels,
     run_reach,
 )
 from brain.core.entitlement import Capability
-from brain.core.envelope import SideEffect
+from brain.core.envelope import SideEffect, ToolDefinition
 from brain.core.errors import Absent, Failed
 from brain.core.field_policy import FieldPolicy
 from brain.core.lane import Lane
 from brain.core.principal import PrincipalKind
 from brain.core.scope import Scope
 from brain.gate.context import TrafficClass
+from brain.gate.leash import Leash
 from brain.knowledge.visibility import Visibility
 from brain.listing import Column, ListAsked, Listing, Plan
 from brain.models.routing import Tier
@@ -319,6 +362,24 @@ THE_VIEWER_IS_THEIR_PRIMARY_DEPARTMENT_UNTIL_MEMBERSHIP_IS_READ: Final = (
     "the viewer is the caller and their primary department, and a person in a second "
     "department does not see that department's agents here. That is a gap and it fails "
     "narrow: nobody is shown an agent their audience does not cover."
+)
+
+#: Why the header's date goes to everybody and its state and rung do not.
+THE_HEADER_DATES_THE_AGENT_FOR_EVERYBODY_AND_STATES_IT_FOR_THE_SETTINGS_READ: Final = (
+    "When an agent was created names nobody and discloses nothing a person opening it could "
+    "misuse, so it travels with the agent as the steward does. Whether it is enabled is the "
+    "fact runnable_agent_ids keeps from a member of the audience, who is told nothing about why "
+    "an agent they used yesterday is not chosen today, and the highest rung is the leash, which "
+    "is configuration. Both are sent where the Settings tab is and are null everywhere else."
+)
+
+#: Why the Profile block follows the Settings tab and its capability names follow the vocabulary.
+THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS: Final = (
+    "The tier, the ceiling in words, the tools the ceiling names and the leash are the agent's "
+    "own decisions, which is what the Settings tab reads, so the block is sent where that tab "
+    "is and nowhere else. A capability name tells a reader what can be granted at all, which is "
+    "the Capabilities screen's grant, so the sentences naming capabilities come from "
+    "ceiling_block and are whole for a holder of that grant and a lock for anybody else."
 )
 
 
@@ -435,6 +496,16 @@ class AgentHeaderView(BaseModel):
     #: Who built it. Sent exactly where the Settings tab is. See
     #: `THE_BUILDER_TRAVELS_WITH_THE_AUDIT_AND_THE_STEWARD_TRAVELS_WITH_THE_AGENT`.
     created_by: str | None = None
+    #: When the agent row was written, for everybody the audience covers. The page derives the
+    #: days since from it. Null only for a row written without the database's own clock.
+    created_at: datetime | None = None
+    #: `AgentRecord.state`: enabled, disabled or archived. Sent where the Settings tab is. See
+    #: `THE_HEADER_DATES_THE_AGENT_FOR_EVERYBODY_AND_STATES_IT_FOR_THE_SETTINGS_READ`.
+    state: str | None = None
+    #: The highest rung any action of this agent could be held to, as
+    #: `brain.console.agent_profile.leash_up_to` says it. Sent where the Settings tab is, and null
+    #: there too for an agent with no action, because a rung governs a side effect.
+    leash_up_to: str | None = None
 
 
 class TabView(BaseModel):
@@ -501,12 +572,15 @@ class ConnectorStripView(BaseModel):
 
     `overflow` counts what is off the end of the row and never what is out of reach, which is
     the rule `ConnectorStrip` enforces in its constructor rather than one restated here.
+    `rows` is every row the strip was cut from, so `shown` is its head and `overflow` the length
+    of its tail, and the page's overflow list opens rows this reader was already counted.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     shown: list[ConnectorView]
     overflow: int = 0
+    rows: list[ConnectorView] = []
 
 
 class ChannelView(BaseModel):
@@ -542,6 +616,90 @@ class HeadlineView(BaseModel):
     range: str
     spend_minor: int
     runs: int
+    #: Whether anything records what a run cost. While it is false the two figures above are
+    #: over rows nothing writes, and the page says they are not recorded yet rather than drawing
+    #: them. See `brain.console.agent_profile`'s
+    #: `A_FIGURE_NOTHING_WRITES_IS_SERVED_WITH_THE_STATEMENT_THAT_NOTHING_WRITES_IT`.
+    recorded: bool = False
+
+
+class ToolView(BaseModel):
+    """One tool the agent's ceiling names, as `brain.console.agent_profile.ToolRow` carries it.
+
+    `source`, `side_effect` and `description` are null together for a name no registered tool
+    answers to, and `within_ceiling` is whether a run could be handed the tool at all.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    source: str | None = None
+    side_effect: str | None = None
+    description: str | None = None
+    within_ceiling: bool
+
+
+class LeashEntryView(BaseModel):
+    """One configured leash entry: its rung, and the rows it applies to when not every row."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rung: str
+    where: str | None = None
+
+
+class LeashRowView(BaseModel):
+    """One target on the leash, as `brain.console.agent_profile.LeashRow` carries it.
+
+    `rung` is the highest of `rungs`, which are every rung a call on the target could be held
+    to, lowest first. `configured` is false for an action on the Shadow default, and `acts` is
+    whether an action this agent could take is behind the target.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    target: str
+    rung: str
+    rungs: list[str]
+    configured: bool
+    acts: bool
+    entries: list[LeashEntryView] = []
+
+
+class AgentCeilingView(BaseModel):
+    """The ceiling in words, as `brain.console.agent_profile.CeilingWords` carries it.
+
+    `reads` is empty and `reads_locked` true for a reader the capability names are locked for,
+    whatever the ceiling holds. `max_side_effect` is `SideEffect`'s own word beside the sentence.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rows: str
+    reads: list[str] = []
+    reads_locked: bool
+    tools: str
+    largest_effect: str
+    max_side_effect: str
+
+
+class ProfileView(BaseModel):
+    """How the agent is set up, for a reader of the Settings tab and nobody else.
+
+    See `THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS`. `tier` is
+    stored and not yet passed to routing, which `docs/admin-console-architecture.md` 4.1a says
+    the page must say.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    tier: str
+    #: `AgentAudience.level`: personal, department or company. The steward and the department
+    #: already reach the audience; the level word is the Settings read's, as 4.1a row 14 says.
+    audience_level: str
+    ceiling: AgentCeilingView
+    tools: list[ToolView]
+    leash: list[LeashRowView]
 
 
 class WorkspaceView(BaseModel):
@@ -560,6 +718,8 @@ class WorkspaceView(BaseModel):
     connectors: ConnectorStripView = ConnectorStripView(shown=[])
     channels: list[ChannelView] = []
     headline: HeadlineView | None = None
+    #: Null for a reader without the Settings tab, as the composition is empty for one.
+    profile: ProfileView | None = None
 
 
 class Origin(enum.StrEnum):
@@ -677,6 +837,10 @@ class Install:
     skills: tuple[SkillView, ...]
     #: The connectors the effective manifest declares, in its own sorted order.
     connectors: tuple[str, ...]
+    #: The effective leash, with the targets as the manifest declares them.
+    leash: Leash = field(default_factory=Leash)
+    #: The tools the effective manifest declares, before this install bound them to its own.
+    declared_tools: tuple[str, ...] = ()
 
 
 def install_of(
@@ -729,6 +893,8 @@ def install_of(
             SkillView(name=one.name, digest=one.digest) for one in effective.manifest.skills
         ),
         connectors=tuple(effective.manifest.connectors),
+        leash=effective.leash,
+        declared_tools=tuple(effective.manifest.authority.allowed_tools),
     )
 
 
@@ -899,6 +1065,18 @@ def product_field_policy() -> FieldPolicy:
     )
 
 
+def offered_surfaces(record: AgentRecord, asked: Asking) -> tuple[ChannelCapabilities, ...]:
+    """The declared surfaces a run of this agent by this caller could be carried on, in order.
+
+    The one computation behind the workspace's channel rows and the About flow's first step, so
+    the two cannot offer different surfaces to one reader. See `channel_views` for the argument.
+    """
+    capabilities = declared_channels()
+    reach = run_reach(asked.reach, record)
+    offered = frozenset(offered_channels(reach, capabilities, product_field_policy(), asked.now))
+    return tuple(one for one in capabilities if one.channel in offered)
+
+
 def channel_views(record: AgentRecord, asked: Asking) -> tuple[ChannelView, ...]:
     """The surfaces a run of this agent by this caller could be carried on (M39.2.4.2).
 
@@ -911,19 +1089,15 @@ def channel_views(record: AgentRecord, asked: Asking) -> tuple[ChannelView, ...]
     No row says whether the install has a surface switched on. See
     `A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`.
     """
-    capabilities = declared_channels()
-    reach = run_reach(asked.reach, record)
-    offered = frozenset(offered_channels(reach, capabilities, product_field_policy(), asked.now))
     return tuple(
         ChannelView(channel=one.channel.value, profile=rendering_profile(one).value)
-        for one in capabilities
-        if one.channel in offered
+        for one in offered_surfaces(record, asked)
     )
 
 
-def connector_view(
+def reader_connector_rows(
     install: Install | None, record: AgentRecord, registry: ToolRegistry | None, asked: Asking
-) -> ConnectorStripView:
+) -> tuple[ConnectorRow, ...]:
     """The connectors this agent names, as this reader may see them (M39.2.1.1, M39.2.1.4).
 
     Three sets and none of them decided here. `declared` is the effective manifest's own
@@ -939,7 +1113,7 @@ def connector_view(
     absent registry has to fail in.
     """
     if install is None:
-        return ConnectorStripView(shown=[])
+        return ()
     visible = () if registry is None else reachable_sources(registry, asked)
     allowed = record.authority.allowed_tools
     attached = (
@@ -949,13 +1123,25 @@ def connector_view(
             {one.source for one in registry.definitions() if one.name in allowed and one.source}
         )
     )
-    rows = connector_rows(declared=install.connectors, attached=attached, visible=visible)
+    return connector_rows(declared=install.connectors, attached=attached, visible=visible)
+
+
+def connector_view(
+    install: Install | None, record: AgentRecord, registry: ToolRegistry | None, asked: Asking
+) -> ConnectorStripView:
+    """The connector strip over `reader_connector_rows`, with every row it was cut from.
+
+    `connector_strip` computes the head and the overflow from the same rows that are sent whole,
+    so the overflow list and the count beside the strip cannot be over two different sets.
+    """
+    rows = reader_connector_rows(install, record, registry, asked)
     strip = connector_strip(rows)
     return ConnectorStripView(
         shown=[
             ConnectorView(source=one.source, presence=one.presence.value) for one in strip.shown
         ],
         overflow=strip.overflow,
+        rows=[ConnectorView(source=one.source, presence=one.presence.value) for one in rows],
     )
 
 
@@ -1013,6 +1199,116 @@ def headline_view(agent_id: str, rows: Sequence[Actual], asked: Asking) -> Headl
         range=HEADLINE_RANGE.value,
         spend_minor=figures.spend_minor,
         runs=figures.runs,
+        recorded=RUN_SPEND_IS_RECORDED,
+    )
+
+
+def holds_settings(strip: Sequence[WorkspaceTab]) -> bool:
+    """Whether a strip holds the Settings tab, which every configuration block on an agent's page
+    travels with.
+
+    Asked of the strip rather than of `permitted` directly, so the composition, the Profile and
+    the About flow's setup are sent on exactly one condition, the one the strip shows the reader.
+    """
+    return any(one.tab is Tab.SETTINGS for one in strip)
+
+
+def may_read_settings(asked: Asking) -> bool:
+    """`holds_settings` over this reader's own strip, for a route that draws no strip."""
+    return holds_settings(tab_strip(asked.reach, populated=POPULATED_HERE, now=asked.now))
+
+
+def leash_of(install: Install | None, registry: ToolRegistry | None) -> Leash:
+    """The agent's leash, with its targets bound to the tools this process registers.
+
+    `brain.agents.install.bound_leash` over `bind_tools`, which is what a finished install binds a
+    template's declared targets with, so a leash row and an action are keyed by the one name the
+    gate looks a rung up by. An agent with no install that constructs has no entry at all, and
+    `Leash.rung_for` answers `MISSING_ENTRY_RUNG` for every target it is asked about, which is the
+    blank template's floor. With no registry nothing binds, and the entries are kept as declared.
+    See `brain.console.agent_profile`'s
+    `THE_LEASH_SHOWN_IS_THE_CONFIGURED_ONE_AND_A_RUN_MAY_ONLY_BE_HELD_LOWER`.
+    """
+    if install is None:
+        return Leash()
+    if registry is None:
+        return install.leash
+    return bound_leash(install.leash, bind_tools(install.declared_tools, registry))
+
+
+def registered_tools(
+    record: AgentRecord, registry: ToolRegistry | None
+) -> tuple[ToolDefinition, ...]:
+    """The registered tools this agent's ceiling names, in the registry's own order."""
+    if registry is None:
+        return ()
+    allowed = record.authority.allowed_tools
+    return tuple(one for one in registry.definitions() if one.name in allowed)
+
+
+@dataclass(frozen=True)
+class Configured:
+    """What the Settings read is handed about one agent: its tools and its leash by target."""
+
+    tools: tuple[ToolRow, ...]
+    leash: tuple[LeashRow, ...]
+
+
+def configured(
+    record: AgentRecord, install: Install | None, registry: ToolRegistry | None
+) -> Configured:
+    """The agent's tools and leash rows, computed once for the header and the Profile alike."""
+    tools = tool_rows(record.authority, registered_tools(record, registry))
+    rows = leash_rows(
+        leash_of(install, registry), record.agent_id, (one.name for one in tools if one.acts)
+    )
+    return Configured(tools=tools, leash=rows)
+
+
+def profile_view(record: AgentRecord, setup: Configured, asked: Asking) -> ProfileView:
+    """The Profile block for a reader of the Settings tab (M27.11.15's content, not its page).
+
+    The capability names are `ceiling_block`'s for this reader, whole or locked. See
+    `THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS`.
+    """
+    words = ceiling_words(
+        record.authority, ceiling_block(record, asked.reach, asked.now), setup.tools
+    )
+    return ProfileView(
+        tier=record.tier.value,
+        audience_level=record.audience.level.value,
+        ceiling=AgentCeilingView(
+            rows=words.rows,
+            reads=list(words.reads),
+            reads_locked=words.reads_locked,
+            tools=words.tools,
+            largest_effect=words.largest_effect,
+            max_side_effect=record.authority.max_side_effect.value,
+        ),
+        tools=[
+            ToolView(
+                name=one.name,
+                source=one.source,
+                side_effect=None if one.side_effect is None else one.side_effect.value,
+                description=one.description,
+                within_ceiling=one.within_ceiling,
+            )
+            for one in setup.tools
+        ],
+        leash=[
+            LeashRowView(
+                target=one.target,
+                rung=rung_key(one.highest),
+                rungs=[rung_key(rung) for rung in one.rungs],
+                configured=one.configured,
+                acts=one.acts,
+                entries=[
+                    LeashEntryView(rung=rung_key(entry.rung), where=entry.where)
+                    for entry in one.entries
+                ],
+            )
+            for one in setup.leash
+        ],
     )
 
 
@@ -1028,6 +1324,7 @@ def workspace(
     *,
     registry: ToolRegistry | None = None,
     spend: Sequence[Actual] = (),
+    created_at: datetime | None = None,
 ) -> WorkspaceView:
     """One visible agent's workspace at this caller's reach.
 
@@ -1043,13 +1340,20 @@ def workspace(
     tab is not a second gate over them. The channels and the headline are computed at the
     run's reach and at the budget screen's grant respectively, and neither is a fact about
     the agent's configuration.
+
+    **The Profile, the lifecycle word and the highest rung travel with the Settings tab too, and
+    they do not need an install.** An agent with no install that constructs still has a ceiling,
+    a tier and a state on its own row, and its leash is the Shadow default everywhere. See
+    `THE_PROFILE_IS_CONFIGURATION_AND_ITS_CAPABILITY_NAMES_ARE_THE_VOCABULARYS`.
     """
     strip = tab_strip(asked.reach, populated=POPULATED_HERE, now=asked.now)
-    may_read_settings = any(one.tab is Tab.SETTINGS for one in strip)
+    reads_settings = holds_settings(strip)
     # One name for "there is an install and this reader may read its configuration", so the
     # three blocks below cannot come apart by somebody editing one condition of three.
-    settings = install if install is not None and may_read_settings else None
+    settings = install if install is not None and reads_settings else None
+    setup = configured(record, install, registry) if reads_settings else None
     may_read_skills = permitted(screen(SKILL_SCREEN).read, asked.reach, asked.now)
+    highest = None if setup is None else leash_up_to(setup.leash)
     return WorkspaceView(
         agent=AgentHeaderView(
             agent_id=record.agent_id,
@@ -1058,7 +1362,10 @@ def workspace(
             summary=(install.summary or None) if install is not None else None,
             template_id=install.template_id if install is not None else None,
             template_version=install.template_version if install is not None else None,
-            created_by=record.created_by if may_read_settings else None,
+            created_by=record.created_by if reads_settings else None,
+            created_at=created_at,
+            state=record.state.value if setup is not None else None,
+            leash_up_to=None if highest is None else rung_key(highest),
         ),
         tabs=[tab_view(one) for one in strip],
         composition=list(settings.composition) if settings is not None else [],
@@ -1067,6 +1374,7 @@ def workspace(
         connectors=connector_view(install, record, registry, asked),
         channels=list(channel_views(record, asked)),
         headline=headline_view(record.agent_id, spend, asked),
+        profile=None if setup is None else profile_view(record, setup, asked),
     )
 
 
@@ -1179,14 +1487,25 @@ def _require_session_factory(request: Request) -> async_sessionmaker[AsyncSessio
     return factory
 
 
-async def _visible_record(session: AsyncSession, agent_id: str, asked: Asking) -> AgentRecord:
+async def _visible_record(
+    session: AsyncSession, agent_id: str, asked: Asking
+) -> tuple[AgentRecord, datetime | None]:
+    """The agent this caller's audience covers, with when its row was written, or the 404.
+
+    The creation time is the row's and not the record's: `AgentRecord` has no such field, and the
+    date is read here, after the audience has admitted the caller, like everything else.
+    """
     row = (await session.execute(one_agent(agent_id))).scalar_one_or_none()
     record = record_of(row) if row is not None else None
-    if record is None or agent_id not in visible_agent_ids((record,), viewer_of(asked)):
+    if (
+        row is None
+        or record is None
+        or agent_id not in visible_agent_ids((record,), viewer_of(asked))
+    ):
         # One refusal for three causes. See `_no_agent_here`.
         log.info("agent not answerable", principal=asked.caller.principal.id)
         raise _no_agent_here()
-    return record
+    return record, row.created_at
 
 
 router = APIRouter(prefix=API_PREFIX, tags=["agents"])
@@ -1225,12 +1544,19 @@ async def agent_workspace(request: Request, agent_id: str, asked: Asked) -> Work
     factory = _require_session_factory(request)
     since, _ = window(HEADLINE_RANGE, asked.now)
     async with factory() as session:
-        record = await _visible_record(session, agent_id, asked)
+        record, created_at = await _visible_record(session, agent_id, asked)
         pair = (await session.execute(install_for(agent_id))).one_or_none()
         costs = (await session.execute(spend_for(agent_id, since))).scalars().all()
     install = install_of(pair[0], pair[1], record) if pair is not None else None
     spend = [one for one in (actual_of(row) for row in costs) if one is not None]
-    return workspace(record, install, asked, registry=_tool_registry(request), spend=spend)
+    return workspace(
+        record,
+        install,
+        asked,
+        registry=_tool_registry(request),
+        spend=spend,
+        created_at=created_at,
+    )
 
 
 @router.get("/agent-templates", response_model=TemplateGallery, responses=COMMON_RESPONSES)

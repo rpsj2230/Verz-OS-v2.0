@@ -56,6 +56,9 @@ from brain.agent_routes import (
 from brain.agents.catalogue import CATALOGUE
 from brain.agents.model import AgentAudience, AgentViewer
 from brain.agents.template import (
+    LeashRung,
+    ManifestAuthority,
+    ManifestGuardrails,
     ManifestIdentity,
     SignedManifest,
     SkillRef,
@@ -79,6 +82,7 @@ from brain.core.lane import Lane
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import TrafficClass
+from brain.gate.injection import AutonomyTier
 from brain.identity.bearer import TokenAuthority
 from brain.knowledge.visibility import Visibility
 from brain.models.routing import DEFAULT_TIER
@@ -110,6 +114,8 @@ DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 #: are clocks: nothing here is about the present.
 SIGNED_AT = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
 INSTALLED_AT = datetime(2019, 3, 5, 9, 0, tzinfo=UTC)
+#: When the agent row was written, which only the database's clock sets on a real install.
+CREATED_AT = datetime(2019, 3, 1, 9, 0, tzinfo=UTC)
 KEY = "a-key-for-this-test"
 
 #: Who each signed-in person is. `u_narrow` sits in web, `u_wide` in sales, and `u_none` in
@@ -234,6 +240,8 @@ def manifest(
     display_name: str = "Pricing desk",
     skills: tuple[SkillRef, ...] = (),
     connectors: tuple[str, ...] = (),
+    authority: ManifestAuthority | None = None,
+    guardrails: ManifestGuardrails | None = None,
 ) -> TemplateManifest:
     return TemplateManifest(
         identity=ManifestIdentity(
@@ -246,6 +254,8 @@ def manifest(
         persona="Answer briefly.",
         skills=skills,
         connectors=connectors,
+        authority=authority or ManifestAuthority(),
+        guardrails=guardrails or ManifestGuardrails(),
     )
 
 
@@ -256,10 +266,18 @@ def install_rows(
     summary: str = SUMMARY,
     skills: tuple[SkillRef, ...] = (),
     connectors: tuple[str, ...] = (),
+    authority: ManifestAuthority | None = None,
+    guardrails: ManifestGuardrails | None = None,
 ) -> tuple[TemplateInstanceRow, TemplateVersionRow, SignedManifest, TemplateInstance]:
     """The two rows an install writes, from a real publish and a real install."""
     signed = publish(
-        manifest(summary=summary, skills=skills, connectors=connectors),
+        manifest(
+            summary=summary,
+            skills=skills,
+            connectors=connectors,
+            authority=authority,
+            guardrails=guardrails,
+        ),
         key=KEY,
         signed_by="u_publisher",
         at=SIGNED_AT,
@@ -625,6 +643,11 @@ def test_no_roster_answer_carries_a_count_of_anything(client: TestClient, stored
         agent_routes.ChannelView,
         agent_routes.HeadlineView,
         agent_routes.TemplateEntry,
+        agent_routes.ToolView,
+        agent_routes.LeashEntryView,
+        agent_routes.LeashRowView,
+        agent_routes.AgentCeilingView,
+        agent_routes.ProfileView,
     ):
         assert not set(view.model_fields) & NAMES_THAT_WOULD_BE_A_HIDDEN_COUNT, view.__name__
 
@@ -779,6 +802,7 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
     Delete this and the route can drop the owner or send half a lineage, and the page renders
     an agent with a fact silently missing."""
     stored.agents["quote_helper"] = agent_row("quote_helper", display_name="Quote Helper")
+    stored.agents["quote_helper"].created_at = CREATED_AT
     instance_row, version_row, _, _ = install_rows("quote_helper")
     stored.installs["quote_helper"] = (instance_row, version_row)
 
@@ -792,6 +816,9 @@ def test_the_header_is_the_agent_its_steward_and_its_lineage_whoever_may_open_it
         "template_id": "pricing_desk",
         "template_version": 3,
         "created_by": None,
+        "created_at": "2019-03-01T09:00:00Z",
+        "state": None,
+        "leash_up_to": None,
     }
 
 
@@ -1018,13 +1045,16 @@ def test_an_install_that_does_not_construct_is_an_agent_with_no_lineage_and_no_c
         "template_id": None,
         "template_version": None,
         "created_by": "u_builder",
+        "created_at": None,
+        "state": "enabled",
+        "leash_up_to": None,
     }
     assert spoiled.json()["composition"] == []
     # And every block the install supplies goes with it, rather than half a workspace drawn
     # from a document that would not load.
     assert spoiled.json()["skills"] == []
     assert spoiled.json()["divergent"] == []
-    assert spoiled.json()["connectors"] == {"shown": [], "overflow": 0}
+    assert spoiled.json()["connectors"] == {"shown": [], "overflow": 0, "rows": []}
 
 
 def test_a_tab_view_never_carries_the_capability_its_tab_requires(
@@ -1227,8 +1257,10 @@ def test_a_connector_the_agent_names_reads_as_attached_when_a_tool_of_its_source
     attached = workspace_of(client, "u_elsewhere", "bound_desk").json()["connectors"]
     requested = workspace_of(client, "u_elsewhere", "asking_desk").json()["connectors"]
 
-    assert attached == {"shown": [{"source": SOURCE, "presence": "attached"}], "overflow": 0}
-    assert requested == {"shown": [{"source": SOURCE, "presence": "requested"}], "overflow": 0}
+    one_attached = [{"source": SOURCE, "presence": "attached"}]
+    one_requested = [{"source": SOURCE, "presence": "requested"}]
+    assert attached == {"shown": one_attached, "overflow": 0, "rows": one_attached}
+    assert requested == {"shown": one_requested, "overflow": 0, "rows": one_requested}
 
 
 def test_a_connector_this_caller_could_not_reach_produces_no_row_in_either_state(
@@ -1249,7 +1281,7 @@ def test_a_connector_this_caller_could_not_reach_produces_no_row_in_either_state
     narrower = workspace_of(client, "u_admin", "quote_helper")
 
     assert [one["source"] for one in wide.json()["connectors"]["shown"]] == [SOURCE]
-    assert narrower.json()["connectors"] == {"shown": [], "overflow": 0}
+    assert narrower.json()["connectors"] == {"shown": [], "overflow": 0, "rows": []}
     assert [one["source"] for one in narrower.json()["connectors"]["shown"]] == []
     # The strip and not the whole body, for the reason the skills test gives about the same
     # overlap: the `connectors` path is one row of a composition diff that is answered whole
@@ -1273,6 +1305,7 @@ def test_a_process_with_no_tool_registry_shows_the_connector_strip_a_narrow_read
     assert workspace_of(client, "u_elsewhere", "quote_helper").json()["connectors"] == {
         "shown": [],
         "overflow": 0,
+        "rows": [],
     }
 
 
@@ -1390,13 +1423,26 @@ def test_the_headline_is_this_agents_spend_at_whichever_basis_the_reader_holds(
     wide = workspace_of(client, "u_elsewhere", "quote_helper").json()["headline"]
     narrower = workspace_of(client, "u_admin", "quote_helper").json()["headline"]
 
-    assert wide == {"basis": "everyone", "range": "30d", "spend_minor": 1000, "runs": 2}
-    assert narrower == {"basis": "own", "range": "30d", "spend_minor": 0, "runs": 0}
+    assert wide == {
+        "basis": "everyone",
+        "range": "30d",
+        "spend_minor": 1000,
+        "runs": 2,
+        "recorded": False,
+    }
+    assert narrower == {
+        "basis": "own",
+        "range": "30d",
+        "spend_minor": 0,
+        "runs": 0,
+        "recorded": False,
+    }
     assert set(agent_routes.HeadlineView.model_fields) == {
         "basis",
         "range",
         "spend_minor",
         "runs",
+        "recorded",
     }
 
 
@@ -1425,6 +1471,7 @@ def test_a_cost_outside_the_window_or_without_a_trace_is_absent_from_the_figure(
         "range": "30d",
         "spend_minor": 400,
         "runs": 1,
+        "recorded": False,
     }
 
 
@@ -1443,6 +1490,264 @@ def test_the_divergence_flag_travels_with_the_composition_and_names_the_parts(
 
     assert workspace_of(client, "u_admin", "quote_helper").json()["divergent"] == ["persona"]
     assert workspace_of(client, "u_narrow", "quote_helper").json()["divergent"] == []
+
+
+# ------------------------------------------------------- the header, the figures and the Profile
+
+#: The two tools beside the reading one that change something, bound to the same source.
+DRAFTS = f"{SOURCE}.draft_{ENTITY}"
+SENDS = f"{SOURCE}.send_{ENTITY}"
+READS = f"{SOURCE}.read_{ENTITY}"
+
+
+def tools_acting() -> ToolRegistry:
+    """The reading registry above, with a drafting tool and a sending tool of the same entity.
+
+    Named by the registry's grammar, so a template declaring `invoice.draft` binds the drafting
+    tool through `brain.agents.install.bind_tool` exactly as a finished install binds it.
+    """
+    registry = tools_reading()
+    for verb, effect in (("draft", SideEffect.DRAFT), ("send", SideEffect.SEND)):
+        registry.register(
+            ToolDefinition(
+                name=f"{SOURCE}.{verb}_{ENTITY}",
+                description=f"{verb}s one invoice",
+                entity=ENTITY,
+                required_capability=f"write:{ENTITY}.reference",
+                side_effect=effect,
+                identity_mode=IdentityMode.DELEGATED,
+                source=SOURCE,
+            ),
+            an_invoice,
+        )
+    return registry
+
+
+def an_acting_agent(stored: Stored, agent_id: str = "quote_helper") -> AgentRow:
+    """An agent allowed all three tools up to sending, installed from a template whose leash puts
+    drafting on the assisted rung and reading on the autonomous one, and names nothing else."""
+    row = agent_row(
+        agent_id,
+        allowed_tools=(READS, DRAFTS, SENDS),
+        capabilities=(Capability(value=f"read:{ENTITY}.reference"),),
+    )
+    row.max_side_effect = SideEffect.SEND.value
+    row.created_at = CREATED_AT
+    stored.agents[agent_id] = row
+    instance_row, version_row, _, _ = install_rows(
+        agent_id,
+        authority=ManifestAuthority(
+            allowed_tools=("invoice.draft", "invoice.read", "invoice.send")
+        ),
+        guardrails=ManifestGuardrails(
+            max_side_effect=SideEffect.SEND,
+            leash=(
+                LeashRung(target="invoice.draft", rung=AutonomyTier.ASSISTED),
+                LeashRung(target="invoice.read", rung=AutonomyTier.AUTONOMOUS),
+            ),
+        ),
+    )
+    stored.installs[agent_id] = (instance_row, version_row)
+    return row
+
+
+def test_the_creation_time_reaches_the_audience_and_the_state_and_rung_only_the_settings_read(
+    client: TestClient, stored: Stored
+) -> None:
+    """A member of the audience and a reader of the Settings tab are both told when the agent was
+    created; only the second is told it is disabled and that its actions reach the assisted rung.
+
+    Delete this and a member learns why an agent they used yesterday is not chosen today, or the
+    header an administrator reads has no state and no rung on it."""
+    row = an_acting_agent(stored)
+    row.disabled_at = INSTALLED_AT
+    app_of(client).state.tools = tools_acting()
+
+    member = workspace_of(client, "u_narrow", "quote_helper").json()["agent"]
+    admin = workspace_of(client, "u_admin", "quote_helper").json()["agent"]
+
+    assert member["created_at"] == admin["created_at"] == "2019-03-01T09:00:00Z"
+    assert (member["state"], member["leash_up_to"]) == (None, None)
+    assert (admin["state"], admin["leash_up_to"]) == ("disabled", "assisted")
+
+
+def test_the_profile_is_the_agents_setup_for_a_reader_of_the_settings_tab_and_nobody_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """The tier, the audience level, the ceiling in words with its capability names locked, every
+    tool the ceiling
+    names as the registry describes it, and the leash bound to this process's tools with the
+    sending action on the Shadow default. A member of the audience and a reader holding the tab's
+    capability without the configuration plane are sent no profile at all.
+
+    Delete this and the ceiling and the leash reach everybody the audience covers, or a reader of
+    the agent's configuration is told nothing about how it is supervised."""
+    an_acting_agent(stored)
+    app_of(client).state.tools = tools_acting()
+
+    profile = workspace_of(client, "u_admin", "quote_helper").json()["profile"]
+
+    assert profile["tier"] == DEFAULT_TIER.value
+    assert profile["audience_level"] == "company"
+    assert profile["ceiling"] == {
+        "rows": "Any row the person it works for may see: this agent narrows no rows of its own.",
+        "reads": [],
+        "reads_locked": True,
+        "tools": (f"It may call {DRAFTS}, {READS} and {SENDS}, and no other tool."),
+        "largest_effect": ("At most it sends a message out of the building. It cannot move money."),
+        "max_side_effect": "send",
+    }
+    assert profile["tools"] == [
+        {
+            "name": DRAFTS,
+            "source": SOURCE,
+            "side_effect": "draft",
+            "description": "drafts one invoice",
+            "within_ceiling": True,
+        },
+        {
+            "name": READS,
+            "source": SOURCE,
+            "side_effect": "none",
+            "description": "reads one invoice",
+            "within_ceiling": True,
+        },
+        {
+            "name": SENDS,
+            "source": SOURCE,
+            "side_effect": "send",
+            "description": "sends one invoice",
+            "within_ceiling": True,
+        },
+    ]
+    assert profile["leash"] == [
+        {
+            "target": DRAFTS,
+            "rung": "assisted",
+            "rungs": ["assisted"],
+            "configured": True,
+            "acts": True,
+            "entries": [{"rung": "assisted", "where": None}],
+        },
+        {
+            "target": READS,
+            "rung": "autonomous",
+            "rungs": ["autonomous"],
+            "configured": True,
+            "acts": False,
+            "entries": [{"rung": "autonomous", "where": None}],
+        },
+        {
+            "target": SENDS,
+            "rung": "shadow",
+            "rungs": ["shadow"],
+            "configured": False,
+            "acts": True,
+            "entries": [],
+        },
+    ]
+    assert workspace_of(client, "u_narrow", "quote_helper").json()["profile"] is None
+    assert workspace_of(client, "u_prefix", "quote_helper").json()["profile"] is None
+
+
+def test_the_ceilings_capability_names_reach_a_reader_of_the_vocabulary_whole_and_nobody_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """The same reader of the Settings tab, once holding the Capabilities screen's grant and once
+    not, is told every capability the ceiling derives or a lock, and the rest of the profile does
+    not move.
+
+    Delete this and a capability name, which says what can be granted at all, reaches every reader
+    of an agent's configuration, or never reaches the administrator granted the vocabulary."""
+    an_acting_agent(stored)
+    app_of(client).state.tools = tools_acting()
+
+    locked = workspace_of(client, "u_admin", "quote_helper").json()["profile"]
+    held = GRANTS["u_admin"]
+    GRANTS["u_admin"] = (
+        *held,
+        Grant(capability=Capability(value="read:capability"), scope=Scope.unrestricted()),
+    )
+    try:
+        told = workspace_of(client, "u_admin", "quote_helper").json()["profile"]
+    finally:
+        GRANTS["u_admin"] = held
+
+    assert told["ceiling"]["reads"] == ["Reads invoice.", "Reads the reference field of invoice."]
+    assert told["ceiling"]["reads_locked"] is False
+    assert (locked["ceiling"]["reads"], locked["ceiling"]["reads_locked"]) == ([], True)
+    assert {**told, "ceiling": None} == {**locked, "ceiling": None}
+
+
+def test_an_agent_with_no_install_holds_every_action_it_could_take_on_the_shadow_default(
+    client: TestClient, stored: Stored
+) -> None:
+    """With no install there is no leash entry, so each action is a row on Shadow and the header's
+    rung is Shadow; an agent that only reads has no leash row and no rung.
+
+    Delete this and an agent nobody configured a leash for is shown with no supervision at all,
+    which is the case `MISSING_ENTRY_RUNG` exists for, or a reading agent is given a rung."""
+    row = agent_row("bare_helper", allowed_tools=(READS, DRAFTS, SENDS))
+    row.max_side_effect = SideEffect.SEND.value
+    stored.agents["bare_helper"] = row
+    stored.agents["reading_helper"] = agent_row("reading_helper", allowed_tools=(READS,))
+    app_of(client).state.tools = tools_acting()
+
+    bare = workspace_of(client, "u_admin", "bare_helper").json()
+    reading = workspace_of(client, "u_admin", "reading_helper").json()
+
+    assert bare["agent"]["leash_up_to"] == "shadow"
+    assert [
+        (one["target"], one["rungs"], one["configured"]) for one in bare["profile"]["leash"]
+    ] == [
+        (DRAFTS, ["shadow"], False),
+        (SENDS, ["shadow"], False),
+    ]
+    assert reading["agent"]["leash_up_to"] is None
+    assert reading["profile"]["leash"] == []
+    assert reading["profile"]["ceiling"]["largest_effect"] == (
+        "It may only read. It cannot prepare a draft, change a record, send anything or move money."
+    )
+
+
+def test_the_overflow_list_is_every_row_the_strip_was_cut_from_and_nothing_else(
+    client: TestClient, stored: Stored
+) -> None:
+    """Seven reachable sources give a strip of five, an overflow of two and seven rows whose head
+    is the strip; a declared connector no tool reads is in none of the three, and a reader who
+    reaches no source gets three empty answers.
+
+    Delete this and the page's "N more" opens a list the count was not computed over, or a
+    connector the strip left out for reach turns up in the list beside it."""
+    sources = [f"source_{one}" for one in "abcdefg"]
+    registry = ToolRegistry()
+    for source in sources:
+        registry.register(
+            ToolDefinition(
+                name=f"{source}.read_{ENTITY}",
+                description=f"reads one invoice from {source}",
+                entity=ENTITY,
+                required_capability=f"read:{ENTITY}.reference",
+                side_effect=SideEffect.NONE,
+                identity_mode=IdentityMode.DELEGATED,
+                source=source,
+            ),
+            an_invoice,
+        )
+    stored.agents["quote_helper"] = agent_row(
+        "quote_helper", allowed_tools=tuple(f"{one}.read_{ENTITY}" for one in sources)
+    )
+    instance_row, version_row, _, _ = install_rows("quote_helper", connectors=(*sources, "atlas"))
+    stored.installs["quote_helper"] = (instance_row, version_row)
+    app_of(client).state.tools = registry
+
+    strip = workspace_of(client, "u_elsewhere", "quote_helper").json()["connectors"]
+    narrower = workspace_of(client, "u_admin", "quote_helper").json()["connectors"]
+
+    assert [one["source"] for one in strip["rows"]] == sources
+    assert strip["shown"] == strip["rows"][:5]
+    assert strip["overflow"] == len(strip["rows"]) - len(strip["shown"]) == 2
+    assert narrower == {"shown": [], "overflow": 0, "rows": []}
 
 
 # ------------------------------------------------------------------ the template gallery
