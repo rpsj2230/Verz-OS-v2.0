@@ -17,17 +17,18 @@ screen is given a department console with nothing in it. Refusing them instead w
 the one route whose status says whether somebody administers anything, and the menu would then
 be the least visible way to ask it.
 
-**The company console's menu is not in the answer.** It is the shell's own constant, identical
-for everybody given it, and `brain.ops.console_design` measures it there against SCREEN 1. What
-is here is the department console's menu, because that one is narrowed per reader by
-`brain.console.screens.for_department` and a browser cannot narrow it without a copy of the
-rules.
+**Both menus are in the answer, since 2026-09-17.** The company console's menu was the shell's
+own constant until then; its groups are a field of the screen registry now, so it is declared in
+Python beside the department's and served whole to everybody given that console. See
+`brain.console.department_console.THE_COMPANY_MENU_IS_ONE_MENU`. An entry with no page yet is
+sent with no address, so the browser has nothing to link it to: see
+`A_MODULE_WITH_NO_PAGE_IS_DECLARED_AND_NEVER_A_LINK` in the same module.
 
 **What has never run.** No database is read, so there is nothing here that a stub stands in
 for: the route is exercised through the real application with the token machinery the other
 route tests use.
 
-Task ids: M27.7.29
+Task ids: M27.7.29, M27.10.1
 """
 
 from __future__ import annotations
@@ -37,24 +38,39 @@ from pydantic import BaseModel, ConfigDict
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
-from brain.console.department_console import ConsoleNavigation, Section, console_for
+from brain.console.department_console import ConsoleNavigation, Entry, Section, console_for
+
+
+class PageView(BaseModel):
+    """One address an entry opens, and the words it is listed under beneath the entry."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    label: str
+    to: str
 
 
 class EntryView(BaseModel):
-    """One menu item: the design's label, the registry screen it opens and the console address."""
+    """One module of a menu: its code, the design's label, where it opens and its pages.
+
+    `to` is null exactly when `pages` is empty, which is a module with no page yet: the shell draws
+    it as not available and links it to nothing.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     key: str
     label: str
-    to: str
+    to: str | None
+    pages: list[PageView]
 
 
 class SectionView(BaseModel):
-    """One heading of the department console's menu and its items, in the design's order."""
+    """One group of a menu, by the registry's name and the design's heading, and its entries."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    group: str
     heading: str
     entries: list[EntryView]
 
@@ -62,10 +78,10 @@ class SectionView(BaseModel):
 class NavigationView(BaseModel):
     """Which console this reader is given, the departments it is bounded to, and its menu.
 
-    `console` is `company` or `department`. `sections` is empty for the company console, whose
-    menu the shell holds. `departments` is read off the reader's own grants. No field counts
-    anything, which is `brain.console.department_console.ConsoleNavigation`'s shape carried to
-    the wire.
+    `console` is `company` or `department`. `sections` is the company's whole menu for the company
+    console and the department's menu narrowed to this reader otherwise. `departments` is read off
+    the reader's own grants. No field counts anything, which is
+    `brain.console.department_console.ConsoleNavigation`'s shape carried to the wire.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -75,11 +91,22 @@ class NavigationView(BaseModel):
     sections: list[SectionView]
 
 
+def entry_view(entry: Entry) -> EntryView:
+    """One entry, copied field by field."""
+    return EntryView(
+        key=entry.key,
+        label=entry.label,
+        to=entry.to,
+        pages=[PageView(label=one.label, to=one.to) for one in entry.pages],
+    )
+
+
 def section_view(section: Section) -> SectionView:
     """One section, copied field by field."""
     return SectionView(
+        group=section.group.value,
         heading=section.heading,
-        entries=[EntryView(key=one.key, label=one.label, to=one.to) for one in section.entries],
+        entries=[entry_view(one) for one in section.entries],
     )
 
 

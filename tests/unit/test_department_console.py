@@ -59,13 +59,18 @@ from brain.audit.ledger import AuditAction, AuditChain
 from brain.audit.view import AuditView
 from brain.console.connector_trust import trust_rows
 from brain.console.department_console import (
+    COMPANY_NAVIGATION,
     DEPARTMENT_NAVIGATION,
     ConsoleKind,
     ConsoleNavigation,
     Entry,
+    Page,
+    Section,
     console_for,
+    department_section,
     departments_held,
     held_across_the_install,
+    offered_sections,
 )
 from brain.console.govern import people
 from brain.console.govern_estate import learning_review, library_rows, spans_departments
@@ -73,7 +78,7 @@ from brain.console.operate import unattended_running
 from brain.console.questions_view import questions_for_reader
 from brain.console.reach_view import TierThreeRouting
 from brain.console.reads import Plane, permitted, plane_capability
-from brain.console.screens import SCREENS, Group, for_department, screen
+from brain.console.screens import SCREENS, Group, MenuGroup, for_department, screen
 from brain.console.usage_screen import usage_for_reader
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import PrincipalKind
@@ -138,7 +143,10 @@ def holding(*capabilities: str, scope: Scope, planes: Scope | None = None) -> En
 
 
 def entry_keys(navigation: ConsoleNavigation) -> list[str]:
-    return [one.key for section in navigation.sections for one in section.entries]
+    """The registry screens a menu's entries open, in menu order."""
+    return [
+        key for section in navigation.sections for one in section.entries for key in one.screens
+    ]
 
 
 # ----------------------------------------------------------------------------- who is given it
@@ -154,11 +162,23 @@ def test_a_reader_holding_every_screen_in_one_department_is_given_that_departmen
 
     assert decided.kind is ConsoleKind.DEPARTMENT
     assert decided.departments == (MAINTENANCE,)
-    assert [one.heading for one in decided.sections] == ["Operate", "Govern", "Report"]
+    assert [one.heading for one in decided.sections] == [
+        "Home",
+        "People and access",
+        "Agents and AI",
+        "Knowledge and data",
+        "Operations",
+        "Governance",
+        "Reports",
+    ]
     assert [[one.label for one in section.entries] for section in decided.sections] == [
-        ["Department", "Live runs", "Connectors"],
-        ["People and grants", "Agents and leashes", "Knowledge", "Skills", "Learning", "Audit"],
-        ["Gaps", "Usage"],
+        ["Department"],
+        ["People"],
+        ["Agents", "Skills and tools"],
+        ["Connectors", "Knowledge", "Learning and memory"],
+        ["Runs and queue"],
+        ["Audit log"],
+        ["Usage and cost", "Questions and gaps"],
     ]
 
 
@@ -185,8 +205,9 @@ def test_a_reader_holding_one_screen_across_the_install_is_given_the_company_con
         grants=(*scoped.grants, Grant(capability=Capability(value="read:release"), scope=WHOLE)),
     )
 
-    assert console_for(plus_one, NOW) == ConsoleNavigation(kind=ConsoleKind.COMPANY)
-    assert console_for(every_screen(WHOLE), NOW) == ConsoleNavigation(kind=ConsoleKind.COMPANY)
+    company = ConsoleNavigation(kind=ConsoleKind.COMPANY, sections=COMPANY_NAVIGATION)
+    assert console_for(plus_one, NOW) == company
+    assert console_for(every_screen(WHOLE), NOW) == company
     assert console_for(twice, NOW).kind is ConsoleKind.DEPARTMENT
 
 
@@ -253,7 +274,7 @@ def test_a_section_with_nothing_offered_in_it_is_dropped_rather_than_shown_empty
     screens there they may not open, the count of hidden things written as a word."""
     decided = console_for(holding("read:usage", scope=IN_MAINTENANCE), NOW)
 
-    assert [one.heading for one in decided.sections] == ["Report"]
+    assert [one.heading for one in decided.sections] == ["Reports"]
     assert entry_keys(decided) == ["usage"]
 
 
@@ -305,8 +326,17 @@ def test_no_screen_whose_subject_is_the_installation_is_offered_to_a_department(
     declared = {one.key for section in DEPARTMENT_NAVIGATION for one in section.entries}
     assert not declared & install
 
+    this_install = Entry(
+        key="I7",
+        label="This install",
+        pages=(Page("This install", "/install"),),
+        screens=("install",),
+    )
     with pytest.raises(ValueError, match="subject is the installation"):
-        Entry(label="This install", key="install", to="/install")
+        department_section(MenuGroup.PLATFORM, this_install)
+    with pytest.raises(ValueError, match="files under Platform"):
+        department_section(MenuGroup.OPERATIONS, this_install)
+    assert all(one.group is not MenuGroup.PLATFORM for one in DEPARTMENT_NAVIGATION)
 
     reader = every_screen(IN_MAINTENANCE)
     assert not {one.key for one in for_department(reader, NOW)} & install
@@ -322,9 +352,56 @@ def test_every_entry_opens_an_address_the_console_routes() -> None:
     table = (REPO / "console" / "src" / "App.tsx").read_text(encoding="utf-8")
     routed = set(re.findall(r'path:\s*"([^"]*)"', table))
 
-    for section in DEPARTMENT_NAVIGATION:
+    for section in (*DEPARTMENT_NAVIGATION, *COMPANY_NAVIGATION):
         for entry in section.entries:
-            assert entry.to.lstrip("/") in routed, entry.to
+            for page in entry.pages:
+                assert page.to.lstrip("/") in routed or page.to == "/", page.to
+
+
+def test_a_department_reader_is_never_offered_platform_whatever_they_hold() -> None:
+    """A reader holding every screen in one department, the Install screens included, is given no
+    Platform section, and an entry kept for one of its two screens is dropped. The company console
+    is the sibling, offered Platform whole.
+
+    Delete this and a department's menu can grow a Platform section with the company's unchanged."""
+    decided = console_for(every_screen(IN_MAINTENANCE), NOW)
+
+    assert decided.kind is ConsoleKind.DEPARTMENT
+    assert MenuGroup.PLATFORM not in [one.group for one in decided.sections]
+    assert MenuGroup.PLATFORM in [one.group for one in COMPANY_NAVIGATION]
+
+    two = Entry(
+        key="D3",
+        label="Learning and memory",
+        pages=(Page("Learning", "/learning"),),
+        screens=("learning", "memory"),
+    )
+    declared = (Section(group=MenuGroup.KNOWLEDGE, entries=(two,)),)
+    assert offered_sections([screen("learning")], declared) == ()
+    assert offered_sections([screen("learning"), screen("memory")], declared) == declared
+
+
+def test_the_company_menu_is_every_module_once_and_every_page_the_console_routes() -> None:
+    """Forty modules, each registry screen in exactly one, every address without a parameter opened
+    by one entry or by the reader's own work, and a module with no page carrying no address.
+
+    Delete this and a page can drop out of the menu, a screen can be filed twice, or an unbuilt
+    module can be sent an address that lands on the not-found page."""
+    entries = [one for section in COMPANY_NAVIGATION for one in section.entries]
+    assert len(entries) == len({one.key for one in entries}) == 40
+    filed = [key for one in entries for key in one.screens]
+    assert sorted(filed) == sorted(one.key for one in SCREENS)
+
+    table = (REPO / "console" / "src" / "App.tsx").read_text(encoding="utf-8")
+    routed = {"/" + one for one in re.findall(r"path:" + chr(92) + 's*"([a-z_-]+)"', table)}
+    own_work = {"/ask", "/me", "/approvals", "/records"}
+    opened = [page.to for one in entries for page in one.pages]
+    assert len(opened) == len(set(opened))
+    assert set(opened) | own_work == (routed - {"/department"}) | {"/"}
+
+    unbuilt = [one.key for one in entries if not one.pages]
+    assert unbuilt == ["B6", "C4", "C5", "E1", "F1", "F5", "I1", "I4"]
+    assert all(one.to is None for one in entries if not one.pages)
 
 
 # --------------------------------------------------------------------------- over the wire
@@ -391,23 +468,17 @@ def test_the_route_answers_each_reader_the_console_their_grants_give_them(
     assert body["console"] == "department"
     assert body["departments"] == [MAINTENANCE]
     served = [one["key"] for section in body["sections"] for one in section["entries"]]
-    assert served == [
-        "overview",
-        "runs",
-        "connectors",
-        "people",
-        "agents",
-        "library",
-        "skills",
-        "learning",
-        "audit",
-        "questions",
-        "usage",
-    ]
+    assert served == ["A1", "B1", "C1", "C3", "D1", "D2", "D3", "F2", "G1", "H1", "H2"]
+    assert "platform" not in [one["group"] for one in body["sections"]]
     for word in ("install", "updates", "recovery", "limits", "connections", "storage", "features"):
         assert f'"/{word}"' not in narrow.text
 
-    assert wide.json() == {"console": "company", "departments": [], "sections": []}
+    company = wide.json()
+    assert company["console"] == "company"
+    assert company["departments"] == []
+    assert [one["group"] for one in company["sections"]] == [one.value for one in MenuGroup]
+    stop = [e for s in company["sections"] for e in s["entries"] if e["key"] == "F5"]
+    assert stop == [{"key": "F5", "label": "Stop", "to": None, "pages": []}]
     assert none.status_code == 200
     assert none.json() == {"console": "department", "departments": [], "sections": []}
 
@@ -646,7 +717,9 @@ THE_SAME_FOR_EVERY_DEPARTMENT: frozenset[str] = frozenset()
 def test_every_screen_the_department_console_offers_has_a_way_to_open_it_here() -> None:
     """Read off the declaration, so an entry added to the department's menu is a screen this file
     has to open. Delete this and the proof below covers the screens somebody remembered."""
-    assert set(OPENERS) == {one.key for section in DEPARTMENT_NAVIGATION for one in section.entries}
+    assert set(OPENERS) == {
+        key for section in DEPARTMENT_NAVIGATION for one in section.entries for key in one.screens
+    }
 
 
 @pytest.mark.parametrize("key", sorted(OPENERS))
