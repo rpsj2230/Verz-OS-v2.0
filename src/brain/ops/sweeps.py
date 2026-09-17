@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 from brain.core.envelope import TOOL_NAME_PATTERN
@@ -356,22 +357,18 @@ def sweep_traceability() -> None:
         findings.append(
             f"{tid} claimed in {src} but no test names it and there is no test_{Path(src).stem}.py"
         )
+    # And the record the status page actually counts. A `Closes:` trailer is how a leaf goes
+    # green on the tracker, so a leaf closed with no test naming it is a green nobody can
+    # check. This was a printed note while it had a 38-leaf backlog; the backlog is worked
+    # down to zero, so it is a gate from 2026-09-21 (M0.5.8) and cannot grow back.
+    findings.extend(
+        f"{tid} is closed by a commit but no test names it; add the id to the Task ids: line "
+        "of the test that proves it, or Reopens: it"
+        for tid in _commit_claims_without_tests()
+    )
     if findings:
         raise SweepFailure(findings)
-    print(f"ok: {len(claimed)} task id(s) claimed, all traceable")
-
-    # And the other direction, which this sweep did not ask about at all.
-    #
-    # A source docstring is one way to claim a task. The other, and the one the status page
-    # actually counts, is a `Closes:` line in a commit. This sweep only ever read the first,
-    # so a leaf closed by a commit with no test anywhere passed silently - and 38 of them
-    # had, which is why the count is printed rather than left implied.
-    #
-    # Reported, not raised, and that is a judgement rather than a dodge. Raising would fail
-    # CI today on a backlog that predates the check, and a gate that goes red on arrival is
-    # a gate somebody switches off. Printed on every run, it cannot be forgotten, and it
-    # goes to zero by being worked down rather than by being ignored.
-    print(f"note: {_commit_claims_without_tests()} leaf/leaves closed by commit have no test")
+    print(f"ok: {len(claimed)} task id(s) claimed, all traceable, every closed leaf has a test")
 
     # And the third direction, which neither of the two above asks about.
     #
@@ -588,11 +585,21 @@ def _source_claims_never_closed_by_a_commit() -> int:
     return len((claimed & leaves) - closed)
 
 
-def _commit_claims_without_tests() -> int:
-    """How many leaves a commit has closed that no test names.
+def untested_closures(closed: set[str], leaves: set[str], named: set[str]) -> tuple[str, ...]:
+    """The leaves a commit closed that no test names, in id order.
 
-    Zero when git or the WBS is unavailable, because this is an advisory line on a sweep
-    that must not fail for want of a repository.
+    Counted against the WBS leaves because a closed group id is `_claims_that_name_no_leaf`'s
+    finding, not this one's, and reporting it twice sends two people to fix one typo.
+    """
+    return tuple(sorted((closed & leaves) - named))
+
+
+def _commit_claims_without_tests() -> tuple[str, ...]:
+    """The leaves a commit has closed that no test names, read from git and the test suite.
+
+    Empty when git or the WBS is unavailable. That is a gap in the gate on a checkout with no
+    history, accepted because CI and the pre-push hook both run with full history (ci.yml sets
+    `fetch-depth: 0` for exactly this) and a laptop tarball failing on it would be noise.
     """
     try:
         from brain.status import closed_task_ids, load_wbs
@@ -605,8 +612,8 @@ def _commit_claims_without_tests() -> int:
         for path in _test_sources():
             named.update(TASK_ID_RE.findall(path.read_text(encoding="utf-8")))
     except Exception:
-        return 0
-    return len((closed & leaves) - named)
+        return ()
+    return untested_closures(closed, leaves, named)
 
 
 #: Licences this project may depend on. Permissive only, plus MPL-2.0, which is file-level
@@ -797,17 +804,49 @@ def installed_licences() -> dict[str, str]:
         name = meta["Name"]
         if not name:
             continue
-        declared = (meta.get("License-Expression") or "").strip()
-        if not declared:
-            plain = (meta.get("License") or "").strip()
-            declared = plain if plain in ALLOWED_LICENCES else ""
-        if not declared:
-            for classifier in meta.get_all("Classifier") or []:
-                if classifier in _CLASSIFIER_TO_SPDX:
-                    declared = _CLASSIFIER_TO_SPDX[classifier]
-                    break
-        found[name] = declared
+        found[name] = declared_licence(
+            meta.get("License-Expression"), meta.get("License"), meta.get_all("Classifier") or ()
+        )
     return found
+
+
+#: Why a copyleft classifier is a refusal rather than an absence of metadata.
+A_COPYLEFT_CLASSIFIER_IS_A_DECLARATION_NOT_A_SILENCE = (
+    "A distribution whose only licence metadata is a classifier such as 'GNU General Public "
+    "License v2 or later (GPLv2+)' has said what it is under. Reading that as 'publishes no "
+    "licence metadata' turned a GPL dependency into a note, so the one case the allowlist exists "
+    "to refuse passed it. igraph, which splink declares, is that shape in the free-text field: "
+    "'GNU General Public License (GPL)' and no classifier. So a classifier or free-text licence "
+    "naming the GPL family that the table does not map is carried out as the declaration, and "
+    "licence_is_allowed refuses it because it is not an identifier on the list."
+)
+
+#: The words that mark a classifier as naming the GPL family, which includes the LGPL and AGPL.
+_COPYLEFT_CLASSIFIER_RE = re.compile(r"General Public License|GPL")
+
+
+def declared_licence(expression: str | None, plain: str | None, classifiers: Iterable[str]) -> str:
+    """The licence one distribution declares, from the three places metadata can say it.
+
+    Shared by the installed environment and `brain.ops.dependency_policy`, which reads the same
+    three fields from the package index for a lock nothing has installed, so both answer alike.
+    Empty means the distribution declared nothing this can read. See
+    `A_COPYLEFT_CLASSIFIER_IS_A_DECLARATION_NOT_A_SILENCE` for the one case that is not empty.
+    """
+    declared = (expression or "").strip()
+    if declared:
+        return declared
+    stated = (plain or "").strip()
+    if stated in ALLOWED_LICENCES:
+        return stated
+    named = tuple(classifiers)
+    for classifier in named:
+        if classifier in _CLASSIFIER_TO_SPDX:
+            return _CLASSIFIER_TO_SPDX[classifier]
+    for words in (*(one for one in named if one.startswith("License ::")), stated):
+        if _COPYLEFT_CLASSIFIER_RE.search(words):
+            return words
+    return ""
 
 
 def licence_findings(licences: dict[str, str]) -> tuple[tuple[str, ...], tuple[str, ...]]:

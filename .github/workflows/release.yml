@@ -46,6 +46,8 @@ jobs:
       # no `id-token` either. See the promote step for why the signature is already made.
       contents: read
       packages: write
+      # To read whether this commit's Deploy run passed the staging checks. Read, never write.
+      actions: read
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
     outputs:
@@ -59,6 +61,30 @@ jobs:
           # about the history in front of it. The archive job needs the whole of it and says
           # why there.
           fetch-depth: 1
+
+      - name: This commit passed the permission canaries and the RLS sweep on staging
+        # M38.5.1. A release tag is the promotion, so it is refused for a commit whose Deploy run
+        # did not pass `staging_checks`, which reads the verdict the server's post-deploy checks
+        # recorded for that commit. Asked of the Actions record rather than of the site, because
+        # the site answers for whatever it serves now and a release may tag an older commit.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKS_JOB: Staging permission canaries and RLS sweep
+        run: |
+          commit=$(git rev-parse HEAD)
+          runs=$(gh api "repos/${{ github.repository }}/actions/workflows/deploy.yml/runs?head_sha=$commit&per_page=20" \
+                   --jq '.workflow_runs[].id')
+          for run in $runs; do
+            passed=$(gh api "repos/${{ github.repository }}/actions/runs/$run/jobs" \
+                       --jq ".jobs[] | select(.name == \"$CHECKS_JOB\" and .conclusion == \"success\") | .id")
+            if [ -n "$passed" ]; then
+              echo "Deploy run $run passed the staging checks for $commit"
+              exit 0
+            fi
+          done
+          echo "::error::no Deploy run for $commit passed '$CHECKS_JOB'."
+          echo "::error::A commit the staging canaries and row-level security sweep did not pass is not released."
+          exit 1
 
       - uses: astral-sh/setup-uv@v5
         with:

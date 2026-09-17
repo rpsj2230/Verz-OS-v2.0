@@ -355,7 +355,17 @@ def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     if not args:
         print("usage: python -m brain.ops.conventions <commit-message-file>", file=sys.stderr)
+        print("       python -m brain.ops.conventions --branch <name>", file=sys.stderr)
         return 2
+
+    # The branch rule had a test and no caller until 2026-09-17, so a track branch named
+    # anything at all opened a pull request. CI's `branch_name` job is that caller.
+    if args[0] == "--branch":
+        branch_refusal = check_branch_name(args[1] if len(args) > 1 else "")
+        if branch_refusal is not None:
+            print(f"refused: {branch_refusal}", file=sys.stderr)
+            return 1
+        return 0
 
     message = Path(args[0]).read_text(encoding="utf-8")
     refusal = check_commit_message(message)
