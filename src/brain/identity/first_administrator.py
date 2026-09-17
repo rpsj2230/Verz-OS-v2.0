@@ -38,6 +38,18 @@ capabilities up to configuration and never `read:console.content`, and the audit
 governing the system. A screen at the content plane, Learning and Memory today, is what a
 person or an agent was told, so it is not opened.
 
+**Two pages are read outside the screen registry, and until 2026-09-17 nobody could open
+either.** Routing asks for `read:routing_matrix` and Classification for
+`read:field_classification`, each on its own route rather than through
+`brain.console.reads.permitted`, so the line above, drawn from `brain.console.screens`, never
+reached them, and both refused the first administrator on every install. They are in `OVERSIGHT`
+now, and a test holds them to the two routes' own constants. **Neither is a data read, so
+`AN_ADMINISTRATOR_GOVERNS_THE_SYSTEM_AND_READS_NO_DATA` stays true.** The matrix says which
+providers are tried in what order and a classification says which columns are confidential and
+what it takes to see one; both route modules argue that each is a statement about how the system
+is set up, and neither answers a row of anybody's data. See
+`TWO_PAGES_OUTSIDE_THE_REGISTRY_READ_HOW_THE_SYSTEM_IS_SET_UP`.
+
 **One `approve:` capability is granted, `approve:grant`, and `approve:action` is not.** Letting a
 reach into the system is how an install gets its second person: the People screen's grant write,
 the Access review and elevation are all behind it, so a first administrator without it is an
@@ -176,6 +188,16 @@ AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA: Final = (
     "scope over the data."
 )
 
+#: Why two reads that no console screen registers are held all the same, and why they are not data.
+TWO_PAGES_OUTSIDE_THE_REGISTRY_READ_HOW_THE_SYSTEM_IS_SET_UP: Final = (
+    "Routing and Classification are console pages whose routes ask for their own read rather than "
+    "going through the screen registry, so a line drawn from the registry left both out and they "
+    "refused the only administrator an install had. Both are configuration: the routing matrix is "
+    "which providers are tried in what order, and a classification is which columns are "
+    "confidential and what it takes to see each one. Neither answers a row of the company's data, "
+    "so holding them reads how the system is set up and nothing inside it."
+)
+
 #: Why the first administrator holds the authority to grant, and not to approve an act.
 THE_FIRST_ADMINISTRATOR_LETS_THE_SECOND_PERSON_IN: Final = (
     "approve:grant is the People screen's grant write, the Access review and elevation. Without "
@@ -269,12 +291,15 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:webhook_subscriber",
 )
 
-#: What a first administrator reads of how the system is run, granted over everything. Three
+#: What a first administrator reads of how the system is run, granted over everything. Four
 #: parts: every console screen's own read at the existence and configuration planes, the two plane
-#: capabilities up to configuration, and the audit kinds not withheld in `AUDIT_KINDS_WITHHELD`.
-#: Written out rather than derived, because this package must not import the console, and held
-#: equal to `brain.console.screens` and `brain.audit.view` by a test. See
-#: `AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA`.
+#: capabilities up to configuration, the audit kinds not withheld in `AUDIT_KINDS_WITHHELD`, and
+#: the reads of the Routing and Classification pages, which no screen registers. Written out rather
+#: than derived, because this package must not import the console or the routes, and held equal to
+#: `brain.console.screens`, `brain.audit.view`, `brain.routing_routes.MATRIX_READ` and
+#: `brain.classification_routes.CLASSIFICATION_READ` by a test. See
+#: `AN_ADMINISTRATOR_READS_HOW_THE_SYSTEM_IS_RUN_AND_NO_DATA` and
+#: `TWO_PAGES_OUTSIDE_THE_REGISTRY_READ_HOW_THE_SYSTEM_IS_SET_UP`.
 OVERSIGHT: Final[tuple[str, ...]] = (
     "read:agent",
     "read:artifact",
@@ -304,6 +329,7 @@ OVERSIGHT: Final[tuple[str, ...]] = (
     "read:document",
     "read:evaluation",
     "read:export",
+    "read:field_classification",
     "read:grant",
     "read:incident",
     "read:knowledge_coverage",
@@ -315,6 +341,7 @@ OVERSIGHT: Final[tuple[str, ...]] = (
     "read:release",
     "read:retention_policy",
     "read:role",
+    "read:routing_matrix",
     "read:run",
     "read:scope",
     "read:session",

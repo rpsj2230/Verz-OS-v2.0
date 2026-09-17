@@ -218,9 +218,11 @@ everything, written by first run and recorded in the ledger. They come in three 
   the Access review, and authorising a break-glass session. Without it nobody on a fresh install
   could grant anybody anything from the console.
 - **Reading how the system is run**: every console screen's own read at the existence and
-  configuration planes, the two plane capabilities themselves, and the audit entries about
-  governing the system. That says a thing is there and how it is set up, and never what is inside
-  it.
+  configuration planes, the two plane capabilities themselves, the audit entries about
+  governing the system, and the reads of the Routing and Classification pages. That says a thing
+  is there and how it is set up, and never what is inside it: the routing matrix is which model
+  providers are tried in what order, and a classification is which columns are confidential and
+  what it takes to see one, not any row of your data.
 
 <!-- checked: what the first administrator is granted at appointment -->
 | Capability | Granted for |
@@ -280,6 +282,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:document` | reading how the system is run |
 | `read:evaluation` | reading how the system is run |
 | `read:export` | reading how the system is run |
+| `read:field_classification` | reading how the system is run |
 | `read:grant` | reading how the system is run |
 | `read:incident` | reading how the system is run |
 | `read:knowledge_coverage` | reading how the system is run |
@@ -291,6 +294,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `read:release` | reading how the system is run |
 | `read:retention_policy` | reading how the system is run |
 | `read:role` | reading how the system is run |
+| `read:routing_matrix` | reading how the system is run |
 | `read:run` | reading how the system is run |
 | `read:scope` | reading how the system is run |
 | `read:session` | reading how the system is run |

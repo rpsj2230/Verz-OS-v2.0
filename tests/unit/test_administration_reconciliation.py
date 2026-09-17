@@ -17,6 +17,7 @@ import pytest
 
 from brain.audit.ledger import SUBJECT_KINDS
 from brain.audit.view import AUDIT_NOUN, CAPABILITY_BY_KIND
+from brain.classification_routes import CLASSIFICATION_READ
 from brain.console.reads import CONSOLE_CAPABILITY_PREFIX, Plane, permitted, plane_capability
 from brain.console.screens import SCREENS, Screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
@@ -36,11 +37,20 @@ from brain.identity.first_administrator import (
     OVERSIGHT,
     SIGN_IN_AUTHORITY,
 )
+from brain.routing_routes import MATRIX_READ
 
 #: Far from any wall clock, for the reason `tests/unit/test_scope_and_capability.py` gives.
 NOW = datetime(2999, 1, 1, tzinfo=UTC)
 
 FINANCE = Scope.department("finance")
+
+#: The reads of the two console pages no screen registers, taken from the routes that ask for them.
+PAGE_READS = (CLASSIFICATION_READ.value, MATRIX_READ.value)
+
+#: What an appointment granted before those two reads were added on 2026-09-17.
+APPOINTED_BEFORE_THE_PAGE_READS = tuple(
+    one for one in GRANTED_AT_APPOINTMENT if one not in PAGE_READS
+)
 
 
 def reach(*capabilities: str, scope: Scope | None = None, principal: str = "u_first") -> Any:
@@ -80,12 +90,16 @@ def test_every_administrative_screen_opens_for_a_fresh_first_administrator() -> 
     assert not refused & opened
 
 
-def test_oversight_is_every_screen_read_below_content_both_planes_and_the_decided_audit_kinds() -> (
+def test_oversight_is_screen_reads_below_content_both_planes_the_audit_kinds_and_two_pages() -> (
     None
 ):
     """`OVERSIGHT` is written out because the identity package must not import the console, so
-    this is what keeps it the console's line. Delete this and a screen added next week is one no
-    first administrator can open, or a content screen's capability can be added by hand."""
+    this is what keeps it the console's line. The fourth part is the reads of the Routing and
+    Classification pages, taken from their routes and held to be outside the registry, because a
+    line drawn from the registry alone is how both refused every first administrator until
+    2026-09-17. Delete this and a screen added next week is one no first administrator can open,
+    a content screen's capability can be added by hand, or either page read can be dropped
+    again."""
     screen_reads = {
         one.read.requires.value
         for one in SCREENS
@@ -95,10 +109,56 @@ def test_oversight_is_every_screen_read_below_content_both_planes_and_the_decide
     kinds = {
         CAPABILITY_BY_KIND[one].value for one in SUBJECT_KINDS if one not in AUDIT_KINDS_WITHHELD
     }
+    pages = set(PAGE_READS)
 
-    assert set(OVERSIGHT) == screen_reads | planes | kinds
+    assert not pages & {one.read.requires.value for one in SCREENS}
+    assert set(OVERSIGHT) == screen_reads | planes | kinds | pages
     assert len(set(OVERSIGHT)) == len(OVERSIGHT)
     assert f"read:{AUDIT_NOUN}" in OVERSIGHT
+
+
+def test_a_fresh_first_administrator_is_answered_the_routing_matrix_and_a_classification() -> None:
+    """See `TWO_PAGES_OUTSIDE_THE_REGISTRY_READ_HOW_THE_SYSTEM_IS_SET_UP`. Both routes, served by
+    the real application to a reach built from exactly what an appointment writes, answer 200; the
+    same reach less the two page reads, which is every administrator appointed before 2026-09-17,
+    is refused in the one sentence, which is the defect as it was measured on origin/main. Delete
+    this and the two pages can go back to refusing the only administrator an install has, with the
+    registry's own test still green because neither page is in the registry."""
+    from fastapi.testclient import TestClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+
+    from brain.api import API_PREFIX
+    from brain.app import Settings, create_app
+    from brain.core.errors import Absent
+    from brain.knowledge.columns import PRICE_LIST
+    from tests.unit.test_routing_routes import StubSession
+    from tests.unit.test_webhook_routes import headers, wiring
+
+    def grants(capabilities: tuple[str, ...]) -> tuple[Grant, ...]:
+        return tuple(
+            Grant(capability=Capability(value=one), scope=Scope.unrestricted())
+            for one in capabilities
+        )
+
+    app = create_app(Settings(env="development"))
+    paths = (f"{API_PREFIX}/routing/rungs", f"{API_PREFIX}/classifications/{PRICE_LIST.entity}")
+    with TestClient(app, raise_server_exceptions=False) as client:
+        app.state.gate = wiring(
+            {
+                "u_admin": grants(GRANTED_AT_APPOINTMENT),
+                "u_wide": grants(APPOINTED_BEFORE_THE_PAGE_READS),
+            }
+        )
+        app.state.db_sessions = async_sessionmaker(class_=StubSession)
+        app.state.console_reads = None
+        fresh = [client.get(path, headers=headers("u_admin")) for path in paths]
+        before = [client.get(path, headers=headers("u_wide")) for path in paths]
+
+    assert [one.status_code for one in fresh] == [200, 200]
+    assert "items" in fresh[0].json()
+    assert fresh[1].json()["entity"] == PRICE_LIST.entity
+    assert [one.status_code for one in before] == [404, 404]
+    assert {one.json()["message"] for one in before} == {Absent.public_message}
 
 
 def test_every_audit_kind_is_decided_and_the_ones_naming_business_records_are_withheld() -> None:
@@ -227,6 +287,34 @@ def test_nobody_but_a_live_administrator_over_everything_is_granted_anything(
     assert to_grant(("admin:session",), reach=held, live=live, ever_granted=(), now=NOW) == ()
 
 
+def test_an_administrator_appointed_before_the_page_reads_gets_both_and_not_a_retired_one() -> None:
+    """The release that added the Routing and Classification reads, as the decision sees it. An
+    administrator holding everything an earlier appointment wrote, all of it recorded as granted by
+    first run, is granted exactly the two page reads; one who was since granted and then had the
+    matrix read retired is granted the classification read only. Delete this and the two reads can
+    fall out of what a start grants an existing install, which leaves both pages refusing its
+    administrator until somebody appoints a new one, or a retired page read comes back."""
+    before = reach(*APPOINTED_BEFORE_THE_PAGE_READS)
+
+    arrived = to_grant(
+        GRANTED_AT_APPOINTMENT,
+        reach=before,
+        live=True,
+        ever_granted=APPOINTED_BEFORE_THE_PAGE_READS,
+        now=NOW,
+    )
+    after_retirement = to_grant(
+        GRANTED_AT_APPOINTMENT,
+        reach=before,
+        live=True,
+        ever_granted={*APPOINTED_BEFORE_THE_PAGE_READS, MATRIX_READ.value},
+        now=NOW,
+    )
+
+    assert arrived == ("read:field_classification", "read:routing_matrix")
+    assert after_retirement == ("read:field_classification",)
+
+
 # ========================================================================== the database
 FIRST = "u_first"
 LATER = "read:a_capability_added_later"
@@ -311,6 +399,87 @@ def test_a_capability_retired_from_the_first_administrator_stays_retired_after_a
 
     assert done == ()
     assert live == [(0,)]
+
+
+def test_a_start_grants_an_earlier_administrator_the_page_reads_and_a_retired_one_stays_retired(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The release that added the Routing and Classification reads, end to end. An administrator
+    appointed while `OVERSIGHT` lacked them is reconciled by a start calling exactly as the lifespan
+    calls, with no list of its own, and is granted both over everything by first run under that
+    start's trace. The matrix read is then retired, and the next start grants nothing and leaves it
+    retired, with the classification read still live. Delete this and the default a start
+    reconciles against can stop carrying the page reads, which only this test exercises, or a
+    retired page read can be written back at every restart."""
+    from brain.identity import first_administrator
+    from brain.session import make_session_factory
+    from tests.fixtures.scratch_postgres import run, sql
+    from tests.unit.test_automation_owner_store import app_engine
+    from tests.unit.test_first_administrator import appoint, audited
+
+    def start(url: str, trace: str) -> tuple[Reconciled, ...]:
+        async def go() -> tuple[Reconciled, ...]:
+            engine = app_engine(url)
+            try:
+                return await reconcile_first_administrators(
+                    make_session_factory(engine), now=NOW, trace_id=trace
+                )
+            finally:
+                await engine.dispose()
+
+        return run(go)
+
+    def live(url: str, capability: str) -> list[tuple[Any, ...]]:
+        return sql(
+            url,
+            "SELECT scope, granted_by FROM gate.capability_grant"
+            " WHERE principal_id = %s AND capability = %s AND deleted_at IS NULL",
+            FIRST,
+            capability,
+        )
+
+    earlier = tuple(one for one in OVERSIGHT if one not in PAGE_READS)
+    with audited("brain_fa_page_reads") as url:
+        with monkeypatch.context() as appointed_earlier:
+            appointed_earlier.setattr(first_administrator, "OVERSIGHT", earlier)
+            assert appoint(url) == "appointed"
+        held_before = [live(url, one) for one in PAGE_READS]
+        first = start(url, "startup.reconcile.pages")
+        granted = {one: live(url, one) for one in PAGE_READS}
+        entries = sql(
+            url,
+            "SELECT details ->> 'capability', actor_id, trace_id FROM obs.audit_entry"
+            " WHERE action = 'grant' AND trace_id = 'startup.reconcile.pages'"
+            " ORDER BY details ->> 'capability'",
+        )
+        sql(
+            url,
+            "UPDATE gate.capability_grant SET deleted_at = now()"
+            " WHERE principal_id = %s AND capability = %s",
+            FIRST,
+            MATRIX_READ.value,
+        )
+        second = start(url, "startup.reconcile.after_retirement")
+        retired = live(url, MATRIX_READ.value)
+        kept = live(url, CLASSIFICATION_READ.value)
+
+    assert held_before == [[], []]
+    assert first == (
+        Reconciled(
+            principal_id=FIRST, granted=("read:field_classification", "read:routing_matrix")
+        ),
+    )
+    for rows in granted.values():
+        [(scope, granted_by)] = rows
+        assert Scope.model_validate(scope).is_unrestricted()
+        assert granted_by == GRANTED_BY
+    assert entries == [
+        ("read:field_classification", GRANTED_BY, "startup.reconcile.pages"),
+        ("read:routing_matrix", GRANTED_BY, "startup.reconcile.pages"),
+    ]
+    assert second == ()
+    assert retired == []
+    assert len(kept) == 1
 
 
 def test_an_administrator_made_by_hand_is_not_reconciled() -> None:
