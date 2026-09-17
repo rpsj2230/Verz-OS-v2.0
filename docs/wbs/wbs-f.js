@@ -26,7 +26,8 @@ module.exports = [
  {n:"Automations owned by the agent",s:[
    {n:"Automation surface",k:["Automations listed under the agent that owns them, never in a global pile","Named as outcomes in the first person, not as trigger and action mechanics","Template gallery for common automations with a one-step install","Per-automation run history with the last result and the next scheduled time","Pause, resume and delete with the scheduler registry updated in the same transaction"]},
    {n:"Automation safety",k:["An automation runs on a named principal, never on the agent itself","Schedule changes are a tier three learning event and need a human","Failure after a threshold pauses the automation and notifies the owner","Every automation appears in the scheduled job registry with what it guards"]}
- ]}
+ ]},
+ {n:"An agent assembled from console choices",s:["An agent is configured with which kinds of memory it may read and write (the conversation, the task, the project, the person and its own), and a run cannot read a kind of memory its configuration leaves out","An agent is assembled on the install from console choices alone, picking knowledge, connectors, skills, channels, tools and workflows that were each created separately, and it answers through its assigned channel with no code change or release, proved on the install for a maintenance agent and an SEO agent"]}
 ]},
 {id:"M40",name:"Member self-service application",wave:4,tasks:[
  {n:"Sign-in and the member shell",s:[
