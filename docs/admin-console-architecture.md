@@ -1234,7 +1234,8 @@ rebuilt page. The mapping was measured against `e3e2ec9`, `origin/main` on 2026-
 commits past the Part 0 code of record `273092a`. Where the two differ, the row says so; the
 differences that matter here are agent automations with start and stop, memory formation code,
 connector reading by the worker and paged lists. The AnyGen images were described in the owner's
-brief and not read, for the reason Part 0 gives.
+brief and not read, for the reason Part 0 gives. The About section below was added the same day at
+the owner's request and measured at `75d4f45`, which changes no source file since `e3e2ec9`.
 
 **The shape: two views of one agent, and the tabs beside them.** Today `AgentWorkspace.tsx` puts
 the tab strip on the left and a Dashboard or Profile switch in a right-hand pane (`PANES`,
@@ -1265,7 +1266,7 @@ what an agent without that element gets (R1, R2).
 | 6 | "Credits used 379 >" | spend over a period: `HeadlineView` (`spend_minor`, `runs`, `basis`, a `range` of 30 days) from `ops.spend_actual` through `console/workspace.headline`. The link opens H1 Usage and cost (`GET /report/spend?dimension=agent`). "Credits" is not this product's word (2.4) | workspace `headline` | an agent budget: `ops/budget_store.append` exists with no route (W3.5) | partial. **Nothing writes `ops.spend_actual`** at either commit (`spend_store.record` has no caller), so every install reads 0.00 and 0 runs. The page says "not recorded yet" rather than drawing nought (`A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`), which needs a served statement that calls are not metered. No money response carries a currency (`INSTALL_CURRENCY` exists and `locale.currency()` has no caller), so the figure has no sign | everybody's runs with the budget screen's read held unrestricted (`basis_for`); otherwise the reader's own runs, labelled as theirs. The link needs `read:usage` | never withheld: the narrower basis is the reader's own figure, labelled. The link is absent without `read:usage` |
 | 7 | "Skills 12" | the number of pinned skills sent (`WorkspaceView.skills`) | workspace | assigning, row 12 | partial: counted from what is sent, and no skill is read by a run (row 12) | the Settings read and the Skills screen read (`read:skill`) | no figure, rather than nought. A count of the pins sent is a count of what was shown |
 | 8 | "Days on board 23" | days since `agent.created_at` (`AgentRow` has it through `TimestampMixin`); for an installed agent `template_instance.created_at` is the install. Labelled "Days since created", because an agent is not staff | none. `AgentRecord` has no creation field, `record_of` does not copy it, and `AgentHeaderView` sends none | never changed | missing on the wire; the column exists | audience. A date names nobody, which is why it can travel where the builder (`created_by`) cannot | as row 1 |
-| 9 | Description paragraph | `identity.summary` of the effective manifest | workspace `agent.summary` | a draft and the publish gate (W2.6) | exists; null for an agent with no install that constructs | audience | no paragraph |
+| 9 | Description paragraph | `identity.summary` of the effective manifest, drawn as the summary of the About section below rather than in the header | workspace `agent.summary` | a draft and the publish gate (W2.6) | exists; null for an agent with no install that constructs, and empty in all 23 built-in templates | audience | no sentence |
 | 10 | "Adaptive learning" card with a switch | memory formation and the learning review: `brain.memory` (`tiers.Tier` session, automatic, promoted, gated; `formation`; `review`; `digest.undo`) and the Learning screen | `GET /govern/learning` (`read:learning`); `GET /govern/memory?subject=` (`read:memory`, by person) | undo: `POST /govern/learning/undo` (`admin:learning`). A per-agent switch: none | partial, and **the switch is not offered as drawn.** New at `e3e2ec9`, `memory/turn.py` and `StoredFormations.after_turn` form a person's memories from an answered turn, and nothing on a running install calls `after_turn` yet. `mem.persistent` and `mem.adaptive` are keyed by person with no agent column; only `mem.learning.agent_id` names an agent. No manifest field, feature or setting switches learning, per agent or for the install. A single on and off switch is the memory-poisoning path SCREEN 13 rejects, so the card shows the four tiers, what each may change, and a link to the review. A per-agent pause would be new (a field `after_turn` reads) and may only narrow | the tier text is product text for the audience; the review link needs `read:learning`, on the content plane and withheld from the first administrator by design | the card's product text still shows; the review link is absent |
 | 11 | Capabilities: Connectors, round icons, "7+", "+" | the connectors the manifest declares, as `ConnectorRow`: `Presence.ATTACHED` (a tool from the source is in `allowed_tools`) or `REQUESTED` (named, no tool bound), narrowed to sources the reader could be told about (`reachable_sources`). `ICONS_ON_THE_ROW = 5`, and the overflow is counted over the reader's own rows. The install's own state (connected, and new at `e3e2ec9` last read and next read) is `ops.connector_connection` and `ops.connector_sync` | workspace `connectors` (`shown`, `overflow`); `GET /connectors` for connected and last read (`read:connector`) | "+": none. An agent's connectors change through its manifest, a draft and the publish gate (W2.6); `agents.install.bind_tool` runs only inside `install.complete`, which has no route. Connecting a source for the whole install is `POST /connectors` (`admin:connector` over that source), a different act on the Connectors screen | partial. The row exists. The "7+" list needs the rows past the strip, which the workspace does not send (to build). New at `e3e2ec9` the worker reads a connected source on its interval, and no question is answered from what it keeps (`WHAT_CONNECTING_A_SOURCE_STARTS`); only xero and hubspot can be connected from the console (`ops/connectable.py`) | the row: audience and `reachable_sources`. Connected and last read: `read:connector` | a source the reader cannot reach makes no row and is not in the overflow (`AN_OVERFLOW_COUNTS_WHAT_IS_OFF_THE_ROW_AND_NEVER_WHAT_IS_OUT_OF_REACH`). No row says "restricted", and none carries a health word (`AN_UNPROBED_CONNECTOR_IS_NOT_A_HEALTHY_ONE`) |
 | 12 | Capabilities: Skills, pill chips, "6+" with a chevron, "+" | pinned skills (`SkillRef` name and digest) on the effective manifest, from `agent.skill_assignment` | workspace `skills` | "+": `POST /skills/{digest}/assignments` with `agent_id` in the body (the Skills screen read, `admin:skill` over a scope admitting the agent, the agent in the caller's audience, an approved digest). Removing a chip: none, detachment is W2.8 | partial. **An assigned skill has no effect at run time.** Nothing in the answer path reads an assignment: `offered_cards` and `body_of` have no caller, `SkillScriptTool` is never built, `build_registry` registers no skill, and the model lane new at `e3e2ec9` reads none. The page says so on the row and beside the Skills figure until W3.1. The served sentence 4.2 names, `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN`, does not exist yet and is added with W2.8 | the Settings read and `read:skill` | no row and no figure. No chip reads "approved" (`A_FIGURE_NOTHING_STORES_IS_ABSENT_AND_NEVER_NOUGHT`) |
@@ -1296,13 +1297,71 @@ Knowledge (the scope predicate, `read:document`), Memory (`GET /govern/memory` i
 route serves an agent's memory) and Artifacts (`GET /govern/artifacts`, with no agent filter, and
 nothing keeps an artifact yet) stay tabs, as C1 lists them.
 
+**About this agent, at the top of the Profile.** Added at the owner's request on 2026-09-17, so that
+anybody opening an agent reads what it is for, how it works and what it will never do. It sits under
+the header and figures, before Capabilities, and takes the header's description (row 9). It has
+three parts. The overview is text a person writes. **The flow and the "never" sentences are computed
+from the agent's configuration and nothing else**, so they cannot describe something the agent is
+not set up to do: a step names only channels the agent is offered on, automations it has, sources it
+is attached to, tools in `allowed_tools`, and actions whose side effect is within `max_side_effect`,
+each at the rung `Leash.rung_for` gives that exact target, which is Shadow where no entry matches. A
+leash entry with no tool behind it is not an action the agent can take and is not drawn; the spike
+checks that on every run of its screenshot script.
+
+**The field decision: a new manifest path is needed.** Measured at `75d4f45`:
+
+- `identity.summary` holds at most 240 characters (`SUMMARY_CHARS`, commented "a sentence in a
+  picker, not a description"), and it is empty in all 23 built-in templates.
+- `persona` holds at most 2,000 characters, 132 to 276 in the catalogue, and they are instructions
+  to the model. Shown as a description, the page would publish prompt material, and every change to
+  how the agent is instructed would rewrite what people are told about it.
+- Nothing else fits: `placeholders` are form questions of at most 200 characters and `golden_set` is
+  test cases.
+
+So a new path is proposed, `identity.overview`: plain text of at most 1,200 characters, **settable
+and not sealed.** A company installing a template must be able to say in its own words how it uses
+the agent; and because the authority section is settable, a sealed overview could go on describing
+permissions the install has since narrowed, with nobody able to correct it. A local edit is a
+recorded divergence (`FieldOwner`) and shows in the Versions tab like any other. It is for readers
+only: nothing passes it to a model, or it becomes a second persona nobody reviews as one. It travels
+to the audience, as the summary does, and `agents/authoring.scan` covers it, because a template's
+overview is where a company's name is most likely to be typed. **The cost is not one field.**
+`content_digest` covers every path in `MANIFEST_PATHS`, so a new path changes every document's digest,
+and every signed `agent.template_version` would then fail `SignedManifest` when read. It needs
+`MANIFEST_SCHEMA` moved to `v2` with a `v1` document read under `v1`'s paths, a migration widening the
+two path lists migration 0016 copies (`MANIFEST_PATHS` and `SETTABLE_PATHS`), and the path added to
+`test_template_tables.py`. Rejected: a column on `agent.agent`. It is cheaper, and it gives the 23
+built-in templates nowhere to ship an overview and a template's author nowhere to write one. Until the
+path lands, the spike shows the overview as authored text marked as an example, under a "Coming soon"
+note.
+
+**No drawn procedure is stored for any agent, so the flow is always the derived one.**
+`builder/procedure` validates a drawing, and `skill_markdown` writes it as a SKILL.md that reads back
+as the same drawing. But the module says no route hands it a drawing, nothing outside it calls
+`skill_markdown`, `read_drawing` or `procedure_from_skill_markdown`, no table or manifest path holds a
+procedure, and no page mounts `ProcedureCanvas.tsx`. A saved drawing would become a skill through
+the review queue, so the About section shows a drawing in place of the flow only once the agent's
+assigned skills include one made from a drawing; until then it says drawing is not available.
+
+| About part | Derived from | Read today by | Status | Permission | When the reader may not see it |
+| --- | --- | --- | --- | --- | --- |
+| Summary | `identity.summary` | workspace `agent.summary` | exists; empty in every built-in template | audience | no sentence |
+| Overview | `identity.overview`, proposed above | none | missing: a new path | audience | no paragraph |
+| 1 What starts it | the offered channels (`offered_channels` at `E_run`), and the agent's automations with their schedules | workspace `channels`; `GET /agents/{agent_id}/automations` (`AutomationView.schedule`, `next_run_at`, `paused_because`) | partial: a channel is offered, never switched on, because no binding table exists (W4.1); automations are served at `e3e2ec9` | audience; schedules by the Automations tab read (`read:queue`) | a channel this reader's run could not use is absent; without `read:queue`, no schedule line |
+| 2 What it reads | attached connectors; the tools in `allowed_tools` whose side effect is none, with each tool's source from the registry; `authority.scope` in words | workspace `connectors`; tools and scope: none (the roster's `ceiling` is the scope as JSON, for the Agents screen read) | partial | audience for the sources; the Settings read for tools and scope | the source line only |
+| 3 What it does | the tools in `allowed_tools` whose side effect is above none and within `max_side_effect`, each with `Leash.rung_for(target)`: Autonomous acts on its own, Assisted prepares and waits, Shadow only practises | none: neither the tools' side effects nor the leash is sent | missing (W2.6) | the Settings read | the step is absent and the steps are numbered without a gap, so a missing step is not a count of something withheld |
+| 4 Where a person steps in | the Assisted actions from step 3, and who approves them in words: somebody holding the action's own capability over the record's scope (`pending_for`, `AN_APPROVER_MAY_NOT_WAVE_THROUGH_WHAT_THEY_COULD_NOT_DO_THEMSELVES`). A Shadow action is carried out by nobody, so it is said to need no approval rather than to wait for one. Approvers are never named: a list of names publishes who holds a capability, which is B3's question behind `read:grant` | none | missing: the leash is not sent (W2.6), the queue faults (W0.3) and nothing asks for approval (W3.6) | the Settings read | absent with step 3 |
+| 5 Where the result goes | each channel's rendering profile; for an automation, the person it runs as (`A_RESULT_IS_SHOWN_ONLY_TO_WHOM_IT_RAN_AS`); `max_side_effect` (none: nothing is written; draft: a draft for a person to send) | workspace `channels`; the automations route; `max_side_effect`: none | partial | audience; the Settings read for the side effect | the channel and schedule lines only |
+| What it will never do | one sentence from `max_side_effect`, one from `authority.scope` in words, and the invariant ("never more than the person it is working for could see"), which is true of every agent | none for the first two | missing for the first two; the third is product text | the Settings read for the first two | the invariant alone |
+
 **Every "+" and "x" on the page, and every other control.**
 
 | Control | Calls | On the page |
 | --- | --- | --- |
 | Dashboard and Profile switch; Sections menu | navigation | live |
 | Settings cog: Open settings; Edit instructions | navigation; `POST /govern/prompts/{agent_id}` | live |
-| Settings cog: Edit as a draft, Duplicate, Transfer stewardship, Enable or Disable, Archive | none | disabled items marked "not built yet", W2.6 |
+| Settings cog: Edit as a draft, Duplicate, Hand to a new steward, Switch on or off, Archive | none | disabled items under "Coming soon", W2.6 |
+| About: edit the overview | none | not drawn until `identity.overview` exists; then a draft, W2.6 |
 | Add to a chat group | none | disabled, W4.1 |
 | Spend figure's link | opens H1 over `GET /report/spend?dimension=agent` | live for `read:usage` |
 | Connectors "+" | none (a manifest edit through a draft) | disabled, W2.6 |
@@ -1323,9 +1382,13 @@ nothing keeps an artifact yet) stay tabs, as C1 lists them.
 | Dashboard: Approvals link | opens C4 over `GET /approvals` | live; the queue faults until W0.3 |
 
 **The rules the page keeps.** A control whose route does not exist is `aria-disabled`, drawn dashed,
-does nothing when pressed, and its tooltip names what is missing and the package that adds it; the
-rebuilt page carries ten, and pressing each was measured to change the address and open a dialog in
-none of them. A thing the product does not offer is a sentence, never a disabled switch. A figure
+does nothing when pressed, and its tooltip says in plain words that it is coming soon; the rebuilt
+page carries ten, and pressing each was measured to change the address and open a dialog in none of
+them. **Every note on the page is written for an administrator**, at the owner's request: it leads
+with "Coming soon:" for something a person will be able to do, or "Not available yet:" for something
+the page is not sent, and it carries no package code, WBS id, route or internal name. The package
+codes in this section are for whoever builds it and never reach the page; the screenshot script
+found none, and no API path, in the page's visible text. A thing the product does not offer is a sentence, never a disabled switch. A figure
 nothing stores reads "not recorded yet", never nought. No number on the page counts what the reader
 cannot see: the connector overflow is over the reader's own rows, the Skills figure over the pins
 sent, approvals over the cards the reader could decide. Channels and connectors are computed at
@@ -1333,14 +1396,16 @@ sent, approvals over the cards the reader could decide. Channels and connectors 
 
 **What the API has to add for this page** (W2.6 unless named): `created_at` on `AgentHeaderView`;
 for a Settings reader, the lifecycle state, the audience level, the tier, the leash entries and the
-ceiling in words, with capability names under `CEILING_DISCLOSURE`; the connector rows past the
-strip; a served statement that model calls are not metered (until W3.5), so the headline is not read
+ceiling in words, with capability names under `CEILING_DISCLOSURE`; for the About flow, each tool in
+`allowed_tools` with its source and side effect, and `max_side_effect`; the manifest path
+`identity.overview`, with its schema version and migration; the connector rows past the strip; a served statement that model calls are not metered (until W3.5), so the headline is not read
 as nought; the sentence `A_SKILL_IS_ASSIGNED_AND_NOT_YET_READ_BY_A_RUN` (W2.8); an agent id on
 approval cards, with a filter (W3.6); and a subject filter on `GET /audit` (G1).
 
 **The rebuilt page.** Built on the base 5.7 records, in the spike under
 `.scratch/ui-spike/app-radix/` (`src/pages/agents/AgentDetailPage.tsx`, `AgentProfile.tsx`,
-`AgentDashboard.tsx`, `profile-parts.tsx`, `profile-data.ts`), which is outside version control.
+`AgentDashboard.tsx`, `about.ts` for the derived flow and "never" sentences, `profile-parts.tsx`,
+`profile-data.ts`), which is outside version control.
 Every figure, person and skill name is a marked example; the connector and channel names are the
 product's own connector and adapter keys, drawn with generic bundled icons and no brand logos. The
 screenshots were taken with headless Chrome by `.scratch/ui-spike/tools/shoot-profile.mjs`, with no
@@ -1349,6 +1414,8 @@ request leaving the local server, no console error, and a 375-pixel page measuri
 | Screen | File under `.scratch/ui-spike/shots/` |
 | --- | --- |
 | Profile, desktop, light | `radix-agent-profile-desktop-light.png` |
+| Top of the Profile through the About section, desktop, light | `radix-agent-profile-about-desktop-light.png` |
+| Top of the Profile through the About section, phone, 375 wide | `radix-agent-profile-about-phone-375.png` |
 | Profile, desktop, dark | `radix-agent-profile-desktop-dark.png` |
 | Dashboard, desktop, light | `radix-agent-dashboard-desktop-light.png` |
 | Profile, phone, 375 wide | `radix-agent-profile-phone-375.png` |
