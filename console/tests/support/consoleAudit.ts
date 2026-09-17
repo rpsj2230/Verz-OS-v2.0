@@ -284,10 +284,6 @@ export const AREAS: Readonly<Record<string, Area>> = {
         what: "An agent cannot be created, and its manifest, leash and procedure cannot be edited.",
         because: "components/ManifestForm.tsx and components/ProcedureCanvas.tsx are built and tested and rendered by no registered page, and no route writes agent.agent or a template version from the console.",
       },
-      {
-        what: "An approval decided on a running install is refused: the application builds no suspension store without a ledger writer, so every approval route answers with the process fault.",
-        because: "brain.app.suspension_store_for passes no ledger, deliberately, until a writer for obs.audit_entry survives a restart; tests/unit/test_approval_decisions.py holds that the lifespan builds none.",
-      },
     ],
   },
   "Skills and tools": {
@@ -846,12 +842,9 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     behaviour: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),
   },
   "POST /api/v1/approvals/{suspension_id}/decision": {
-    row: t("test_approval_decisions", "test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it"),
-    audit: t("test_approval_decisions", "test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it"),
-    behaviour: {
-      none:
-        "In-process the decision leaves the queue (test_approval_decisions.py::test_a_decided_approval_leaves_the_queue_and_its_card_no_longer_opens), but on a running install brain.app.suspension_store_for builds no store, so the decision a person presses is refused and changes nothing.",
-    },
+    row: t("test_suspension_store", "test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart", true),
+    audit: t("test_suspension_store", "test_a_decided_approval_leaves_one_ledger_entry_that_survives_a_restart", true),
+    behaviour: t("test_suspension_store", "test_an_approved_suspension_is_what_resume_reads_and_a_rejected_one_is_not_run", true),
   },
   "POST /api/v1/answer": {
     row: { notApplicable: "Asking a question writes no row an administrator manages." },

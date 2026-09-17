@@ -27,19 +27,39 @@ the digest that was decided and reports whether one row changed; the update poli
 refuses a decided row as well, so the clause is what makes a refusal loud rather than a quiet
 nothing, which is the argument `brain.browsing.envelope_store.record_decision` makes.
 
-**The ledger entry is written inside that transaction and the ledger is not.** `decide` writes the
-entry before it moves the suspension, through the writer this store was built with. With the lock
-held, two requests cannot both write one. What can still happen is the row update failing after
-the entry was written, which rolls the row back and leaves an entry recording a decision that did
-not take effect. It is the direction `brain.console.approvals` chooses on purpose, since a
-decision that took effect unrecorded is the worse one, and it closes only when the ledger is
-written by the same transaction, which needs a store for `obs.audit_entry` that does not exist.
+**The ledger entry is written by the row, in the statement that decides it.** Until `0083` this
+store was built with a ledger writer and `decide` wrote the entry through it before the row moved,
+which left one ordering open: an entry recording a decision whose row write then failed. No writer
+for `obs.audit_entry` existed in the process, so no process built this store and every decision on
+a running install was refused. Now the row carries the verdict and the reason code, `0083`'s
+trigger appends the `approval` entry when the row stops being pending, and the decision and its
+entry commit or roll back together. See `THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT`.
+
+**`brain.console.approvals.decide` still decides, and its recorder still builds the entry.**
+`AuditRecorder.approval` holds the rules about a reason code and the shape of the details, and a
+second statement of them here would drift. So the route hands `decide` a recorder over a chain of
+its own, which drafts the entry and keeps nothing, and `record` writes the draft's verdict and
+reason onto the row, tells the trigger the decider's reach digest and the request's trace, and
+reads back the entry the database kept. A kept entry that says something other than the draft is
+refused inside the transaction, so a trigger and a recorder that have drifted apart stop a
+decision rather than record a different one.
+
+Rejected: a `LedgerWriter` whose `append` stages the entry for the trigger. `append` is synchronous
+and returns an `AuditEntry` with its sequence and both digests, which do not exist until the row's
+UPDATE has run, so every value it could return would be a forged link, the thing
+`brain.audit.ledger.AuditChain.append` refuses to let a caller choose. A writer held by the store
+would also be shared by every request deciding at once.
+
+Rejected: appending to `obs.audit_entry` from here, which `brain_app` is granted. Every persisted
+entry is written by a trigger on a row, for the reason `0054` gives, so a decision an operator
+writes at a prompt is recorded exactly as one pressed in the console and the chain has one writer.
 
 **A resume re-resolves the reach and hands the stored row to `brain.gate.leash.resume`.**
 `resume_stored` takes the function that resolves a principal's reach now, not the reach the
-approval was granted at, so everything `resume` re-checks is checked against the present.
+approval was granted at, so everything `resume` re-checks is checked against the present. What
+it reads is `state`, which the decision wrote and a check holds the verdict to.
 
-Task ids: M35.3.1.1, M33.6.1.3
+Task ids: M35.3.1.1, M33.6.1.3, M27.9.3
 """
 
 from __future__ import annotations
@@ -55,13 +75,14 @@ from pydantic import ValidationError
 from sqlalchemy import CursorResult, column, insert, select, table, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from brain.audit.record import LedgerWriter
+from brain.audit.ledger import AuditAction, AuditEntry
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.envelope import Entity, TypedResult
 from brain.core.field_policy import FieldPolicy
 from brain.gate.injection import RiskAssessment
 from brain.gate.leash import Action, ApprovalState, Leash, Resumption, SuspendedAction, resume
 from brain.ops.idempotency import OperationLedger
+from brain.tables.audit import AuditEntryRow, attributed_to
 from brain.tables.suspension import SuspensionRow
 
 log = structlog.get_logger()
@@ -79,6 +100,15 @@ A_ROW_THAT_DISAGREES_WITH_ITS_DIGEST_IS_NOT_WHAT_WAS_RAISED: Final = (
     "The digest is what the artefact was rendered for and what an approval binds to. A row "
     "whose action no longer produces it describes something other than what was raised, and "
     "approving it would approve the edit. It is refused on read, logged, and absent."
+)
+
+#: Why a decision's entry is drafted in the process and kept by the database.
+THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT: Final = (
+    "AuditRecorder.approval holds the rules about what an approval entry says, and a trigger on "
+    "gate.suspension is the only thing that writes one, in the transaction that decides the row. "
+    "So the recorder drafts the entry on a chain nobody keeps, the row is written with the draft's "
+    "verdict and reason, and the entry the trigger kept is read back and must say what the draft "
+    "said. A decision whose kept entry says anything else is not taken."
 )
 
 PRINCIPAL_SETTING: Final = "app.principal_id"
@@ -284,11 +314,22 @@ class HeldRows:
         )
         return None if row is None else _readable(dict(row))
 
-    async def record(self, decided: SuspendedAction) -> bool:
-        """Write a decision against its pending row at its digest. True when one row changed."""
+    async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
+        """Write a decision over its pending row at its digest, and return the entry kept for it.
+
+        `entry` is the draft `brain.console.approvals.decide` built, and the row takes its verdict
+        and reason code. None when no pending row at that digest changed, which writes nothing.
+        Raises when the kept entry is missing or says anything the draft does not, including an
+        entry about another suspension or by another person, which rolls the decision back. See
+        `THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT`.
+        """
         if decided.state is ApprovalState.PENDING or decided.decided_at is None:
             msg = f"suspension {decided.id!r} has not been decided, so there is nothing to record"
             raise SuspensionStoreError(msg)
+        for statement in attributed_to(
+            actor_id=entry.actor_id, ent_hash=entry.ent_hash, trace_id=entry.trace_id
+        ):
+            await self.session.execute(statement)
         # `CursorResult` rather than `Result`, which is what an UPDATE returns and is the only
         # one carrying `rowcount`. Cast at a library boundary where proving the match buys nothing.
         changed = cast(
@@ -304,40 +345,78 @@ class HeldRows:
                     state=decided.state.value,
                     decided_by=decided.decided_by,
                     decided_at=decided.decided_at,
+                    verdict=entry.details.get("verdict"),
+                    reason_code=entry.details.get("reason_code"),
                 )
             ),
         )
-        return changed.rowcount == 1
+        if changed.rowcount != 1:
+            return None
+        kept = await self._kept(entry.subject)
+        if kept is None or recorded_differently(kept, entry):
+            msg = (
+                f"suspension {decided.id!r} was decided and the ledger does not hold the entry "
+                f"its recorder drafted. {THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT}"
+            )
+            raise SuspensionStoreError(msg)
+        return kept
+
+    async def _kept(self, subject: str) -> AuditEntry | None:
+        """The newest approval entry about this subject, which the trigger has just appended.
+
+        Newest, because the trigger took the ledger's advisory lock and this transaction still
+        holds it, so nothing has been appended after it.
+        """
+        row = (
+            (
+                await self.session.execute(
+                    select(AuditEntryRow.__table__)
+                    .where(
+                        AuditEntryRow.subject == subject,
+                        AuditEntryRow.action == AuditAction.APPROVAL.value,
+                    )
+                    .order_by(AuditEntryRow.seq.desc())
+                    .limit(1)
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else AuditEntry.model_validate(dict(row))
 
 
-@dataclass(frozen=True)
-class ReadableSuspensions:
-    """`gate.suspension` read at a reach, on a process with nowhere durable to record a decision.
+def recorded_differently(kept: AuditEntry, drafted: AuditEntry) -> bool:
+    """Whether the kept entry says something other than the draft.
 
-    Implements `brain.approval_routes.SuspensionReader`, and is what `app.state.suspensions` holds
-    on a process with a database and no ledger writer that survives a restart. The queue and the
-    card are reads and need no ledger, so they are served; a decision is refused in words by
-    `brain.approval_routes._require_store`, identically for every caller and every id. Until
-    2026-09-17 such a process held nothing at all, and the Approvals screen answered every person
-    with a 500. See `brain.app.suspension_store_for`.
+    Every field but the four the ledger assigns: the sequence, the instant and the two digests.
     """
-
-    sessions: async_sessionmaker[AsyncSession]
-
-    def reading_as(self, reach: EntitlementSet, now: datetime) -> ReachedSuspensions:
-        return ReachedSuspensions(self.sessions, reach, now)
+    return (
+        kept.actor_id,
+        kept.action,
+        kept.subject,
+        kept.ent_hash,
+        kept.trace_id,
+        kept.details,
+    ) != (
+        drafted.actor_id,
+        drafted.action,
+        drafted.subject,
+        drafted.ent_hash,
+        drafted.trace_id,
+        drafted.details,
+    )
 
 
 @dataclass(frozen=True)
 class StoredSuspensions:
-    """`gate.suspension`, and the ledger its decisions are recorded to.
+    """`gate.suspension`, read at a reach and decided on a held row.
 
     Implements `brain.approval_routes.SuspensionStore`, and is what `app.state.suspensions` holds
-    on a process that has both a database and a ledger writer.
+    on a process with a database. Until 2026-09-17 it was built with a ledger writer, and no
+    process had one; see the module docstring.
     """
 
     sessions: async_sessionmaker[AsyncSession]
-    ledger: LedgerWriter
 
     def reading_as(self, reach: EntitlementSet, now: datetime) -> ReachedSuspensions:
         return ReachedSuspensions(self.sessions, reach, now)

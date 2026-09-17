@@ -62,7 +62,6 @@ from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.artifact_routes import router as artifact_router
 from brain.audit.ledger import TRACE_ID
-from brain.audit.record import LedgerWriter
 from brain.audit_routes import router as audit_router
 from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
@@ -94,7 +93,7 @@ from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
-from brain.gate.suspension_store import ReadableSuspensions, StoredSuspensions
+from brain.gate.suspension_store import StoredSuspensions
 from brain.govern_people_routes import router as govern_people_router
 from brain.govern_routes import router as govern_router
 from brain.identity.administration_reconciliation import (
@@ -479,9 +478,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception as exc:
             log.warning("install could not be furnished", error=type(exc).__name__)
-    # No ledger writer survives a restart yet, so a database gets the reading half and no way to
-    # decide. See `suspension_store_for`.
-    app.state.suspensions = suspension_store_for(app.state.db_sessions, ledger=None)
+    # Approvals are read and decided on the database, whose trigger keeps each decision's ledger
+    # entry. See `suspension_store_for`.
+    app.state.suspensions = suspension_store_for(app.state.db_sessions)
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
         try:
@@ -687,29 +686,27 @@ def request_recorders_for(
 
 
 def suspension_store_for(
-    sessions: async_sessionmaker[AsyncSession] | None, ledger: LedgerWriter | None
-) -> StoredSuspensions | ReadableSuspensions | None:
+    sessions: async_sessionmaker[AsyncSession] | None,
+) -> StoredSuspensions | None:
     """What `app.state.suspensions` holds on this process. See `brain.approval_routes`.
 
-    A store when there is both a database to keep the suspension and a ledger to keep the
-    decision; the reading half alone when there is a database and no ledger; nothing without a
-    database. The lifespan passes no ledger, because the only writer in this repository is
-    `brain.audit.ledger.AuditChain`, which lives in the process: a decision recorded there is
-    recorded and then lost at the next restart, and the approval routes would then answer as
-    though it had been kept.
+    The store when there is a database, and nothing without one. The store needs nothing else,
+    because the ledger entry a decision leaves is written by `gate.suspension`'s own trigger in
+    the transaction that decides the row (`0083`), so it survives a restart exactly as the row
+    does. A process without a database answers every approvals route in
+    `brain.approval_routes.APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS`.
 
-    **It built nothing at all without a ledger until 2026-09-17**, and that took the reads down
-    with the decision: the Approvals screen answered every person on a staging install with a 500
-    and "Something went wrong.", although reading the queue needs no ledger. A deployed process
-    now serves the queue and the card, and refuses a decision in words that say why
-    (`brain.approval_routes.DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS`) until a writer for
-    `obs.audit_entry` exists and is passed here.
+    **This asked for a ledger writer as well until 2026-09-17, and none existed.** The only writer
+    in the process was `brain.audit.ledger.AuditChain`, which a restart empties, so the lifespan
+    passed none: first nothing was built and the Approvals screen answered every person on a
+    staging install with a 500, then the reads were served and every decision was refused in
+    words. This docstring said a writer for `obs.audit_entry` would arrive and be passed here. It
+    was the wrong fix to wait for, because every persisted entry is written by a trigger on a row,
+    and the parameter is gone rather than given a value.
     """
     if sessions is None:
         return None
-    if ledger is None:
-        return ReadableSuspensions(sessions)
-    return StoredSuspensions(sessions, ledger)
+    return StoredSuspensions(sessions)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:

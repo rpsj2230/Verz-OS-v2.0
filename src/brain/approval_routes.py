@@ -39,12 +39,20 @@ card, tell an id that exists from one that does not. It is logged and absent, as
 `brain.agent_routes.A_ROW_THAT_DOES_NOT_CONSTRUCT_IS_ABSENT_FOR_EVERYBODY` argues for agents.
 
 **A decision is written once because the row is held while it is taken.** `decide_once` locks
-the stored suspension, asks `card` whether this reach may see it, hands it to `decide`, which
-writes the ledger entry before the state moves, and records the moved suspension against the
-pending row. The lock is the store's, so a second request for the same suspension waits and then
-finds it decided, which `card` answers with the same `None` as every other reason. There is no
-second approval mechanism here and no second statement of who may approve: `decide` is the one
-already written and tested. See `A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE`.
+the stored suspension, asks `card` whether this reach may see it, hands it to `decide`, whose
+recorder drafts the ledger entry, and has the store record the moved suspension and that entry
+against the pending row in one write. The lock is the store's, so a second request for the same
+suspension waits and then finds it decided, which `card` answers with the same `None` as every
+other reason, and nothing is written. There is no second approval mechanism here and no second
+statement of who may approve: `decide` is the one already written and tested. See
+`A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE`.
+
+**The entry a decision returns is the one the store kept, never the draft.** `decide` is handed a
+recorder over a chain of this request's own, because `brain.audit.record.AuditRecorder.approval`
+is where an entry's rules live and a store has no ledger writer to offer it: on a database the
+entry is appended by `gate.suspension`'s trigger, in the transaction that moves the row. The draft
+carries the verdict and the reason to the store, and `Decided.entry` is what the store says it
+kept. See `brain.gate.suspension_store.THE_RECORDER_DRAFTS_THE_ENTRY_AND_THE_ROW_KEEPS_IT`.
 
 **Two verdicts are offered, and the body refuses a mismatched reason before the store is
 asked.** Approving and rejecting are what a phone needs. Taking over needs somewhere for the
@@ -59,11 +67,13 @@ and a test holds the two to agree.
 **Where suspensions come from is read off `app.state.suspensions`,** in the shape
 `brain.api_routes.wiring_of` reads the gate. Either a `SuspensionStore`, which reads at the
 caller's reach so row-level security has something to narrow on and which can hold a row to
-decide it, or a bare `SuspensionSource`, which can be read and not decided. A process with
-neither gets the one fault `_require_source` raises, the same for everybody and every id, and a
-process that cannot keep a decision refuses every decision alike. Nothing constructs a store in
-production today, because it needs a ledger writer that survives a restart and none exists; see
-`brain.app.suspension_store_for`.
+decide it, or a bare `SuspensionSource`, which can be read and not decided. A process with a
+database holds the store; see `brain.app.suspension_store_for`. A process with neither refuses
+every read and every decision in `APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS`, and one holding only a
+source refuses every decision in `A_SOURCE_THAT_ONLY_READS_CANNOT_TAKE_A_DECISION`, each the same
+for everybody and every id because it is said before any approval is read. Until 2026-09-17 a
+deployed process read approvals and refused every decision, because the store needed a ledger
+writer that nothing in the process could be.
 
 Rejected: reading every suspension and finding one by id for the single card. It would work,
 and it would make the single card as expensive as the queue, so the protocol asks for one
@@ -78,7 +88,7 @@ approver on the same day.
 reach decided, soonest to lapse first unless asked otherwise. Approvals are never decided several
 at once: see `AN_APPROVAL_IS_DECIDED_FROM_ITS_OWN_CARD`.
 
-Task ids: M35.3.1.2, M35.3.1.1, M27.8.6
+Task ids: M35.3.1.2, M35.3.1.1, M27.8.6, M27.9.3
 """
 
 from __future__ import annotations
@@ -95,7 +105,8 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from brain.api import API_PREFIX, COMMON_RESPONSES, Page
 from brain.api_routes import Asked
-from brain.audit.record import ApprovalVerdict, AuditRecorder, LedgerWriter
+from brain.audit.ledger import AuditChain, AuditEntry
+from brain.audit.record import ApprovalVerdict, AuditRecorder
 from brain.console.approvals import ApprovalError, Card, Decided, card, decide
 from brain.core.entitlement import EntitlementSet
 from brain.core.errors import Absent, BrainError, Failed
@@ -208,21 +219,13 @@ class HeldSuspensions(Protocol):
         """The suspension, held until the transaction ends, or None."""
         ...
 
-    async def record(self, decided: SuspendedAction) -> bool:
-        """Write a decided suspension over its pending row. True when exactly that happened."""
-        ...
+    async def record(self, decided: SuspendedAction, entry: AuditEntry) -> AuditEntry | None:
+        """Write a decided suspension over its pending row, with the entry `decide` drafted.
 
-
-@runtime_checkable
-class SuspensionReader(Protocol):
-    """Suspensions read at a reach, with no way to hold one while it is decided.
-
-    `brain.gate.suspension_store.ReadableSuspensions` implements it. The queue and the card are
-    served from it; a decision is refused. See `DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS`.
-    """
-
-    def reading_as(self, reach: EntitlementSet, now: datetime) -> SuspensionSource:
-        """The suspensions as this reach may read them."""
+        The entry kept for it, or None when no pending row at that digest changed, in which case
+        nothing is written. One transaction, so the decision and its entry are kept together or
+        not at all.
+        """
         ...
 
 
@@ -230,13 +233,9 @@ class SuspensionReader(Protocol):
 class SuspensionStore(Protocol):
     """A store that reads at a reach and can hold a row while it is decided.
 
-    `brain.gate.suspension_store.StoredSuspensions` implements it over `gate.suspension`.
+    `brain.gate.suspension_store.StoredSuspensions` implements it over `gate.suspension`, whose
+    trigger keeps a decision's entry.
     """
-
-    @property
-    def ledger(self) -> LedgerWriter:
-        """Where a decision's entry is written."""
-        ...
 
     def reading_as(self, reach: EntitlementSet, now: datetime) -> SuspensionSource:
         """The store as this reach may read it."""
@@ -386,13 +385,15 @@ async def decide_once(
     """Decide one held suspension and write the decision, or None when this reach may not.
 
     None for every reason there is no card, which `card` already makes one reason. See
-    `A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE` for the order. A row that the store
-    locked and then would not write is a process fault, raised so the transaction rolls back.
+    `A_DECISION_IS_TAKEN_ON_A_HELD_ROW_AND_WRITTEN_ONCE` for the order. `recorder` drafts the
+    entry and the store keeps it, and the answer carries the entry the store kept. A row that the
+    store locked and then would not write is a process fault, raised so the transaction rolls
+    back.
     """
     found = await held.lock(suspension_id)
     if found is None or shown_card(found, reach, now) is None:
         return None
-    decided = decide(
+    drafted = decide(
         found,
         reach,
         recorder,
@@ -400,18 +401,17 @@ async def decide_once(
         now=now,
         reason_code=asked.reason_code.value if asked.reason_code is not None else "",
     )
-    if not await held.record(decided.suspension):
+    kept = await held.record(drafted.suspension, drafted.entry)
+    if kept is None:
         msg = f"suspension {suspension_id!r} was held and its decision was not written"
         raise Failed(msg)
-    return decided
+    return Decided(suspension=drafted.suspension, entry=kept)
 
 
 # ------------------------------------------------------------------------- the wiring
 
 
-def suspensions_of(
-    request: Request,
-) -> SuspensionStore | SuspensionReader | SuspensionSource | None:
+def suspensions_of(request: Request) -> SuspensionStore | SuspensionSource | None:
     """The suspension store or source this process was built with, or None.
 
     `getattr` and an `isinstance`, in the shape `brain.api_routes.wiring_of` uses and for its
@@ -419,7 +419,7 @@ def suspensions_of(
     reaches a caller as a 500 reading like a bug.
     """
     found = getattr(request.app.state, "suspensions", None)
-    if isinstance(found, SuspensionStore | SuspensionReader | SuspensionSource):
+    if isinstance(found, SuspensionStore | SuspensionSource):
         return found
     return None
 
@@ -428,13 +428,17 @@ def _require_source(request: Request, reach: EntitlementSet, now: datetime) -> S
     """What this reach reads, or a process-level fault identical for every caller and every id.
 
     A `Failed` rather than an empty queue, because an empty queue is a claim that nothing is
-    waiting on this person, and a process with no store has no evidence for that claim.
+    waiting on this person, and a process with no store has no evidence for that claim. Said in
+    words, `APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS`, and not as "Something went wrong.".
     """
     found = suspensions_of(request)
-    if isinstance(found, SuspensionStore | SuspensionReader):
+    if isinstance(found, SuspensionStore):
         return found.reading_as(reach, now)
     if found is None:
-        raise Failed("no suspension store on this process")
+        raise Failed(
+            "no suspension store on this process",
+            public_message=APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS,
+        )
     return found
 
 
@@ -443,19 +447,29 @@ def _require_store(request: Request) -> SuspensionStore:
     found = suspensions_of(request)
     if isinstance(found, SuspensionStore):
         return found
-    if isinstance(found, SuspensionReader):
+    if found is None:
         raise Failed(
-            "suspensions are readable and no ledger writer keeps a decision on this process",
-            public_message=DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS,
+            "no suspension store on this process",
+            public_message=APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS,
         )
-    raise Failed("no suspension store that keeps a decision on this process")
+    raise Failed(
+        "suspensions are readable and nothing on this process can hold one to decide it",
+        public_message=A_SOURCE_THAT_ONLY_READS_CANNOT_TAKE_A_DECISION,
+    )
 
 
-#: What a decision is told on a process that can read approvals and cannot keep a decision.
-#: Identical for every caller and every id, because it is asked before the approval is read.
-DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS: Final = (
-    "Approvals can be read here but not decided yet: this install has nowhere to keep a record of "
-    "a decision that would survive a restart, so none is taken."
+#: What every approvals route is told on a process with nowhere approvals are kept, which is a
+#: process with no database. Identical for every caller and every id, because it is said before
+#: anything is read.
+APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS: Final = (
+    "Approvals cannot be shown or decided here: this process has no store where they are kept."
+)
+
+#: What a decision is told on a process whose approvals can be read and not held while one is
+#: decided. Identical for every caller and every id, for the same reason.
+A_SOURCE_THAT_ONLY_READS_CANNOT_TAKE_A_DECISION: Final = (
+    "Approvals can be read here and not decided: this process reads them from a store that cannot "
+    "hold one while it is decided, so no decision is taken."
 )
 
 
@@ -507,8 +521,10 @@ async def decide_approval(
     # reason `brain.api_routes.answer` gives: the header is what the caller proposed.
     trace_id = str(structlog.contextvars.get_contextvars().get("trace_id", ""))
     now = asked.now
+    # A chain of this request's own, which drafts the entry and is then discarded: the store
+    # keeps the entry. See the module note on the entry a decision returns.
     recorder = AuditRecorder(
-        store.ledger,
+        AuditChain(),
         actor_id=asked.reach.principal_id,
         ent_hash=asked.reach.ent_hash(),
         trace_id=trace_id,

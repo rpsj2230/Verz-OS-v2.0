@@ -36,6 +36,7 @@ from brain.api import API_PREFIX
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
 from brain.approval_routes import (
+    APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS,
     MAX_QUEUE_CARDS,
     ApprovalCardView,
     ApprovalQueue,
@@ -424,11 +425,13 @@ def test_a_card_on_the_wire_is_card_field_for_field_and_no_field_is_call_shaped(
 
 
 def test_a_process_with_no_suspension_store_answers_every_caller_and_every_id_alike() -> None:
-    """No store, and a store that is not a `SuspensionSource`, are one fault for everybody.
+    """No store, and a store that is not a `SuspensionSource`, are one fault for everybody, in the
+    sentence saying approvals are not kept on this process.
 
     Delete this and a process with no store can answer an empty queue, which is a claim that
-    nothing is waiting on this person made with no evidence at all."""
-    app: FastAPI = create_app(Settings(env="development"))
+    nothing is waiting on this person made with no evidence at all, or answer "Something went
+    wrong.", which a person cannot act on."""
+    app: FastAPI = create_app(Settings(env="development", database_url=""))
     with TestClient(app, raise_server_exceptions=False) as c:
         app.state.gate = _wiring()
         for attached in (None, object()):
@@ -441,6 +444,7 @@ def test_a_process_with_no_suspension_store_answers_every_caller_and_every_id_al
             ]
             assert {one.status_code for one in answers} == {500}
             assert len({str(without_trace(one)) for one in answers}) == 1
+            assert answers[0].json()["message"] == APPROVALS_ARE_NOT_KEPT_ON_THIS_PROCESS
 
         app.state.suspensions = MemorySource()
         assert get(c, "u_narrow", APPROVALS).status_code == 200
