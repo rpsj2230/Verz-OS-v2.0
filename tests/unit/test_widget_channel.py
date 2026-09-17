@@ -316,11 +316,9 @@ def test_a_refusal_never_repeats_the_origin_header_back_into_a_log() -> None:
 
 
 def test_a_wildcard_allowlist_entry_is_refused_outright() -> None:
-    """`config.check` refuses a `cors_origins` of exactly `"*"`, only in production, and
-    `serve.py` hands it the setting comma-joined, so `"*,https://console.example"` passes that
-    check. For CORS that is a browser convenience; here it is permission for every site on the
-    internet to mint anonymous credentials against a customer's brain, so it is refused per
-    entry in every environment."""
+    """A wildcard here is permission for every site on the internet to mint anonymous
+    credentials against a customer's brain, so it is refused per entry in every environment,
+    whether or not `config.check` ran first."""
     with pytest.raises(WidgetConfigurationError, match=r"may not contain"):
         allowed_origins(["https://example.com", "*"])
     with pytest.raises(WidgetConfigurationError, match=r"may not contain"):

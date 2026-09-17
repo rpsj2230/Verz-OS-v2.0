@@ -291,6 +291,20 @@ def test_with_nothing_on_the_config_the_address_is_the_one_settings_reads(
     assert migrate.alembic_url(None) == PLAIN
 
 
+def test_the_bare_command_migrates_as_the_owner_when_the_install_names_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With `BRAIN_MIGRATION_DATABASE_URL` set, `DATABASE_URL` names `brain_app`, which cannot
+    create a schema. Delete this and `alembic upgrade head` on such an install fails as the
+    application's login, and the owner is tempted to point `DATABASE_URL` back at the owner."""
+    owner = "postgresql+psycopg://owner:pw@db:5432/brain"
+    monkeypatch.setenv("DATABASE_URL", PLAIN)
+    monkeypatch.setenv("BRAIN_MIGRATION_DATABASE_URL", owner)
+
+    assert migrate.alembic_url(None) == owner
+    assert migrate.alembic_url(HANDED) == HANDED
+
+
 def test_with_no_address_anywhere_the_refusal_names_both_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

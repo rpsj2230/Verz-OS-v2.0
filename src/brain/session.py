@@ -24,7 +24,7 @@ exactly what `0001`'s docstring says it exists to prevent. The login cannot simp
 `brain_app` either: the same URL runs the migrations inside the lifespan, and those create
 extensions and roles. See `THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`.
 
-Task ids: M0.3.4, M31.2.1.2, M31.2.1.3, M31.2.1.4
+Task ids: M0.3.4, M31.2.1.2, M31.2.1.3, M31.2.1.4, M31.4.2
 """
 
 from __future__ import annotations
@@ -58,6 +58,21 @@ SET_APPLICATION_ROLE: Final = "SET LOCAL ROLE brain_app"
 #: Whether the role this transaction runs as could read past a policy. False is the ready answer.
 BYPASSES_ROW_SECURITY: Final = text(
     "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user"
+)
+
+#: Whether the login itself could read past a policy. `session_user` is the login, whatever role a
+#: transaction has taken, and it is the role a `RESET ROLE` inside a request transaction returns to.
+LOGIN_BYPASSES_ROW_SECURITY: Final = text(
+    "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = session_user"
+)
+
+#: Why a per-transaction role is not enough on its own, and what the login has to be.
+A_REQUEST_TRANSACTION_CAN_RESET_ITS_ROLE_TO_THE_LOGIN: Final = (
+    "SET LOCAL ROLE is undone by RESET ROLE, which any statement in the transaction may run, and "
+    "the role it returns to is the login. So while the application logs in as the owner, one "
+    "injected statement reads past every policy. The application's login has to be brain_app "
+    "itself, and only migrations log in as the owner: BRAIN_MIGRATION_DATABASE_URL names that "
+    "login, and database_login on /health/ready is not ready while DATABASE_URL still names it."
 )
 
 #: Why the role is set per transaction, and not on the login or the connection.
@@ -189,6 +204,24 @@ async def check_row_security(sessions: async_sessionmaker[AsyncSession]) -> bool
         return False
     if bypasses:
         log.error("the application's transactions read past row-level security")
+        return False
+    return True
+
+
+async def check_login_row_security(engine: AsyncEngine) -> bool:
+    """Readiness: the login this engine connects as is itself bound by row-level security.
+
+    False for a superuser or BYPASSRLS login, and False when nothing could be asked. See
+    `A_REQUEST_TRANSACTION_CAN_RESET_ITS_ROLE_TO_THE_LOGIN`.
+    """
+    try:
+        async with engine.connect() as conn:
+            bypasses = (await conn.execute(LOGIN_BYPASSES_ROW_SECURITY)).scalar_one()
+    except Exception as exc:
+        log.warning("database login unverified", error=type(exc).__name__)
+        return False
+    if bypasses:
+        log.warning("the application logs in as a role that reads past row-level security")
         return False
     return True
 

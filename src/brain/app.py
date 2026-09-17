@@ -20,9 +20,14 @@ use it: see
 `brain.session.THE_APPLICATION_ANSWERS_AS_THE_ROLE_ROW_SECURITY_BINDS`, whose answer readiness
 checks as `row_security`.
 
+**Readiness names four parts whatever is configured: database, cache, vault and sign-in.** A
+configured database, cache or vault decides the status and is asked again while the process runs;
+sign-in and anything not configured are named and decide nothing. `brain.readiness` holds the
+rules, and `parts` on the answer is what the console's Overview draws.
+
 Task ids: M31.1.1.1, M31.1.1.2, M31.1.1.4, M31.1.1.5
 Task ids: M31.1.3.1, M31.1.3.2, M31.1.3.3, M31.1.3.4, M31.1.3.5
-Task ids: M31.1.1.3, M31.2.2.5
+Task ids: M31.1.1.3, M31.2.2.5, M31.4.1, M31.4.2
 """
 
 from __future__ import annotations
@@ -77,6 +82,7 @@ from brain.cache import (
     check_reachable_async,
     make_async_client,
 )
+from brain.channels.widget import allowed_origins
 from brain.classification_routes import router as classification_router
 from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
@@ -147,10 +153,24 @@ from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.prompt_routes import router as prompt_router
 from brain.provider_routes import router as provider_router
+from brain.readiness import (
+    CACHE_PART,
+    DATABASE_LOGIN_PART,
+    DATABASE_PART,
+    SIGN_IN_PART,
+    VAULT_PART,
+    ReadinessPart,
+    Readings,
+    issuer_answers,
+    parts_of,
+    vault_answers,
+    vault_configured,
+)
 from brain.report_routes import router as report_router
 from brain.retention_routes import router as retention_router
 from brain.routing_routes import router as routing_router
 from brain.session import (
+    check_login_row_security,
     check_reachable,
     check_row_security,
     dispose,
@@ -185,13 +205,30 @@ log = structlog.get_logger()
 TRACE_ID_RE = re.compile(TRACE_ID)
 
 #: The readiness check that says whether this process can turn a token into a caller.
-SIGN_IN_CHECK: Final = "sign_in"
+SIGN_IN_CHECK: Final = SIGN_IN_PART
 
 #: The readiness check that says whether requests run as a role row-level security binds.
 ROW_SECURITY_CHECK: Final = "row_security"
 
-#: The readiness check for a configured cache. Absent when no cache is configured.
-CACHE_CHECK: Final = "cache"
+#: The readiness check for a configured cache. Named not configured when there is none.
+CACHE_CHECK: Final = CACHE_PART
+
+#: The readiness check for a configured secrets vault. Named not configured when there is none.
+VAULT_CHECK: Final = VAULT_PART
+
+#: The methods and headers a cross-origin caller may use. PUT and PATCH because two console
+#: writes are one of each (`provider_routes`, `routing_routes`); no DELETE, because no route is one.
+CORS_METHODS: Final = ("GET", "POST", "PUT", "PATCH")
+CORS_HEADERS: Final = ("authorization", "content-type", "x-trace-id")
+
+#: Why the CORS allow list is two named settings, normalised, and never a wildcard.
+CORS_ADMITS_THE_CONSOLE_AND_THE_WIDGET_AND_NOTHING_ELSE: Final = (
+    "Only two kinds of page call this API from another origin: the console, when an install "
+    "serves it from a second host, and a site embedding the widget. So the allow list is "
+    "cors_origins and widget_origins and nothing else, each entry normalised by the widget's own "
+    "origin rule and a wildcard refused in every environment, including development, because a "
+    "development setting copied to a server is how a wildcard reaches production."
+)
 
 #: The wait before asking an identity provider that did not answer at startup again, and the most
 #: that wait grows to. The ceiling is two of `oidc.JWKS_MIN_REFETCH`, so a realm that comes up is
@@ -245,6 +282,8 @@ class Health(BaseModel):
     checks: dict[str, bool] = {}
     #: Components named and never counted. See `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
     reported: dict[str, bool] = {}
+    #: Every part in one list, the four headline parts always present. See `brain.readiness`.
+    parts: list[ReadinessPart] = []
 
 
 @asynccontextmanager
@@ -257,6 +296,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.ready = {}
     # Named on readiness and never counted. See SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS.
     app.state.reported = {}
+    # The blocking checks that can be asked again, each registered below beside its first answer.
+    # See `brain.readiness.A_READING_IS_SHARED_SO_AN_ANONYMOUS_CALLER_CANNOT_AMPLIFY_IT`.
+    readings = Readings()
+    app.state.readings = readings
     # The secrets vault, and every provider key it holds loaded into this process's environment
     # before anything could call a model. In a thread, because the client blocks, and before the
     # database, because a key does not depend on one. With no vault named this asks nobody. See
@@ -273,6 +316,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # This process's own vault token, renewed by this process, because OpenBao renews a token
     # only for whoever presents it. See `brain.ops.vault_renewal`.
     renewer = renewer_at_start(settings.vault_address, settings.vault_token)
+    # A vault the install names decides readiness; one it does not name is shown as not
+    # configured. See `brain.readiness.A_PART_NOBODY_CONFIGURED_IS_NAMED_AND_NEVER_COUNTED`.
+    if vault_configured(settings.vault_address, settings.vault_token):
+
+        async def vault_probe() -> bool:
+            return await asyncio.to_thread(
+                vault_answers, settings.vault_address, settings.vault_token
+            )
+
+        readings.probes[VAULT_CHECK] = vault_probe
+        app.state.ready[VAULT_CHECK] = await vault_probe()
     renewing = asyncio.create_task(keep_renewing(renewer)) if renewer is not None else None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
@@ -290,7 +344,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # against a schema it does not match. Concurrency between replicas is handled by
         # an advisory lock inside run_migrations, not by hoping.
         try:
-            applied = await asyncio.to_thread(run_migrations, settings.database_url)
+            # As the owner when the install names one, so the application's own login can be
+            # `brain_app`. See
+            # `brain.session.A_REQUEST_TRANSACTION_CAN_RESET_ITS_ROLE_TO_THE_LOGIN`.
+            applied = await asyncio.to_thread(
+                run_migrations, settings.migration_database_url or settings.database_url
+            )
             app.state.ready["migrations"] = True
             if applied:
                 log.info("schema migrated", revisions=applied)
@@ -311,7 +370,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Warnings and errors this process logs from here on are also kept, redacted and bounded,
         # for the Logs screen; standard output is unchanged. See `brain.ops.log_capture`.
         app.state.log_store = start_log_store(app.state.db_sessions, settings)
-        app.state.ready["database"] = await check_reachable(app.state.db_engine)
+        engine = app.state.db_engine
+
+        async def database_probe() -> bool:
+            return await check_reachable(engine)
+
+        readings.probes[DATABASE_PART] = database_probe
+        app.state.ready[DATABASE_PART] = await database_probe()
+        # Named and not counted: every install deployed before the migration login existed logs
+        # in as the owner, and failing readiness for that would take each of them down on update.
+        app.state.reported[DATABASE_LOGIN_PART] = await check_login_row_security(engine)
         # Before anything reads an installation value, because the setup wizard's answers
         # live in `ops.setting` and `brain.install.value_of` resolves them ahead of the
         # environment. A database that refuses is not a reason to stop: the values resolve
@@ -515,12 +583,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if app.state.db_sessions is not None:
         app.state.key_client = key_set_client()
         if settings.valkey_url:
-            app.state.valkey = make_async_client(settings.valkey_url)
-            app.state.ready[CACHE_CHECK] = await check_reachable_async(app.state.valkey)
-        app.state.ready[ROW_SECURITY_CHECK] = await check_row_security(app.state.db_sessions)
+            cache_client = make_async_client(settings.valkey_url)
+            app.state.valkey = cache_client
+
+            async def cache_probe() -> bool:
+                return await check_reachable_async(cache_client)
+
+            readings.probes[CACHE_CHECK] = cache_probe
+            app.state.ready[CACHE_CHECK] = await cache_probe()
+        sessions = app.state.db_sessions
+
+        async def row_security_probe() -> bool:
+            return await check_row_security(sessions)
+
+        readings.probes[ROW_SECURITY_CHECK] = row_security_probe
+        app.state.ready[ROW_SECURITY_CHECK] = await row_security_probe()
+        get = http_get(app.state.key_client)
         wired = wirings_for(
             app.state.db_sessions,
-            get=http_get(app.state.key_client),
+            get=get,
             cache=entitlement_cache_for(app.state.valkey),
             clock=wall_clock,
         )
@@ -533,12 +614,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             # Beside the bindings writer and never without it. See
             # `brain.setup_routes.NO_APPOINTMENT_WHERE_NOBODY_COULD_SIGN_IN_AFTER_IT`.
             app.state.first_administrators = FirstAdministrators(app.state.db_sessions)
-            if await prime_keys(wired[0].authority, wall_clock):
-                app.state.reported[SIGN_IN_CHECK] = True
-            else:
-                priming = asyncio.create_task(
-                    keep_priming(wired[0].authority, app.state.reported, wall_clock)
+            answered = await sign_in_answers(wired[0].authority, get, wall_clock)
+            app.state.reported[SIGN_IN_CHECK] = answered
+            priming = asyncio.create_task(
+                keep_watching(
+                    wired[0].authority, get, app.state.reported, wall_clock, answered=answered
                 )
+            )
 
     try:
         yield
@@ -653,21 +735,42 @@ async def prime_keys(authority: TokenAuthority, clock: Callable[[], datetime]) -
     return True
 
 
-async def keep_priming(
-    authority: TokenAuthority, ready: MutableMapping[str, bool], clock: Callable[[], datetime]
-) -> None:
-    """Ask for the key set again until it arrives, then mark sign-in ready.
+async def sign_in_answers(
+    authority: TokenAuthority, get: Callable[[str], bytes], clock: Callable[[], datetime]
+) -> bool:
+    """The key set is read and the issuer answers as itself, now. Off the event loop.
 
-    See `AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN`. The waits are read from the module
-    on every pass, so a test can shorten them.
+    See `brain.readiness.SIGN_IN_IS_TRUE_ONLY_WHILE_THE_ISSUER_ANSWERS_AS_ITSELF`.
     """
-    delay = KEY_PRIMING_FIRST_RETRY_SECONDS
+    if not await prime_keys(authority, clock):
+        return False
+    return await asyncio.to_thread(issuer_answers, get, authority.issuer)
+
+
+async def keep_watching(
+    authority: TokenAuthority,
+    get: Callable[[str], bytes],
+    ready: MutableMapping[str, bool],
+    clock: Callable[[], datetime],
+    *,
+    answered: bool,
+) -> None:
+    """Ask whether sign-in answers for as long as the process runs, and say so each time.
+
+    Soon and then less often while it does not answer, which is
+    `AN_IDENTITY_PROVIDER_NOT_YET_ANSWERING_IS_ASKED_AGAIN`; once a minute while it does, so an
+    issuer that stops answering is reported. The waits are read from the module on every pass, so
+    a test can shorten them.
+    """
+    delay = KEY_PRIMING_MAX_RETRY_SECONDS if answered else KEY_PRIMING_FIRST_RETRY_SECONDS
     while True:
         await asyncio.sleep(delay)
-        if await prime_keys(authority, clock):
-            ready[SIGN_IN_CHECK] = True
-            return
-        delay = min(delay * 2, KEY_PRIMING_MAX_RETRY_SECONDS)
+        answered = await sign_in_answers(authority, get, clock)
+        ready[SIGN_IN_CHECK] = answered
+        if answered:
+            delay = KEY_PRIMING_MAX_RETRY_SECONDS
+        else:
+            delay = min(delay * 2, KEY_PRIMING_MAX_RETRY_SECONDS)
 
 
 def request_recorders_for(
@@ -738,6 +841,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.ready = {}
     app.state.reported = {}
+    app.state.readings = Readings()
     # Set to None rather than left unset, so "this process has no gate wiring" is a value a
     # route reads rather than an AttributeError it recovers from. `lifespan` builds it through
     # `wirings_for` when there is a database and an issuer: `keycloak_tokens.verify_rs256` is the
@@ -784,13 +888,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # held connections is an outage, which is the failure it was written to prevent.
     app.middleware("http")(TimeoutMiddleware(seconds=settings.request_timeout_seconds))
 
-    if settings.cors_origins:
+    # See CORS_ADMITS_THE_CONSOLE_AND_THE_WIDGET_AND_NOTHING_ELSE. `allowed_origins` raises on a
+    # wildcard or a value that is not an origin; `brain.config.check` refuses both before this.
+    admitted = allowed_origins((*settings.cors_origins, *settings.widget_origins))
+    if admitted:
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=list(settings.cors_origins),
+            allow_origins=sorted(admitted),
             allow_credentials=True,
-            allow_methods=["GET", "POST"],
-            allow_headers=["authorization", "content-type", "x-trace-id"],
+            allow_methods=list(CORS_METHODS),
+            allow_headers=list(CORS_HEADERS),
         )
 
     @app.middleware("http")
@@ -1160,6 +1267,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         `checks` decide the status; `reported` are named beside them and decide nothing. See
         `SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS`.
         """
+        await app.state.readings.refresh(app.state.ready)
         checks: dict[str, bool] = dict(app.state.ready)
         reported: dict[str, bool] = dict(getattr(app.state, "reported", {}))
         ok = all(checks.values()) if checks else True
@@ -1170,6 +1278,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             commit=settings.resolved_commit(),
             checks=checks,
             reported=reported,
+            parts=parts_of(checks, reported),
         )
 
     # The console's other half: the handler Starlette calls once the whole routing table has

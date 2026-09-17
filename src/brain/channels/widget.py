@@ -302,15 +302,11 @@ def allowed_origins(configured: Sequence[str]) -> frozenset[str]:
     normalised header against a raw configuration entry is how a trailing slash or a capital
     letter turns into "the widget does not work on our site" with nothing in the logs.
 
-    The wildcard is refused here, in every environment, and that is deliberately stricter than
-    `brain.config.check`, which only refuses a `cors_origins` of exactly `"*"` and only in
-    production. Two gaps in that check are visible from here: staging is not covered, and
-    `serve.py` passes the setting as a comma-joined string, so `"*,https://console.example"`
-    is a production wildcard that compares unequal to `"*"` and passes. Neither gap matters
-    much for CORS, which is a browser convenience; both matter a great deal here, because a
-    wildcard on this path means every site on the internet may mint anonymous credentials
-    against a customer's brain. Refusing per entry closes it whatever the joined string looks
-    like.
+    The wildcard is refused here, in every environment, per entry, whatever the joined string
+    looks like, because a wildcard on this path means every site on the internet may mint
+    anonymous credentials against a customer's brain. `brain.config.check` states the same rule
+    for `cors_origins` and `widget_origins` before the port is bound, so an operator reads it as
+    a named problem; this is the refusal that holds when nothing ran that check.
 
     Rejected: treating a wildcard as an allowlist that matches nothing. It fails closed, which
     is the right direction, and it fails quietly, which is the wrong one: the operator sees a

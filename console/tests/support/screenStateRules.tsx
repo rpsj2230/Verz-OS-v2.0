@@ -105,6 +105,10 @@ export const NO_EMPTY_SENTENCE: Readonly<Record<string, string>> = {
     "One agent is not a list. Its connectors, skills and channels are blocks that draw nothing when " +
     "they have no rows, because a heading over an empty block cannot be told from one whose rows the " +
     "reader may not see: brain.console.workspace.A_TAB_HEADING_WITH_NOTHING_UNDER_IT_IS_A_COUNT_IN_WORDS.",
+  "/":
+    "The overview's only list is the install card's parts, and /health/ready always names database, " +
+    "cache, vault and sign-in (brain.readiness.HEADLINE_PARTS), so an empty list is not an answer " +
+    "the API can give. The caller card is one object, not a list.",
 };
 
 /** What `api/errors.transportFailure` puts in front of a person, which no page wrote. */

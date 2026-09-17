@@ -136,14 +136,35 @@ def test_a_cors_wildcard_is_a_problem_in_staging_too() -> None:
     assert any(p.setting == "cors_origins" for p in problems)
 
 
-def test_development_keeps_the_wildcard_escape_hatch() -> None:
-    """So the check cannot be widened into refusing every wildcard everywhere, which would
-    satisfy both tests above and make local work annoying enough to be switched off. A
-    developer's ports move, and a machine with no client data on it is not what this
-    protects."""
+def test_a_wildcard_is_refused_in_development_too() -> None:
+    """Development kept an escape hatch here until 2026-09-17. `brain.app` now builds CORS
+    through `allowed_origins`, which refuses a wildcard in every environment, so a hatch here
+    only turned this readable problem into a traceback at import. Delete this and the hatch
+    can come back, and a development setting copied to a server is how a wildcard ships."""
     problems = check("development", {"cors_origins": "*"})
 
-    assert not any(p.setting == "cors_origins" for p in problems)
+    assert [p.setting for p in problems] == ["cors_origins"]
+
+
+def test_a_widget_origin_wildcard_is_refused_per_entry() -> None:
+    """The widget list is the one where an admitted origin mints anonymous sessions, and it
+    was not checked here at all. Delete this and `*` beside a real site passes this check."""
+    problems = check("development", {"widget_origins": "https://www.client.example, *"})
+
+    assert [(p.setting, p.problem) for p in problems] == [
+        ("widget_origins", "wildcard origin in development")
+    ]
+
+
+@pytest.mark.parametrize("entry", ["https://www.client.example/embed", "null", "not a url"])
+def test_an_entry_that_is_not_an_origin_is_named(entry: str) -> None:
+    """A path, `null` or free text is refused by `allowed_origins` at import; named here first,
+    so the operator reads which setting and why before the port is bound."""
+    problems = check("development", {"widget_origins": entry})
+
+    assert [(p.setting, p.problem) for p in problems] == [
+        ("widget_origins", "an entry is not an origin")
+    ]
 
 
 def test_a_named_origin_list_is_not_flagged() -> None:
@@ -154,11 +175,12 @@ def test_a_named_origin_list_is_not_flagged() -> None:
         {
             "database_url": "postgresql://real",
             "valkey_url": "redis://x",
-            "cors_origins": "https://console.example.com,https://www.client.example",
+            "cors_origins": "https://console.example.com",
+            "widget_origins": "https://www.client.example, HTTPS://Shop.Client.Example:8443/",
         },
     )
 
-    assert not any(p.setting == "cors_origins" for p in problems)
+    assert not any(p.setting in ("cors_origins", "widget_origins") for p in problems)
 
 
 # ------------------------------------------------------------------ reporting

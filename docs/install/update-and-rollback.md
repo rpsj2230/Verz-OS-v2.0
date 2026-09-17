@@ -227,6 +227,18 @@ generated from a plan with tests against it, and are carried in the archive. The
 the running release and whether a newer one exists. **None of it has been run on a server**,
 which is why the drill is still here.
 
+## When an update retires a route of the API
+
+Anything your company has written against `/api/v1` (a bot, a script, a partner's portal) keeps
+working across updates. A route that is going away is first marked deprecated, and from that
+release on every answer it sends carries three headers: `Deprecation` (the date it was marked),
+`Sunset` (the date before which it will not be removed, at least ninety days later) and `Link`
+(the route that replaces it). The API's own description marks it deprecated too. A route is
+never removed before its sunset, and a v1 answer is never changed incompatibly in place.
+
+So if you maintain an integration, log any response carrying a `Sunset` header, and move to the
+route its `Link` names before that date.
+
 ## What is checked and what is not
 
 | Claim | Held by |
@@ -246,6 +258,7 @@ which is why the drill is still here.
 | That the check asks nothing while switched off, and that no page waits for a look | `test_release_feed.py` and `test_install_routes.py`, the second with a list that does not answer until the page has |
 | That the application is handed the image variable the compose files select it by | `test_version_view.py`, against the compose files the release carries |
 | That tags are ordered by their numbers, and drafts, prereleases and `latest` are never the newest | `test_release_feed.py` and `test_version_view.py` |
+| That a deprecated route announces itself on every answer, with at least ninety days' notice and a served successor | `test_api_deprecation.py`, including a walk of the application's whole API description |
 | **That a published release list has ever been read by an install** | **nobody. No release has been published.** |
 | **The procedure on this page** | **nobody. It has never been run on a server.** |
 

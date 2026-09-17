@@ -339,6 +339,26 @@ def test_the_command_line_reads_the_environment_it_is_handed_and_not_the_machine
     assert database.main(["migrate"], env={"BRAIN_DATABASE_URL": URL}) == EXIT_DONE
 
 
+def test_the_command_line_acts_as_the_owner_when_the_install_names_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Create, migrate and seed are the owner's work. Delete this and an install whose
+    `DATABASE_URL` names `brain_app` runs them as a login that cannot create a schema."""
+    owner = "postgresql://owner:pw@db:5432/brain"
+    seen: list[str] = []
+
+    def migrated(url: str) -> list[str]:
+        seen.append(url)
+        return []
+
+    monkeypatch.setattr(database, "migrate", migrated)
+
+    env = {"DATABASE_URL": URL, "BRAIN_MIGRATION_DATABASE_URL": owner}
+    assert database.main(["migrate"], env=env) == EXIT_DONE
+    assert database.main(["migrate"], env={"DATABASE_URL": URL}) == EXIT_DONE
+    assert seen == [owner, URL]
+
+
 def test_the_command_line_answers_each_outcome_with_its_own_status(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

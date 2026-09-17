@@ -23,6 +23,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from brain.app import TRACE_ID_RE, Settings, create_app
+from brain.channels.widget import WidgetConfigurationError
 from brain.core.errors import Absent, Degraded, Denied, Unresolved
 from brain.ops.release_manifest import ReleaseManifest
 
@@ -42,7 +43,13 @@ def client(app: FastAPI) -> Iterator[TestClient]:
 def test_liveness_reports_the_running_commit(client: TestClient) -> None:
     r = client.get("/health/live")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok", "commit": "abc1234", "checks": {}, "reported": {}}
+    assert r.json() == {
+        "status": "ok",
+        "commit": "abc1234",
+        "checks": {},
+        "reported": {},
+        "parts": [],
+    }
 
 
 def test_the_running_commit_comes_from_the_image_when_the_environment_says_unknown(
@@ -132,7 +139,13 @@ def test_readiness_fails_when_any_dependency_is_unreachable(app: FastAPI) -> Non
 
 def test_liveness_stays_ok_while_readiness_fails(app: FastAPI) -> None:
     """The two must be able to disagree, or there is no point having both."""
+
+    async def down() -> bool:
+        return False
+
     with TestClient(app) as c:
+        # Readiness asks its probes again, so the outage is a probe that fails, not a flag.
+        app.state.readings.probes["database"] = down
         app.state.ready = {"database": False}
         assert c.get("/health/live").status_code == 200
         assert c.get("/health/ready").status_code == 503
@@ -479,6 +492,46 @@ def test_the_trace_id_reaches_every_log_line_and_not_only_the_response() -> None
     lifecycle = [e for e in captured if e.get("event") in {"starting", "shutting down"}]
     assert lifecycle, "the lifespan logged nothing, so this half asserts nothing"
     assert all("trace_id" not in e for e in lifecycle), lifecycle
+
+
+def test_cors_admits_the_widgets_sites_normalised_and_the_console_writes_and_nothing_else() -> None:
+    """The allow list is `cors_origins` plus `widget_origins`, each through the widget's origin
+    rule, with the two console write verbs and no DELETE.
+
+    Delete this and three edits pass every other test: dropping `widget_origins` from the list
+    (every embedding site's preflight refused), passing the raw entries (a configured trailing
+    slash or capital letter never matches a browser's Origin), and widening the verbs."""
+    app = create_app(
+        Settings(
+            cors_origins=("https://console.example.com",),
+            widget_origins=("HTTPS://Www.Client.Example/",),
+        )
+    )
+
+    def preflight(c: TestClient, origin: str, method: str) -> Any:
+        return c.options(
+            "/health/live",
+            headers={"Origin": origin, "Access-Control-Request-Method": method},
+        )
+
+    with TestClient(app) as c:
+        site = preflight(c, "https://www.client.example", "POST")
+        assert site.headers.get("access-control-allow-origin") == "https://www.client.example"
+        for method in ("PUT", "PATCH"):
+            console = preflight(c, "https://console.example.com", method)
+            assert console.status_code == 200, method
+        assert preflight(c, "https://console.example.com", "DELETE").status_code == 400
+        other = preflight(c, "https://elsewhere.example", "GET")
+        assert other.headers.get("access-control-allow-origin") is None
+
+
+@pytest.mark.parametrize("setting", ["cors_origins", "widget_origins"])
+def test_a_cors_wildcard_is_refused_when_the_application_is_built(setting: str) -> None:
+    """The refusal that holds when `config.check` never ran, in development too. Delete this
+    and a wildcard in either list can reach `CORSMiddleware`, which with credentials on echoes
+    every origin back."""
+    with pytest.raises(WidgetConfigurationError):
+        create_app(Settings.model_validate({setting: ("https://console.example.com", "*")}))
 
 
 def test_cors_is_closed_unless_origins_are_configured() -> None:

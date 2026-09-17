@@ -62,7 +62,11 @@ def alembic_url(configured: str | None) -> str:
     Here rather than in `env.py`, because `env.py` is executed by Alembic and cannot be imported
     by a test, and the precedence is the part worth holding to a test.
     """
-    url = (configured or "").strip() or Settings().database_url.strip()
+    settings = Settings()
+    # The owner's login first, as the lifespan does, so the bare command can migrate an install
+    # whose `DATABASE_URL` names `brain_app`.
+    fallback = settings.migration_database_url or settings.database_url
+    url = (configured or "").strip() or fallback.strip()
     if not url:
         msg = (
             "no database to migrate: the Alembic config names none, and neither "
