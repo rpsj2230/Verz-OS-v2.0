@@ -115,6 +115,11 @@ def downgrade() -> None:
     never existed, and the whole value of the history is that each revision describes what
     was really there. So this restores the mangled form, and the table it is applied to
     stops accepting writes again, which is what 0014 and earlier actually shipped.
+
+    It goes back `NOT VALID`, for the reason `0026` gives and one of its own: validating the
+    rows already there evaluates the broken pattern against each of them. Measured on
+    PostgreSQL 17.11, one row in the table is enough for `invalid regular expression:
+    quantifier operand invalid`, so validated, this downgrade could run only on empty tables.
     """
     for schema, table, name, column in CONSTRAINED:
         op.drop_constraint(name, table, schema=schema, type_="check")
@@ -123,4 +128,5 @@ def downgrade() -> None:
             table,
             f"{column} ~ '{SLUG_SQL_PATTERN_AS_0003_SHIPPED_IT}'",
             schema=schema,
+            postgresql_not_valid=True,
         )

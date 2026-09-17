@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from brain.ops.migration_policy import Finding, check_all, check_file
 
 NL = "\n"
@@ -310,3 +312,110 @@ def test_a_migration_discussing_create_table_in_prose_creates_nothing(tmp_path: 
     )
     p = write(tmp_path, body)
     assert rules(check_file(p)) == {"empty downgrade"}
+
+
+# ------------------------------------------------- a downgrade on a populated database
+NOT_VALID_RULE = "downgrade adds a check constraint without NOT VALID"
+DROP_ACTION = "op.drop_constraint('action', 'audit_entry', schema='obs', type_='check')"
+NARROWER_SQL = (
+    "ALTER TABLE obs.audit_entry ADD CONSTRAINT ck_audit_entry_action CHECK (action IN ('grant'))"
+)
+
+
+def downgrade_rules(tmp_path: Path, down: list[str], preamble: str = "") -> list[Finding]:
+    """The findings of this one rule, for a migration whose upgrade widens and whose downgrade is
+    `down`. The upgrade re-creates its constraint validated, as every upgrade here does."""
+    up = [DROP_ACTION, "op.create_check_constraint('action', 'audit_entry', 'true', schema='obs')"]
+    p = write(tmp_path, preamble + migration(up, down))
+    return [f for f in check_file(p) if f.rule == NOT_VALID_RULE]
+
+
+@pytest.mark.parametrize(
+    ("down", "preamble"),
+    [
+        (
+            [
+                DROP_ACTION,
+                "op.create_check_constraint('action', 'audit_entry', 'false', schema='obs')",
+            ],
+            "",
+        ),
+        (
+            [
+                DROP_ACTION,
+                "op.create_check_constraint(",
+                "    'action', 'audit_entry', 'false', schema='obs', postgresql_not_valid=False",
+                ")",
+            ],
+            "",
+        ),
+        ([DROP_ACTION, f'op.execute("{NARROWER_SQL}")'], ""),
+        ([DROP_ACTION, "op.execute(NARROWER)"], f'NARROWER = "{NARROWER_SQL}"' + NL + NL),
+    ],
+    ids=["no-keyword", "keyword-false", "sql-literal", "sql-held-in-a-constant"],
+)
+def test_a_downgrade_that_re_creates_a_check_constraint_validated_is_refused(
+    tmp_path: Path, down: list[str], preamble: str
+) -> None:
+    """Found on CI on 2026-09-17: `0059`'s downgrade re-added the narrower subject grammar over a
+    ledger the unit tests had filled, PostgreSQL validated every row, and the round trip stopped
+    on `CheckViolation`. The ledger is append-only, so on an install that has used the release
+    being rolled back that downgrade cannot run at all. The four shapes are the two ways a check
+    is added, the keyword written and set wrong, and the SQL held in a named constant, which is
+    how this repository names its SQL.
+
+    Delete this and a migration can go back to re-creating a narrower check validated, which
+    passes every test against an empty database and fails the first real rollback."""
+    findings = downgrade_rules(tmp_path, down, preamble)
+
+    assert len(findings) == 1
+
+
+@pytest.mark.parametrize(
+    ("down", "preamble"),
+    [
+        (
+            [
+                '"""Not ALTER TABLE obs.audit_entry ADD CONSTRAINT ck CHECK (x) as it was."""',
+                DROP_ACTION,
+                "op.create_check_constraint(",
+                "    'action', 'audit_entry', 'false', schema='obs', postgresql_not_valid=True",
+                ")",
+            ],
+            "",
+        ),
+        ([DROP_ACTION, f'op.execute("{NARROWER_SQL} NOT VALID")'], ""),
+        (
+            [DROP_ACTION, "op.execute(NARROWER + ' NOT VALID')"],
+            f'NARROWER = "{NARROWER_SQL}"' + NL + NL,
+        ),
+    ],
+    ids=["keyword-true-beside-prose", "sql-literal", "sql-concatenated-from-a-constant"],
+)
+def test_a_downgrade_that_re_creates_a_check_constraint_not_valid_passes(
+    tmp_path: Path, down: list[str], preamble: str
+) -> None:
+    """The positive half. A rule tested only by its refusals is satisfied by one that refuses
+    every downgrade with a check in it, and twenty-one migrations here have one. The docstring
+    case holds that prose quoting the refused statement is not the statement, and the last case
+    that a `NOT VALID` in the final fragment of a concatenation is read as part of the statement.
+
+    Delete this and the rule can be tightened into refusing the fix it asks for."""
+    assert downgrade_rules(tmp_path, down, preamble) == []
+
+
+def test_an_upgrade_that_re_creates_a_check_constraint_validated_is_not_held_to_it(
+    tmp_path: Path,
+) -> None:
+    """An upgrade widens, so every row already there satisfies the new check, and validating it
+    is what proves that: every upgrade in this repository re-creates its checks validated and
+    must go on doing so. Only the downgrade narrows over rows written under a wider rule.
+
+    Delete this and the rule can be widened to the whole file, which refuses every migration
+    that has ever widened a vocabulary and invites `NOT VALID` onto upgrades, where it would let
+    a row the new rule refuses pass unnoticed."""
+    up = [DROP_ACTION, "op.create_check_constraint('action', 'audit_entry', 'true', schema='obs')"]
+    up.append(f'op.execute("{NARROWER_SQL}")')
+    p = write(tmp_path, migration(up, [DROP_ACTION]))
+
+    assert NOT_VALID_RULE not in rules(check_file(p))

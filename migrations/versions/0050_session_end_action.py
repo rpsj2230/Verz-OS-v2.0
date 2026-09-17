@@ -40,9 +40,9 @@ Rejected for the reason `0047` gives: rewriting `0003`'s trigger to call a share
 migration edits a function every grant in production goes through in order to add a feature to a
 different table. The three copies name each other.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing either
-list is refused once any row carries the new value, and an audit row cannot be removed to make
-room.
+**The downgrade keeps the rows already written**, for the reason `0026` gives: both lists go back
+`NOT VALID`, so a session or an entry already carrying the new value stays and no new one is
+accepted.
 
 Task ids: none
 """
@@ -170,6 +170,10 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER session_records_its_end ON auth.session")
     op.execute("DROP FUNCTION auth.record_session_end()")
     op.drop_constraint("end_reason", "session", schema="auth", type_="check")
-    op.create_check_constraint("end_reason", "session", WITHOUT_CONSOLE_ENDING, schema="auth")
+    op.create_check_constraint(
+        "end_reason", "session", WITHOUT_CONSOLE_ENDING, schema="auth", postgresql_not_valid=True
+    )
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", WITHOUT_SESSION_END, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", WITHOUT_SESSION_END, schema="obs", postgresql_not_valid=True
+    )

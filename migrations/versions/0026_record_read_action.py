@@ -38,12 +38,18 @@ years, `brain.ops.retention` puts the chain in a class that never expires, and
 a control. Closing that needs a table of its own with its own chain, which is a decision rather
 than an edit, and it is not made here.
 
-**The downgrade is real and it can fail, which is correct.** Narrowing the list rejects the
-migration if any row already carries `record_read`, because recreating a check constraint
-validates the rows already there, and an audit row cannot be deleted to make room: the ledger
-is append-only and `brain.tables.audit` grants no DELETE on it. So a downgrade past this point
-is only available to an installation where nobody has ever read a personnel record, which is
-the correct restriction rather than an oversight.
+**The downgrade narrows the list for what is written next and keeps what was written before.**
+The constraint goes back `NOT VALID`, so PostgreSQL holds every write after the downgrade to the
+narrower list and does not read the rows already there. Until 2026-09-17 this paragraph said the
+downgrade could fail and that failing was correct: recreating a check validates every row, and an
+audit row cannot be deleted to make room, because the ledger is append-only and
+`brain.tables.audit` grants no DELETE on it. Both halves are true, and together they left a
+rollback past this point open only to an installation where nobody had ever read a personnel
+record, which is no installation that would want one. CI found it on `0059`, the first time the
+round trip ran over a ledger the unit tests had filled. A row the newer release wrote is history
+the older release cannot produce and has no business rewriting, and the next upgrade recreates
+the wider list validated, which every row satisfies. `brain.ops.migration_policy` refuses a
+downgrade that adds a check constraint any other way.
 
 Task ids: none
 """
@@ -83,4 +89,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", WITHOUT_RECORD_READ, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", WITHOUT_RECORD_READ, schema="obs", postgresql_not_valid=True
+    )

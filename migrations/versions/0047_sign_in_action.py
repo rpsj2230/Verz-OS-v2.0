@@ -33,8 +33,8 @@ trigger to call a shared append function in the same migration, which edits a fu
 grant in production goes through in order to add a feature to a different table. The two copies
 are named in each other's neighbourhood so the next change to the chain's shape finds both.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing the list is
-refused once any row carries `sign_in`, and an audit row cannot be removed to make room.
+**The downgrade keeps what the ledger already holds**, for the reason `0026` gives: the list goes
+back `NOT VALID`, so a row already carrying `sign_in` stays and no new one is accepted.
 
 Task ids: none
 """
@@ -165,4 +165,6 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER principal_identity_records_sign_in ON auth.principal_identity")
     op.execute("DROP FUNCTION auth.record_sign_in_change()")
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", WITHOUT_SIGN_IN, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", WITHOUT_SIGN_IN, schema="obs", postgresql_not_valid=True
+    )

@@ -55,8 +55,8 @@ for the reason `0047` gives against editing a function every grant in production
 advisory lock, same sequence and parent read, same `obs.audit_entry_hash`, same refusal of a
 discarded MERGE.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing the action list
-is refused once any row carries the new value.
+**The downgrade keeps what the ledger already holds**, for the reason `0026` gives: the action list
+goes back `NOT VALID`, so an entry already carrying the new value stays and no new one is accepted.
 
 Task ids: none
 """
@@ -263,6 +263,8 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER review_decision_is_audited ON gate.review_decision")
     op.execute("DROP FUNCTION gate.record_review_decision()")
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", WITHOUT_CERTIFICATION, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", WITHOUT_CERTIFICATION, schema="obs", postgresql_not_valid=True
+    )
     # The policies and the grants go with the table.
     op.drop_table("review_decision", schema="gate")

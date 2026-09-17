@@ -22,11 +22,14 @@ adding one needs `ALTER TYPE`, which on older servers cannot run inside the sing
 transaction `migrations/env.py` wraps a migration in. A check constraint is dropped and
 recreated like anything else, so the downgrade below is ordinary.
 
-**The downgrade is real and it can fail, which is correct.** Narrowing the list back rejects
-the migration if any row already carries `widget`, because recreating a check constraint
-validates the existing rows. That is the right behaviour: a downgrade that silently kept
-rows the schema says are impossible would leave a table nothing can subsequently validate.
-Whoever needs to go back deletes those sessions first, deliberately.
+**The downgrade narrows the list for new rows and keeps the rows already there.** The
+constraint goes back `NOT VALID`, for the reason `0026` gives. Until 2026-09-17 this paragraph
+argued that the downgrade should fail on a `widget` row, so that whoever went back deleted those
+sessions first rather than keep rows the schema says are impossible. What that bought was a
+rollback whose precondition is a hand edit of the identity tables, at the moment something is
+already wrong. What it costs now is stated rather than hidden: the table can hold rows that
+`VALIDATE CONSTRAINT` would refuse, and the older release can read a session on a channel it has
+no member for. Deleting those rows is still available, and is no longer required to go back.
 
 Task ids: M10.5.5
 """
@@ -85,7 +88,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Narrow the list again. Fails if a row already carries `widget`, deliberately."""
+    """Narrow the list again for new rows, and keep any row that already carries `widget`."""
     for schema, table in CONSTRAINED:
         # The bare name. Alembic applies `NAMING_CONVENTION["ck"]` on top, so passing the
         # already-prefixed `ck_<table>_channel` renders
@@ -93,4 +96,6 @@ def downgrade() -> None:
         # constraint that has never existed. This is the first drop_constraint in the
         # repository, so there was no idiom to copy; there is a test now.
         op.drop_constraint("channel", table, schema=schema, type_="check")
-        op.create_check_constraint("channel", table, WITHOUT_WIDGET, schema=schema)
+        op.create_check_constraint(
+            "channel", table, WITHOUT_WIDGET, schema=schema, postgresql_not_valid=True
+        )

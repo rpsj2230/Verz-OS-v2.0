@@ -38,9 +38,9 @@ every one since, for the reason `0047` gives against editing a function every gr
 through. Same advisory lock, same sequence and parent read, same `obs.audit_entry_hash`, same
 refusal of a discarded MERGE.
 
-**The downgrade can fail, which is correct**, for `0026`'s reason: narrowing the action list is
-refused once any entry records a placement or a request, and an audit entry cannot be deleted to
-make room. It drops the three tables with it, and with them every placement and request, which is
+**The downgrade keeps what the ledger already holds**, for `0026`'s reason: the action list goes
+back `NOT VALID`, so an entry already recording a placement or a request stays and no new one is
+accepted. It drops the three tables with it, and with them every placement and request, which is
 the state before this migration.
 
 Task ids: M27.7.4, M27.7.8
@@ -519,7 +519,9 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER team_membership_is_audited ON gate.team_membership")
     op.execute("DROP FUNCTION gate.record_team_membership()")
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", NARROWER_ACTIONS, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", NARROWER_ACTIONS, schema="obs", postgresql_not_valid=True
+    )
     # The policies and the grants go with the tables.
     op.drop_index("ix_gate_elevation_request_principal_id", "elevation_request", schema="gate")
     op.drop_table("elevation_request", schema="gate")

@@ -31,9 +31,9 @@ for the reason `0047` gives against editing a function every grant in production
 advisory lock, same sequence and parent read, same `obs.audit_entry_hash`, same refusal of a
 discarded MERGE.
 
-**The downgrade can fail, which is correct**, for `0026`'s reason: narrowing the action list and
-the subject grammar is refused once any entry records a correction, and an audit entry cannot be
-deleted to make room. It drops both tables with it, and with them every correction, which is the
+**The downgrade keeps what the ledger already holds**, for `0026`'s reason: the action list and
+the subject grammar go back `NOT VALID`, so an entry already recording a correction stays and no
+new one is accepted. It drops both tables with it, and with them every correction, which is the
 state before this migration: recall then reads no corrections, as it did.
 
 Task ids: M27.7.21, M27.7.22
@@ -305,9 +305,13 @@ def downgrade() -> None:
     op.execute("DROP TRIGGER correction_is_audited ON mem.correction")
     op.execute("DROP FUNCTION mem.record_correction()")
     op.drop_constraint("subject_grammar", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs")
+    op.create_check_constraint(
+        "subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs", postgresql_not_valid=True
+    )
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", NARROWER_ACTIONS, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", NARROWER_ACTIONS, schema="obs", postgresql_not_valid=True
+    )
     # The policies and the grants go with the tables.
     op.drop_index("ix_correction_by_id", "correction", schema="mem")
     op.drop_index("ix_correction_memory_id", "correction", schema="mem")

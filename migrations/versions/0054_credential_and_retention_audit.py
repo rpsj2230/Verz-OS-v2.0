@@ -58,9 +58,9 @@ wrote, which no migration had touched; `brain.tables.audit.SUBJECT_PATTERN` rend
 in production goes through. Same advisory lock, same sequence and parent read, same
 `obs.audit_entry_hash`, same refusal of a discarded MERGE.
 
-**The downgrade can fail, which is correct**, for the reason `0026` gives: narrowing the action list
-and the subject grammar is refused once any entry carries the new values, and an audit entry cannot
-be deleted to make room.
+**The downgrade keeps what the ledger already holds**, for the reason `0026` gives: the action list
+and the subject grammar go back `NOT VALID`, so an entry already carrying the new values stays and
+no new one is accepted.
 
 Task ids: none
 """
@@ -343,8 +343,12 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION ops.record_retention_release()")
     op.execute("DROP FUNCTION ops.record_credential_write()")
     op.drop_constraint("subject_grammar", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs")
+    op.create_check_constraint(
+        "subject_grammar", "audit_entry", NARROWER_SUBJECTS, schema="obs", postgresql_not_valid=True
+    )
     op.drop_constraint("action", "audit_entry", schema="obs", type_="check")
-    op.create_check_constraint("action", "audit_entry", NARROWER_ACTIONS, schema="obs")
+    op.create_check_constraint(
+        "action", "audit_entry", NARROWER_ACTIONS, schema="obs", postgresql_not_valid=True
+    )
     # The policies and the grants go with the table.
     op.drop_table("credential_write", schema="ops")
