@@ -141,7 +141,12 @@ def test_the_recorder_refuses_a_team_change_naming_a_department_and_the_reverse(
         (OrganisationChange.STOOD_DOWN, {"team": "web.design", "department": "web"}),
     ):
         try:
-            recorder().organisation(principal_id="u_1", change=change, **where)
+            recorder().organisation(
+                principal_id="u_1",
+                change=change,
+                team=where.get("team", ""),
+                department=where.get("department", ""),
+            )
         except ValueError:
             continue
         raise AssertionError(f"{change} with {where} was recorded")
