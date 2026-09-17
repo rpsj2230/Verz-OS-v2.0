@@ -110,7 +110,30 @@
     "Rejected: declaring no clientScopes, so that Keycloak builds and attaches its own. It would",
     "work, and it moves brain-identity's mappers onto brain-console, needs every product client",
     "pinned against the realm default scopes that would then exist, and leaves every install",
-    "repaired by hand a different shape from a fresh one."
+    "repaired by hand a different shape from a fresh one.",
+    "",
+    "EVERY REQUIRED ACTION KEYCLOAK REGISTERS IS DECLARED, AND UNTIL 2026-09-17 ONE WAS.",
+    "Keycloak 26.0.0's DefaultExportImportManager registers the file's requiredActions plus",
+    "delete_account when the file declares any, and Keycloak's own list only when it declares",
+    "none. An action nobody registered is skipped at sign-in with a warning. So on every install",
+    "a temporary password was never replaced, a password reset never asked for a new password,",
+    "the Account Console's Update on a password and Delete on a one-time code came back with",
+    "nothing done, and an administrator's request to verify an address or update a profile never",
+    "ran. Found on the owner's staging install, which had CONFIGURE_TOTP and delete_account only.",
+    "",
+    "So requiredActions below is Keycloak's own list for a new realm, with Keycloak's own enabled,",
+    "defaultAction and priority, less the two whose features are preview and off by default",
+    "(UPDATE_EMAIL, CONFIGURE_RECOVERY_AUTHN_CODES). CONFIGURE_TOTP keeps defaultAction true, the",
+    "one deliberate difference, because every admin screen needs a second factor.",
+    "",
+    "verifyEmail is false, and that is the price of declaring VERIFY_EMAIL at all. With it true,",
+    "VERIFY_EMAIL asks every person whose address is not marked verified to click an emailed link",
+    "before the sign-in finishes, and this file configures no mail server, so the email fails and",
+    "nobody gets in. It was true before and did nothing, because VERIFY_EMAIL was not registered,",
+    "so false is what every install has been running. Turn it on in the admin console once that",
+    "install can send email. Rejected: VERIFY_EMAIL declared but disabled, which keeps a true",
+    "verifyEmail that does nothing and leaves an administrator's own request to verify one",
+    "person's address skipped exactly as before."
   ],
 
   "realm": "brain",
@@ -120,7 +143,7 @@
   "registrationAllowed": false,
   "resetPasswordAllowed": true,
   "rememberMe": false,
-  "verifyEmail": true,
+  "verifyEmail": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "editUsernameAllowed": false,
@@ -726,6 +749,91 @@
       "defaultAction": true,
       "priority": 10,
       "_comment": "defaultAction true so a new account is asked to set up a second factor at first login. Assurance.STRONG is what brain.gate.admission requires for approve and admin, so without this nobody can approve anything. Setting one up is not presenting one: this action runs after the flow, so the OTP form was not a completed step of the session it ran in, and that session's tokens carry pwd alone. The person signs out and signs in again, and that sign-in passes the OTP form and carries otp."
+    },
+    {
+      "alias": "TERMS_AND_CONDITIONS",
+      "providerId": "TERMS_AND_CONDITIONS",
+      "name": "Terms and Conditions",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 20,
+      "_comment": "Disabled, as Keycloak registers it. Made default, it puts a terms page in front of every new account."
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "providerId": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 30,
+      "_comment": "What a temporary password, the last step of a password reset and the Account Console's Update on a password all ask for. Unregistered, each of them is skipped and the old password stays."
+    },
+    {
+      "alias": "UPDATE_PROFILE",
+      "providerId": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 40
+    },
+    {
+      "alias": "VERIFY_EMAIL",
+      "providerId": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 50,
+      "_comment": "Runs for a person an administrator asks to verify. It runs for everybody unverified only while the realm's verifyEmail is true, which is false here because this file configures no mail server; see the header."
+    },
+    {
+      "alias": "delete_account",
+      "providerId": "delete_account",
+      "name": "Delete Account",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 60
+    },
+    {
+      "alias": "webauthn-register",
+      "providerId": "webauthn-register",
+      "name": "Webauthn Register",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 70
+    },
+    {
+      "alias": "webauthn-register-passwordless",
+      "providerId": "webauthn-register-passwordless",
+      "name": "Webauthn Register Passwordless",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 80
+    },
+    {
+      "alias": "VERIFY_PROFILE",
+      "providerId": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 90,
+      "_comment": "Asks once for what the user profile requires and an account lacks, first name, last name and email in Keycloak's default profile. A complete account is never asked."
+    },
+    {
+      "alias": "delete_credential",
+      "providerId": "delete_credential",
+      "name": "Delete Credential",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 100,
+      "_comment": "The Account Console deletes a one-time code through this action. Unregistered, Delete returns to the page with the credential still there."
+    },
+    {
+      "alias": "update_user_locale",
+      "providerId": "update_user_locale",
+      "name": "Update User Locale",
+      "enabled": true,
+      "defaultAction": false,
+      "priority": 1000
     }
   ]
 }

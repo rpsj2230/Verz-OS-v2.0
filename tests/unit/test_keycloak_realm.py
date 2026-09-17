@@ -47,7 +47,15 @@ that reads it, the way the audience test walks the join to `validate_token`.
 install opened Keycloak's Account Console to set up a one-time code and was refused. The realm
 declares its own client scope, and Keycloak's import attaches its built-in scopes to its own
 clients only when a file declares none, so `account-console` minted tokens with no roles in them.
-The last three tests walk that join from the realm to what the Account REST API reads.
+The three tests after the amr ones walk that join from the realm to what the Account REST API
+reads.
+
+**And a realm where nobody was ever asked for a new password.** Staging registered two required
+actions, `CONFIGURE_TOTP` and `delete_account`, because Keycloak registers its own list only for a
+file that declares none. So a temporary password, a password reset and the Account Console's
+Update and Delete buttons were all skipped at sign-in with a warning. The last two tests hold the
+realm to Keycloak's own list and hold that nothing on it but the second factor stands in front of
+everybody.
 
 Task ids: M1.1.1, M3.3.4
 """
@@ -944,3 +952,107 @@ def test_the_account_client_and_its_console_are_declared_together_with_every_rol
         f"the account roles everybody holds are declared on {carrying}, and the default role is "
         f"{default_role!r}"
     )
+
+
+# --------------------------------------------------------------- required actions
+#
+# Keycloak 26.0.0 source, read rather than remembered. `DefaultExportImportManager.importRealm`
+# registers a file's `requiredActions` and then `delete_account`, and calls
+# `DefaultRequiredActions.addActions` only when the file declares none (L326-337); the later
+# `RealmManager.setupRequiredActions` adds nothing to a realm that has any (L149-151, L611). At
+# sign-in `AuthenticationManager.getApplicableRequiredAction` skips an alias nobody registered with
+# a warning (L1374-1381), `evaluateRequiredActionTriggers` runs only registered, enabled actions
+# (L1400-1405), and a `kc_action` nobody registered comes back to the application as an error
+# (L1342-1346).
+
+#: `DefaultRequiredActions.addActions` in Keycloak 26.0.0, as it registers them on a new realm:
+#: alias to (enabled, defaultAction, priority), L122-321. `UPDATE_EMAIL` and
+#: `CONFIGURE_RECOVERY_AUTHN_CODES` are not here: their features are preview in `Profile` (L91,
+#: L93), and `addActions` registers neither unless a server turns its feature on (L239-279).
+KEYCLOAK_REGISTERS_ON_A_NEW_REALM: dict[str, tuple[bool, bool, int]] = {
+    "VERIFY_EMAIL": (True, False, 50),
+    "UPDATE_PROFILE": (True, False, 40),
+    "CONFIGURE_TOTP": (True, False, 10),
+    "UPDATE_PASSWORD": (True, False, 30),
+    "TERMS_AND_CONDITIONS": (False, False, 20),
+    "delete_account": (False, False, 60),
+    "delete_credential": (True, False, 100),
+    "update_user_locale": (True, False, 1000),
+    "webauthn-register": (True, False, 70),
+    "webauthn-register-passwordless": (True, False, 80),
+    "VERIFY_PROFILE": (True, False, 90),
+}
+#: The actions this realm adds to every new account, which is the one place it differs from
+#: Keycloak: every admin screen needs a sign-in that used a second factor.
+ASKED_OF_EVERY_NEW_ACCOUNT = frozenset({"CONFIGURE_TOTP"})
+
+
+def test_the_realm_declares_every_required_action_keycloak_registers_with_its_flags() -> None:
+    """**The staging finding: nobody on any install was ever asked for a new password.** This file
+    declared `CONFIGURE_TOTP` alone, so the import registered it and `delete_account` and nothing
+    else. `UPDATE_PASSWORD` is what a temporary password (`UserResource` L722-723), the last step
+    of a password reset (`ResetPassword` L40) and the Account Console's Update on a password
+    (`PasswordCredentialProvider` L249) all ask for, and `delete_credential` is what its Delete on a
+    one-time code asks for (`SigningIn.tsx` L215-219). Each was skipped, and the person came back
+    with nothing changed.
+
+    Held to Keycloak's own list with Keycloak's own flags rather than to a list of the ones that
+    have hurt so far, because every action on it is somebody's button: a missing one is found by
+    the person who presses it. `CONFIGURE_TOTP` is the one flag allowed to differ, and the test
+    below says why. An action outside the list is one Keycloak does not register on a new realm,
+    behind a preview feature or from a provider it does not ship, so declaring one is a decision
+    that changes this test with it.
+
+    Delete this and the list can shrink back to the second factor, with every other test here green
+    and the realm importing cleanly."""
+    declared = _realm()["requiredActions"]
+    aliases = [one["alias"] for one in declared]
+    assert len(set(aliases)) == len(aliases), f"an action is declared twice: {aliases}"
+
+    missing = sorted(set(KEYCLOAK_REGISTERS_ON_A_NEW_REALM) - set(aliases))
+    extra = sorted(set(aliases) - set(KEYCLOAK_REGISTERS_ON_A_NEW_REALM))
+    assert not missing, f"Keycloak registers these on a new realm and this file does not: {missing}"
+    assert not extra, f"Keycloak 26.0 registers none of these on a new realm: {extra}"
+
+    by_alias = {one["alias"]: one for one in declared}
+    differ: dict[str, str] = {}
+    for alias, (enabled, default, priority) in KEYCLOAK_REGISTERS_ON_A_NEW_REALM.items():
+        expected = (enabled, default or alias in ASKED_OF_EVERY_NEW_ACCOUNT, priority)
+        one = by_alias[alias]
+        found = (one.get("enabled"), one.get("defaultAction"), one.get("priority"))
+        if found != expected:
+            differ[alias] = f"(enabled, defaultAction, priority) is {found}, expected {expected}"
+    assert not differ, f"declared with flags Keycloak does not give them: {differ}"
+
+
+def test_nothing_but_the_second_factor_stands_in_front_of_everybody_who_signs_in() -> None:
+    """**The other half: declaring Keycloak's list must not change a sign-in for everybody.**
+
+    - An enabled action marked default is added to every account created from then on
+      (`JpaUserProvider.addUser` L129-135). Only the one-time code is, and it still is: a realm
+      that dropped it would let a new account reach no admin screen and never be told why.
+    - `VERIFY_EMAIL` asks every person whose address is not marked verified to click an emailed
+      link before the sign-in finishes, while the realm's `verifyEmail` is true (`VerifyEmail`
+      L50-54). With no sender address the email fails (`DefaultEmailSenderProvider` L113-115),
+      the page is shown anyway (`VerifyEmail` L153-158), and nobody gets in. So the realm may ask
+      that of everybody only if it declares a mail server to send from.
+
+    Delete this and terms and conditions can be made default, or `verifyEmail` turned back on,
+    with the list above still matching Keycloak's and every person stopped at their next sign-in."""
+    realm = _realm()
+    actions = realm["requiredActions"]
+
+    for_everybody = {
+        one["alias"] for one in actions if one.get("enabled") and one.get("defaultAction")
+    }
+    assert for_everybody == ASKED_OF_EVERY_NEW_ACCOUNT, (
+        f"every new account is asked for {sorted(for_everybody)}"
+    )
+
+    verify: dict[str, Any] = next((one for one in actions if one["alias"] == "VERIFY_EMAIL"), {})
+    if realm.get("verifyEmail") and verify.get("enabled"):
+        sender = (realm.get("smtpServer") or {}).get("from")
+        assert sender, (
+            "verifyEmail asks every unverified person for an emailed link, and the realm names no "
+            "sender, so the email fails and nobody finishes signing in"
+        )

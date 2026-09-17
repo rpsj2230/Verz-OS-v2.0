@@ -660,6 +660,166 @@ claims by it, and that the realm declares every client and role this needs, are 
 `test_keycloak_realm.py` against the realm file. The commands above were written from the identity
 provider's 26.0 source and admin documentation, and have not been run against a server.
 
+## When a new password is never asked for
+
+**On a realm imported before this release, the identity provider skips most of what it is asked
+to make a person do.** What people see:
+
+- Somebody given a temporary password signs straight in and is never asked to choose their own, so
+  the password an administrator typed stays theirs.
+- On an install that sends email, a forgotten-password link finishes without asking for a new
+  password, and the old one is still the one that works.
+- In the Account Console, under **Signing in**, **Update** beside a password and **Delete** beside a
+  one-time code both come back to the same page with nothing changed.
+- Somebody an administrator asked to verify their email or update their profile is never asked.
+
+The cause is in the realm, not in any account. Each of those is a *required action*, and the
+identity provider runs one only if the realm registers it: any other is skipped, with a warning in
+its log and nothing on the screen. The realm this product used to import registered two, **Configure
+OTP** and **Delete Account**, and Delete Account is off. A realm imported from this release
+registers the eleven the identity provider registers on a realm it creates itself, with the same
+settings, and still puts only one of them in front of every new account: the one-time code.
+
+**It also turns off the realm's email check, and step 5 below does the same.** That setting was on
+and did nothing, because the step it needs was not registered. Once **Verify Email** is registered,
+the setting stops every person whose address is not marked verified at their next sign-in until
+they click a link in an email, and this product does not set up the identity provider's email. So
+with the setting on, nobody could finish signing in.
+
+### Registering the required actions on a realm imported before this release
+
+Run these on the server, as somebody who can use `docker`. Every command is typed exactly as it is
+written: nothing in it needs replacing. No password is typed on a command line: step 3 asks for it.
+
+1. Check there is exactly one identity provider container on this server:
+
+   ```
+   docker ps --filter "ancestor=quay.io/keycloak/keycloak:26.0" --format "{{.Names}}"
+   ```
+
+   It should print one name. If it prints more than one, do not use step 2: open the Terminal of
+   this install's `keycloak` service in Coolify instead, which puts you in the right container,
+   and carry on at step 3.
+
+2. Open a shell inside it:
+
+   ```
+   docker exec -it "$(docker ps --filter "ancestor=quay.io/keycloak/keycloak:26.0" --format "{{.Names}}")" bash
+   ```
+
+3. Sign the admin tool in. It asks for the temporary administrator's password. If you have deleted
+   the temporary administrator, as this page advises, type your own administrator's username in
+   place of `"$KC_BOOTSTRAP_ADMIN_USERNAME"`.
+
+   ```
+   KC=/opt/keycloak/bin/kcadm.sh
+   $KC config credentials --server http://localhost:8080 --realm master --user "$KC_BOOTSTRAP_ADMIN_USERNAME"
+   ```
+
+4. Read what the realm registers now:
+
+   ```
+   $KC get authentication/required-actions -r brain --fields alias,enabled,defaultAction,priority --format csv --noquotes
+   ```
+
+   On a realm imported before this release it prints two rows, `CONFIGURE_TOTP,true,true,10` and
+   `delete_account,false,false,60`. If it prints more, somebody has registered some by hand. Step 6
+   leaves every action already registered as it is and registers only the rest.
+
+5. Turn off the realm's email check:
+
+   ```
+   $KC get realms/brain --fields verifyEmail --format csv --noquotes
+   $KC update realms/brain -s verifyEmail=false
+   ```
+
+   The first command prints `true` on a realm imported before this release. Leave the second out
+   only if this install already sends email from the identity provider and you want every person to
+   verify their address: each person whose address is not marked verified is then asked to at their
+   next sign-in.
+
+6. Register every action the realm does not have yet. Each entry in the list is the action, the
+   name the admin console shows for it, whether it is on, and its place in the order, all as the
+   identity provider sets them on a realm it creates:
+
+   ```
+   REGISTERED=$($KC get authentication/required-actions -r brain --fields alias --format csv --noquotes)
+   for ENTRY in \
+     "TERMS_AND_CONDITIONS|Terms and Conditions|false|20" \
+     "UPDATE_PASSWORD|Update Password|true|30" \
+     "UPDATE_PROFILE|Update Profile|true|40" \
+     "VERIFY_EMAIL|Verify Email|true|50" \
+     "delete_account|Delete Account|false|60" \
+     "webauthn-register|Webauthn Register|true|70" \
+     "webauthn-register-passwordless|Webauthn Register Passwordless|true|80" \
+     "VERIFY_PROFILE|Verify Profile|true|90" \
+     "delete_credential|Delete Credential|true|100" \
+     "update_user_locale|Update User Locale|true|1000"
+   do
+     ALIAS=$(echo "$ENTRY" | cut -d'|' -f1)
+     NAME=$(echo "$ENTRY" | cut -d'|' -f2)
+     ENABLED=$(echo "$ENTRY" | cut -d'|' -f3)
+     PRIORITY=$(echo "$ENTRY" | cut -d'|' -f4)
+     if echo "$REGISTERED" | grep -q -E "^$ALIAS\$"; then
+       echo "already registered: $ALIAS"
+     else
+       $KC create authentication/register-required-action -r brain -s "providerId=$ALIAS" -s "name=$NAME" &&
+       $KC update "authentication/required-actions/$ALIAS" -r brain -s "enabled=$ENABLED" -s defaultAction=false -s "priority=$PRIORITY" &&
+       echo "registered: $ALIAS"
+     fi
+   done
+   ```
+
+   Every entry should print `registered:` or `already registered:`. Registering puts an action on,
+   last in the order, and the second command then gives it the identity provider's own setting and
+   place, which is why terms and conditions and account deletion end up off. If an entry prints an
+   error instead, read it before going on: `Required Action Provider with given providerId not
+   found` on the two `webauthn` entries means this server has security keys turned off, and those
+   two can be left unregistered.
+
+7. Read it back:
+
+   ```
+   $KC get authentication/required-actions -r brain --fields alias,enabled,defaultAction,priority --format csv --noquotes
+   ```
+
+   It should print these eleven rows. Only `CONFIGURE_TOTP` has `true` in the third column.
+
+   ```
+   CONFIGURE_TOTP,true,true,10
+   TERMS_AND_CONDITIONS,false,false,20
+   UPDATE_PASSWORD,true,false,30
+   UPDATE_PROFILE,true,false,40
+   VERIFY_EMAIL,true,false,50
+   delete_account,false,false,60
+   webauthn-register,true,false,70
+   webauthn-register-passwordless,true,false,80
+   VERIFY_PROFILE,true,false,90
+   delete_credential,true,false,100
+   update_user_locale,true,false,1000
+   ```
+
+8. Leave the container with `exit`. Nothing needs restarting.
+
+**What changes for the people on this realm.** Whatever was asked of somebody and skipped until now
+is asked at their next sign-in: a person still on a temporary password chooses their own, and a
+person an administrator asked to verify an email or update a profile is asked to. A person whose
+account has no first name, last name or email is asked for them once, because **Verify Profile**
+holds every account to the identity provider's user profile, which requires all three unless
+somebody has changed it. A person with nothing outstanding and a complete profile signs in as
+before.
+
+To confirm it worked, open the Account Console, choose **Account security**, then **Signing in**,
+and choose **Update** beside your password. It now shows a form for a new password rather than
+coming straight back to the page. Leaving that form without submitting it changes nothing.
+
+**What is checked and what is not.** That a realm imported from this release registers every
+required action the identity provider registers on a realm it creates, with its settings, puts only
+the one-time code in front of every new account, and does not ask everybody to verify an email it
+has no mail server to send, is held by `test_keycloak_realm.py` against the realm file. The commands
+above were written from the identity provider's 26.0 source and admin documentation, and have not
+been run against a server.
+
 ## Two things about the realm that have already gone wrong
 
 Both were found by deploying the identity stack for the first time, in logs rather than in a
@@ -700,6 +860,8 @@ than thirty. A slow start beats a container that never becomes ready.
 | The four identity settings and their defaults | `test_install_docs.py`, through the configuration guide |
 | That a sign-in with a one-time code is counted as a second factor, a password alone is not, and both last the session | `test_keycloak_realm.py`, against the realm file and the code that reads the token |
 | The commands for adding the second factor to a realm imported before this release | **nobody. They were written from the identity provider's 26.0 source and admin documentation and have not been run against a server.** |
+| That a realm imported from this release registers every required action the identity provider registers itself, with its settings, and puts only the one-time code in front of everybody | `test_keycloak_realm.py`, against the realm file |
+| The commands for registering the required actions on a realm imported before this release | **nobody. They were written from the identity provider's 26.0 source and admin documentation and have not been run against a server.** |
 | **Everything else on this page** | **nobody. Prose, kept true by hand.** |
 
 ## Task ids
