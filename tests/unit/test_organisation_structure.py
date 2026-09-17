@@ -617,19 +617,19 @@ def test_an_administrator_creates_renames_and_retires_departments_teams_and_scop
             post(
                 client,
                 "u_elsewhere",
-                "/govern/departments/teams",
+                "/govern/departments/team",
                 {"department": "web", "slug": "hosting", "name": "Hosting"},
             ),
             post(
                 client,
                 "u_elsewhere",
-                "/govern/departments/teams/rename",
+                "/govern/departments/team/rename",
                 {"department": "web", "slug": "hosting", "expected_name": "Hosting", "name": "Ops"},
             ),
             post(
                 client,
                 "u_elsewhere",
-                "/govern/departments/teams/retirement",
+                "/govern/departments/team/retirement",
                 {"department": "web", "slug": "hosting", "expected_name": "Ops"},
             ),
             post(
@@ -709,7 +709,7 @@ def test_a_department_administrator_outside_their_department_is_answered_as_a_mi
             post(
                 client,
                 "u_admin",
-                "/govern/departments/teams/retirement",
+                "/govern/departments/team/retirement",
                 {"department": "finance", "slug": "payroll", "expected_name": "Payroll"},
             ),
             post(
@@ -730,13 +730,13 @@ def test_a_department_administrator_outside_their_department_is_answered_as_a_mi
             post(
                 client,
                 "u_elsewhere",
-                "/govern/departments/teams",
+                "/govern/departments/team",
                 {"department": "finance", "slug": "payroll", "name": "Payroll"},
             ),
             post(
                 client,
                 "u_elsewhere",
-                "/govern/departments/teams/retirement",
+                "/govern/departments/team/retirement",
                 {"department": "finance", "slug": "payroll", "expected_name": "Payroll"},
             ),
             post(
@@ -755,7 +755,7 @@ def test_a_department_administrator_outside_their_department_is_answered_as_a_mi
             post(
                 client,
                 "u_none",
-                "/govern/departments/teams",
+                "/govern/departments/team",
                 {"department": "web", "slug": "hosting", "name": "Hosting"},
             ),
         ]
@@ -795,7 +795,7 @@ def test_every_readable_refusal_is_a_sentence_saying_what_to_do() -> None:
         taken_team = post(
             client,
             "u_elsewhere",
-            "/govern/departments/teams",
+            "/govern/departments/team",
             {"department": "web", "slug": "design", "name": "Design"},
         )
         taken_scope = post(
@@ -880,13 +880,13 @@ def test_a_body_the_types_refuse_is_a_422_that_reaches_no_store() -> None:
             post(
                 client,
                 "u_admin",
-                "/govern/departments/teams",
+                "/govern/departments/team",
                 {"department": "web", "slug": "web", "name": "Web"},
             ),
             post(
                 client,
                 "u_admin",
-                "/govern/departments/teams",
+                "/govern/departments/team",
                 {"department": "web", "slug": "super_admin", "name": "Admins"},
             ),
             post(client, "u_admin", "/govern/departments", {"slug": "Web-Team", "name": "Web"}),
@@ -1074,12 +1074,12 @@ def test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_act
                 ),
                 (
                     "u_elsewhere",
-                    "/govern/departments/teams",
+                    "/govern/departments/team",
                     {"department": "web", "slug": "design", "name": "Design"},
                 ),
                 (
                     "u_elsewhere",
-                    "/govern/departments/teams/rename",
+                    "/govern/departments/team/rename",
                     {
                         "department": "web",
                         "slug": "design",
@@ -1104,7 +1104,7 @@ def test_each_change_writes_its_rows_and_one_ledger_entry_per_row_naming_the_act
                 ),
                 (
                     "u_elsewhere",
-                    "/govern/departments/teams/retirement",
+                    "/govern/departments/team/retirement",
                     {"department": "web", "slug": "design", "expected_name": "Visual design"},
                 ),
                 (
@@ -1176,7 +1176,7 @@ def test_a_duplicate_short_name_is_refused_with_a_sentence_and_writes_nothing() 
         ("u_admin", "/govern/departments", {"slug": "web", "name": "Web"}),
         (
             "u_admin",
-            "/govern/departments/teams",
+            "/govern/departments/team",
             {"department": "web", "slug": "design", "name": "D"},
         ),
         (
@@ -1227,7 +1227,7 @@ def test_the_store_answers_an_out_of_reach_row_as_it_answers_a_missing_one() -> 
                 ("u_admin", "/govern/departments", {"slug": "finance", "name": "Finance"}),
                 (
                     "u_admin",
-                    "/govern/departments/teams",
+                    "/govern/departments/team",
                     {"department": "finance", "slug": "payroll", "name": "Payroll"},
                 ),
                 (
@@ -1248,7 +1248,7 @@ def test_the_store_answers_an_out_of_reach_row_as_it_answers_a_missing_one() -> 
                 ),
                 (
                     "u_elsewhere",
-                    "/govern/departments/teams/retirement",
+                    "/govern/departments/team/retirement",
                     {"department": "finance", "slug": "payroll", "expected_name": "Payroll"},
                 ),
                 (
@@ -1263,7 +1263,7 @@ def test_the_store_answers_an_out_of_reach_row_as_it_answers_a_missing_one() -> 
                 ),
                 (
                     "u_admin",
-                    "/govern/departments/teams/retirement",
+                    "/govern/departments/team/retirement",
                     {"department": "finance", "slug": "gone", "expected_name": "Gone"},
                 ),
                 (
@@ -1283,7 +1283,7 @@ def test_the_store_answers_an_out_of_reach_row_as_it_answers_a_missing_one() -> 
                 ),
                 (
                     "u_elsewhere",
-                    "/govern/departments/teams",
+                    "/govern/departments/team",
                     {"department": "web", "slug": "design", "name": "Design"},
                 ),
             ),

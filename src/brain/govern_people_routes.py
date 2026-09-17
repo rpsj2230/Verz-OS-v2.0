@@ -1533,8 +1533,10 @@ async def retire_department(
     return _structured(outcome, asked, kind="department", slug=slug, change="retired")
 
 
+# Singular `team`: a path segment named `teams` reads as the Microsoft Teams channel to the
+# inbound webhook sweep, which refuses any POST address a platform could be pointed at.
 @router.post(
-    "/govern/departments/teams",
+    "/govern/departments/team",
     response_model=StructureChanged,
     responses=COMMON_RESPONSES,
     status_code=201,
@@ -1557,7 +1559,7 @@ async def add_team(request: Request, body: TeamAdding, asked: Asked) -> Structur
 
 
 @router.post(
-    "/govern/departments/teams/rename",
+    "/govern/departments/team/rename",
     response_model=StructureChanged,
     responses=COMMON_RESPONSES,
 )
@@ -1577,7 +1579,7 @@ async def rename_team(request: Request, body: TeamRenaming, asked: Asked) -> Str
 
 
 @router.post(
-    "/govern/departments/teams/retirement",
+    "/govern/departments/team/retirement",
     response_model=StructureChanged,
     responses=COMMON_RESPONSES,
 )
