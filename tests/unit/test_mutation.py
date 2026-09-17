@@ -37,6 +37,7 @@ from brain.ops.mutation import (
     Report,
     Verdict,
     failures_in,
+    subprocess_environment,
     verify,
 )
 
@@ -679,9 +680,79 @@ def test_bytecode_writing_is_switched_off_for_every_run() -> None:
     Delete this and a fast run reports survivors a slow one does not, which reads as flakiness
     rather than as caching."""
     assert NO_BYTECODE == {"PYTHONDONTWRITEBYTECODE": "1"}
+    assert subprocess_environment({})["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert (
+        subprocess_environment({"PYTHONDONTWRITEBYTECODE": "0"})["PYTHONDONTWRITEBYTECODE"] == "1"
+    )
 
-    source = (REPO / "src" / "brain" / "ops" / "mutation.py").read_text(encoding="utf-8")
-    assert "env={**process_environment(), **NO_BYTECODE}" in source
+
+class _Finished:
+    """A process that has already exited, for a runner whose `Popen` is recorded."""
+
+    pid = 0
+    returncode = 0
+
+    def communicate(self, timeout: float | None = None) -> tuple[str, str]:
+        return "", ""
+
+
+class _Recorded:
+    """What `subprocess.Popen` was called with."""
+
+    def __init__(self) -> None:
+        self.kwargs: dict[str, object] = {}
+
+    def popen(self, *_args: object, **kwargs: object) -> _Finished:
+        self.kwargs = kwargs
+        return _Finished()
+
+
+def test_the_pytest_subprocess_is_started_without_the_callers_import_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """**Measured on 2026-09-17.** `verify` was run with `PYTHONPATH` pointing at another
+    worktree's `src`, the subprocess imported `brain` from there rather than from the throwaway
+    worktree the mutation was written into, the unmutated baseline came back clean, and a
+    mutation a test genuinely catches came back SURVIVED. With the variable unset the same run
+    caught it. This reads the environment the runner actually hands `subprocess.Popen`, off the
+    call rather than off the source.
+
+    The positive half matters as much: a runner that started pytest with an empty environment
+    would pass the first assertion and break every test that reads a setting.
+
+    Delete this and a caller's import path decides which tree is tested again, and the failure
+    reports every catch as a survivor."""
+    from brain.ops import mutation
+
+    recorded = _Recorded()
+    monkeypatch.setattr(subprocess, "Popen", recorded.popen)
+    monkeypatch.setenv("PYTHONPATH", str(tmp_path / "another-tree" / "src"))
+    monkeypatch.setenv("PYTHONHOME", str(tmp_path / "another-home"))
+    monkeypatch.setenv("BRAIN_MUTATION_SENTINEL", "kept")
+
+    mutation._run_tests(["tests/unit/test_nothing.py"], cwd=tmp_path, timeout=5.0)
+
+    env = recorded.kwargs["env"]
+    assert isinstance(env, dict)
+    # The names written out rather than read from `IMPORT_PATH_VARIABLES`: asserted against the
+    # module's own constant, a mutation shrinking that constant moves both sides together, and
+    # a mutation run showed exactly that before this line was written.
+    assert not {name.upper() for name in env} & {"PYTHONPATH", "PYTHONHOME"}
+    assert env["BRAIN_MUTATION_SENTINEL"] == "kept"
+    assert env["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
+def test_an_import_path_is_removed_whatever_case_it_is_written_in() -> None:
+    """Windows environment names are case-insensitive, so `PythonPath` is the same variable to
+    the interpreter as `PYTHONPATH`, and a filter comparing exact names would pass it through.
+
+    Delete this and the guard above holds on the machine that set the variable in capitals and
+    fails on the one that did not."""
+    env = subprocess_environment(
+        {"PythonPath": "elsewhere", "pythonhome": "elsewhere", "PATH": "kept"}
+    )
+
+    assert env == {"PATH": "kept", "PYTHONDONTWRITEBYTECODE": "1"}
 
 
 def test_a_test_that_prints_outside_the_platform_encoding_does_not_crash_the_reader() -> None:

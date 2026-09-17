@@ -54,6 +54,15 @@ immediate child leaves the spinning one holding the worktree), the verdict says 
 a line is printed as each mutation finishes. See `A_HANG_IS_NOT_A_NAMED_FAILURE` for why a
 timeout is reported as not caught.
 
+**A borrowed import path is refused on the way in.** The pytest subprocess is started with
+this process's environment, and on 2026-09-17 that environment carried `PYTHONPATH` pointing at
+another worktree's `src`, which is a common way to run a detached worktree against the main
+venv. The subprocess imported `brain` from that path rather than from the throwaway worktree the
+mutation was written into, so the unmutated baseline ran clean and a mutation a test genuinely
+catches came back SURVIVED. Unset, the same run caught it. It is the `sys.executable` trap
+recorded below arriving by another road: every mutation survives, and a survivor reads as a gap
+in the code rather than in the run. See `A_BORROWED_IMPORT_PATH_TESTS_ANOTHER_TREE`.
+
 It also does not judge a survivor. CLAUDE.md is explicit that a survivor means either a
 missing test or a genuinely equivalent mutation, and telling the two apart needs a reader.
 `Verdict` reports what happened and says nothing about what it means.
@@ -74,7 +83,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Final
@@ -140,6 +149,31 @@ KILL_GRACE_SECONDS: Final = 15.0
 #: false catches, which makes it the kind of error that leaves earlier work sound and sends
 #: somebody hunting for a guard that is already there.
 NO_BYTECODE = {"PYTHONDONTWRITEBYTECODE": "1"}
+
+#: Why the subprocess is not handed the caller's import path.
+A_BORROWED_IMPORT_PATH_TESTS_ANOTHER_TREE: Final = (
+    "The mutated file lives in a throwaway worktree, and the subprocess proves something only if "
+    "it imports `brain` from there. PYTHONPATH set by the caller puts another tree ahead of it, "
+    "so the baseline runs clean against code nobody mutated and every catch reads as a survivor. "
+    "PYTHONHOME moves the standard library the same way. Both are removed from the environment "
+    "the pytest subprocess starts with, whatever the caller had."
+)
+
+#: The variables that decide where the subprocess imports from, compared without case because
+#: Windows environment names are case-insensitive.
+IMPORT_PATH_VARIABLES: Final[frozenset[str]] = frozenset({"PYTHONPATH", "PYTHONHOME"})
+
+
+def subprocess_environment(base: Mapping[str, str]) -> dict[str, str]:
+    """The environment a mutation's pytest run starts with: `base` without an import path.
+
+    Everything else the caller set is kept, because the tests read settings from it, and
+    bytecode writing is switched off. See `A_BORROWED_IMPORT_PATH_TESTS_ANOTHER_TREE`.
+    """
+    kept = {
+        name: value for name, value in base.items() if name.upper() not in IMPORT_PATH_VARIABLES
+    }
+    return {**kept, **NO_BYTECODE}
 
 
 class MutationError(Exception):
@@ -389,7 +423,7 @@ def _run_tests(tests: Sequence[str], *, cwd: Path, timeout: float) -> _Run:
         # must not be able to lose a `FAILED` line that is plain ASCII either side of it.
         encoding="utf-8",
         errors="replace",
-        env={**process_environment(), **NO_BYTECODE},
+        env=subprocess_environment(process_environment()),
     )
     try:
         stdout, stderr = process.communicate(timeout=timeout)
