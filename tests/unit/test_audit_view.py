@@ -37,6 +37,7 @@ from brain.audit.ledger import (
 )
 from brain.audit.record import (
     ACTION_BY_METHOD,
+    AgentChange,
     ApprovalVerdict,
     AuditRecorder,
     BreachChange,
@@ -443,6 +444,7 @@ CALLS: dict[str, dict[str, object]] = {
         "capability": cap("read:client.name"),
         "reason": "incident_response",
     },
+    "agent": {"agent_id": "pricing_desk", "change": AgentChange.DISABLED},
 }
 
 

@@ -179,6 +179,15 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # A second call appends a second row naming the same categories, and the newest applies.
         "brain.skill_routes:SkillLibrary.categorise": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         "brain.skill_routes:AgentInstalls.agent": Repeat.READS,
+        # An agent's lifecycle (0137): reads, a move written by compare-and-set against the state
+        # the page drew, so a second press finds the row already moved and writes nothing, and an
+        # install or a duplicate under a minted id, where a second press is a second agent written
+        # disabled at Shadow, which is what a second press asked for.
+        "brain.agent_lifecycle_routes:AgentLifecycles.agent": Repeat.READS,
+        "brain.agent_lifecycle_routes:AgentLifecycles.version": Repeat.READS,
+        "brain.agent_lifecycle_routes:AgentLifecycles.live_principal": Repeat.READS,
+        "brain.agent_lifecycle_routes:AgentLifecycles.change": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
+        "brain.agent_lifecycle_routes:AgentLifecycles.create": Repeat.WRITES_THIS_SYSTEMS_DATABASE,
         # Approvals: reads and writes of this system's own suspension rows.
         "brain.approval_routes:SuspensionSource.open_suspensions": Repeat.READS,
         "brain.approval_routes:SuspensionSource.suspension": Repeat.READS,

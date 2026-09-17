@@ -26,19 +26,41 @@ anything is written: it is a republish or a forgery under a number somebody alre
 instance id is the agent's id, the insert does nothing on a conflict, and the agent row is written
 only when the instance row was, so two presses of one Finish race to one agent.
 
-**What calls this, said plainly.** No route. The flow's inputs are a signing key, a draft carried
-across the wizard's steps, the audience the installer chooses and this process's registries, and no
-setting holds an install's template signing key and no screen carries a draft. Installing is the
-console's next surface, and this is the call it will make; until then the tests drive it with a key
-of their own.
+**Every agent this writes starts disabled, whatever its badge says.** `complete` disables an install
+with something missing and leaves a finished one selectable, which is right for the domain's
+question, whether the install is complete. It is the wrong answer to whether anybody decided the
+agent should answer yet: an agent installed from the console would be live in every picker its
+audience covers on the press of Install, before anybody read what it was assembled from. So the row
+is written through `brain.agents.lifecycle.disable`, and enabling it is a person's second act, which
+the ledger records separately. See `AN_INSTALLED_AGENT_IS_WRITTEN_DISABLED`.
 
-Task ids: M13.3.6, M13.3.7, M38.2.2.4
+**And at Shadow on every target, or not at all.** The leash is the sealed path `guardrails.leash`,
+an install cannot overlay it, and nothing stores a per-agent rung yet (the lowering row is W3.8), so
+the only way an installed agent can start at Shadow everywhere is for the version it pins to say so.
+A version whose leash names any rung above Shadow is refused before a connection is opened, with the
+targets named. Every template this product ships says Shadow on every target
+(`brain.agents.catalogue.EVERY_AGENT_STARTS_SUPERVISED`), so the refusal reaches only a version
+somebody published with a raised rung, which is the version that should not hand a new agent
+autonomy it has not earned. See `AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET`.
+
+**Who installed it reaches the ledger with the request.** `0137`'s trigger records the agent's
+insert as `created` with the row's own `created_by`, and the transaction is told the reach digest
+and the trace first, through `brain.tables.audit.attributed_to`, so the entry names the request and
+not the transaction.
+
+**What calls this, said plainly.** `brain.agent_lifecycle_routes`, for an install of a published
+version and for a duplicate, which is an install of the same version with another agent's overlay.
+Both need this install's template signing key, and no setting holds one yet
+(`brain.ops.starter_store.NO_TEMPLATE_IS_SIGNED_BEFORE_THE_INSTALL_HOLDS_A_KEY_OF_ITS_OWN`), so on a
+real install both routes say so; the tests drive it with a key of their own.
+
+Task ids: M13.3.6, M13.3.7, M38.2.2.4, M27.11.6, M27.11.7
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any, Final
 
@@ -47,10 +69,13 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.agents.install import Installation, InstallDraft, complete
+from brain.agents.lifecycle import disable
 from brain.agents.model import AgentAudience, AgentRecord
 from brain.agents.template import SignedManifest, TemplateError
 from brain.connectors.registry import ConnectorRegistry
+from brain.gate.injection import AutonomyTier
 from brain.tables.agent import AgentRow
+from brain.tables.audit import attributed_to
 from brain.tables.template import TemplateInstanceRow, TemplateVersionRow
 from brain.tools.registry import ToolRegistry
 
@@ -69,6 +94,27 @@ A_VERSION_NUMBER_NAMES_ONE_SIGNED_BODY: Final = (
     "row, and one carrying a different digest or signature under that number is refused before "
     "anything is written, because it is a republish or a forgery of something already installed."
 )
+
+
+#: Why an installed agent is written switched off.
+AN_INSTALLED_AGENT_IS_WRITTEN_DISABLED: Final = (
+    "Installing decides that an agent exists; it does not decide that the agent should answer. A "
+    "finished install written selectable is live in every picker its audience covers on the press "
+    "of Install, before anybody has read what it is assembled from, so every install is written "
+    "disabled and enabling it is a second act by a person, recorded as its own entry."
+)
+
+#: Why a version whose leash starts above Shadow is refused rather than installed.
+AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET: Final = (
+    "A new agent has no runs, so it has no evidence for any rung above Shadow. The leash is a "
+    "sealed path an install cannot overlay and no per-agent rung is stored yet, so a version whose "
+    "leash names a higher rung would hand every agent installed from it autonomy that was earned, "
+    "if at all, by another agent. Such a version is refused, naming the targets, and nothing is "
+    "written."
+)
+
+#: The rung every target of an installed agent starts on.
+INSTALLED_RUNG: Final = AutonomyTier.SHADOW
 
 
 class InstallStoreError(TemplateError):
@@ -143,12 +189,58 @@ def agent_values(record: AgentRecord) -> dict[str, Any]:
     }
 
 
+def rungs_above_the_start(signed: SignedManifest) -> tuple[str, ...]:
+    """The targets whose sealed rung is above `INSTALLED_RUNG`, sorted, or nothing.
+
+    Read off the signed manifest rather than off `Installation.leash`, because the manifest's leash
+    is what the instance pins and what every later materialisation reads; the installation's is
+    pinned to Shadow only while a connector is missing, which is a fact about today that nothing
+    stores. See `AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET`.
+    """
+    leash = signed.manifest.guardrails.leash
+    return tuple(sorted({one.target for one in leash if one.rung > INSTALLED_RUNG}))
+
+
 def same_version(found: Mapping[str, Any], signed: SignedManifest) -> bool:
     """Whether a version row on file is this signed body."""
     return (found["content_digest"], found["signature"]) == (
         signed.content_digest,
         signed.signature,
     )
+
+
+def prepared(
+    draft: InstallDraft,
+    *,
+    key: str,
+    audience: AgentAudience,
+    registry: ConnectorRegistry,
+    tools: ToolRegistry,
+    at: datetime,
+) -> Installation:
+    """The installation `StoredAgentInstalls.finish` writes, decided before any connection.
+
+    A version whose leash starts above Shadow is refused first, per
+    `AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET`. Then `complete` runs, so a draft whose signature
+    does not verify, whose overlay touches a sealed path or whose persona is blank is refused by
+    the domain. The record handed back is disabled, per `AN_INSTALLED_AGENT_IS_WRITTEN_DISABLED`,
+    and it is the record written, so what a caller reads is what was stored.
+
+    A function of its own rather than the first half of `finish`, so a caller holding no database,
+    a route test among them, is handed the installation the store would write rather than a copy
+    of these three steps that agrees with them today.
+    """
+    signed = draft.offer.signed
+    raised = rungs_above_the_start(signed)
+    if raised:
+        msg = (
+            f"version {signed.manifest.identity.version} of "
+            f"{signed.manifest.identity.template_id!r} starts {list(raised)} above Shadow, "
+            f"and nothing was installed. {AN_INSTALL_STARTS_AT_SHADOW_ON_EVERY_TARGET}"
+        )
+        raise InstallStoreError(msg)
+    completed = complete(draft, key=key, audience=audience, registry=registry, tools=tools, at=at)
+    return replace(completed, record=disable(completed.record, now=at))
 
 
 class StoredAgentInstalls:
@@ -166,18 +258,24 @@ class StoredAgentInstalls:
         registry: ConnectorRegistry,
         tools: ToolRegistry,
         at: datetime,
+        ent_hash: str,
+        trace_id: str,
     ) -> Finished:
-        """Complete the draft and write the version, the instance and the agent, or nothing.
+        """Write the version, the instance and the agent `prepared` decides, or nothing.
 
-        `complete` runs first and outside the transaction, so a draft whose signature does not
-        verify, whose overlay touches a sealed path or whose persona is blank is refused by the
-        domain before a connection is opened.
+        `prepared` runs first and outside the transaction, so every refusal it makes is made before
+        a connection is opened. `ent_hash` and `trace_id` are the request's, for `0137`'s trigger;
+        neither has a default, so a caller that has no request has to say so.
         """
-        installation = complete(
+        signed = draft.offer.signed
+        installation = prepared(
             draft, key=key, audience=audience, registry=registry, tools=tools, at=at
         )
-        signed = draft.offer.signed
         async with self._sessions() as session, session.begin():
+            for statement in attributed_to(
+                actor_id=draft.installer, ent_hash=ent_hash, trace_id=trace_id
+            ):
+                await session.execute(statement)
             on_file = (
                 (
                     await session.execute(

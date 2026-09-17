@@ -323,7 +323,9 @@ everything, written by first run and recorded in the ledger. They come in three 
 <!-- checked: what the first administrator is granted at appointment -->
 | Capability | Granted for |
 | --- | --- |
+| `admin:agent_install` | running the system |
 | `admin:agent_instructions` | running the system |
+| `admin:agent_lifecycle` | running the system |
 | `admin:application_log` | running the system |
 | `admin:automation` | running the system |
 | `admin:budget` | running the system |

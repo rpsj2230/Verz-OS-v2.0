@@ -157,6 +157,18 @@ A_TRANSFER_MOVES_THE_STEWARD_AND_NOT_THE_REACH: Final = (
 #: the same way and in the same position.
 AGENT_PUBLICATION_CAPABILITY: Final = Capability(value="approve:agent.visibility")
 
+#: The capability that enables, disables, archives and hands on one agent, held in a scope
+#: admitting that agent's row.
+#:
+#: Named here beside `AGENT_PUBLICATION_CAPABILITY` for that constant's reason, and one capability
+#: for the four transitions rather than four, because they are this module's four and they share
+#: the property `A_TRANSFER_MOVES_THE_STEWARD_AND_NOT_THE_REACH` and the module docstring argue:
+#: none of them moves what any run may reach. Publication is not among them, because it widens who
+#: is told and so takes an agreement a second person gives. The verb is `admin`, which the gate
+#: admits only at strong assurance, so a person who signed in without a second factor holds this
+#: grant and cannot use it. `brain.agent_lifecycle_routes` asks for it.
+AGENT_LIFECYCLE_CAPABILITY: Final = Capability(value="admin:agent_lifecycle")
+
 #: The one level `publish` moves an agent to.
 #:
 #: A constant rather than a parameter, and the absence of the parameter is the guarantee:

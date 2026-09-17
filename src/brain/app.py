@@ -55,6 +55,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from brain.acceptance_routes import router as acceptance_router
 from brain.access_request_routes import router as access_request_router
 from brain.agent_about_routes import router as agent_about_router
+from brain.agent_lifecycle_routes import router as agent_lifecycle_router
 from brain.agent_model_routes import router as agent_model_router
 from brain.agent_routes import every_agent, record_of
 from brain.agent_routes import router as agent_router
@@ -1227,6 +1228,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # One agent's About tab, which reads the agent's automations and so cannot sit on the
     # workspace's router without an import cycle. The same audience and the same one 404.
     app.include_router(agent_about_router)
+    # Enabling, disabling, archiving, handing on and duplicating an agent, and installing a
+    # published template version. Its own router because these are writes and the agent router
+    # above is the page's read: an `admin:` authority asked before the agent is read, its
+    # audience, a precondition the page drew, and a row whose trigger writes the ledger entry.
+    app.include_router(agent_lifecycle_router)
     # The approvals queue and one approval's card. A fifth router because the refusal differs
     # again: who is offered an approval is `pending_for` over the action's own row, and an
     # approval out of reach, decided, lapsed or missing is one answer. GET only; see the module.
