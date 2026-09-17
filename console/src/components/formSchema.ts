@@ -49,10 +49,18 @@
  * disclosed by the API putting it in the schema, and hiding it would leave the person
  * wondering why their form is shorter than a colleague's with no way to ask.
  *
- * Task ids: M32.5.2.2
+ * **The API's refusal of a submission is placed on the fields it names, and only on a field the
+ * form draws as an input.** `problemsOnFields` walks the schema by the problem's path, so
+ * `rungs.0.attempts` lands on the first rung's attempts and on nothing else, and a path the schema
+ * does not carry, a path of `""`, and a path into a withheld field all stay unplaced for the notice
+ * under the form to list. The last of the three is the lock rule again: the lock is replaced whole
+ * and has no error slot, and a sentence drawn beside it would be a reason drawn beside a lock.
+ *
+ * Task ids: M32.5.2.2, M27.8.5
  */
 
-import type { RJSFSchema, UiSchema } from "@rjsf/utils";
+import type { ErrorSchema, RJSFSchema, UiSchema } from "@rjsf/utils";
+import type { FieldProblem } from "../api/errors";
 
 /**
  * Written down because "grey it out and explain why" is the change that will look like an
@@ -256,4 +264,63 @@ export function withoutWithheld<T>(data: T, withheld: ReadonlySet<string>): T {
     }
   }
   return kept as T;
+}
+
+/** The API's problems as the form library's `extraErrors`, and the fields they were placed on. */
+export interface PlacedProblems {
+  /** For `Form`'s `extraErrors`: each placed sentence under its field's path. */
+  readonly errors: ErrorSchema;
+  /** The problem fields that found an input, for the notice not to list them again. */
+  readonly placed: readonly string[];
+}
+
+/** Whether `path` names a field the schema draws, walking properties and array items. */
+function drawsField(schema: RJSFSchema, path: readonly string[]): boolean {
+  let at: unknown = schema;
+  for (const segment of path) {
+    if (typeof at !== "object" || at === null || segment === "") {
+      return false;
+    }
+    const node = at as RJSFSchema;
+    if (/^\d+$/.test(segment) && typeof node.items === "object" && node.items !== null) {
+      at = Array.isArray(node.items) ? node.items[Number(segment)] : node.items;
+      continue;
+    }
+    const properties = node.properties;
+    if (typeof properties !== "object" || properties === null || !Object.hasOwn(properties, segment)) {
+      return false;
+    }
+    at = properties[segment];
+  }
+  return path.length > 0;
+}
+
+/**
+ * Place each problem on the field its path names in `shape`, or leave it unplaced.
+ *
+ * A problem is unplaced when its field is `""`, when the schema has no field at that path, or when
+ * the path begins at a withheld field: see the module note on the lock.
+ */
+export function problemsOnFields(shape: FormShape, problems: readonly FieldProblem[]): PlacedProblems {
+  const errors: Record<string, unknown> = {};
+  const placed: string[] = [];
+  for (const one of problems) {
+    const path = one.field.split(".");
+    if (shape.withheld.has(path[0] ?? "") || !drawsField(shape.schema, path)) {
+      continue;
+    }
+    let node = errors;
+    for (const segment of path) {
+      const next = node[segment];
+      node = (typeof next === "object" && next !== null ? next : (node[segment] = {})) as Record<string, unknown>;
+    }
+    const listed = node["__errors"];
+    node["__errors"] = [...(Array.isArray(listed) ? listed : []), one.message];
+    if (!placed.includes(one.field)) {
+      placed.push(one.field);
+    }
+  }
+  // A cast at the library boundary, where proving the structural match buys nothing: the object is
+  // built above as nested records ending in `__errors` string arrays, which is `ErrorSchema`.
+  return { errors: errors as ErrorSchema, placed };
 }

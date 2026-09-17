@@ -38,6 +38,11 @@
  * arrives on demand has to suspend somewhere, and putting the boundary outside the header would
  * make the frame wait for a chunk. The menu's own request is separate from the page's, so the
  * page inside the frame renders whether the menu has answered or not.
+ *
+ * **Under the header, a sign-in without a second factor is said once for every page.**
+ * `layout/SignInStrength.tsx` asks `GET /me` and draws a banner only when the API says signing in
+ * again with a second factor would give this person back something they hold. It sits outside
+ * `main`, so it is part of the frame and not of any page's own states.
  */
 
 import { Suspense } from "react";
@@ -48,6 +53,7 @@ import { signOut } from "../auth/session";
 import { INSTALL_SECTIONS } from "../pages/installQuery";
 import { Chip } from "../ui/Chip";
 import { NAVIGATION_API_PATH, menuFor, readNavigation, type NavGroup } from "./navigationQuery";
+import { SignInStrength } from "./SignInStrength";
 
 /** Said in the menu while the API has not answered which console this is. */
 export const MENU_LOADING = "Loading the rest of the menu.";
@@ -213,6 +219,8 @@ export function Shell() {
           </button>
         </div>
       </header>
+
+      <SignInStrength />
 
       <div className="shell__body">
         <nav className="shell__nav" aria-label="Sections">

@@ -26,7 +26,7 @@
 
 import { useState } from "react";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   ARTIFACTS_API_PATH,
   NO_ARTIFACT_FILTERS,
@@ -43,7 +43,6 @@ import {
   type ArtifactsView,
   type Order,
 } from "./artifactsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const ARTIFACTS_HEADING = "Artifacts";
 export const ARTIFACTS_CRUMB = "Govern › Artifacts";
@@ -189,14 +188,7 @@ export function Artifacts() {
 
       {answer.failure ? (
         <section className="card">
-          <Notice
-            title={
-              answer.failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK
-            }
-            traceId={answer.failure.traceId}
-          >
-            <p>{answer.failure.message}</p>
-          </Notice>
+          <FailureNotice failure={answer.failure} />
         </section>
       ) : null}
 

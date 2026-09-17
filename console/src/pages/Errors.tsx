@@ -12,7 +12,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   DEFAULT_HOURS,
   ERRORS_CRUMB,
@@ -34,12 +34,10 @@ import {
   REQUESTS_CAPTION,
   REQUESTS_HEADING,
   STATUS_WORDS,
-  THE_BRAIN_COULD_NOT_BE_REACHED,
   UNREADABLE_ANSWER,
   WINDOWS,
 } from "./errorsQuery";
 import { LOGS_PATH } from "./logsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { when } from "./sessionsQuery";
 
 function Failures({ hours }: { readonly hours: number }) {
@@ -53,14 +51,7 @@ function Failures({ hours }: { readonly hours: number }) {
     );
   }
   if (answer.failure) {
-    return (
-      <Notice
-        title={answer.failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-        traceId={answer.failure.traceId}
-      >
-        <p>{answer.failure.message}</p>
-      </Notice>
-    );
+    return <FailureNotice failure={answer.failure} />;
   }
   const body = readErrors(answer.data);
   if (body === null) {

@@ -42,7 +42,7 @@ import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListContr
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   LEAD_API_PATH,
   MEMBERSHIP_API_PATH,
@@ -65,7 +65,6 @@ import {
   type MembershipBody,
   type TeamRow,
 } from "./governPeopleQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const DEPARTMENTS_HEADING = "Departments and teams";
 export const DEPARTMENTS_CRUMB = "Govern › Departments and teams";
@@ -103,17 +102,6 @@ export const CHOOSE_SOMEBODY_FIRST = "Choose who to place first; nothing has bee
 /** What a success says: what changed, for whom, and the instant the database recorded. */
 export function changedSentence(question: string, at: string): string {
   return `Done: ${question.replace(/\?$/, "")}, recorded at ${when(at)}.`;
-}
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
 }
 
 function readAt(payload: unknown): string {
@@ -275,7 +263,7 @@ function Organisation({
         sorts={DEPARTMENT_SORTS}
       />
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
 
       {pending === null ? null : (
         <ConfirmAction
@@ -294,7 +282,7 @@ function Organisation({
       )}
 
       {listing.failure ? (
-        <Failure failure={listing.failure} />
+        <FailureNotice failure={listing.failure} />
       ) : listing.busy ? (
         <p className="note" role="status">
           {READING_DEPARTMENTS}

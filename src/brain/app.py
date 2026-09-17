@@ -40,14 +40,24 @@ from typing import Final, Literal
 import httpx
 import structlog
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from brain.agent_routes import router as agent_router
-from brain.api import ErrorBody, TimeoutMiddleware
-from brain.api_routes import GateWiring, passage_search_for
+from brain.api import (
+    ErrorBody,
+    FailureBodyMiddleware,
+    TimeoutMiddleware,
+    bound_trace_id,
+    refused_request,
+    status_sentence,
+    unexpected_failure,
+)
+from brain.api_routes import GateWiring, passage_search_for, second_factor_needed
 from brain.api_routes import router as api_router
 from brain.approval_routes import router as approval_router
 from brain.artifact_routes import router as artifact_router
@@ -70,7 +80,7 @@ from brain.cache import (
 from brain.classification_routes import router as classification_router
 from brain.connector_routes import router as connector_router
 from brain.console_static import mount_console_entry, mount_console_fallback
-from brain.core.errors import BrainError, Outcome, to_public
+from brain.core.errors import Absent, BrainError, Outcome, to_public
 from brain.credential_routes import router as credential_router
 from brain.data_transfer_routes import router as data_transfer_router
 from brain.docs_routes import router as docs_router
@@ -79,11 +89,12 @@ from brain.error_routes import router as error_router
 from brain.estate_routes import router as estate_router
 from brain.feature_routes import router as feature_router
 from brain.firstrun import GRANTED_BY
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.gate.finish import RequestRecorder
 from brain.gate.resolve import EntitlementCache
 from brain.gate.rule_store import load_rules, rule_ids
-from brain.gate.suspension_store import StoredSuspensions
+from brain.gate.suspension_store import ReadableSuspensions, StoredSuspensions
 from brain.govern_people_routes import router as govern_people_router
 from brain.govern_routes import router as govern_router
 from brain.identity.administration_reconciliation import (
@@ -468,8 +479,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception as exc:
             log.warning("install could not be furnished", error=type(exc).__name__)
-    # No ledger writer survives a restart yet, so no store is built even with a database. See
-    # `suspension_store_for`.
+    # No ledger writer survives a restart yet, so a database gets the reading half and no way to
+    # decide. See `suspension_store_for`.
     app.state.suspensions = suspension_store_for(app.state.db_sessions, ledger=None)
     app.state.fast_path_rules = ()
     if app.state.db_sessions:
@@ -677,19 +688,27 @@ def request_recorders_for(
 
 def suspension_store_for(
     sessions: async_sessionmaker[AsyncSession] | None, ledger: LedgerWriter | None
-) -> StoredSuspensions | None:
+) -> StoredSuspensions | ReadableSuspensions | None:
     """What `app.state.suspensions` holds on this process. See `brain.approval_routes`.
 
-    A store only when there is both a database to keep the suspension and a ledger to keep the
-    decision, and nothing otherwise. The lifespan passes no ledger, because the only writer in
-    this repository is `brain.audit.ledger.AuditChain`, which lives in the process: a decision
-    recorded there is recorded and then lost at the next restart, and the approval routes would
-    then answer as though it had been kept. So a deployed process has no store and every
-    approval route answers with the one process fault, which is true, until a writer for
+    A store when there is both a database to keep the suspension and a ledger to keep the
+    decision; the reading half alone when there is a database and no ledger; nothing without a
+    database. The lifespan passes no ledger, because the only writer in this repository is
+    `brain.audit.ledger.AuditChain`, which lives in the process: a decision recorded there is
+    recorded and then lost at the next restart, and the approval routes would then answer as
+    though it had been kept.
+
+    **It built nothing at all without a ledger until 2026-09-17**, and that took the reads down
+    with the decision: the Approvals screen answered every person on a staging install with a 500
+    and "Something went wrong.", although reading the queue needs no ledger. A deployed process
+    now serves the queue and the card, and refuses a decision in words that say why
+    (`brain.approval_routes.DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS`) until a writer for
     `obs.audit_entry` exists and is passed here.
     """
-    if sessions is None or ledger is None:
+    if sessions is None:
         return None
+    if ledger is None:
+        return ReadableSuspensions(sessions)
     return StoredSuspensions(sessions, ledger)
 
 
@@ -814,11 +833,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         started = time.perf_counter()
         try:
             response = await call_next(request)
+        except Exception:
+            # Caught here, inside the binding, rather than by an `Exception` handler: Starlette
+            # runs that handler outermost, after this `finally` has cleared the trace id, and it
+            # answered plain text with no reference. The traceback goes to the log under this
+            # request's id; the body carries the id and a sentence. See
+            # `brain.api.A_FAILURE_WITHOUT_A_SENTENCE_IS_A_FAILURE_NOBODY_CAN_REPORT`.
+            log.exception("request raised and nothing handled it")
+            response = unexpected_failure(trace_id)
         finally:
             structlog.contextvars.clear_contextvars()
         response.headers["x-trace-id"] = trace_id
         response.headers["server-timing"] = f"app;dur={(time.perf_counter() - started) * 1000:.1f}"
         return response
+
+    # Outside `trace`, which is registered just above and so sits inside this: a failing JSON
+    # answer a route wrote for itself leaves `trace` with its `x-trace-id` set, and is given that
+    # reference and a sentence here if it has neither. See `brain.api.FailureBodyMiddleware`.
+    app.add_middleware(FailureBodyMiddleware)
 
     @app.middleware("http")
     async def security_headers(
@@ -831,7 +863,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return response
 
     @app.exception_handler(BrainError)
-    async def handle_brain_error(_request: Request, exc: BrainError) -> JSONResponse:
+    async def handle_brain_error(request: Request, exc: BrainError) -> JSONResponse:
         """Maps the taxonomy to a response, and is the only place an error becomes text.
 
         DENIED and ABSENT both leave here as 404 with the same body. A 403 on a hidden
@@ -861,11 +893,45 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         }[exc.outcome]
         log.warning("request failed", outcome=exc.outcome, detail=exc.detail)
         bound = structlog.contextvars.get_contextvars()
+        # Read off the request, where `brain.api_routes.asking` put it before the route read
+        # anything, so it is the same for every object this session asks about. See
+        # `brain.gate.admission.A_REFUSAL_TO_A_WEAK_SIGN_IN_IS_ABOUT_THE_SESSION`.
+        weak = exc.outcome in {Outcome.DENIED, Outcome.ABSENT} and second_factor_needed(request)
         body = ErrorBody(
-            message=to_public(exc),
+            message=SECOND_FACTOR_NEEDED_MESSAGE if weak else to_public(exc),
             trace_id=str(bound.get("trace_id", "")),
+            second_factor_needed=weak,
         )
         return JSONResponse(status_code=status, content=body.model_dump())
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_refused_request(request: Request, exc: RequestValidationError) -> Response:
+        """A body, query or path the route's model refused, as `ErrorBody` with its problems.
+
+        FastAPI's own answer was `{"detail": [...]}`, which quoted every refused value and carried
+        no `message`, so the console showed "Something went wrong." beside a form it could not
+        mark. See `brain.api.A_REFUSED_BODY_IS_NOT_ECHOED`.
+        """
+        log.info("request refused before the route ran", path=request.url.path)
+        return refused_request(exc.errors(), bound_trace_id(request))
+
+    @app.exception_handler(StarletteHTTPException)
+    async def handle_http_exception(request: Request, exc: StarletteHTTPException) -> Response:
+        """An address or a method nothing serves, in a sentence, with the reference.
+
+        A 404 says what `Absent` says, so an address that does not exist and a record that is
+        refused are one answer; a 405 keeps its `Allow` header. The framework's `detail` is not
+        used, because a route that raised one could have put anything in it.
+        """
+        message = (
+            to_public(Absent()) if exc.status_code == 404 else status_sentence(exc.status_code)
+        )
+        body = ErrorBody(message=message, trace_id=bound_trace_id(request))
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=body.model_dump(),
+            headers=dict(exc.headers or {}),
+        )
 
     @app.exception_handler(TokenRefusedError)
     async def handle_token_refused(request: Request, exc: TokenRefusedError) -> JSONResponse:

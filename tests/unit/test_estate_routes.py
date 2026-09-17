@@ -49,6 +49,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.sql import operators
 from sqlalchemy.sql.elements import BooleanClauseList
+from sqlalchemy.sql.functions import FunctionElement
 
 from brain import estate_routes
 from brain.api import API_PREFIX
@@ -85,7 +86,9 @@ from brain.estate_routes import (
     stated_about,
     stored_memory,
 )
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.identity.bearer import TokenAuthority
+from brain.knowledge.item import RETRIEVABLE_STATES
 from brain.listing import MAX_PAGE_ROWS
 from brain.memory.correction import Correction
 from brain.memory.digest import COUNTING_FIELD_NAMES
@@ -365,6 +368,20 @@ def _bound(statement: Any, rows: list[Any]) -> list[Any]:
     return rows if limit is None else rows[:limit]
 
 
+#: The states `know.library_items` returns, which the migration holds to the same constant.
+RETRIEVABLE: frozenset[str] = frozenset(one.value for one in RETRIEVABLE_STATES)
+
+
+def _library_bound(statement: Any) -> int | None:
+    """The bound a statement passes `know.library_items`, or None for any other statement."""
+    for one in getattr(statement, "get_final_froms", list)():
+        called = getattr(one, "element", None)
+        if isinstance(called, FunctionElement) and getattr(called, "name", "") == "library_items":
+            (bound,) = [arg.value for arg in called.clauses]
+            return int(bound)
+    return None
+
+
 #: Each table the stub answers, where its rows are held and the order a load reads them in.
 _ORDERS: dict[type, tuple[str, Any]] = {
     KnowledgeItemRow: ("items", lambda one: one.item_id),
@@ -386,6 +403,15 @@ class StubSession(AsyncSession):
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
         _STORED.statements.append(statement)
+        library = _library_bound(statement)
+        if library is not None:
+            # `0069`'s function, answered from its contract: retrievable items in reference order,
+            # bounded. That the function keeps it is `test_application_reads_db.py`'s, on a server.
+            rows = sorted(
+                (one for one in _STORED.items if one.state in RETRIEVABLE),
+                key=lambda one: one.item_id,
+            )
+            return StubResult(rows[:library])
         if isinstance(statement, Insert):
             assert getattr(statement.table, "fullname", None) == "mem.correction", statement
             _STORED.corrections.append(CorrectionRow(**statement.compile().params))
@@ -679,17 +705,20 @@ def test_the_library_searches_filters_and_pages_only_the_rows_the_reader_may_kno
     assert [one["item_id"] for one in by_level["items"]] == ["doc_a", "doc_finance", "doc_web"]
 
 
-def test_the_library_load_asks_for_retrievable_states_in_reference_order_and_bounded() -> None:
-    """The statement, compiled against PostgreSQL.
+def test_the_library_load_reads_the_library_function_with_its_bound_and_not_the_table() -> None:
+    """The statement, compiled against PostgreSQL: `know.library_items` with the page's bound, and
+    no `know.item` in its FROM. The state list, the order and the bound applied by the function are
+    held against a server in `tests/unit/test_application_reads_db.py`.
 
-    Delete this and the order can be dropped, after which the rows that fall off a full load
-    are whichever the database returns first and two readings of one table are two pages."""
+    Delete this and the load can go back to selecting from `know.item` as the application role,
+    which that table's policy answers with company items only, so the library under-reports every
+    department and personal item it says it lists."""
     sql = str(retrievable_items(7).compile(dialect=DIALECT, compile_kwargs={"literal_binds": True}))
 
-    assert "FROM know.item" in sql
-    assert "know.item.state IN ('draft', 'published')" in sql
-    assert "ORDER BY know.item.item_id" in sql
-    assert "LIMIT 7" in sql
+    assert "know.library_items(7)" in sql
+    assert "FROM know.item" not in sql
+    assert "item_id" in sql and "visibility" in sql and "department" in sql
+    assert "title" not in sql
 
 
 def test_the_library_asks_for_no_more_than_its_bound(client: TestClient, stored: Stored) -> None:
@@ -979,8 +1008,10 @@ def test_an_undo_is_refused_before_anything_is_read_to_a_caller_without_the_scre
 ) -> None:
     """A caller with no grant, a caller with the learning screen and no undo authority, the
     administrator signed in without a second factor, and a caller with no grant on an instance with
-    no database are refused alike before a session is reached for; the administrator on that
-    instance is told it is broken.
+    no database are refused before a session is reached for; the administrator on that instance is
+    told it is broken. The administrator without a second factor is told what their sign-in lacks,
+    and told it identically for a memory that does not exist, which is
+    `brain.gate.admission.A_REFUSAL_TO_A_WEAK_SIGN_IN_IS_ABOUT_THE_SESSION` held on a real route.
 
     Delete this and the order of the questions can move, after which a refusal on one instance and
     a fault on another is the deployment's state readable by anybody who can reach the port."""
@@ -1002,12 +1033,15 @@ def test_an_undo_is_refused_before_anything_is_read_to_a_caller_without_the_scre
         password_only.status_code,
         bare.status_code,
     } == {404}
-    assert (
-        nobody.json()["message"]
-        == reader.json()["message"]
-        == password_only.json()["message"]
-        == bare.json()["message"]
+    missing = post(
+        client, "u_admin", UNDO, {"memory_id": "m_never_stored"}, claims={"amr": ["pwd"]}
     )
+    assert nobody.json()["message"] == reader.json()["message"] == bare.json()["message"]
+    assert "second_factor_needed" not in nobody.json()
+    assert password_only.json()["message"] == SECOND_FACTOR_NEEDED_MESSAGE
+    assert password_only.json()["second_factor_needed"] is True
+    assert missing.status_code == 404
+    assert {**missing.json(), "trace_id": ""} == {**password_only.json(), "trace_id": ""}
     assert stored.statements == []
     assert fault.status_code == 500
     assert set(fault.json()) >= {"message", "trace_id"}

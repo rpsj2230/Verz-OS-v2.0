@@ -223,7 +223,14 @@ describe("what the grid says about rows it does not have", () => {
 
     const container = grid({
       rows: [],
-      failure: { status: 404, message: sentence as string, traceId: "trace-abc", outcome: "" },
+      failure: {
+        status: 404,
+        message: sentence as string,
+        traceId: "trace-abc",
+        outcome: "",
+        problems: [],
+        secondFactorNeeded: false,
+      },
     });
 
     const notice = container.querySelector(".notice");

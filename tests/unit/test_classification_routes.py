@@ -56,7 +56,12 @@ from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.field_policy import Classification
 from brain.core.scope import Clause, Op, Scope
-from brain.gate.admission import ASSURANCE_VERBS, CHANNEL_VERBS, Assurance
+from brain.gate.admission import (
+    ASSURANCE_VERBS,
+    CHANNEL_VERBS,
+    SECOND_FACTOR_NEEDED_MESSAGE,
+    Assurance,
+)
 from brain.gate.context import Channel
 from brain.knowledge.columns import PRICE_LIST, ColumnRule, TableClassification, project_row
 from tests.fixtures.http_client import Response
@@ -368,8 +373,8 @@ def test_the_review_capability_carries_a_verb_a_service_account_cannot_exercise(
 def test_a_password_only_session_cannot_have_a_change_reviewed(client: TestClient) -> None:
     """The assurance ceiling, driven rather than asserted. `u_admin` holds both capabilities
     and signs in without a second factor, so the admin verb is not in reach and the review
-    is the refusal a stranger gets. The same token still reads the classification, which is
-    what makes this a test of the ceiling rather than of a broken token.
+    is refused with the sentence saying what the sign-in lacks. The same token still reads the
+    classification, which is what makes this a test of the ceiling rather than of a broken token.
 
     Delete this and the verb on the capability becomes decoration: nothing would notice a
     review answered to somebody who typed a password an hour ago."""
@@ -377,7 +382,8 @@ def test_a_password_only_session_cannot_have_a_change_reviewed(client: TestClien
     still_reads = read(client, "u_admin", claims={})
 
     assert refused.status_code == 404
-    assert refused.json()["message"] == Absent.public_message
+    assert refused.json()["message"] == SECOND_FACTOR_NEEDED_MESSAGE
+    assert refused.json()["message"] != Absent.public_message
     assert still_reads.status_code == 200
 
 

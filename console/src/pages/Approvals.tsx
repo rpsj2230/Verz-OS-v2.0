@@ -60,6 +60,7 @@ import {
   type Decision,
 } from "./approvalsQuery";
 import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 
 /** Written down because a button that turns green on click is the easy version of this page. */
 export const A_DECISION_IS_CLAIMED_ONLY_WHEN_THE_API_CONFIRMS_IT =
@@ -181,6 +182,9 @@ export function DecisionControls({
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const problems = failure?.problems ?? [];
+  // One card per approval on the queue, so the list beside the reason is named for this one.
+  const form = `approval-${suspensionId}`;
 
   const send = useCallback(
     (decision: Decision) => {
@@ -223,8 +227,10 @@ export function DecisionControls({
         <span>{REASON_LABEL}</span>
         <select
           className="form-control approval-card__choice"
+          name="reason_code"
           value={reason}
           disabled={busy}
+          {...problemAttributes(problems, form, "reason_code")}
           onChange={(event) => setReason(event.target.value)}
         >
           <option value="">{NO_REASON_CHOSEN}</option>
@@ -235,6 +241,7 @@ export function DecisionControls({
           ))}
         </select>
       </label>
+      <FieldProblems problems={problems} form={form} names="reason_code" />
       <button
         type="button"
         className="button approval-card__action"
@@ -243,9 +250,7 @@ export function DecisionControls({
       >
         {REJECT_LABEL}
       </button>
-      {failure ? (
-        <FailureNotice failure={failure} />
-      ) : null}
+      {failure ? <FailureNotice failure={failure} fields={["reason_code"]} /> : null}
     </div>
   );
 }

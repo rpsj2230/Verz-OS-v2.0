@@ -28,6 +28,7 @@ import { useEffect, useRef, useState } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import type { Resource } from "../api/useResource";
+import { FailureNotice } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { ConfirmAction } from "./ConfirmAction";
 import {
@@ -95,15 +96,17 @@ interface Confirming {
   readonly starting: boolean;
 }
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
+/**
+ * A failure to show, and the refusal's own sentence when the API wrote one in its document.
+ *
+ * The 409 that says nothing was changed is a refusal with a sentence of its own and a reference like
+ * any other, so it is drawn by `ui/FailureNotice.tsx` under its own heading rather than as a notice
+ * with no reference, as `AutomationGallery` draws the 409 that says an automation was not installed.
+ */
+interface Refused {
+  readonly failure: ApiFailure;
+  readonly title?: string;
+  readonly sentence?: string;
 }
 
 function Facts({ one, becomes }: { readonly one: InstalledAutomationShown; readonly becomes?: string }) {
@@ -132,7 +135,7 @@ function Facts({ one, becomes }: { readonly one: InstalledAutomationShown; reado
 export function AgentAutomations({ agentId, automations, onChanged }: AgentAutomationsProps) {
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [failure, setFailure] = useState<Refused | null>(null);
   const [told, setTold] = useState<{ readonly title: string; readonly sentence: string } | null>(
     null,
   );
@@ -164,17 +167,16 @@ export function AgentAutomations({ agentId, automations, onChanged }: AgentAutom
         return;
       }
       const refused = result.failure.status === 409 ? readNotChanged(result.body) : null;
-      if (refused !== null) {
-        setFailure(null);
-        setTold({ title: NOT_CHANGED, sentence: refused.sentence });
-        return;
-      }
-      setFailure(result.failure);
+      setFailure(
+        refused === null
+          ? { failure: result.failure }
+          : { failure: result.failure, title: NOT_CHANGED, sentence: refused.sentence },
+      );
     })();
   };
 
   if (automations.failure) {
-    return <Failure failure={automations.failure} />;
+    return <FailureNotice failure={automations.failure} title={SOMETHING_DID_NOT_WORK} />;
   }
   if (automations.busy) {
     return (
@@ -228,7 +230,13 @@ export function AgentAutomations({ agentId, automations, onChanged }: AgentAutom
       <h3>{AUTOMATIONS_HEADING}</h3>
       <p className="note">{answer.resultRule}</p>
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : (
+        <FailureNotice
+          failure={failure.failure}
+          title={failure.title ?? SOMETHING_DID_NOT_WORK}
+          {...(failure.sentence === undefined ? {} : { sentence: failure.sentence })}
+        />
+      )}
       {told === null ? null : (
         <Notice title={told.title}>
           <p>{told.sentence}</p>

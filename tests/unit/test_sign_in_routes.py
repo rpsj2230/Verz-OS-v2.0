@@ -23,6 +23,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from brain.api import NOT_DONE_AS_THINGS_STAND
 from brain.api_routes import GateWiring
 from brain.app import Settings, create_app
 from brain.audit.ledger import AuditChain, AuditEntry
@@ -31,6 +32,7 @@ from brain.core.entitlement import EntitlementSet, Grant
 from brain.core.errors import Absent
 from brain.core.scope import Clause, Op, Scope
 from brain.firstrun import GRANTED_BY, digest_of, open_enrolment
+from brain.gate.admission import SECOND_FACTOR_NEEDED_MESSAGE
 from brain.gate.entitlement_store import StoredEntitlements
 from brain.identity.bearer import TokenAuthority
 from brain.identity.oidc import KeySet, SigningKey, VerifiedClaims
@@ -283,14 +285,15 @@ def test_an_administrator_over_one_department_is_refused_as_a_non_administrator(
 
 
 def test_a_password_only_session_cannot_bind_a_sign_in(client: TestClient, writer: Writer) -> None:
-    """The capability is an `admin:` verb, which admission withholds without a second factor.
-    Delete this and the capability can be renamed out of the admin verbs, and a stolen password
-    alone binds accounts."""
+    """The capability is an `admin:` verb, which admission withholds without a second factor, and
+    the refusal says what the sign-in lacks rather than what it asked for. Delete this and the
+    capability can be renamed out of the admin verbs, and a stolen password alone binds accounts."""
     weak = bind(client, "u_admin", claims={})
     stranger = bind(client, "u_none")
 
-    assert weak.status_code == 404
-    assert refusal(weak) == refusal(stranger)
+    assert weak.status_code == stranger.status_code == 404
+    assert refusal(weak)["message"] == SECOND_FACTOR_NEEDED_MESSAGE
+    assert refusal(stranger)["message"] == "I could not find that."
     assert writer.calls == []
 
 
@@ -303,9 +306,14 @@ def test_a_subject_held_elsewhere_is_told_to_the_administrator_without_saying_by
 
     answer = bind(client, "u_admin", subject="s-held")
 
-    assert (answer.status_code, answer.json()) == (
+    assert (answer.status_code, refusal(answer)) == (
         409,
-        {"principal_id": "u_joiner", "outcome": "subject_bound_elsewhere"},
+        {
+            "principal_id": "u_joiner",
+            "outcome": "subject_bound_elsewhere",
+            "message": NOT_DONE_AS_THINGS_STAND,
+            "trace_id": "<per request>",
+        },
     )
     assert "u_other" not in answer.text
     assert writer.held == {"s-held": "u_other"}

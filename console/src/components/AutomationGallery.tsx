@@ -40,6 +40,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import type { Resource } from "../api/useResource";
+import { FailureNotice } from "../ui/FailureNotice";
 import { Notice } from "../ui/Notice";
 import { ConfirmAction } from "./ConfirmAction";
 import {
@@ -110,15 +111,17 @@ interface AutomationGalleryProps {
   readonly onInstalled: () => void;
 }
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
+/**
+ * A failure to show, and the refusal's own sentence when the API wrote one in its document.
+ *
+ * The 409 that says an automation was not installed is a refusal with a sentence of its own and a
+ * reference like any other, so it is drawn by `ui/FailureNotice.tsx` under this panel's heading
+ * rather than as a notice with no reference.
+ */
+interface Refused {
+  readonly failure: ApiFailure;
+  readonly title?: string;
+  readonly sentence?: string;
 }
 
 function PreviewFacts({ shown }: { readonly shown: InstallPreview }) {
@@ -171,7 +174,7 @@ export function AutomationGallery({
   const [confirming, setConfirming] = useState<InstallPreview | null>(null);
   const [asking, setAsking] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [failure, setFailure] = useState<Refused | null>(null);
   const [told, setTold] = useState<{ readonly title: string; readonly sentence: string } | null>(
     null,
   );
@@ -203,7 +206,7 @@ export function AutomationGallery({
         const result = await request<unknown>(automationPreviewApiPath(agentId, card.templateId));
         setAsking(null);
         if (!result.ok) {
-          setFailure(result.failure);
+          setFailure({ failure: result.failure });
           return;
         }
         const shown = readPreview(result.data);
@@ -243,19 +246,18 @@ export function AutomationGallery({
           return;
         }
         const refused = result.failure.status === 409 ? readNotInstalled(result.body) : null;
-        if (refused !== null) {
-          setFailure(null);
-          setTold({ title: NOT_INSTALLED, sentence: refused.sentence });
-          return;
-        }
-        setFailure(result.failure);
+        setFailure(
+          refused === null
+            ? { failure: result.failure }
+            : { failure: result.failure, title: NOT_INSTALLED, sentence: refused.sentence },
+        );
       })();
     },
     [agentId, onInstalled],
   );
 
   if (gallery.failure) {
-    return <Failure failure={gallery.failure} />;
+    return <FailureNotice failure={gallery.failure} title={SOMETHING_DID_NOT_WORK} />;
   }
   if (gallery.busy) {
     return (
@@ -274,7 +276,13 @@ export function AutomationGallery({
       <h3>{GALLERY_HEADING}</h3>
       <p className="note">{answer.installing}</p>
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : (
+        <FailureNotice
+          failure={failure.failure}
+          title={failure.title ?? SOMETHING_DID_NOT_WORK}
+          {...(failure.sentence === undefined ? {} : { sentence: failure.sentence })}
+        />
+      )}
       {told === null ? null : (
         <Notice title={told.title}>
           <p>{told.sentence}</p>

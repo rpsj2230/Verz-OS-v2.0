@@ -47,7 +47,7 @@ from brain.core.errors import Absent
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Clause, Op, Scope
 from brain.gate.leash import Action, ApprovalState, SuspendedAction, render_artefact
-from brain.gate.suspension_store import StoredSuspensions
+from brain.gate.suspension_store import ReadableSuspensions, StoredSuspensions
 from brain.identity.bearer import TokenAuthority
 from brain.session import make_app_engine, make_session_factory
 from tests.fixtures.http_client import Response
@@ -512,20 +512,65 @@ def test_a_process_that_cannot_keep_a_decision_refuses_every_decision_alike() ->
         assert approve(c, "u_narrow", "m_1").status_code == 200
 
 
+class MemoryReader:
+    """A `SuspensionReader` over a dict: what a deployed process with no ledger now holds."""
+
+    def __init__(self, rows: dict[str, SuspendedAction]) -> None:
+        self.rows = rows
+
+    def reading_as(self, reach: EntitlementSet, now: datetime) -> MemorySource:
+        del reach, now
+        return MemorySource(self.rows)
+
+
+def test_a_process_that_reads_approvals_and_keeps_no_decision_serves_the_queue_and_says_why() -> (
+    None
+):
+    """The reading half answers the queue and the card, and a decision is refused in words that
+    say why, identically for an approval in reach and one that does not exist.
+
+    Delete this and a process with a database and no ledger can go back to answering the
+    Approvals screen with a 500 for everybody, which a staging install did, or a refused decision
+    can say "Something went wrong." or differ by whether the approval exists."""
+    app: FastAPI = create_app(Settings(env="development"))
+    held = a_suspension("m_1")
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.gate = _wiring()
+        app.state.suspensions = MemoryReader({held.id: held})
+        queue = c.get(APPROVALS, headers=headers("u_narrow"))
+        empty = c.get(APPROVALS, headers=headers("u_none"))
+        in_reach = approve(c, "u_narrow", "m_1")
+        invented = approve(c, "u_none", "nothing_here")
+
+    assert queue.status_code == 200
+    assert [one["suspension_id"] for one in queue.json()["items"]] == ["m_1"]
+    assert (empty.status_code, empty.json()["items"]) == (200, [])
+    assert in_reach.status_code == invented.status_code == 500
+    assert in_reach.json()["message"] == approval_routes.DECISIONS_ARE_NOT_KEPT_ON_THIS_PROCESS
+    assert without_trace(in_reach) == without_trace(invented)
+
+
 def test_a_store_is_built_only_with_a_database_and_a_ledger_and_the_lifespan_builds_none() -> None:
-    """Delete this and a process can be given a store whose decisions are recorded in a ledger
-    that is gone at the next restart."""
+    """A database without a ledger gets the reading half, which is not a store: it can be read and
+    cannot hold a row to decide. Delete this and a process can be given a store whose decisions are
+    recorded in a ledger that is gone at the next restart, or a database with no ledger can go back
+    to building nothing, which answered every person's Approvals screen with a 500."""
     engine = make_app_engine("postgresql://nobody@127.0.0.1:1/nothing")
     sessions = make_session_factory(engine)
     ledger = AuditChain()
 
     assert suspension_store_for(None, ledger) is None
-    assert suspension_store_for(sessions, None) is None
+    assert suspension_store_for(None, None) is None
+    readable = suspension_store_for(sessions, None)
+    assert isinstance(readable, ReadableSuspensions)
+    assert isinstance(readable, approval_routes.SuspensionReader)
+    assert not isinstance(readable, approval_routes.SuspensionStore)
     built = suspension_store_for(sessions, ledger)
     assert isinstance(built, StoredSuspensions)
     assert isinstance(built, approval_routes.SuspensionStore)
 
-    app: FastAPI = create_app(Settings(env="development"))
+    # Pinned, for the reason `tests.fixtures.no_database` gives: CI's environment has a database.
+    app: FastAPI = create_app(Settings(env="development", database_url=""))
     with TestClient(app, raise_server_exceptions=False):
         assert app.state.suspensions is None
 

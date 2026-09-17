@@ -360,10 +360,14 @@ describe("the whole of first run", () => {
     // Waited for rather than asserted outright: the overview's own read of `/me` is fired by
     // the page, so the heading can be on screen a tick before the request is recorded. This
     // read as a stable assertion until the twelve console screens changed what the shell loads
-    // on the way in, and then failed in CI on a flow that was working.
-    await waitFor(() =>
-      expect(seen.map((one) => one.path)).toEqual([APPOINTMENT_PATH, FINISH_PATH, "/api/v1/me"]),
-    );
+    // on the way in, and then failed in CI on a flow that was working. There are two reads of
+    // `/me` after the two setup routes, the page's and the shell's banner's, and their order is
+    // whichever answered first, so the two are compared as a set after the ordered pair.
+    await waitFor(() => {
+      const paths = seen.map((one) => one.path);
+      expect(paths.slice(0, 2)).toEqual([APPOINTMENT_PATH, FINISH_PATH]);
+      expect(paths.slice(2)).toEqual(["/api/v1/me", "/api/v1/me"]);
+    });
     expect(callsTo(seen, APPOINTMENT_PATH)[0]?.body).toEqual({
       setup_code: CODE,
       answers: {
@@ -657,7 +661,11 @@ describe("what a refusal is drawn as", () => {
       const body = container.querySelector(".notice .notice__body")?.textContent ?? "";
       expect(body).toBe(SETUP_REFUSED_MESSAGE);
       expect(container.textContent).not.toContain(message);
-      expect(container.querySelector(".notice__trace")).toBeNull();
+      // The request's reference, from the header every response carries, and nothing else from
+      // the body. It is minted before the server decides anything, so it names no reason, and both
+      // refusals here carry the same one, so the two screens are still identical: see the module
+      // note in `pages/FirstRun.tsx`.
+      expect(container.querySelector(".notice__trace")?.textContent).toBe("Reference TRACE-SENTINEL");
       expect(callsTo(seen, FINISH_PATH)).toEqual([]);
       drawn.push(container.textContent ?? "");
       document.body.innerHTML = "";

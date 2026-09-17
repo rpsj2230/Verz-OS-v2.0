@@ -583,13 +583,20 @@ def test_the_error_body_carries_no_field_that_varies_with_the_outcome() -> None:
 
     `trace_id` is the deliberate exception and it is safe for a stated reason: it is minted
     per request by the middleware and says nothing about what was asked for, who asked, or
-    how it was refused.
+    how it was refused. `problems` describes a request refused before any route ran, and
+    `second_factor_needed` is decided from the sign-in before any route reads anything; both are
+    identical for DENIED and ABSENT, and a test in `test_api_routes.py` holds the second to that.
 
     Delete this and `outcome` can return to the schema as an obviously useful debugging
     field, which is exactly how it got there the first time."""
     from brain.api import ErrorBody
 
-    assert set(ErrorBody.model_fields) == {"message", "trace_id"}
+    assert set(ErrorBody.model_fields) == {
+        "message",
+        "trace_id",
+        "problems",
+        "second_factor_needed",
+    }
 
     for banned in ("outcome", "reason", "capability", "denied", "status", "code"):
         assert banned not in ErrorBody.model_fields, (
@@ -622,7 +629,9 @@ def test_the_handler_returns_the_shape_the_schema_documents() -> None:
         body = c.get("/boom").json()
         header_id = c.get("/boom").headers.get("x-trace-id", "")
 
-    assert body.keys() == set(ErrorBody.model_fields)
+    # The two optional fields are left out at their defaults, so a refusal is the pair.
+    assert set(body) == {"message", "trace_id"}
+    assert set(body) <= set(ErrorBody.model_fields)
     assert body["trace_id"], "the body carries no trace id, so nobody can quote one"
     assert header_id, "the middleware stopped setting the header the body copies"
 

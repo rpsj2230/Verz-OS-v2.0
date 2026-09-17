@@ -454,7 +454,14 @@ def test_a_confirmed_start_is_written_as_the_approver_and_a_stale_one_writes_not
 
     stale = change(client, "u_admin", START, "auto_one", "0" * 64)
     assert stale.status_code == 409
-    assert stale.json() == {"outcome": routes.UNCONFIRMED, "sentence": routes.LOOK_AGAIN}
+    # The sentence a failure carries is the document's own, and its reference is the header's:
+    # see `brain.api.A_DOCUMENT_A_ROUTE_WROTE_STILL_CARRIES_THE_TWO_FIELDS_EVERY_FAILURE_DOES`.
+    assert stale.json() == {
+        "outcome": routes.UNCONFIRMED,
+        "sentence": routes.LOOK_AGAIN,
+        "message": routes.LOOK_AGAIN,
+        "trace_id": stale.headers["x-trace-id"],
+    }
     assert schedules.calls == []
 
     done = change(client, "u_admin", START, "auto_one", shown["start_confirmation"])
@@ -501,7 +508,12 @@ def test_a_change_that_lost_a_race_writes_nothing_and_says_to_look_again(
     shown = items(client, "u_admin")["auto_one"]
     moved = change(client, "u_admin", START, "auto_one", shown["start_confirmation"])
     assert moved.status_code == 409
-    assert moved.json() == {"outcome": routes.MOVED, "sentence": routes.IT_MOVED}
+    assert moved.json() == {
+        "outcome": routes.MOVED,
+        "sentence": routes.IT_MOVED,
+        "message": routes.IT_MOVED,
+        "trace_id": moved.headers["x-trace-id"],
+    }
 
 
 def test_a_control_on_an_automation_the_reader_cannot_see_is_the_same_404_as_none(

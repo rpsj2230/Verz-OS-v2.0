@@ -20,7 +20,11 @@
  *
  * **Four states and four sentences**, for `docs/admin-console.md`'s reason.
  *
- * Task ids: M27.7.11
+ * **A 409 is still a failure, with its reference.** Its sentence is the one the API's document
+ * carries, and it is drawn by `ui/FailureNotice.tsx` in place of the API's message rather than as a
+ * note, so the reference is under it like every other refusal.
+ *
+ * Task ids: M27.7.11, M27.8.5
  */
 
 import { useCallback, useState, type FormEvent } from "react";
@@ -30,7 +34,8 @@ import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListContr
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   LINK_API_PATH,
   UNLINK_API_PATH,
@@ -44,7 +49,6 @@ import {
   unlinkSentence,
   type LinkRow,
 } from "./signInLinksQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 
 export const LINKS_HEADING = "Sign-in links";
 export const LINKS_CRUMB = "Govern › Sign-in links";
@@ -80,14 +84,23 @@ export function unlinkQuestion(row: LinkRow): string {
   return `Unlink ${row.display_name}'s sign-in?`;
 }
 
-function Failure({ failure }: { readonly failure: ApiFailure }) {
+/** The names the link form's two inputs are sent under, and the prefix of the lists beside them. */
+const LINK_FIELDS: readonly string[] = ["subject", "principal_id"];
+const LINK_FORM = "sign-in-link";
+
+/** A failure, and the sentence its own document carried when it was a 409. */
+interface Refused {
+  readonly failure: ApiFailure;
+  readonly sentence?: string;
+}
+
+function RefusedNotice({ refused, fields }: { readonly refused: Refused; readonly fields?: readonly string[] }) {
   return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
+    <FailureNotice
+      failure={refused.failure}
+      {...(refused.sentence === undefined ? {} : { sentence: refused.sentence })}
+      {...(fields === undefined ? {} : { fields })}
+    />
   );
 }
 
@@ -95,16 +108,15 @@ function LinkForm({ onLinked }: { readonly onLinked: (sentence: string) => void 
   const [subject, setSubject] = useState("");
   const [principalId, setPrincipalId] = useState("");
   const [problems, setProblems] = useState<readonly string[]>([]);
-  const [told, setTold] = useState<string | null>(null);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [failure, setFailure] = useState<Refused | null>(null);
   const [busy, setBusy] = useState(false);
+  const refusedProblems = failure?.failure.problems ?? [];
 
   const submit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       const found = linkProblems(subject, principalId);
       setProblems(found);
-      setTold(null);
       setFailure(null);
       if (found.length > 0) {
         return;
@@ -123,11 +135,7 @@ function LinkForm({ onLinked }: { readonly onLinked: (sentence: string) => void 
           return;
         }
         const refusal = result.failure.status === 409 ? linkOutcome(result.body) : null;
-        if (refusal !== null) {
-          setTold(refusal);
-          return;
-        }
-        setFailure(result.failure);
+        setFailure(refusal === null ? { failure: result.failure } : { failure: result.failure, sentence: refusal });
       })();
     },
     [subject, principalId, onLinked],
@@ -142,27 +150,33 @@ function LinkForm({ onLinked }: { readonly onLinked: (sentence: string) => void 
           <input
             className="form-control"
             type="text"
+            name="subject"
             autoComplete="off"
             spellCheck={false}
             value={subject}
+            {...problemAttributes(refusedProblems, LINK_FORM, "subject")}
             onChange={(event) => {
               setSubject(event.target.value);
             }}
           />
         </label>
+        <FieldProblems problems={refusedProblems} form={LINK_FORM} names="subject" />
         <label className="control-label">
           {PERSON_LABEL}{" "}
           <input
             className="form-control"
             type="text"
+            name="principal_id"
             autoComplete="off"
             spellCheck={false}
             value={principalId}
+            {...problemAttributes(refusedProblems, LINK_FORM, "principal_id")}
             onChange={(event) => {
               setPrincipalId(event.target.value);
             }}
           />
         </label>
+        <FieldProblems problems={refusedProblems} form={LINK_FORM} names="principal_id" />
         {problems.length === 0 ? null : (
           <ul className="form__problems" role="status">
             {problems.map((problem) => (
@@ -176,12 +190,7 @@ function LinkForm({ onLinked }: { readonly onLinked: (sentence: string) => void 
           </button>
         </div>
       </form>
-      {told === null ? null : (
-        <p className="note" role="status">
-          {told}
-        </p>
-      )}
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <RefusedNotice refused={failure} fields={LINK_FIELDS} />}
     </section>
   );
 }
@@ -196,8 +205,7 @@ function LinkList({
   const listing = useListing<LinkRow>(LINKS_API_PATH, { choices: LINK_FILTERS, version });
   const [confirming, setConfirming] = useState<LinkRow | null>(null);
   const [busy, setBusy] = useState(false);
-  const [told, setTold] = useState<string | null>(null);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  const [failure, setFailure] = useState<Refused | null>(null);
 
   const unlink = useCallback(
     (row: LinkRow) => {
@@ -214,11 +222,7 @@ function LinkList({
           return;
         }
         const refusal = result.failure.status === 409 ? unlinkSentence(result.body) : "";
-        if (refusal !== "") {
-          setTold(refusal);
-          return;
-        }
-        setFailure(result.failure);
+        setFailure(refusal === "" ? { failure: result.failure } : { failure: result.failure, sentence: refusal });
       })();
     },
     [onUnlinked],
@@ -230,12 +234,7 @@ function LinkList({
   return (
     <>
       <ListControls label={FIND_LABEL} listing={listing} choices={LINK_FILTERS} sorts={LINK_SORTS} />
-      {failure === null ? null : <Failure failure={failure} />}
-      {told === null ? null : (
-        <Notice title={SOMETHING_DID_NOT_WORK}>
-          <p>{told}</p>
-        </Notice>
-      )}
+      {failure === null ? null : <RefusedNotice refused={failure} />}
       {confirming === null ? null : (
         <ConfirmAction
           question={unlinkQuestion(confirming)}
@@ -255,7 +254,7 @@ function LinkList({
       <section className="card">
         <h2>{LINKS_LABEL}</h2>
         {listing.failure ? (
-          <Failure failure={listing.failure} />
+          <FailureNotice failure={listing.failure} />
         ) : listing.busy ? (
           <p className="note" role="status">
             {READING_LINKS}
@@ -293,7 +292,6 @@ function LinkList({
                             disabled={busy}
                             onClick={() => {
                               setFailure(null);
-                              setTold(null);
                               setConfirming(row);
                             }}
                           >

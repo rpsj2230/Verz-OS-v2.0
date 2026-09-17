@@ -21,8 +21,7 @@ import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   ACTION_LABELS,
   actionConsequence,
@@ -47,23 +46,11 @@ import {
   READING_JOBS,
   readJobs,
   stateWords,
-  THE_BRAIN_COULD_NOT_BE_REACHED,
   UNREADABLE_ANSWER,
   type JobAction,
   type JobRow,
 } from "./jobsQuery";
 import { when } from "./sessionsQuery";
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
 
 interface Pending {
   readonly action: JobAction;
@@ -119,7 +106,7 @@ function JobList({ onDone }: { readonly onDone: (sentence: string) => void }) {
     );
   }
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   const body = readJobs(answer.data);
   if (body === null) {
@@ -130,7 +117,7 @@ function JobList({ onDone }: { readonly onDone: (sentence: string) => void }) {
 
   return (
     <>
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
       {pending === null ? null : (
         <ConfirmAction
           question={actionQuestion(pending.action, pending.row)}

@@ -389,7 +389,8 @@ def test_a_window_longer_than_the_bound_is_refused_identically_for_every_reader(
 
     assert admitted.status_code == 422
     assert refused.status_code == 422
-    assert admitted.json() == refused.json()
+    # Less the reference, which is minted per request and says nothing about either reader.
+    assert {**admitted.json(), "trace_id": ""} == {**refused.json(), "trace_id": ""}
 
 
 # ------------------------------------------------------------------------------- spend
@@ -641,7 +642,7 @@ def test_an_adoption_window_longer_than_the_bound_is_refused_identically_for_eve
     refused = get(client, ADOPTION_PATH, "u_none", days=MAX_ADOPTION_DAYS + 1)
 
     assert admitted.status_code == 422
-    assert admitted.json() == refused.json()
+    assert {**admitted.json(), "trace_id": ""} == {**refused.json(), "trace_id": ""}
 
 
 # ------------------------------------------------------------------ what they share

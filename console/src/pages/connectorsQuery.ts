@@ -27,9 +27,9 @@
  */
 
 import type { components } from "../api/schema";
-import { problemsFor, readProblems, when, type Problem } from "./webhooksQuery";
+import { problemsFor, when, type Problem } from "./webhooksQuery";
 
-export { problemsFor, readProblems, when, type Problem };
+export { problemsFor, when, type Problem };
 
 /** One connected source, as `brain.connector_routes.ConnectedView` sends it. */
 export type Connected = components["schemas"]["ConnectedView"];

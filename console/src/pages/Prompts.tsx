@@ -13,11 +13,11 @@
 
 import { useCallback, useState } from "react";
 import { request } from "../api/client";
-import type { ApiFailure } from "../api/errors";
+import type { ApiFailure, FieldProblem } from "../api/errors";
 import { useResource } from "../api/useResource";
 import { ConfirmAction } from "../components/ConfirmAction";
-import { Notice } from "../ui/Notice";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
+import { FailureNotice } from "../ui/FailureNotice";
+import { FieldProblems, problemAttributes } from "../ui/FieldProblems";
 import {
   CANCEL,
   EDIT,
@@ -47,23 +47,11 @@ import {
   SYSTEM_HEADING,
   SYSTEM_INSTRUCTIONS_ARE_PRODUCT_TEXT,
   TEMPLATE_INSTRUCTIONS,
-  THE_BRAIN_COULD_NOT_BE_REACHED,
   UNREADABLE_ANSWER,
   type AgentInstructions,
   type PromptsBody,
 } from "./promptsQuery";
 import { when } from "./sessionsQuery";
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
 
 function SystemInstructions({ body }: { readonly body: PromptsBody }) {
   return (
@@ -106,15 +94,21 @@ type Pending =
   | { readonly kind: "edit"; readonly row: AgentInstructions; readonly text: string }
   | { readonly kind: "give-back"; readonly row: AgentInstructions };
 
+/** The name an edit's text is sent under. `expected_hash` is sent too, and no input holds it. */
+const INSTRUCTIONS_NAME = "instructions";
+
 function AgentCard({
   row,
   maxChars,
   busy,
+  problems,
   onAsk,
 }: {
   readonly row: AgentInstructions;
   readonly maxChars: number;
   readonly busy: boolean;
+  /** What the API refused in this agent's last edit, for the list beside its text. */
+  readonly problems: readonly FieldProblem[];
   readonly onAsk: (pending: Pending) => void;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
@@ -147,13 +141,15 @@ function AgentCard({
           <textarea
             id={fieldId}
             className="form-control"
+            name={INSTRUCTIONS_NAME}
             rows={8}
             value={draft}
-            aria-describedby={`${fieldId}-count`}
+            {...problemAttributes(problems, fieldId, INSTRUCTIONS_NAME, `${fieldId}-count`)}
             onChange={(event) => {
               setDraft(event.target.value);
             }}
           />
+          <FieldProblems problems={problems} form={fieldId} names={INSTRUCTIONS_NAME} />
           <p className="note" id={`${fieldId}-count`}>
             {problem ?? `${String(draft.trim().length)} of ${String(maxChars)} characters.`}
           </p>
@@ -217,7 +213,11 @@ function PromptList({ onDone }: { readonly onDone: (sentence: string) => void })
   const answer = useResource<unknown>(PROMPTS_API_PATH);
   const [pending, setPending] = useState<Pending | null>(null);
   const [busy, setBusy] = useState(false);
-  const [failure, setFailure] = useState<ApiFailure | null>(null);
+  // The refusal, and the edit it refused when it was one, so its problems are drawn beside that
+  // agent's text and no other.
+  const [failure, setFailure] = useState<{ readonly failure: ApiFailure; readonly edited: string | null } | null>(
+    null,
+  );
 
   const send = useCallback(
     (asked: Pending) => {
@@ -236,7 +236,7 @@ function PromptList({ onDone }: { readonly onDone: (sentence: string) => void })
         setBusy(false);
         setPending(null);
         if (!result.ok) {
-          setFailure(result.failure);
+          setFailure({ failure: result.failure, edited: asked.kind === "edit" ? asked.row.agent_id : null });
           return;
         }
         setFailure(null);
@@ -258,7 +258,7 @@ function PromptList({ onDone }: { readonly onDone: (sentence: string) => void })
     );
   }
   if (answer.failure) {
-    return <Failure failure={answer.failure} />;
+    return <FailureNotice failure={answer.failure} />;
   }
   const body = readPrompts(answer.data);
   if (body === null) {
@@ -268,7 +268,12 @@ function PromptList({ onDone }: { readonly onDone: (sentence: string) => void })
   return (
     <>
       <SystemInstructions body={body} />
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : (
+        <FailureNotice
+          failure={failure.failure}
+          {...(failure.edited === null ? {} : { fields: [INSTRUCTIONS_NAME] })}
+        />
+      )}
       {pending === null ? null : (
         <ConfirmAction
           question={pending.kind === "edit" ? editQuestion(pending.row) : giveBackQuestion(pending.row)}
@@ -300,6 +305,7 @@ function PromptList({ onDone }: { readonly onDone: (sentence: string) => void })
             row={row}
             maxChars={body.max_chars}
             busy={busy}
+            problems={failure !== null && failure.edited === row.agent_id ? failure.failure.problems : []}
             onAsk={(asked) => {
               setFailure(null);
               setPending(asked);

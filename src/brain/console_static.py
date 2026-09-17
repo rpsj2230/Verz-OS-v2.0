@@ -284,6 +284,21 @@ def mount_console_entry(app: FastAPI) -> None:
         app.add_api_route(reserved, console_page, methods=["GET"], include_in_schema=False)
 
 
+#: Why a GET under the API's prefix that nothing serves is refused rather than given the console.
+AN_API_ADDRESS_NOTHING_SERVES_IS_NOT_A_PAGE: Final = (
+    "The console calls the API with fetch and reads JSON. A GET to an API address the server does "
+    "not serve used to fall through to the console's entry document with a 200, which the console "
+    "read as a success carrying no body, so a screen asking a server one release behind it drew "
+    "nothing and said nothing. Under the API's prefix the answer is the framework's 404, in "
+    "ErrorBody with a reference, as for any other address nothing serves."
+)
+
+
+def is_api_address(path: str) -> bool:
+    """Whether a request path is under `API_PREFIX`, and so never a console page."""
+    return path == API_PREFIX or path.startswith(f"{API_PREFIX}/")
+
+
 def mount_console_fallback(app: FastAPI) -> None:
     """Every other console address, and the bundle's own files.
 
@@ -316,6 +331,15 @@ def mount_console_fallback(app: FastAPI) -> None:
     answer to that question. See `DOCUMENTATION_PATHS`, which is held against what the
     framework actually serves them at rather than restated.
 
+    **An address under `API_PREFIX` is never a console page, and keeps the framework's 404.** The
+    console's own addresses are its screens, and none is under the API's prefix, so a GET there
+    that nothing serves is a client asking the API for something it does not have: a console one
+    release ahead of the server, or a mistyped path. It answered 200 with this document until
+    2026-09-17, which a caller reading JSON takes as a success with no body, so the screen drew
+    nothing and said nothing. The prefix is one constant every router is mounted under, not a list
+    of routes, so it is not the second copy of the routing table the paragraph above refuses. See
+    `AN_API_ADDRESS_NOTHING_SERVES_IS_NOT_A_PAGE`.
+
     **Only GET and HEAD are answered, and everything else keeps Starlette's own 404.** A POST
     to a path that does not exist is not a person following a link, and answering it with an
     HTML document would hide a client's mistake behind a 200. The handler that was there
@@ -344,6 +368,7 @@ def mount_console_fallback(app: FastAPI) -> None:
             scope["type"] != "http"
             or scope["method"] not in _BROWSING_METHODS
             or path in DOCUMENTATION_PATHS
+            or is_api_address(path)
         ):
             await unmatched(scope, receive, send)
             return

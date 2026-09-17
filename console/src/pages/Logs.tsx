@@ -18,7 +18,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { request } from "../api/client";
 import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   ADDRESS_PARAMETERS,
   ALL_LEVELS,
@@ -45,7 +45,6 @@ import {
   ORDER_LABELS,
   SHOW_NEWER,
   SHOW_OLDER,
-  THE_BRAIN_COULD_NOT_BE_REACHED,
   UNREADABLE_ANSWER,
   WHAT_IS_NOT_HERE_HEADING,
   WORKER_OUTPUT_IS_NOT_KEPT,
@@ -60,19 +59,7 @@ import {
   type LogFilters,
   type LogPage,
 } from "./logsQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { when } from "./sessionsQuery";
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
-}
 
 function Fields({ fields }: { readonly fields: Readonly<Record<string, string>> }) {
   const named = Object.entries(fields).sort(([a], [b]) => a.localeCompare(b));
@@ -267,7 +254,7 @@ function Entries({ filters }: { readonly filters: LogFilters }) {
     );
   }
   if (first.failure) {
-    return <Failure failure={first.failure} />;
+    return <FailureNotice failure={first.failure} />;
   }
   if (firstPage === null || last === null) {
     return <p className="note">{UNREADABLE_ANSWER}</p>;
@@ -278,7 +265,7 @@ function Entries({ filters }: { readonly filters: LogFilters }) {
       <section className="card">
         <h2>Rows</h2>
         {entries.length === 0 ? <p className="note">{NO_ENTRIES}</p> : <Rows entries={entries} />}
-        {moreFailure === null ? null : <Failure failure={moreFailure} />}
+        {moreFailure === null ? null : <FailureNotice failure={moreFailure} />}
         {last.nextCursor === null ? (
           entries.length === 0 ? null : <p className="note">{NO_MORE_ENTRIES}</p>
         ) : (

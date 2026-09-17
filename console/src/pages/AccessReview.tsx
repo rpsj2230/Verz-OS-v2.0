@@ -39,7 +39,7 @@ import { ConfirmAction } from "../components/ConfirmAction";
 import { ListControls, NOTHING_MATCHES, ShowMore } from "../components/ListControls";
 import { narrows } from "../components/listing";
 import { useListing } from "../components/useListing";
-import { Notice } from "../ui/Notice";
+import { FailureNotice } from "../ui/FailureNotice";
 import {
   DECISIONS,
   MOST_DECIDED_AT_ONCE,
@@ -63,7 +63,6 @@ import {
   type ReviewDecisionWord,
   type ReviewRow,
 } from "./governPeopleQuery";
-import { SOMETHING_DID_NOT_WORK } from "./Overview";
 import { scopeLines } from "./scopeText";
 
 export const REVIEW_HEADING = "Access review";
@@ -103,17 +102,6 @@ export function decidedSentence(row: ReviewRow, decision: ReviewDecisionWord, de
   const who = row.display_name ?? row.principal_id;
   const verb = decision === "keep" ? "kept" : "removed";
   return `${holdingName(row)} for ${who} was ${verb} at ${when(decidedAt)}.`;
-}
-
-function Failure({ failure }: { readonly failure: ApiFailure }) {
-  return (
-    <Notice
-      title={failure.status === 0 ? THE_BRAIN_COULD_NOT_BE_REACHED : SOMETHING_DID_NOT_WORK}
-      traceId={failure.traceId}
-    >
-      <p>{failure.message}</p>
-    </Notice>
-  );
 }
 
 function readDecidedAt(payload: unknown): string {
@@ -212,7 +200,7 @@ function ReviewList({
     <>
       <ListControls label={FILTERS_LABEL} listing={listing} choices={choices} sorts={REVIEW_SORTS} />
 
-      {failure === null ? null : <Failure failure={failure} />}
+      {failure === null ? null : <FailureNotice failure={failure} />}
 
       {pending === null ? null : (
         <ConfirmAction
@@ -256,7 +244,7 @@ function ReviewList({
       <section className="card">
         <h2>Grants to review</h2>
         {listing.failure ? (
-          <Failure failure={listing.failure} />
+          <FailureNotice failure={listing.failure} />
         ) : listing.busy ? (
           <p className="note" role="status">
             {READING_REVIEW}

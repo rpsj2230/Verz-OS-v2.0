@@ -817,7 +817,9 @@ by a function that refuses everything.
 | `tests/auth-realm.test.ts` | Every constant in `src/auth/constants.ts` against `ops/keycloak/realm-export.json`. |
 | `tests/auth-pkce.test.ts` | The S256 challenge against the RFC 7636 vector, single use, and the attempt window. |
 | `tests/auth-session.test.ts` | No token in any store, `state` verified, single-flight refresh, the return-address guard, the loop guard, sign-out. |
-| `tests/api-errors.test.tsx` | The fallback sentences against `brain.core.errors`, and that nothing is added to a 404 on the way to the screen. |
+| `tests/api-errors.test.tsx` | The fallback sentences against `brain.core.errors`, a bodiless failure worded by what answered and never only "Something went wrong.", the problems a failure carries, and that nothing is added to a 404 on the way to the screen. |
+| `tests/field-problems.test.tsx` | A validation refusal drawn beside the input each problem names, on a hand-built form and a generated one, the problems no input holds listed under the notice, and a write the API accepts drawing none of it. |
+| `tests/second-factor.test.tsx` | A 404 with `second_factor_needed` shows the API's sentence and a sign-in that sends `prompt=login`, the same 404 without the flag shows neither, and the shell's banner is drawn from `GET /me`'s flag and nothing else. |
 | `tests/api-client.test.ts` | The bearer token, no cookies, no allow-list, a refusal as a value, and what a 401 does. |
 | `tests/shell-navigation.test.tsx` | The navigation is identical for every session the API gives one answer, on every page, and names nobody. |
 | `tests/routing.test.tsx` | Deep links, the console's own 404, and the two routes that must stay outside the guard. |
