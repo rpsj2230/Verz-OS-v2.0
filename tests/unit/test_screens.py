@@ -746,7 +746,7 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         # group. Like the two groups above they are work on the console, not registry entries.
         "M27.9": 8,  # wave 0: make what is built reachable
         "M27.10": 6,  # wave 1: the shell and the list contract
-        "M27.11": 15,  # wave 2: complete the modules whose logic exists, and the agent profile page
+        "M27.11": 16,  # wave 2: complete the modules whose logic exists, and the agent profile page
         "M27.12": 8,  # wave 3: make the controls take effect
         "M27.13": 7,  # wave 4: breadth
         "M27.14": 8,  # every module group proved end to end
