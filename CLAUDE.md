@@ -42,6 +42,28 @@ company nobody here has met?** If not, it is configuration and belongs in the se
 
 ---
 
+## The owner's requirements are a register, and a narrowing is a question
+
+Capabilities the owner asked for once never became tasks: his first brief was never saved, and
+nothing checked that every requirement had one. So they are held in
+`docs/requirements/register.json`, one row per requirement, naming the leaves that build it
+(`leaves`), the leaves that prove it on an install or in the browser (`proof`), and `decision`.
+`tests/unit/test_requirements_register.py` fails the build when a row names no leaf, no proof
+leaf, an id that is not a leaf, or a decided leaf without a decision.
+`uv run python -m brain.requirements` prints every finding, and `/build` shows how many
+requirements are covered and how many delivered.
+
+**A new requirement gets a row and a task in the same commit.** A row without a task is red, and
+a task without a row is a capability nobody can trace back to the person who asked for it.
+
+**A design that narrows a requirement goes to `docs/needs-rupash.md` as a question**, and the row
+records it in `decision` by naming the item (`needs-rupash 58: ...`). It is never decided
+silently in a docstring, which is the other way the owner's requirements went missing: the
+architecture deciding against him without asking. A row resting on a leaf flagged DECIDED has to
+name its decision, and the item it names has to exist.
+
+---
+
 ## A problem found on an install: is the fix the product's or that install's?
 
 The owner runs an install of this product as a staging server, and problems found there arrive
@@ -551,6 +573,7 @@ each of those has exactly one test file, so there was nothing else to miss.
 | `migrations/versions/` | Alembic. Every new table enables row-level security. |
 | `docs/wbs/*.js` | The work breakdown. `docs/wbs.json` is compiled from it. |
 | `docs/needs-rupash.md` | Decisions only the owner can make. Served at `/build/needs-rupash`. |
+| `docs/requirements/register.json` | The owner's requirements, each traced to the leaves that build and prove it. |
 | `ops/` | Keycloak realm, OpenBao policies and runbooks, git hooks. |
 
 **Nothing that decides policy owns a client.** `brain.ops.limits` holds the sliding-window

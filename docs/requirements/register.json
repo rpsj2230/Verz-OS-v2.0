@@ -1,0 +1,94 @@
+{
+  "requirements": [
+    {
+      "id": "OWN-2.1",
+      "source": "admin-console.md, What an administrator must be able to manage",
+      "area": "Connectors",
+      "requirement": "An administrator manages connectors and third-party integrations from the console.",
+      "leaves": ["M27.11.9", "M27.12.2"],
+      "proof": ["M27.14.3"],
+      "decision": null
+    },
+    {
+      "id": "OWN-2.2",
+      "source": "admin-console.md, How every screen behaves",
+      "area": "Connectors",
+      "requirement": "A credential is written once and never read back: a screen shows that a secret is held, never the secret.",
+      "leaves": ["M11.2.1", "M27.8.7", "M27.11.10"],
+      "proof": ["M27.8.17"],
+      "decision": null
+    },
+    {
+      "id": "OWN-3.1",
+      "source": "admin-console.md, What an administrator must be able to manage",
+      "area": "Knowledge",
+      "requirement": "An administrator manages knowledge bases, documents and data sources from the console.",
+      "leaves": ["M27.7.20", "M27.13.4"],
+      "proof": ["M27.14.3"],
+      "decision": null
+    },
+    {
+      "id": "OWN-4.1",
+      "source": "admin-console.md, What an administrator must be able to manage",
+      "area": "Skills",
+      "requirement": "An administrator manages skills and tools from the console.",
+      "leaves": ["M27.3.13", "M27.11.8"],
+      "proof": ["M27.14.2"],
+      "decision": null
+    },
+    {
+      "id": "OWN-5.1",
+      "source": "admin-console.md, What an administrator must be able to manage",
+      "area": "Agents",
+      "requirement": "An administrator manages agents and their configuration, including templates, from the console.",
+      "leaves": ["M27.11.6", "M27.11.7"],
+      "proof": ["M27.14.2"],
+      "decision": null
+    },
+    {
+      "id": "OWN-6.1",
+      "source": "needs-rupash 56",
+      "area": "Workflows",
+      "requirement": "An automation runs as the person who owns it, never with more than that person may do, and stops when that person loses what it needs.",
+      "leaves": ["M17.4.3", "M17.4.4", "M39.6.2.1"],
+      "proof": ["M38.2.2.5"],
+      "decision": null
+    },
+    {
+      "id": "OWN-6.2",
+      "source": "admin-console.md, What an administrator must be able to manage",
+      "area": "Workflows",
+      "requirement": "An administrator sees and controls scheduled jobs and background work from the console.",
+      "leaves": ["M27.8.13", "M27.13.3"],
+      "proof": ["M27.14.5"],
+      "decision": null
+    },
+    {
+      "id": "OWN-13.1",
+      "source": "admin-console.md, What an administrator must be able to manage",
+      "area": "Permissions",
+      "requirement": "An administrator manages people, roles, permissions and access control from the console.",
+      "leaves": ["M27.7.3", "M27.7.5", "M27.7.7", "M27.11.3"],
+      "proof": ["M27.14.1"],
+      "decision": null
+    },
+    {
+      "id": "OWN-13.2",
+      "source": "admin-console.md, What the permission model has to hold",
+      "area": "Permissions",
+      "requirement": "No screen, filter or error tells a reader that something exists which they may not see, and no count of withheld rows is shown.",
+      "leaves": ["M27.5.7", "M27.5.8", "M27.10.3"],
+      "proof": ["M27.7.29"],
+      "decision": null
+    },
+    {
+      "id": "OWN-14.1",
+      "source": "CLAUDE.md, This repository is the template, not one company's system",
+      "area": "Modularity",
+      "requirement": "Whatever differs between companies is a plugin or a setting, never a change to the product for one company.",
+      "leaves": ["M29.1.2", "M29.1.13", "M29.2.1", "M29.2.3"],
+      "proof": ["M29.2.6"],
+      "decision": "needs-rupash 58: the identity provider plug-in point is marked not needed yet, because which provider is used is a setting chosen during setup"
+    }
+  ]
+}
