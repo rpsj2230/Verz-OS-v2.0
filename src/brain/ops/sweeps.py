@@ -457,6 +457,15 @@ def sweep_traceability() -> None:
             f"note: {len(unbuilt_here)} navigation item(s) the design names are not in the "
             "department console: " + ", ".join(one.line for one in unbuilt_here)
         )
+    # A module the menu declares in its group with no page behind it yet. Not a gap in the
+    # menu, and never a link, so nothing else on this run would name it. See
+    # `brain.console.department_console.A_MODULE_WITH_NO_PAGE_IS_DECLARED_AND_NEVER_A_LINK`.
+    no_page = console_design.unbuilt_entries()
+    if no_page:
+        print(
+            f"note: {len(no_page)} menu module(s) are declared with no page yet: "
+            + ", ".join(one.line for one in no_page)
+        )
     others = console_design.unmeasured_navigations(REPO)
     if others:
         print(

@@ -35,7 +35,7 @@ from types import MappingProxyType
 import pytest
 
 from brain.console.reads import ConsoleRead, Plane, plane_capability
-from brain.console.screens import SCREENS, Axis, Group, Screen
+from brain.console.screens import SCREENS, Axis, Group, MenuGroup, Screen
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
@@ -219,6 +219,7 @@ def governance_screen(key: str, *, capability: str, tool: str = "console.made_up
         ),
         axes=frozenset({Axis.DEPARTMENT, Axis.PERSON}),
         intended_for=frozenset({Role.SUPER_ADMIN}),
+        menu=MenuGroup.PEOPLE,
         purpose="A screen invented for a test.",
     )
 

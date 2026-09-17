@@ -69,6 +69,13 @@
   .navitem.on{background:var(--acc-wash);color:var(--acc-text);font-weight:600;box-shadow:inset 3px 0 0 var(--brand)}
   .navitem .badge{font-family:var(--mono);font-size:9.5px;background:var(--crit-w);color:var(--crit);padding:1px 5px;border-radius:2px;font-weight:600}
   .navitem .badge.q{background:var(--warn-w);color:var(--warn)}
+  /* A menu group is a disclosure: the reader's own work, Home and the current page's group
+     open, the rest one line each until opened. The console draws the same. */
+  .navgrp{margin:0}
+  summary.navsec{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:6px}
+  summary.navsec::-webkit-details-marker{display:none}
+  summary.navsec::after{content:"\25B8";font-size:9px;color:var(--faint)}
+  .navgrp[open]>summary.navsec::after{content:"\25BE"}
 
   .main{padding:16px 20px 22px;display:flex;flex-direction:column;gap:15px;min-width:0}
   .topbar{display:flex;flex-wrap:wrap;align-items:center;gap:9px;justify-content:space-between}
@@ -279,23 +286,80 @@
     <div class="app">
       <div class="nav">
         <div class="brand"><img class="mark" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADEAAAArCAYAAADR0WDhAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyBpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBXaW5kb3dzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkJDMjlEMzgwRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkJDMjlEMzgxRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6QkMyOUQzN0VGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6QkMyOUQzN0ZGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz5dK3lzAAAD8ElEQVR42tRYW0hUQRie3T2mi+56SRGMzLSLhBkIGUQZRIZ0oxv0XGhmBUmaoGh21dDQiiJCrd56iEyCeii7WG8RYWYUpqk9ZUJeMsnbbt/UGMNpd87Zc2l3Bz7+PTP/mTPffGe+mbOWlAVJjwghG0gQllCbhRQsD++ygMQQrqOCjUB2YuhkRaZz3DHH8k3CdQ1QFSyDT46USNVq50BqtBSPyzlAPlUiDD/eA0mBPPiIEAspyogY2J5ij7UQYmPVLxzVL7OsPf19P3FREqiDx4DJ7kX20cc7Y0d3pNjjOQJuoHA253eBIs8R1gYSgbS5IVM1a5yDCeG2BA/NN6DCPvpD4iopq1c8MX+VmDArqVzl6F83LzQRl54IjAFlvFqEU+M6wl5B/x+AAmASGDfp3bfi1bkF+1wiSCuDCtWzF5K8kb6CgMPLzamAHevomVkqfC/NzEcQEegD6vkKG38xNDI8FhMV5VLY/FYi5xpyXSYQiES4C4QL0vZDhQ6+wuoh6QLQK+iEztIhk4SoBOIE7dRSb8sr/yGBV2UCoVjpYVg/cQarQCfnsCDlr6UqkmBEmhHaBB3SY8opg1U4D4QI2m9ChdeqSXCW6xa050GNdINUyEbYKkrhLVU1CajRjtAk6JiaQqkBBKhD1imknYUKX3wmwUo5mwV5mWCHxlwDhKCWmiZo72VmI5xNrwU2+gN2Ok1Pvlx1C7ANSt1B+5ROFaKZpdoFablQoVPUj6TiWRfZbNGDYiEG32qwpcYI2ttAoFnNIVGxYAEnI3wGgWkDLXUpQqdgIqmpZIBEu1JfapSgi/yTCRtbncLzm9QQULOwzTof5SBsUrDUcrX9Wf1AQJIf4LxY6oDaPiUDB0edLo+uHQzggSD1IDsNa7ZUTQtbBYEshEvACjaIVBCZ9JBHnagbiBZ0t0uNIxmmBAY1H6EW2MNVLwSOsHp5OaFAoM1XApqVYK9OGTt2eNqoRoHFGNBX7p5lCB2CDdbFLPWNr+PRtLDxoBmELMFO6wROy+rqFU4IjVoI6HWno8CM6LiA2U9nKmxG2CjIpcpV6PlbR8+auIpwQJDyBMhhO7Pou7kEKtRqHYfefeI4MCJoXw80KxDoYecz4hcSmL1BFV94WxTai3k7drvdPsOIHfsy8FHjvU9BoEXvAHSTYLNYrOFWl7cP//9OghG5h+Drd0aj/P8jv5JQabmGWappJDCrbxEaVKaf4XfzQFJi1nKHFXK69VqqqSSY5Z5USCvydMINJCVouQJ0eWlrZSZAApoEBjnFFrm8zHipD0glKJH7CA9l1Q1s8QcHCQ+WO8IWPQkqEpj1dwjnyJ8/3Y6xRW9K+SXAAAhYSe/BcO5cAAAAAElFTkSuQmCC" alt=""><div class="brandtxt">Verz Brain<small>SUPER ADMIN</small></div></div>
-        <div class="navsec">Operate</div>
-        <div class="navitem on">Overview</div>
-        <div class="navitem">Live runs</div>
-        <div class="navitem">Models &amp; health<span class="badge">1</span></div>
-        <div class="navitem">Connectors</div>
-        <div class="navsec">Govern</div>
-        <div class="navitem">People &amp; grants</div>
-        <div class="navitem">Scopes</div>
-        <div class="navitem">Agents &amp; leashes<span class="badge q">3</span></div>
-        <div class="navitem">Skills &amp; templates<span class="badge q">7</span></div>
-        <div class="navitem">Knowledge<span class="badge q">12</span></div>
-        <div class="navitem">Learning<span class="badge q">3</span></div>
-        <div class="navitem">Audit</div>
-        <div class="navsec">Report</div>
-        <div class="navitem">Questions &amp; gaps</div>
-        <div class="navitem">Usage &amp; cost</div>
-        <div class="navitem">Quality &amp; canaries</div>
+        <details class="navgrp" open>
+          <summary class="navsec">Use</summary>
+          <div class="navitem">Ask</div>
+          <div class="navitem">My workspace</div>
+          <div class="navitem">My approvals</div>
+          <div class="navitem">Records</div>
+        </details>
+        <details class="navgrp" open>
+          <summary class="navsec">Home</summary>
+          <div class="navitem on">Dashboard</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">People and access</summary>
+          <div class="navitem">People</div>
+          <div class="navitem">Departments and teams</div>
+          <div class="navitem">Roles and permissions</div>
+          <div class="navitem">Access reviews and elevation</div>
+          <div class="navitem">Sign-in, directory and sessions</div>
+          <div class="navitem">Service accounts and API keys</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Agents and AI</summary>
+          <div class="navitem">Agents</div>
+          <div class="navitem">Agent templates</div>
+          <div class="navitem">Skills and tools</div>
+          <div class="navitem">Approvals and autonomy</div>
+          <div class="navitem">Automations</div>
+          <div class="navitem">Models and routing</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Knowledge and data</summary>
+          <div class="navitem">Connectors</div>
+          <div class="navitem">Knowledge</div>
+          <div class="navitem">Learning and memory</div>
+          <div class="navitem">Fields and records</div>
+          <div class="navitem">Artifacts</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Channels and notifications</summary>
+          <div class="navitem">Channels</div>
+          <div class="navitem">Webhooks</div>
+          <div class="navitem">Notifications and email</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Operations</summary>
+          <div class="navitem">System health</div>
+          <div class="navitem">Runs and queue</div>
+          <div class="navitem">Background jobs</div>
+          <div class="navitem">Logs and errors</div>
+          <div class="navitem">Stop</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Governance</summary>
+          <div class="navitem">Audit log</div>
+          <div class="navitem">Retention, legal holds and erasure</div>
+          <div class="navitem">Import and export</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Reports</summary>
+          <div class="navitem">Usage and cost</div>
+          <div class="navitem">Questions and gaps</div>
+          <div class="navitem">Quality and canaries</div>
+          <div class="navitem">Service levels</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Platform</summary>
+          <div class="navitem">Settings</div>
+          <div class="navitem">Features and plugins</div>
+          <div class="navitem">Limits, budgets and capacity</div>
+          <div class="navitem">Secrets and credentials</div>
+          <div class="navitem">Storage</div>
+          <div class="navitem">Backup and recovery</div>
+          <div class="navitem">Version and updates</div>
+        </details>
       </div>
 
       <div class="main">
@@ -373,19 +437,41 @@
     <div class="app">
       <div class="nav">
         <div class="brand"><img class="mark" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADEAAAArCAYAAADR0WDhAAAAGXRFWHRTb2Z0d2FyZQBBZG9iZSBJbWFnZVJlYWR5ccllPAAAAyBpVFh0WE1MOmNvbS5hZG9iZS54bXAAAAAAADw/eHBhY2tldCBiZWdpbj0i77u/IiBpZD0iVzVNME1wQ2VoaUh6cmVTek5UY3prYzlkIj8+IDx4OnhtcG1ldGEgeG1sbnM6eD0iYWRvYmU6bnM6bWV0YS8iIHg6eG1wdGs9IkFkb2JlIFhNUCBDb3JlIDUuMC1jMDYwIDYxLjEzNDc3NywgMjAxMC8wMi8xMi0xNzozMjowMCAgICAgICAgIj4gPHJkZjpSREYgeG1sbnM6cmRmPSJodHRwOi8vd3d3LnczLm9yZy8xOTk5LzAyLzIyLXJkZi1zeW50YXgtbnMjIj4gPHJkZjpEZXNjcmlwdGlvbiByZGY6YWJvdXQ9IiIgeG1sbnM6eG1wPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvIiB4bWxuczp4bXBNTT0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL21tLyIgeG1sbnM6c3RSZWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9zVHlwZS9SZXNvdXJjZVJlZiMiIHhtcDpDcmVhdG9yVG9vbD0iQWRvYmUgUGhvdG9zaG9wIENTNSBXaW5kb3dzIiB4bXBNTTpJbnN0YW5jZUlEPSJ4bXAuaWlkOkJDMjlEMzgwRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIiB4bXBNTTpEb2N1bWVudElEPSJ4bXAuZGlkOkJDMjlEMzgxRkZGQjExRTdBNDE2OEVGNzI2NDE3NjBEIj4gPHhtcE1NOkRlcml2ZWRGcm9tIHN0UmVmOmluc3RhbmNlSUQ9InhtcC5paWQ6QkMyOUQzN0VGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiIHN0UmVmOmRvY3VtZW50SUQ9InhtcC5kaWQ6QkMyOUQzN0ZGRkZCMTFFN0E0MTY4RUY3MjY0MTc2MEQiLz4gPC9yZGY6RGVzY3JpcHRpb24+IDwvcmRmOlJERj4gPC94OnhtcG1ldGE+IDw/eHBhY2tldCBlbmQ9InIiPz5dK3lzAAAD8ElEQVR42tRYW0hUQRie3T2mi+56SRGMzLSLhBkIGUQZRIZ0oxv0XGhmBUmaoGh21dDQiiJCrd56iEyCeii7WG8RYWYUpqk9ZUJeMsnbbt/UGMNpd87Zc2l3Bz7+PTP/mTPffGe+mbOWlAVJjwghG0gQllCbhRQsD++ygMQQrqOCjUB2YuhkRaZz3DHH8k3CdQ1QFSyDT46USNVq50BqtBSPyzlAPlUiDD/eA0mBPPiIEAspyogY2J5ij7UQYmPVLxzVL7OsPf19P3FREqiDx4DJ7kX20cc7Y0d3pNjjOQJuoHA253eBIs8R1gYSgbS5IVM1a5yDCeG2BA/NN6DCPvpD4iopq1c8MX+VmDArqVzl6F83LzQRl54IjAFlvFqEU+M6wl5B/x+AAmASGDfp3bfi1bkF+1wiSCuDCtWzF5K8kb6CgMPLzamAHevomVkqfC/NzEcQEegD6vkKG38xNDI8FhMV5VLY/FYi5xpyXSYQiES4C4QL0vZDhQ6+wuoh6QLQK+iEztIhk4SoBOIE7dRSb8sr/yGBV2UCoVjpYVg/cQarQCfnsCDlr6UqkmBEmhHaBB3SY8opg1U4D4QI2m9ChdeqSXCW6xa050GNdINUyEbYKkrhLVU1CajRjtAk6JiaQqkBBKhD1imknYUKX3wmwUo5mwV5mWCHxlwDhKCWmiZo72VmI5xNrwU2+gN2Ok1Pvlx1C7ANSt1B+5ROFaKZpdoFablQoVPUj6TiWRfZbNGDYiEG32qwpcYI2ttAoFnNIVGxYAEnI3wGgWkDLXUpQqdgIqmpZIBEu1JfapSgi/yTCRtbncLzm9QQULOwzTof5SBsUrDUcrX9Wf1AQJIf4LxY6oDaPiUDB0edLo+uHQzggSD1IDsNa7ZUTQtbBYEshEvACjaIVBCZ9JBHnagbiBZ0t0uNIxmmBAY1H6EW2MNVLwSOsHp5OaFAoM1XApqVYK9OGTt2eNqoRoHFGNBX7p5lCB2CDdbFLPWNr+PRtLDxoBmELMFO6wROy+rqFU4IjVoI6HWno8CM6LiA2U9nKmxG2CjIpcpV6PlbR8+auIpwQJDyBMhhO7Pou7kEKtRqHYfefeI4MCJoXw80KxDoYecz4hcSmL1BFV94WxTai3k7drvdPsOIHfsy8FHjvU9BoEXvAHSTYLNYrOFWl7cP//9OghG5h+Drd0aj/P8jv5JQabmGWappJDCrbxEaVKaf4XfzQFJi1nKHFXK69VqqqSSY5Z5USCvydMINJCVouQJ0eWlrZSZAApoEBjnFFrm8zHipD0glKJH7CA9l1Q1s8QcHCQ+WO8IWPQkqEpj1dwjnyJ8/3Y6xRW9K+SXAAAhYSe/BcO5cAAAAAElFTkSuQmCC" alt=""><div class="brandtxt">Verz Brain<small>MAINTENANCE</small></div></div>
-        <div class="navsec">Operate</div>
-        <div class="navitem on">Department</div>
-        <div class="navitem">Live runs</div>
-        <div class="navitem">Connectors</div>
-        <div class="navsec">Govern</div>
-        <div class="navitem">People &amp; grants</div>
-        <div class="navitem">Agents &amp; leashes<span class="badge q">2</span></div>
-        <div class="navitem">Knowledge<span class="badge q">4</span></div>
-        <div class="navitem">Skills<span class="badge q">3</span></div>
-        <div class="navitem">Learning<span class="badge q">11</span></div>
-        <div class="navsec">Report</div>
-        <div class="navitem">Gaps</div>
-        <div class="navitem">Usage</div>
+        <details class="navgrp" open>
+          <summary class="navsec">Use</summary>
+          <div class="navitem">Ask</div>
+          <div class="navitem">My workspace</div>
+          <div class="navitem">My approvals</div>
+          <div class="navitem">Records</div>
+        </details>
+        <details class="navgrp" open>
+          <summary class="navsec">Home</summary>
+          <div class="navitem on">Department</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">People and access</summary>
+          <div class="navitem">People</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Agents and AI</summary>
+          <div class="navitem">Agents</div>
+          <div class="navitem">Skills and tools</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Knowledge and data</summary>
+          <div class="navitem">Connectors</div>
+          <div class="navitem">Knowledge</div>
+          <div class="navitem">Learning and memory</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Operations</summary>
+          <div class="navitem">Runs and queue</div>
+        </details>
+        <details class="navgrp">
+          <summary class="navsec">Reports</summary>
+          <div class="navitem">Usage and cost</div>
+          <div class="navitem">Questions and gaps</div>
+        </details>
       </div>
 
       <div class="main">
