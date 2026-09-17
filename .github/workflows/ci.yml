@@ -13,10 +13,44 @@ env:
   UV_VERSION: "0.12.9"
 
 jobs:
+  # Which kind of change this is. A change that touches only the task list (the work breakdown,
+  # its compiled JSON, the tracker page, the delivery checklist and the requirements register)
+  # cannot change what the product does, so it skips the suites that test the product and runs
+  # only the checks that read those files: the tracker regenerates to what is committed, every
+  # requirement names a task and a proof, and the tests that read task sentences pass. Measured on
+  # 2026-09-17: a task-list change waited 15 to 20 minutes per CI run for suites it cannot affect,
+  # twice per change (the pull request and main), and the owner asked for it to take minutes.
+  #
+  # Anything else, or a diff this job cannot compute, is treated as a code change and runs everything.
+  changes:
+    name: Kind of change
+    runs-on: ubuntu-latest
+    outputs:
+      tasks_only: ${{ steps.kind.outputs.tasks_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: kind
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            echo "tasks_only=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(git diff --name-only "$BASE" "$GITHUB_SHA")
+          echo "$files"
+          if [ -n "$files" ] && ! echo "$files" | grep -Evq '^docs/(wbs/(wbs-[a-f]|acts|schedule)\.js|wbs\.json|tracker\.html|delivery-checklist\.md|requirements/register\.json|tracker-audit-[0-9-]+\.md)$'; then
+            echo "tasks_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tasks_only=false" >> "$GITHUB_OUTPUT"
+          fi
   # Everything that needs no database. Fast, so it fails first.
   static:
     name: Lint, types, invariants
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -68,6 +102,8 @@ jobs:
   tests:
     name: Unit tests, shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
     strategy:
       # A red shard does not cancel the others, so one run reports every failure in the suite
       # rather than the first quarter's.
@@ -175,7 +211,7 @@ jobs:
   coverage:
     name: Unit tests and coverage
     runs-on: ubuntu-latest
-    needs: tests
+    needs: [tests, changes]
     # Runs when a shard failed as well, and fails itself. A job skipped because what it needs
     # failed reports as passing a required check, so a skipped floor would read as a green one.
     if: ${{ !cancelled() }}
@@ -183,21 +219,27 @@ jobs:
       - name: Every shard passed
         env:
           SHARDS: ${{ needs.tests.result }}
+          TASKS_ONLY: ${{ needs.changes.outputs.tasks_only }}
         run: |
-          [ "$SHARDS" = "success" ] || { echo "::error::the unit test shards ended in $SHARDS"; exit 1; }
+          [ "$SHARDS" = "success" ] || [ "$TASKS_ONLY" = "true" ] || { echo "::error::the unit test shards ended in $SHARDS"; exit 1; }
           echo "every shard passed"
       - uses: actions/checkout@v4
+        if: ${{ needs.changes.outputs.tasks_only != 'true' }}
       - uses: astral-sh/setup-uv@v5
+        if: ${{ needs.changes.outputs.tasks_only != 'true' }}
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - run: uv sync --locked
+      - if: ${{ needs.changes.outputs.tasks_only != 'true' }}
+        run: uv sync --locked
       - uses: actions/download-artifact@v4
+        if: ${{ needs.changes.outputs.tasks_only != 'true' }}
         with:
           pattern: coverage-shard-*
           path: coverage-data
           merge-multiple: true
       - name: Coverage floor over the whole suite
+        if: ${{ needs.changes.outputs.tasks_only != 'true' }}
         # `coverage report` reads `fail_under` from `pyproject.toml` and exits non-zero below
         # it. No `--fail-under` here: the floor has one home, and a second copy in a workflow is
         # the one nobody raises.
@@ -298,6 +340,8 @@ jobs:
   console:
     name: Console types, boundaries, tests, build
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -332,8 +376,12 @@ jobs:
   docs:
     name: Tracker matches the WBS
     runs-on: ubuntu-latest
+    needs: changes
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history: the task-list tests read the claims from commit messages.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -344,6 +392,24 @@ jobs:
           node docs/wbs/export.js
           node docs/wbs/render.js
           git diff --exit-code -- docs/tracker.html docs/wbs.json             || { echo "::error::docs/tracker.html is out of date - run node docs/wbs/render.js"; exit 1; }
+      - uses: astral-sh/setup-uv@v5
+        if: ${{ needs.changes.outputs.tasks_only == 'true' }}
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - if: ${{ needs.changes.outputs.tasks_only == 'true' }}
+        run: uv sync --locked
+      - name: Every requirement names a task and a proof task
+        if: ${{ needs.changes.outputs.tasks_only == 'true' }}
+        run: uv run python -m brain.requirements
+      - name: The tests that read the task list
+        if: ${{ needs.changes.outputs.tasks_only == 'true' }}
+        run: >-
+          uv run pytest -q
+          tests/unit/test_status.py tests/unit/test_screens.py tests/unit/test_reliability.py
+          tests/unit/test_catalogue.py tests/unit/test_migration_checklist.py tests/unit/test_backup_ladder.py
+          tests/unit/test_requirements_register.py tests/unit/test_wave_report.py tests/unit/test_launch.py
+          tests/unit/test_assembly.py tests/unit/test_architecture_doc.py
 
   # M41.2.5. An install into a scratch container, from a database with nothing in it, ending
   # in a question that gets answered.
@@ -461,6 +527,8 @@ jobs:
   stack:
     name: The whole stack starts
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
     # Job level, not step level. Set per-step, the later `docker compose exec` calls run
     # without POSTGRES_PASSWORD and compose resolves it to an empty string - which looks
     # like the migrations never ran rather than like a missing variable.
@@ -540,6 +608,8 @@ jobs:
   supply_chain:
     name: Dependency audit
     runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ needs.changes.outputs.tasks_only != 'true' }}
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5

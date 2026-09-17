@@ -677,3 +677,48 @@ def test_the_local_type_gates_judge_the_platform_the_runner_does() -> None:
     )
     assert expected in makefile, "make types no longer names the platform the runner uses"
     assert "types-here:" in makefile, "the native run has to stay reachable for debugging"
+
+
+def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
+    """The quick path exists because a task-list change waited for suites it cannot affect. The
+    danger it carries is the other direction: a code change read as a task-list change would
+    deploy with nothing tested. So the pattern is asserted against paths outside itself, a task
+    list file on each side and every kind of code file on the other, and the jobs that test the
+    product are asserted to be the ones it gates.
+
+    Delete this and a widened pattern (``docs/.*``, or a generator like ``render.js``) sends code
+    to the server untested, with every check green."""
+    jobs = _workflow()["jobs"]
+    run = str(jobs["changes"]["steps"][1]["run"])
+    found = re.search(r"grep -Evq '([^']+)'", run)
+    assert found is not None, "the kind-of-change step no longer names its pattern"
+    pattern = re.compile(found.group(1).replace("\\\\", "\\"))
+
+    for path in (
+        "docs/wbs/wbs-a.js",
+        "docs/wbs/acts.js",
+        "docs/wbs.json",
+        "docs/tracker.html",
+        "docs/requirements/register.json",
+        "docs/delivery-checklist.md",
+    ):
+        assert pattern.fullmatch(path), f"{path} is a task-list file and should take the quick path"
+    for path in (
+        "src/brain/app.py",
+        "tests/unit/test_status.py",
+        "docs/wbs/render.js",
+        "docs/wbs/export.js",
+        ".github/workflows/ci.yml",
+        "docs/needs-rupash.md",
+        "console/src/App.tsx",
+        "migrations/versions/0083_x.py",
+    ):
+        assert not pattern.fullmatch(path), (
+            f"{path} is not a task-list file and must run everything"
+        )
+
+    gated = "${{ needs.changes.outputs.tasks_only != 'true' }}"
+    for name in ("static", "tests", "console", "stack", "supply_chain"):
+        assert jobs[name].get("if") == gated, f"the {name} job is not gated on the kind of change"
+    docs_runs = "\n".join(str(step.get("run", "")) for step in jobs["docs"]["steps"])
+    assert "python -m brain.requirements" in docs_runs
