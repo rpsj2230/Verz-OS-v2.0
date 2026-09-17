@@ -168,14 +168,19 @@ table at the top of this file.
 The application's policy may create and update `connector_keys/data/+` and read
 `connector_keys/metadata/+`, and nothing else there. It never reads a source's key back, and it
 cannot delete one: disconnecting a source leaves its key in the vault, so revoke the key in the
-source's own settings as well. Nothing on an install reads from a connected source yet, because
-no worker runs a connector, and when one does it reads the key under its own policy, which does not
-name this engine today.
+source's own settings as well.
 
-To let the application keep them, once per install that runs a vault:
+The worker reads a connected source on a schedule (`brain.ops.connector_sync_run`), and its policy
+may read `connector_keys/data/+` and nothing else there: no write, no delete and no metadata. It asks
+only for the slot a live connection's own declaration names, and it needs its own token, minted
+against the worker policy, in `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN` in the worker's
+environment. Without one every due source is recorded as failed with a sentence saying the worker
+has no vault, and the Connectors screen shows it.
+
+To let the application keep them and the worker read them, once per install that runs a vault:
 
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=connector_keys kv-v2`.
-2. Load the policies: `sh ops/openbao/load-policies.sh`.
+2. Load the policies: `sh ops/openbao/load-policies.sh`, which also reloads the worker's rule.
 
 Until both are done, connecting a source is refused with a sentence saying the vault refused, and
 nothing is recorded as connected.

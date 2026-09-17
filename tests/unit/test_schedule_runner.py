@@ -423,6 +423,10 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And eighteen controls later that day, with six orphans still.** `automation_run` arrived
     already wired, the way `erasure_queue` did.
 
+    **And nineteen controls later that day, with six orphans still.** `connector_sync` arrived
+    already wired, the way `erasure_queue` did, so the control count rose and the orphan count did
+    not.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -433,7 +437,7 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 18
+    assert len(CONTROLS) == 19
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -464,6 +468,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "canary_run",
         "vault_token_renewal",
         "automation_run",
+        "connector_sync",
     }
 
 

@@ -22,10 +22,10 @@ from brain.ops.connector_admin import (
     CONNECTING_A_SOURCE,
     KEY_FIELD,
     KEY_SENTENCES,
-    NOTHING_READS_A_CONNECTED_SOURCE_YET,
     SOURCE_FIELD,
     TOLD,
     VAULT_SAYS,
+    WHAT_CONNECTING_A_SOURCE_STARTS,
     connection_problems,
     key_problems,
     may_connect_source,
@@ -145,8 +145,13 @@ def test_every_vault_state_has_a_sentence_for_a_write_and_for_the_screen() -> No
     assert VAULT_SAYS[VaultState.READY] == ""
 
 
-def test_the_confirmation_says_that_nothing_reads_a_connected_source_yet() -> None:
-    """The words a person agrees to include what connecting does not do. Delete this and the
-    confirmation can be shortened to the write alone, which reads as a sync starting."""
-    assert NOTHING_READS_A_CONNECTED_SOURCE_YET in CONNECTING_A_SOURCE
-    assert "worker" in NOTHING_READS_A_CONNECTED_SOURCE_YET
+def test_the_confirmation_says_what_connecting_starts_and_that_no_question_is_answered_yet() -> (
+    None
+):
+    """The words a person agrees to include what connecting starts, the worker reading the source,
+    and what it still does not, answering a question from it. Delete this and the confirmation can
+    be shortened to the write alone, or to the read alone, which reads as the source being usable
+    in an answer the moment it is connected."""
+    assert WHAT_CONNECTING_A_SOURCE_STARTS in CONNECTING_A_SOURCE
+    assert "worker" in WHAT_CONNECTING_A_SOURCE_STARTS
+    assert "No question is answered" in WHAT_CONNECTING_A_SOURCE_STARTS

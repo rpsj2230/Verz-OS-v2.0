@@ -49,6 +49,13 @@ reader nothing about this one. A connection is `brain.ops.connector_store.Connec
 sentence on the row is still read off a manifest and the digest pinned at connect says whether
 what it declares today is what was agreed to. See `WHAT_IS_SHOWN_IS_WHAT_IT_DECLARES_NOW`.
 
+**How reading a connected source went is the worker's record, shown and never judged here.**
+`brain.ops.connector_sync_run` records every attempt in `ops.connector_sync`, and `connected_rows`
+takes the newest one per connection rather than gathering it, for `trust_row`'s reason about a
+probe. The row's last-checked time and state are that attempt's, the last read to the end is beside
+them, and `brain.ops.connector_sync.sync_in_words` says what happened or why nothing reads the
+source.
+
 **A connection this build cannot rebuild is listed, and says so.** A source dropped from the
 connectable list, or settings a stricter connector now refuses, still has a key in the vault and a
 row saying it was connected. Leaving it off would make the one connection nobody can account for
@@ -87,6 +94,7 @@ from brain.core.entitlement import EntitlementSet
 from brain.core.projection import MAX_LABEL_CHARS, MAX_PROJECTED_FIELDS
 from brain.ops.connectable import NotConnectableError, manifest_for
 from brain.ops.connector_store import Connection
+from brain.ops.connector_sync import SyncState, plan_for, sync_in_words
 from brain.ops.credentials import Held, VaultState
 from brain.ops.limits import connector_ceiling
 
@@ -171,14 +179,15 @@ NOTHING_HERE_COUNTS_TODAYS_CALLS: Final = (
     "stated in words instead."
 )
 
-#: Why the design's last-read column carries the last probe instead.
+#: Why the design's last-read column is two columns.
 A_LAST_PROBE_IS_NOT_A_LAST_READ: Final = (
-    "The design's column is the time this source last answered a question, and nothing in this "
-    "repository records one: brain.connectors.contract.ConnectorHealth carries checked_at, "
-    "which is when somebody probed the source, and a probe happens whether or not anybody "
-    "asked it anything. The two differ exactly when it matters, which is a source nothing has "
-    "used all day and which probes green every minute. So the column carries the probe's time "
-    "under the probe's name, and a reader is not invited to read a health check as traffic."
+    "The design's column is the time this source was last read, and a connected source is now read "
+    "by the worker on a schedule, which records every attempt. An attempt and a read are still two "
+    "facts: a source whose key expired is attempted every hour and read never, and a single column "
+    "holding the attempt's time would show it as recently read. So the last attempt's time sits "
+    "under Last checked with the state it left, and the last time the source was read to the end "
+    "sits beside it under its own name, and a reader is not invited to read an attempt as a read. "
+    "Neither is the time a question was answered from the source, which nothing records."
 )
 
 #: Why a count of projected fields is allowed on a screen that refuses counts.
@@ -612,6 +621,12 @@ class ConnectedRow:
     pinned: bool
     declaration: str
     trust: TrustRow | None
+    #: When the worker last read it to the end, or None when it never has.
+    last_synced_at: datetime | None = None
+    #: When the worker may next attempt it, or None when nothing has attempted it.
+    next_sync_at: datetime | None = None
+    #: What reading it came to, or why nothing reads it. `brain.ops.connector_sync.sync_in_words`.
+    sync: str = ""
 
 
 def key_in_words(held: Held | None, vault: VaultState) -> str:
@@ -635,6 +650,21 @@ def admitted_connections(
     return tuple(one for one in connections if one.connector in admitted)
 
 
+_NOTHING_SYNCED: Final[Mapping[str, SyncState]] = MappingProxyType({})
+
+
+def attempt_as_health(state: SyncState | None) -> ConnectorHealth | None:
+    """The newest attempt as the health `trust_row` takes: its state, finish and sentence."""
+    if state is None:
+        return None
+    return ConnectorHealth(
+        connector=state.connector,
+        state=state.health,
+        checked_at=state.finished_at,
+        detail=state.detail,
+    )
+
+
 def connected_rows(
     connections: Sequence[Connection],
     reader: EntitlementSet,
@@ -642,12 +672,18 @@ def connected_rows(
     now: datetime | None = None,
     held: Mapping[str, Held],
     vault: VaultState,
+    synced: Mapping[str, SyncState] = _NOTHING_SYNCED,
 ) -> tuple[ConnectedRow, ...]:
     """Every connection this reader may be told exists, each with what it is trusted to read.
 
     Narrowed by `admitted_connections` whatever the caller already narrowed, so a reader holding
-    nothing over a source is told of it by no path through this function. See
+    nothing over a source is told of it by no path through this function, and an attempt recorded
+    against a source the reader may not be told of is never looked up. See
     `AN_UNINSTALLED_CONNECTOR_AND_AN_UNREACHABLE_ONE_ARE_ONE_ABSENCE`.
+
+    `synced` is the newest attempt per source, handed in rather than read. Why nothing reads a
+    source is asked of `brain.ops.connector_sync.plan_for` at `now`, so the sentence is the one the
+    worker's next run would act on; with no `now` only the attempt is described.
 
     No count of what was left out, and the reader is taken rather than a list of names, for
     `trust_rows`' reasons.
@@ -657,6 +693,11 @@ def connected_rows(
         key = held.get(one.connector) if vault is VaultState.READY else None
         written = None if key is None else key.set_at
         known = None if key is None else key.held
+        state = synced.get(one.connector)
+        plan = None if now is None else plan_for(one, last=state, now=now)
+        last_synced = None if state is None else state.last_synced_at
+        next_sync = None if state is None else state.next_attempt_at
+        said = sync_in_words(plan, state)
         try:
             manifest = manifest_for(one.connector, one.settings)
         except (NotConnectableError, ConnectorContractError):
@@ -670,6 +711,9 @@ def connected_rows(
                     pinned=False,
                     declaration=DECLARATION_UNREADABLE,
                     trust=None,
+                    last_synced_at=last_synced,
+                    next_sync_at=next_sync,
+                    sync=said,
                 )
             )
             continue
@@ -677,6 +721,7 @@ def connected_rows(
         registered = RegisteredConnector(
             manifest=manifest, digest=one.digest, state=ConnectorState.REGISTERED
         )
+        trust = trust_row(registered, attempt_as_health(state))
         rows.append(
             ConnectedRow(
                 name=one.connector,
@@ -686,7 +731,10 @@ def connected_rows(
                 key_written_at=written,
                 pinned=pinned,
                 declaration=DECLARATION_AGREED if pinned else DECLARATION_CHANGED,
-                trust=replace(trust_row(registered, None), credential=key_in_words(key, vault)),
+                trust=replace(trust, credential=key_in_words(key, vault)),
+                last_synced_at=last_synced,
+                next_sync_at=next_sync,
+                sync=said,
             )
         )
     return tuple(rows)

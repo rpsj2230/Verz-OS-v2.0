@@ -81,6 +81,7 @@ STARTED = [
     ("erasure_queue", False),
     ("vault_token_renewal", False),
     ("automation_run", False),
+    ("connector_sync", False),
 ]
 
 
@@ -149,14 +150,14 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_eight_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_nine_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
     the vault token renewal later that day, with the installer's vault, and the automation
-    runner after it.
+    runner and the connector sync after it.
 
-    Delete this and every assertion below that names the eight could be satisfied by a table
+    Delete this and every assertion below that names the nine could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -167,6 +168,7 @@ def test_the_wired_runners_are_the_eight_the_schedule_is_meant_to_start() -> Non
         "erasure_queue",
         "vault_token_renewal",
         "automation_run",
+        "connector_sync",
     ]
 
 
@@ -325,6 +327,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
             ("automation_run", "ok", False, "automation_run ran"),
             ("canary_run", "ok", False, "canary_run ran"),
+            ("connector_sync", "ok", False, "connector_sync ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
@@ -419,6 +422,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
         assert [row[0] for row in recorded(url)] == [
             "automation_run",
             "canary_run",
+            "connector_sync",
             "erasure_queue",
             "knowledge_reverification",
             "outbox_dispatch",
@@ -447,6 +451,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
             ("automation_run", "ok", "automation_run ran"),
             ("canary_run", "ok", "canary_run ran"),
+            ("connector_sync", "ok", "connector_sync ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
@@ -515,6 +520,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("erasure_queue", False),
         ("vault_token_renewal", False),
         ("automation_run", False),
+        ("connector_sync", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.

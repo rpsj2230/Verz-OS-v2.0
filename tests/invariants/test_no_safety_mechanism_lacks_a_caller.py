@@ -13,8 +13,8 @@ were written by somebody who found it in their own module and wrote it down. Thi
 first thing in the tree that asks the question of every module at once.
 
 **What this asserts is that the registry and the source agree, not that everything is
-wired.** Six of the sixteen controls have no caller of any kind today, three have a caller
-nothing runs on a schedule, six are started by the worker's schedule, and one is on a route. A
+wired.** Six of the nineteen controls have no caller of any kind today, three have a caller
+nothing runs on a schedule, nine are started by the worker's schedule, and one is on a route. A
 test asserting that they do would be red on arrival, and
 `brain.ops.sweeps.sweep_house_style` records at length what happens to a check that is red the
 day it lands. So the assertion is agreement in
@@ -118,6 +118,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #:
 #: `automation_run` joined on 2026-09-17 the day it was registered, running each started
 #: automation as its owner through `brain.ops.automation_run_store`.
+#:
+#: `connector_sync` joined on 2026-09-17 the day it was registered, reading every connected source
+#: that is due through `brain.ops.connector_sync_run`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -128,6 +131,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "canary_run",
         "vault_token_renewal",
         "automation_run",
+        "connector_sync",
     }
 )
 

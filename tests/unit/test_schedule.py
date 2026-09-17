@@ -176,19 +176,22 @@ def test_a_control_another_module_calls_is_still_this_schedulers_to_start() -> N
     assert [one.name for one in schedulable([in_process])] == ["correction"]
 
 
-def test_the_real_registry_gives_this_scheduler_seventeen_of_the_eighteen_controls() -> None:
+def test_the_real_registry_gives_this_scheduler_eighteen_of_the_nineteen_controls() -> None:
     """The state of the estate today, asserted so that wiring a control to a timer outside the
     process shows up here rather than in nothing.
 
     Named as a fact about the registry rather than about the function, because it is: it will
     change when the estate changes, and that is what it is for.
 
+    Nineteen since 2026-09-17, when `vault_token_renewal`, `automation_run` and `connector_sync`
+    arrived to be started by the worker.
+
     Delete this and a control moved onto an external schedule silently keeps a second caller
     inside the process."""
     mine = schedulable()
 
-    assert len(CONTROLS) == 18
-    assert len(mine) == 17
+    assert len(CONTROLS) == 19
+    assert len(mine) == 18
     assert "audit_anchor" not in {one.name for one in mine}
 
 

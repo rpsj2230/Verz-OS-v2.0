@@ -235,21 +235,22 @@ class Piece:
 #:
 #: **The list was rewritten on 2026-09-17 rather than shortened.** Eleven steps, six of them
 #: called by nothing, became the fourteen the path actually takes once it runs, and the one
-#: that is still an orphan is the first: see `chunk_store:ingest_document`.
+#: that was still an orphan, the first, gained its door later that day.
+#:
+#: **That door is the connector sync, and what reaches it is narrower than the word suggests.**
+#: `brain.ops.connector_sync_run.corpus_sink` hands every document a reading yields to
+#: `chunk_store:ingest_document`, with the owner and visibility the reading gave it, on the
+#: worker's schedule and with the worker's queue. No reading the console can connect yields a
+#: document today (`brain.ops.connector_sync.NO_CONNECTABLE_SOURCE_YIELDS_A_DOCUMENT`), and
+#: `brain.member_library.upload` and `lark_wiki.WikiDocument.as_knowledge_item` still build an
+#: item nothing hands over, so a corpus on a real install stays empty until one of those is
+#: connected. The step is wired; its inputs are the work.
 EMBED_PATH: Final[tuple[Piece, ...]] = (
     Piece(
         symbol="brain.knowledge.chunk_store:ingest_document",
         step=(
             "an item and its chunks are written under the owner's reach, and a job to embed "
             "them is handed to the queue once they are committed"
-        ),
-        needs=(
-            "a door that hands it a document. Everything behind the door runs: a route or a "
-            "connector sync that has an item's text in hand calls this and nothing else. None "
-            "exists yet. brain.member_library.upload and "
-            "brain.connectors.lark_wiki.WikiDocument.as_knowledge_item both build the item and "
-            "neither is called, and a web process holds no queue app to enqueue with, which is "
-            "brain.app's to build"
         ),
     ),
     Piece(

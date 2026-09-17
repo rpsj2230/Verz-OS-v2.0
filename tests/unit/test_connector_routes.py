@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Awaitable, Callable, Iterator, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 import pytest
@@ -43,6 +43,7 @@ from brain.connector_routes import (
     DISCONNECT_PATH,
     ConnectorsView,
 )
+from brain.connectors.contract import HealthState
 from brain.connectors.manifest import manifest_digest
 from brain.connectors.registry import INSTALL_AUTHORITY
 from brain.console.connector_trust import (
@@ -64,11 +65,20 @@ from brain.ops.connector_admin import (
     CONNECTING_A_SOURCE,
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
-    NOTHING_READS_A_CONNECTED_SOURCE_YET,
     TOLD,
     VAULT_SAYS,
+    WHAT_CONNECTING_A_SOURCE_STARTS,
 )
 from brain.ops.connector_store import Connection, ConnectorTakenError, NotConnectedError
+from brain.ops.connector_sync import (
+    KEY_DECLINED,
+    NO_VERIFIED_CEILING,
+    NOT_READ_YET,
+    READ_TO_THE_END,
+    TRIED_AGAIN,
+    SyncOutcome,
+    SyncState,
+)
 from brain.ops.credentials import KEY_FIELD, Credentials, VaultState
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
 from tests.fixtures.http_client import Response
@@ -345,6 +355,99 @@ def test_a_grant_narrowed_to_one_source_is_told_about_that_source_and_asks_the_v
     assert vault.asked == ["connector_keys/xero"]
 
 
+class SyncRecords:
+    """`brain.ops.connector_sync_store.ConnectorSyncRecords` in memory, noting that it was asked."""
+
+    def __init__(self, states: Mapping[str, SyncState]) -> None:
+        self.found = dict(states)
+        self.asked = 0
+
+    async def states(self) -> Mapping[str, SyncState]:
+        self.asked += 1
+        return dict(self.found)
+
+
+def an_attempt(name: str, **changed: Any) -> SyncState:
+    base: dict[str, Any] = {
+        "connector": name,
+        "finished_at": LONG_AGO,
+        "outcome": SyncOutcome.SYNCED,
+        "health": HealthState.OK,
+        "consecutive_failures": 0,
+        "next_attempt_at": LONG_AGO,
+        "detail": READ_TO_THE_END,
+        "last_synced_at": LONG_AGO,
+    }
+    base.update(changed)
+    return SyncState(**base)
+
+
+def test_a_connected_source_shows_when_it_was_last_read_and_how_that_went(
+    app: FastAPI, client: TestClient
+) -> None:
+    """**The screen's half of the leaf.** A source read to the end shows the attempt's time and
+    health in its trust row and its last read beside them. A source whose key was declined shows
+    down, when it is tried again, and the last time it was read, which is older than the attempt.
+    A source nothing has tried says so, and a source nothing may read says why rather than showing
+    an attempt. A reader told of one source is told of that source's reading and of no other.
+
+    Delete this and the Connectors screen goes back to an empty state column for every source
+    while the worker reads them, or shows a failing source's old read as current."""
+    declined = an_attempt(
+        "xero",
+        finished_at=LONG_AGO + timedelta(days=2),
+        outcome=SyncOutcome.FAILED,
+        health=HealthState.DOWN,
+        consecutive_failures=1,
+        next_attempt_at=LONG_AGO + timedelta(days=3),
+        detail=KEY_DECLINED,
+    )
+    attach(app, Records((a_connection("xero"), a_connection("hubspot"))), held_vault())
+    app.state.connector_sync_records = SyncRecords(
+        {"xero": declined, "hubspot": an_attempt("hubspot")}
+    )
+    wide = {one["name"]: one for one in get(client, "u_wide").json()["connectors"]}
+    narrow = get(client, "u_narrow").json()["connectors"]
+
+    xero = wide["xero"]
+    assert xero["trust"]["health"] == "down"
+    assert xero["trust"]["checked_at"] == declined.finished_at.isoformat()
+    assert xero["last_synced_at"] == LONG_AGO.isoformat().replace("+00:00", "Z")
+    assert xero["next_sync_at"] == (LONG_AGO + timedelta(days=3)).isoformat().replace("+00:00", "Z")
+    assert xero["sync"].startswith(KEY_DECLINED)
+    assert TRIED_AGAIN in xero["sync"]
+    assert wide["hubspot"]["sync"] == NO_VERIFIED_CEILING
+    assert [one["name"] for one in narrow] == ["xero"]
+    assert "hubspot" not in json.dumps(narrow)
+
+    app.state.connector_sync_records = SyncRecords({})
+    untried = get(client, "u_wide").json()["connectors"]
+    assert {one["name"]: one["sync"] for one in untried}["xero"] == NOT_READ_YET
+    assert all(one["last_synced_at"] is None for one in untried)
+    assert all(one["trust"]["health"] == "" for one in untried)
+
+
+def test_the_attempts_are_asked_for_only_when_there_is_a_connection_to_describe(
+    app: FastAPI, client: TestClient
+) -> None:
+    """A reader of the screen told of no connection, on an install with none and on one whose only
+    connection their grant does not reach, has the worker's record read on nobody's behalf.
+
+    Delete this and the attempts are read for a page that can show none of them, and a store that
+    failed for a source the reader may not be told of would fail their listing."""
+    records = SyncRecords({"xero": an_attempt("xero")})
+    attach(app, Records(), held_vault())
+    app.state.connector_sync_records = records
+    get(client, "u_wide")
+    attach(app, Records((a_connection("hubspot"),)), held_vault())
+    get(client, "u_narrow")
+    assert records.asked == 0
+
+    attach(app, Records((a_connection("xero"),)), held_vault())
+    get(client, "u_narrow")
+    assert records.asked == 1
+
+
 def test_a_body_carries_no_count_of_the_sources_that_were_left_out(
     app: FastAPI, client: TestClient
 ) -> None:
@@ -465,7 +568,7 @@ def test_every_answer_says_what_connecting_does_not_do_and_offers_the_same_sourc
     wired = get(client, "u_admin").json()
 
     for body in (unread, wired):
-        assert body["connecting"] == NOTHING_READS_A_CONNECTED_SOURCE_YET
+        assert body["connecting"] == WHAT_CONNECTING_A_SOURCE_STARTS
         assert body["confirm_connect"] == CONNECTING_A_SOURCE
         assert body["confirm_disconnect"] == DISCONNECTING_A_SOURCE
         assert body["budget_unread"] == NOTHING_HERE_COUNTS_TODAYS_CALLS

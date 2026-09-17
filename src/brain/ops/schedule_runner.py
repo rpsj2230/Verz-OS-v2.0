@@ -31,17 +31,17 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Eight controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+**Nine controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
 `canary_run`, `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`,
-`erasure_queue`, `vault_token_renewal` and `automation_run` have a runner that gathers what they
-need, and `brain.ops.worker` starts them on the schedule through `start_control`. Every other
-control entry point is a policy function that takes its inputs: `retention.enforcement_report`
-takes a census "the executor saw", `denial_alerts.digest` takes patterns and recipients,
-`recovery.alerts` takes backups and verifications. None of them gathers anything. So the
-registry's orphans are not mechanisms waiting for a timer, they are mechanisms whose policy is
-written and whose input gathering does not exist, and a scheduler alone does not switch them
-on. `runner_gaps` reports each one by name, which turns a count of mechanisms nothing runs
-into a list of named pieces of work, and no count is written here because this one went stale
+`erasure_queue`, `vault_token_renewal`, `automation_run` and `connector_sync` have a runner that
+gathers what they need, and `brain.ops.worker` starts them on the schedule through
+`start_control`. Every other control entry point is a policy function that takes its inputs:
+`retention.enforcement_report` takes a census "the executor saw", `denial_alerts.digest` takes
+patterns and recipients, `recovery.alerts` takes backups and verifications. None of them gathers
+anything. So the registry's orphans are not mechanisms waiting for a timer, they are mechanisms
+whose policy is written and whose input gathering does not exist, and a scheduler alone does not
+switch them on. `runner_gaps` reports each one by name, which turns a count of mechanisms nothing
+runs into a list of named pieces of work, and no count is written here because this one went stale
 twice. See
 `A_SCHEDULER_WITH_NOTHING_TO_RUN_IS_HONEST_AND_A_SCHEDULER_THAT_PRETENDS_IS_NOT`.
 
@@ -62,7 +62,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5
+Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2, M38.2.2.5, M42.6.5
 """
 
 from __future__ import annotations
@@ -79,6 +79,7 @@ from brain.db import libpq_url
 from brain.knowledge.item_store import run_reverification_now
 from brain.ops.automation_run_store import run_automations_now
 from brain.ops.canary_run import run_canaries_now
+from brain.ops.connector_sync_run import run_connector_sync_now
 from brain.ops.controls import Control
 from brain.ops.erasure_store import drain_erasure_queue
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
@@ -401,9 +402,46 @@ def automation_run(now: datetime, report_only: bool, database_url: str) -> str:
     return run_automations_now(database_url, now=now, loop_factory=_loop_factory())
 
 
+#: Why a sync reads nothing in report-only mode.
+A_READ_IN_REPORT_ONLY_MODE_READS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and a sync removes nothing, so "
+    "brain.ops.schedule never asks for it. A runner that read anyway when asked would ignore the "
+    "mode it was given, which is the property every runner keeps for the one control whose safety "
+    "rests on it."
+)
+
+
+def connector_sync(now: datetime, report_only: bool, database_url: str) -> str:
+    """Read every connected source that is due, and say what the run came to in counts.
+
+    `brain.ops.connector_sync_run.run_connector_sync_now` reads, writes the projection, hands any
+    document to the corpus and records each attempt; this is the literal call the registry reads.
+    The vault is the worker's own, read from this process's settings, because the worker is the one
+    process that reads a source's key: see `brain.ops.connector_sync_run.
+    THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES`. Declines in report-only
+    mode, see `A_READ_IN_REPORT_ONLY_MODE_READS_NOTHING`, and takes the worker's event loop for the
+    reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            f"report only: no connected source was read. {A_READ_IN_REPORT_ONLY_MODE_READS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    settings = settings_from(process_environment())
+    ran = run_connector_sync_now(
+        database_url,
+        now=now,
+        vault_address=settings.vault_address,
+        vault_token=settings.vault_token,
+        loop_factory=_loop_factory(),
+    )
+    return ran.summary()
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Six with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
+#: Nine with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
 #: they wait for, which is the point of the module header. Each sentence is a piece of work
 #: somebody can pick up, written from reading the entry point's own signature rather than from a
 #: guess about it.
@@ -502,6 +540,9 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="vault_token_renewal", run=vault_token_renewal),
     # Wired on 2026-09-17 with `agent.automation_run`. See `brain.ops.automation_run_store`.
     Runner(name="automation_run", run=automation_run),
+    # Wired on 2026-09-17 with `ops.connector_sync`, the worker's reader of connector keys and the
+    # readings `brain.ops.connector_sync` declares. See `brain.ops.connector_sync_run`.
+    Runner(name="connector_sync", run=connector_sync),
 )
 
 
@@ -544,6 +585,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return vault_token_renewal(now, report_only, database_url)
         case "automation_run":
             return automation_run(now, report_only, database_url)
+        case "connector_sync":
+            return connector_sync(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

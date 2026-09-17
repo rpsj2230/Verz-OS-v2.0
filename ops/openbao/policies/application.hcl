@@ -92,8 +92,8 @@ path "webhooks/metadata/+" {
 # create and update, so an administrator holding admin:connector connects a source from the
 # console and the key goes straight into its slot, one slot per source. No read: this process
 # answers questions and runs no connector, so a read here would be a standing copy of every
-# source's key in the process that talks to a model. Whatever runs a connector will read under its
-# own policy, and the worker's names this engine nowhere today. No delete: disconnecting a source
+# source's key in the process that talks to a model. The worker runs connectors and reads a key under
+# its own policy (worker.hcl), and this one does not. No delete: disconnecting a source
 # leaves its key here, and the console says to revoke it in the source's own settings. Metadata
 # read only, for the reason given above for providers.
 path "connector_keys/data/+" {

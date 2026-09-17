@@ -331,13 +331,14 @@ canaries.
 | `erasure_queue` | that a request to erase somebody's data, once filed, is carried out and what it did is written down | `in_process` |
 | `vault_token_renewal` | that the application's and the worker's tokens on this install's own vault are renewed long before their period runs out | `in_process` |
 | `automation_run` | that an automation somebody started runs at its cadence as the person it names, at no more than that person may reach through the agent, and stops and says why when it cannot | `in_process` |
+| `connector_sync` | that every connected source is read on its own interval under its verified call ceiling, with the source's own visibility rule on what is kept | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
-`vault_token_renewal` and `automation_run` it is: the general worker ticks the control schedule
-and starts all eight.
+`vault_token_renewal`, `automation_run` and `connector_sync` it is: the general worker ticks
+the control schedule and starts all nine.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker
@@ -364,6 +365,14 @@ stops it and it is recorded as held, and otherwise each store in PostgreSQL is e
 kept by its own table's rule and what happened is written on the request, which the Retention
 screen lists. Recordings, attachments, the answer cache and the retrieval index are not reached by
 it, so every request finishes as incomplete and says which stores it could not reach.
+The connector sync runs every five minutes and reads each source connected on the Connectors
+screen once its own interval has passed (hourly for Xero), with the key the worker reads from the
+vault under its own policy, so a worker with no `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN`
+records every due source as failed and says why. Each attempt is kept in `ops.connector_sync`, a
+failure makes the next attempt later, doubling up to a day, and the third in a row marks the
+source down; the Connectors screen shows when each source was last read and how that went. A
+source with no verified call ceiling, which is HubSpot today, is not read and says so. What is read
+is kept in the projection and is not yet answered from.
 For `spend_correction` it means a console screen nobody opens on a schedule, for
 `directory_sync` a console page somebody presses, and for `restore_drill` a recovery panel that
 can only show an alarm, because nothing performs a drill. `on_a_route` is started from outside:

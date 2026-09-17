@@ -8,16 +8,20 @@
  * copy policy, served whole by the API, and the other is connecting a source, which stands where
  * the design's "Add connector" action is.
  *
- * **What connecting does not do is on the screen wherever connecting is offered.** Nothing reads
- * from a connected source yet: no worker runs a connector on any install. The API sends that
- * sentence and this screen draws it above the form and in the confirmation, so nobody presses
- * Connect believing a sync has started.
+ * **What connecting starts, and what it still does not, is on the screen wherever connecting is
+ * offered.** The worker reads a connected source on its own interval and nothing answers a question
+ * from it yet. The API sends that sentence and this screen draws it above the form and in the
+ * confirmation, so nobody presses Connect believing either more or less has started.
  *
- * **Two things the design asks for are still not drawn, and the screen says so rather than drawing
- * them from nothing.** There is no bar of today's calls against each ceiling, because nothing on
- * the server can count today's calls, and the column carries the API's reason. There is no
- * last-read time, because nothing records one and the probe's time is a different fact under a
- * different heading.
+ * **How reading each source went is the worker's record, drawn in its words.** The state and last
+ * checked columns are the last attempt, the last read column is the last time the source was read
+ * to the end, and the detail card carries the API's sentence about the attempt or about why nothing
+ * reads the source. An attempt and a read are two columns because a source failing every hour is
+ * attempted often and read never.
+ *
+ * **One thing the design asks for is still not drawn, and the screen says so rather than drawing it
+ * from nothing.** There is no bar of today's calls against each ceiling, because nothing on the
+ * server can count today's calls, and the column carries the API's reason.
  *
  * **Every write is confirmed in the API's words.** Connecting is `components/ConnectSource.tsx`,
  * which first run uses too; disconnecting opens `ConfirmAction` with the sentence the API served,
@@ -50,6 +54,7 @@ import {
   CONNECTORS_LABEL,
   disconnectApiPath,
   keyWords,
+  lastRead,
   offered,
   readConnectors,
   readTold,
@@ -161,6 +166,7 @@ function ConnectedTable({
                   {column.header}
                 </th>
               ))}
+              <th scope="col">Last read</th>
               <th scope="col">Connected</th>
               <th scope="col">Controls</th>
             </tr>
@@ -179,6 +185,7 @@ function ConnectedTable({
                       : cell(row.trust, column.field)}
                   </td>
                 ))}
+                <td>{lastRead(row)}</td>
                 <td>
                   <code>{row.connected_by}</code> {when(row.connected_at)}
                 </td>
@@ -227,6 +234,18 @@ function ConnectedDetail({ row }: { readonly row: Connected }) {
           <dt>Key</dt>
           <dd>
             <span>{keyWords(row)}</span>
+          </dd>
+        </div>
+        <div className="fields__row">
+          <dt>Reading</dt>
+          <dd>
+            <span>{row.sync}</span>
+          </dd>
+        </div>
+        <div className="fields__row">
+          <dt>Last read</dt>
+          <dd>
+            <span>{lastRead(row)}</span>
           </dd>
         </div>
       </dl>

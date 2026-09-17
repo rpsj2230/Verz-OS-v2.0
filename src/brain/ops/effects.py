@@ -378,6 +378,25 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.limit_store:WindowPipeline.expire": Repeat.DERIVED_STATE,
         "brain.ops.limit_store:WindowClient.pipeline": Repeat.READS,
         "brain.ops.object_store:StaticKvReader.read_static_kv": Repeat.READS,
+        # Reading a connected source on a schedule. A reading computes a page's arguments and a
+        # row's record from what it is handed, the key is read from the vault, a call is a GET to
+        # a source this connection may only read, and the screen reads the attempts; none changes
+        # anything anywhere, so a repeat is a second read. The writes a run makes go through
+        # `brain.ops.connector_sync_store`'s statements in this system's own database.
+        "brain.ops.connector_sync:SourceReading.entities": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.refresh_interval": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.operation": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.first_page": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.next_page": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.call_headers": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.interpret": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.retry_after": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.allowance_spent": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.projected": Repeat.READS,
+        "brain.ops.connector_sync:SourceReading.document": Repeat.READS,
+        "brain.ops.connector_sync_run:ConnectorKeys.key_for": Repeat.READS,
+        "brain.ops.connector_sync_run:SourceCaller.get": Repeat.READS,
+        "brain.ops.connector_sync_store:ConnectorSyncRecords.states": Repeat.READS,
         # A delivery is a request somebody else's server acts on, so every one is made inside
         # `issue_once` under a key per attempt, and the receiver's duty to drop a repeated event
         # id covers the one repeat the ledger cannot: a request that left and was never answered.

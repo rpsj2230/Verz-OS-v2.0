@@ -59,6 +59,7 @@ from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
 from brain.tables.config import SettingRow, SettingType
 from brain.tables.connector_connection import ConnectorConnectionRow
+from brain.tables.connector_sync import ConnectorSyncRow
 from brain.tables.credential import CredentialWriteRow
 from brain.tables.data_export import DataExportRow
 from brain.tables.elevation import ElevationRequestRow
@@ -278,6 +279,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # are values, so what ran in a person's name and why it stopped outlive all of them.
     "agent.automation_run",
     "agent.automation_schedule",
+    # 0068_connector_sync. Points at nothing: the connection an attempt read with is named by its
+    # id as a value, so a source connected again starts a history of its own.
+    "ops.connector_sync",
 )
 
 __all__ = [
@@ -299,6 +303,7 @@ __all__ = [
     "CapabilityPackRow",
     "CapabilityRegistryRow",
     "ConnectorConnectionRow",
+    "ConnectorSyncRow",
     "ControlRunRow",
     "ConversationRow",
     "CorrectionRow",

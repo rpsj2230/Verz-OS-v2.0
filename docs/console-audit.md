@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 73 tables, from `brain.db.Base.metadata`.
+- 74 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
 - 113 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 66 console addresses, from the route table in `console/src/App.tsx`.
 - 40 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 48 routes.
-- 36 gaps recorded, and 3 routes no screen calls.
+- 37 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
 
@@ -162,7 +162,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Connectors and third-party integrations
 
 - **Screens:** `/connectors`
-- **Tables:** `ops.connector_connection`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
+- **Tables:** `ops.connector_connection`, `ops.connector_sync`, `proj.record`, `er.alias`, `er.canonical`, `er.identifier`, `er.link`
 - **Installation values:** none
 
 | Route | Called by |
@@ -171,7 +171,8 @@ What an administrator would need to manage, read out of the schema, the routes a
 | `POST /api/v1/connectors` | `/connectors` |
 | `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` |
 
-- **Gap.** Nothing reads from a connected source: it is not synced, projected, probed or answered from, and its key is read by nothing. Recorded: No worker runs a connector on any install, which brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET says on the screen; the worker's vault policy names no connector_keys rule until one does.
+- **Gap.** A connected source is read and kept, and no question is answered from what is kept. Recorded: No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.
+- **Gap.** HubSpot can be connected and is not read. Recorded: brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.
 - **Gap.** Freshdesk, Google Drive, the Laravel views, Lark Base and Lark Wiki cannot be connected from a screen. Recorded: Each needs a visibility rule, a department declaration or a key file the form cannot collect, which brain.ops.connectable.NOT_FROM_THE_CONSOLE says for each.
 
 ### API keys, credentials and secrets, held in the vault and never displayed
@@ -409,7 +410,7 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 41 of 48 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 43 of 48 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
@@ -420,8 +421,8 @@ Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it` in `tests/unit/test_approval_decisions.py` | `test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it` in `tests/unit/test_approval_decisions.py` | **None.** In-process the decision leaves the queue (test_approval_decisions.py::test_a_decided_approval_leaves_the_queue_and_its_card_no_longer_opens), but on a running install brain.app.suspension_store_for builds no store, so the decision a person presses is refused and changes nothing. |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_nothing_mounted_here_can_change_a_classification` in `tests/unit/test_classification_routes.py` |
-| `POST /api/v1/connectors` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | **None.** No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET. |
-| `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | **None.** No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET. |
+| `POST /api/v1/connectors` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
+| `POST /api/v1/connectors/{connector}/disconnect` | `/connectors` | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record` in `tests/unit/test_connector_store.py` (database, in CI) | `test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again` in `tests/unit/test_connector_sync_run.py` (database, in CI) |
 | `POST /api/v1/data-transfer/exports` | `/import-export` | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_an_export_leaves_its_record_and_a_publish_entry_naming_what_left_and_who_took_it` in `tests/unit/test_data_export_store.py` (database, in CI) | `test_the_listing_offers_the_export_to_a_reader_who_may_take_it_and_shows_only_their_own` in `tests/unit/test_data_transfer_routes.py` |
 | `POST /api/v1/govern/access-review/decision` | `/access_review` | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) | `test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to` in `tests/unit/test_review_store.py` (database, in CI) |
 | `POST /api/v1/govern/departments/lead` | `/departments` | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) | `test_placing_and_appointing_reach_the_rows_the_ledger_and_the_departments_page` in `tests/unit/test_organisation_store.py` (database, in CI) |

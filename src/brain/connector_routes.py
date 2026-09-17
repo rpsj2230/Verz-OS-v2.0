@@ -36,10 +36,15 @@ by its model names the field and does not repeat the key. Every answer is built 
 name, times, booleans and sentences. What is logged is the surface, the source's name and the
 principal, never the settings and never the key.
 
-**What connecting does not do is served beside the screen**, as `connecting`, for
-`brain.skill_routes`' reason: the day a worker runs connectors, the sentence changes in the same
-commit as the behaviour. So are the two confirmations, so the words a person agrees to are the
-words of the system that does it.
+**What connecting starts and what it still does not is served beside the screen**, as
+`connecting`, for `brain.skill_routes`' reason: the worker began reading connected sources on
+2026-09-17 and the sentence changed in the same commit as the behaviour. So are the two
+confirmations, so the words a person agrees to are the words of the system that does it.
+
+**How reading each source went is the worker's record, read after the connections the reader may be
+told of.** `brain.ops.connector_sync_store.StoredSyncStates` answers the newest attempt per live
+connection, and `brain.console.connector_trust.connected_rows` looks one up only for a connection it
+admitted, so an attempt against a source this reader may not be told of reaches no response.
 
 **A process with no database answers a sentence and never an empty list**, which is
 `brain.install_routes.AN_UNREAD_SOURCE_IS_NOT_AN_EMPTY_ONE`: an empty list of connectors reads as an
@@ -101,10 +106,10 @@ from brain.ops.connector_admin import (
     DISCONNECTED,
     DISCONNECTING_A_SOURCE,
     KEY_SENTENCES,
-    NOTHING_READS_A_CONNECTED_SOURCE_YET,
     SOURCE_FIELD,
     TOLD,
     VAULT_SAYS,
+    WHAT_CONNECTING_A_SOURCE_STARTS,
     connection_problems,
     key_problems,
     may_connect_source,
@@ -116,6 +121,7 @@ from brain.ops.connector_store import (
     NotConnectedError,
     StoredConnections,
 )
+from brain.ops.connector_sync_store import ConnectorSyncRecords, StoredSyncStates
 from brain.ops.credentials import (
     MAX_CREDENTIAL_CHARS,
     CredentialProblemError,
@@ -199,6 +205,12 @@ class ConnectedView(BaseModel):
     trust: TrustView | None
     #: Whether this reader may disconnect it. Their own grant, and it narrows nothing.
     may_disconnect: bool
+    #: When the worker last read it to the end, or None when it never has.
+    last_synced_at: datetime | None
+    #: When the worker may next attempt it, or None when nothing has attempted it.
+    next_sync_at: datetime | None
+    #: What reading it came to, or why nothing reads it, in the worker's own words.
+    sync: str
 
 
 class CopyLineView(BaseModel):
@@ -390,6 +402,9 @@ def connected_view(one: ConnectedRow, *, may_disconnect: bool) -> ConnectedView:
         declaration=one.declaration,
         trust=None if one.trust is None else trust_view(one.trust),
         may_disconnect=may_disconnect,
+        last_synced_at=one.last_synced_at,
+        next_sync_at=one.next_sync_at,
+        sync=one.sync,
     )
 
 
@@ -436,6 +451,19 @@ def records_of(request: Request) -> ConnectorRecords | None:
     return None if sessions is None else StoredConnections(sessions)
 
 
+def sync_records_of(request: Request) -> ConnectorSyncRecords | None:
+    """What `app.state.connector_sync_records` holds, or the database, or None without one.
+
+    None is answered as no attempt recorded, which the row says in words, rather than as a fault:
+    the listing is still true without it.
+    """
+    found = getattr(request.app.state, "connector_sync_records", None)
+    if isinstance(found, ConnectorSyncRecords):
+        return found
+    sessions = sessions_of(request)
+    return None if sessions is None else StoredSyncStates(sessions)
+
+
 def _trace_id() -> str:
     # The id the trace middleware vouched for or minted, as `brain.credential_routes` reads it.
     return str(structlog.contextvars.get_contextvars().get("trace_id", ""))
@@ -480,7 +508,7 @@ def _page(
     return ConnectorsView(
         connectors=connections,
         unread="" if connections is not None else NOTHING_HERE_CAN_SAY_WHICH_SOURCES_ARE_CONNECTED,
-        connecting=NOTHING_READS_A_CONNECTED_SOURCE_YET,
+        connecting=WHAT_CONNECTING_A_SOURCE_STARTS,
         confirm_connect=CONNECTING_A_SOURCE,
         confirm_disconnect=DISCONNECTING_A_SOURCE,
         copy_policy=[
@@ -535,7 +563,8 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     """Which sources this install connected, and what each one is trusted to read (M42.6.5).
 
     The screen's read first, then the database, then the vault for the keys of the connections
-    this reader may be told of and no others.
+    this reader may be told of and no others, then the worker's attempts, which are asked only when
+    there is a connection to describe.
     """
     _permitted(asked.reach, asked.now)
     credentials = credentials_of(request)
@@ -546,7 +575,9 @@ async def connectors(request: Request, asked: Asked) -> ConnectorsView:
     found: tuple[Connection, ...] = await records.connected()
     shown = admitted_connections(found, asked.reach, asked.now)
     vault, held = await asyncio.to_thread(keys_held, credentials, [one.connector for one in shown])
-    rows = connected_rows(shown, asked.reach, now=asked.now, held=held, vault=vault)
+    sync = sync_records_of(request)
+    synced = {} if sync is None or not shown else await sync.states()
+    rows = connected_rows(shown, asked.reach, now=asked.now, held=held, vault=vault, synced=synced)
     return _page(
         asked.reach,
         asked.now,

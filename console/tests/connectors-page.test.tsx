@@ -38,10 +38,12 @@ import {
 import {
   CONNECTORS_LABEL,
   CONNECTORS_PATH,
-  NOT_PROBED,
+  NEVER_READ,
+  NOT_TRIED,
   TRUST_COLUMNS,
   TRUST_DETAIL,
   keyWords,
+  lastRead,
   offered,
   stateOf,
   type Connectable,
@@ -104,6 +106,9 @@ function aConnected(over: Partial<Connected> = {}): Connected {
     declaration: sentinel("declaration"),
     trust: aTrust(),
     may_disconnect: true,
+    last_synced_at: null,
+    next_sync_at: null,
+    sync: sentinel("reading"),
     ...over,
   };
 }
@@ -250,7 +255,7 @@ describe("what this page agrees with the API about", () => {
     // What breaks if this is deleted: somebody adds a word from one of these sentences to the one
     // table in this console where a value picks a tone, and a connector that may write to a
     // client's finance system renders green.
-    expect(Object.keys(STATE_TONES)).not.toContain(NOT_PROBED);
+    expect(Object.keys(STATE_TONES)).not.toContain(NOT_TRIED);
     for (const word of ["read_only", "write", "none", "predicate", "delegated", "registered"]) {
       expect(Object.keys(STATE_TONES)).not.toContain(word);
     }
@@ -320,7 +325,7 @@ describe("the connectors screen", () => {
     const { container } = await mount(answering(aBody()));
 
     const text = container.textContent ?? "";
-    for (const one of ["reaches", "access", "sync", "key-sentence", "declaration", "copied-why", "never-why"]) {
+    for (const one of ["reaches", "access", "sync", "reading", "key-sentence", "declaration", "copied-why", "never-why"]) {
       expect(text).toContain(sentinel(one));
     }
     expect(text).toContain("xero");
@@ -331,10 +336,27 @@ describe("the connectors screen", () => {
     expect(text).toContain(WHAT_WE_COPY);
   });
 
-  test("a source nothing has probed, and one this release cannot rebuild, each show words rather than blanks", async () => {
+  test("the last read is the last time a source was read to the end, and never the last attempt", async () => {
+    // What breaks if this is deleted: the last-read column draws the attempt's time, and a source
+    // whose key expired, attempted every hour and read never, shows as read an hour ago.
+    const failing = aConnected({
+      trust: aTrust({ checked_at: "2019-03-06T10:00:00Z", health: "down" }),
+      last_synced_at: "2019-03-04T09:30:00Z",
+      next_sync_at: "2019-03-06T11:00:00Z",
+    });
+
+    expect(lastRead(failing)).toBe("2019-03-04 09:30");
+    expect(lastRead(aConnected())).toBe(NEVER_READ);
+    const { container } = await mount(answering(aBody({ connectors: [failing] })));
+    const text = container.textContent ?? "";
+    expect(text).toContain("2019-03-04 09:30");
+    expect(text).toContain(sentinel("reading"));
+  });
+
+  test("a source nothing has tried, and one this release cannot rebuild, each show words rather than blanks", async () => {
     // What breaks if this is deleted: an empty state cell, which reads as nothing being wrong with a
     // source nobody has reached, or a connection with no trust row drawn as an empty line.
-    expect(stateOf(aTrust({ health: "" }))).toBe(NOT_PROBED);
+    expect(stateOf(aTrust({ health: "" }))).toBe(NOT_TRIED);
     const { container } = await mount(
       answering(
         aBody({
@@ -346,7 +368,8 @@ describe("the connectors screen", () => {
       ),
     );
 
-    expect(container.textContent).toContain(NOT_PROBED);
+    expect(container.textContent).toContain(NOT_TRIED);
+    expect(container.textContent).toContain(NEVER_READ);
     expect(container.textContent).toContain(sentinel("unreadable"));
     expect(container.textContent).toContain("Not known");
   });

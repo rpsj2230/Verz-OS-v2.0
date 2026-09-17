@@ -1310,6 +1310,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
             pinned: true,
             declaration: UNBROKEN,
             may_disconnect: true,
+            last_synced_at: "2019-03-04T09:00:00Z",
+            next_sync_at: "2019-03-04T10:00:00Z",
+            sync: UNBROKEN,
             trust: {
               name: UNBROKEN,
               wiring: "rest",

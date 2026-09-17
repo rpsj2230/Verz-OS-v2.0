@@ -267,6 +267,10 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         # A log row keeps an event name, a place in the code and masked fields, never a person.
         "obs.application_log",
         "ops.connector_connection",
+        # An attempt to read a connected source keeps the connection's id, the source's name, two
+        # counts, three instants and a constant sentence: `0068` keeps no principal and no value
+        # from the source, so nothing in it is anybody's.
+        "ops.connector_sync",
         "ops.control_run",
         "ops.credential_write",
         "ops.data_export",

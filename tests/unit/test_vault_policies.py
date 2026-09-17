@@ -362,14 +362,28 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
     }
 
 
-def test_no_other_role_reaches_the_connector_key_engine_yet() -> None:
-    """The worker will read a source's key when it runs connectors, under a rule named for the
-    connectors a job is configured for, and the browser runner never. Neither holds one today, so
-    a copy of the application's rule into either reads as consistency and is a way to read every
-    source's key. Delete this and nothing notices the copy."""
-    for role in (VaultRole.WORKER, VaultRole.BROWSER_RUNNER):
-        granted = _granted_paths(_policy_file(role).read_text(encoding="utf-8"))
-        assert not [path for path in granted if path.startswith("connector_keys")], role
+def test_the_worker_reads_connector_keys_and_does_nothing_else_there() -> None:
+    """Exactly one rule under the connector key engine for the worker, and it is read on the data
+    path. The worker runs connectors (`brain.ops.connector_sync_run`), so it reads a source's key;
+    it may not write one, delete one or read metadata, because a process nobody watches must not be
+    able to replace the key a source checks and has no screen to tell.
+
+    Delete this and the worker's rule gains `update` in a debugging session, which is a way for a
+    scheduled job to swap every source's key, and nothing else reads the policy."""
+    granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
+    keys = {
+        path: sorted(caps) for path, caps in granted.items() if path.startswith("connector_keys")
+    }
+    assert keys == {"connector_keys/data/+": ["read"]}
+
+
+def test_the_browser_runner_never_reaches_the_connector_key_engine() -> None:
+    """The worker reads a source's key because it reads the source, and the browser runner never
+    reads a source. A copy of the worker's rule into its policy reads as consistency and is a way
+    for a page an agent drives to reach every source's key. Delete this and nothing notices the
+    copy."""
+    granted = _granted_paths(_policy_file(VaultRole.BROWSER_RUNNER).read_text(encoding="utf-8"))
+    assert not [path for path in granted if path.startswith("connector_keys")]
 
 
 def test_every_path_a_connector_key_is_written_to_is_one_the_application_policy_grants() -> None:

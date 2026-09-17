@@ -144,11 +144,13 @@ export function readConnectors(payload: Connectors | null): Read<readonly Connec
 /**
  * How a connected source's columns are shown, in `docs/screens.html` SCREEN 9's order.
  *
- * The header is this console's own wording and the values are the API's. Two of these columns do
- * not answer the design's question: the design asks for the last read and the API can say only
- * when the source was last probed, and the design asks for the budget used today and the API can
- * say only the ceiling. A header repeating the design's word over the weaker fact is the screen
- * claiming a measurement it does not have.
+ * The header is this console's own wording and the values are the API's. Two of these columns
+ * answer the design's question in two halves or not at all. The design asks for the last read:
+ * `Last checked` is the worker's last attempt and the state it left, and the last time the source
+ * was read to the end is a column of its own beside the table (`lastRead`), because an attempt that
+ * failed every hour is not a read. The design asks for the budget used today and the API can say
+ * only the ceiling. A header repeating the design's word over a weaker fact is the screen claiming
+ * a measurement it does not have.
  */
 export const TRUST_COLUMNS: readonly { readonly field: keyof Trust; readonly header: string }[] = [
   { field: "name", header: "Source" },
@@ -171,17 +173,31 @@ export const TRUST_DETAIL: readonly { readonly field: keyof Trust; readonly labe
 ];
 
 /**
- * What a source nothing has probed shows in the state column.
+ * What a source the worker has not tried yet shows in the state column.
  *
- * An empty string reaches here for a source with no probe, and it is drawn as this word rather
+ * An empty string reaches here for a source with no attempt, and it is drawn as this word rather
  * than as a blank: a blank in a column of states reads as nothing being wrong with it.
  * `ui/Status.tsx` does not recognise the word, so it renders in the quietest tone.
  */
-export const NOT_PROBED = "not probed";
+export const NOT_TRIED = "not tried";
 
 /** The state word for a row, never a blank. */
 export function stateOf(row: Trust): string {
-  return row.health === "" ? NOT_PROBED : row.health;
+  return row.health === "" ? NOT_TRIED : row.health;
+}
+
+/** What the last-read column says for a source the worker has never read to the end. */
+export const NEVER_READ = "Never";
+
+/**
+ * When the worker last read a source to the end, or `NEVER_READ`.
+ *
+ * Never the attempt's time: a source whose key expired is attempted every hour and read never, and
+ * drawing the attempt here would show it as read an hour ago. See
+ * `brain.console.connector_trust.A_LAST_PROBE_IS_NOT_A_LAST_READ`.
+ */
+export function lastRead(row: Connected): string {
+  return row.last_synced_at ? when(row.last_synced_at) : NEVER_READ;
 }
 
 /**

@@ -79,9 +79,14 @@ def _dialect() -> Any:
 
 def test_the_migration_widens_the_control_names_to_exactly_the_registry() -> None:
     """Delete this and the first run the schedule records under `automation_run` is refused by the
-    database, or a name the registry dropped stays admitted."""
+    database, or a name the registry dropped stays admitted.
+
+    `0068` widened the names once more with `connector_sync`, so this migration's list is exactly
+    the one `0068` replaces, and `0068`'s is exactly the registry."""
     module = migration_module(MIGRATION)
-    assert squash(module.WITH_AUTOMATION_RUN) == squash(
+    after = migration_module(VERSIONS / "0068_connector_sync.py")
+    assert squash(module.WITH_AUTOMATION_RUN) == squash(after.WITHOUT_CONNECTOR_SYNC)
+    assert squash(after.WITH_CONNECTOR_SYNC) == squash(
         one_of("name", tuple(one.name for one in CONTROLS))
     )
     assert module.SUPERSEDES == {module.WITHOUT_AUTOMATION_RUN: module.WITH_AUTOMATION_RUN}

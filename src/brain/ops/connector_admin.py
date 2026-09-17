@@ -18,11 +18,14 @@ The settings by `connectable.settings_problems`, which ends in the connector's o
 key by `brain.ops.credentials.problems_with`, told in a source key's words rather than a provider
 key's. See `key_problems`.
 
-**What connecting does not do is said wherever connecting is offered.** Nothing on any install reads
-from a connected source: no worker runs a connector, so nothing is synced, projected, probed or
-answered from it, and its key is read by nothing. The screen and the confirmation carry
-`NOTHING_READS_A_CONNECTED_SOURCE_YET` rather than a control that looks like it started something.
-And disconnecting leaves the key in the vault, because the application may not delete one, which
+**What connecting starts, and what it still does not, is said wherever connecting is offered.**
+Since 2026-09-17 the worker reads a connected source on its own interval
+(`brain.ops.connector_sync`) and keeps what it declares, with the source's visibility rule on every
+record, and the table says when each source was last read and how that went. No question is answered
+from what it keeps yet, because no row tool is registered for a connected source's records, and a
+source with no verified call ceiling is not read at all. The screen and the confirmation carry
+`WHAT_CONNECTING_A_SOURCE_STARTS` rather than a control that looks like it did more. And
+disconnecting leaves the key in the vault, because the application may not delete one, which
 `DISCONNECTING_A_SOURCE` tells the person to finish at the source.
 
 Rejected: generating nothing and asking only for the key, with the source's identifiers filled in
@@ -62,20 +65,23 @@ A_GRANT_NARROWED_TO_ONE_SOURCE_CONNECTS_THAT_SOURCE: Final = (
     "nothing, and a caller refused this way is refused exactly as one holding no grant at all."
 )
 
-#: What connecting does not do yet, said on the screen and in the confirmation.
-NOTHING_READS_A_CONNECTED_SOURCE_YET: Final = (
-    "Connecting a source keeps its settings on this install and its key in the vault, and nothing "
-    "reads from it yet. No worker on any install runs a connector today, so nothing is synced or "
-    "projected from a connected source, no question is answered from it, its health is never "
-    "probed and its key is read by nothing. What it would be trusted to read is shown from what it "
-    "declared when it was connected, so it can be checked before anything runs."
+#: What connecting starts and what it still does not, said on the screen and in the confirmation.
+WHAT_CONNECTING_A_SOURCE_STARTS: Final = (
+    "Connecting a source keeps its settings on this install and its key in the vault. The worker "
+    "then reads it on its own interval, under its verified call ceiling, and keeps the few fields "
+    "it declares, each record carrying the source's own rule about who may see it; the table shows "
+    "when each source was last read and how that went. A source with no verified call ceiling, or "
+    "whose declaration changed after it was connected, is not read, and its row says why. No "
+    "question is answered from what is kept yet: nothing on this release registers a way to ask "
+    "for a connected source's records. What it is trusted to read is shown from what it declared "
+    "when it was connected, so it can be checked first."
 )
 
 #: The confirmation's consequence, in the words a person agrees to.
 CONNECTING_A_SOURCE: Final = (
     "The key is written into the vault and never shown again, and the source is recorded as "
     "connected by you, now, with these settings. The ledger records both. "
-    + NOTHING_READS_A_CONNECTED_SOURCE_YET
+    + WHAT_CONNECTING_A_SOURCE_STARTS
 )
 
 #: The confirmation's consequence for a disconnect.
@@ -88,8 +94,8 @@ DISCONNECTING_A_SOURCE: Final = (
 
 #: What a success says, per change.
 CONNECTED: Final = (
-    "The source is connected and its key is held in the vault. Nothing reads from it until a "
-    "worker runs connectors, which no install does yet."
+    "The source is connected and its key is held in the vault. The worker reads it on its next run "
+    "if it can be read, and the table shows when it was read and how that went."
 )
 DISCONNECTED: Final = (
     "The source is disconnected. Its key is still in the vault: revoke it in the source's own "

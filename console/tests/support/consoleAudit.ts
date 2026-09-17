@@ -333,13 +333,26 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Connectors and third-party integrations": {
     screens: ["/connectors"],
     routes: ["/api/v1/connectors", "/api/v1/connectors/{connector}/disconnect"],
-    tables: ["ops.connector_connection", "proj.record", "er.alias", "er.canonical", "er.identifier", "er.link"],
+    tables: [
+      "ops.connector_connection",
+      "ops.connector_sync",
+      "proj.record",
+      "er.alias",
+      "er.canonical",
+      "er.identifier",
+      "er.link",
+    ],
     installation: [],
     gaps: [
       {
-        what: "Nothing reads from a connected source: it is not synced, projected, probed or answered from, and its key is read by nothing.",
+        what: "A connected source is read and kept, and no question is answered from what is kept.",
         because:
-          "No worker runs a connector on any install, which brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET says on the screen; the worker's vault policy names no connector_keys rule until one does.",
+          "No row tool is registered for a connected source's records: brain.tools.startup.classification_for is keyed on the entity alone and Xero and HubSpot both project contact, which that module records as the limit to change first. brain.ops.connector_admin.WHAT_CONNECTING_A_SOURCE_STARTS says so on the screen.",
+      },
+      {
+        what: "HubSpot can be connected and is not read.",
+        because:
+          "brain.ops.limits records no verified call ceiling for it and brain.connectors.throttle.limits_for refuses to invent one; its row carries brain.ops.connector_sync.NO_VERIFIED_CEILING.",
       },
       {
         what: "Freshdesk, Google Drive, the Laravel views, Lark Base and Lark Wiki cannot be connected from a screen.",
@@ -751,10 +764,11 @@ const CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER = t(
   "test_connecting_and_disconnecting_reach_the_row_the_ledger_and_the_key_s_record",
   true,
 );
-const NOTHING_READS_A_CONNECTED_SOURCE: Proof = {
-  none:
-    "No worker runs a connector on any install, so connecting or disconnecting a source changes what the Connectors screen lists and nothing that reads data: brain.ops.connector_admin.NOTHING_READS_A_CONNECTED_SOURCE_YET.",
-};
+const A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT = t(
+  "test_connector_sync_run",
+  "test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again",
+  true,
+);
 
 const UNDO_REACHES_THE_ROW_THE_LEDGER_AND_RECALL = t(
   "test_memory_store",
@@ -805,12 +819,12 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
   "POST /api/v1/connectors": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
-    behaviour: NOTHING_READS_A_CONNECTED_SOURCE,
+    behaviour: A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT,
   },
   "POST /api/v1/connectors/{connector}/disconnect": {
     row: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
     audit: CONNECTION_REACHES_THE_ROW_AND_THE_LEDGER,
-    behaviour: NOTHING_READS_A_CONNECTED_SOURCE,
+    behaviour: A_CONNECTED_SOURCE_IS_READ_AND_A_DISCONNECTED_ONE_IS_NOT,
   },
   "POST /api/v1/govern/access-review/decision": {
     row: t("test_review_store", "test_keeping_and_removing_reach_the_rows_the_ledger_and_what_the_holder_is_resolved_to", true),

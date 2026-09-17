@@ -415,6 +415,7 @@ _DAILY: Final = timedelta(days=1)
 _WEEKLY: Final = timedelta(days=7)
 _SIX_HOURLY: Final = timedelta(hours=6)
 _QUARTER_HOURLY: Final = timedelta(minutes=15)
+_FIVE_MINUTELY: Final = timedelta(minutes=5)
 
 CONTROLS: Final[tuple[Control, ...]] = (
     Control(
@@ -837,6 +838,35 @@ CONTROLS: Final[tuple[Control, ...]] = (
         # tables, which import this registry for the control-run name constraint.
         every=timedelta(minutes=1),
         cadence_from="brain.ops.automation_run_store:RUN_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="connector_sync",
+        # Added on 2026-09-17, and started by the worker's schedule from the day it was registered.
+        # The run is what the schedule calls; `plan_for` is what decides a connection may be read
+        # and `after_attempt` what an attempt costs, and both are called by the run.
+        symbols=(
+            "brain.ops.connector_sync_run:run_connector_sync_now",
+            "brain.ops.connector_sync:plan_for",
+            "brain.ops.connector_sync:after_attempt",
+        ),
+        guards=(
+            "that every source an administrator connected is read on its own interval under its "
+            "verified call ceiling, that what is kept from it carries the source's own visibility "
+            "rule, and that the Connectors screen's last read and health come from real attempts"
+        ),
+        lost_silently=(
+            "Every projected record stops being refreshed and ages quietly into stale, and nothing "
+            "new from a connected source reaches an answer. The Connectors screen goes on listing "
+            "each source as connected with its key held, which reads as a source being used, and "
+            "only its last read time, which stops moving, says otherwise."
+        ),
+        # Five minutes, restated rather than imported: `brain.ops.connector_sync` imports the
+        # connectors, which import the tables, which import this registry for the control-run name
+        # constraint.
+        every=_FIVE_MINUTELY,
+        cadence_from="brain.ops.connector_sync:CONTROL_EVERY",
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
