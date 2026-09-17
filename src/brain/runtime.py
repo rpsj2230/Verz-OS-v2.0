@@ -17,14 +17,17 @@ eight seconds, a five-second grace period fails several every time.
 seconds before SIGKILL, so the grace period has to fit inside the container's stop timeout
 or the drain is killed halfway through and the point is lost.
 
-Task ids: M31.1.2.1, M31.1.2.2, M31.1.2.3, M31.1.1.3
+Task ids: M31.1.2.1, M31.1.2.2, M31.1.2.3, M31.1.1.3, M42.5.14
 """
 
 from __future__ import annotations
 
+import multiprocessing
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Final
 
 import structlog
 
@@ -146,3 +149,22 @@ def _cgroup_cores(path: Path = CPU_PATH) -> int | None:
         return max(1, int(int(quota) / int(period)))
     except (ValueError, ZeroDivisionError):
         return None
+
+
+#: Why a process asks how it was started rather than how many workers it would size itself for.
+A_PROCESS_A_SUPERVISOR_STARTED_HAS_SIBLINGS: Final = (
+    "uvicorn serves one worker in the process brain.serve runs and starts more than one as "
+    "children of a supervisor, through multiprocessing. So a process with a multiprocessing "
+    "parent has siblings, which hold whatever they read at their own start, and a process "
+    "without one serves alone. detect_profile would answer what this container should run, "
+    "which is the number the supervisor was given and not a fact about this process, and it "
+    "reads four for the ordinary application container whatever command started it."
+)
+
+
+def serves_alone(parent: Callable[[], object] = multiprocessing.parent_process) -> bool:
+    """Whether this process is the only one serving requests, judged by how it was started.
+
+    See `A_PROCESS_A_SUPERVISOR_STARTED_HAS_SIBLINGS`. `parent` is for tests.
+    """
+    return parent() is None

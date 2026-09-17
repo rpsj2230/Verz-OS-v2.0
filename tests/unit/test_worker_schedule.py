@@ -79,6 +79,7 @@ STARTED = [
     ("outbox_dispatch", False),
     ("spend_report_refresh", False),
     ("erasure_queue", False),
+    ("vault_token_renewal", False),
 ]
 
 
@@ -147,12 +148,13 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_six_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_seven_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
-    The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17.
+    The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17, and
+    the vault token renewal later that day, with the installer's vault.
 
-    Delete this and every assertion below that names the six could be satisfied by a table
+    Delete this and every assertion below that names the seven could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -161,6 +163,7 @@ def test_the_wired_runners_are_the_six_the_schedule_is_meant_to_start() -> None:
         "outbox_dispatch",
         "spend_report_refresh",
         "erasure_queue",
+        "vault_token_renewal",
     ]
 
 
@@ -323,6 +326,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
+            ("vault_token_renewal", "ok", False, "vault_token_renewal ran"),
         ]
         assert {row[4] for row in recorded(url)} == {NOW}
         assert {row[5] for row in recorded(url)} == {FINISHED}
@@ -332,6 +336,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert by_name["knowledge_reverification"] is Ticked.RAN
         assert by_name["spend_report_refresh"] is Ticked.RAN
         assert by_name["outbox_dispatch"] is Ticked.RAN
+        assert by_name["vault_token_renewal"] is Ticked.RAN
         unwired = {one.name for one in schedulable()} - set(WIRED)
         assert {name for name, ticked in by_name.items() if ticked is Ticked.NOTHING_TO_RUN} == (
             unwired
@@ -384,12 +389,12 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
         later = tick(url, at=NOW + timedelta(seconds=30))
 
         assert starts.calls == STARTED
-        assert len(recorded(url)) == 6
+        assert len(recorded(url)) == 7
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 12
-        assert len(recorded(url)) == 12
+        assert len(starts.calls) == 14
+        assert len(recorded(url)) == 14
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
@@ -406,13 +411,14 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:4], STARTED[5]]
+        assert starts.calls == [*STARTED[:4], *STARTED[5:]]
         assert [row[0] for row in recorded(url)] == [
             "canary_run",
             "erasure_queue",
             "knowledge_reverification",
             "outbox_dispatch",
             "retention_sweep",
+            "vault_token_renewal",
         ]
         assert {one.name: one.ticked for one in found}["spend_report_refresh"] is (
             Ticked.LOCKED_ELSEWHERE
@@ -440,6 +446,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
+            ("vault_token_renewal", "ok", "vault_token_renewal ran"),
         ]
         assert {one.name: one.ticked for one in found}["retention_sweep"] is Ticked.FAILED
 
@@ -500,6 +507,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("outbox_dispatch", False),
         ("spend_report_refresh", False),
         ("erasure_queue", False),
+        ("vault_token_renewal", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.

@@ -65,7 +65,7 @@ is Docker's own script, and Docker's own documentation says not to use it in pro
 routes below are the per-distribution ones from that same documentation, and an unrecognised
 distribution is told exactly what to run instead.
 
-Task ids: M42.5.1
+Task ids: M42.5.1, M42.6.2
 """
 
 from __future__ import annotations
@@ -75,6 +75,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from brain.deployment import vault_setup
 from brain.deployment.installer import (
     INSTALL_HOME,
     PLAN,
@@ -151,6 +152,10 @@ FLAGS: Final[tuple[tuple[str, str], ...]] = (
     ("--release", "the release tag to install. Required, and never latest"),
     ("--console-address", "the address your reverse proxy will serve the console on"),
     ("--no-install-docker", "do not install Docker, say what to run instead"),
+    (
+        vault_setup.DECLINE_FLAG,
+        f"run no secrets vault, accepted only for: {' '.join(vault_setup.DECLINABLE_PROFILES)}",
+    ),
     ("--help", "print this and stop"),
 )
 
@@ -330,6 +335,13 @@ def unquoted_expansions(
             continue
         if character == chr(92):
             index += 2
+            continue
+        if character == "#" and quotes[-1] == "" and (index == 0 or script[index - 1] in " \t\n;"):
+            # A comment, which quotes nothing. The step headings are comments and carry prose, and
+            # an apostrophe in one read as a quote put the rest of the script in single quotes
+            # until the next apostrophe, which hid every expansion in between.
+            end = script.find("\n", index)
+            index = len(script) if end < 0 else end
             continue
         if character == "'" and quotes[-1] == "":
             quotes[-1] = "'"
@@ -806,6 +818,7 @@ def _arguments(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
         '    --console-address) BRAIN_CONSOLE_ADDRESS="${2:?--console-address needs the '
         'address your reverse proxy will serve}"; shift 2 ;;',
         '    --no-install-docker) BRAIN_INSTALL_DOCKER="no"; shift ;;',
+        f'    {vault_setup.DECLINE_FLAG}) BRAIN_VAULT="no"; shift ;;',
         "    --help|-h) usage; exit 0 ;;",
         '    *) usage >&2; fail "unknown option: $1" ;;',
         "  esac",
@@ -854,6 +867,8 @@ def _profile_case(
             raise InstallScriptError(msg)
         arms.append(
             f'  {profile}) BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}"; '
+            f'{vault_setup.WORKER_FILES_VARIABLE}="'
+            f'{vault_setup.worker_files_argument(profile, home=INSTALL_HOME)}"; '
             f'BRAIN_SERVICES="{services[profile]}"; '
             f'BRAIN_MEMORY_MIB="{memory_mib[profile]}" ;;'
         )
@@ -899,6 +914,7 @@ def render_install(
         'BRAIN_RELEASE=""',
         'BRAIN_CONSOLE_ADDRESS=""',
         'BRAIN_INSTALL_DOCKER="yes"',
+        'BRAIN_VAULT="yes"',
         "BRAIN_REFUSALS=0",
         "",
         *_helpers(),
@@ -908,6 +924,7 @@ def render_install(
         *_arguments(profiles),
         "",
         *_profile_case(services=services, memory_mib=memory_mib, profiles=profiles),
+        *vault_setup.decline_lines(),
         f'BRAIN_RELEASE_URL="${{{RELEASE_URL_VARIABLE}:?set {RELEASE_URL_VARIABLE} to the '
         'release archive for $BRAIN_RELEASE}"',
         "",

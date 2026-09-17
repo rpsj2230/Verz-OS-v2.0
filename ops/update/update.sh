@@ -21,13 +21,14 @@ off_the_pin() {
 }
 
 case "$BRAIN_PROFILE" in
-  lite) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.lite.yml"; BRAIN_TUNNEL_FILES="-f /opt/brain/docker-compose.tunnel.yml" ;;
-  standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml"; BRAIN_TUNNEL_FILES="-f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml" ;;
-  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml"; BRAIN_TUNNEL_FILES="-f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml" ;;
+  lite) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.lite.yml"; BRAIN_TUNNEL_FILES="-f /opt/brain/docker-compose.tunnel.yml"; BRAIN_WORKER_VAULT_FILES="" ;;
+  standard) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.inference.yml"; BRAIN_TUNNEL_FILES="-f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml"; BRAIN_WORKER_VAULT_FILES="-f /opt/brain/docker-compose.vault.worker.yml" ;;
+  full) BRAIN_COMPOSE_FILES="-f /opt/brain/docker-compose.yml -f /opt/brain/docker-compose.worker.yml -f /opt/brain/docker-compose.parse-worker.yml -f /opt/brain/docker-compose.objectstore.yml -f /opt/brain/docker-compose.keycloak.yml -f /opt/brain/docker-compose.langfuse.yml -f /opt/brain/docker-compose.inference.yml -f /opt/brain/docker-compose.automation.yml -f /opt/brain/docker-compose.matcher.yml"; BRAIN_TUNNEL_FILES="-f /opt/brain/docker-compose.tunnel.yml -f /opt/brain/docker-compose.tunnel.identity.yml"; BRAIN_WORKER_VAULT_FILES="-f /opt/brain/docker-compose.vault.worker.yml" ;;
   *) fail "unknown profile; one of: lite standard full" ;;
 esac
 if grep -q "^CLOUDFLARE_TUNNEL_TOKEN=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES $BRAIN_TUNNEL_FILES"; say "The environment file holds the tunnel token, so the tunnel is composed in."; fi
 if grep -q "^BRAIN_VAULT_ADDRESS=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES -f /opt/brain/docker-compose.vault.yml"; say "The environment file names a secrets vault, so the vault overlay is composed in."; fi
+if test -n "${BRAIN_WORKER_VAULT_FILES:-}" && grep -q "^BRAIN_WORKER_VAULT_TOKEN=." "/opt/brain/.env" 2>/dev/null; then BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES $BRAIN_WORKER_VAULT_FILES"; say "The environment file holds the worker's vault token, so its overlay is composed in."; fi
 
 say "Updating the $BRAIN_PROFILE profile in $BRAIN_HOME to $BRAIN_RELEASE."
 

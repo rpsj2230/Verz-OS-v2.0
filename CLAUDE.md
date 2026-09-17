@@ -59,7 +59,7 @@ front of you. Worked examples, all from the first week on the owner's staging in
 | --- | --- | --- |
 | Keycloak refused every sign-in with "Unexpected error" | a required action re-registered by hand with `kcadm` | `ops/keycloak/realm-export.json` named no `providerId` for it, so every import had the fault (61009b6) |
 | Tokens carried no `sub`, so every request was refused | a mapper added by hand on that realm | Keycloak 25 moved `sub` into a scope a full import discards, so the realm's own scope mints it now (6a8c47e) |
-| The wizard refused the model provider step | the provider key set in that server's environment | the wizard should store the key it asks for, rather than require it to be set somewhere else first (open) |
+| The wizard refused the model provider step | the provider key set in that server's environment | the wizard keeps the key it asks for in the vault, and the installer runs, opens and hands out tokens for that vault on every install, so nothing is set somewhere else first (2026-09-17; the run on a server is `ops/openbao/REHEARSAL.md`) |
 | Signed in as the first administrator, then redirected for ever | the sign-in binding row inserted by hand | the loop guard was reset by every token exchange, so a refused account looped (d68b361) |
 | The server's address appeared in two workflow files | a repository variable holding that address | the workflows read the variable and nothing else, and an audit keeps a client value out (f43c5bc) |
 | The stored compose file named no image | one line changed in Coolify's copy | none: that copy belongs to the install, and the product's compose file already required it |

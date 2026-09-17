@@ -412,3 +412,22 @@ def test_the_static_path_rule_admits_the_connector_key_engine_and_still_refuses_
     ):
         with pytest.raises(SecretsUnavailableError):
             assert_static_path(refused)
+
+
+def test_the_application_and_the_worker_may_look_up_and_renew_their_own_token_and_no_other() -> (
+    None
+):
+    """Explicit rather than left to the vault's default policy, which a token minted with
+    `-no-default-policy` does not carry, and self only: renewing another token takes the token.
+    Delete this and a policy edit can drop the renewal grant, so the token the installer minted
+    lapses a month after the install with every renewal run failing as refused, or widen it to
+    `auth/token/renew`, which renews any token whoever holds this one is handed."""
+    for role in (VaultRole.APPLICATION, VaultRole.WORKER):
+        granted = _granted_paths(_policy_file(role).read_text(encoding="utf-8"))
+        own = {path: sorted(caps) for path, caps in granted.items() if path.startswith("auth/")}
+        assert own == {
+            "auth/token/lookup-self": ["read"],
+            "auth/token/renew-self": ["update"],
+        }, role
+    browser = _granted_paths(_policy_file(VaultRole.BROWSER_RUNNER).read_text(encoding="utf-8"))
+    assert not [path for path in browser if path.startswith("auth/")]

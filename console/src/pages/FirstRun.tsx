@@ -37,14 +37,16 @@
  * drawn, because the server sends a path, a name and a reason and never a value. A 404 is one
  * constant sentence whatever its body said: see `A_SETUP_REFUSAL_NAMES_NO_REASON`.
  *
- * **The finishing screen says which processes use the key.** Until 2026-09-16 the key had to be
- * in the server's environment before the wizard would go on, so there was nothing to say. It is
- * kept in the vault now, and the process that appointed uses it at once while every other server
- * process uses it from its next start, or not at all while the environment file sets the same
- * variable. So an appointment that kept a key stops on a sentence and a button rather than
- * landing on the console, because the person is about to ask a question and the answer to "why
- * did that fail" is the sentence. A local install, which kept no key, lands as it always did.
- * See `brain.ops.credentials.A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`.
+ * **The finishing screen stops only for something the person has to do.** The key is kept in the
+ * vault, which the installer runs since 2026-09-17, and the process that appointed uses it and
+ * every saved answer at once. Where that process serves the console alone, nothing is left to do
+ * and the page lands on the console signed in, key or no key: that is M42.5.14. It stops on a
+ * sentence and a button in three cases, because the person is about to ask a question and the
+ * answer to "why did that fail" is the sentence: other server processes serve beside it and hold
+ * neither until they start again (`restart_needed`), the environment file outranks the vault, or
+ * there is no vault and the key is the environment's. See
+ * `brain.setup_routes.A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES` and
+ * `brain.ops.credentials.A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`.
  *
  * **Sources named on the Data sources screen are offered for connecting after the sign-in.** The
  * finishing screen binds the administrator's sign-in first, and only then, when that screen named
@@ -139,8 +141,9 @@ export const KEY_KEPT_SENTENCES: Readonly<Record<Exclude<ProviderKeyKept, "not_a
   Object.freeze({
     in_use:
       "Your provider key is held in the secrets vault and in use by the server process that set " +
-      "you up. If this server runs more than one process, the others use it from their next " +
-      "start, so restart the system before relying on every question reaching the provider.",
+      "you up. This server answers from more than one process, and the others use the key and " +
+      "your answers from their next start, so restart the application before relying on every " +
+      "question reaching the provider.",
     outranked:
       "Your provider key is held in the secrets vault, and it is not in use yet: the server's " +
       "environment file sets the same key variable, and that value wins every time the system " +
@@ -151,16 +154,29 @@ export const KEY_KEPT_SENTENCES: Readonly<Record<Exclude<ProviderKeyKept, "not_a
       "file and restarting the system.",
   });
 
-/** The button on the finishing screen when a key was kept. */
+/** What the finishing screen says when no key was kept and other processes need a restart. */
+export const ANSWERS_WAIT_FOR_A_RESTART =
+  "This server answers from more than one process. The one that set you up already uses your " +
+  "answers; the others use them from their next start, so restart the application before " +
+  "relying on every screen showing them.";
+
+/** The button on the finishing screen when there is something to say first. */
 export const OPEN_CONSOLE = "Open the console";
 
-/** The finishing sentence for what became of the key, or null when there is none to say. */
-function keptSentence(kept: ProviderKeyKept): string | null {
-  // `in` rather than a comparison with "not_asked", so a value this page was not built for lands
-  // on the console as a local install does instead of drawing an empty paragraph.
-  return kept in KEY_KEPT_SENTENCES
-    ? KEY_KEPT_SENTENCES[kept as Exclude<ProviderKeyKept, "not_asked">]
-    : null;
+/**
+ * What the finishing screen has to say before the console, or null when it has nothing to say
+ * and lands there at once. `restartNeeded` is the appointment's `restart_needed`.
+ */
+export function keptSentence(kept: ProviderKeyKept, restartNeeded: boolean): string | null {
+  const said: string[] = [];
+  // Both already say what to restart and why, and are said whether or not other processes serve.
+  if (kept === "outranked" || kept === "from_environment") {
+    said.push(KEY_KEPT_SENTENCES[kept]);
+  }
+  if (restartNeeded && kept !== "outranked") {
+    said.push(kept === "in_use" ? KEY_KEPT_SENTENCES.in_use : ANSWERS_WAIT_FOR_A_RESTART);
+  }
+  return said.length > 0 ? said.join(" ") : null;
 }
 
 /** The heading over a refusal. The same for every refusal, so it says nothing either. */
@@ -276,6 +292,7 @@ function Wizard() {
   const [busy, setBusy] = useState(false);
   const [appointed, setAppointed] = useState("");
   const [keyKept, setKeyKept] = useState<ProviderKeyKept>("not_asked");
+  const [restartNeeded, setRestartNeeded] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [finished, setFinished] = useState(false);
   const [connectingSources, setConnectingSources] = useState(false);
@@ -312,7 +329,7 @@ function Wizard() {
     setAt(at + 1);
   }
 
-  async function finish(principalId: string, kept: ProviderKeyKept): Promise<void> {
+  async function finish(principalId: string, kept: ProviderKeyKept, restart: boolean): Promise<void> {
     setBusy(true);
     setFinishing(true);
     setTold(null);
@@ -334,7 +351,7 @@ function Wizard() {
       setConnectingSources(true);
       return;
     }
-    if (keptSentence(kept) === null) {
+    if (keptSentence(kept, restart) === null) {
       navigate("/", { replace: true });
       return;
     }
@@ -361,7 +378,10 @@ function Wizard() {
       setPlaced(NO_PROBLEMS);
       setAppointed(result.data.principal_id);
       setKeyKept(result.data.provider_key);
-      await finish(result.data.principal_id, result.data.provider_key);
+      // `=== true` so a response from a server older than the field reads as nothing to restart.
+      const restart = result.data.restart_needed === true;
+      setRestartNeeded(restart);
+      await finish(result.data.principal_id, result.data.provider_key, restart);
       return;
     }
     setBusy(false);
@@ -388,7 +408,7 @@ function Wizard() {
     }
   }
 
-  const kept = keptSentence(keyKept);
+  const kept = keptSentence(keyKept, restartNeeded);
   if (connectingSources) {
     return (
       <ConnectSourcesStep
@@ -483,7 +503,7 @@ function Wizard() {
             Back
           </button>
           {appointed ? (
-            <button type="button" className="button" disabled={busy} onClick={() => void finish(appointed, keyKept)}>
+            <button type="button" className="button" disabled={busy} onClick={() => void finish(appointed, keyKept, restartNeeded)}>
               Sign in again
             </button>
           ) : (

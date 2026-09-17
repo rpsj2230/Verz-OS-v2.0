@@ -1,6 +1,6 @@
 # What the background worker may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.12
+# Task ids: M31.3.2.2, M27.8.12, M42.6.2
 #
 # The worker runs scheduled and queued work, so its runs are longer than a request and
 # nobody is watching them. Two differences from the application follow from that, and both
@@ -40,5 +40,17 @@ path "sys/leases/revoke" {
 }
 
 path "sys/leases/renew" {
+  capabilities = ["update"]
+}
+
+# Its own token's standing, and its renewal. Granted here rather than left to the vault's default
+# policy, which grants both today and which a token minted with -no-default-policy does not carry:
+# a periodic token nothing renews lapses for good. Self only: renewing a token takes the token, so
+# this reaches no other process's. See brain.ops.vault_renewal.RENEWAL_TAKES_THE_CREDENTIAL_SO_EACH_HOLDER_RENEWS_ITS_OWN.
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+
+path "auth/token/renew-self" {
   capabilities = ["update"]
 }

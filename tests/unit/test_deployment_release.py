@@ -341,8 +341,12 @@ def test_the_template_and_the_four_settings_are_what_the_plan_reads_from_the_arc
     ships."""
     assert paths_the_install_reads(PLAN) == (
         ".env.example",
+        "docker-compose.vault.yml",
         "ops/automation/egress.conf",
         "ops/langfuse/clickhouse-memory.xml",
+        # The vault's own project and the policies loaded into it, since the installer runs it.
+        "ops/openbao/compose.yml",
+        "ops/openbao/policies/",
         "ops/seaweedfs/provision.sh",
         "ops/seaweedfs/s3.json",
     )

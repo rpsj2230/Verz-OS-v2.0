@@ -129,6 +129,7 @@ from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
 from brain.ops.trace_sink import CountingTraceSink
+from brain.ops.vault_renewal import keep_renewing, renewer_at_start
 from brain.ops.webhook_admin import signing_secrets_at_start
 from brain.prompt_routes import router as prompt_router
 from brain.provider_routes import router as provider_router
@@ -254,6 +255,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.signing_secrets = signing_secrets_at_start(
         settings.vault_address, settings.vault_token
     )
+    # This process's own vault token, renewed by this process, because OpenBao renews a token
+    # only for whoever presents it. See `brain.ops.vault_renewal`.
+    renewer = renewer_at_start(settings.vault_address, settings.vault_token)
+    renewing = asyncio.create_task(keep_renewing(renewer)) if renewer is not None else None
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -504,6 +509,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Drain before the socket closes. Uvicorn stops accepting first, so in-flight
         # requests finish against a live pool rather than a disposed one.
         log.info("shutting down")
+        if renewing is not None:
+            renewing.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await renewing
         if priming is not None:
             priming.cancel()
             with contextlib.suppress(asyncio.CancelledError):

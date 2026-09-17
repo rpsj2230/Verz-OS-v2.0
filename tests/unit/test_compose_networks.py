@@ -55,7 +55,7 @@ import pytest
 import yaml
 
 from brain.browsing.launcher import overlays_for as browser_overlays_for
-from brain.deployment.app_environment import VAULT_OVERLAY
+from brain.deployment.app_environment import VAULT_OVERLAY, worker_vault_overlays_for
 from brain.deployment.requirements import COMPOSE_FILES_FOR, files_for
 from brain.ops.split import overlays_for as split_overlays_for
 from brain.ops.streaming_replica import OVERLAY as REPLICA_OVERLAY
@@ -138,7 +138,12 @@ def compositions() -> dict[str, tuple[str, ...]]:
         found[f"{profile} with the tunnel"] = (*files, *overlays_for(files))
         # Composed onto any profile whose environment file names a vault. See
         # `brain.deployment.app_environment`.
-        found[f"{profile} with the vault"] = (*files, VAULT_OVERLAY)
+        # The worker's own overlay is composed beside it on a profile that runs the worker.
+        found[f"{profile} with the vault"] = (
+            *files,
+            VAULT_OVERLAY,
+            *worker_vault_overlays_for(files),
+        )
         found[f"{profile} split across two hosts"] = (*files, *split_overlays_for(files))
         found[f"{profile} with a read replica"] = (*files, REPLICA_OVERLAY)
         # Composed onto a profile that runs the worker when browsing is switched on. See

@@ -58,7 +58,13 @@ own and not a path under `connectors/`, because `connectors/creds/` is the lease
 check reading `startswith` would admit every lease beside it. See
 `A_KEY_A_VENDOR_ISSUED_IS_STORED_BECAUSE_NOTHING_CAN_MINT_IT`.
 
-Task ids: M31.3.2.3, M27.8.7, M27.8.12, M42.6.5
+**It asks about its own token and renews it, and never anybody else's.** A periodic token lapses
+when nobody renews it inside its period, and renewal is a call made *with* the token: OpenBao
+renews a token by its value, at `auth/token/renew-self` or `auth/token/renew`, and offers no
+renewal by accessor. So `token_standing` and `renew_self` take no argument naming a token, and
+`brain.ops.vault_renewal` argues why each process renews the one it holds.
+
+Task ids: M31.3.2.3, M27.8.7, M27.8.12, M42.6.5, M42.6.2
 """
 
 from __future__ import annotations
@@ -132,6 +138,32 @@ class VaultRefusedError(SecretsUnavailableError):
 
 class VaultUnreachableError(SecretsUnavailableError):
     """The vault did not answer inside `TIMEOUT_SECONDS`, or could not be connected to at all."""
+
+
+@dataclass(frozen=True)
+class TokenStanding:
+    """What the vault says about the token this client presents, and nothing that is the token.
+
+    `ttl_seconds` is how long it has left, `period_seconds` the period a renewal restores it to,
+    zero for a token with none, and `renewable` whether the vault will renew it at all. Read from
+    `auth/token/lookup-self`, whose answer also carries the token's id; that field is never read
+    into this, so there is nowhere for it to go.
+    """
+
+    ttl_seconds: int
+    period_seconds: int
+    renewable: bool
+
+
+def _seconds(value: object) -> int | None:
+    """A whole number of seconds as the vault writes one, or None for anything else.
+
+    A boolean is refused although Python counts it an integer, because `true` in a field that
+    should hold a duration is a malformed answer and not one second.
+    """
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 @dataclass(frozen=True)
@@ -386,6 +418,41 @@ class OpenBaoVault:
         if gone:
             return None
         return StaticVersion(written_at=_instant(found.get("created_time")))
+
+    def token_standing(self) -> TokenStanding:
+        """How long the token this client holds has left, as the vault answers for it.
+
+        A malformed answer raises rather than reading as a token with no time left: a renewal
+        decided on a figure the vault did not state is a renewal nobody can explain afterwards.
+        """
+        payload = self._call("GET", "auth/token/lookup-self")
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            msg = "the vault described this token with no data"
+            raise SecretsUnavailableError(msg)
+        ttl = _seconds(data.get("ttl"))
+        period = _seconds(data.get("period", 0) or 0)
+        renewable = data.get("renewable")
+        if ttl is None or period is None or not isinstance(renewable, bool):
+            msg = "the vault described this token without a readable ttl, period or renewable"
+            raise SecretsUnavailableError(msg)
+        return TokenStanding(ttl_seconds=ttl, period_seconds=period, renewable=renewable)
+
+    def renew_self(self) -> int:
+        """Renew the token this client holds, and return the seconds the vault granted.
+
+        Not retried, for `write_static_kv`'s reason: a renewal that timed out may have landed,
+        and the next scheduled run asks again from the vault's own answer rather than from a
+        guess about this one. The grant is the vault's `lease_duration`, not a period this
+        process remembers, because the two differ whenever the token was minted differently.
+        """
+        payload = self._call("POST", "auth/token/renew-self", {})
+        auth = payload.get("auth")
+        granted = _seconds(auth.get("lease_duration")) if isinstance(auth, dict) else None
+        if granted is None:
+            msg = "the vault answered a renewal without saying how long it granted"
+            raise SecretsUnavailableError(msg)
+        return granted
 
     def revoke(self, lease_id: str) -> None:
         """Give the credential back. Retries, unlike `issue`.

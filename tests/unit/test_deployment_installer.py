@@ -266,7 +266,7 @@ def test_every_step_that_writes_something_says_when_it_is_already_done() -> None
 
     Delete this and a step added next year makes the whole installer unsafe to re-run, with
     nothing to say which one."""
-    assert len(PLAN) == 15
+    assert len(PLAN) == 19
     for step in PLAN:
         if step.changes:
             assert step.already_done.strip(), f"{step.name} writes and cannot say it is done"
@@ -341,17 +341,25 @@ def test_printing_something_that_is_not_a_credential_is_not_a_leak() -> None:
     assert value_leaks_in('POSTGRES_PASSWORD="$(openssl rand -hex 32)"') == ()
 
 
-def test_exactly_one_step_is_allowed_to_present_a_value_and_it_is_the_setup_code() -> None:
-    """The one deliberate exception. The setup code has to reach the person standing at the
+def test_exactly_two_steps_present_a_value_the_setup_code_and_the_vaults_unseal_pieces() -> None:
+    """The two deliberate exceptions. The setup code has to reach the person standing at the
     console or nobody can become the first administrator, which `brain.firstrun` already
-    argues. What matters is that it is a declared flag on one step rather than a value that
-    got through because its name happened not to match a pattern.
+    argues; and the vault's unseal pieces have to reach the people who will hold them, once,
+    because nothing can show them again, which `brain.deployment.vault_setup` argues. What
+    matters is that each is a declared flag on one step rather than a value that got through
+    because its name happened not to match a pattern.
+
+    The name check sees the setup code and does not see the pieces, which travel in
+    `BRAIN_VAULT_INIT`, a name that holds a vault's answer rather than naming a credential.
+    `test_vault_setup.py` holds the other half: that only this step prints that variable.
 
     Delete this and the exception spreads to whichever step somebody finds inconvenient."""
     presenting = [one for one in PLAN if one.presents_once]
-    assert len(presenting) == 1
-    assert presenting[0].name == "present the setup code, once"
-    assert value_leaks_in(presenting[0].run), "the exception is not being exercised"
+    assert [one.name for one in presenting] == [
+        "initialise the secrets vault and show its unseal pieces, once",
+        "present the setup code, once",
+    ]
+    assert value_leaks_in(presenting[1].run), "the exception is not being exercised"
 
 
 def test_a_step_nobody_declared_is_refused_rather_than_answered_with_nothing() -> None:

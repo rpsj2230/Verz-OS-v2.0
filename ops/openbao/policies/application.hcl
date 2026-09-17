@@ -1,6 +1,6 @@
 # What the application may do with the secrets vault.
 #
-# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5
+# Task ids: M31.3.2.2, M27.8.7, M27.8.12, M42.6.5, M42.6.2
 #
 # The application answers questions. It borrows connector credentials for the length of one
 # request and gives them back, which is why most rules below are about *creating and
@@ -28,6 +28,18 @@ path "sys/leases/revoke" {
 }
 
 path "sys/leases/renew" {
+  capabilities = ["update"]
+}
+
+# Its own token's standing, and its renewal. Granted here rather than left to the vault's default
+# policy, which grants both today and which a token minted with -no-default-policy does not carry:
+# a periodic token nothing renews lapses for good. Self only: renewing a token takes the token, so
+# this reaches no other process's. See brain.ops.vault_renewal.RENEWAL_TAKES_THE_CREDENTIAL_SO_EACH_HOLDER_RENEWS_ITS_OWN.
+path "auth/token/lookup-self" {
+  capabilities = ["read"]
+}
+
+path "auth/token/renew-self" {
   capabilities = ["update"]
 }
 

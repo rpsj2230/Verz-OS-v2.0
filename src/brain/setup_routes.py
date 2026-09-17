@@ -52,6 +52,14 @@ the environment file sets. That is
 `brain.ops.credentials.A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`, and it is on the response
 because the person who typed the key is about to ask the system a question.
 
+**And it is told whether another process needs a restart, which is the only reason it would.**
+Since 2026-09-17 the installer runs the vault, so on a fresh hosted install the key is kept and
+the process that appointed holds it and every answer the wizard saved. Where that process serves
+the console alone there is nothing to restart and the screen lands on the console signed in.
+Where uvicorn runs it as one of several workers, the others hold the environment's answers and no
+key until they start again, and `restart_needed` says so rather than letting the first question
+land on a sibling. See `A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES`.
+
 **The appointing process reads its own answers back without restarting**, because it holds what
 it wrote rather than re-reading the table it just wrote to. Which processes that reaches, and
 which it does not, is
@@ -96,7 +104,7 @@ that would have to be built.
 Rejected: appointing and discarding the settings. It is what a route reaching for `appoint`
 would do first, and it is the door closed before the settings are written.
 
-Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7
+Task ids: M42.5.6, M42.5.10, M42.5.14, M27.8.7, M42.6.2
 """
 
 from __future__ import annotations
@@ -130,6 +138,7 @@ from brain.ops.credentials import (
     InUse,
     VaultState,
 )
+from brain.runtime import serves_alone
 from brain.settings import process_environment
 from brain.setup_wizard import (
     MAX_ANSWER_CHARS,
@@ -191,6 +200,15 @@ THE_LADDER_IS_WRITTEN_AFTER_THE_APPOINTMENT_AND_NEVER_IN_ITS_WAY: Final = (
     "is never refilled. Written inside it, a routing table that refused would take the door with "
     "it. So it is written after, for the provider the appointed answers name, and a refusal is "
     "logged by its class and repaired by the reconciliation at the next start."
+)
+
+#: Why the finishing screen is told about sibling processes and nothing else about restarting.
+A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES: Final = (
+    "The appointing process holds the key it kept and every answer it saved, from the moment it "
+    "appoints, so a person it serves alone has nothing to restart. A saved answer and a kept key "
+    "are not messages to another worker, so where uvicorn runs this process beside siblings they "
+    "hold the environment's answers and no key until they start again. The response says which, "
+    "judged by how this process was started, and the screen asks for a restart only then."
 )
 
 #: Why the principal id is not taken from the request.
@@ -347,6 +365,8 @@ class AppointedView(BaseModel):
     principal_id: str
     finish_path: str
     provider_key: ProviderKeyKept
+    #: True when other processes serve beside this one and hold none of what it just kept.
+    restart_needed: bool
 
 
 @dataclass(frozen=True)
@@ -359,6 +379,7 @@ class Appointment:
     variables: tuple[str, ...] = ()
     reason: NotKeptReason | None = None
     provider_key: ProviderKeyKept = ProviderKeyKept.NOT_ASKED
+    restart_needed: bool = False
 
 
 # ------------------------------------------------------------------------ the decisions
@@ -515,6 +536,7 @@ async def appoint_first_administrator(
     credentials: Credentials | None = None,
     env: Mapping[str, str] | None = None,
     ladder: LadderWriter | None = None,
+    alone: bool = True,
 ) -> Appointment:
     """Run the appointment in its order, or refuse before the answers in one way.
 
@@ -522,7 +544,8 @@ async def appoint_first_administrator(
     `_nothing_to_appoint` for every refusal in `EVERY_REFUSAL_BEFORE_THE_ANSWERS_IS_ONE_ANSWER`,
     and returns problems, or the key that could not be kept, with nobody appointed, for the
     rest. `credentials` None is an install with no vault. `ladder` None is a process with no
-    database, which writes no routing ladder.
+    database, which writes no routing ladder. `alone` is whether this process serves the
+    console by itself; see `A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES`.
     """
     store = credentials if credentials is not None else Credentials(None)
     if enrolment is None:
@@ -569,6 +592,7 @@ async def appoint_first_administrator(
     return Appointment(
         principal_id=principal_id,
         provider_key=put_provider_key_to_use(slot, applied, store),
+        restart_needed=not alone,
     )
 
 
@@ -624,6 +648,7 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
             now=now,
             credentials=credentials_of(request),
             ladder=ladder_of(request),
+            alone=serves_alone(),
         )
     except BrainError:
         raise
@@ -640,5 +665,6 @@ async def appoint_from_setup(request: Request, body: AppointmentAsked) -> JSONRe
         principal_id=result.principal_id,
         finish_path=FINISH_PATH,
         provider_key=result.provider_key,
+        restart_needed=result.restart_needed,
     )
     return JSONResponse(status_code=200, content=view.model_dump(mode="json"))

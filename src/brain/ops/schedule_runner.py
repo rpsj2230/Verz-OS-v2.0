@@ -62,7 +62,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19
+Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19, M42.6.2
 """
 
 from __future__ import annotations
@@ -84,6 +84,7 @@ from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
 from brain.ops.retention_store import run_retention_sweep
 from brain.ops.schedule import TICK, Owed, owed, schedulable
 from brain.ops.spend_store import refresh_spend_daily_now
+from brain.ops.vault_renewal import run_renewal_now
 from brain.ops.webhook_delivery import run_dispatch_now
 from brain.settings import process_environment, settings_from
 
@@ -350,6 +351,29 @@ def canary_run(now: datetime, report_only: bool, database_url: str) -> str:
     )
 
 
+#: Why a renewal is not held back in report-only mode.
+A_RENEWAL_IN_REPORT_ONLY_MODE_STILL_RENEWS: Final = (
+    "Report-only mode exists for controls that remove data, and a renewal removes nothing, so "
+    "brain.ops.schedule never asks for it. Declining when asked would be the one refusal here that "
+    "does harm: a token not renewed lapses for good, and every signed delivery with it. So the "
+    "mode is honoured by saying so, and the renewal runs."
+)
+
+
+def vault_token_renewal(now: datetime, report_only: bool, database_url: str) -> str:
+    """Renew the worker's own vault token when it is owed, and say what was done.
+
+    `brain.ops.vault_renewal.run_renewal_now` is the literal call the registry reads, with the
+    worker's settings, because a token is renewed by the process that holds it: see
+    `brain.ops.vault_renewal.RENEWAL_TAKES_THE_CREDENTIAL_SO_EACH_HOLDER_RENEWS_ITS_OWN`. The
+    application renews its own from its lifespan. Touches no database, and renews in report-only
+    mode too, see `A_RENEWAL_IN_REPORT_ONLY_MODE_STILL_RENEWS`.
+    """
+    settings = settings_from(process_environment())
+    said = run_renewal_now(settings.vault_address, settings.vault_token)
+    return f"report only, renewed anyway: {said}" if report_only else said
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
 #: Six with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
@@ -447,6 +471,8 @@ RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="spend_report_refresh", run=spend_report_refresh),
     # Wired on 2026-09-17 with `ops.erasure_request`. See `brain.ops.erasure_store`.
     Runner(name="erasure_queue", run=erasure_queue),
+    # Wired on 2026-09-17 with the installer's vault, the day it was registered.
+    Runner(name="vault_token_renewal", run=vault_token_renewal),
 )
 
 
@@ -485,6 +511,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return erasure_queue(now, report_only, database_url)
         case "canary_run":
             return canary_run(now, report_only, database_url)
+        case "vault_token_renewal":
+            return vault_token_renewal(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

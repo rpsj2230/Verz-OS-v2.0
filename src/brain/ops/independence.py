@@ -184,6 +184,11 @@ SEARCHED_FILES: Final[tuple[str, ...]] = (".env.example",)
 #: Compose is searched too, and separately, because it is YAML rather than Python.
 COMPOSE_GLOB: Final = "docker-compose*.yml"
 
+#: A compose project this deployment runs beside the stack rather than in it, which today is the
+#: secrets vault's under `ops/openbao/`. Its service names are addresses on this system's own
+#: networks, which is what `compose_services` allows, and the installer writes the vault's.
+OWN_PROJECT_GLOB: Final = "ops/*/compose.yml"
+
 #: An email address in a literal.
 ADDRESS = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})")
 
@@ -328,7 +333,7 @@ def compose_services(repo: Path) -> frozenset[str]:
     import yaml
 
     found: set[str] = set()
-    for path in sorted(repo.glob(COMPOSE_GLOB)):
+    for path in sorted([*repo.glob(COMPOSE_GLOB), *repo.glob(OWN_PROJECT_GLOB)]):
         parsed = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         if isinstance(parsed, dict):
             services = parsed.get("services")

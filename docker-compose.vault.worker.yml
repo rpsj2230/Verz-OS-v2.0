@@ -1,0 +1,49 @@
+# The secrets vault option for the general worker: its own token, and the vault's network.
+#
+# Composed on top of a profile that runs the general worker (standard and full), beside
+# `docker-compose.vault.yml`, and only on an install whose environment file holds a worker token:
+#
+#   docker compose <the profile's -f files> -f /opt/brain/docker-compose.vault.yml \
+#     -f /opt/brain/docker-compose.vault.worker.yml up -d
+#
+# The installer, the update and the rollback compose it themselves when the environment file holds
+# `BRAIN_WORKER_VAULT_TOKEN`. The argument is in `brain.deployment.app_environment`, and what is
+# written here is what a reader of this file needs in order not to undo it.
+#
+# **Why the worker needs the vault at all.** It signs every webhook delivery with the subscriber's
+# secret, read from `webhooks/` under the worker policy (`ops/openbao/policies/worker.hcl`), and it
+# renews its own token on the schedule. Without this file every dispatch run fails naming the vault.
+#
+# **Why its token is read from a variable of another name.** The worker reads `BRAIN_VAULT_TOKEN`,
+# as the application does, and holds a token minted against a narrower policy. One environment file
+# cannot give that name two values, so the file keeps the worker's as `BRAIN_WORKER_VAULT_TOKEN`
+# and it is handed over here under the name the worker reads. Never the application's token: that
+# would give the process nobody watches every provider key and every connector lease.
+#
+# **Why a second file and not a second service in the first.** `docker-compose.vault.yml` is
+# composed onto `lite` too, whose files declare no worker, and a service named in an overlay and in
+# no base file is a service with no image, which stops the stack.
+#
+# **Why `default` is listed.** The worker's base file names no networks, so it is on `default`
+# implicitly, and compose replaces an implicit list with the one an overlay names: listing only the
+# vault's network here would cut the worker off from its database and its queue.
+#
+# Task ids: M42.6.2, M27.8.12
+
+services:
+  brain-worker:
+    environment:
+      # As the worker container reaches the vault: the vault's service name on the network below
+      # and its port, the same address the application is handed.
+      BRAIN_VAULT_ADDRESS: ${BRAIN_VAULT_ADDRESS:?set BRAIN_VAULT_ADDRESS to the address the worker reaches the vault on}
+      # Minted on this install's own vault against the worker policy, never the application's.
+      BRAIN_VAULT_TOKEN: ${BRAIN_WORKER_VAULT_TOKEN:?set BRAIN_WORKER_VAULT_TOKEN to the token minted for the worker policy}
+    networks:
+      - default
+      - brain-vault
+
+networks:
+  brain-vault:
+    # Created by the vault's own project, under this fixed name, as `docker-compose.vault.yml` says.
+    external: true
+    name: brain-vault

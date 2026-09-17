@@ -197,8 +197,13 @@ def test_every_value_the_installer_mints_that_the_application_reads_reaches_it()
     names = {name for names in application_reads().values() for name in names}
     minted = minted_variables(PLAN) & names
     assert {"BRAIN_SETUP_SECRET", "BRAIN_SETUP_ISSUED_AT", "APP_ROLE_PASSWORD"} <= minted
+    # The vault's two settings are minted too, and reach the application through the overlay the
+    # same install composes in, never through a base file: see `NOT_PASSED_BY_A_PROFILE`.
+    by_the_overlay = set(VAULT_SETTINGS)
+    assert by_the_overlay <= minted
+    assert by_the_overlay <= passed_names(load(VAULT_OVERLAY))
     for name in application_files():
-        assert minted <= passed_names(load(name)), name
+        assert minted - by_the_overlay <= passed_names(load(name)), name
 
 
 # ============================================================================ the vault overlay

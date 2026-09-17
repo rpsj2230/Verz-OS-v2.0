@@ -75,7 +75,7 @@ Rejected: `git clone` for the release. It is one line shorter and it is the shap
 `brain.ops.independence.duplication_gaps` refuses in a build input, for the reason that ends
 with a client running a copy nobody fixed. The installer fetches one archive of one tag.
 
-Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15, M30.2.5
+Task ids: M42.1.3, M42.1.4, M42.3.1, M42.3.4, M42.5.3, M42.5.15, M30.2.5, M42.6.2
 """
 
 from __future__ import annotations
@@ -86,6 +86,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Final
 
+from brain.deployment import vault_setup
 from brain.deployment.requirements import (
     NOTHING_IN_THIS_DEPLOYMENT_PUBLISHES_A_PORT,
     files_for,
@@ -695,6 +696,76 @@ PLAN: Final[tuple[Step, ...]] = (
         # stack needs is missing with the step reporting that it had nothing to do.
         already_done=(f'grep -q "^POSTGRES_PASSWORD=." "{INSTALL_HOME}/{INSTALL_ENV_FILE}"'),
     ),
+    # The secrets vault, between minting the install's own credentials and anything that composes
+    # the stack, because the last of these four decides which files every later compose command
+    # reads. See `brain.deployment.vault_setup`, which owns the shell and the argument.
+    Step(
+        name="start the secrets vault",
+        run=vault_setup.start_run(INSTALL_HOME),
+        why=(
+            "every profile keeps credentials put in from a browser, and the vault is the one "
+            "place they are kept. Its own compose project, so a deploy of the application never "
+            "restarts and seals it. See vault_setup.THE_VAULT_RUNS_WHEREVER_A_CREDENTIAL_IS_KEPT"
+        ),
+        on_failure=(
+            "read `docker logs brain-vault`. Nothing secret has been made yet, so running this "
+            "again is safe"
+        ),
+        changes=True,
+        already_done=vault_setup.start_done(INSTALL_HOME),
+    ),
+    Step(
+        # `presents_once` for the second of the two values that have to reach the person at the
+        # terminal. See `vault_setup.THE_UNSEAL_PIECES_ARE_SHOWN_ONCE_AND_KEPT_BY_PEOPLE`.
+        name="initialise the secrets vault and show its unseal pieces, once",
+        run=vault_setup.initialise_run(),
+        why=(
+            "the vault makes its unseal pieces once, ever, and nothing can show them again. They "
+            "are printed here and written nowhere, and the root token stays in this shell for "
+            "the next step alone. See "
+            "vault_setup.THE_UNSEAL_PIECES_ARE_SHOWN_ONCE_AND_KEPT_BY_PEOPLE"
+        ),
+        on_failure=(
+            "if no piece was printed, nothing was made: read `docker logs brain-vault` and run "
+            "this again. If pieces were printed, keep them, and finish by hand with "
+            "ops/openbao/UNSEAL.md under Finishing what the installer began"
+        ),
+        changes=True,
+        already_done=vault_setup.initialise_done(),
+        presents_once=True,
+    ),
+    Step(
+        name="open the secrets vault and give this install its tokens",
+        run=vault_setup.open_run(INSTALL_HOME, INSTALL_ENV_FILE),
+        why=(
+            "opens the vault with the pieces just made, turns on its audit devices, enables the "
+            "engines the product writes to, loads the policies, mints the application's and the "
+            "worker's tokens with a period, appends them to the environment file with the "
+            "vault's address, and revokes the root token. See "
+            "vault_setup.THE_ROOT_CREDENTIAL_LIVES_FOR_ONE_STEP"
+        ),
+        on_failure=(
+            "the root token existed only in the run that initialised the vault, so this step "
+            "cannot be repeated by a later run. Finish by hand with ops/openbao/UNSEAL.md under "
+            "Finishing what the installer began"
+        ),
+        changes=True,
+        already_done=vault_setup.open_done(INSTALL_HOME, INSTALL_ENV_FILE),
+    ),
+    Step(
+        name="compose the secrets vault in",
+        run=vault_setup.compose_run(INSTALL_HOME, INSTALL_ENV_FILE),
+        why=(
+            "the overlays hand the application and the worker the vault's address and their own "
+            "tokens and join them to its network, and they are composed in because the "
+            "environment file names them, on this run and every later one. See "
+            "app_environment.AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT"
+        ),
+        on_failure=(
+            "this step only reads the environment file. Check it is readable and run this again"
+        ),
+        changes=False,
+    ),
     Step(
         name="pull the images this profile runs",
         run="docker compose $BRAIN_COMPOSE_FILES pull --quiet",
@@ -980,6 +1051,8 @@ def render(profile: str, *, services: int, memory_mib: int) -> str:
         f'BRAIN_HOME="{INSTALL_HOME}"',
         f'BRAIN_REPOSITORY="{PRODUCT_IMAGE}"',
         f'BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}"',
+        f'{vault_setup.WORKER_FILES_VARIABLE}="'
+        f'{vault_setup.worker_files_argument(profile, home=INSTALL_HOME)}"',
         f'BRAIN_SERVICES="{services}"',
         f'BRAIN_MEMORY_MIB="{memory_mib}"',
         'BRAIN_RELEASE="${1:?usage: install.sh <release tag>}"',

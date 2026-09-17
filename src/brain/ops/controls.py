@@ -107,6 +107,7 @@ from brain.ops.denial_alerts import DIGEST_WINDOW
 from brain.ops.handover import Residue
 from brain.ops.queue import stale_after
 from brain.ops.recovery import DRILL_INTERVAL_DAYS
+from brain.ops.vault_renewal import CHECK_EVERY as VAULT_TOKEN_CHECK_EVERY
 from brain.resolution.calibration import CALIBRATION_PERIOD
 
 #: The repository this module was installed from, used only by the derived checks below.
@@ -780,6 +781,34 @@ CONTROLS: Final[tuple[Control, ...]] = (
         # the tables, which import this registry for the control-run name constraint.
         every=_QUARTER_HOURLY,
         cadence_from="brain.ops.erasure_store:DRAIN_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
+    Control(
+        name="vault_token_renewal",
+        # Added on 2026-09-17 with the installer's vault, and started by the worker's schedule
+        # from the day it was registered. Two symbols because there are two tokens and each is
+        # renewed by the process holding it: the worker's schedule calls `run_renewal_now` for
+        # the worker's, and the application's lifespan calls `keep_renewing` for its own. Either
+        # losing its caller is a token nothing renews, so both are the control.
+        symbols=(
+            "brain.ops.vault_renewal:run_renewal_now",
+            "brain.ops.vault_renewal:keep_renewing",
+        ),
+        guards=(
+            "that the application's and the worker's tokens on this install's own vault are "
+            "renewed long before their period runs out, so a provider key can still be kept and "
+            "a webhook delivery still signed a month after the install"
+        ),
+        lost_silently=(
+            "Nothing reads the vault on the path of an ordinary question, so a lapsed token is "
+            "found weeks later: the console refuses to keep a key, the worker's deliveries all "
+            "fail naming the vault, and the next restart loads no provider key at all. A lapsed "
+            "token cannot be renewed, only minted again under a root token that three holders "
+            "of the unseal pieces have to generate."
+        ),
+        every=VAULT_TOKEN_CHECK_EVERY,
+        cadence_from="brain.ops.vault_renewal:CHECK_EVERY",
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),

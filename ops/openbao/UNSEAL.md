@@ -3,7 +3,7 @@
 For whoever operates the Company Brain. Written to be followed by someone who has not read
 the code.
 
-Task ids: M31.3.2.1
+Task ids: M31.3.2.1, M42.6.2
 
 ---
 
@@ -62,7 +62,59 @@ page says and nothing about the running vault.
 
 ---
 
-## First install
+## First install, which the installer now does for you
+
+Since 2026-09-17 `ops/install/install.sh` runs the vault on every profile (a `lite` install may
+decline it with `--no-vault`), and it does steps 1 to 6 below itself, in four steps of its own:
+it starts the vault, initialises it with the split above, **prints the five pieces once at the
+terminal**, opens it with three of them, turns on both audit devices, enables the `providers`,
+`webhooks` and `connector_keys` engines, loads the policies, mints the application's token and,
+on a profile with a worker, the worker's, each with a period of 768 hours, appends them and the
+vault's address to `/opt/brain/.env`, and revokes the root token. `brain.deployment.vault_setup`
+is the code and the argument.
+
+**What you keep is the five pieces, and nothing else.**
+
+- Each piece with a different person, handed over before you press Enter at the installer's
+  prompt, and none of them anywhere on the server. The installer writes them nowhere, and
+  nothing can show them again.
+- Who holds which piece is your company's decision and is recorded outside this repository. The
+  installer prints them as piece 1 to piece 5 and names nobody.
+- Nothing about the root token: it no longer exists when the installer finishes. If one is ever
+  needed, three holders generate a new one (see step 6).
+- The two tokens are in `/opt/brain/.env` beside the database password, under the same mode, and
+  the application and the worker renew their own while they run. Nothing to keep.
+
+If the terminal was recorded, or the install was run through `tee` or into a log, that record
+holds the pieces. Destroy it.
+
+## Finishing what the installer began
+
+The root token existed only in the shell that initialised the vault. So if the install stopped
+after it printed the pieces and before `/opt/brain/.env` held the tokens, a second run of the
+installer stops at the same place and sends you here. What is left is done by hand, by the
+person running the install with three of the holders:
+
+1. Open the vault, three times, with three different pieces:
+   `docker exec -it brain-vault bao operator unseal`.
+2. Generate a root token with the same three holders: `docker exec -it brain-vault bao operator
+   generate-root -init`, then the steps it prints. It leaves a record that it happened.
+3. With that token, do what the installer did not: `sh ops/openbao/enable-audit.sh`; enable any
+   of `providers`, `webhooks` and `connector_keys` that `bao secrets list` does not show, each as
+   `bao secrets enable -path=<name> kv-v2`; `sh ops/openbao/load-policies.sh`.
+4. Mint the tokens as `ops/openbao/credential-slots.md` says, and append `BRAIN_VAULT_ADDRESS`,
+   `BRAIN_VAULT_TOKEN` and, on `standard` or `full`, `BRAIN_WORKER_VAULT_TOKEN` to
+   `/opt/brain/.env`.
+5. Revoke the root token (step 6 below), and run the installer again: every step already done
+   says so and skips.
+
+If the installer says the root token could not be revoked, only step 5 is left: generate a new
+one with three holders, revoke the old one by its accessor from `bao list auth/token/accessors`,
+then revoke the new one with step 6.
+
+## First install by hand
+
+For a server where the installer cannot run. Every step below is one the installer makes.
 
 **Step 1. Start the vault.**
 
@@ -142,8 +194,13 @@ reach one of the systems needed to answer that". The vault container will be run
 
     docker exec -it brain-vault bao operator unseal
 
-Once the third piece goes in, it opens. The Brain reconnects on its own; nothing needs
-restarting.
+Once the third piece goes in, it opens. A connector's next request reconnects on its own.
+
+**If the whole server restarted, restart the application as well, after the vault is open.**
+The application reads the provider keys and the object store's key from the vault once, as it
+starts, so an application that started while the vault was sealed answers without them until it
+is started again: `docker compose <your profile's files> restart app`, from `/opt/brain`. An
+application that was already running when only the vault restarted still holds them.
 
 **How long it takes:** about two minutes, most of which is reaching three people.
 

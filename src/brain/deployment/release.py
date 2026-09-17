@@ -131,8 +131,8 @@ from typing import Any, Final
 
 from brain.deployment.app_environment import (
     AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT,
-    VAULT_CHOICE,
     VAULT_OVERLAY,
+    WORKER_VAULT_OVERLAY,
 )
 from brain.deployment.compatibility import VERSIONS, Verdict, changes_in
 from brain.deployment.installer import (
@@ -147,6 +147,11 @@ from brain.deployment.installer import (
     step_named,
 )
 from brain.deployment.requirements import files_for
+from brain.deployment.vault_setup import (
+    WORKER_FILES_VARIABLE,
+    vault_choice_lines,
+    worker_files_argument,
+)
 from brain.ops.compose import ComposeDoc, ComposeFiles
 from brain.ops.independence import NOT_OF_THIS_REPOSITORY
 from brain.ops.tunnel import (
@@ -353,14 +358,20 @@ def _tunnel_rules(profiles: Sequence[str] = PROFILES) -> tuple[Rule, ...]:
 
 
 def _vault_rules() -> tuple[Rule, ...]:
-    """The vault overlay, which no profile composes and the update and rollback scripts may."""
+    """The vault overlays, which no profile names and the install, update and rollback compose."""
     return (
         Rule(
             VAULT_OVERLAY,
-            "the overlay the update and rollback scripts compose onto an install whose "
+            "the overlay the installer, the update and the rollback compose onto an install whose "
             "environment file names a vault address, so a release that did not carry it is an "
-            "update that stops on the one install that chose a vault. "
+            "update that stops on every install that runs the vault. "
             + AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT,
+        ),
+        Rule(
+            WORKER_VAULT_OVERLAY,
+            "the overlay handing the general worker its own vault token, composed where the "
+            "environment file holds one, so a release that did not carry it is an update that "
+            "stops on every standard and full install that runs the vault",
         ),
     )
 
@@ -776,6 +787,8 @@ def archive_gaps(
         f"{one}: the install reads {INSTALL_HOME}/{one} and the archive would not carry it. "
         f"{A_PATH_THE_INSTALL_READS_AND_THE_ARCHIVE_LACKS_FAILS_ON_SOMEBODY_ELSES_SERVER}"
         for one in sorted(set(wanted) - held)
+        # A directory the install walks, the vault's policies, is carried when a file under it is.
+        if not (one.endswith("/") and any(path.startswith(one) for path in held))
     ]
     findings.extend(
         f"{one}: the archive would carry it and it is refused by {refused_by(one)}"
@@ -1526,7 +1539,8 @@ def _profile_case(profiles: Sequence[str] = PROFILES) -> tuple[str, ...]:
     """
     arms = [
         f'  {profile}) BRAIN_COMPOSE_FILES="{compose_files_argument(profile)}"; '
-        f'BRAIN_TUNNEL_FILES="{_overlays_argument(profile)}" ;;'
+        f'BRAIN_TUNNEL_FILES="{_overlays_argument(profile)}"; '
+        f'{WORKER_FILES_VARIABLE}="{worker_files_argument(profile, home=INSTALL_HOME)}" ;;'
         for profile in profiles
     ]
     names = " ".join(profiles)
@@ -1559,20 +1573,15 @@ def _tunnel_choice(variable: str) -> str:
     )
 
 
-def _vault_choice(variable: str = VAULT_CHOICE) -> str:
-    """The one line that composes the vault overlay in, when the environment file names a vault.
+def _vault_choice() -> tuple[str, ...]:
+    """The lines that compose the vault overlays in, when the environment file names them.
 
-    See `AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT`. A value is required after the
-    `=`, for the reason `_tunnel_choice` gives: the template carries the line empty, and an
-    empty line is not a choice. After the tunnel's line, so the overlays come after the
-    profile's own files in both scripts in one order.
+    See `AN_ADDRESS_IN_THE_ENVIRONMENT_FILE_RECORDS_THE_VAULT`. The lines are
+    `brain.deployment.vault_setup.vault_choice_lines`, the installer's own, so an install, an
+    update and a rollback compose a vault in one way. After the tunnel's line, so the overlays
+    come after the profile's own files in both scripts in one order.
     """
-    return (
-        f'if grep -q "^{variable}=." "{INSTALL_HOME}/{INSTALL_ENV_FILE}" 2>/dev/null; then '
-        f'BRAIN_COMPOSE_FILES="$BRAIN_COMPOSE_FILES -f {INSTALL_HOME}/{VAULT_OVERLAY}"; '
-        'say "The environment file names a secrets vault, so the vault overlay is composed in."; '
-        "fi"
-    )
+    return vault_choice_lines(INSTALL_HOME, INSTALL_ENV_FILE)
 
 
 def _helpers() -> tuple[str, ...]:
@@ -1656,7 +1665,7 @@ def render_update(
         "",
         *_profile_case(profiles),
         _tunnel_choice(tunnel_token),
-        _vault_choice(),
+        *_vault_choice(),
         "",
         f'say "Updating the $BRAIN_PROFILE profile in $BRAIN_HOME to ${variable}."',
     ]
@@ -1695,7 +1704,7 @@ def render_rollback(
         "",
         *_profile_case(profiles),
         _tunnel_choice(tunnel_token),
-        _vault_choice(),
+        *_vault_choice(),
         "",
         'say "Going back one release on the $BRAIN_PROFILE profile in $BRAIN_HOME."',
     ]

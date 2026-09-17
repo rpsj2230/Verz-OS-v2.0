@@ -394,7 +394,12 @@ def test_only_the_step_that_hands_over_the_setup_code_prints_a_value() -> None:
     leaking = [one.name for one in install_plan() if value_leaks_in(one.run)]
 
     assert leaking == ["present the setup code, once"]
-    assert [one.name for one in install_plan() if one.presents_once] == leaking
+    # The vault's unseal pieces are the second declared exception, and the name check cannot see
+    # them: see `test_deployment_installer.py` and `test_vault_setup.py`.
+    assert [one.name for one in install_plan() if one.presents_once] == [
+        "initialise the secrets vault and show its unseal pieces, once",
+        *leaking,
+    ]
 
 
 def test_the_rendered_script_puts_exactly_one_credential_in_front_of_a_person() -> None:
@@ -639,3 +644,16 @@ def test_a_step_is_still_refused_when_it_writes_and_cannot_say_it_is_done() -> N
             on_failure="make the directory writable",
             changes=True,
         )
+
+
+def test_an_apostrophe_in_a_comment_does_not_hide_the_expansions_after_it() -> None:
+    """The step headings are comments and carry prose, and the scanner read the apostrophe in
+    `mint this installation's secrets` as an opening quote until the next one, so every expansion
+    between the two went unread. Found when the vault steps added an odd number of apostrophes and
+    the scanner reported quoted expansions as unquoted. Delete this and the scanner can go back to
+    reading comments, which hides unquoted expansions as readily as it invents them."""
+    assert unquoted_expansions('# the installation\'s secrets\necho "$A"\n', allowed={}) == ()
+    found = unquoted_expansions("# the installation's secrets\necho $A\n", allowed={})
+    assert len(found) == 1
+    assert found[0].startswith("$A ")
+    assert unquoted_expansions('echo "${#A}" "$#"\n', allowed={}) == ()

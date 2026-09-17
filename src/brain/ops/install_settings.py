@@ -44,10 +44,11 @@ calls it, and what is left of the 409 is an install that names no vault. See
 **A saved value reaches the process that saved it and every process started after it, and not
 a sibling worker that is still running.** `A_SAVED_SETTING_IS_NOT_A_MESSAGE_TO_ANOTHER_WORKER`
 carries the argument, which is `brain.ops.provider_keys`' "rotation is a restart" reached from
-the other end. It is stated rather than solved, and it costs
-nothing at the moment that matters: the wizard runs once, on an install nobody but the person
-holding the setup code has an address for, and the finishing screen they land on is served by
-the process that appointed them.
+the other end. It is stated rather than solved, and since 2026-09-17 it is said
+at the moment that matters: the finishing screen is served by the process that appointed, and the
+appointment answers whether other processes serve beside it, so the screen lands on the console
+where it serves alone and asks for a restart where it does not. See
+`brain.setup_routes.A_RESTART_IS_ASKED_FOR_ONLY_WHERE_ANOTHER_PROCESS_SERVES`.
 
 Rejected: writing the environment file from the application. The container has no mount onto
 it, and a process that rewrites its own configuration is a second writer beside the variables

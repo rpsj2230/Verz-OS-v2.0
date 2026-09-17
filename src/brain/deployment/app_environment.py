@@ -39,8 +39,20 @@ without which the setup code's own instant, left blank, stops the application st
 own compose project, so it is external here and exists only where the vault runs, and a base
 file naming it stops every install without one. The overlay requires both variables, because
 composing it in is the choice, and it adds one network and nothing else. `vault_overlay_gaps`
-holds that, and the release's update and rollback scripts compose it when the environment file
-names an address, as they do for the tunnel's token; see `VAULT_CHOICE`.
+holds that, and the installer, the update and the rollback compose it when the environment file
+names an address, as the scripts do for the tunnel's token; see `VAULT_CHOICE`.
+
+**The worker is handed the vault by an overlay of its own, `docker-compose.vault.worker.yml`,
+with a token of its own.** Until 2026-09-17 the worker signed webhook deliveries under the worker
+policy and nothing handed it a vault, so every dispatch run failed naming the two settings. One
+environment file cannot hold two values under `BRAIN_VAULT_TOKEN`, so the worker's token is kept
+as `BRAIN_WORKER_VAULT_TOKEN` and handed to the worker container under the name it reads, which
+is the one place here a key names another variable, and it is argued in
+`THE_WORKER_S_VAULT_CREDENTIAL_IS_KEPT_UNDER_ITS_OWN_NAME`. A second file rather than a second
+service in the first, because the first is composed onto `lite`, whose files declare no worker,
+and an overlay naming a service the profile lacks is a service with no image that stops the
+stack. The worker's line is its own choice, `WORKER_VAULT_CHOICE`, so an install whose vault was
+set up by hand for the application alone updates exactly as it did.
 
 Rejected: `env_file: .env` on the application service. It is one line, and it hands the
 container every line of the file: the database superuser's password, the identity provider's
@@ -61,7 +73,7 @@ which is `brain.deployment.release._compose_rules`' reason for leaving it out of
 The two workers run the same image with an environment of their own and are not checked here;
 whether a job they run reads an `INSTALL_` value is an open question this module does not answer.
 
-Task ids: M41.1.3, M42.5.3, M5.1.2
+Task ids: M41.1.3, M42.5.3, M5.1.2, M42.6.2
 """
 
 from __future__ import annotations
@@ -100,6 +112,19 @@ VAULT_CHOICE: Final = "BRAIN_VAULT_ADDRESS"
 #: The two settings the overlay hands the application, in the order the file writes them.
 VAULT_SETTINGS: Final[tuple[str, ...]] = ("BRAIN_VAULT_ADDRESS", "BRAIN_VAULT_TOKEN")
 
+#: The overlay that hands the general worker a vault, composed only onto a profile that runs one.
+WORKER_VAULT_OVERLAY: Final = "docker-compose.vault.worker.yml"
+
+#: The base file declaring the general worker, by which a profile is known to run one. A test holds
+#: the name to the file that really declares `WORKER_SERVICE`, as the tunnel's overlay rule does.
+WORKER_FILE: Final = "docker-compose.worker.yml"
+
+#: The general worker's service, the one process besides the application that reads the vault.
+WORKER_SERVICE: Final = "brain-worker"
+
+#: The line in the environment file holding the worker's token, which is also its choice.
+WORKER_VAULT_CHOICE: Final = "BRAIN_WORKER_VAULT_TOKEN"
+
 #: `${NAME}`, `${NAME:-default}` or `${NAME:?message}`, as the whole value and nothing else.
 INTERPOLATION: Final = re.compile(r"\A\$\{([A-Z][A-Z0-9_]*)(?:(:[-?])([^}]*))?\}\Z")
 
@@ -119,6 +144,15 @@ AN_UNSET_INSTALLATION_VALUE_MUST_NOT_STOP_THE_STACK: Final = (
     "An install with no issuer starts unready for sign-in, which is how an operator reaches the "
     "status page and the setup wizard to fix it. ${NAME:?} refuses to compose the stack at all "
     "while the value is unset, so the application an operator would fix it from never starts."
+)
+
+#: Why the worker's token is written under a name the worker does not read.
+THE_WORKER_S_VAULT_CREDENTIAL_IS_KEPT_UNDER_ITS_OWN_NAME: Final = (
+    "The application and the worker read the same setting, BRAIN_VAULT_TOKEN, and hold tokens "
+    "minted against different policies. One environment file cannot give that name two values, "
+    "and handing the worker the application's token would give the process nobody watches every "
+    "provider key and every connector lease. So the file keeps the worker's as "
+    "BRAIN_WORKER_VAULT_TOKEN and the worker's overlay hands it over under the name it reads."
 )
 
 #: Why the vault overlay is chosen by a line in the environment file.
@@ -321,6 +355,65 @@ def vault_overlay_gaps(
         found.append(
             f"{VAULT_OVERLAY} does not declare {vault_network!r} as external under that name, "
             "so compose would create a second network the vault is not on"
+        )
+    return tuple(found)
+
+
+def worker_vault_overlays_for(files: tuple[str, ...]) -> tuple[str, ...]:
+    """The worker's vault overlay when these files run a general worker, and nothing otherwise.
+
+    Decided by the file name, because that is what a script's profile arm holds, for the reason
+    `brain.ops.tunnel.overlays_for` gives; a test holds `WORKER_FILE` to the file declaring the
+    worker.
+    """
+    return (WORKER_VAULT_OVERLAY,) if WORKER_FILE in files else ()
+
+
+def worker_vault_overlay_gaps(
+    document: Mapping[str, Any], *, vault_network: str = VAULT_NETWORK
+) -> tuple[str, ...]:
+    """Every way the worker's overlay does more or less than hand the worker its own vault token.
+
+    Empty for the file as written. The worker keeps `default`, which it holds implicitly in its
+    base file: compose replaces an implicit network list with the one an overlay names, so an
+    overlay naming only the vault's network would cut the worker off from its database.
+    """
+    services = document.get("services")
+    if not isinstance(services, Mapping) or set(services) != {WORKER_SERVICE}:
+        return (f"{WORKER_VAULT_OVERLAY} must add to {WORKER_SERVICE!r} and to nothing else",)
+    found: list[str] = []
+    body = services[WORKER_SERVICE]
+    keys = sorted(str(one) for one in body) if isinstance(body, Mapping) else []
+    if keys != ["environment", "networks"]:
+        found.append(
+            f"{WORKER_VAULT_OVERLAY} sets {keys} on {WORKER_SERVICE}, not the two it needs"
+        )
+    environment = environment_of(document, WORKER_SERVICE) or {}
+    wanted = {"BRAIN_VAULT_ADDRESS": VAULT_CHOICE, "BRAIN_VAULT_TOKEN": WORKER_VAULT_CHOICE}
+    if sorted(environment) != sorted(wanted):
+        found.append(f"{WORKER_VAULT_OVERLAY} hands the worker {sorted(environment)}")
+    for key, variable in wanted.items():
+        if required_variable(environment.get(key, "")) != variable:
+            found.append(
+                f"{WORKER_VAULT_OVERLAY} does not hand {key} from ${{{variable}:?message}}. "
+                f"{THE_WORKER_S_VAULT_CREDENTIAL_IS_KEPT_UNDER_ITS_OWN_NAME}"
+            )
+    networks = body.get("networks") if isinstance(body, Mapping) else None
+    joined = sorted(str(one) for one in networks) if isinstance(networks, list | Mapping) else []
+    if joined != sorted(["default", vault_network]):
+        found.append(
+            f"{WORKER_VAULT_OVERLAY} joins {WORKER_SERVICE} to {joined}, and it must join "
+            f"'default' and {vault_network!r}: naming only the vault's loses the database"
+        )
+    declared = document.get("networks")
+    network = declared.get(vault_network) if isinstance(declared, Mapping) else None
+    if not (
+        isinstance(network, Mapping)
+        and network.get("external") is True
+        and network.get("name") == vault_network
+    ):
+        found.append(
+            f"{WORKER_VAULT_OVERLAY} does not declare {vault_network!r} as external under that name"
         )
     return tuple(found)
 

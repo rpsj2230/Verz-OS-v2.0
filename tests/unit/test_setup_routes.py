@@ -841,3 +841,104 @@ def test_a_fresh_install_reaches_a_signed_in_administrator_through_the_routes_al
     assert [str(row[0]) for row in keys] == sorted(key_for(name) for name in carried)
     assert elsewhere == dict(carried)
     assert value_of("INSTALL_COMPANY_NAME", {}) == COMPANY_ANSWERS["company_name"]
+
+
+# ------------------------------------------------------ an install the installer gave a vault
+
+
+class InstalledVault:
+    """An OpenBao reached through the real client's `urlopen`, as the installer leaves one.
+
+    The three kv engines are enabled and empty, and the application's token is the one the
+    installer minted: periodic, renewable, a whole period left. Every request is recorded by method
+    and path, with the token it presented, so a test can say which token asked for what. Standing in
+    at `urlopen` rather than at a client method, so every component the lifespan builds from the
+    two settings, the credential store, the object store and the renewal, talks to it the way it
+    would talk to the vault on the server.
+    """
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+        self.held: dict[str, dict[str, str]] = {}
+        self.asked: list[tuple[str, str, str]] = []
+
+    def urlopen(self, request: Any, timeout: float = 0) -> Any:
+        import io
+        import json as jsonlib
+        import urllib.error
+        from email.message import Message
+
+        method, url = request.get_method(), request.full_url
+        path = url.split("/v1/", 1)[1]
+        presented = request.get_header("X-vault-token") or ""
+        self.asked.append((method, path, presented))
+        if presented != self.token:
+            raise urllib.error.HTTPError(url, 403, "permission denied", Message(), None)
+        answer: dict[str, Any]
+        if path == "auth/token/lookup-self":
+            answer = {"data": {"ttl": 768 * 3600, "period": 768 * 3600, "renewable": True}}
+        elif method == "POST" and "/data/" in path:
+            self.held[path] = dict(jsonlib.loads(request.data)["data"])
+            answer = {"data": {"created_time": "2999-01-01T00:00:00.000000001Z", "version": 1}}
+        elif method == "GET" and path in self.held:
+            answer = {"data": {"data": self.held[path], "metadata": {"version": 1}}}
+        else:
+            raise urllib.error.HTTPError(url, 404, "not found", Message(), None)
+
+        class Answered(io.BytesIO):
+            def __enter__(self) -> Answered:
+                return self
+
+            def __exit__(self, *_: object) -> None:
+                self.close()
+
+        return Answered(jsonlib.dumps(answer).encode())
+
+
+@pytest.mark.parametrize("alone", [True, False], ids=["serving alone", "beside siblings"])
+def test_a_hosted_install_named_the_installers_vault_keeps_the_key_with_no_hand_edit(
+    carried: Mapping[str, str], monkeypatch: pytest.MonkeyPatch, *, alone: bool
+) -> None:
+    """**M42.6.2 and M42.5.14 on a hosted install, from the settings the installer writes.** The
+    process is started with `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN` exactly as the vault
+    step appends them and with no provider key anywhere in its environment; the lifespan builds the
+    credential store from those two settings through the real client; the wizard's key is written
+    to the vault under the application's token and handed to this process; and the finishing
+    screen is told the key is in use and whether anything is left to restart, which is nothing for
+    a process serving alone and a restart beside siblings.
+
+    Delete this and the installer and the wizard can each be right on their own and not meet: an
+    address the credential store cannot use, a token the lifespan never reads, or a finishing
+    screen asking a person serving alone to restart a system that has nothing to restart."""
+    del carried
+    from brain.deployment.vault_setup import APPLICATION_TOKEN, VAULT_ADDRESS
+    from brain.settings import settings_from as settings_read_from
+
+    # Set and then removed, so the key this process is handed is taken away again afterwards:
+    # a removal of a variable that was never set records nothing to put back.
+    monkeypatch.setenv(VARIABLE, "restored-to-unset-afterwards")
+    monkeypatch.delenv(VARIABLE)
+    minted_by_the_installer = "hvs.application-token-the-installer-minted"
+    vault = InstalledVault(minted_by_the_installer)
+    monkeypatch.setattr("urllib.request.urlopen", vault.urlopen)
+    monkeypatch.setattr("brain.setup_routes.serves_alone", lambda: alone)
+    written = settings_read_from(
+        {"BRAIN_VAULT_ADDRESS": VAULT_ADDRESS, APPLICATION_TOKEN[1]: minted_by_the_installer}
+    )
+    store = Store()
+    app = create_app(
+        minted_settings(vault_address=written.vault_address, vault_token=written.vault_token)
+    )
+    with TestClient(app, raise_server_exceptions=False) as c:
+        app.state.first_administrators = store
+        assert app.state.credentials.configured
+        answer = appointing(c, body(answers=HOSTED))
+
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["provider_key"] == ProviderKeyKept.IN_USE
+    assert answer.json()["restart_needed"] is (not alone)
+    assert vault.held == {"providers/data/anthropic": {KEY_FIELD: KEY}}
+    assert {presented for _, _, presented in vault.asked} == {minted_by_the_installer}
+    assert ("GET", "auth/token/lookup-self", minted_by_the_installer) in vault.asked
+    assert len(store.appointed) == 1
+    assert KEY not in answer.text

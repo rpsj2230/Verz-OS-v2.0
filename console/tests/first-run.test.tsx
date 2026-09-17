@@ -42,6 +42,7 @@ import {
   finishBody,
 } from "../src/setup/wizard";
 import {
+  ANSWERS_WAIT_FOR_A_RESTART,
   KEY_KEPT_SENTENCES,
   NOT_CONTINUED_TITLE,
   OPEN_CONSOLE,
@@ -412,17 +413,74 @@ describe("the whole of first run", () => {
     );
     expect(container.querySelector("form")).toBeNull();
   });
-  test.each(["in_use", "outranked", "from_environment"] as const)(
-    "a key kept as %s stops the finish on what the person must know, then opens the console",
-    async (outcome) => {
+  test("a hosted install whose key was kept by the one process serving lands on the console at once", async () => {
+    // What breaks if this is deleted: M42.5.14 on a hosted install. The installer runs the vault, the
+    // key is kept, and the process that appointed is the only one serving, so there is nothing left
+    // for the person to do and a sentence asking for a restart would be a sentence asking for
+    // nothing. The test below is the sibling that still stops, for each case that is not this one.
+    const { idp, seen } = standIn({
+      appointment: () =>
+        json({
+          principal_id: PRINCIPAL,
+          finish_path: FINISH_PATH,
+          provider_key: "in_use",
+          restart_needed: false,
+        }),
+    });
+    const { container, router } = await openFirstRun(idp);
+    await answerEverything(container, true);
+    press(container, "Set up this system");
+
+    await arriveAt(container, "Overview");
+    expect(router.state.location.pathname).toBe("/");
+    expect(callsTo(seen, FINISH_PATH)).toHaveLength(1);
+    expect(container.textContent).not.toContain(KEY_KEPT_SENTENCES.in_use);
+    expect(container.textContent).not.toContain(KEY);
+  });
+
+  test("no key, and other processes serving, stops on the restart the saved answers wait for", async () => {
+    // What breaks if this is deleted: the other half of `restart_needed`. The answers the wizard
+    // saved are held by the process that appointed and by no sibling until it restarts, so a local
+    // install served by several processes has to be told so, key or no key.
+    const { idp } = standIn({
+      appointment: () =>
+        json({
+          principal_id: PRINCIPAL,
+          finish_path: FINISH_PATH,
+          provider_key: "not_asked",
+          restart_needed: true,
+        }),
+    });
+    const { container, router } = await openFirstRun(idp);
+    await answerEverything(container);
+    press(container, "Set up this system");
+
+    await waitFor(() => expect(container.textContent).toContain(ANSWERS_WAIT_FOR_A_RESTART));
+    expect(router.state.location.pathname).toBe(FIRST_RUN_PATH);
+    press(container, OPEN_CONSOLE);
+    await arriveAt(container, "Overview");
+  });
+
+  test.each([
+    ["in_use", true],
+    ["outranked", false],
+    ["from_environment", false],
+  ] as const)(
+    "a key kept as %s with a restart needed %s stops the finish on what the person must know, then opens the console",
+    async (outcome, restart) => {
       // What breaks if this is deleted: the honesty of the finishing screen. A key kept in the vault
       // is in use by one server process at once, or by none while the environment file outranks it,
       // and a person landed straight on the console asks a question that fails with no idea why.
-      // The local install's test above is the sibling that still lands at once.
+      // The hosted install's test above is the sibling that lands at once.
       const writes = vi.spyOn(Storage.prototype, "setItem");
       const { idp, seen } = standIn({
         appointment: () =>
-          json({ principal_id: PRINCIPAL, finish_path: FINISH_PATH, provider_key: outcome }),
+          json({
+            principal_id: PRINCIPAL,
+            finish_path: FINISH_PATH,
+            provider_key: outcome,
+            restart_needed: restart,
+          }),
       });
       const { container, router } = await openFirstRun(idp);
       await answerEverything(container, true);

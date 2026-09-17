@@ -73,6 +73,9 @@ same moment as `BRAIN_SETUP_SECRET` and never change afterwards.
 | `APP_ROLE_PASSWORD` | A new random password. |
 | `BRAIN_SETUP_ISSUED_AT` | The current time in UTC, written when you set the setup code. |
 | `BRAIN_SETUP_SECRET` | A new random value. It is the code the first wizard screen asks for. |
+| `BRAIN_VAULT_ADDRESS` | `http://vault:8200`, once you run the secrets vault beside the stack by hand: `ops/openbao/UNSEAL.md`, under First install by hand. Leave it empty, with both tokens, and the wizard keeps no provider key. |
+| `BRAIN_VAULT_TOKEN` | The application's token, minted on that vault as `ops/openbao/credential-slots.md` says. The vault's pieces stay with people, never in Coolify. |
+| `BRAIN_WORKER_VAULT_TOKEN` | On `standard` or `full`, the worker's token, minted the same way against the worker policy. |
 | `POSTGRES_PASSWORD` | A new random password. Set it once: the database volume keeps the first one. |
 
 **These values arrive with a default, and Coolify keeps the default you first saw.** A later

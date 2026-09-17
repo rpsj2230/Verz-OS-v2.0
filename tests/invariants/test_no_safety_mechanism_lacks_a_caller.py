@@ -110,6 +110,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #: `outbox_dispatch` joined on 2026-09-17 from `KNOWN_ORPHANS`, when `brain.ops.webhook_delivery`
 #: gave `dispatch_due` a sender, a resolver and the worker's reader of signing secrets.
 #:
+#: `vault_token_renewal` joined on 2026-09-17 the day it was registered: the worker's schedule
+#: renews the worker's own vault token, and the application renews its own from its lifespan.
+#:
 #: `canary_run` joined on 2026-09-17 from `KNOWN_ORPHANS`. `brain.ops.canary_run` asks as every
 #: reach the install holds and raises on a finding, so a red run is recorded as failed.
 SCHEDULED_BY_THE_WORKER = frozenset(
@@ -120,6 +123,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "outbox_dispatch",
         "erasure_queue",
         "canary_run",
+        "vault_token_renewal",
     }
 )
 
@@ -153,7 +157,15 @@ SCHEDULED_BY_THE_WORKER = frozenset(
 #: function of a console module does not reach the rest of it, which is
 #: `A_CALLER_IS_REACHED_THROUGH_ITS_FUNCTION_AND_NOT_THROUGH_ITS_MODULE`, and it is why this set
 #: goes down one chain at a time rather than one module at a time.
-CALLERS_NOTHING_REACHES = frozenset({"directory_sync"})
+#:
+#: `vault_token_renewal` joined it on 2026-09-17 and it is the other direction the check says it
+#: errs in: towards reporting. Its application half, `keep_renewing`, is called from
+#: `brain.app.lifespan`, which FastAPI calls because `create_app` hands it over as a value, and a
+#: function reached only as a value is exactly what this check cannot follow. The worker half,
+#: `run_renewal_now`, is reached through `start_control` and is not reported. Recorded rather
+#: than dropped from the symbols, because dropping it would make the application's token a token
+#: the registry says nothing about.
+CALLERS_NOTHING_REACHES = frozenset({"directory_sync", "vault_token_renewal"})
 
 
 def test_every_control_names_functions_that_exist() -> None:
@@ -330,7 +342,7 @@ def test_a_control_that_is_reachable_is_reachable_from_something_reachable() -> 
     found = chains_worth_checking()
 
     assert {one.split(":", 1)[0] for one in found} == CALLERS_NOTHING_REACHES
-    assert CALLERS_NOTHING_REACHES <= WIRED_BUT_NOT_SCHEDULED
+    assert CALLERS_NOTHING_REACHES <= WIRED_BUT_NOT_SCHEDULED | SCHEDULED_BY_THE_WORKER
 
 
 def test_the_handover_pack_says_which_mechanisms_are_not_running() -> None:

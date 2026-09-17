@@ -357,6 +357,10 @@ def test_the_installer_writes_five_values_and_the_register_reads_them_off_the_pl
             "BRAIN_SETUP_SECRET",
             "BRAIN_SETUP_ISSUED_AT",
             "APP_IMAGE",
+            # The vault's address and the two tokens minted on it, since 2026-09-17.
+            "BRAIN_VAULT_ADDRESS",
+            "BRAIN_VAULT_TOKEN",
+            "BRAIN_WORKER_VAULT_TOKEN",
         }
     )
 

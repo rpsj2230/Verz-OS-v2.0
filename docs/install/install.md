@@ -40,7 +40,22 @@ it. Three things it takes on the command line:
 | `--console-address` | the address your reverse proxy will serve the console on | It asks, if you are at a terminal, and blank is a fine answer. Nothing in this deployment publishes a port, so this address is a fact about the proxy in front of the server and the script has no way to discover it. Given none, the last line tells you what the address depends on rather than inventing one. |
 
 There is also `--no-install-docker`, which is the flag for a server where you would rather
-install Docker yourself, and `--help`.
+install Docker yourself, `--no-vault`, and `--help`.
+
+**`--no-vault` is accepted for `lite` alone, and it costs something.** The installer runs the
+secrets vault on every profile, because every credential the console and the setup wizard keep
+lives there and nowhere else. `standard` and `full` cannot decline it: their worker signs every
+webhook delivery with a secret from the vault and their object store's key is read from there.
+A `lite` install whose model needs no key it has to keep may decline it, and then the wizard
+refuses a hosted provider's key unless the environment file already carries it.
+
+**Stay at the terminal for the vault's unseal pieces.** Part way through, the installer
+initialises the secrets vault and prints its unseal key in five pieces, any three of which open
+it. That is the only time they are shown, nothing on the server keeps them, and nothing can show
+them again. Give each to a different person before you press Enter, keep none of them on the
+server, and destroy any recording of the terminal. Three of those people open the vault after
+every restart of its container: [`ops/openbao/UNSEAL.md`](../../ops/openbao/UNSEAL.md) has that,
+and what to do if the install stops part way through this.
 
 **It is safe to run twice.** Every step that writes something can say when it has already been
 done, and a second run prints `already done, skipping` for each one rather than repeating it.
@@ -53,8 +68,10 @@ credentials are minted here".
 all of them at once rather than one per run; installs Docker by the route Docker documents for
 your distribution, or tells you exactly what to install when it does not recognise it; fetches
 one release archive at your tag and unpacks it; writes the environment file from the template;
-pins the image; mints this installation's credentials under `umask 077`; starts the stack;
-waits for it to report ready; and prints your setup code and where to enter it.
+pins the image; mints this installation's credentials under `umask 077`; starts, initialises and
+opens the secrets vault, printing its unseal pieces once, and writes the application's and the
+worker's vault tokens into the environment file; starts the stack; waits for it to report ready;
+and prints your setup code and where to enter it.
 
 The table further down is the middle of that list: it is the install itself, which the script
 and the sequence by hand share exactly, because the script is a printout of that plan rather
@@ -149,6 +166,10 @@ makes an install unpinned. `BRAIN_RELEASE_URL` is where the release archive is f
 | `pin the image this install runs` | Writes `APP_IMAGE` into `/opt/brain/.env` as the published image at the tag you are installing. Every compose file requires that variable and refuses to start without it, so this comes before anything runs compose, and it is what makes the release you unpacked and the image you run the same fact. | The file is rewritten beside itself and moved into place, so a failure leaves it as it was. Check `/opt/brain` is writable and run again. |
 | `create the settings the containers mount` | Copies four settings files out of the release into `/opt/brain/settings`, which is what four containers read at startup: a memory ceiling, an egress allowlist, and the object store's access control and provisioning script. Each is copied only if it is not already there, so anything you have edited survives an update. | Check the release unpacked its `ops` directory into `/opt/brain/ops` and run again. |
 | `mint this installation's secrets` | Generates the database password, the application role password and the setup code with `openssl rand`, under `umask 077`, and appends them with the instant the code was minted. | Install `openssl` and run again. The file is written in one go, so a failure leaves nothing half-minted. |
+| `start the secrets vault` | Starts the vault from `ops/openbao/compose.yml` as its own compose project, so a deploy of the application never restarts and seals it, and waits until it answers. Skipped with `--no-vault` on `lite`. | Read `docker logs brain-vault`. Nothing secret has been made yet, so it is safe to run again. |
+| `initialise the secrets vault and show its unseal pieces, once` | Initialises the vault with five pieces, any three of which open it, and prints the pieces once. They are written nowhere. The root token stays in the running shell for the next step alone. | If no piece was printed, nothing was made: read the vault's logs and run again. If pieces were printed, keep them and finish by hand with `ops/openbao/UNSEAL.md`, under Finishing what the installer began. |
+| `open the secrets vault and give this install its tokens` | Opens the vault with three of the pieces, turns on its two audit devices, enables the `providers`, `webhooks` and `connector_keys` engines, loads the policies, mints the application's token and, on a profile with a worker, the worker's, each with a period of 768 hours, appends them and the vault's address to `/opt/brain/.env`, and revokes the root token. | The root token existed only in the run that initialised the vault, so a later run cannot repeat this. Finish by hand with `ops/openbao/UNSEAL.md`, under Finishing what the installer began. |
+| `compose the secrets vault in` | Adds `docker-compose.vault.yml`, and on a profile with a worker `docker-compose.vault.worker.yml`, to the files every later step composes, because the environment file names the vault and holds the tokens. | It only reads `/opt/brain/.env`. Check it is readable and run again. |
 | `pull the images this profile runs` | Pulls before anything starts, so an unreachable registry fails while the machine is still empty rather than half up. | Check the server can reach the image registry and run again. Pulling an image that is already present does nothing. |
 | `start the database and wait for it` | Starts the database alone and waits until it accepts connections, because the application runs its own migrations at startup and needs a database that is ready rather than one that is starting. | Read the database container's logs. A database that will not start is almost always a volume from a different major version. |
 | `create the databases the compose files do not` | Creates the trace ledger's login and its own database on the database server, if this profile runs a trace ledger. The database server's image creates exactly one database, and the trace ledger connects to a second one; giving it a database and a login of its own means a fault there cannot reach your records. Does nothing on a profile with no trace ledger. | Read the database container's logs. Both statements are guarded by an existence check, so running it again after fixing the cause repeats neither. If it stopped because `LANGFUSE_POSTGRES_PASSWORD` is not set, set it in `/opt/brain/.env` and run again. |
@@ -286,7 +307,9 @@ bodies that disagree, and two services pointed at a database nothing creates.
 | That the script asks for every requirement below, with the reason each is on the list | `test_install_script.py`, against `RUNTIME_REQUIREMENTS` |
 | That every step of the script that writes something can say when it is already done | `test_install_script.py`, by reading the guards |
 | That the script prints exactly one credential, which is the setup code | `test_install_script.py` |
+| That the vault steps enable every engine the client writes to, load every policy file, mint both tokens with the documented period, print the pieces in one step only and revoke the root token | `test_vault_setup.py`, by reading the rendered script |
 | **That the script installs anything, because one has ever been run on a server** | **nobody. There is no Docker on the machine its tests run on.** |
+| **That the vault answers `bao operator init` in the shape the script reads, and opens with pieces piped to it** | **nobody. `ops/openbao/REHEARSAL.md` is the run that would.** |
 | The sizing table | `test_deployment_requirements.py`, against the compose files |
 | The requirements list | `test_deployment_requirements.py` |
 | That the archive carries every file the install reads, and none it must not | `test_deployment_release.py`, and the release workflow refuses to publish without it |

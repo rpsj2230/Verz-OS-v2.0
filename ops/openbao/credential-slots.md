@@ -60,17 +60,23 @@ until an audit asked.
 
 ## Letting the application keep a provider key
 
-Done once on each install that runs a vault, by whoever holds a token that may write policy,
-which during first setup is the root token before `UNSEAL.md` step 6 revokes it. No value in
-these steps belongs to any particular install, and none is written into this repository.
+**The installer does every step of this on a fresh install**, and of the two sections below
+about signing secrets and a connected source's key, since 2026-09-17: see `UNSEAL.md`, under
+First install, which the installer now does for you. These are the same steps by hand, for an
+install made before it did, or a `lite` install run with `--no-vault` that later wants a vault.
+Done once, by whoever holds a token that may write policy, which during first setup is the root
+token before `UNSEAL.md` step 6 revokes it. No value in these steps belongs to any particular
+install, and none is written into this repository.
 
 1. Enable a version 2 kv engine at the prefix the code reads: `bao secrets enable -path=providers kv-v2`.
 2. Load the policies, which now include the provider slots in `application.hcl`:
    `sh ops/openbao/load-policies.sh`.
 3. Mint the application's token against that policy alone, as an orphan with a period, and
    read it once from the terminal: `bao token create -orphan -policy=application -period=768h`.
-   Nothing in the application renews this token yet, so a process that outlives the period is
-   refused by the vault and says so; restarting the application does not renew it either.
+   The application renews it itself while it runs, once less than half the period is left
+   (`brain.ops.vault_renewal`), so it lapses only if no application process runs for longer
+   than the period. A token minted without a period cannot be kept alive that way, and the
+   renewal says so.
 4. Put the vault's address as the application container reaches it, and that token, into the
    install's environment file as `BRAIN_VAULT_ADDRESS` and `BRAIN_VAULT_TOKEN`. With the vault
    run from `ops/openbao/compose.yml` beside the install, the address is `http://`, then the
@@ -89,14 +95,14 @@ these steps belongs to any particular install, and none is written into this rep
 7. Restart the application, and turn on the audit device if it is not on (`enable-audit.sh`),
    because the vault's log is the one record of each write by path until the ledger has one.
 
-**Why step 5 is an overlay and is done by hand once.** The vault's network is created by the
-vault's own compose project, so it exists only on a server that runs the vault, and a base compose
-file naming it would stop every install without one from starting. The overlay is composed only
-where the vault is, as `docker-compose.tunnel.yml` is for the tunnel, and the environment file's
-address is the record that it was chosen. The installer does not compose it, because a vault is
-unsealed, given its policies and asked for a token after the install has finished, never during
-it. `brain.deployment.app_environment` argues the shape and `tests/unit/test_app_environment.py`
-holds the overlay, both scripts and the base files to it.
+**Why step 5 is an overlay.** The vault's network is created by the vault's own compose project,
+so it exists only on a server that runs the vault, and a base compose file naming it would stop
+every install without one from starting. The overlay is composed only where the vault is, as
+`docker-compose.tunnel.yml` is for the tunnel, and the environment file's address is the record
+that it was chosen. The installer composes it in as its own step once it has written that address,
+and the update and rollback read the same line. `brain.deployment.app_environment` argues the
+shape and `tests/unit/test_app_environment.py` holds the overlay, the scripts and the base files
+to it.
 
 **On a deployment panel that keeps its own copy of the compose file**, the scripts never run, so
 step 5 is made in that copy: add the two variables to the `app` service's `environment` exactly as
@@ -142,8 +148,12 @@ To let the application keep them, once per install that runs a vault:
 
 1. Enable a version 2 kv engine at that prefix: `bao secrets enable -path=webhooks kv-v2`.
 2. Load the policies: `sh ops/openbao/load-policies.sh`.
-3. Mint the worker's token against its policy: `bao token create -orphan -policy=worker -period=768h`, and set
-   it as `BRAIN_VAULT_TOKEN` in the worker's environment, with `BRAIN_VAULT_ADDRESS` beside it.
+3. Mint the worker's token against its policy: `bao token create -orphan -policy=worker -period=768h`, and
+   append it to the install's environment file as `BRAIN_WORKER_VAULT_TOKEN`. On `standard` and
+   `full` the installer, the update and the rollback then compose `docker-compose.vault.worker.yml`
+   in, which hands it to the worker as `BRAIN_VAULT_TOKEN` with `BRAIN_VAULT_ADDRESS` beside it
+   and joins the worker to the vault's network. The worker's schedule renews it as
+   `vault_token_renewal`.
 
 ## A connected source's key
 
