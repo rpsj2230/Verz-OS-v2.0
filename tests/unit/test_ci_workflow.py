@@ -87,6 +87,7 @@ def test_the_permission_canaries_run_on_every_push_and_not_only_on_a_laptop() ->
         ("types", "mypy"),
         ("invariants", "pytest tests/invariants"),
         ("unit tests", "pytest --cov"),
+        ("coverage floor", "coverage report"),
     ],
 )
 def test_ci_runs_every_gate(gate: str, command: str) -> None:
@@ -375,6 +376,125 @@ def test_the_console_installs_from_its_lockfile() -> None:
     )
 
 
+# ------------------------------------------------------------------ the unit suite in shards
+#: The job holding the unit suite's shards, and the job enforcing the floor over all of them.
+SHARD_JOB = "tests"
+FLOOR_JOB = "coverage"
+
+
+def _live_lines(step: dict[Any, Any]) -> list[str]:
+    """A step's `run:` as the shell would execute it, comment lines removed."""
+    return [
+        line.strip()
+        for line in str(step.get("run", "")).splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
+def _shard_step() -> tuple[int, dict[Any, Any]]:
+    """The one step in the shard job that runs pytest, and where it sits."""
+    steps = _job(SHARD_JOB)["steps"]
+    found = [
+        (index, step)
+        for index, step in enumerate(steps)
+        if any(line.split()[:3] == ["uv", "run", "pytest"] for line in _live_lines(step))
+    ]
+    assert len(found) == 1, f"expected one pytest step in the shard job, found {len(found)}"
+    return found[0]
+
+
+def test_the_unit_suite_runs_as_shards_that_between_them_run_every_test_file() -> None:
+    """**The unit job was split on 2026-09-17, and a split is the easiest place in CI to lose
+    a test without a red check.** So the matrix, the command and the helper are held together:
+    the matrix counts shards from one with no gap, the step asks `brain.ops.test_shards` for
+    its own shard out of the matrix's own total and hands the answer to pytest, and the shards
+    that matrix produces cover every file pytest would collect, each exactly once.
+
+    Delete this and the matrix can lose a shard, or the step can pass a literal count that no
+    longer matches it, and a quarter of the suite stops running with every job green."""
+    from brain.ops.test_shards import collected, shard
+
+    job = _job(SHARD_JOB)
+    numbers = job["strategy"]["matrix"]["shard"]
+    _, step = _shard_step()
+    lines = _live_lines(step)
+    asked = [line for line in lines if "brain.ops.test_shards" in line]
+
+    assert numbers == list(range(1, len(numbers) + 1)) and len(numbers) > 1
+    # `strategy.job-total` counts every combination, so it is the shard count only while the
+    # shard is the matrix's one dimension.
+    assert set(job["strategy"]["matrix"]) == {"shard"}
+    assert len(asked) == 1
+    assert asked[0].startswith("files=$(uv run python -m brain.ops.test_shards ")
+    assert "--shard ${{ matrix.shard }} --of ${{ strategy.job-total }}" in asked[0]
+    assert '[ -n "$files" ]' in "\n".join(lines), "an empty shard would run the whole suite"
+    assert lines[-1].split()[:4] == ["uv", "run", "pytest", "--cov"]
+    assert lines[-1].endswith(" $files")
+
+    listed = [name for number in numbers for name in shard(number, len(numbers))]
+    assert sorted(listed) == sorted(collected())
+
+
+def test_every_shard_has_a_database_of_its_own() -> None:
+    """Services belong to a job, and a matrix job gives each shard its own copy, so the matrix
+    and the database are asserted on the same job. The suite writes to that database, and the
+    migration round trip after it reads what the suite left.
+
+    Delete this and the database can move to a job that is not the matrix, and three shards
+    run their database tests against nothing: `needs_db` tests skip rather than fail."""
+    job = _job(SHARD_JOB)
+
+    assert "matrix" in job["strategy"]
+    assert "pgvector" in str(job["services"]["postgres"]["image"])
+    assert "localhost:5432" in str(job["env"]["DATABASE_URL"])
+
+
+def test_every_shard_keeps_its_coverage_data_under_a_name_of_its_own() -> None:
+    """A shard runs a fraction of the suite, so it records coverage and does not judge it:
+    `--cov-fail-under=0` stops the floor from failing a quarter of the suite for covering a
+    quarter of the code. What it must do instead is keep the data, under a name no other
+    shard shares, after the tests that wrote it.
+
+    Delete this and two shards can write one artifact name, so the floor is enforced over
+    whichever shard uploaded last, which is a floor over a quarter of the suite that reads
+    as a floor over all of it."""
+    job = _job(SHARD_JOB)
+    index, step = _shard_step()
+    uploads = [
+        (position, one)
+        for position, one in enumerate(job["steps"])
+        if str(one.get("uses", "")).startswith("actions/upload-artifact")
+    ]
+
+    assert "${{ matrix.shard }}" in str(job["env"]["COVERAGE_FILE"])
+    assert "--cov-fail-under=0" in _live_lines(step)[-1].split()
+    assert len(uploads) == 1
+    position, upload = uploads[0]
+    assert position > index, "the data is uploaded before the tests that write it have run"
+    assert upload["with"]["path"] == "${{ env.COVERAGE_FILE }}"
+    assert "${{ matrix.shard }}" in str(upload["with"]["name"])
+    assert upload["with"]["if-no-files-found"] == "error"
+
+
+def test_the_floor_job_keeps_the_name_the_unit_job_had_and_cannot_pass_by_being_skipped() -> None:
+    """A required check is matched by name, so the job that judges the suite carries the name
+    the single job had. And a job skipped because what it needs failed reports as passing a
+    required check, so the floor job runs whatever the shards did and fails itself when any of
+    them failed.
+
+    Delete this and the floor can become a job that is skipped on a red shard, and a required
+    "Unit tests and coverage" check goes green on the run where the tests failed."""
+    job = _job(FLOOR_JOB)
+    first = job["steps"][0]
+
+    assert job["name"] == "Unit tests and coverage"
+    assert SHARD_JOB in ([job["needs"]] if isinstance(job["needs"], str) else job["needs"])
+    assert job["if"] == "${{ !cancelled() }}"
+    assert first["env"]["SHARDS"] == "${{ needs.tests.result }}"
+    assert '[ "$SHARDS" = "success" ]' in _live_lines(first)[0]
+    assert "exit 1" in _live_lines(first)[0]
+
+
 def test_the_unit_suite_can_build_the_automation_piece_it_tests() -> None:
     """`test_automation_piece_package.py` compiles the piece and loads it, and on a runner it
     fails rather than skipping when it cannot. So the job that runs the unit suite sets up a
@@ -383,10 +503,10 @@ def test_the_unit_suite_can_build_the_automation_piece_it_tests() -> None:
     Delete this and either step can go. The unit job then turns red, and the tempting repair is
     to let that test skip in CI, which puts the piece back to never having been built with a
     green tick over it."""
-    steps = _job("tests").get("steps", [])
+    steps = _job(SHARD_JOB).get("steps", [])
     node = [step for step in steps if str(step.get("uses", "")).startswith("actions/setup-node")]
     installs = [step for step in steps if step.get("working-directory") == "ops/automation/piece"]
-    suite = next(i for i, step in enumerate(steps) if "pytest" in str(step.get("run", "")))
+    suite, _ = _shard_step()
 
     assert len(node) == 1
     assert int(str(node[0]["with"]["node-version"]).split(".")[0]) >= 22
