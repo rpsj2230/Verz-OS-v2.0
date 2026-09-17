@@ -160,7 +160,8 @@
     "M1.8.6",
     "M1.8.7",
     "M1.8.8",
-    "M1.8.9"
+    "M1.8.9",
+    "M1.9.1"
    ],
    "leaf_texts": [
     "Realm setup script and exported realm config in the repo",
@@ -212,7 +213,8 @@
     "The staff source credential given at setup is kept in the vault for the scheduled sync and replaced from the console, and a sync whose credential is refused changes nobody and says so on the staff sources screen",
     "Appointing one person as both Super Admin and Connector Admin shows a separation-of-duties warning that must be acknowledged with a reason, and the acknowledgement is recorded in the audit trail",
     "Every permissions requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
-    "When the staff sync marks a person as a leaver, every agent they own is listed for transfer on the console and keeps running at no wider reach than before until a new owner accepts it"
+    "When the staff sync marks a person as a leaver, every agent they own is listed for transfer on the console and keeps running at no wider reach than before until a new owner accepts it",
+    "A record's access view, showing who can see that record, opens only for someone who can already see it"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -454,7 +456,10 @@
     "M5.6.2",
     "M5.6.3",
     "M5.6.4",
-    "M5.6.5"
+    "M5.6.5",
+    "M5.7.1",
+    "M5.7.2",
+    "M5.7.3"
    ],
    "leaf_texts": [
     "LiteLLM SDK integration as a driver only, never as a proxy",
@@ -480,11 +485,14 @@
     "Chain skips non-compliant rungs rather than degrading silently",
     "Provider residency registry with documented storage location",
     "Refusal path when no compliant rung exists",
-    "An install on the local-only profile answers a question end to end while outbound traffic to every external model provider is blocked, with the check recorded",
+    "An install answers a question end to end through each online provider an administrator switched on (OpenAI, Anthropic, Moonshot and DeepSeek), with the check recorded",
     "A change to the routing matrix is run against the golden questions and permission canaries through the gate before it takes traffic, and a regression holds the change with the failing cases shown",
     "Model routing is proved on an install: a provider is made to fail and the chain falls back on the closed set only while the breaker opens and recovers, a residency-restricted request skips non-compliant models or is refused, a content refusal is not tried on another model, an agent's tier and the company's own keys are used, and every attempt is visible in the trace, with the checks recorded",
     "Each provider registered on the install carries its processing region, retention and training terms and a link to the signed agreement, the console lists what categories of data each has been sent with counts, and that record exports as one document the company can show",
-    "Every models requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
+    "Every models requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "OpenAI, Anthropic, Moonshot and DeepSeek are each a model provider an administrator switches on from the console with a key, and each answers on the install through the routing ladder",
+    "Another provider with an OpenAI-compatible interface is added from the console with only its address, key and model names, with no release",
+    "An agent uses a model level by default, and an administrator may pin a specific provider and model for it, tried first with the level's fallback behind it"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -683,13 +691,13 @@
     "Document citations deep-linking to the passage",
     "Freshness and staleness state on every citation",
     "Citation assembled from the tool trace, never from the model",
-    "Four distinct states: nothing retrieved, retrieved but not answering, nothing connected, not entitled",
+    "Four states kept apart: nothing retrieved, retrieved but not answering and nothing connected are said to the asker, and not entitled reads to the asker as nothing retrieved and is shown only in an administrator's trace",
     "Scope statement naming what was searched",
     "Not-entitled path indistinguishable from nothing-found",
     "Refusal when no citation exists, configurable per agent",
     "Escalation as an authored step in a skill, not a model judgement",
     "Handoff payload: who asked, what, what was tried, what is needed",
-    "Notice of a pending approval reaches the approver in their own channel, and the decision itself is taken only in the console or on a Lark card",
+    "Notice of a pending approval reaches the approver in their own channel, and the decision itself is taken only in the console, the staff web application or on a Lark card",
     "Timeout and expiry behaviour on every escalation",
     "Takeover signal fed to the circuit breaker",
     "Escalation and sensitive topics are proved on an install: an escalated question reaches the named person in their own channel with who asked, what, what was tried and what is needed and times out as configured, and a question about HR, harassment, whistleblowing, salary, medical or legal matters is intercepted and routed before any agent answers without its content being recorded, with the checks recorded"
@@ -810,7 +818,7 @@
     "Every channel adapter delivers its planned message through the vendor's API using a credential held outside configuration, and a delivery the vendor refused is recorded as refused and never as sent",
     "A WhatsApp webhook is accepted only when its signature matches the app secret over the exact bytes received, and an unsigned or altered request is refused before it is read",
     "Each channel is configured on the install as its own record holding its tenant identifiers, secret slot and on or off state, and switching one off stops both receiving and sending on it without touching any other channel",
-    "An approval is decided only in the console or on a Lark card; a reply on WhatsApp, email or any other channel never decides one, and the approver is told where to decide it",
+    "An approval is decided only in the console, the staff web application or on a Lark card; a reply on WhatsApp, email or any other channel never decides one, and the approver is told where to decide it",
     "An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public",
     "Every shipped channel is proved on an install: on each chat channel, by email, through the REST API and in the web application a bound person asks and gets a permission-correct answer through that channel's own credential with progress streamed, a sender bound to nobody learns nothing about the company, a message whose signature does not verify is refused unread, a platform retry produces one answer, a waiting approval notice reaches the person it names, the conversation continues on a second channel, and an agent not enabled on a channel refuses there, with the checks recorded",
     "Group chat and channel policy are proved on an install: in one group chat people with different reach see a shared message at the floor of everyone present and each receives their own body privately or as a link where the gate re-runs, a channel whose policy excludes a sensitivity class refuses to carry it, and an approval card is offered only where approvals are allowed, with the checks recorded",
@@ -885,7 +893,21 @@
     "M11.8.10",
     "M11.8.11",
     "M11.8.12",
-    "M11.8.13"
+    "M11.8.13",
+    "M11.9.1",
+    "M11.9.2",
+    "M11.9.3",
+    "M11.9.4",
+    "M11.9.5",
+    "M11.9.6",
+    "M11.9.7",
+    "M11.9.8",
+    "M11.9.9",
+    "M11.9.10",
+    "M11.9.11",
+    "M11.9.12",
+    "M11.9.13",
+    "M11.9.14"
    ],
    "leaf_texts": [
     "Connector interface: capabilities, tools, health, credential binding",
@@ -947,7 +969,21 @@
     "A connector write is proved on an install: a write that was off is turned on by an administrator, the agent prepares a reply to a ticket, a person approves it, it runs once at the requester's reach and is reported done only after it is read back from the source, and a signed outbound event is delivered to a receiving system with a retry after a refused first attempt, with the checks recorded",
     "A record the source has deleted is detected by the sync, withheld from answers from the next completed read and recorded with when it was noticed, and a record the source later returns is served again without reviving the retired row",
     "The ticket desk connector can post a reply to a ticket as a prepared action, sent only after a person approves it and reported done only after it is read back from the ticket desk, as the first connector write of the first complete maintenance agent",
-    "Every connectors requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
+    "Every connectors requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A connector keeps only a minimal index of a source (identifiers, display names and the few fields needed to find a record), never a copy of business values, and a test fails if the projection holds a field outside that minimal set",
+    "Every value an answer or an agent uses from a connected source is read live from the source at that moment, at the asker's reach",
+    "Google Drive, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Lark, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Slack, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Freshdesk, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Xero, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "The CRM, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "The maintenance portal, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "The domain and hosting connector, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Cloudflare, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Google Workspace, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Google Analytics, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it",
+    "Search Console, once connected from the console, is ready to use with no server step: a permitted person's question is answered from it on the install and an agent bound to it can use it"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1141,7 +1177,11 @@
     "M13.8.16",
     "M13.8.17",
     "M13.8.18",
-    "M13.8.19"
+    "M13.8.19",
+    "M13.9.1",
+    "M13.9.2",
+    "M13.9.3",
+    "M13.9.4"
    ],
    "leaf_texts": [
     "agent table: persona, scope, model tier, visibility level",
@@ -1224,7 +1264,11 @@
     "An agent's audience can list named people and several departments, and adding one lets them find the agent without widening what any run reaches.",
     "The manifest has a settable overview path, older signed templates still verify under their own schema version, and no model prompt includes the overview.",
     "On an install with no vault the template catalogue says installing is unavailable and no signing key is stored anywhere else.",
-    "An agent's audience can name several departments and individual people beside its level, and each added person or department gains discovery only, never reach"
+    "An agent's audience can name several departments and individual people beside its level, and each added person or department gains discovery only, never reach",
+    "A super admin creates an agent for the whole company from the console, from a template or from scratch, and in one flow sets its workflow, skills, tools, connectors, knowledge, channels, memory access and which actions need approval",
+    "A department admin creates an agent for their own department in the same flow, and can choose only the skills, tools, connectors and knowledge their department holds",
+    "On the install a super admin and a department admin each create an agent from their requirements and a workflow, assign its skills and tools, and the agent answers through its channel, with the checks recorded",
+    "A template agent installs with one click using sensible defaults, and the full setup wizard stays available for anyone who wants to change them"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1673,7 +1717,8 @@
     "M18.5.2",
     "M18.5.3",
     "M18.6.1",
-    "M18.6.2"
+    "M18.6.2",
+    "M18.7.1"
    ],
    "leaf_texts": [
     "Planner proposing subtasks and data dependencies",
@@ -1696,7 +1741,8 @@
     "A specialist agent handed a subtask reads through its own knowledge, skills and connectors within the asker's reach, and the coordinator receives only the specialist's schema-checked result",
     "A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal checks before any child runs",
     "A request to analyse a client's website and prepare an improvement proposal runs on the install as a coordinating agent handing website, search data, competitor and services and pricing subtasks to specialist agents along administrator-set links, in parallel where independent, each at the asker's reach intersected with its own ceiling, and merging their checked results into one proposal whose single trace shows each child's reach, result, cost and the fan-out verdict, with the checks recorded",
-    "An agent spawns parallel subtasks or workers only when fan-out is enabled on it by its department admin, and a run of an agent without it runs as a single loop with the reason recorded"
+    "An agent spawns parallel subtasks or workers only when fan-out is enabled on it by its department admin, and a run of an agent without it runs as a single loop with the reason recorded",
+    "The cost check may run a coordinator's specialist agents one after another, but never replaces a specialist's work with the coordinator's own"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
