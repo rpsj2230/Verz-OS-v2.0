@@ -34,6 +34,20 @@ export function realm(): Realm {
 }
 
 /**
+ * Keycloak's own self-service clients, which every realm has whether or not the file names them.
+ *
+ * Their ids are Keycloak's constants (`Constants.ACCOUNT_MANAGEMENT_CLIENT_ID` and
+ * `ACCOUNT_CONSOLE_CLIENT_ID`), not choices of this product. The realm export declares them
+ * because an import that declares client scopes gives the Account Console no roles mapper, so
+ * it refused every person with 403 until the file carried one (measured on staging,
+ * 2026-09-17). Both are public standard-flow clients by Keycloak's design, and counting them
+ * as the console's would make every test below fail for a client the console never uses.
+ * They are excluded by their fixed ids, and nothing else is: a third public client of the
+ * product's own still makes `browserClient` refuse.
+ */
+export const KEYCLOAKS_OWN_ACCOUNT_CLIENTS: readonly string[] = ["account", "account-console"];
+
+/**
  * The one browser client, found by what makes it one rather than by name.
  *
  * Looking it up by `brain-console` would mean the client id was compared with itself, and
@@ -41,7 +55,10 @@ export function realm(): Realm {
  */
 export function browserClient(): RealmClient {
   const candidates = (realm().clients ?? []).filter(
-    (client) => client.publicClient === true && client.standardFlowEnabled === true,
+    (client) =>
+      client.publicClient === true &&
+      client.standardFlowEnabled === true &&
+      !KEYCLOAKS_OWN_ACCOUNT_CLIENTS.includes(client.clientId),
   );
   if (candidates.length !== 1) {
     throw new Error(

@@ -26,7 +26,7 @@ import {
   RESPONSE_TYPE,
   SIGNED_OUT_PATH,
 } from "../src/auth/constants";
-import { browserClient, pathOf, realm } from "./support/realm";
+import { KEYCLOAKS_OWN_ACCOUNT_CLIENTS, browserClient, pathOf, realm } from "./support/realm";
 
 describe("the console's sign-in constants", () => {
   test("the client id is the realm's own browser client", () => {
@@ -36,6 +36,20 @@ describe("the console's sign-in constants", () => {
     // implicit flow or a direct grant enabled, because the browser is not the thing being
     // protected. Compared against the realm rather than against itself.
     expect(KEYCLOAK_CLIENT_ID).toBe(browserClient().clientId);
+  });
+
+  test("the only public clients set aside are Keycloak's own account clients", () => {
+    // What breaks if this is deleted: the list of clients `browserClient` sets aside can
+    // grow to take in a second public client of the product's own, and the refusal that a
+    // second browser client is a decision goes quiet. Every public standard-flow client
+    // other than the console's must be one Keycloak itself creates, and the console's must
+    // not be one of them.
+    const others = (realm().clients ?? [])
+      .filter((client) => client.publicClient === true && client.standardFlowEnabled === true)
+      .map((client) => client.clientId)
+      .filter((clientId) => clientId !== browserClient().clientId);
+    expect([...others].sort()).toEqual([...KEYCLOAKS_OWN_ACCOUNT_CLIENTS].sort());
+    expect(KEYCLOAKS_OWN_ACCOUNT_CLIENTS).not.toContain(KEYCLOAK_CLIENT_ID);
   });
 
   test("the callback path is the one the realm has registered", () => {
