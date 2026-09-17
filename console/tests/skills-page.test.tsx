@@ -458,7 +458,12 @@ describe("what a skill is trusted to reach, and deciding about it", () => {
     expect(sent.filter((one) => one.method === "POST").map((one) => one.body)).toEqual([
       { decision: "approve" },
     ]);
-    expect(() => button(container, APPROVE)).toThrow();
+    // Waited for rather than asserted at once: the page reads the skill again after the POST,
+    // and until that answer is drawn the button from the pending state is still on screen. On a
+    // loaded CI runner that gap was long enough to fail this line (ece82dc), with nothing wrong.
+    await waitFor(() => {
+      expect(() => button(container, APPROVE)).toThrow();
+    });
   });
 });
 
