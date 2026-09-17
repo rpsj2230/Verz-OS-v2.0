@@ -718,6 +718,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         channel: "web",
         ent_hash: "f".repeat(64),
       },
+      // The install card: the four parts `brain.readiness` always names, at the API's root.
+      "/health/ready": {
+        status: "ok",
+        commit: UNBROKEN,
+        checks: { database: true },
+        reported: { sign_in: true },
+        parts: [
+          { name: "database", state: "ready", gates: true },
+          { name: "cache", state: "not_configured", gates: false },
+          { name: "vault", state: "not_configured", gates: false },
+          { name: "sign_in", state: "ready", gates: false },
+        ],
+      },
     },
   },
   // Department, SCREEN 2's overview, mounted as a department admin would open it: the stand-in API

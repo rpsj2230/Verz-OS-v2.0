@@ -63,6 +63,15 @@ class Entity(BaseModel):
     id: str = Field(min_length=1, max_length=128)
 
 
+#: Why `TypedResult`'s records are bound to `Entity`. Asserted by `tests/unit/test_envelope.py`.
+A_RECORD_IN_THE_ENVELOPE_CARRIES_ITS_TAG = (
+    "Every record a tool returns is an Entity, with an entity tag and an id, because the "
+    "redactor decides each field by asking whether the caller holds read:<entity>.<field>. "
+    "An untagged record would leave it two choices, pass the record through unchecked or drop "
+    "it whole, and the envelope's type parameter is where that is refused before anything runs."
+)
+
+
 class Redaction(BaseModel):
     """A field that was removed, and why. Retained so traces can show the shape of an
     answer without showing its contents."""
@@ -75,8 +84,13 @@ class Redaction(BaseModel):
     reason: str = "no grant"
 
 
-class TypedResult[T: BaseModel](BaseModel):
+class TypedResult[T: Entity](BaseModel):
     """What every tool returns.
+
+    **Bound to `Entity`, not `BaseModel`.** A record without the tag and the id gives the
+    redactor no `read:<entity>.<field>` to ask about, which is the whole reason this envelope
+    exists; bound to `BaseModel`, a tool could wrap an untagged model and mypy would say nothing.
+    See `A_RECORD_IN_THE_ENVELOPE_CARRIES_ITS_TAG`.
 
     `redactions` is populated by the redactor, not by the tool. A tool never decides what
     a caller may see; it returns everything it fetched and the gate removes what is not

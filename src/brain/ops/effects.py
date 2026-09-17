@@ -314,6 +314,7 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         # A process's own vault token: its standing is a read, and a second renewal inside the
         # period sets the token to the same full period the first did.
         "brain.ops.vault_renewal:SelfRenewing.token_standing": Repeat.READS,
+        "brain.readiness:TokenLookup.token_standing": Repeat.READS,
         "brain.ops.vault_renewal:SelfRenewing.renew_self": Repeat.SAME_RESULT_WHEN_REPEATED,
         # The Webhooks screen. Each write is this system's own rows in one transaction; the vault
         # write inside a registration or a rotation goes through `CredentialVault.write_static_kv`,

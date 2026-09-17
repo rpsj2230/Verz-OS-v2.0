@@ -137,6 +137,12 @@ class Settings(BaseSettings):
     valkey_url: str = Field(
         default="", validation_alias=AliasChoices("BRAIN_VALKEY_URL", "VALKEY_URL")
     )
+    #: The login migrations run as, which owns the schema. Empty, migrations run through
+    #: `database_url` as they always have. Set, `database_url` can name `brain_app` itself, so no
+    #: request transaction can `RESET ROLE` back to an owner. Under the prefixed name only, for the
+    #: reason `read_replica_url` gives. See
+    #: `brain.session.A_REQUEST_TRANSACTION_CAN_RESET_ITS_ROLE_TO_THE_LOGIN`.
+    migration_database_url: str = Field(default="", repr=False)
     #: A streaming replica of `database_url`, for console pages that only display. Empty, the
     #: default, means every console read is answered by the primary exactly as before. Under
     #: the prefixed name only: unlike the two above, no other tool has a universal name for
@@ -192,8 +198,12 @@ class Settings(BaseSettings):
     #: record ids collide by coincidence of integers, so this carries a real default rather
     #: than an empty string that would fail startup on a fresh install.
     tool_source: str = "local"
-    #: The console and the widget only. Not a wildcard, in any environment.
+    #: The console's origin, when the console is served from a host other than the API's. Empty
+    #: on a normal install, which serves both from one origin. Not a wildcard, in any environment.
     cors_origins: tuple[str, ...] = ()
+    #: The sites that embed the widget. With `cors_origins`, the only origins CORS admits: see
+    #: `brain.app.CORS_ADMITS_THE_CONSOLE_AND_THE_WIDGET_AND_NOTHING_ELSE`.
+    widget_origins: tuple[str, ...] = ()
     #: Off in tests, on everywhere else. A deployment that wants migrations applied
     #: by hand sets this false and runs `alembic upgrade head` itself.
     run_migrations: bool = True

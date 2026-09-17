@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -40,6 +41,7 @@ from brain.app import (
     ROW_SECURITY_CHECK,
     SIGN_IN_CHECK,
     SIGN_IN_IS_REPORTED_AND_DOES_NOT_GATE_READINESS,
+    VAULT_CHECK,
     Settings,
     create_app,
 )
@@ -61,7 +63,13 @@ from brain.identity.principal_directory import StoredDirectory
 from brain.identity.principal_store import StoredPrincipals
 from brain.identity.sign_in_binding import Binding, SignInBindings, sign_in_bindings
 from brain.ops.automation_owner_store import StoredAutomations
+from brain.ops.credentials import Credentials
 from brain.ops.replica_store import console_reads_for
+from brain.readiness import (
+    DISCOVERY_PATH,
+    SIGN_IN_IS_TRUE_ONLY_WHILE_THE_ISSUER_ANSWERS_AS_ITSELF,
+    PartState,
+)
 from brain.session import (
     APPLICATION_ROLE,
     SET_APPLICATION_ROLE,
@@ -99,8 +107,12 @@ class Realm:
     def __init__(self) -> None:
         self.idp = Idp()
         self.answering = True
+        #: The realm this identity provider serves, and the issuer its discovery document names.
+        self.serves = ISSUER
+        self.names = ISSUER
         self.clients: list[httpx.Client] = []
         self.fetched_on_the_loop: list[bool] = []
+        self.discovered_on_the_loop: list[bool] = []
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         try:
@@ -108,11 +120,17 @@ class Realm:
             on_loop = True
         except RuntimeError:
             on_loop = False
-        self.fetched_on_the_loop.append(on_loop)
+        url = str(request.url)
+        discovery = url.endswith(DISCOVERY_PATH)
+        (self.discovered_on_the_loop if discovery else self.fetched_on_the_loop).append(on_loop)
         if not self.answering:
             msg = "the realm is still importing"
             raise httpx.ConnectError(msg, request=request)
-        return httpx.Response(200, content=self.idp.get(str(request.url)))
+        if not url.startswith(f"{self.serves}/"):
+            return httpx.Response(404, content=b"no such realm")
+        if discovery:
+            return httpx.Response(200, content=json.dumps({"issuer": self.names}).encode())
+        return httpx.Response(200, content=self.idp.get(url))
 
     def client(self) -> httpx.Client:
         made = httpx.Client(transport=httpx.MockTransport(self.handle))
@@ -214,6 +232,7 @@ def test_the_realms_keys_are_fetched_off_the_event_loop_at_startup(realm: Realm)
         pass
 
     assert realm.fetched_on_the_loop == [False]
+    assert realm.discovered_on_the_loop == [False]
 
 
 def test_without_a_database_there_is_no_wiring_and_readiness_says_the_database_is_missing(
@@ -266,7 +285,7 @@ def test_an_install_that_cannot_check_a_sign_in_refuses_it_and_stays_ready_for_e
         bindings = app.state.sign_in_bindings
 
     assert (gate, automation, bindings) == (None, None, None)
-    assert ready.json()["reported"] == {SIGN_IN_CHECK: False}
+    assert ready.json()["reported"][SIGN_IN_CHECK] is False
     assert SIGN_IN_CHECK not in ready.json()["checks"]
     assert refused.status_code == 401
     assert live.status_code == 200
@@ -371,6 +390,178 @@ def test_a_configured_cache_that_does_not_answer_fails_readiness(
     assert response.status_code == 503
     assert response.json()["checks"][CACHE_CHECK] is False
     del realm
+
+
+# ------------------------------------------------------------------ the parts readiness names
+
+
+async def _answers(*_args: object) -> bool:
+    return True
+
+
+def reachable_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every database probe answers as a reachable, correctly bound database would, so what a test
+    reads off readiness is decided by the part under test and not by the unanswered address."""
+    monkeypatch.setattr("brain.app.check_reachable", _answers)
+    monkeypatch.setattr("brain.app.check_row_security", _answers)
+    monkeypatch.setattr("brain.app.check_login_row_security", _answers)
+
+
+def part(body: dict[str, object], name: str) -> dict[str, object]:
+    parts = body["parts"]
+    assert isinstance(parts, list)
+    [found] = [one for one in parts if one["name"] == name]
+    return dict(found)
+
+
+def test_a_wrong_issuer_leaves_the_site_up_refuses_sign_in_and_names_sign_in_not_ready(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm
+) -> None:
+    """M31.4.1 as the owner reads it. The install names an issuer the identity provider does not
+    serve, and a person presents a token the real realm signed. Liveness and readiness both answer
+    200, the token is refused, and sign_in is a part that is not ready and does not gate. Delete
+    this and a wrong issuer can take the site down with it, or be reported ready because the
+    process started, and nothing else here configures an issuer that is present and wrong."""
+    monkeypatch.setenv("INSTALL_OIDC_ISSUER", "https://id.example.com/realms/not-this-one")
+    reachable_database(monkeypatch)
+    app = wired_app()
+    with TestClient(app) as c:
+        live = c.get("/health/live")
+        ready = c.get("/health/ready")
+        refused = c.get(f"{API_PREFIX}/me", headers=signed_for("s-anyone"))
+
+    assert (live.status_code, ready.status_code) == (200, 200)
+    assert ready.json()["status"] == "ok"
+    assert part(ready.json(), SIGN_IN_CHECK) == {
+        "name": SIGN_IN_CHECK,
+        "state": PartState.NOT_READY,
+        "gates": False,
+    }
+    assert refused.status_code == 401
+    assert "some other issuer" in SIGN_IN_IS_TRUE_ONLY_WHILE_THE_ISSUER_ANSWERS_AS_ITSELF
+
+
+def test_an_issuer_whose_keys_load_and_whose_discovery_names_another_issuer_is_not_ready(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm
+) -> None:
+    """The key set alone was the old test for sign_in, and it passes for an address that serves
+    keys and describes itself as some other issuer. Delete this and `issuer_answers` can stop
+    comparing the name, which every other test here would still pass."""
+    reachable_database(monkeypatch)
+    realm.names = "https://id.example.com/realms/somebody-else"
+    with TestClient(wired_app()) as c:
+        body = c.get("/health/ready").json()
+
+    assert realm.idp.urls == [jwks_url_for(ISSUER)]
+    assert body["reported"][SIGN_IN_CHECK] is False
+
+
+def test_sign_in_turns_not_ready_when_the_issuer_stops_answering_with_nobody_restarting(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm
+) -> None:
+    """ "True only when the configured issuer answers": ready once it answers, not ready once it
+    stops, while the process runs. Delete this and the watcher can return after the first success,
+    which is what it did until 2026-09-17, and sign_in is ready for ever after one good minute."""
+    monkeypatch.setattr("brain.app.KEY_PRIMING_FIRST_RETRY_SECONDS", 0.02)
+    monkeypatch.setattr("brain.app.KEY_PRIMING_MAX_RETRY_SECONDS", 0.02)
+    reachable_database(monkeypatch)
+    app = wired_app()
+    with TestClient(app) as c:
+        before = c.get("/health/ready").json()["reported"][SIGN_IN_CHECK]
+        realm.answering = False
+        deadline = time.monotonic() + 10
+        after = True
+        while time.monotonic() < deadline and after:
+            after = c.get("/health/ready").json()["reported"][SIGN_IN_CHECK]
+            time.sleep(0.02)
+        status = c.get("/health/ready").status_code
+
+    assert (before, after, status) == (True, False, 200)
+
+
+def test_readiness_always_names_database_cache_vault_and_sign_in_in_that_order(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm
+) -> None:
+    """The four parts the owner looks for on the Overview, present whatever is configured, and an
+    unconfigured cache and vault named rather than omitted and deciding nothing. Delete this and a
+    part can drop out of the answer, and the console shows three lines where a person expects four
+    with nothing saying which is missing."""
+    reachable_database(monkeypatch)
+    with TestClient(wired_app()) as c:
+        response = c.get("/health/ready")
+
+    parts = response.json()["parts"]
+    assert [one["name"] for one in parts[:4]] == ["database", CACHE_CHECK, VAULT_CHECK, "sign_in"]
+    assert part(response.json(), "database") == {
+        "name": "database",
+        "state": PartState.READY,
+        "gates": True,
+    }
+    for unconfigured in (CACHE_CHECK, VAULT_CHECK):
+        assert part(response.json(), unconfigured) == {
+            "name": unconfigured,
+            "state": PartState.NOT_CONFIGURED,
+            "gates": False,
+        }
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(("answers", "status"), [(True, 200), (False, 503)])
+def test_a_configured_vault_decides_readiness(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm, answers: bool, status: int
+) -> None:
+    """M31.1.1.5: readiness is gated on the secret store as it is on the database and the cache.
+    Both directions, so a check that always fails and one that is never registered are both
+    caught. Delete this and a vault with a revoked token or a sealed store reads as a ready
+    install whose every provider key is silently missing."""
+    reachable_database(monkeypatch)
+    asked: list[tuple[str, str]] = []
+
+    def vault(address: str, token: str) -> bool:
+        asked.append((address, token))
+        return answers
+
+    monkeypatch.setattr("brain.app.vault_answers", vault)
+    monkeypatch.setattr("brain.app.credentials_at_start", lambda *_a, **_k: Credentials(None))
+    monkeypatch.setattr("brain.app.renewer_at_start", lambda *_a, **_k: None)
+    settings = Settings(
+        env="development",
+        database_url=UNANSWERED,
+        valkey_url="",
+        vault_address="https://vault.invalid:8200",
+        vault_token="t-for-the-test",
+    )
+    with TestClient(create_app(settings)) as c:
+        response = c.get("/health/ready")
+
+    assert response.status_code == status
+    assert response.json()["checks"][VAULT_CHECK] is answers
+    assert part(response.json(), VAULT_CHECK)["gates"] is True
+    assert asked and asked[0] == ("https://vault.invalid:8200", "t-for-the-test")
+
+
+def test_a_database_that_goes_away_after_start_turns_readiness_to_503(
+    monkeypatch: pytest.MonkeyPatch, realm: Realm
+) -> None:
+    """The blocking checks are asked again. Until 2026-09-17 the database was asked once at start
+    and remembered, so readiness said reachable for the life of the process. Delete this and the
+    probes can go back to being a snapshot, and the deploy gate and the console both keep saying
+    ready about a database nobody can reach."""
+    monkeypatch.setattr("brain.readiness.PROBE_INTERVAL_SECONDS", 0.0)
+    reachable_database(monkeypatch)
+    reachable = [True]
+
+    async def database(_engine: object) -> bool:
+        return reachable[0]
+
+    monkeypatch.setattr("brain.app.check_reachable", database)
+    with TestClient(wired_app()) as c:
+        first = c.get("/health/ready").status_code
+        reachable[0] = False
+        second = c.get("/health/ready")
+
+    assert (first, second.status_code) == (200, 503)
+    assert part(second.json(), "database")["state"] == PartState.NOT_READY
 
 
 def test_both_sign_in_routes_are_served_by_the_application_and_answer_as_routes(

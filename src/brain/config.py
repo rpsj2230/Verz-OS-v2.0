@@ -14,13 +14,14 @@ The check runs before the server binds a port, so a misconfigured container fail
 rather than serving wrongly. That is the one case where crashing beats degrading: a
 container that will never work should not be in a load balancer's rotation at all.
 
-Task ids: M31.3.1.1, M31.3.1.3, M32.1.1.4
+Task ids: M31.3.1.1, M31.3.1.3, M32.1.1.4, M31.1.3.4
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from brain.channels.widget import WILDCARD, normalise_origin
 from brain.ops.inference import inference_config_conflicts
 from brain.ops.wiring import DEFAULT_PROFILE, assert_known_profile, trace_config_conflicts
 
@@ -38,6 +39,18 @@ FORBIDDEN_VALUES: dict[str, tuple[str, ...]] = {
     "database_url": ("postgresql://postgres:postgres@localhost:5432/postgres",),
     "app_role_password": ("change-me", "changeme", "password", "postgres"),
 }
+
+
+#: The two settings CORS admits origins from. See `EVERY_CORS_ENTRY_IS_A_NAMED_ORIGIN`.
+CORS_SETTINGS: tuple[str, ...] = ("cors_origins", "widget_origins")
+
+EVERY_CORS_ENTRY_IS_A_NAMED_ORIGIN = (
+    "cors_origins and widget_origins are checked entry by entry in every environment: a "
+    "wildcard is refused however it is joined to real origins, and an entry that is not an "
+    "origin is named, because on the widget path an admitted origin is permission to mint "
+    "anonymous sessions, and brain.app would otherwise refuse the same value at import with a "
+    "traceback instead of this list."
+)
 
 
 @dataclass(frozen=True)
@@ -92,30 +105,34 @@ def check(env: str, values: dict[str, str]) -> list[ConfigProblem]:
                     )
                 )
 
-    # A production deployment with the interactive docs reachable publishes the name of
-    # every tool and capability in the system. Cheap to check, unpleasant to discover.
-    # Per entry, and not only in production. This was `== "*"` against the whole setting, and
-    # `serve.py` hands it the origins comma-joined, so `*,https://console.example.com`
-    # compared unequal to `*` and passed: a wildcard beside a real origin is the *likely*
-    # spelling, because somebody adds the real one and forgets to take the wildcard out.
-    # Staging was not covered at all, and staging holds a copy of the same shape of data.
-    #
-    # For CORS alone this is a browser convenience. It stops being one on the widget mint
-    # path, where an allowed origin is permission to mint anonymous credentials against a
-    # client's brain, so a wildcard there is every site on the internet.
-    #
-    # Development keeps the escape hatch: a developer's ports move, and a machine with no
-    # client data on it is not what this check is protecting.
-    origins = [part.strip() for part in (values.get("cors_origins") or "").split(",")]
-    if env != "development" and any(part == "*" for part in origins):
-        problems.append(
-            ConfigProblem(
-                setting="cors_origins",
-                problem=f"wildcard origin in {env}",
-                fix="name the console and widget origins explicitly; a wildcard beside them "
-                "is still a wildcard",
-            )
-        )
+    # Per entry, for both lists and in every environment. This was `== "*"` against the whole
+    # setting, and `serve.py` hands it over comma-joined, so `*,https://console.example.com`
+    # passed: a wildcard beside a real origin is the likely spelling, because somebody adds the
+    # real one and forgets to take the wildcard out. Development kept an escape hatch until
+    # 2026-09-17; `brain.app` now builds CORS through `brain.channels.widget.allowed_origins`,
+    # which refuses a wildcard everywhere, so a hatch here only moved the refusal from this
+    # readable list to a traceback at import. See `EVERY_CORS_ENTRY_IS_A_NAMED_ORIGIN`.
+    for setting in CORS_SETTINGS:
+        for entry in (part.strip() for part in (values.get(setting) or "").split(",")):
+            if not entry:
+                continue
+            if entry == WILDCARD:
+                problems.append(
+                    ConfigProblem(
+                        setting=setting,
+                        problem=f"wildcard origin in {env}",
+                        fix="name the console and widget origins explicitly; a wildcard beside "
+                        "them is still a wildcard",
+                    )
+                )
+            elif not normalise_origin(entry):
+                problems.append(
+                    ConfigProblem(
+                        setting=setting,
+                        problem="an entry is not an origin",
+                        fix="write each as scheme, host and optional port, with no path",
+                    )
+                )
 
     # The profile flag, refusing rather than describing. A lite install carrying a
     # LANGFUSE_HOST copied from a standard one deploys no trace ledger and still posts

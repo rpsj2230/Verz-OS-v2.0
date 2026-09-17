@@ -288,7 +288,10 @@ def main(argv: Sequence[str] | None = None, env: Mapping[str, str] | None = None
     # Through `Settings`, so this script and the application agree about which of the two
     # names wins when both are set. It preferred the plain one until 2026-09-15.
     settings = Settings() if env is None else settings_from(env)
-    url = settings.database_url.strip()
+    # The owner's login when the install names one: creating, migrating and seeding are the
+    # owner's work, and `DATABASE_URL` may name `brain_app`. See
+    # `brain.session.A_REQUEST_TRANSACTION_CAN_RESET_ITS_ROLE_TO_THE_LOGIN`.
+    url = (settings.migration_database_url or settings.database_url).strip()
     if not url:
         print("DATABASE_URL is not set, so there is no database to act on", file=sys.stderr)
         return EXIT_USAGE

@@ -6,7 +6,7 @@ Task ids: M0.2.5, M0.2.6
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from brain.core.envelope import (
     Entity,
@@ -54,6 +54,22 @@ def test_result_carries_records_and_counts_them() -> None:
     r: TypedResult[Client] = TypedResult(records=(a_client(hours_remaining=12), a_client()))
     assert r.record_count() == 2
     assert r.records[0].hours_remaining == 12
+
+
+def test_the_envelope_holds_only_records_that_carry_an_entity_tag() -> None:
+    """The type parameter is bound to `Entity`, and an untagged model is refused at runtime.
+
+    Delete this and the bound can drift back to `BaseModel`: every connector still passes,
+    because each already returns an `Entity`, and the first tool returning an untagged model
+    reaches the redactor with no `read:<entity>.<field>` to ask about."""
+
+    class Untagged(BaseModel):
+        name: str
+
+    assert TypedResult.__type_params__[0].__bound__ is Entity
+    with pytest.raises(ValidationError):
+        TypedResult(records=(Untagged(name="SNM Construction Pte Ltd"),))  # type: ignore[type-var]
+    assert TypedResult(records=(a_client(),)).record_count() == 1
 
 
 def test_redactions_are_recorded_not_silently_dropped() -> None:

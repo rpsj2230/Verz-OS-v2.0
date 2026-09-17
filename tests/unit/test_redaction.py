@@ -951,20 +951,19 @@ def test_an_untyped_shape_from_a_tool_is_refused(untyped: object) -> None:
 
 
 def test_a_result_whose_records_are_not_entities_is_refused() -> None:
-    """`TypedResult` is generic over `BaseModel`, so a tool can build one out of a model
-    carrying no entity tag. Two defences, and this asserts the second.
+    """Three defences against a record with no entity tag, and this asserts the last.
 
-    mypy is the first: the `type: ignore` below is the build-time refusal, and removing it
-    fails the type check. That is the defence a connector author meets while writing. The
-    runtime check is what meets the same author after a `cast`, a `**kwargs`, or a plugin
-    loaded by name, which is how this shape actually arrives in production."""
+    `TypedResult` is bound to `Entity`, so mypy refuses the annotation and pydantic refuses the
+    record at construction (`test_envelope.py`). This check meets a result built without
+    validation, `model_construct` here, which is how a plugin loaded by name or a `cast` over a
+    `**kwargs` build gets one past the first two."""
 
     class Untagged(BaseModel):  # a valid TypedResult member, and no entity tag
         name: str
 
     with pytest.raises(UntypedShapeError, match="not entities"):
         serialise_for_channel(
-            TypedResult(records=(Untagged(name="SNM"),)),  # type: ignore[type-var]
+            TypedResult.model_construct(records=(Untagged(name="SNM"),)),
             entitlement=ent("read:client.*"),
             policy=POLICY,
         )
@@ -1481,7 +1480,9 @@ def a_tool_returning_a_bare_typed_result(department: str) -> TypedResult:  # typ
     raise NotImplementedError
 
 
-def a_tool_returning_untagged_records(department: str) -> TypedResult[NotAnEntity]:
+# mypy refuses this annotation too since `TypedResult` is bound to `Entity`; registration is the
+# half that holds for a tool nobody type-checked.
+def a_tool_returning_untagged_records(department: str) -> TypedResult[NotAnEntity]:  # type: ignore[type-var]
     """A TypedResult of a model carrying no entity tag."""
     raise NotImplementedError
 

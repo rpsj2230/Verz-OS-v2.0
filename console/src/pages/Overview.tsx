@@ -32,15 +32,105 @@
  * seen in both themes before any record rendered, and its own comment said to delete it when
  * a real record rendered anywhere. `/records/{entity}` renders one now.
  *
- * Task ids: M32.5.1.1, M32.5.1.2
+ * **The install card is `/health/ready`, drawn part by part as the API names them.** Database,
+ * cache, vault and sign-in are always in the list, each `ready`, `not_ready` or `not_configured`,
+ * and `gates` says whether it decides the status; see `brain.readiness`. A 503 carries the same
+ * document as a 200, so a degraded install still shows which part is down rather than a failure
+ * notice with nothing in it. The words are the API's: nothing here turns a state into a colour.
+ *
+ * Task ids: M32.5.1.1, M32.5.1.2, M31.4.1, M31.1.1.5
  */
 
+import { useEffect, useState } from "react";
+import { request, type ApiResult } from "../api/client";
+import type { ApiFailure } from "../api/errors";
 import { useResource } from "../api/useResource";
 import type { components } from "../api/schema";
 import { Chip } from "../ui/Chip";
 import { FailureNotice, THAT_DID_NOT_WORK } from "../ui/FailureNotice";
 
 type CallerView = components["schemas"]["CallerView"];
+type Health = components["schemas"]["Health"];
+
+/** Where the API says whether each part it depends on is ready. At the root, not under `/api/v1`. */
+export const READY_PATH = "/health/ready";
+
+/** The readiness document from a 200, or from a 503, which carries the same one; else null. */
+export function healthFrom(result: ApiResult<Health>): Health | null {
+  const body: unknown = result.ok ? result.data : result.body;
+  if (body === null || typeof body !== "object") {
+    return null;
+  }
+  const candidate = body as Partial<Health>;
+  return typeof candidate.status === "string" && Array.isArray(candidate.parts)
+    ? (candidate as Health)
+    : null;
+}
+
+interface Readiness {
+  readonly health: Health | null;
+  readonly failure: ApiFailure | null;
+}
+
+/** One ask of `/health/ready` per mount. Not `useResource`: that drops a 503's body. */
+function useReadiness(): Readiness | null {
+  const [answer, setAnswer] = useState<Readiness | null>(null);
+  useEffect(() => {
+    let live = true;
+    const controller = new AbortController();
+    void (async () => {
+      const result = await request<Health>(READY_PATH, { atRoot: true, signal: controller.signal });
+      if (live) {
+        const health = healthFrom(result);
+        setAnswer({ health, failure: health === null && !result.ok ? result.failure : null });
+      }
+    })();
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, []);
+  return answer;
+}
+
+/** The install's parts, each as the API named it, with the state word and whether it gates. */
+function InstallReadiness() {
+  const readiness = useReadiness();
+  if (readiness === null) {
+    return null;
+  }
+  return (
+    <section className="card" aria-label="This install">
+      <h2>This install</h2>
+      {readiness.failure ? <FailureNotice failure={readiness.failure} /> : null}
+      {readiness.health ? (
+        <dl className="fields readiness">
+          <div className="fields__row readiness__row" key="status">
+            <dt>Status</dt>
+            <dd>
+              <Chip label={readiness.health.status} />
+            </dd>
+          </div>
+          {readiness.health.parts?.map((part) => (
+            <div className="fields__row readiness__row" key={part.name} data-part={part.name}>
+              <dt>{part.name}</dt>
+              <dd>
+                <Chip label={part.state} />
+                <Chip label={part.gates ? "decides readiness" : "reported only"} />
+              </dd>
+            </div>
+          ))}
+          <div className="fields__row readiness__row" key="commit">
+            <dt>Commit</dt>
+            <dd>
+              <code>{readiness.health.commit}</code>
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+    </section>
+  );
+}
 
 /** Where the API says who is asking. One route, named once. */
 export const ME_PATH = "/me";
@@ -112,7 +202,9 @@ export function Overview() {
   return (
     <article className="page">
       <h1>Overview</h1>
-      <p className="lede">Who this console is signed in as, according to the API.</p>
+      <p className="lede">
+        Who this console is signed in as, and whether this install is ready, according to the API.
+      </p>
 
       <section className="card">
         <h2>You</h2>
@@ -151,6 +243,8 @@ export function Overview() {
           </dl>
         ) : null}
       </section>
+
+      <InstallReadiness />
     </article>
   );
 }

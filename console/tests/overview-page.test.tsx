@@ -18,7 +18,7 @@
 
 import { render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
-import { CALLER_FIELDS, ME_PATH } from "../src/pages/Overview";
+import { CALLER_FIELDS, ME_PATH, READY_PATH } from "../src/pages/Overview";
 import { fakeIdentityProvider, loadConsole, signIn } from "./support/auth";
 import { backendCallerViewFields, backendPublicMessages } from "./support/python";
 
@@ -198,5 +198,87 @@ describe("when the API does not answer", () => {
     await waitFor(() => {
       expect(container.querySelector(".fields")).not.toBeNull();
     });
+  });
+});
+
+describe("the install card", () => {
+  /** The parts `/health/ready` sends on a degraded install: sign-in down, no vault named. */
+  const DEGRADED = {
+    status: "degraded",
+    commit: "COMMIT-SENTINEL",
+    checks: { database: false, cache: true },
+    reported: { sign_in: false },
+    parts: [
+      { name: "database", state: "not_ready", gates: true },
+      { name: "cache", state: "ready", gates: true },
+      { name: "vault", state: "not_configured", gates: false },
+      { name: "sign_in", state: "not_ready", gates: false },
+    ],
+  };
+
+  async function overviewWithReadiness(status: number, body: unknown) {
+    const idp = fakeIdentityProvider({
+      api(url) {
+        const answer = url.endsWith(READY_PATH) ? { status, body } : { status: 200, body: A_CALLER };
+        return new Response(JSON.stringify(answer.body), {
+          status: answer.status,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    const loaded = await loadConsole({ idp });
+    await signIn(loaded);
+    const { Overview } = await import("../src/pages/Overview");
+    const { container } = render(<Overview />);
+    await waitFor(() => {
+      if (!container.querySelector("section[aria-label='This install']")) {
+        throw new Error("the install card has not answered");
+      }
+    });
+    return { container, idp };
+  }
+
+  test("a degraded install shows each part's state from the 503's own body", async () => {
+    // What breaks if this is deleted: the card can read `/health/ready` through `useResource`,
+    // which turns a 503 into a failure and drops its body, so the one time an owner opens this
+    // card to see what is down it says only that something did not work.
+    const { container } = await overviewWithReadiness(503, DEGRADED);
+    const card = container.querySelector("section[aria-label='This install']");
+    expect(card?.querySelector("[data-part='database'] dd")?.textContent).toBe(
+      "not_readydecides readiness",
+    );
+    expect(card?.querySelector("[data-part='vault'] dd")?.textContent).toBe(
+      "not_configuredreported only",
+    );
+    expect(card?.querySelector("[data-part='sign_in'] dd")?.textContent).toBe(
+      "not_readyreported only",
+    );
+    expect(card?.textContent).toContain("degraded");
+    expect(card?.textContent).toContain("COMMIT-SENTINEL");
+    expect(card?.querySelector(".notice")).toBeNull();
+  });
+
+  test("the parts are drawn in the order the API sent them, at the API's root", async () => {
+    // What breaks if this is deleted: the card could ask `/api/v1/health/ready`, which is not a
+    // route, and the positive half of the test above would never run against the real address.
+    const ready = {
+      ...DEGRADED,
+      status: "ok",
+      parts: DEGRADED.parts.map((part) => ({ ...part, state: "ready" })),
+    };
+    const { container, idp } = await overviewWithReadiness(200, ready);
+    const names = [...container.querySelectorAll("[data-part]")].map((row) =>
+      row.getAttribute("data-part"),
+    );
+    expect(names).toEqual(["database", "cache", "vault", "sign_in"]);
+    expect(idp.urls.some((url) => url.endsWith(READY_PATH) && !url.includes("/api/v1"))).toBe(true);
+  });
+
+  test("an answer that is not a readiness document is a failure notice, not an empty list", async () => {
+    // What breaks if this is deleted: a proxy's error page reads as an install with no parts.
+    const { container } = await overviewWithReadiness(502, { message: "Bad gateway", trace_id: "" });
+    const card = container.querySelector("section[aria-label='This install']");
+    expect(card?.querySelector(".notice")).not.toBeNull();
+    expect(card?.querySelector("[data-part]")).toBeNull();
   });
 });
