@@ -7,7 +7,7 @@ merged commits rather than from anyone's browser.
 These routes are public-by-deployment but carry no company data, they describe the build,
 not the client's records. Nothing here touches the gate.
 
-Task ids: M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5, M27.8.1
+Task ids: M38.3.2.1, M38.3.2.2, M38.3.2.3, M38.3.2.4, M38.3.2.5, M27.8.1, M38.2.1.6, M38.2.1.1
 """
 
 from __future__ import annotations
@@ -116,6 +116,120 @@ async def screens() -> FileResponse | HTMLResponse:
     return _doc("screens.html")
 
 
+def _read_wbs() -> dict[str, Any] | None:
+    """The work breakdown baked into the image, or None when this build carries none."""
+    from brain.status import load_wbs
+
+    path = DOCS / "wbs.json"
+    return load_wbs(path) if path.exists() else None
+
+
+@router.get("/build/waves", response_class=HTMLResponse)
+async def wave_reports() -> HTMLResponse:
+    """Every wave's report: closed, open, in progress, ready for testing and blocked with reasons.
+
+    **Built from the status baked into the image, not from git**, because the image has no
+    history. `done_task_ids` is what `brain.status` computed from the commits at build time,
+    so the closed ids here are the ones `/build` counts, and `brain.wave_report.report_for` is
+    the same function the command line runs over `git log`. A leaf sentence and a reason are
+    escaped: the progress file is typed by a person and ends up in markup.
+    """
+    import html as _html
+
+    from brain.status import BLOCKED, IN_PROGRESS, OPEN, READY_FOR_TESTING
+    from brain.wave_report import report_for, wave_numbers
+
+    wbs = _read_wbs()
+    if wbs is None:
+        return HTMLResponse("<h1>wbs.json not published</h1>", status_code=404)
+    s = _read_status()
+    closed = set(s.get("done_task_ids", []))
+    commits: list[dict[str, str]] = s.get("recent", [])
+    esc = _html.escape
+
+    sections: list[str] = []
+    for number in wave_numbers(wbs):
+        report = report_for(wbs, number, closed, commits)
+        counts = f'<span class="k ok">{report.closed_count} closed</span>' + "".join(
+            # Coloured only when something holds the status, so a red outline means a block.
+            f'<span class="k{" st-" + state.lower().replace(" ", "-") if report.count_of(state) else ""}">'
+            f"{report.count_of(state)} {state.lower()}</span>"
+            for state in (IN_PROGRESS, READY_FOR_TESTING, BLOCKED, OPEN)
+        )
+        record = (
+            f"Recorded as closed at commit <code>{esc(report.record.commit)}</code> on "
+            f"{esc(report.record.recorded)}"
+            + (f": {esc(report.record.note)}" if report.record.note else "")
+            if report.record is not None
+            else "No end-of-wave commit recorded yet"
+        )
+        lists = ""
+        for state in (BLOCKED, READY_FOR_TESTING, IN_PROGRESS):
+            held = report.leaves_with(state)
+            if not held:
+                continue
+            items = "".join(
+                f"<li><code>{esc(leaf)}</code> {esc(report.texts.get(leaf, ''))}"
+                + (
+                    f'<div class="why">{esc(report.statuses[leaf].why)} '
+                    f"(since {esc(report.statuses[leaf].updated)})</div>"
+                )
+                + "</li>"
+                for leaf in held
+            )
+            lists += f"<h3>{state.capitalize()}: {len(held)}</h3><ul>{items}</ul>"
+        modules = "".join(
+            f"<tr><td><code>{esc(m.module)}</code> {esc(m.name)}</td>"
+            f'<td class="n">{len(m.closed)}/{m.total}</td>'
+            f'<td class="n">{sum(1 for leaf in m.open if report.status_of(leaf) == OPEN)}</td></tr>'
+            for m in report.modules
+        )
+        sections.append(
+            f'<section id="wave-{number}"><h2>Wave {number}: {esc(report.name)}</h2>'
+            f'<div class="line">{report.closed_count} of {report.total} buildable tasks closed '
+            f"({report.percent}%) · {report.acts} client tasks and {report.decided} decided, "
+            f'not counted</div><div class="ks">{counts}</div><div class="rec">{record}</div>'
+            f"{lists}<table><thead><tr><th>Module</th>"
+            f'<th style="text-align:right">Closed</th><th style="text-align:right">Open</th>'
+            f"</tr></thead><tbody>{modules}</tbody></table></section>"
+        )
+
+    return HTMLResponse(f"""<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wave reports</title>
+<style>
+{palette()}
+@media(prefers-color-scheme:dark){{:root{{--ground:#14110F;--panel:#1D1916;--line:#332C25;--ink:#F5F1ED;--dim:#948A83;--ok:#57BE8C}}}}
+*{{box-sizing:border-box}}
+body{{margin:0;background:var(--ground);color:var(--ink);font:15px/1.55 {SANS}}}
+.w{{max-width:860px;margin:0 auto;padding:44px 16px 80px}}
+h1{{font-size:32px;margin:0 0 4px;letter-spacing:-.02em}}
+h2{{font-size:22px;margin:34px 0 4px;padding-top:18px;border-top:1px solid var(--line)}}
+h3{{font-size:14px;margin:18px 0 6px}}
+.sub,.line,.rec{{font-family:{MONO};font-size:12px;color:var(--dim)}}
+.ks{{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}}
+.k{{font-family:{MONO};font-size:11px;padding:3px 8px;border-radius:3px;background:var(--line)}}
+.k.ok{{color:var(--ok);font-weight:600}}
+.k.st-blocked{{color:#B4342E;box-shadow:inset 0 0 0 1px #B4342E}}
+ul{{padding-left:18px;font-size:13.5px;margin:0}}
+li{{margin:4px 0}}
+.why{{font-size:12.5px;color:var(--dim)}}
+code{{font-family:{MONO};font-size:11.5px;color:var(--brand);overflow-wrap:anywhere}}
+table{{width:100%;border-collapse:collapse;font-size:13px;margin-top:14px}}
+th{{font-family:{MONO};font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);text-align:left;padding:6px 8px 5px 0;border-bottom:1px solid var(--line)}}
+td{{padding:6px 8px 6px 0;border-bottom:1px solid var(--line)}}
+td.n{{font-family:{MONO};text-align:right}}
+a{{color:var(--brand)}}
+</style></head><body><div class="w">
+<div class="sub">{installed_name()} · <a href="/build">build status</a></div>
+<h1>Wave reports</h1>
+<div class="line">Closed means a commit on main claimed the task with proof. In progress, ready
+for testing and blocked are set by hand in docs/wbs/progress.js. Generated from commit
+{esc(str(s.get("commit", "?")))}.</div>
+{"".join(sections)}
+</div></body></html>""")
+
+
 def _shipped_at() -> str:
     """When this image was built, from the manifest baked into it.
 
@@ -148,7 +262,9 @@ async def build_status(request: Request) -> HTMLResponse:
         f"<tr><td>Wave {w['wave']}</td><td>{w['name']}</td>"
         f'<td class="n">{w["done"]}/{w["total"]}</td>'
         f'<td class="b"><span style="width:{w["percent"]}%"></span></td>'
-        f'<td class="n">{w["percent"]}%</td></tr>'
+        f'<td class="n">{w["percent"]}%</td>'
+        f'<td class="n">{w.get("in_progress", 0)}</td><td class="n">{w.get("ready_for_testing", 0)}</td>'
+        f'<td class="n">{w.get("blocked", 0)}</td><td class="n">{w.get("open", 0)}</td></tr>'
         for w in waves
     )
     recent = "".join(
@@ -214,9 +330,10 @@ code{{font-family:{MONO};font-size:11.5px;color:var(--brand)}}
 {requirements_line}<br>
 commit {s.get("commit", "?")}{shipped}</span></div>
 <div class="track"><span style="width:{pct}%"></span></div>
-<table><thead><tr><th>Wave</th><th>Name</th><th style="text-align:right">Done</th><th></th><th style="text-align:right">%</th></tr></thead>
-<tbody>{wave_rows}</tbody></table>
+<div style="overflow-x:auto"><table><thead><tr><th>Wave</th><th>Name</th><th style="text-align:right">Done</th><th></th><th style="text-align:right">%</th><th style="text-align:right">In progress</th><th style="text-align:right">Ready for testing</th><th style="text-align:right">Blocked</th><th style="text-align:right">Open</th></tr></thead>
+<tbody>{wave_rows}</tbody></table></div>
 <a class="btn pri" href="/build/tracker">Task tracker</a>
+<a class="btn" href="/build/waves">Wave reports</a>
 <a class="btn" href="/build/architecture">Architecture</a>
 <a class="btn" href="/build/screens">Key screens</a>
 <a class="btn" href="/build/needs-rupash">Needs you ({needs})</a>
@@ -347,6 +464,7 @@ becomes the real screen when its wave lands, so a link you save today keeps work
 <tr><td><a href="/login">/login</a></td><td>Sign in</td><td><span class="tag">wave 1</span></td></tr>
 <tr><td><a href="/build">/build</a></td><td>Build progress</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/tracker">/build/tracker</a></td><td>Task tracker</td><td><span class="tag on">live</span></td></tr>
+<tr><td><a href="/build/waves">/build/waves</a></td><td>Wave reports</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/architecture">/build/architecture</a></td><td>Architecture</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/screens">/build/screens</a></td><td>Key screens (designs)</td><td><span class="tag on">live</span></td></tr>
 <tr><td><a href="/build/needs-rupash">/build/needs-rupash</a></td><td>Decisions waiting on you</td><td><span class="tag on">live</span></td></tr>

@@ -697,6 +697,7 @@ def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
     for path in (
         "docs/wbs/wbs-a.js",
         "docs/wbs/acts.js",
+        "docs/wbs/progress.js",
         "docs/wbs.json",
         "docs/tracker.html",
         "docs/requirements/register.json",

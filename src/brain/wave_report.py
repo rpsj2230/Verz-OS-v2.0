@@ -14,6 +14,16 @@ a problem the thirty do not cancel.
 completion date belongs to the schedule, which computes it from capacity, and duplicating
 that calculation here would give two answers that drift.
 
+**It counts what `/build` counts, and splits what is not closed by its hand-set status.** Acts
+and decided leaves are left out of closed and open and reported beside them, as
+`brain.status` does, so the report and the status page cannot give a wave two totals. A leaf
+no commit closed is IN PROGRESS, READY FOR TESTING or BLOCKED when `docs/wbs/progress.js` says
+so and OPEN otherwise; a closed leaf is closed whatever that file says.
+
+**`report_for` takes the closed ids rather than a repository**, because the running image has
+no git history: `/build/waves` builds the same report from the status baked into the image,
+and the command line builds it from `git log`. One function, two sources of the same ids.
+
 Task ids: M38.2.1.6
 """
 
@@ -24,12 +34,25 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
-from brain.status import closed_task_ids, load_wbs
+from brain.status import (
+    BLOCKED,
+    IN_PROGRESS,
+    OPEN,
+    READY_FOR_TESTING,
+    LeafProgress,
+    WaveRecord,
+    acts_of,
+    closed_task_ids,
+    decided_of,
+    load_wbs,
+    progress_of,
+    wave_records_of,
+)
 
 
 @dataclass(frozen=True)
 class ModuleLine:
-    """One module's contribution to a wave."""
+    """One module's contribution to a wave: its buildable leaves, closed and not."""
 
     module: str
     name: str
@@ -52,6 +75,15 @@ class WaveReport:
     #: Commits that closed something in this wave, newest first.
     commits: list[dict[str, str]] = field(default_factory=list)
     overdue: list[tuple[str, str]] = field(default_factory=list)
+    #: Hand-set statuses of this wave's unclosed buildable leaves, by id.
+    statuses: dict[str, LeafProgress] = field(default_factory=dict)
+    #: Leaf sentences, by id, where the work breakdown carries them.
+    texts: dict[str, str] = field(default_factory=dict)
+    #: Leaves in this wave a person does on the week of a migration, and leaves decided against.
+    acts: int = 0
+    decided: int = 0
+    #: The deployed commit this wave was recorded as closing at, if anyone has recorded it.
+    record: WaveRecord | None = None
 
     @property
     def closed_count(self) -> int:
@@ -59,6 +91,7 @@ class WaveReport:
 
     @property
     def open_count(self) -> int:
+        """Every buildable leaf not closed, whatever its hand-set status."""
         return sum(len(m.open) for m in self.modules)
 
     @property
@@ -73,30 +106,42 @@ class WaveReport:
     def is_complete(self) -> bool:
         return self.open_count == 0
 
+    def status_of(self, leaf: str) -> str:
+        """An unclosed leaf's status: its hand-set one, else OPEN."""
+        entry = self.statuses.get(leaf)
+        return entry.status if entry is not None else OPEN
 
-def build_wave_report(
-    repo: Path,
+    def leaves_with(self, status: str) -> list[str]:
+        """This wave's unclosed leaves holding `status`, in plan order."""
+        return [leaf for m in self.modules for leaf in m.open if self.status_of(leaf) == status]
+
+    def count_of(self, status: str) -> int:
+        return len(self.leaves_with(status))
+
+
+def report_for(
     wbs: dict[str, Any],
     wave: int,
+    closed: set[str],
+    commits: list[dict[str, str]],
     *,
     now: datetime | None = None,
     due_dates: dict[str, str] | None = None,
-    ref: str = "HEAD",
 ) -> WaveReport:
-    """Assemble the report for one wave from the WBS and the commit history.
+    """Assemble one wave's report from the work breakdown and the ids commits closed.
 
-    `due_dates` is optional and comes from the schedule. Without it the report simply has
-    no overdue section, which is better than inventing one: a report that guesses a
-    deadline and then reports against its own guess is worse than a report with a gap.
+    `commits` are records shaped as `brain.status.closed_task_ids` returns them, with the ids
+    each closed in `closed` as a comma-separated string.
     """
     at = now or datetime.now(UTC)
-    closed, commits = closed_task_ids(repo, ref)
     wave_names: dict[str, str] = wbs.get("wave_names", {})
+    records = wave_records_of(wbs)
 
     report = WaveReport(
         wave=wave,
         name=wave_names.get(str(wave), f"Wave {wave}"),
         generated_at=at,
+        record=records.get(str(wave)),
     )
 
     in_this_wave: set[str] = set()
@@ -111,11 +156,21 @@ def build_wave_report(
         if not leaves:
             continue
         in_this_wave.update(leaves)
-        done = tuple(leaf for leaf in leaves if leaf in closed)
-        todo = tuple(leaf for leaf in leaves if leaf not in closed)
-        report.modules.append(
-            ModuleLine(module=module["id"], name=module["name"], closed=done, open=todo)
-        )
+        flags, decisions, hand_set = acts_of(module), decided_of(module), progress_of(module)
+        report.acts += sum(1 for leaf in leaves if leaf in flags)
+        report.decided += sum(1 for leaf in leaves if leaf in decisions)
+        buildable = [leaf for leaf in leaves if leaf not in flags and leaf not in decisions]
+        # Not strict: an export from before sentences existed carries none, and the page then
+        # shows ids alone rather than refusing to render.
+        texts = zip(module.get("leaf_ids", []), module.get("leaf_texts", []), strict=False)
+        report.texts.update((leaf, text) for leaf, text in texts if leaf in leaves)
+        done = tuple(leaf for leaf in buildable if leaf in closed)
+        todo = tuple(leaf for leaf in buildable if leaf not in closed)
+        report.statuses.update((leaf, hand_set[leaf]) for leaf in todo if leaf in hand_set)
+        if buildable:
+            report.modules.append(
+                ModuleLine(module=module["id"], name=module["name"], closed=done, open=todo)
+            )
 
     # Only commits that touched this wave. A wave report listing every commit in the repo
     # is a git log with a title.
@@ -133,6 +188,35 @@ def build_wave_report(
         report.overdue.sort(key=lambda pair: pair[1])
 
     return report
+
+
+def build_wave_report(
+    repo: Path,
+    wbs: dict[str, Any],
+    wave: int,
+    *,
+    now: datetime | None = None,
+    due_dates: dict[str, str] | None = None,
+    ref: str = "HEAD",
+) -> WaveReport:
+    """Assemble the report for one wave from the WBS and the commit history.
+
+    `due_dates` is optional and comes from the schedule. Without it the report simply has
+    no overdue section, which is better than inventing one: a report that guesses a
+    deadline and then reports against its own guess is worse than a report with a gap.
+    """
+    closed, commits = closed_task_ids(repo, ref)
+    return report_for(wbs, wave, closed, commits, now=now, due_dates=due_dates)
+
+
+def wave_numbers(wbs: dict[str, Any]) -> list[int]:
+    """Every wave the work breakdown places a leaf in, ascending."""
+    found: set[int] = set()
+    for module in wbs.get("modules", []):
+        module_wave = int(module.get("wave", 0))
+        leaf_waves: dict[str, int] = module.get("leaf_waves", {})
+        found.update(int(leaf_waves.get(leaf, module_wave)) for leaf in module.get("leaf_ids", []))
+    return sorted(found)
 
 
 def render_markdown(report: WaveReport) -> str:
@@ -156,6 +240,17 @@ def render_markdown(report: WaveReport) -> str:
     if report.overdue:
         lines += [f"## Overdue: {len(report.overdue)}", ""]
         lines += [f"- `{leaf}` was due {when}" for leaf, when in report.overdue]
+        lines += [""]
+
+    for state in (BLOCKED, READY_FOR_TESTING, IN_PROGRESS):
+        held = report.leaves_with(state)
+        if not held:
+            continue
+        lines += [f"## {state.capitalize()}: {len(held)}", ""]
+        for leaf in held:
+            why = report.statuses[leaf].why
+            text = report.texts.get(leaf, "")
+            lines.append(f"- `{leaf}`" + (f" {text}" if text else "") + (f": {why}" if why else ""))
         lines += [""]
 
     if not report.is_complete:
