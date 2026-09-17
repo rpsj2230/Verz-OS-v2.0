@@ -93,8 +93,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol
 
-from brain.agents.model import AgentRecord
-from brain.console.skill_library import LibrarySkill, reach_through
+from brain.agents.model import AgentRecord, tool_ceiling
+from brain.console.workspace_capabilities import run_reach
 from brain.core.entitlement import EntitlementSet
 from brain.core.envelope import TypedResult
 from brain.core.field_policy import Classification, FieldPolicy, FieldRule
@@ -114,6 +114,7 @@ from brain.gate.abstain import (
     retrieved_but_not_answering,
 )
 from brain.gate.caches import MAX_QUESTION_CHARS
+from brain.gate.catalogue import EmptyCatalogueError
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
 from brain.gate.effort import settings_for
 from brain.gate.prefix import PromptLayout, build_prefix, lay_out
@@ -128,7 +129,15 @@ from brain.models.driver import DriverMessage, DriverResponse, Role
 from brain.models.metering import Meter
 from brain.models.routing import RoutingRequest, Tier, classify_tier
 from brain.tools.registry import ToolRegistry
-from brain.tools.skills import SkillCard, SkillError, SkillPin, offered_cards, resolve_pin
+from brain.tools.skills import (
+    ImportedSkill,
+    SkillCard,
+    SkillError,
+    SkillPin,
+    offered_cards,
+    resolve_pin,
+    skill_reach,
+)
 
 # ------------------------------------------------------------------- written-down reasons
 
@@ -292,6 +301,20 @@ class DocumentSearchTool:
         return await self.handler(request, entitlement=entitlement, now=now)
 
 
+class LibraryRow(Protocol):
+    """What a run reads of a library row. `brain.console.skill_library.LibrarySkill` satisfies it;
+    importing that module here would put the console's offline controls on the request path."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def digest(self) -> str: ...
+    @property
+    def moved(self) -> bool: ...
+    @property
+    def imported(self) -> ImportedSkill: ...
+
+
 @dataclass(frozen=True)
 class AgentRun:
     """The agent a request runs with: its record, its current pins, and the library they name.
@@ -301,14 +324,14 @@ class AgentRun:
 
     record: AgentRecord
     pins: tuple[SkillPin, ...]
-    library: tuple[LibrarySkill, ...]
+    library: tuple[LibraryRow, ...]
     registry: ToolRegistry
 
 
 def skill_cards(agent: AgentRun, *, caller: EntitlementSet, now: datetime) -> tuple[SkillCard, ...]:
     """The cards a run offers: pinned, approved, unmoved, and every tool inside the run reach.
 
-    The reach is `reach_through`, which intersects through `run_reach` and nowhere else. A row
+    The reach is `skill_reach` at `run_reach`, which intersects there and nowhere else. A row
     whose stored text no longer digests to its key is skipped, so a moved body is never offered.
     """
     offered = []
@@ -321,9 +344,17 @@ def skill_cards(agent: AgentRun, *, caller: EntitlementSet, now: datetime) -> tu
             except SkillError:
                 continue
             tools = skill.skill.tools
-            if set(tools) <= set(
-                reach_through(skill.skill, agent.registry, caller, agent.record, now)
-            ):
+            try:
+                reach = skill_reach(
+                    skill.skill,
+                    agent.registry,
+                    run_reach(caller, agent.record),
+                    tool_ceiling(agent.record),
+                    now=now,
+                )
+            except EmptyCatalogueError:
+                reach = ()
+            if set(tools) <= set(reach):
                 offered.append(skill)
     return offered_cards(offered)
 
