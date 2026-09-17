@@ -8,7 +8,7 @@ as `bao` does, which is what catches a quoting mistake, a pipe that loses a piec
 reaches an argument list. Neither is a vault: nothing here has initialised OpenBao, and
 `ops/openbao/REHEARSAL.md` is the run on a server that would.
 
-Task ids: M42.6.2, M42.5.14
+Task ids: M42.6.2, M42.5.14, M31.3.2.3, M31.3.2.6, M38.4.1.3
 """
 
 from __future__ import annotations
@@ -49,6 +49,8 @@ from brain.deployment.vault_setup import (
     VAULT_SERVICE,
     vault_choice_lines,
 )
+from brain.ops.connector_lease import RUN_POLICY, RUN_ROLE_MAX_TTL_SECONDS, RUN_TOKEN_ROLE
+from brain.ops.connector_slots import SLOT_SCOPES
 from brain.ops.openbao import STATIC_PREFIXES
 from brain.ops.vault_quorum import DEFAULT_POLICY
 from brain.ops.wiring import PROFILES
@@ -105,6 +107,8 @@ case "$asked" in
   "audit enable"*) exit 0 ;;
   "secrets list") printf 'cubbyhole/    cubbyhole    n/a\n'; exit 0 ;;
   "secrets enable"*) exit 0 ;;
+  "write auth/token/roles/connector-run "*) exit 0 ;;
+  "kv metadata put -mount=connector_keys "*) exit 0 ;;
   "policy write "*" -") name="${asked#policy write }"; cat > "$state/policy.${name% -}"; exit 0 ;;
   "token create -policy=application"*) printf '%s' "__APP__"; exit 0 ;;
   "token create -policy=worker"*) printf '%s' "__WORKER__"; exit 0 ;;
@@ -238,7 +242,7 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
     as_root = [asked for presented, asked in calls if presented == ROOT]
     assert [one for one in as_root if one.startswith("audit enable")] == [
         "audit enable -path=file file file_path=/openbao/logs/audit.log log_raw=false "
-        "hmac_accessor=true",
+        "hmac_accessor=true mode=0644",
         "audit enable -path=stderr file file_path=stderr log_raw=false",
     ]
     assert [one for one in as_root if one.startswith("secrets enable")] == [
@@ -249,6 +253,18 @@ def test_a_fresh_standard_install_opens_the_vault_and_writes_both_tokens_and_the
     assert (state / "policy.application").read_text(encoding="utf-8") == (
         REPO / "ops/openbao/policies/application.hcl"
     ).read_text(encoding="utf-8").replace("\r", "")
+    # The run-token role and every source's slot, defined under the root token before it goes.
+    assert [one for one in as_root if one.startswith("write auth/token/roles")] == [
+        f"write auth/token/roles/{RUN_TOKEN_ROLE} allowed_policies={RUN_POLICY} orphan=false "
+        "renewable=false token_no_default_policy=true "
+        f"token_explicit_max_ttl={RUN_ROLE_MAX_TTL_SECONDS}"
+    ]
+    defined = [one for one in as_root if one.startswith("kv metadata put")]
+    assert [one.rsplit(" ", 1)[-1] for one in defined] == sorted(SLOT_SCOPES)
+    for one in defined:
+        slot = SLOT_SCOPES[one.rsplit(" ", 1)[-1]]
+        assert f"-custom-metadata=scopes={'; '.join(slot.request)}" in one
+        assert f"-custom-metadata=not_requested={'; '.join(slot.refuse)}" in one
     assert [one for one in as_root if one.startswith("token create")] == [
         f"token create -policy=application -orphan -period={TOKEN_PERIOD} -field=token",
         f"token create -policy=worker -orphan -period={TOKEN_PERIOD} -field=token",

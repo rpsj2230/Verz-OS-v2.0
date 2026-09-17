@@ -28,7 +28,12 @@
 # implicitly, and compose replaces an implicit list with the one an overlay names: listing only the
 # vault's network here would cut the worker off from its database and its queue.
 #
-# Task ids: M42.6.2, M27.8.12
+# **Why it mounts the vault's audit log.** The worker ships the vault's audit log into the ledger
+# (`brain.ops.vault_audit_ship`), reading the file the vault's file audit device writes on the
+# vault's own log volume. Read-only, at one path, and only here: the application never reads the log,
+# because a process that could read its own access history could also be asked to explain it away.
+#
+# Task ids: M42.6.2, M27.8.12, M31.3.2.6
 
 services:
   brain-worker:
@@ -41,9 +46,18 @@ services:
     networks:
       - default
       - brain-vault
+    volumes:
+      # The vault's log volume, as `brain.deployment.app_environment.VAULT_AUDIT_VOLUME` names it.
+      - brain-vault_brain-vault-logs:/vault-audit:ro
 
 networks:
   brain-vault:
     # Created by the vault's own project, under this fixed name, as `docker-compose.vault.yml` says.
     external: true
     name: brain-vault
+
+volumes:
+  brain-vault_brain-vault-logs:
+    # Created by the vault's own project, whose compose name and volume key make this name.
+    external: true
+    name: brain-vault_brain-vault-logs

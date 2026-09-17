@@ -8,7 +8,7 @@ a representation), or which processes use a key once it is kept. The HTTP half i
 No vault is contacted. `Vault` below implements the store's protocol directly, and the start-up
 tests subclass the real client with its one network call replaced, as `test_provider_keys` does.
 
-Task ids: M27.8.7, M5.1.2
+Task ids: M27.8.7, M5.1.2, M31.3.2.5
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from dataclasses import fields
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -40,6 +40,7 @@ from brain.ops.credentials import (
     _application_vault,
     connector_key_slot,
     credentials_at_start,
+    keep_refreshing,
     problems_with,
     told_in_use,
 )
@@ -86,6 +87,9 @@ class Vault:
         if self._fail is not None:
             raise self._fail
         return self._version
+
+    def read_static_kv(self, path: str) -> dict[str, Any]:
+        raise AssertionError(f"nothing but the refresh reads a slot's fields, and {path} was read")
 
 
 class Stocked(OpenBaoVault):
@@ -498,15 +502,15 @@ def test_a_key_kept_here_is_handed_to_this_process_unless_the_environment_outran
 
 
 def test_what_a_person_is_told_about_a_kept_key_says_what_to_do_next() -> None:
-    """Outranked names the variable and says to remove it; in use says the others need a restart.
+    """Outranked names the variable and says to remove it; in use says the others follow unasked.
     Held against the slot's own variable rather than a literal. Delete this and the sentence can
     stop naming the line to remove, which is the one thing the person cannot find out otherwise."""
     outranked = told_in_use(ANTHROPIC, InUse.OUTRANKED)
     here = told_in_use(ANTHROPIC, InUse.HERE)
     assert f"Remove {ANTHROPIC.provider.env_var}" in outranked
     assert ANTHROPIC.provider.env_var not in here
-    assert "next start" in here
-    assert "restart the system" in here
+    assert "within a minute" in here
+    assert "no restart" in here
 
 
 # ------------------------------------------------------------------- at start
@@ -631,3 +635,100 @@ def test_the_console_s_credential_route_writes_no_connected_source_s_slot() -> N
     written without its settings under a different capability."""
     assert SLOTS
     assert not [path for path in SLOTS if path.startswith(CONNECTOR_KEY_PREFIX)]
+
+
+# ------------------------------------------------------------------- the refresh (M31.3.2.5)
+class Rotating:
+    """Provider slots whose key and version an operator changes under a running process."""
+
+    def __init__(self) -> None:
+        self.held: dict[str, tuple[str, datetime | None]] = {}
+        self.read: list[str] = []
+        self.fail: Exception | None = None
+
+    def write_static_kv(self, path: str, fields: Mapping[str, str]) -> datetime | None:
+        raise AssertionError("the refresh writes nothing")
+
+    def static_kv_version(self, path: str) -> StaticVersion | None:
+        if self.fail is not None:
+            raise self.fail
+        found = self.held.get(path)
+        return None if found is None else StaticVersion(written_at=found[1])
+
+    def read_static_kv(self, path: str) -> dict[str, Any]:
+        self.read.append(path)
+        return {KEY_FIELD: self.held[path][0]}
+
+
+LATER = AT + timedelta(days=1)
+
+
+def test_a_key_replaced_in_the_vault_is_loaded_on_the_next_refresh_and_an_unchanged_one_not() -> (
+    None
+):
+    """M31.3.2.5: rotation without a restart. The first round loads what is held; a round with no
+    new version reads metadata only; a replaced key is in the environment after the next round.
+    Delete this and the refresh can read every key every minute, or never notice a new one."""
+    vault, env = Rotating(), dict[str, str]()
+    vault.held["providers/anthropic"] = ("sk-old", AT)
+    store = Credentials(vault, environ=env)
+
+    seen, loaded = store.refresh({})
+    assert (loaded, env) == (("ANTHROPIC_API_KEY",), {"ANTHROPIC_API_KEY": "sk-old"})
+
+    vault.read.clear()
+    seen, loaded = store.refresh(seen)
+    assert (loaded, vault.read) == ((), [])
+
+    vault.held["providers/anthropic"] = ("sk-new", LATER)
+    seen, loaded = store.refresh(seen)
+    assert loaded == ("ANTHROPIC_API_KEY",)
+    assert env == {"ANTHROPIC_API_KEY": "sk-new"}
+    assert seen["ANTHROPIC_API_KEY"] == LATER
+
+
+def test_the_refresh_leaves_a_variable_the_environment_file_set_alone() -> None:
+    """The file outranks the vault in every refresh as at start. Delete this and a refresh could
+    replace the key a developer's shell or the environment file deliberately set."""
+    vault, env = Rotating(), {"ANTHROPIC_API_KEY": "sk-from-the-file"}
+    vault.held["providers/anthropic"] = ("sk-vault", AT)
+    store = Credentials(vault, environ=env, outranking=frozenset({"ANTHROPIC_API_KEY"}))
+
+    _, loaded = store.refresh({})
+    assert (loaded, env, vault.read) == ((), {"ANTHROPIC_API_KEY": "sk-from-the-file"}, [])
+
+
+@pytest.mark.parametrize(
+    ("failure", "state"),
+    [
+        (VaultUnreachableError("silent"), VaultState.UNREACHABLE),
+        (VaultRefusedError("no", status=403), VaultState.REFUSED),
+    ],
+)
+def test_a_vault_that_does_not_answer_a_refresh_is_said_in_its_own_word(
+    failure: Exception, state: VaultState
+) -> None:
+    """Silent and refused are told apart, and nothing is loaded. Delete this and a lapsed token
+    reads as a network fault on the log the refresh writes."""
+    vault, env = Rotating(), dict[str, str]()
+    vault.fail = failure
+    with pytest.raises(CredentialsUnavailableError) as raised:
+        Credentials(vault, environ=env).refresh({})
+    assert (raised.value.state, env) == (state, {})
+
+
+def test_keep_refreshing_survives_a_silent_round_and_picks_the_key_up_on_the_next() -> None:
+    """The loop never raises, sleeps its minute between rounds, and a round the vault missed is
+    asked again. Delete this and one silent minute ends rotation for the process's lifetime."""
+    vault, env = Rotating(), dict[str, str]()
+    vault.held["providers/anthropic"] = ("sk-new", AT)
+    vault.fail = VaultUnreachableError("silent")
+    slept: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+        vault.fail = None
+
+    asyncio.run(keep_refreshing(Credentials(vault, environ=env), sleep=sleep, rounds=2))
+    assert env == {"ANTHROPIC_API_KEY": "sk-new"}
+    assert slept == [60.0, 60.0]

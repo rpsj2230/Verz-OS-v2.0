@@ -7,10 +7,10 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 75 tables, from `brain.db.Base.metadata`.
+- 76 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
-- 128 routes under `/api/v1` and `/setup`, from the API's internal document.
-- 67 console addresses, from the route table in `console/src/App.tsx`.
+- 129 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 68 console addresses, from the route table in `console/src/App.tsx`.
 - 44 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 52 routes.
 - 35 gaps recorded, and 12 routes no screen calls.
 
@@ -190,13 +190,14 @@ What an administrator would need to manage, read out of the schema, the routes a
 
 ### API keys, credentials and secrets, held in the vault and never displayed
 
-- **Screens:** `/webhooks`
-- **Tables:** `ops.credential_write`
+- **Screens:** `/webhooks`, `/vault`
+- **Tables:** `ops.credential_write`, `ops.vault_access`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/credentials` | **no screen** |
+| `GET /api/v1/vault` | `/vault` |
 | `PUT /api/v1/credentials/{family}/{name}` | **no screen** |
 
 - **Gap.** GET /api/v1/credentials and PUT /api/v1/credentials/{family}/{name} are served, and no screen calls either. Open leaf `M27.8.8`.

@@ -870,6 +870,34 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="vault_audit_ship",
+        # Added on 2026-09-17 with `ops.vault_access`, and started by the worker's schedule from the
+        # day it was registered. The run is what the schedule calls; `parse_line` is what decides
+        # which line is an entry and its slot, and the trigger in `0093` makes a row an entry.
+        symbols=(
+            "brain.ops.vault_audit_ship:run_vault_audit_ship_now",
+            "brain.ops.vault_audit:parse_line",
+        ),
+        guards=(
+            "that every call the secrets vault answered about a slot, a key read, a run token "
+            "minted or revoked, a refusal, reaches the tamper-evident ledger within minutes, so "
+            "who read which credential is answerable from the Audit screen and not only from a "
+            "file on the vault's volume"
+        ),
+        lost_silently=(
+            "The vault goes on writing its log and nothing carries it anywhere, so the ledger has "
+            "no vault entry after the last one shipped and reads as a vault nobody used. The file "
+            "stays on the vault's volume, where a volume removed with the vault's project takes "
+            "every record of who read a key with it."
+        ),
+        # Five minutes, restated rather than imported: `brain.ops.vault_audit_ship` imports the
+        # tables, which import this registry for the control-run name constraint.
+        every=_FIVE_MINUTELY,
+        cadence_from="brain.ops.vault_audit_ship:SHIP_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
 )
 
 

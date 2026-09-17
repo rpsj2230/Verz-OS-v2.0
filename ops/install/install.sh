@@ -286,7 +286,7 @@ else
   BRAIN_VAULT_AUDIT="$(as_vault_root audit list 2>/dev/null || true)"
   case "$BRAIN_VAULT_AUDIT" in
     *"file/"*) ;;
-    *) as_vault_root audit enable -path=file file file_path=/openbao/logs/audit.log log_raw=false hmac_accessor=true >/dev/null ;;
+    *) as_vault_root audit enable -path=file file file_path=/openbao/logs/audit.log log_raw=false hmac_accessor=true mode=0644 >/dev/null ;;
   esac
   case "$BRAIN_VAULT_AUDIT" in
     *"stderr/"*) ;;
@@ -302,6 +302,14 @@ else
   for policy in "/opt/brain/ops/openbao/policies/"*.hcl; do
     tr -d "\015" < "$policy" | as_vault_root_reading policy write "$(basename "$policy" .hcl)" - >/dev/null
   done
+  as_vault_root write auth/token/roles/connector-run allowed_policies=connector-run orphan=false renewable=false token_no_default_policy=true token_explicit_max_ttl=3600 >/dev/null || fail "the vault would not create the connector-run token role. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=an agent API key with read access' -custom-metadata='not_requested=an admin key, which can change SLAs and delete tickets' freshdesk >/dev/null || fail "the vault would not define the credential slot for freshdesk. Finish by hand with ops/openbao/credential-slots.md"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=read on the named shared drive only' -custom-metadata='not_requested=domain-wide delegation' google_drive >/dev/null || fail "the vault would not define the credential slot for google_drive. Finish by hand with ops/openbao/credential-slots.md"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=crm.objects.contacts.read; crm.objects.deals.read' -custom-metadata='not_requested=crm.objects.*.write; anything touching settings' hubspot >/dev/null || fail "the vault would not define the credential slot for hubspot. Finish by hand with ops/openbao/credential-slots.md"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=SELECT on the allowlisted views only' -custom-metadata='not_requested=SELECT on tables; any write' laravel >/dev/null || fail "the vault would not define the credential slot for laravel. Finish by hand with ops/openbao/credential-slots.md"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=bitable:app:readonly; base:record:read' -custom-metadata='not_requested=base:record:write; drive:drive' lark_base >/dev/null || fail "the vault would not define the credential slot for lark_base. Finish by hand with ops/openbao/credential-slots.md"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=wiki:wiki:readonly' -custom-metadata='not_requested=docs:document edit scopes' lark_wiki >/dev/null || fail "the vault would not define the credential slot for lark_wiki. Finish by hand with ops/openbao/credential-slots.md"
+  as_vault_root kv metadata put -mount=connector_keys -custom-metadata='scopes=accounting.transactions.read; accounting.contacts.read' -custom-metadata='not_requested=any .write scope' xero >/dev/null || fail "the vault would not define the credential slot for xero. Finish by hand with ops/openbao/credential-slots.md"
   BRAIN_VAULT_APP_TOKEN="$(as_vault_root token create -policy=application -orphan -period=768h -field=token)" || fail "the vault would not mint the application's token. Finish by hand with ops/openbao/UNSEAL.md, under Finishing what the installer began"
   BRAIN_VAULT_WORKER_TOKEN=""
   if test -n "${BRAIN_WORKER_VAULT_FILES:-}"; then

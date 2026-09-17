@@ -4,7 +4,7 @@ the run that borrowed it, or a way a secret reaches somewhere it should not.
 No real vault is contacted. The HTTP call is replaced at the one seam that makes it, so
 these test what this module does with an answer rather than testing that OpenBao works.
 
-Task ids: M31.3.2.3, M27.8.7
+Task ids: M31.3.2.3, M31.3.2.4, M27.8.7
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import pytest
 
 from brain.ops.openbao import (
     OpenBaoVault,
+    SealStatus,
     VaultRefusedError,
     VaultUnreachableError,
     _instant,
@@ -444,3 +445,133 @@ def test_a_vault_time_is_read_with_its_zone_and_anything_else_is_none() -> None:
     assert _instant("2026-09-16T08:30:05") == datetime(2026, 9, 16, 8, 30, 5, tzinfo=UTC)
     assert _instant("2026-09-16T08:30:05+08:00") == datetime(2026, 9, 16, 0, 30, 5, tzinfo=UTC)
     assert [_instant(None), _instant(""), _instant(20260916), _instant("soon")] == [None] * 4
+
+
+# ------------------------------------------------ a run token, the seal, a defined slot (M31.3.2.4)
+RUN_TOKEN = "s.RUN-TOKEN-SENTINEL-77c1"
+
+
+def _minted(**overrides: Any) -> dict[str, Any]:
+    auth: dict[str, Any] = {
+        "client_token": RUN_TOKEN,
+        "accessor": "accessor-of-the-run-token",
+        "lease_duration": 900,
+        "renewable": False,
+        "policies": ["connector-run"],
+    }
+    auth.update(overrides)
+    return {"auth": auth}
+
+
+def test_a_run_token_is_asked_for_with_its_ttl_no_renewal_and_no_default_policy() -> None:
+    """The request fixes the lease's shape, and the answer is sealed so no rendering prints it.
+    Delete this and a run token can be minted renewable, or carry the default policy, and the
+    token's value reaches a traceback through the dataclass's repr."""
+    v = Recording({"auth/token/create/connector-run": _minted()})
+
+    minted = v.mint_role_token(
+        "connector-run", ttl=timedelta(minutes=15), meta={"connector": "xero"}
+    )
+
+    assert v.sent == [
+        (
+            "POST",
+            "auth/token/create/connector-run",
+            {
+                "ttl": "900s",
+                "explicit_max_ttl": "900s",
+                "renewable": False,
+                "no_default_policy": True,
+                "meta": {"connector": "xero"},
+            },
+        )
+    ]
+    assert (minted.lease_seconds, minted.renewable, minted.policies) == (
+        900,
+        False,
+        ("connector-run",),
+    )
+    assert minted.token.reveal() == RUN_TOKEN
+    assert RUN_TOKEN not in f"{minted!r} {minted}"
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {},
+        {"auth": None},
+        _minted(client_token=""),
+        _minted(lease_duration=0),
+        _minted(lease_duration=None),
+        _minted(renewable="no"),
+        _minted(policies="connector-run"),
+    ],
+)
+def test_a_run_token_answer_missing_its_token_duration_or_policies_is_refused(
+    answer: dict[str, Any],
+) -> None:
+    """A lease whose end this process cannot state is not a lease. Delete this and a token with no
+    stated TTL is used as if it had the one asked for."""
+    v = Recording({"auth/token/create/connector-run": answer})
+    with pytest.raises(SecretsUnavailableError) as raised:
+        v.mint_role_token("connector-run", ttl=timedelta(minutes=15), meta={})
+    assert RUN_TOKEN not in str(raised.value)
+
+
+def test_holding_presents_the_run_token_and_revoke_self_gives_it_back() -> None:
+    """The child client presents the minted token, not the worker's; revoking is a POST to
+    revoke-self, retried through a silence and raised at once on a refusal. Delete this and the
+    worker revokes its own token at the end of every run, or never revokes the run's."""
+    v = Recording({"auth/token/create/connector-run": _minted()})
+    held = v.holding(v.mint_role_token("connector-run", ttl=timedelta(minutes=15), meta={}))
+    assert held._token == RUN_TOKEN  # the one attribute the request header is built from
+
+    class Flaky(OpenBaoVault):
+        def __init__(self, failures: list[Exception]) -> None:
+            super().__init__("http://vault:8200", RUN_TOKEN)
+            self.calls: list[str] = []
+            self._failures = failures
+
+        def _call(
+            self, method: str, path: str, body: dict[str, Any] | None = None
+        ) -> dict[str, Any]:
+            self.calls.append(path)
+            if self._failures:
+                raise self._failures.pop(0)
+            return {}
+
+    once_silent = Flaky([VaultUnreachableError("timeout")])
+    once_silent.revoke_self()
+    assert once_silent.calls == ["auth/token/revoke-self"] * 2
+
+    refused = Flaky([VaultRefusedError("gone", status=403)])
+    with pytest.raises(VaultRefusedError):
+        refused.revoke_self()
+    assert refused.calls == ["auth/token/revoke-self"]
+
+    silent = Flaky([VaultUnreachableError("timeout")] * 3)
+    with pytest.raises(VaultUnreachableError):
+        silent.revoke_self()
+
+
+def test_the_seal_is_read_as_two_booleans_and_anything_else_is_refused() -> None:
+    """Delete this and a vault answering a proxy's HTML page reads as open and unsealed."""
+    assert Recording({"sys/seal-status": {"initialized": True, "sealed": True}}).seal_status() == (
+        SealStatus(initialized=True, sealed=True)
+    )
+    with pytest.raises(SecretsUnavailableError):
+        Recording({"sys/seal-status": {"initialized": "yes", "sealed": False}}).seal_status()
+
+
+def test_a_slot_the_installer_defined_is_told_from_one_that_does_not_exist() -> None:
+    """Metadata that answers is a defined slot; a 404 is none; any other refusal is raised. Delete
+    this and a missing installer step reads as a defined, empty slot."""
+    defined = Recording({"connector_keys/metadata/xero": {"data": {"current_version": 0}}})
+    assert defined.static_kv_defined("connector_keys/xero") is True
+    assert defined.sent == [("GET", "connector_keys/metadata/xero", None)]
+    missing = Recording(fail=VaultRefusedError("none", status=404))
+    assert missing.static_kv_defined("connector_keys/xero") is False
+    with pytest.raises(VaultRefusedError):
+        Recording(fail=VaultRefusedError("no", status=403)).static_kv_defined("connector_keys/xero")
+    with pytest.raises(SecretsUnavailableError):
+        defined.static_kv_defined("database/creds/xero")

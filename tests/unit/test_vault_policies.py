@@ -362,19 +362,31 @@ def test_the_application_may_write_connector_keys_and_read_only_their_metadata()
     }
 
 
-def test_the_worker_reads_connector_keys_and_does_nothing_else_there() -> None:
-    """Exactly one rule under the connector key engine for the worker, and it is read on the data
-    path. The worker runs connectors (`brain.ops.connector_sync_run`), so it reads a source's key;
-    it may not write one, delete one or read metadata, because a process nobody watches must not be
-    able to replace the key a source checks and has no screen to tell.
-
-    Delete this and the worker's rule gains `update` in a debugging session, which is a way for a
-    scheduled job to swap every source's key, and nothing else reads the policy."""
+def test_the_worker_reads_no_connector_key_itself_and_may_mint_only_the_run_token() -> None:
+    """M31.3.2.3: the worker's own token, renewed for as long as the worker runs, reads nothing
+    under the connector key engine, and may mint a child against the `connector-run` role and no
+    other.
+    Delete this and the direct read comes back in a debugging session, which makes the worker's
+    token a standing read of every source's key again, and nothing else reads the policy."""
     granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
-    keys = {
-        path: sorted(caps) for path, caps in granted.items() if path.startswith("connector_keys")
+    assert not [path for path in granted if path.startswith("connector_keys")]
+    minting = {path: sorted(caps) for path, caps in granted.items() if "token/create" in path}
+    assert minting == {"auth/token/create/connector-run": ["create", "update"]}
+    assert not [path for path in granted if path.startswith("auth/token/roles")]
+
+
+def test_the_run_token_policy_reads_a_source_key_and_revokes_itself_and_nothing_more() -> None:
+    """The one policy that reads a source's key, carried only by a token minted per attempt. No
+    renewal, so a stuck run loses its authority at the TTL; no create, so a run token mints nothing;
+    no metadata and no write. Delete this and the policy widens to the worker's old reach and the
+    lease is a lease in name only."""
+    from brain.ops.connector_lease import RUN_POLICY
+
+    granted = _granted_paths((POLICIES / f"{RUN_POLICY}.hcl").read_text(encoding="utf-8"))
+    assert {path: sorted(caps) for path, caps in granted.items()} == {
+        "connector_keys/data/+": ["read"],
+        "auth/token/revoke-self": ["update"],
     }
-    assert keys == {"connector_keys/data/+": ["read"]}
 
 
 def test_the_browser_runner_never_reaches_the_connector_key_engine() -> None:
@@ -438,10 +450,34 @@ def test_the_application_and_the_worker_may_look_up_and_renew_their_own_token_an
     `auth/token/renew`, which renews any token whoever holds this one is handed."""
     for role in (VaultRole.APPLICATION, VaultRole.WORKER):
         granted = _granted_paths(_policy_file(role).read_text(encoding="utf-8"))
-        own = {path: sorted(caps) for path, caps in granted.items() if path.startswith("auth/")}
+        # The worker's run-token mint is `test_the_worker_reads_no_connector_key_itself...`'s.
+        own = {
+            path: sorted(caps)
+            for path, caps in granted.items()
+            if path.startswith("auth/") and "token/create" not in path
+        }
         assert own == {
             "auth/token/lookup-self": ["read"],
             "auth/token/renew-self": ["update"],
         }, role
     browser = _granted_paths(_policy_file(VaultRole.BROWSER_RUNNER).read_text(encoding="utf-8"))
     assert not [path for path in browser if path.startswith("auth/")]
+
+
+def test_the_key_slot_table_is_the_catalogue_the_installer_defines() -> None:
+    """Every `connector_keys/` row of the document is a slot `brain.ops.connector_slots` defines,
+    with the same scopes, and every slot has a row. Delete this and the document drifts from the
+    code again, which is how it came to name `connectors/creds/` for keys kept elsewhere."""
+    from brain.ops.connector_slots import SLOT_SCOPES
+
+    rows = {
+        cells[1].strip("` "): (cells[3].strip(), cells[4].strip())
+        for cells in (
+            line.split("|")
+            for line in SLOTS_DOC.read_text(encoding="utf-8").splitlines()
+            if line.startswith("| `connector_keys/")
+        )
+    }
+    assert rows == {
+        one.path: ("; ".join(one.request), "; ".join(one.refuse)) for one in SLOT_SCOPES.values()
+    }

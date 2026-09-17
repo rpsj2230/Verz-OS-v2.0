@@ -20,7 +20,7 @@ and as another. `brain.ops.connector_sync.NO_CONNECTABLE_SOURCE_YIELDS_A_DOCUMEN
 No test here calls a live API. The key is a sentinel, the call is a replay, and the address is the
 one a stand-in resolver hands out.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4
 """
 
 from __future__ import annotations
@@ -55,6 +55,7 @@ from brain.knowledge.row_store import SessionRowSource
 from brain.knowledge.rows import RowRequest, RowTool, read_rows
 from brain.knowledge.visibility import KnowledgeVisibility
 from brain.ops.connectable import manifest_for
+from brain.ops.connector_lease import RUN_LEASE_TTL, RUN_POLICY, RUN_TOKEN_ROLE, LeaseOutcome
 from brain.ops.connector_store import StoredConnections
 from brain.ops.connector_sync import (
     ADDRESS_REFUSED,
@@ -82,16 +83,17 @@ from brain.ops.connector_sync_run import (
     sync_on,
     worker_connector_keys,
 )
-from brain.ops.connector_sync_store import StoredSyncStates
+from brain.ops.connector_sync_store import LeaseTally, StoredLeaseCounts, StoredSyncStates
 from brain.ops.credentials import KEY_FIELD, connector_key_slot
-from brain.ops.openbao import VaultRefusedError, VaultUnreachableError
+from brain.ops.leases import SealedSecret
+from brain.ops.openbao import RoleToken, VaultRefusedError, VaultUnreachableError
 from brain.ops.queue import Job
 from brain.ops.secrets import SecretRef, SecretsUnavailableError, VaultRole
 from brain.session import make_app_engine, make_application_sessions, make_session_factory
 from brain.tools.fetch import UnsafeAddressError
 from tests.fixtures.cassettes import CASSETTES
 from tests.fixtures.scratch_postgres import add_modelled, drop, fresh, run, sql
-from tests.unit.test_vault_policies import _granted_paths, _matches, _policy_file
+from tests.unit.test_vault_policies import POLICIES, _granted_paths, _matches, _policy_file
 from tests.unit.test_webhook_delivery import NAME, _certificate
 
 #: Far outside any plausible wall clock. See `CLAUDE.md` on a fixture with a date in it.
@@ -167,19 +169,41 @@ class Replay:
 
 
 @dataclass
+class Leased:
+    """`KeyLease` over a key or a failure, ending as it is told and noting when it was closed."""
+
+    given: str | None
+    failure: SecretsUnavailableError | None = None
+    ending: LeaseOutcome = LeaseOutcome.REVOKED
+    closed: list[datetime] = field(default_factory=list)
+
+    def key(self) -> str:
+        if self.failure is not None:
+            raise self.failure
+        assert self.given is not None
+        return self.given
+
+    def close(self, now: datetime) -> LeaseOutcome:
+        self.closed.append(now)
+        return self.ending
+
+
+@dataclass
 class Keys:
-    """`ConnectorKeys` handing out the sentinel and noting which reference it was asked for."""
+    """`ConnectorKeys` leasing the sentinel and noting which reference it was asked for."""
 
     asked: list[SecretRef] = field(default_factory=list)
+    leases: list[Leased] = field(default_factory=list)
 
-    def key_for(self, ref: SecretRef) -> str:
+    def lease(self, ref: SecretRef, *, now: datetime) -> Leased:
         self.asked.append(ref)
-        return KEY
+        self.leases.append(Leased(KEY))
+        return self.leases[-1]
 
 
 class NoKeys:
-    def key_for(self, ref: SecretRef) -> str:
-        raise ConnectorKeyAbsentError(NO_KEY)
+    def lease(self, ref: SecretRef, *, now: datetime) -> Leased:
+        return Leased(None, failure=ConnectorKeyAbsentError(NO_KEY), ending=LeaseOutcome.NONE)
 
 
 async def no_documents(item: KnowledgeItem) -> object:
@@ -280,6 +304,11 @@ def sync(
         )
 
     return through(url, work)
+
+
+def leases(url: str) -> list[str]:
+    rows = sql(url, "SELECT lease FROM ops.connector_sync ORDER BY finished_at")
+    return [str(one) for (one,) in rows]
 
 
 def attempts(url: str) -> list[tuple[Any, ...]]:
@@ -453,7 +482,10 @@ def test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again
         first = Replay([answer_for("XERO-200-invoices"), NO_CONTACTS])
         sync(url, first)
         listed = through(url, lambda sessions: StoredSyncStates(sessions).states())
+        leased = through(url, lambda sessions: StoredLeaseCounts(sessions).tallies(NOW))
+        ended = leases(url)
         disconnect(url)
+        after = through(url, lambda sessions: StoredLeaseCounts(sessions).tallies(NOW))
         later = Replay([answer_for("XERO-200-invoices")])
         ran = sync(url, later, at=NOW + timedelta(days=2))
         unlisted = through(url, lambda sessions: StoredSyncStates(sessions).states())
@@ -463,6 +495,7 @@ def test_a_connected_source_is_read_and_once_disconnected_it_is_never_read_again
     assert len(first.calls) == 2
     assert set(listed) == {"xero"}
     assert listed["xero"].last_synced_at is not None
+    assert (ended, dict(leased), dict(after)) == (["revoked"], {"xero": LeaseTally(revoked=1)}, {})
     assert later.calls == []
     assert ran == SyncRun(read=0, waiting=0, failed=0, not_due=0, cannot_be_read=0)
     assert unlisted == {}
@@ -545,8 +578,10 @@ def test_a_key_the_worker_cannot_read_fails_the_attempt_and_calls_nothing() -> N
         caller = Replay([answer_for("XERO-200-invoices")])
         sync(url, caller, keys=NoKeys())
         ((outcome, health, _, _, failures, _, _, detail),) = attempts(url)
+        ended = leases(url)
 
     assert caller.calls == []
+    assert ended == ["none"]
     assert (outcome, health, failures, detail) == ("failed", "degraded", 1, NO_KEY)
 
 
@@ -783,12 +818,14 @@ def test_a_synced_document_is_found_within_its_owners_department_and_is_absent_o
 
 
 @dataclass
-class Vault:
-    """`StaticKvReader` answering with one slot's fields, or refusing as it is told."""
+class RunReader:
+    """The vault as a run token presents to it: one slot's fields, and revoking itself."""
 
     fields: Mapping[str, Any] = field(default_factory=lambda: {KEY_FIELD: KEY})
     refuse: Exception | None = None
+    revoke_fails: Exception | None = None
     asked: list[str] = field(default_factory=list)
+    revoked: int = 0
 
     def read_static_kv(self, path: str) -> dict[str, Any]:
         self.asked.append(path)
@@ -796,12 +833,49 @@ class Vault:
             raise self.refuse
         return dict(self.fields)
 
+    def revoke_self(self) -> None:
+        if self.revoke_fails is not None:
+            raise self.revoke_fails
+        self.revoked += 1
+
+
+def a_run_token(**overrides: Any) -> RoleToken:
+    shape: dict[str, Any] = {
+        "token": SealedSecret("s.RUN-TOKEN"),
+        "accessor": "accessor",
+        "lease_seconds": int(RUN_LEASE_TTL.total_seconds()),
+        "renewable": False,
+        "policies": (RUN_POLICY,),
+    }
+    shape.update(overrides)
+    return RoleToken(**shape)
+
+
+@dataclass
+class Vault:
+    """`RunTokenVault`: mints a run token, or refuses as it is told, and hands out its reader."""
+
+    reader: RunReader = field(default_factory=RunReader)
+    minted: RoleToken = field(default_factory=a_run_token)
+    refuse_mint: Exception | None = None
+    mints: list[tuple[str, timedelta, dict[str, str]]] = field(default_factory=list)
+
+    def mint_role_token(self, role: str, *, ttl: timedelta, meta: Mapping[str, str]) -> RoleToken:
+        self.mints.append((role, ttl, dict(meta)))
+        if self.refuse_mint is not None:
+            raise self.refuse_mint
+        return self.minted
+
+    def holding(self, token: RoleToken) -> RunReader:
+        assert token is self.minted
+        return self.reader
+
 
 def test_the_worker_reads_a_key_only_at_a_sources_slot_and_only_for_its_own_role() -> None:
     """**The key-handling half of the leaf.** A reference outside `connector_keys/`, the engine's
     bare prefix, the leased connector path and a reference made for the application are each
-    refused before the vault is asked; the sibling is the source's own slot under the worker's
-    role, which is read.
+    refused before the vault is asked for anything, a run token included; the sibling is the
+    source's own slot under the worker's role, read through a run token minted for it.
 
     Delete this and a declaration edited to point at a provider key, or at another role's path, is
     handed to the vault by the least-watched process in the system."""
@@ -814,42 +888,110 @@ def test_the_worker_reads_a_key_only_at_a_sources_slot_and_only_for_its_own_role
         SecretRef(path="connectors/creds/xero", role=VaultRole.WORKER),
         SecretRef(path=slot, role=VaultRole.APPLICATION),
     ):
+        lease = keys.lease(refused, now=NOW)
         with pytest.raises(SecretsUnavailableError):
-            keys.key_for(refused)
-    assert vault.asked == []
+            lease.key()
+        assert lease.close(NOW) is LeaseOutcome.NONE
+    assert (vault.mints, vault.reader.asked) == ([], [])
 
-    assert keys.key_for(SecretRef(path=slot, role=VaultRole.WORKER)) == KEY
-    assert vault.asked == [slot]
+    held = keys.lease(SecretRef(path=slot, role=VaultRole.WORKER), now=NOW)
+    assert held.key() == KEY
+    assert vault.mints == [(RUN_TOKEN_ROLE, RUN_LEASE_TTL, {"connector": "xero"})]
+    assert vault.reader.asked == [slot]
+    assert KEY not in f"{held!r} {held}"
+
+
+def test_a_run_token_is_revoked_once_when_the_lease_closes_and_the_key_goes_with_it() -> None:
+    """M31.3.2.3: the lease ends at the attempt's end. A second close answers the first's outcome
+    without asking the vault again, and the key is gone once the token is. Delete this and a run
+    token lives out its TTL after every run, or the key outlives the lease in memory."""
+    vault = Vault()
+    lease = WorkerConnectorKeys(vault).lease(
+        SecretRef(path=connector_key_slot("xero").path, role=VaultRole.WORKER), now=NOW
+    )
+    assert lease.close(NOW) is LeaseOutcome.REVOKED
+    assert lease.close(NOW) is LeaseOutcome.REVOKED
+    assert vault.reader.revoked == 1
+    with pytest.raises(ConnectorKeyAbsentError):
+        lease.key()
+
+
+def test_a_revocation_the_vault_did_not_confirm_is_told_apart_from_a_token_that_had_expired() -> (
+    None
+):
+    """Inside the TTL an unconfirmed revocation leaves a live token, which is the one an operator
+    looks at; past the TTL there was nothing left to take back. Delete this and both read as
+    revoked, and a token living on for fifteen minutes is never counted."""
+    ref = SecretRef(path=connector_key_slot("xero").path, role=VaultRole.WORKER)
+    endings = []
+    for closed_at in (NOW + timedelta(minutes=1), NOW + RUN_LEASE_TTL):
+        vault = Vault(reader=RunReader(revoke_fails=VaultUnreachableError("timeout")))
+        endings.append(WorkerConnectorKeys(vault).lease(ref, now=NOW).close(closed_at))
+    assert endings == [LeaseOutcome.NOT_REVOKED, LeaseOutcome.EXPIRED]
+
+
+@pytest.mark.parametrize(
+    "widened",
+    [
+        {"renewable": True},
+        {"policies": (RUN_POLICY, "default")},
+        {"policies": ("worker",)},
+        {"lease_seconds": int(RUN_LEASE_TTL.total_seconds()) + 1},
+    ],
+)
+def test_a_run_token_wider_than_asked_for_is_never_read_with_and_is_revoked(
+    widened: dict[str, Any],
+) -> None:
+    """A token role configured wider than the installer wrote it would hand a run the worker's own
+    reach. Delete this and a renewable token, or one carrying another policy, reads the key."""
+    vault = Vault(minted=a_run_token(**widened))
+    lease = WorkerConnectorKeys(vault).lease(
+        SecretRef(path=connector_key_slot("xero").path, role=VaultRole.WORKER), now=NOW
+    )
+    with pytest.raises(VaultRefusedError) as raised:
+        lease.key()
+    assert key_detail(raised.value) == VAULT_REFUSED
+    assert vault.reader.asked == []
+    assert lease.close(NOW) is LeaseOutcome.REVOKED
 
 
 def test_an_empty_slot_is_absent_and_each_vault_failure_says_its_own_sentence() -> None:
     """A slot the vault answers 404 for, or holds with no key, is no key; a refusal is the policy; a
-    silence is the vault; no vault at all names the two settings.
+    silence is the vault; no vault at all names the two settings; a refused or silent mint says the
+    same words as a refused or silent read. A token minted and then not read with is still revoked.
 
     Delete this and every failure reads as the vault being down, and the person sent to fix it
     restarts OpenBao for a key nobody put in."""
     ref = SecretRef(path=connector_key_slot("xero").path, role=VaultRole.WORKER)
 
-    def failure(vault: Vault | None) -> SecretsUnavailableError:
+    def failure(vault: Vault | None) -> tuple[SecretsUnavailableError, LeaseOutcome]:
+        lease = WorkerConnectorKeys(vault).lease(ref, now=NOW)
         with pytest.raises(SecretsUnavailableError) as raised:
-            WorkerConnectorKeys(vault).key_for(ref)
-        return raised.value
+            lease.key()
+        return raised.value, lease.close(NOW)
 
-    missing = failure(Vault(refuse=VaultRefusedError("gone", status=404)))
-    blank = failure(Vault(fields={KEY_FIELD: "  "}))
-    refused = failure(Vault(refuse=VaultRefusedError("no", status=403)))
-    silent = failure(Vault(refuse=VaultUnreachableError("timeout")))
-    none = failure(None)
+    found = [
+        failure(Vault(reader=RunReader(refuse=VaultRefusedError("gone", status=404)))),
+        failure(Vault(reader=RunReader(fields={KEY_FIELD: "  "}))),
+        failure(Vault(reader=RunReader(refuse=VaultRefusedError("no", status=403)))),
+        failure(Vault(reader=RunReader(refuse=VaultUnreachableError("timeout")))),
+        failure(None),
+        failure(Vault(refuse_mint=VaultRefusedError("no role", status=403))),
+        failure(Vault(refuse_mint=VaultUnreachableError("timeout"))),
+    ]
 
-    assert isinstance(missing, ConnectorKeyAbsentError)
-    assert isinstance(blank, ConnectorKeyAbsentError)
-    assert [key_detail(one) for one in (missing, blank, refused, silent, none)] == [
+    assert isinstance(found[0][0], ConnectorKeyAbsentError)
+    assert isinstance(found[1][0], ConnectorKeyAbsentError)
+    assert [key_detail(one) for one, _ in found] == [
         NO_KEY,
         NO_KEY,
         VAULT_REFUSED,
         VAULT_UNREACHABLE,
         NO_VAULT,
+        VAULT_REFUSED,
+        VAULT_UNREACHABLE,
     ]
+    assert [ended for _, ended in found] == [LeaseOutcome.REVOKED] * 4 + [LeaseOutcome.NONE] * 3
 
 
 def test_a_worker_with_half_a_vault_configuration_has_none_and_prints_no_token() -> None:
@@ -863,18 +1005,21 @@ def test_a_worker_with_half_a_vault_configuration_has_none_and_prints_no_token()
     assert "vault:8200" not in str(configured)
 
 
-def test_the_worker_policy_grants_read_on_the_path_the_reader_calls_and_nothing_more() -> None:
-    """Held against the path `OpenBaoVault` reads for a source name at the grammar's longest.
+def test_the_run_policy_grants_read_on_the_path_the_reader_calls_and_the_worker_none() -> None:
+    """Held against the path `OpenBaoVault` reads for a source name at the grammar's longest: the
+    run token's policy reads it and nothing on its metadata, and the worker's own reads neither.
 
     Delete this and a source name that makes two path segments is refused by the vault on the first
-    install, or the worker's rule widens with nothing reading the policy."""
-    granted = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
+    install, or the worker's own token regains the read with nothing reading the policy."""
+    run = _granted_paths((POLICIES / f"{RUN_POLICY}.hcl").read_text(encoding="utf-8"))
+    worker = _granted_paths(_policy_file(VaultRole.WORKER).read_text(encoding="utf-8"))
     mount, _, rest = connector_key_slot("a" + "0" * 62).path.partition("/")
 
-    assert [caps for rule, caps in granted.items() if _matches(rule, f"{mount}/data/{rest}")] == [
+    assert [caps for rule, caps in run.items() if _matches(rule, f"{mount}/data/{rest}")] == [
         ["read"]
     ]
-    assert not [rule for rule in granted if _matches(rule, f"{mount}/metadata/{rest}")]
+    assert not [rule for rule in run if _matches(rule, f"{mount}/metadata/{rest}")]
+    assert not [rule for rule in worker if rule.startswith(mount)]
     assert "worker" in THE_PROCESS_THAT_RUNS_A_CONNECTOR_READS_ITS_KEY_AND_NO_OTHER_DOES
 
 

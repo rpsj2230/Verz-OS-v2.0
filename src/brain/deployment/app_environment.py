@@ -73,7 +73,7 @@ which is `brain.deployment.release._compose_rules`' reason for leaving it out of
 The two workers run the same image with an environment of their own and are not checked here;
 whether a job they run reads an `INSTALL_` value is an open question this module does not answer.
 
-Task ids: M41.1.3, M42.5.3, M5.1.2, M42.6.2
+Task ids: M41.1.3, M42.5.3, M5.1.2, M42.6.2, M31.3.2.6
 """
 
 from __future__ import annotations
@@ -124,6 +124,14 @@ WORKER_SERVICE: Final = "brain-worker"
 
 #: The line in the environment file holding the worker's token, which is also its choice.
 WORKER_VAULT_CHOICE: Final = "BRAIN_WORKER_VAULT_TOKEN"
+
+#: The vault's audit log volume as docker names it: the vault's compose project, `brain-vault`, and
+#: the volume's key in `ops/openbao/compose.yml`, `brain-vault-logs`. A test reads both.
+VAULT_AUDIT_VOLUME: Final = "brain-vault_brain-vault-logs"
+
+#: Where the worker's overlay mounts that volume, read-only, and the log the file device writes.
+VAULT_AUDIT_MOUNT: Final = "/vault-audit"
+VAULT_AUDIT_LOG: Final = f"{VAULT_AUDIT_MOUNT}/audit.log"
 
 #: `${NAME}`, `${NAME:-default}` or `${NAME:?message}`, as the whole value and nothing else.
 INTERPOLATION: Final = re.compile(r"\A\$\{([A-Z][A-Z0-9_]*)(?:(:[-?])([^}]*))?\}\Z")
@@ -384,9 +392,28 @@ def worker_vault_overlay_gaps(
     found: list[str] = []
     body = services[WORKER_SERVICE]
     keys = sorted(str(one) for one in body) if isinstance(body, Mapping) else []
-    if keys != ["environment", "networks"]:
+    if keys != ["environment", "networks", "volumes"]:
         found.append(
-            f"{WORKER_VAULT_OVERLAY} sets {keys} on {WORKER_SERVICE}, not the two it needs"
+            f"{WORKER_VAULT_OVERLAY} sets {keys} on {WORKER_SERVICE}, not the three it needs"
+        )
+    volumes = body.get("volumes") if isinstance(body, Mapping) else None
+    if volumes != [f"{VAULT_AUDIT_VOLUME}:{VAULT_AUDIT_MOUNT}:ro"]:
+        found.append(
+            f"{WORKER_VAULT_OVERLAY} must mount the vault's audit log read-only at "
+            f"{VAULT_AUDIT_MOUNT} and nothing else, and mounts {volumes}"
+        )
+    declared_volumes = document.get("volumes")
+    audit = (
+        declared_volumes.get(VAULT_AUDIT_VOLUME) if isinstance(declared_volumes, Mapping) else None
+    )
+    if not (
+        isinstance(audit, Mapping)
+        and audit.get("external") is True
+        and audit.get("name") == VAULT_AUDIT_VOLUME
+    ):
+        found.append(
+            f"{WORKER_VAULT_OVERLAY} does not declare {VAULT_AUDIT_VOLUME!r} as external "
+            "under that name"
         )
     environment = environment_of(document, WORKER_SERVICE) or {}
     wanted = {"BRAIN_VAULT_ADDRESS": VAULT_CHOICE, "BRAIN_VAULT_TOKEN": WORKER_VAULT_CHOICE}

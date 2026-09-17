@@ -64,7 +64,17 @@ renews a token by its value, at `auth/token/renew-self` or `auth/token/renew`, a
 renewal by accessor. So `token_standing` and `renew_self` take no argument naming a token, and
 `brain.ops.vault_renewal` argues why each process renews the one it holds.
 
-Task ids: M31.3.2.3, M27.8.7, M27.8.12, M42.6.5, M42.6.2
+**A run is given a token of its own, and that token is the lease.** A vendor's key cannot be minted,
+so what is leased for a connector run is the vault's authority to read it: `mint_role_token` asks
+`auth/token/create/<role>` for a child of this client's token, carrying one policy, a TTL and no
+renewal, and `holding` returns a client presenting it. `revoke_self` gives it back. The token is a
+`SealedSecret`, so no rendering of the answer prints it. See `brain.ops.connector_lease`.
+
+**The seal status is asked without trusting the token.** `seal_status` reads `sys/seal-status`,
+which OpenBao answers for anybody, so a console can say sealed, open or silent even when the token
+it holds has lapsed, which is exactly when somebody needs to know which of the three it is.
+
+Task ids: M31.3.2.3, M31.3.2.4, M27.8.7, M27.8.12, M42.6.5, M42.6.2
 """
 
 from __future__ import annotations
@@ -77,6 +87,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from brain.ops.leases import SealedSecret
 from brain.ops.secrets import Lease, SecretRef, SecretsUnavailableError, VaultRole
 
 #: How long to wait on the vault. Short on purpose: the vault sits on the same host on the
@@ -153,6 +164,31 @@ class TokenStanding:
     ttl_seconds: int
     period_seconds: int
     renewable: bool
+
+
+@dataclass(frozen=True)
+class RoleToken:
+    """A child token the vault minted against a token role: the lease a connector run holds.
+
+    `token` is sealed, so `repr`, `str`, an f-string and `dataclasses.asdict` all render the seal.
+    `accessor` is not a credential that reads anything and is still never logged by this module.
+    `policies` is what the vault says the token carries, which the caller checks rather than
+    trusting the role to have been configured as the installer wrote it.
+    """
+
+    token: SealedSecret
+    accessor: str
+    lease_seconds: int
+    renewable: bool
+    policies: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class SealStatus:
+    """What `sys/seal-status` says: whether the vault was ever initialised, and whether sealed."""
+
+    initialized: bool
+    sealed: bool
 
 
 def _seconds(value: object) -> int | None:
@@ -453,6 +489,105 @@ class OpenBaoVault:
             msg = "the vault answered a renewal without saying how long it granted"
             raise SecretsUnavailableError(msg)
         return granted
+
+    def seal_status(self) -> SealStatus:
+        """Whether the vault is initialised and sealed. Answered by OpenBao for any caller."""
+        payload = self._call("GET", "sys/seal-status")
+        initialized = payload.get("initialized")
+        sealed = payload.get("sealed")
+        if not isinstance(initialized, bool) or not isinstance(sealed, bool):
+            msg = "the vault described its seal without a readable initialized or sealed"
+            raise SecretsUnavailableError(msg)
+        return SealStatus(initialized=initialized, sealed=sealed)
+
+    def static_kv_defined(self, path: str) -> bool:
+        """Whether the slot exists at all, written or not: its metadata answers rather than 404.
+
+        A slot the installer defined with its scopes and nobody has filled answers here and holds
+        no version, which is the state `ops/openbao/credential-slots.md` calls empty until go-live.
+        """
+        assert_static_path(path)
+        mount, _, rest = path.partition("/")
+        try:
+            self._call("GET", f"{mount}/metadata/{rest}")
+        except VaultRefusedError as refused:
+            if refused.status == 404:
+                return False
+            raise
+        return True
+
+    def mint_role_token(self, role: str, *, ttl: timedelta, meta: Mapping[str, str]) -> RoleToken:
+        """A child token from `auth/token/create/<role>`, with this TTL and no renewal.
+
+        Not retried, for `issue`'s reason: a create that timed out may have minted a token whose
+        value came back only on the answer that never arrived, and it expires on its own TTL.
+        The answer is refused whole when it carries no token, no duration or no policies, because a
+        lease whose end this process cannot state is not one. Whether what it carries is what was
+        asked for is `brain.ops.connector_lease.judge_minted`'s decision, not this parser's.
+        """
+        seconds = int(ttl.total_seconds())
+        payload = self._call(
+            "POST",
+            f"auth/token/create/{role}",
+            {
+                "ttl": f"{seconds}s",
+                "explicit_max_ttl": f"{seconds}s",
+                "renewable": False,
+                "no_default_policy": True,
+                "meta": dict(meta),
+            },
+        )
+        auth = payload.get("auth")
+        if not isinstance(auth, dict):
+            msg = "the vault answered a token request with no auth block"
+            raise SecretsUnavailableError(msg)
+        token = auth.get("client_token")
+        accessor = auth.get("accessor")
+        granted = _seconds(auth.get("lease_duration"))
+        renewable = auth.get("renewable")
+        policies = auth.get("policies")
+        if (
+            not isinstance(token, str)
+            or not token
+            or not isinstance(accessor, str)
+            or granted is None
+            or granted == 0
+            or not isinstance(renewable, bool)
+            or not isinstance(policies, list)
+        ):
+            msg = (
+                "the vault answered a token request without a token, a bounded duration "
+                "or its policies"
+            )
+            raise SecretsUnavailableError(msg)
+        return RoleToken(
+            token=SealedSecret(token),
+            accessor=accessor,
+            lease_seconds=granted,
+            renewable=renewable,
+            policies=tuple(str(one) for one in policies),
+        )
+
+    def holding(self, token: RoleToken) -> OpenBaoVault:
+        """A client at this address presenting the child token instead of this one."""
+        return OpenBaoVault(self._address, token.token.reveal(), role=self._role)
+
+    def revoke_self(self) -> None:
+        """Revoke the token this client presents. Retried, for `revoke`'s reason."""
+        last: SecretsUnavailableError | None = None
+        for _ in range(3):
+            try:
+                self._call("POST", "auth/token/revoke-self", {})
+            except VaultRefusedError:
+                # A refusal is an answer: the token is already gone or never was, and asking again
+                # gets the same one. Raised at once so the caller can tell it from a silence.
+                raise
+            except SecretsUnavailableError as exc:
+                last = exc
+                continue
+            return
+        if last is not None:
+            raise last
 
     def revoke(self, lease_id: str) -> None:
         """Give the credential back. Retries, unlike `issue`.

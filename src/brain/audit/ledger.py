@@ -572,6 +572,19 @@ class AuditAction(enum.StrEnum):
     #: request. Which is in the details, with the capability and the reason code. Written by
     #: `0062`'s trigger on `gate.elevation_request`.
     ELEVATION = "elevation"
+    #: The secrets vault answered a call about a slot: a key read or written, its metadata read, a
+    #: run token minted or revoked, or the vault's own configuration changed. Which operation, which
+    #: part of the slot, whether it was refused and the token's HMAC are in the details, and never a
+    #: value. Written by `0093`'s trigger on `ops.vault_access`, which the worker fills from the
+    #: vault's audit log (`brain.ops.vault_audit_ship`).
+    #:
+    #: **A member of its own, and the second that records something within the permissions rather
+    #: than a change to them**, after RECORD_READ. `credential` was the tempting home and is the
+    #: wrong one for GRANT's reason: "when was the Anthropic key last replaced" is answered from
+    #: that action alone, and filling it with every read the worker makes would bury the answer.
+    #: The actor is the vault, `secrets_vault`, because the principal behind a token is not in the
+    #: log; the HMAC in the details ties calls by one token together without naming it.
+    VAULT_ACCESS = "vault_access"
 
 
 # --------------------------------------------------------------------- redaction

@@ -36,13 +36,17 @@ naming the two settings, never a row: `brain.tables.config` refuses secrets in t
 application can write configuration to, and a credential the application role can select is a
 credential in the ordinary query path. See `NO_VAULT_IS_NOT_A_REASON_TO_USE_A_TABLE`.
 
-**A key written here is in use in one process at once, and the rest is said rather than
-hidden.** The process that wrote it hands it to its own SDK, so the person who pressed save is
-not answered by a process still using the old key. A sibling worker started by
-`brain.serve` loads keys at its own start and nowhere else, which is
-`brain.ops.provider_keys`' "rotation is a restart", and a variable the environment file sets
-outranks the vault on every start. Both are reported, `InUse.OUTRANKED` for the second, so a
-screen can say what the person has to do. See `A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE`.
+**A key written here is in use in one process at once, and in every other within a minute.**
+The process that wrote it hands it to its own SDK, so the person who pressed save is not answered
+by a process still using the old key. Every application process also asks the vault once a minute
+when each provider slot was last written (`keep_refreshing`, reading metadata only) and loads a
+key whose version moved, so a key replaced from the console, or by an operator with the vault's own
+command line, is in use everywhere without a restart or a redeploy. Until 2026-09-17 a sibling
+loaded keys at its own start and nowhere else, which was `brain.ops.provider_keys`' "rotation is a
+restart", and M31.3.2.5 asks for the opposite. A variable the environment file sets still outranks
+the vault, on every start and in every refresh, and is reported as `InUse.OUTRANKED` so a screen
+can say what the person has to do. See `A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE` and
+`A_KEY_REPLACED_IN_THE_VAULT_IS_USED_WITHOUT_A_RESTART`.
 
 **A credential write leaves an entry in the audit ledger, and never the value.** Until
 2026-09-16 it left a log line, which is kept for a month and edited by whoever holds the log. Now
@@ -78,9 +82,9 @@ deadlocks the day somebody calls it on the loop. `keep` awaits instead: the bloc
 runs in a worker thread inside it, and the record is awaited on the loop through the application's
 own sessions, with no second pool.
 
-Rejected: a lazy load in a sibling worker the first time it finds no key. It is polling with a
-different trigger, it puts a vault call on the path of a person's question, and it still does
-nothing for a variable the environment file sets.
+Rejected: a lazy load in a sibling worker the first time it finds no key. It puts a vault call on
+the path of a person's question, it never notices a key replaced by a working one, and it still
+does nothing for a variable the environment file sets. The refresh is off that path, on a timer.
 
 Rejected: letting the vault win over the environment at start. It is the order that would make
 a rotation from the console survive a restart on an install whose file still carries a key, and
@@ -101,7 +105,7 @@ environment. The console's credential route writes `SLOTS` and nothing else, so 
 is written by connecting the source, under `admin:connector`, and never under `admin:credential`.
 See `A_CONNECTED_SOURCE_S_KEY_IS_WRITTEN_BY_CONNECTING_IT`.
 
-Task ids: M27.8.7, M5.1.2, M42.6.5
+Task ids: M27.8.7, M5.1.2, M42.6.5, M31.3.2.5
 """
 
 from __future__ import annotations
@@ -109,11 +113,11 @@ from __future__ import annotations
 import asyncio
 import enum
 import re
-from collections.abc import Callable, Mapping, MutableMapping
+from collections.abc import Awaitable, Callable, Mapping, MutableMapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import MappingProxyType
-from typing import Final, Protocol
+from typing import Any, Final, Protocol
 
 import structlog
 
@@ -129,6 +133,7 @@ from brain.ops.provider_keys import (
     load_into_environment,
     names_in_environment,
     put_into_environment,
+    read_static,
 )
 from brain.ops.secrets import SecretsUnavailableError, VaultRole
 
@@ -169,11 +174,24 @@ NO_VAULT_IS_NOT_A_REASON_TO_USE_A_TABLE: Final = (
 A_KEY_IN_USE_HERE_IS_NOT_IN_USE_EVERYWHERE: Final = (
     "The process that wrote a key hands it to its own provider SDK, so the answer to the person "
     "who saved it is not given by a process still using the old one. Every other server process "
-    "reads keys at its own start and not again, so it uses the new key from its next start, and "
-    "an environment file that sets the same variable wins over the vault on every start. The "
-    "first is a restart; the second is a line to remove, then a restart, and it is reported as "
-    "outranked so a screen can say which."
+    "notices the slot's new version on its next refresh, within a minute, and uses the new key "
+    "then, and an environment file that sets the same variable wins over the vault on every start "
+    "and every refresh. The first needs nothing; the second is a line to remove, then a restart, "
+    "and it is reported as outranked so a screen can say which."
 )
+
+#: Why a running process asks the vault whether its keys were replaced.
+A_KEY_REPLACED_IN_THE_VAULT_IS_USED_WITHOUT_A_RESTART: Final = (
+    "Rotation is somebody replacing a key in the vault, usually because the old one leaked, and "
+    "a process that keeps the old key until it restarts keeps using the leaked one on every "
+    "question until somebody redeploys. So each application process reads every provider slot's "
+    "metadata once a minute, which carries a version time and no field of the secret, and reads a "
+    "key into its environment only when that time moved. The model wire reads the environment on "
+    "every call, so the next question after the refresh goes out with the new key."
+)
+
+#: How often a running application process asks whether a provider key was replaced.
+REFRESH_EVERY: Final = timedelta(minutes=1)
 
 #: What a credential write leaves in the ledger, and what it never leaves.
 A_CREDENTIAL_WRITE_LEAVES_A_LEDGER_ENTRY_AND_NEVER_THE_VALUE: Final = (
@@ -388,6 +406,10 @@ class CredentialVault(Protocol):
         """The slot's current version, or None when it holds nothing."""
         ...
 
+    def read_static_kv(self, path: str) -> dict[str, Any]:
+        """One slot's fields, which only the refresh asks for, to load a replaced key."""
+        ...
+
 
 class CredentialWrites(Protocol):
     """Where a kept credential is recorded. `brain.ops.credential_write_store` is the one.
@@ -587,6 +609,41 @@ class Credentials:
                 error=type(exc).__name__,
             )
 
+    def refresh(
+        self, seen: Mapping[str, datetime | None]
+    ) -> tuple[dict[str, datetime | None], tuple[str, ...]]:
+        """Load every provider key whose slot was written since `seen`, unless it is outranked.
+
+        `seen` is each variable's version time as the last refresh found it; a variable absent from
+        it has never been loaded by a refresh, so its key is read once. Returns the times now seen
+        and the variables loaded, names and never values. See
+        `A_KEY_REPLACED_IN_THE_VAULT_IS_USED_WITHOUT_A_RESTART`. A vault that is silent or refuses
+        raises, and the caller asks again on its next round with the same `seen`.
+        """
+        vault = self._vault_or_refuse()
+        now_seen: dict[str, datetime | None] = dict(seen)
+        loaded: list[str] = []
+        for provider in PROVIDER_SLOTS:
+            if provider.env_var in self._outranking:
+                continue
+            try:
+                version = vault.static_kv_version(provider.path)
+                if version is None:
+                    continue
+                stamp = version.written_at
+                unchanged = stamp is not None and seen.get(provider.env_var) == stamp
+                if provider.env_var in seen and unchanged:
+                    continue
+                value = read_static(vault, provider.path)
+            except VaultUnreachableError as silent:
+                raise CredentialsUnavailableError(VaultState.UNREACHABLE) from silent
+            except SecretsUnavailableError as refused:
+                raise CredentialsUnavailableError(VaultState.REFUSED) from refused
+            put_into_environment(provider, value, environ=self._environ)
+            now_seen[provider.env_var] = stamp
+            loaded.append(provider.env_var)
+        return now_seen, tuple(loaded)
+
     def put_to_use(self, slot: CredentialSlot, value: str) -> InUse:
         """Hand a key this process has just kept to its own provider SDK, unless it is outranked.
 
@@ -611,10 +668,37 @@ def told_in_use(slot: CredentialSlot, in_use: InUse) -> str:
             f"{variable} from the environment file and restart the system."
         )
     return (
-        "The key is held in the vault and in use by the server process that answered. Any "
-        "other server process uses it from its next start, so restart the system to be sure "
-        "every question reaches the provider."
+        "The key is held in the vault and in use by the server process that answered. Every "
+        "other server process picks it up from the vault within a minute, with no restart."
     )
+
+
+async def keep_refreshing(
+    store: Credentials,
+    *,
+    every: timedelta = REFRESH_EVERY,
+    sleep: Callable[[float], Awaitable[object]] = asyncio.sleep,
+    rounds: int | None = None,
+) -> None:
+    """The application's refresh: now, then every `every`, until cancelled. Never raises.
+
+    The vault client blocks, so each round runs in a worker thread. A round the vault did not
+    answer is logged by the vault's state and asked again, for
+    `brain.ops.vault_renewal.keep_renewing`'s reason. `rounds` bounds the loop for a test; the
+    lifespan passes none.
+    """
+    seen: dict[str, datetime | None] = {}
+    done = 0
+    while rounds is None or done < rounds:
+        try:
+            seen, loaded = await asyncio.to_thread(store.refresh, seen)
+        except CredentialsUnavailableError as unavailable:
+            log.warning("provider keys not refreshed", vault=unavailable.state)
+        else:
+            if loaded:
+                log.info("provider keys refreshed from the vault", loaded=sorted(loaded))
+        done += 1
+        await sleep(every.total_seconds())
 
 
 # ------------------------------------------------------------------------ the wiring

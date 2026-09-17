@@ -82,6 +82,7 @@ STARTED = [
     ("vault_token_renewal", False),
     ("automation_run", False),
     ("connector_sync", False),
+    ("vault_audit_ship", False),
 ]
 
 
@@ -150,14 +151,14 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_nine_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_ten_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
     The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17,
     the vault token renewal later that day, with the installer's vault, and the automation
-    runner and the connector sync after it.
+    runner and the connector sync after it, and the vault audit shipper last.
 
-    Delete this and every assertion below that names the nine could be satisfied by a table
+    Delete this and every assertion below that names the ten could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
@@ -169,6 +170,7 @@ def test_the_wired_runners_are_the_nine_the_schedule_is_meant_to_start() -> None
         "vault_token_renewal",
         "automation_run",
         "connector_sync",
+        "vault_audit_ship",
     ]
 
 
@@ -333,6 +335,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
             ("retention_sweep", "refused", True, "retention_sweep ran"),
             ("spend_report_refresh", "ok", False, "spend_report_refresh ran"),
+            ("vault_audit_ship", "ok", False, "vault_audit_ship ran"),
             ("vault_token_renewal", "ok", False, "vault_token_renewal ran"),
         ]
         assert {row[4] for row in recorded(url)} == {NOW}
@@ -427,6 +430,7 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             "knowledge_reverification",
             "outbox_dispatch",
             "retention_sweep",
+            "vault_audit_ship",
             "vault_token_renewal",
         ]
         assert {one.name: one.ticked for one in found}["spend_report_refresh"] is (
@@ -457,6 +461,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
             ("retention_sweep", "failed", "RuntimeError: retention_sweep broke on purpose"),
             ("spend_report_refresh", "ok", "spend_report_refresh ran"),
+            ("vault_audit_ship", "ok", "vault_audit_ship ran"),
             ("vault_token_renewal", "ok", "vault_token_renewal ran"),
         ]
         assert {one.name: one.ticked for one in found}["retention_sweep"] is Ticked.FAILED
@@ -521,6 +526,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
         ("vault_token_renewal", False),
         ("automation_run", False),
         ("connector_sync", False),
+        ("vault_audit_ship", False),
     ]
     # The registry's entry point is what the schedule starts, so the control cannot measure as
     # running through its decision functions while the store they need goes uncalled.

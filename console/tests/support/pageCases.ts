@@ -676,6 +676,28 @@ const STORAGE = {
   read_at: "2019-03-04T09:00:00Z",
 };
 
+const VAULT_SLOT = {
+  slot: UNBROKEN,
+  description: UNBROKEN,
+  state: "held",
+  set_at: "2019-03-04T09:00:00Z",
+  request: [UNBROKEN],
+  refuse: [UNBROKEN],
+};
+
+const VAULT = {
+  seal: "open",
+  told: UNBROKEN,
+  slots_unread: "",
+  providers: [VAULT_SLOT],
+  connectors: [VAULT_SLOT],
+  leases: [{ connector: UNBROKEN, issued: 3, revoked: 2, expired: 1, not_revoked: 0 }],
+  leases_told: UNBROKEN,
+  lease_ttl_minutes: 15,
+  rotation: UNBROKEN,
+  audit: { entries: 4, refused: 1, last_shipped_at: "2019-03-04T09:00:00Z", told: UNBROKEN },
+};
+
 const DATA_TRANSFER = {
   catalogue: [
     { key: "audit_trail", label: UNBROKEN, direction: "export", carries: UNBROKEN, runs: true, told: UNBROKEN },
@@ -1870,6 +1892,14 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     signedIn: true,
     drawsValues: true,
     answers: { "/api/v1/storage": STORAGE },
+  },
+  // Secrets vault. The slot and lease tables scroll; the seal's sentence, the rotation and the
+  // shipping sentences wrap outside them.
+  "/vault": {
+    address: "/vault",
+    signedIn: true,
+    drawsValues: true,
+    answers: { "/api/v1/vault": VAULT },
   },
   // Import and export. The catalogue and the exports tables scroll; the served sentences and the
   // export form sit outside them. The confirmation is held in `tests/data-transfer-page.test.tsx`.

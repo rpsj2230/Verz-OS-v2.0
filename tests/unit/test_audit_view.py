@@ -392,6 +392,13 @@ CALLS: dict[str, dict[str, object]] = {
         "capability": "read:client.name",
     },
     "credential": {"slot": "providers/anthropic"},
+    "vault_access": {
+        "slot": "connector_keys/xero",
+        "operation": "read",
+        "part": "value",
+        "refused": False,
+        "identity": "d" * 64,
+    },
     "retention": {
         "release_id": "3c2b1a09-8f7e-4d6c-9b5a-1e2d3c4b5a69",
         "change": RetentionChange.RELEASED,

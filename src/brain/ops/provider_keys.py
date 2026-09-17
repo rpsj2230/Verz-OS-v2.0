@@ -30,14 +30,14 @@ and cannot be in an exception the adapter builds. This module therefore never re
 value to application code at all - `load_into_environment` sets it and returns only the
 names it set.
 
-**Rotation is a restart, except in the process that did the rotating.** A key changed in the
-vault does not reach a running process, and this does not poll for one. Polling would mean
-holding a re-read loop over a value that must not be logged, for a change that happens
-perhaps twice a year; a restart is cheap here and the deploy path already does one in three
-minutes. The one process that does not need the restart is the one an administrator's write
-went through, because it is already holding the value it was handed: `put_into_environment`
-sets it there, so the process that answered "saved" is not also the one still using the old
-key. Siblings are told about in `brain.ops.credentials`.
+**Rotation reaches a running process without a restart.** Until 2026-09-17 this paragraph said
+rotation was a restart, on the argument that a re-read loop over a value that must not be logged
+was not worth it for a change made twice a year. The argument missed what rotation is for: a key
+is usually replaced because it leaked, and every minute a process keeps the old one it goes on
+sending it. On a panel that redeploys to restart, a restart is also a redeploy.
+`brain.ops.credentials.Credentials.refresh` now reads each slot's metadata once a minute, which
+holds no field of the secret, and calls `read_static` and `put_into_environment` only for a slot
+whose version moved. The process an administrator's write went through still uses it at once.
 
 **A value that was in the environment before the vault was asked outranks the vault, on
 every start.** That is `load_into_environment`'s rule and it is kept: a developer's shell key
@@ -45,7 +45,7 @@ means it. `names_in_environment` is how a process remembers which names that was
 a key written from the console into a slot the environment file also sets can be reported as
 outranked rather than as in use.
 
-Task ids: M5.1.2, M27.8.7
+Task ids: M5.1.2, M27.8.7, M31.3.2.5
 """
 
 from __future__ import annotations
@@ -53,6 +53,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable, Mapping, MutableMapping
 from dataclasses import dataclass
+from typing import Any, Protocol
 
 from brain.ops.openbao import (
     STATIC_PREFIX,
@@ -74,8 +75,17 @@ __all__ = [
     "read_static",
 ]
 
+
 #: What a provider slug may look like. Interpolated into a vault path and used to build an
 #: environment variable name, so it is validated rather than trusted.
+class StaticKvReader(Protocol):
+    """A vault that reads one slot's fields under the static prefix. `OpenBaoVault` is one."""
+
+    def read_static_kv(self, path: str) -> dict[str, Any]:
+        """The slot's fields, or a `SecretsUnavailableError`."""
+        ...
+
+
 SLUG_RE = re.compile(r"^[a-z][a-z0-9_]{1,30}$")
 
 
@@ -128,7 +138,7 @@ PROVIDER_SLOTS: tuple[ProviderSlot, ...] = (
 )
 
 
-def read_static(vault: OpenBaoVault, path: str) -> str:
+def read_static(vault: StaticKvReader, path: str) -> str:
     """One value out of the vault's kv engine. Never returned to application code.
 
     Public only so `load_into_environment` can be read as two steps rather than one long

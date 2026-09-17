@@ -127,7 +127,7 @@ from brain.operate_routes import router as operate_router
 from brain.ops.artifact_store import artifacts_for
 from brain.ops.automation_owner_store import StoredAutomations
 from brain.ops.credential_write_store import credential_writes_for
-from brain.ops.credentials import credentials_at_start
+from brain.ops.credentials import credentials_at_start, keep_refreshing
 from brain.ops.default_ladder_store import SessionLadderWriter
 from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.log_store import start_log_store, stop_log_store
@@ -172,6 +172,7 @@ from brain.skill_routes import router as skill_router
 from brain.staff_source_routes import router as staff_source_router
 from brain.storage_routes import router as storage_router
 from brain.tools.startup import build_registry
+from brain.vault_routes import router as vault_router
 from brain.webhook_routes import router as webhook_router
 
 log = structlog.get_logger()
@@ -274,6 +275,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # only for whoever presents it. See `brain.ops.vault_renewal`.
     renewer = renewer_at_start(settings.vault_address, settings.vault_token)
     renewing = asyncio.create_task(keep_renewing(renewer)) if renewer is not None else None
+    # Every provider key this process uses, re-read when its slot's version moves, so a key
+    # replaced in the vault is in use here within a minute and nothing is redeployed. See
+    # `brain.ops.credentials.A_KEY_REPLACED_IN_THE_VAULT_IS_USED_WITHOUT_A_RESTART`.
+    refreshing = (
+        asyncio.create_task(keep_refreshing(app.state.credentials))
+        if app.state.credentials.configured
+        else None
+    )
 
     if settings.run_migrations and not settings.database_url and settings.env != "development":
         # Loud on purpose. Skipping migrations because a variable was unset is exactly
@@ -550,6 +559,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             renewing.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await renewing
+        if refreshing is not None:
+            refreshing.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await refreshing
         if priming is not None:
             priming.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -1021,6 +1034,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # held and when, and is built on `brain.api.NoEchoRoute` so not even a refused body is
     # repeated. See `brain.credential_routes`.
     app.include_router(credential_router)
+    # The Secrets vault screen: the seal, every slot, each source's leases and the audit log's
+    # shipping. Read only, under the credentials route's capability. See `brain.vault_routes`.
+    app.include_router(vault_router)
     # The five install screens. A ninth router because what it answers about is the deployment
     # rather than the company's data: no name to guess, no row belonging to anybody, and no
     # session on four of the five. The same `asking` dependency, imported. See

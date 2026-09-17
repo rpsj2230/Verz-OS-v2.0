@@ -172,6 +172,7 @@ ACTION_BY_METHOD: Final[Mapping[str, AuditAction]] = MappingProxyType(
         "memory": AuditAction.MEMORY,
         "organisation": AuditAction.ORGANISATION,
         "elevation": AuditAction.ELEVATION,
+        "vault_access": AuditAction.VAULT_ACCESS,
     }
 )
 
@@ -835,6 +836,25 @@ class AuditRecorder:
         """
         return self._write(
             AuditAction.CREDENTIAL, subject("credential", credential_subject_id(slot)), {}
+        )
+
+    def vault_access(
+        self, *, slot: str, operation: str, part: str, refused: bool, identity: str = ""
+    ) -> AuditEntry:
+        """Record that the secrets vault answered a call about a slot.
+
+        Written in a deployed database by `0093`'s trigger on `ops.vault_access`, one entry per row
+        the worker ships from the vault's audit log, and held to this method's details by a test.
+        The subject is the slot, as `credential` files a write under it, so a slot's writes and its
+        reads sit under one subject and two actions. `identity` is the hex of the vault's HMAC of
+        the token's accessor, omitted when the log carried none: a digest by shape, which
+        `_is_recordable` admits, and one no candidate list can reverse without the vault's key.
+        """
+        details: dict[str, object] = {"operation": operation, "part": part, "refused": refused}
+        if identity:
+            details["identity"] = identity
+        return self._write(
+            AuditAction.VAULT_ACCESS, subject("credential", credential_subject_id(slot)), details
         )
 
     def retention(self, *, release_id: str, change: RetentionChange) -> AuditEntry:

@@ -25,14 +25,15 @@ somebody erased would fail every sync of its source for good.
 and the last read to the end beside it, so a connection disconnected and connected again shows the
 new connection's history and none of the old one's.
 
-Task ids: M42.6.5
+Task ids: M42.6.5, M31.3.2.3, M31.3.2.4
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Any, Final, Protocol, runtime_checkable
 
@@ -42,6 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.connectors.contract import HealthState
 from brain.connectors.projection import ProjectedRecord
+from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection, every_live
 from brain.ops.connector_sync import Attempt, StoredValue, SyncOutcome, SyncState
 from brain.tables.connector_connection import ConnectorConnectionRow
@@ -161,6 +163,7 @@ def attempt_row(connection_id: uuid.UUID, attempt: Attempt) -> Insert:
         consecutive_failures=attempt.consecutive_failures,
         next_attempt_at=attempt.next_attempt_at,
         detail=attempt.detail,
+        lease=attempt.lease.value,
     )
 
 
@@ -214,3 +217,82 @@ class StoredSyncStates:
         async with self._sessions() as session, session.begin():
             rows = (await session.execute(latest_attempts())).mappings().all()
         return MappingProxyType({str(one["connector"]): _state(one) for one in rows})
+
+
+# ---------------------------------------------------------------------- the leases
+
+
+@dataclass(frozen=True)
+class LeaseTally:
+    """How one source's attempts' leases ended over a window. Counts of this install's own runs.
+
+    Every figure is a count of attempts the worker made, never of anything a reader may not see:
+    which sources a reader is told of is decided before a tally is looked up, as the Connectors
+    screen decides it.
+    """
+
+    revoked: int = 0
+    expired: int = 0
+    not_revoked: int = 0
+
+    @property
+    def issued(self) -> int:
+        return self.revoked + self.expired + self.not_revoked
+
+
+@runtime_checkable
+class LeaseCounts(Protocol):
+    """What the Secrets vault screen needs about leases. `StoredLeaseCounts` is one."""
+
+    async def tallies(self, since: datetime) -> Mapping[str, LeaseTally]:
+        """Each live connection's lease endings since `since`, by the source's name."""
+        ...
+
+
+def lease_tallies(since: datetime) -> Select[Any]:
+    """Attempts that held a lease since `since`, by source and ending, live connections only."""
+    return (
+        select(ConnectorSyncRow.connector, ConnectorSyncRow.lease, func.count().label("attempts"))
+        .join(
+            ConnectorConnectionRow,
+            and_(
+                ConnectorConnectionRow.id == ConnectorSyncRow.connection_id,
+                ConnectorConnectionRow.disconnected_at.is_(None),
+            ),
+        )
+        .where(
+            ConnectorSyncRow.finished_at >= since,
+            ConnectorSyncRow.lease != LeaseOutcome.NONE.value,
+        )
+        .group_by(ConnectorSyncRow.connector, ConnectorSyncRow.lease)
+    )
+
+
+def fold_tallies(rows: Sequence[tuple[str, str, int]]) -> Mapping[str, LeaseTally]:
+    """The grouped counts as one tally per source. An ending this build does not know is refused."""
+    found: dict[str, LeaseTally] = {}
+    for connector, ending, attempts in rows:
+        one = found.get(connector, LeaseTally())
+        match LeaseOutcome(ending):
+            case LeaseOutcome.REVOKED:
+                one = LeaseTally(one.revoked + attempts, one.expired, one.not_revoked)
+            case LeaseOutcome.EXPIRED:
+                one = LeaseTally(one.revoked, one.expired + attempts, one.not_revoked)
+            case LeaseOutcome.NOT_REVOKED:
+                one = LeaseTally(one.revoked, one.expired, one.not_revoked + attempts)
+            case LeaseOutcome.NONE:
+                continue
+        found[connector] = one
+    return MappingProxyType(found)
+
+
+class StoredLeaseCounts:
+    """`LeaseCounts` over this install's database."""
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def tallies(self, since: datetime) -> Mapping[str, LeaseTally]:
+        async with self._sessions() as session, session.begin():
+            rows = (await session.execute(lease_tallies(since))).all()
+        return fold_tallies([(str(a), str(b), int(c)) for a, b, c in rows])

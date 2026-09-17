@@ -132,6 +132,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "vault_token_renewal",
         "automation_run",
         "connector_sync",
+        "vault_audit_ship",
     }
 )
 

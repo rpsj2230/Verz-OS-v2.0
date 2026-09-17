@@ -315,8 +315,16 @@ def test_the_roles_that_may_renew_are_exactly_those_their_vault_policy_grants_re
     policies = sorted(POLICY_DIR.glob("*.hcl"))
     assert policies, "no vault policies found; the path this test pins has moved"
 
+    # `connector-run` is carried by a child token minted per connector attempt and by no
+    # process, so it names no role; it is the only policy file that does not.
+    from brain.ops.connector_lease import RUN_POLICY
+
     granted: set[VaultRole] = set()
+    assert RUN_POLICY in {path.stem for path in policies}
     for path in policies:
+        if path.stem == RUN_POLICY:
+            assert 'path "sys/leases/renew"' not in path.read_text(encoding="utf-8")
+            continue
         role = VaultRole(path.stem.replace("-", "_"))
         if 'path "sys/leases/renew"' in path.read_text(encoding="utf-8"):
             granted.add(role)

@@ -78,6 +78,7 @@ from brain.core.envelope import TypedResult
 from brain.core.scope import Op, Scope
 from brain.knowledge.item import KnowledgeItem
 from brain.ops.connectable import NotConnectableError, manifest_for
+from brain.ops.connector_lease import LeaseOutcome
 from brain.ops.connector_store import Connection
 from brain.ops.limits import Limit
 from brain.tools.fetch import Resolver
@@ -246,8 +247,9 @@ NO_KEY: Final = (
     "The vault holds no key for this source. Disconnect it and connect it again with its key."
 )
 VAULT_REFUSED: Final = (
-    "The vault refused the worker's read of this source's key. The worker policy may not be "
-    "loaded: ops/openbao/credential-slots.md has the steps."
+    "The vault refused the worker's read of this source's key, or minted a run token wider than a "
+    "run may hold. The worker and connector-run policies or the connector-run token role may not "
+    "be loaded: ops/openbao/credential-slots.md has the steps."
 )
 VAULT_UNREACHABLE: Final = "The vault did not answer, so the source's key could not be read."
 NOT_READ_YET: Final = "Not read yet. The worker reads it on its next run."
@@ -305,6 +307,9 @@ class Attempt:
     consecutive_failures: int
     next_attempt_at: datetime
     detail: str
+    #: How the attempt's vault lease ended. Set by `brain.ops.connector_sync_run.attempt`, which
+    #: holds the lease; this module decides nothing about it. See `brain.ops.connector_lease`.
+    lease: LeaseOutcome = LeaseOutcome.NONE
 
 
 #: A value `proj.record.fields` can hold as JSON.
