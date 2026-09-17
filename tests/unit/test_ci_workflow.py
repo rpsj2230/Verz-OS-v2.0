@@ -675,8 +675,15 @@ def test_the_local_type_gates_judge_the_platform_the_runner_does() -> None:
         "both mypy runs in the hook, the HEAD worktree one and the working-tree one, have to "
         "judge the platform the runner judges"
     )
-    assert expected in makefile, "make types no longer names the platform the runner uses"
+    # The Makefile's `types` calls `brain.tasks types`, which holds the command.
+    from brain.tasks import TASKS
+
+    assert "uv run python -m brain.tasks types" in makefile
+    assert " ".join(TASKS["types"].steps[0]) == f"mypy {expected}", (
+        "make types no longer names the platform the runner uses"
+    )
     assert "types-here:" in makefile, "the native run has to stay reachable for debugging"
+    assert "--platform" not in TASKS["types-here"].steps[0]
 
 
 def test_only_a_change_to_the_task_list_skips_the_product_suites() -> None:
