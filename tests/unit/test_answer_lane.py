@@ -472,6 +472,53 @@ def test_a_question_reaching_a_lane_with_nothing_connected_is_told_so() -> None:
     assert answered.abstention.reason is AbstentionReason.NOTHING_CONNECTED
 
 
+#: The same question shape filed under a source this lane has no reader for.
+UNREAD = HOURS.model_copy(update={"rule_id": "client_hours_in_xero", "source": "xero"})
+
+
+def test_a_rule_whose_source_nothing_reads_is_told_nothing_is_connected_and_names_it() -> None:
+    """A question whose shape matches a rule for a source no reader serves: the asker is told
+    nothing is connected, and the abstention carries that source for the ledger (M27.7.18).
+
+    Delete this and the lane goes back to "I could not find that" for a system nobody connected,
+    and the Questions and gaps screen has no source to name."""
+    answered = run(rules=(UNREAD,))
+
+    assert texts(answered) == [f"{NOTHING_CONNECTED_TEXT} This covers laravel."]
+    assert answered.abstention is not None
+    assert answered.abstention.reason is AbstentionReason.NOTHING_CONNECTED
+    assert answered.abstention.missing_source == "xero"
+
+
+def test_a_missing_source_is_said_alike_whether_the_record_exists_and_whoever_asks() -> None:
+    """Decided from the rules and the readers before anything is read, so a record that exists,
+    one that does not, a reader of the column and a reader of nothing receive one set of frames,
+    and nothing is read for any of them.
+
+    Delete this and the missing source could be decided after a read, where it would vary with
+    what the read found."""
+    source = Rows(ACME)
+    frames_seen = {
+        body(run(question, rows=source, rules=(UNREAD,), entitlement=reach, sources=()))
+        for question in ("hours left on Acme", "hours left on Nobody")
+        for reach in (ents(*SEES_HOURS), ents())
+    }
+
+    assert len(frames_seen) == 1
+    assert source.queries == []
+
+
+def test_a_rule_a_reader_serves_is_answered_even_beside_an_unread_rule_of_the_same_shape() -> None:
+    """The positive case: the served rule matches, so the question is not a gap and is answered.
+
+    Delete this and a lane that calls every question with an unread twin a missing source passes
+    the tests above."""
+    answered = run(rules=(HOURS, UNREAD))
+
+    assert answered.abstention is None
+    assert "37" in texts(answered)[0]
+
+
 def test_the_progress_steps_are_the_work_in_the_order_it_happens() -> None:
     """The steps are what a person watches while they wait, and they must describe the lane's
     real order rather than a fixed animation: reading the question, checking reach, the tool

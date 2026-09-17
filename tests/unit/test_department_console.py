@@ -78,6 +78,7 @@ from brain.core.scope import Clause, Op, Scope
 from brain.gate.context import Channel
 from brain.knowledge.visibility import Visibility
 from brain.navigation_routes import NavigationView
+from brain.ops.question_gap_store import Gap
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import Directory, Keys, NoCache, Versions, token_for, verifier
 from tests.unit.test_connector_trust import a_registered
@@ -536,12 +537,15 @@ def open_skills(viewer: AgentViewer, reader: EntitlementSet) -> frozenset[str]:
 
 
 def open_questions(reader: EntitlementSet) -> frozenset[str]:
-    """Gaps: whether every question is answered with nothing connected, which is one fact about
-    the install, the same for every department, and names no department on the screen."""
-    shown = questions_for_reader(connected=False, entitlement=reader, now=NOW)
-    return frozenset(
-        str(getattr(shown, one.name)) for one in fields(shown) if one.name == "department"
+    """Gaps: a question no connected source covered, one asked in each department. Nothing
+    connected at all is one fact about the install and names no department; a recorded gap names
+    the department it was asked in, since 2026-09-17, so this screen sees less like the others."""
+    gaps = tuple(
+        Gap(trace_id=f"t-{department}", department=department, source="xero", at=NOW)
+        for department in (MAINTENANCE, FINANCE)
     )
+    shown = questions_for_reader(connected=False, gaps=gaps, entitlement=reader, now=NOW)
+    return frozenset(one.department for one in shown.gaps)
 
 
 MAINTENANCE_PERSON = AgentViewer(principal_id="u_maintenance", departments=frozenset({MAINTENANCE}))
@@ -573,9 +577,10 @@ OPENERS: dict[
     "usage": (open_usage, open_usage),
 }
 
-#: The one screen whose only fact is the same for every department, so seeing less is not
-#: possible on it and the proof is that it names no department at all.
-THE_SAME_FOR_EVERY_DEPARTMENT = frozenset({"questions"})
+#: Screens whose only fact is the same for every department, so seeing less is not possible on
+#: them and the proof is that they name no department at all. Questions and gaps was the one until
+#: 2026-09-17, when it began listing the questions no connected source covered by department.
+THE_SAME_FOR_EVERY_DEPARTMENT: frozenset[str] = frozenset()
 
 
 def test_every_screen_the_department_console_offers_has_a_way_to_open_it_here() -> None:

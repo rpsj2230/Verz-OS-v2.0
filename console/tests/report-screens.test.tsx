@@ -6,8 +6,8 @@
  * testing are the ones that look like the design working. A token column of zeros looks like the
  * usage the design asks for and says nobody used any tokens, and a token total added up in the
  * browser looks like the API's and is a figure nobody can reconcile; a gaps table with question shapes
- * blank looks like the design's card and says every question was answered; a green canary line
- * looks like the design's card and says a run passed that nothing checked. Each is asserted
+ * blank looks like the design's card and says the words were kept; a green canary line drawn for
+ * anything but a run the API calls passed says a run passed that nothing checked. Each is asserted
  * against over the rendered page.
  *
  * **What the API sends is compared with the Python models, not with this file's copy of them.**
@@ -29,29 +29,35 @@ import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 import { SOMETHING_DID_NOT_WORK } from "../src/pages/Overview";
 import {
+  A_RUN_IS_OWED,
   CANARIES_HEADING,
-  FINDINGS_ARE_NOT_RECORDED,
+  FINDINGS_GO_TO_THE_ALERT,
   GOLDEN_NOT_ON_AN_INSTALL,
   NOTHING_ACTS_ON_A_RESULT,
-  NOT_ON_AN_INSTALL,
   NO_EVALUATION_RUN,
   NO_RUN,
+  ON_A_RED_CANARY,
   QUALITY_HEADING,
   Quality,
+  WHAT_A_RUN_CHECKS,
+  WHO_A_RUN_ASKS_AS,
   notStarted,
 } from "../src/pages/Quality";
 import { QUALITY_API_PATH, cadence, readQuality, runLine } from "../src/pages/qualityQuery";
 import {
   CONNECT_A_SOURCE,
   EXPORT_NOT_OFFERED,
-  NO_GAP,
+  MISSING_SOURCES_CAPTION,
+  NO_MISSING_SOURCE,
   NO_SOURCE,
+  ONLY_MISSING_SOURCES_ARE_RECORDED,
   QUESTIONS_HEADING,
   Questions,
-  UNANSWERED_ARE_NOT_RECORDED,
+  SOURCE_NOT_NAMED,
   UNANSWERED_HEADING,
   WORDS_ARE_NOT_KEPT,
   notFoundIsNotAGap,
+  since,
 } from "../src/pages/Questions";
 import { QUESTIONS_API_PATH, readQuestions } from "../src/pages/questionsQuery";
 import { THE_BRAIN_COULD_NOT_BE_REACHED as COULD_NOT_REACH_THE_BRAIN } from "../src/ui/FailureNotice";
@@ -151,6 +157,9 @@ function usageBody(over: Record<string, unknown> = {}): Record<string, unknown> 
 
 function questionsBody(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    start: "2019-02-26T09:00:00Z",
+    end: "2019-03-05T09:00:00Z",
+    gaps: [],
     nothing_connected: true,
     answered_when_nothing_connected: sentinel("nothing-connected"),
     answered_when_nothing_found: sentinel("nothing-found"),
@@ -164,9 +173,10 @@ function qualityBody(over: Record<string, unknown> = {}): Record<string, unknown
     last_canary_run: {
       started_at: "2019-03-05T06:00:00Z",
       finished_at: "2019-03-05T06:02:00Z",
-      state: "finished",
+      state: "passed",
     },
-    canaries_started: false,
+    canaries_owed: false,
+    canaries_started: true,
     canary_interval_seconds: 43200,
     findings_are_recorded: false,
     evaluation_runs_are_recorded: false,
@@ -712,14 +722,20 @@ describe("the Questions and gaps screen", () => {
     // dropped, which on this screen is a sentence about what cannot be listed that nobody sees.
     expect(backendModelFields(ROUTES, "QuestionsView").sort()).toEqual(
       [
+        "start",
+        "end",
+        "gaps",
         "nothing_connected",
         "answered_when_nothing_connected",
         "answered_when_nothing_found",
         "unanswered_are_recorded",
       ].sort(),
     );
+    expect(backendModelFields(ROUTES, "GapLineView")).toEqual(["department", "source", "asked"]);
     expect(readQuestions("not a screen")).toBeNull();
     expect(readQuestions(questionsBody({ nothing_connected: "yes" }))).toBeNull();
+    expect(readQuestions(questionsBody({ gaps: [{ department: "web", asked: 1 }] }))).toBeNull();
+    expect(readQuestions(questionsBody({ gaps: undefined }))).toBeNull();
   });
 
   test("nothing connected is the design's no source row, quoting what askers are told, with the fix", async () => {
@@ -737,14 +753,54 @@ describe("the Questions and gaps screen", () => {
     expect(fix?.getAttribute("href")).toBe("/connectors");
   });
 
-  test("the design's question shape and asked columns are not drawn, and the page says why", async () => {
-    // What breaks if this is deleted: columns drawn blank on every row, which read as every question
-    // having been answered, or the sentence saying why they are absent disappears.
-    const container = await mount("/questions", answering(QUESTIONS_API_PATH, questionsBody()));
+  test("each gap line is its department, the source that would have answered, and how often", async () => {
+    // What breaks if this is deleted: the lines the API sends are dropped, re-ordered or summed on
+    // the page, or a source the reader may not be told is drawn as a blank that reads as a name.
+    const container = await mount(
+      "/questions",
+      answering(
+        QUESTIONS_API_PATH,
+        questionsBody({
+          nothing_connected: false,
+          gaps: [
+            { department: sentinel("support"), source: sentinel("xero"), asked: 2 },
+            { department: sentinel("web"), source: null, asked: 1 },
+          ],
+        }),
+      ),
+    );
+
+    expect(cells(container, MISSING_SOURCES_CAPTION)).toEqual([
+      [sentinel("support"), sentinel("xero"), "2", CONNECT_A_SOURCE],
+      [sentinel("web"), SOURCE_NOT_NAMED, "1", CONNECT_A_SOURCE],
+    ]);
+    expect(text(container)).toContain(since("2019-02-26T09:00:00Z"));
+    expect(text(container)).not.toContain(NO_MISSING_SOURCE);
+    expect(container.querySelectorAll("table")).toHaveLength(1);
+  });
+
+  test("the design's question shape column is not drawn, and the page says why", async () => {
+    // What breaks if this is deleted: a shape column drawn blank on every row, which reads as the
+    // words having been kept and hidden, or the sentences saying why disappear.
+    const container = await mount(
+      "/questions",
+      answering(
+        QUESTIONS_API_PATH,
+        questionsBody({ gaps: [{ department: "web", source: "xero", asked: 1 }] }),
+      ),
+    );
     const headers = [...container.querySelectorAll("th[scope=col]")].map((one) => one.textContent);
 
-    expect(headers).toEqual(["Why it failed", "What every asker is told", "Fix"]);
-    expect(text(container)).toContain(UNANSWERED_ARE_NOT_RECORDED);
+    expect(headers).toEqual([
+      "Why it failed",
+      "What every asker is told",
+      "Fix",
+      "Department",
+      "Source that would have answered",
+      "Asked",
+      "Fix",
+    ]);
+    expect(text(container)).toContain(ONLY_MISSING_SOURCES_ARE_RECORDED);
     expect(text(container)).toContain(WORDS_ARE_NOT_KEPT);
     expect(text(container)).toContain(EXPORT_NOT_OFFERED);
     expect(container.querySelectorAll("button")).toHaveLength(0);
@@ -759,10 +815,11 @@ describe("the Questions and gaps screen", () => {
     expect(cells(container, "Why questions could not be answered")).toHaveLength(1);
   });
 
-  test("no gap is one sentence, and a withheld answer renders exactly as a connected install", async () => {
-    // What breaks if this is deleted: a reader who may not be told reads something that separates
-    // them from a reader on a connected install, or a helpful field upstream reaches the page.
-    const connected = await mount(
+  test("no gap line is one sentence, and a withheld answer renders exactly as an install with none", async () => {
+    // What breaks if this is deleted: a reader who may not see a line reads something that
+    // separates them from an install where no question went unanswered, or a helpful field
+    // upstream reaches the page.
+    const none = await mount(
       "/questions",
       answering(QUESTIONS_API_PATH, questionsBody({ nothing_connected: false })),
     );
@@ -770,24 +827,30 @@ describe("the Questions and gaps screen", () => {
       "/questions",
       answering(
         QUESTIONS_API_PATH,
-        questionsBody({ nothing_connected: false, withheld: true, reason: sentinel("grant") }),
+        questionsBody({
+          nothing_connected: false,
+          withheld: true,
+          hidden_lines: 4,
+          reason: sentinel("grant"),
+        }),
       ),
     );
 
-    expect(text(connected)).toContain(NO_GAP);
-    expect(connected.querySelector("table")).toBeNull();
-    expect(page(leaky).innerHTML).toBe(page(connected).innerHTML);
+    expect(text(none)).toContain(NO_MISSING_SOURCE);
+    expect(none.querySelector("table")).toBeNull();
+    expect(page(leaky).innerHTML).toBe(page(none).innerHTML);
+    expect(text(leaky)).not.toContain(sentinel("grant"));
   });
 
-  test("the sentence saying nothing records an unanswered question follows the response", async () => {
-    // What breaks if this is deleted: the day a ledger records one, the page goes on saying none
-    // does, because the sentence was the page's rather than the API's.
+  test("the sentence saying only missing sources are recorded follows the response", async () => {
+    // What breaks if this is deleted: the day a ledger records every unanswered question, the page
+    // goes on saying only one kind is, because the sentence was the page's rather than the API's.
     const container = await mount(
       "/questions",
       answering(QUESTIONS_API_PATH, questionsBody({ unanswered_are_recorded: true })),
     );
 
-    expect(text(container)).not.toContain(UNANSWERED_ARE_NOT_RECORDED);
+    expect(text(container)).not.toContain(ONLY_MISSING_SOURCES_ARE_RECORDED);
   });
 });
 
@@ -799,6 +862,7 @@ describe("the Quality and canaries screen", () => {
     expect(backendModelFields(ROUTES, "QualityView").sort()).toEqual(
       [
         "last_canary_run",
+        "canaries_owed",
         "canaries_started",
         "canary_interval_seconds",
         "findings_are_recorded",
@@ -812,32 +876,36 @@ describe("the Quality and canaries screen", () => {
     ]);
     expect(readQuality("not a screen")).toBeNull();
     expect(readQuality(qualityBody({ canaries_started: "no" }))).toBeNull();
+    expect(readQuality(qualityBody({ canaries_owed: undefined }))).toBeNull();
     expect(readQuality({ ...qualityBody(), last_canary_run: undefined })).toBeNull();
   });
 
-  test("a finished run is drawn as finished and never as passed or green", async () => {
-    // What breaks if this is deleted: a run that returned is drawn as a pass, on the screen read
-    // before deciding not to worry, when nothing recorded what it found.
+  test("a run the API calls passed is drawn as passed, and nothing it found is on the page", async () => {
+    // What breaks if this is deleted: a passed run is drawn in words a reader has to interpret, or
+    // the page stops saying that what a failed run found goes to the alert and not here.
     const container = await mount("/quality", answering(QUALITY_API_PATH, qualityBody()));
 
     expect(container.querySelector("h2")?.textContent).toBe(CANARIES_HEADING);
     expect(field(container, "Last run")).toBe(
-      "Started 2019-03-05T06:00:00Z, finished at 2019-03-05T06:02:00Z.",
+      "Started 2019-03-05T06:00:00Z, passed at 2019-03-05T06:02:00Z.",
     );
-    expect(field(container, "What it found")).toBe(FINDINGS_ARE_NOT_RECORDED);
-    expect(field(container, "Last run")).not.toMatch(/pass|green/i);
-    expect(text(container).replace(FINDINGS_ARE_NOT_RECORDED, "")).not.toMatch(/pass|green/i);
+    expect(field(container, "What it found")).toBe(FINDINGS_GO_TO_THE_ALERT);
+    expect(field(container, "Synthetic users under test")).toBe(WHO_A_RUN_ASKS_AS);
+    expect(field(container, "Assertions per run")).toBe(WHAT_A_RUN_CHECKS);
   });
 
   test.each([
-    ["failed", "Started 2019-03-05T06:00:00Z, failed at 2019-03-05T06:02:00Z."],
+    [
+      "failed",
+      "Started 2019-03-05T06:00:00Z, failed, because it found something or could not finish, at 2019-03-05T06:02:00Z.",
+    ],
     [
       "declined",
       "Started 2019-03-05T06:00:00Z, reached in report-only mode and did not act at 2019-03-05T06:02:00Z.",
     ],
   ])("a %s run is said in its own words", (state, line) => {
-    // What breaks if this is deleted: two endings drawn alike, and a run that raised reads as one
-    // that returned.
+    // What breaks if this is deleted: two endings drawn alike, and a red run reads as one that
+    // passed, or a failed run is said to have found something when it may only have stopped.
     expect(
       runLine({ started_at: "2019-03-05T06:00:00Z", finished_at: "2019-03-05T06:02:00Z", state }),
     ).toBe(line);
@@ -856,13 +924,18 @@ describe("the Quality and canaries screen", () => {
     // them from an install where the canaries never ran, which says a run happened.
     const none = await mount(
       "/quality",
-      answering(QUALITY_API_PATH, qualityBody({ last_canary_run: null })),
+      answering(QUALITY_API_PATH, qualityBody({ last_canary_run: null, canaries_owed: true })),
     );
     const leaky = await mount(
       "/quality",
       answering(
         QUALITY_API_PATH,
-        qualityBody({ last_canary_run: null, withheld: true, subject: sentinel("client.cost") }),
+        qualityBody({
+          last_canary_run: null,
+          canaries_owed: true,
+          withheld: true,
+          subject: sentinel("client.cost"),
+        }),
       ),
     );
 
@@ -871,30 +944,41 @@ describe("the Quality and canaries screen", () => {
     expect(text(leaky)).not.toContain(sentinel("client.cost"));
   });
 
-  test("whether anything starts the canaries is said, with the cadence they keep", async () => {
+  test("whether anything starts the canaries is said, with the cadence they keep and whether a run is owed", async () => {
     // What breaks if this is deleted: the page says the canaries run every twelve hours on an
-    // install where nothing starts them, or stops giving the cadence once something does.
-    const idle = await mount("/quality", answering(QUALITY_API_PATH, qualityBody()));
-    expect(text(idle)).toContain(notStarted(43200));
-
-    const started = await mount(
+    // install where nothing starts them, stops giving the cadence once something does, or says
+    // nothing when the schedule has stopped and a run is owed.
+    const idle = await mount(
       "/quality",
-      answering(QUALITY_API_PATH, qualityBody({ canaries_started: true })),
+      answering(QUALITY_API_PATH, qualityBody({ canaries_started: false, canaries_owed: true })),
     );
+    expect(text(idle)).toContain(notStarted(43200));
+    expect(text(idle)).not.toContain(A_RUN_IS_OWED);
+    expect(field(idle, "On a red canary")).toBe(NOTHING_ACTS_ON_A_RESULT);
+
+    const started = await mount("/quality", answering(QUALITY_API_PATH, qualityBody()));
     expect(text(started)).toContain(cadence(43200));
     expect(text(started)).not.toContain(notStarted(43200));
+    expect(text(started)).not.toContain(A_RUN_IS_OWED);
+    expect(field(started, "On a red canary")).toBe(ON_A_RED_CANARY);
+
+    const owed = await mount(
+      "/quality",
+      answering(QUALITY_API_PATH, qualityBody({ canaries_owed: true })),
+    );
+    expect(field(owed, "Runs")).toBe(`${cadence(43200)}${A_RUN_IS_OWED}`);
+
     expect(cadence(43200)).toBe("every 12 hours");
     expect(cadence(3600)).toBe("every hour");
     expect(cadence(90)).toBe("every 90 seconds");
   });
 
-  test("the design's rows an install cannot fill are sentences, with no figure and no control", async () => {
+  test("the design's rows an install cannot fill as figures are sentences, with no control", async () => {
     // What breaks if this is deleted: synthetic users and assertions drawn as numbers nothing on an
     // install measured, or a golden score and a regression drawn empty, which read as zero.
     const container = await mount("/quality", answering(QUALITY_API_PATH, qualityBody()));
 
-    expect(text(container)).toContain(NOT_ON_AN_INSTALL);
-    expect(text(container)).toContain(NOTHING_ACTS_ON_A_RESULT);
+    expect(text(container)).not.toMatch(/\b(34|198)\b/);
     expect(text(container)).toContain(GOLDEN_NOT_ON_AN_INSTALL);
     expect(text(container)).toContain(NO_EVALUATION_RUN);
     expect(container.querySelectorAll("button")).toHaveLength(0);

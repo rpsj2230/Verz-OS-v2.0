@@ -7,7 +7,7 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 70 tables, from `brain.db.Base.metadata`.
+- 71 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
 - 110 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 66 console addresses, from the route table in `console/src/App.tsx`.
@@ -295,7 +295,7 @@ No gap recorded.
 ### Usage, activity and system statistics
 
 - **Screens:** `/usage`, `/adoption`, `/spend`, `/questions`, `/quality`, `/service-levels`, `/me`
-- **Tables:** `ops.question_asked`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`
+- **Tables:** `ops.question_asked`, `ops.question_gap`, `ops.report_refresh`, `ops.spend_actual`, `obs.request_telemetry`
 - **Installation values:** none
 
 | Route | Called by |

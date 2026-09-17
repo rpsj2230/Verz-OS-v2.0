@@ -270,6 +270,9 @@ ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
         "ops.outbox_event",
         "ops.plugin_install",
         "ops.plugin_version",
+        # A department, a source and an instant under a trace id: `0063` keeps no principal, so a
+        # question no connected source covered is nobody's once the question ledger's row is gone.
+        "ops.question_gap",
         "ops.report_refresh",
         "ops.retention_release",
         "ops.retention_report",

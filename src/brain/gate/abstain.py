@@ -46,6 +46,14 @@ different provider does answer, the chain has shopped until something said yes. 
 then has an answer that depends on which model happened to be up. So the system says "I will
 not answer that" once, honestly, and records it.
 
+**Nothing connected can name the source that would have answered, for the ledger only.**
+`Abstention.missing_source` is the source of a rule whose question shape matched and whose source
+nothing on this install reads. It is a fact about configuration, identical for every asker, so
+recording it discloses no reach and no record, and it is what makes a gap a roadmap rather than a
+count (M27.7.18). It is refused on every other reason: a source named beside "nothing found" would
+be the refusal and the absence told apart in the ledger by the one field a gaps screen reads. See
+`ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE`. `AbstentionNotice` still has nowhere to put it.
+
 **Escalation names a route, never a person's availability.** "Ask Wei Ling, she is online"
 leaks a presence signal and a reporting line to whoever forwards the message. "This needs a
 person from maintenance" does not, and it is the sentence that actually gets the work done.
@@ -53,7 +61,7 @@ person from maintenance" does not, and it is the sentence that actually gets the
 Scope: domain logic. Nothing here sends a message, writes a row, calls a model or reads a
 clock; `now` is always a parameter.
 
-Task ids: M8.2.1, M8.2.2, M8.2.3, M8.2.4, M8.3.1, M8.3.2, M8.3.3, M8.3.4, M8.3.5
+Task ids: M8.2.1, M8.2.2, M8.2.3, M8.2.4, M8.3.1, M8.3.2, M8.3.3, M8.3.4, M8.3.5, M27.7.18
 """
 
 from __future__ import annotations
@@ -200,6 +208,15 @@ def scope_of_reach(admissible: Iterable[str]) -> SearchScope:
 
 # ------------------------------------------------------- the outcome (M8.2.3)
 
+#: Why a source is carried by one reason and refused on the other four.
+ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE: Final = (
+    "Nothing connected is said alike to every asker, because it is decided from the rules and "
+    "the readers this install holds, so the source a matched rule names is configuration and "
+    "may be recorded. Every other reason is decided from a reach or from what a read found, and "
+    "a source recorded beside one of those would tell a refusal from an absence in the one "
+    "field a gaps screen reads."
+)
+
 
 @dataclass(frozen=True)
 class AbstentionNotice:
@@ -236,6 +253,17 @@ class Abstention:
     reason: AbstentionReason
     scope: SearchScope = SearchScope()
     detail: str = ""
+    #: The source a matched rule names and nothing here reads, on `NOTHING_CONNECTED` only. See
+    #: `ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE`. Empty when no rule's shape matched.
+    missing_source: str = ""
+
+    def __post_init__(self) -> None:
+        if self.missing_source and self.reason is not AbstentionReason.NOTHING_CONNECTED:
+            msg = (
+                f"an abstention for {self.reason.value!r} cannot name a missing source. "
+                f"{ONLY_NOTHING_CONNECTED_NAMES_A_SOURCE}"
+            )
+            raise ValueError(msg)
 
     def for_asker(self) -> AbstentionNotice:
         """The only thing that may be said to the person who asked."""
@@ -256,8 +284,15 @@ def not_entitled(scope: SearchScope, *, detail: str = "") -> Abstention:
     return Abstention(reason=AbstentionReason.NOT_ENTITLED, scope=scope, detail=detail)
 
 
-def nothing_connected(scope: SearchScope, *, detail: str = "") -> Abstention:
-    return Abstention(reason=AbstentionReason.NOTHING_CONNECTED, scope=scope, detail=detail)
+def nothing_connected(
+    scope: SearchScope, *, detail: str = "", missing_source: str = ""
+) -> Abstention:
+    return Abstention(
+        reason=AbstentionReason.NOTHING_CONNECTED,
+        scope=scope,
+        detail=detail,
+        missing_source=missing_source,
+    )
 
 
 def retrieved_but_not_answering(scope: SearchScope, *, detail: str = "") -> Abstention:

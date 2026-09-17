@@ -291,7 +291,7 @@ labelled "last verified restore" beside a backup timestamp is the field somebody
 deciding not to worry, and the rule exists so that the day somebody builds a restore is the day
 that screen gets written.
 
-## Seven of the fifteen mechanisms are started by nothing
+## Six of the sixteen mechanisms are started by nothing
 
 Named individually, because "monitoring is not wired" is a sentence somebody skims. The last
 column is the registry's own word for what starts each one, and this table is checked against
@@ -306,14 +306,15 @@ test it before it runs became the first caller of the roster dry run. Nine becam
 2026-09-15, when the general worker began ticking the control schedule and the retention
 sweep was the first of these it started. Eight became true the same day, when the schedule began
 starting the re-verification nag. Seven became true on 2026-09-17, when the schedule began
-starting the webhook dispatch.
+starting the webhook dispatch, and six later that day, when it began starting the permission
+canaries.
 
 <!-- checked: every scheduled mechanism and whether anything starts it -->
 
 | Mechanism | What it would guard | Started by |
 | --- | --- | --- |
 | `retention_sweep` | that nothing is kept past the window its data class was given | `in_process` |
-| `canary_run` | that the gate still refuses today what it refused yesterday | `nothing` |
+| `canary_run` | that the gate still refuses today what it refused yesterday | `in_process` |
 | `restore_drill` | that the copies being taken can actually be restored | `in_process` |
 | `backup_exposure` | that a stretch of work with no copy anywhere is noticed while it is still short | `nothing` |
 | `denial_digest` | that a colleague who keeps being told there is nothing there is noticed by somebody who can fix it | `nothing` |
@@ -331,16 +332,20 @@ starting the webhook dispatch.
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
-says nothing about whether *that* module is ever reached. For `retention_sweep`,
+says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
 `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh` and `erasure_queue` it is: the general worker
-ticks the control schedule and starts all five. The sweep runs in report-only mode, deleting nothing, until the
+ticks the control schedule and starts all six. The sweep runs in report-only mode, deleting nothing, until the
 installation releases it: every run writes a report an administrator reads at
 `GET /api/v1/govern/retention`, and somebody holding `admin:retention` over everything releases
 the sweep after the newest report with `POST /api/v1/govern/retention/release`, or puts it back
 to reporting with `POST /api/v1/govern/retention/withdrawal`. A legal hold placed with
 `POST /api/v1/govern/legal-holds` by somebody holding `admin:legal_hold` keeps the rows it covers
-from the next run on. The re-verification nag records each nag in the webhook outbox and asks
-the owner only while the owner can still reach the document; no person is sent it yet. The webhook
+from the next run on. The permission canaries ask as every distinct reach the install's live
+accounts hold, and as one that holds nothing, and create no account to do it; a run that finds a
+defect is recorded as failed, the Quality and canaries screen says so, and what it found is written
+to the worker's error stream beside the failure and is kept nowhere else. The re-verification nag
+records each nag in the webhook outbox and asks the owner only while the owner can still reach the
+document; no person is sent it yet. The webhook
 dispatch sends what is due every minute, signed with each subscriber's secret, which the worker
 reads from the vault under its own policy: a worker with no `BRAIN_VAULT_ADDRESS` and
 `BRAIN_VAULT_TOKEN` sends nothing and its every run fails saying so. An administrator stops a

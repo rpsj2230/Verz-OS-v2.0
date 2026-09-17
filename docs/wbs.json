@@ -1780,7 +1780,7 @@
     "Spend, budgets and what happens at the ceiling",
     "Service levels: what was promised, what was measured, and where the gap is",
     "Adoption: who is using this, for what, and who has stopped",
-    "Questions and gaps: what people asked that the system could not answer",
+    "Questions and gaps: the questions no connected source could answer, by department and the source that would have, never counting one answered with nothing found",
     "Quality and the permission canaries",
     "Knowledge library across every department, with per-item visibility scope",
     "Learning review across every department, tiers separated and tier one undoable",

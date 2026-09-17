@@ -13,8 +13,8 @@ were written by somebody who found it in their own module and wrote it down. Thi
 first thing in the tree that asks the question of every module at once.
 
 **What this asserts is that the registry and the source agree, not that everything is
-wired.** Seven of the sixteen controls have no caller of any kind today, three have a caller
-nothing runs on a schedule, five are started by the worker's schedule, and one is on a route. A
+wired.** Six of the sixteen controls have no caller of any kind today, three have a caller
+nothing runs on a schedule, six are started by the worker's schedule, and one is on a route. A
 test asserting that they do would be red on arrival, and
 `brain.ops.sweeps.sweep_house_style` records at length what happens to a check that is red the
 day it lands. So the assertion is agreement in
@@ -60,7 +60,8 @@ KNOWN_ORPHANS = frozenset(
     {
         # `retention_sweep` left on 2026-09-15: the worker's schedule starts it. See
         # `SCHEDULED_BY_THE_WORKER`.
-        "canary_run",
+        # `canary_run` left on 2026-09-17: the worker's schedule starts it. See
+        # `SCHEDULED_BY_THE_WORKER`.
         "backup_exposure",
         "denial_digest",
         # `knowledge_reverification` left on 2026-09-15: the worker's schedule starts it. See
@@ -108,6 +109,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #:
 #: `outbox_dispatch` joined on 2026-09-17 from `KNOWN_ORPHANS`, when `brain.ops.webhook_delivery`
 #: gave `dispatch_due` a sender, a resolver and the worker's reader of signing secrets.
+#:
+#: `canary_run` joined on 2026-09-17 from `KNOWN_ORPHANS`. `brain.ops.canary_run` asks as every
+#: reach the install holds and raises on a finding, so a red run is recorded as failed.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -115,6 +119,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "spend_report_refresh",
         "outbox_dispatch",
         "erasure_queue",
+        "canary_run",
     }
 )
 

@@ -90,6 +90,7 @@ from brain.tables.organisation import DepartmentLeadRow, TeamMembershipRow
 from brain.tables.outbox import OutboxDeliveryRow, OutboxEventRow, WebhookSubscriberRow
 from brain.tables.plugin import PluginInstallRow, PluginVersionRow
 from brain.tables.projection import ProjectedRecordRow
+from brain.tables.question_gap import QuestionGapRow
 from brain.tables.resolution import (
     CanonicalEntityRow,
     EntityAliasRow,
@@ -269,6 +270,9 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0063_application_log. Points at nothing: a log row names a module, a trace reference and
     # an exception type as values, and names no person.
     "obs.application_log",
+    # 0064_question_gap. Points at nothing: a department and a source are values, so a question the
+    # install was not wired to answer is still counted after either is renamed.
+    "ops.question_gap",
 )
 
 __all__ = [
@@ -322,6 +326,7 @@ __all__ = [
     "PrincipalRow",
     "ProjectedRecordRow",
     "QuestionAskedRow",
+    "QuestionGapRow",
     "ReportRefreshRow",
     "RequestTelemetryRow",
     "RetentionReleaseRow",

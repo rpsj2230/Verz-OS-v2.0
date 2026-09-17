@@ -117,6 +117,7 @@ from brain.ops.install_settings import refresh as refresh_install_settings
 from brain.ops.log_store import start_log_store, stop_log_store
 from brain.ops.model_service import ModelService, model_service_at_start
 from brain.ops.object_store import backup_objects, object_store_at_start
+from brain.ops.question_gap_store import GapRecorder
 from brain.ops.question_store import QuestionRecorder
 from brain.ops.replica_store import console_reads_for
 from brain.ops.telemetry_store import TelemetryRecorder
@@ -593,8 +594,9 @@ def request_recorders_for(
 ) -> tuple[RequestRecorder, ...]:
     """What a finished request is recorded to on this process. See `brain.gate.finish`.
 
-    The question recorder and the metadata ledger's recorder when there is a database, both
-    bound to its sessions, and nothing when there is not. A process
+    The question recorder, the metadata ledger's recorder and the recorder of questions no
+    connected source covers when there is a database, all bound to its sessions, and nothing when
+    there is not. A process
     with no database has nowhere to keep a record and nowhere an adoption report could read
     one back from, so an in-memory recorder there would be a count that vanishes on restart
     and that no reader can reach. A function rather than two lines in `lifespan`, so which
@@ -602,7 +604,7 @@ def request_recorders_for(
     """
     if sessions is None:
         return ()
-    return (QuestionRecorder(sessions), TelemetryRecorder(sessions))
+    return (QuestionRecorder(sessions), TelemetryRecorder(sessions), GapRecorder(sessions))
 
 
 def suspension_store_for(

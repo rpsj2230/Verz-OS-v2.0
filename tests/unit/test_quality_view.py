@@ -1,9 +1,10 @@
-"""The quality screen's reader decision: when the canaries last ran, to whom, and in what words.
+"""The quality screen's reader decision: whether the canaries passed, to whom, and in what words.
 
-Three properties. A finished run is never a passed one, because the attempt table records that a
-control returned and not what it found. A canary run is shown only to a reader whose evaluation
-grant covers the whole install, because a failing run is a statement that the gate may be leaking
-now. And a reader who may not see a run is answered exactly as an install with no run recorded.
+Three properties. A run recorded `ok` is a pass, because the canary runner raises on a finding and
+a raise is recorded as failed. A canary run is shown only to a reader whose evaluation grant covers
+the whole install, because a failing run is a statement that the gate may be leaking now. And a
+reader who may not see a run is answered exactly as an install with no run recorded, down to
+whether a run is owed.
 
 Dates are 2019, far from any wall clock, because nothing here is about the present.
 
@@ -66,20 +67,23 @@ def a_run(state: RunState = RunState.FAILED) -> CanaryRun:
 # ----------------------------------------------------------------------------- the runs
 @pytest.mark.parametrize(
     ("outcome", "state"),
-    [("ok", RunState.FINISHED), ("failed", RunState.FAILED), ("refused", RunState.DECLINED)],
+    [("ok", RunState.PASSED), ("failed", RunState.FAILED), ("refused", RunState.DECLINED)],
 )
-def test_each_recorded_outcome_is_shown_in_the_attempt_tables_own_terms(
+def test_a_run_recorded_ok_is_a_pass_and_a_run_recorded_failed_is_a_failure(
     outcome: str, state: RunState
 ) -> None:
-    """Three outcomes, three states, and none of them is passed.
+    """Three outcomes, three states, and only `ok` is passed.
 
-    What breaks if this is deleted: `ok` shown as a pass, which is a green light on the screen
-    read before deciding not to worry, for a run that may have found a leak and returned.
+    `ok` is a pass because `brain.ops.canary_run.verdict` raises on any finding, which
+    `tests/unit/test_canary_run.py` holds, and the worker records a raise as `failed`.
+
+    What breaks if this is deleted: a failed run shown as anything but failed, or a run that
+    passed drawn as something a reader has to interpret.
     """
     run = canary_run_of(started_at=STARTED, finished_at=FINISHED, outcome=outcome)
 
     assert run == CanaryRun(started_at=STARTED, finished_at=FINISHED, state=state)
-    assert {one.value for one in RunState} == {"finished", "failed", "declined", "unfinished"}
+    assert {one.value for one in RunState} == {"passed", "failed", "declined", "unfinished"}
 
 
 def test_a_run_with_a_start_and_no_finish_is_unfinished() -> None:
@@ -175,6 +179,10 @@ def test_a_reader_who_may_not_see_a_run_is_answered_as_an_install_with_no_run(
 ) -> None:
     """DENIED and ABSENT: the withheld object equals the never-run object, whatever the run was.
 
+    Every state, and `a_run` started three hours before `NOW`, so a run is not owed to a reader
+    shown it: a screen deciding owed from the run it read rather than the run it shows would say
+    not owed here and owed to an install with no run.
+
     What breaks if this is deleted: a field or a default that differs between the two, and a
     reader can tell a run was withheld from them, which says one happened.
     """
@@ -182,6 +190,24 @@ def test_a_reader_who_may_not_see_a_run_is_answered_as_an_install_with_no_run(
     for state in RunState:
         withheld = quality_for_reader(a_run(state), entitlement, now=NOW, started=True)
         assert withheld == never_run
+
+
+def test_a_run_is_owed_once_the_run_shown_is_older_than_the_canaries_interval() -> None:
+    """Owed is `brain.ops.canaries.due` over the run this reader is shown, at the request's instant.
+
+    Two runs either side of twelve hours, written as literals, so a changed interval or a
+    comparison turned round fails here rather than on the screen.
+
+    What breaks if this is deleted: the screen says a run is owed half a day early or never,
+    and the one line telling an administrator the schedule has stopped says nothing.
+    """
+    permitted = reader(Scope.unrestricted())
+    recent = CanaryRun(started_at=NOW - timedelta(hours=11), finished_at=NOW, state=RunState.PASSED)
+    stale = CanaryRun(started_at=NOW - timedelta(hours=13), finished_at=NOW, state=RunState.PASSED)
+
+    assert quality_for_reader(recent, permitted, now=NOW, started=True).canaries_owed is False
+    assert quality_for_reader(stale, permitted, now=NOW, started=True).canaries_owed is True
+    assert quality_for_reader(None, permitted, now=NOW, started=True).canaries_owed is True
 
 
 def test_whether_the_canaries_are_started_and_their_cadence_are_carried_to_everybody() -> None:
@@ -240,8 +266,9 @@ def test_the_screen_is_the_registrys_quality_screen_read_behind_the_evaluation_g
 def test_nothing_records_a_finding_or_an_evaluation_run() -> None:
     """The two constants the route copies onto the response.
 
-    What breaks if this is deleted: the page stops saying a finished run is not a passed one, or
-    that the golden corpus is not on an install, with nothing having changed about either.
+    What breaks if this is deleted: the page stops saying a red run's findings go to the alert and
+    are kept nowhere, or that the golden corpus is not on an install, with nothing having changed
+    about either.
     """
     assert FINDINGS_ARE_RECORDED is False
     assert EVALUATION_RUNS_ARE_RECORDED is False

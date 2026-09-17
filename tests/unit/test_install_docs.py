@@ -1000,9 +1000,9 @@ def test_a_mechanism_the_chapter_does_not_name_is_a_finding() -> None:
         a_table(
             MECHANISMS_MARKER,
             MECHANISMS_HEADER,
-            "| `canary_run` | that the gate still refuses what it refused | `nothing` |",
+            "| `backup_exposure` | that the gate still refuses what it refused | `nothing` |",
         ),
-        controls=(control("canary_run"), control("restore_drill")),
+        controls=(control("backup_exposure"), control("restore_drill")),
     )
 
     assert found == (
@@ -1020,10 +1020,10 @@ def test_a_row_for_a_mechanism_this_install_does_not_carry_is_a_finding() -> Non
         a_table(
             MECHANISMS_MARKER,
             MECHANISMS_HEADER,
-            "| `canary_run` | that the gate still refuses what it refused | `nothing` |",
+            "| `backup_exposure` | that the gate still refuses what it refused | `nothing` |",
             "| `gone_away` | something that was removed | `nothing` |",
         ),
-        controls=(control("canary_run"),),
+        controls=(control("backup_exposure"),),
     )
 
     assert found == (
@@ -1043,13 +1043,13 @@ def test_a_row_that_disagrees_about_what_starts_a_mechanism_is_a_finding() -> No
         a_table(
             MECHANISMS_MARKER,
             MECHANISMS_HEADER,
-            "| `canary_run` | that the gate still refuses what it refused | `on_a_route` |",
+            "| `backup_exposure` | that the gate still refuses what it refused | `on_a_route` |",
         ),
-        controls=(control("canary_run"),),
+        controls=(control("backup_exposure"),),
     )
 
     assert found == (
-        "canary_run: the chapter says it is started by 'on_a_route' and the registry says "
+        "backup_exposure: the chapter says it is started by 'on_a_route' and the registry says "
         "'nothing', which is the column somebody acts on",
     )
 
@@ -1060,8 +1060,8 @@ def test_a_mechanism_row_with_too_few_cells_is_a_finding() -> None:
 
     Delete this and a malformed row is read as a claim about the wrong column."""
     found = mechanism_gaps(
-        a_table(MECHANISMS_MARKER, MECHANISMS_HEADER, "| `canary_run` | only two |"),
-        controls=(control("canary_run"),),
+        a_table(MECHANISMS_MARKER, MECHANISMS_HEADER, "| `backup_exposure` | only two |"),
+        controls=(control("backup_exposure"),),
     )
 
     assert any("every row states the mechanism" in one for one in found)

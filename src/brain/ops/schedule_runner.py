@@ -31,12 +31,12 @@ mechanisms behind whichever is slowest, and a retention sweep is the slowest thi
 identifier is derived from the control's name so it cannot be typed wrong and cannot collide
 with `brain.migrate`'s.
 
-**Five controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
-`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh` and `erasure_queue` have
-a runner that gathers what they need, and `brain.ops.worker` starts them on the schedule
-through `start_control`. Every other control entry point is a policy function that takes its
-inputs: `retention.enforcement_report`
-takes a census "the executor saw", `denial_alerts.digest` takes patterns and recipients,
+**Six controls are wired, and the rest are stated rather than implied.** `retention_sweep`,
+`canary_run`, `knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh` and
+`erasure_queue` have a runner that gathers what they need, and `brain.ops.worker` starts them on
+the schedule through `start_control`. Every other control entry point is a policy function that
+takes its inputs: `retention.enforcement_report` takes a census "the executor saw",
+`denial_alerts.digest` takes patterns and recipients,
 `recovery.alerts` takes backups and verifications. None of them gathers anything. So the
 registry's orphans are not mechanisms waiting for a timer, they are mechanisms whose policy is
 written and whose input gathering does not exist, and a scheduler alone does not switch them
@@ -62,7 +62,7 @@ Rejected: recording a run before taking the lock, so that a contended tick leave
 would fill the table with rows for runs that never happened, and "this control has thousands
 of attempts and no successes" would then mean two different things.
 
-Task ids: M37.5.1.3, M34.2.1.3, M27.8.12
+Task ids: M37.5.1.3, M34.2.1.3, M27.8.12, M27.7.19
 """
 
 from __future__ import annotations
@@ -77,6 +77,7 @@ import psycopg
 
 from brain.db import libpq_url
 from brain.knowledge.item_store import run_reverification_now
+from brain.ops.canary_run import run_canaries_now
 from brain.ops.controls import Control
 from brain.ops.erasure_store import drain_erasure_queue
 from brain.ops.ledger_partitions import maintain as maintain_ledger_partitions
@@ -146,6 +147,14 @@ A_NAG_IN_REPORT_ONLY_MODE_RECORDS_NOTHING: Final = (
     "so brain.ops.schedule never asks for it. A runner that recorded anyway when asked would be a "
     "runner that ignores the mode it was given, which is the property every runner has to keep "
     "for the one control whose safety rests on it."
+)
+
+#: Why the canaries ask nothing in report-only mode.
+A_CANARY_RUN_IN_REPORT_ONLY_MODE_ASKS_NOTHING: Final = (
+    "Report-only mode exists for controls that remove data, and the canaries remove nothing, so "
+    "brain.ops.schedule never asks for it. A runner that asked its questions anyway when told "
+    "to report would be a runner that ignores the mode it was given, which is the property "
+    "every runner keeps for the one control whose safety rests on it."
 )
 
 #: The advisory lock namespace, so a control's lock cannot collide with `brain.migrate`'s.
@@ -315,22 +324,44 @@ def erasure_queue(now: datetime, report_only: bool, database_url: str) -> str:
         return drain_erasure_queue(conn, now=now, report_only=report_only)
 
 
+def canary_run(now: datetime, report_only: bool, database_url: str) -> str:
+    """Ask the permission canaries as every reach on the install, and say what they found.
+
+    `brain.ops.canary_run.run_canaries_now` is the literal call the registry reads. A red run
+    raises `CanariesFoundError`, whose text names nothing, so the worker records it as failed with
+    no subject in the detail. The registry's source is read from this process's settings, as
+    `outbox_dispatch` reads the vault, because the registry the canaries ask is the one the
+    application builds.
+    Declines in report-only mode, see `A_CANARY_RUN_IN_REPORT_ONLY_MODE_ASKS_NOTHING`, and takes
+    the worker's event loop for the reason `spend_report_refresh` gives.
+    """
+    if report_only:
+        return (
+            "report only: the permission canaries asked nothing. "
+            f"{A_CANARY_RUN_IN_REPORT_ONLY_MODE_ASKS_NOTHING}"
+        )
+    from brain.ops.worker import _loop_factory
+
+    return run_canaries_now(
+        database_url,
+        now=now,
+        tool_source=settings_from(process_environment()).tool_source,
+        loop_factory=_loop_factory(),
+    )
+
+
 #: What each schedulable control still needs before it can be started, by name.
 #:
-#: Five with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
+#: Six with a `run` since 2026-09-17, which the worker's schedule starts, and the rest saying what
 #: they wait for, which is the point of the module header. Each sentence is a piece of work
 #: somebody can pick up, written from reading the entry point's own signature rather than from a
 #: guess about it.
 RUNNERS: Final[tuple[Runner, ...]] = (
     Runner(name="retention_sweep", run=retention_sweep),
-    Runner(
-        name="canary_run",
-        needs=(
-            "the two askers `compare_askers` compares, as live entitlement sets, and the "
-            "store scan it compares them over. Both are arguments today and nothing builds "
-            "either"
-        ),
-    ),
+    # Wired on 2026-09-17. The askers are every live reach through the one resolver and one
+    # the directory does not hold, and what they are compared over is the answer lane itself:
+    # `brain.ops.canary_run` says why the store scan is the fixture suite's and not this run's.
+    Runner(name="canary_run", run=canary_run),
     Runner(
         name="restore_drill",
         needs=(
@@ -452,6 +483,8 @@ def start_control(name: str, *, now: datetime, report_only: bool, database_url: 
             return outbox_dispatch(now, report_only, database_url)
         case "erasure_queue":
             return erasure_queue(now, report_only, database_url)
+        case "canary_run":
+            return canary_run(now, report_only, database_url)
         case _:
             runner = runner_for(name)
             msg = (

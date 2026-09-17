@@ -407,6 +407,29 @@ def match_rule(
     return found[0] if found else None
 
 
+def unserved_match(
+    question: str,
+    rules: Sequence[FastPathRule],
+    readers: Mapping[tuple[str, str], RowReader],
+) -> RuleMatch | None:
+    """The one rule this question is exactly whose source and entity nothing here reads (M27.7.18).
+
+    Only when no rule a reader serves matches the question at all, so a question two served rules
+    match is ambiguous configuration and not a missing source, and only one unserved rule, for
+    `match_rule`'s reason. Nothing about the caller and nothing about a record reaches this: the
+    rules and the readers are the install's wiring, so the answer is the same for every asker,
+    which is what lets the lane say "nothing connected" for it and a ledger record the source.
+    """
+    served = entities_served(readers)
+    tidy = _tidy(question)
+    if any(
+        _apply(rule, tidy) is not None for rule in rules if (rule.source, rule.entity) in served
+    ):
+        return None
+    unserved = frozenset((rule.source, rule.entity) for rule in rules) - served
+    return match_rule(question, rules, served=unserved)
+
+
 def _apply(rule: FastPathRule, tidy: str) -> RuleMatch | None:
     """One rule against one tidied question. Literal on both sides, bounded in the middle."""
     before = _tidy(rule.before)

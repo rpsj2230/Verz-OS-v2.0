@@ -110,7 +110,13 @@ from brain.gate.abstain import (
 from brain.gate.answer_cache import serve_cached
 from brain.gate.cache_key import CachedAnswer
 from brain.gate.compose import ComposedAnswer, TraceSink, compose
-from brain.gate.fast_lane import FastLaneAnswer, FastPathRule, RowReader, respond
+from brain.gate.fast_lane import (
+    FastLaneAnswer,
+    FastPathRule,
+    RowReader,
+    respond,
+    unserved_match,
+)
 from brain.gate.finish import Finished, Origin, RequestRecorder, attributable, finish
 from brain.gate.streaming import AnswerStream, Progress, at_tool_input_start, cache_hit
 from brain.knowledge.rows import RowRecord, RowRequest
@@ -339,12 +345,28 @@ async def _outcome(
     stream = AnswerStream()
     frames = [stream.step(Progress.UNDERSTANDING), stream.step(Progress.CHECKING)]
 
-    if not readers:
+    unserved = unserved_match(question, rules, readers)
+    if not readers or unserved is not None:
         # A fact about this company's setup, identical for everybody, which is why abstain
         # treats it as safe to say. It is not a permission outcome and must not be reported
         # as one: nothing is connected for anybody, so saying so tells this caller nothing
         # about themselves.
-        return _abstained(stream, frames, nothing_connected(scope, detail="no row readers"))
+        #
+        # **And a question whose shape a rule matches, for a source nothing here reads, is the
+        # same fact about one subject (M27.7.18).** Decided from the rules and the readers and
+        # nothing else, before anything is read, so it is identical for every asker and for a
+        # record that exists and one that does not. Until 2026-09-17 it was "I could not find
+        # that", which is true and sends somebody to look for a record in a system nobody
+        # connected; the source the rule names is kept for the ledger and never rendered.
+        return _abstained(
+            stream,
+            frames,
+            nothing_connected(
+                scope,
+                detail="no row readers" if unserved is None else "no reader for a matched rule",
+                missing_source="" if unserved is None else unserved.rule.source,
+            ),
+        )
 
     frames.append(stream.step(at_tool_input_start()))
     found = await respond(question, rules=rules, readers=readers, entitlement=entitlement, now=now)

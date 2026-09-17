@@ -468,7 +468,13 @@ export const AREAS: Readonly<Record<string, Area>> = {
   "Usage, activity and system statistics": {
     screens: ["/usage", "/adoption", "/spend", "/questions", "/quality", "/service-levels", "/me"],
     routes: ["/api/v1/report/*", "/api/v1/me/workspace"],
-    tables: ["ops.question_asked", "ops.report_refresh", "ops.spend_actual", "obs.request_telemetry"],
+    tables: [
+      "ops.question_asked",
+      "ops.question_gap",
+      "ops.report_refresh",
+      "ops.spend_actual",
+      "obs.request_telemetry",
+    ],
     installation: [],
     gaps: [],
   },

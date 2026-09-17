@@ -250,11 +250,15 @@ def test_every_control_the_schedule_cannot_start_yet_says_what_it_is_waiting_for
     **Ten on 2026-09-17**, when `outbox_dispatch` was given the sender, the resolver and the
     worker's reader of signing secrets its sentence here said nothing implemented.
 
+    **Nine later the same day**, when `canary_run` was given the askers its sentence here said it
+    waited for, as every reach the install holds, and a runner that asks as them.
+
     Delete this and the gap report can go empty because the list went empty."""
     found = runner_gaps()
 
-    assert len(found) == 10
+    assert len(found) == 9
     assert not any("outbox_dispatch" in one for one in found)
+    assert not any("canary_run" in one for one in found)
     assert all("cannot be started yet: it needs" in one for one in found)
     assert not any("retention_sweep" in one for one in found)
     assert not any("spend_report_refresh" in one for one in found)
@@ -410,11 +414,15 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And to seven on 2026-09-17, for the same reason.** `start_control` calls the webhook
     dispatch runner, so `outbox_dispatch` left the list.
 
+    **And to six later that day, for the same reason.** `start_control` calls the canary runner,
+    so `canary_run` left the list.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
 
-    assert len(orphans()) == 7
+    assert len(orphans()) == 6
+    assert "canary_run" not in {one.name for one in orphans()}
     assert "outbox_dispatch" not in {one.name for one in orphans()}
     assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
@@ -447,6 +455,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "spend_report_refresh",
         "outbox_dispatch",
         "erasure_queue",
+        "canary_run",
     }
 
 
@@ -491,7 +500,7 @@ def test_a_control_with_nothing_to_run_is_refused_by_name_with_what_it_needs() -
     Delete this and a control the schedule cannot start could be answered with an empty string,
     which the worker would record as a run that succeeded."""
     with pytest.raises(RunnerError, match="cannot be started by this process: it needs"):
-        start_control("canary_run", now=NOW, report_only=False, database_url="postgresql://x")
+        start_control("backup_exposure", now=NOW, report_only=False, database_url="postgresql://x")
     with pytest.raises(RunnerError, match="no runner named"):
         start_control("no_such_control", now=NOW, report_only=False, database_url="postgresql://x")
 

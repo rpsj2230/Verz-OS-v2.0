@@ -1,23 +1,23 @@
-"""Quality and canaries, as one reader may be shown them: when the canaries last ran, and no more.
+"""Quality and canaries, as one reader may be shown them: whether the last canary run passed.
 
 `docs/screens.html` draws the permission canaries as a card: how many synthetic users are under
 test, how many assertions a run makes, when the last run was and whether it was green, and what
-happens on a red one. The overview repeats it as "Permission canaries green". Measured on
-2026-09-16, an install can support one line of that card. `brain.ops.canaries` holds the checks
-and runs nothing; the corpus and the planted canary values live in `tests/fixtures`, which
-`.dockerignore` keeps out of the image because shipping the suite would ship the canaries; the
-scheduled production run is `brain.ops.controls`' `canary_run`, which nothing starts, because
-`brain.ops.schedule_runner.RUNNERS` says what it still needs. What an install does record is
-`ops.control_run`, one row per attempt to run a control, kept. That is where the last canary run
-is read from, and this module decides who may see it.
+happens on a red one. The overview repeats it as "Permission canaries green". `brain.ops.canaries`
+holds the checks and runs nothing; the corpus and the planted canary values live in
+`tests/fixtures`, which `.dockerignore` keeps out of the image because shipping the suite would
+ship the canaries. The scheduled production run is `brain.ops.canary_run`, which the worker's
+schedule starts as `brain.ops.controls`' `canary_run` since 2026-09-17, asking as every reach the
+install holds. What an install records of it is `ops.control_run`, one row per attempt, kept.
+That is where the last canary run is read from, and this module decides who may see it.
 
-**A finished run is not a green one, and the screen must not say it is.** The attempt table's
-`ok` means the control returned rather than raised, and nothing records what a canary run found:
-`brain.ops.canaries.alert_lines` returns lines and no store keeps them. Translating `ok` into
-"passed" would put a green light on the screen somebody reads before deciding not to worry, on
-the strength of a run that might have found a leak and returned normally to say so. So a run is
-`finished`, `failed`, `declined` or `unfinished`, in the attempt table's own terms, and the page
-says in words that a finished run is not a passing one. See `A_FINISHED_RUN_IS_NOT_A_GREEN_ONE`.
+**A run recorded `ok` found nothing, and a red run is recorded `failed`.** Until 2026-09-17 this
+said the opposite and was right to: `ok` meant only that a control returned, nothing started the
+canaries, and a run that found a leak could have returned normally. `brain.ops.canary_run.verdict`
+now raises on any finding, and `brain.ops.worker.start_owed` records a raise as `failed`, so `ok`
+is written only for a run that compared everything it asked and found nothing wrong. So `ok` is
+shown as passed. `failed` is shown as failed, and it covers a run that could not finish as well as
+a red one, because the detail telling them apart is not read here. See
+`A_RUN_RECORDED_OK_FOUND_NOTHING_AND_A_RED_RUN_IS_RECORDED_FAILED`.
 
 **A canary run is the whole install's, and a red one is a way in.** It has no department's
 version: a canary asks whether the gate refuses what it should across every department at once.
@@ -29,21 +29,22 @@ department-scoped one matches nothing. That is `brain.console.service_level_view
 shape for a different reason. See `A_CANARY_RUN_IS_THE_WHOLE_INSTALLS_AND_A_RED_ONE_IS_A_WAY_IN`.
 
 **A reader who may not see a run is answered as an install where none is recorded.** No field
-says a run was withheld, and whether anything starts the canaries and how often they would run
-are carried to everybody, because both are facts about the product's code rather than about this
-install's gate. See `A_WITHHELD_RUN_AND_A_RUN_NEVER_MADE_ARE_ONE_OBJECT`.
+says a run was withheld, and whether a run is owed is decided from the run this reader is shown,
+so a withheld run is owed exactly as a run never made is. Whether anything starts the canaries and
+how often they run are carried to everybody, because both are facts about the product's code
+rather than about this install's gate. See `A_WITHHELD_RUN_AND_A_RUN_NEVER_MADE_ARE_ONE_OBJECT`.
 
 **No finding reaches this screen, and none could.** `brain.ops.canaries.CanaryFinding.subject`
 names a field, and `brain.console.operate.findings_in_reach` is the decision about who may be
-shown one. Nothing stores a finding, so there is nothing for that decision to filter, and this
-module has no field one could arrive in. The day findings are recorded, they are shown through
-that function and not through a second one written here.
+shown one. A red run's findings go to the alert and are stored nowhere, which is
+`brain.ops.canary_run.A_RED_RUN_IS_RECORDED_FAILED_AND_ITS_SUBJECTS_REACH_ONLY_THE_ALERT`, so
+there is nothing for that decision to filter, and this module has no field one could arrive in.
 
-What is not built, and why. The golden corpus's score, the synthetic users and the assertions per
-run are the test suite's, which is not on an install. A regression since the last release needs a
-recorded evaluation run to compare with, and nothing records one; `brain.ops.evaluation` says why
-M28.1.4 is not claimed. So M27.7.19 is claimed here for the line the screen can show and is not
-closed by it.
+What is not built, and why. The golden corpus's score is the test suite's, which is not on an
+install. A regression since the last release needs a recorded evaluation run to compare with, and
+nothing records one; `brain.ops.evaluation` says why M28.1.4 is not claimed. The card's counts of
+synthetic users and assertions are not drawn: a count of the distinct reaches an install holds is
+a fact about its grants, and the page says in words what a run asks instead.
 
 Scope: domain logic. Nothing here opens a connection, reads a clock or renders anything.
 
@@ -61,7 +62,7 @@ from typing import Final
 
 from brain.console.screens import screen
 from brain.core.entitlement import Capability, EntitlementSet
-from brain.ops.canaries import CANARY_INTERVAL_SECONDS
+from brain.ops.canaries import CANARY_INTERVAL_SECONDS, due
 from brain.ops.controls import CONTROLS, Control
 from brain.tables.schedule import OUTCOMES
 
@@ -71,12 +72,12 @@ class QualityViewError(Exception):
 
 
 # ------------------------------------------------------------------ written-down reasons
-#: Why `ok` is not rendered as a pass.
-A_FINISHED_RUN_IS_NOT_A_GREEN_ONE: Final = (
-    "The attempt table records that a control returned, not what it found, and nothing stores "
-    "a canary finding. A run that found a leak and returned to report it is ok in that table. "
-    "Calling it passed would put a green light on the screen that is read before deciding not "
-    "to worry, so the screen says finished and says that finished is not passed."
+#: Why `ok` is rendered as a pass, and what `failed` covers.
+A_RUN_RECORDED_OK_FOUND_NOTHING_AND_A_RED_RUN_IS_RECORDED_FAILED: Final = (
+    "The canary runner raises when a run finds anything, and the worker records a raise as "
+    "failed, so ok is written only for a run that found nothing wrong in what it compared. "
+    "That is a pass and the screen says passed. Failed is a red run or a run that could not "
+    "finish, and the screen says both, because the detail that tells them apart is not read."
 )
 
 #: Why only a whole-install evaluation grant sees a run.
@@ -90,9 +91,9 @@ A_CANARY_RUN_IS_THE_WHOLE_INSTALLS_AND_A_RED_ONE_IS_A_WAY_IN: Final = (
 #: Why a withheld run is not visible as one.
 A_WITHHELD_RUN_AND_A_RUN_NEVER_MADE_ARE_ONE_OBJECT: Final = (
     "A reader who may not see the last canary run is answered with no run, which is exactly "
-    "what an install that has never run the canaries answers. Nothing on the response says a "
-    "run was withheld, and the facts carried to everybody are the product's: whether anything "
-    "starts the canaries, and how often they are due."
+    "what an install that has never run the canaries answers, and a run is owed to both. "
+    "Nothing on the response says a run was withheld, and the facts carried to everybody are "
+    "the product's: whether anything starts the canaries, and how often they are due."
 )
 
 #: Why the golden corpus is not scored on this screen.
@@ -115,7 +116,8 @@ CANARY_CONTROL: Final = "canary_run"
 #: `A_CANARY_RUN_IS_THE_WHOLE_INSTALLS_AND_A_RED_ONE_IS_A_WAY_IN`.
 RUN_ROW: Final[Mapping[str, str]] = MappingProxyType({})
 
-#: Whether anything records what a canary run found. Nothing does.
+#: Whether anything stores what a canary run found. Nothing does, on purpose: a red run's
+#: findings go to the alert. See `A_RUN_RECORDED_OK_FOUND_NOTHING_AND_A_RED_RUN_IS_RECORDED_FAILED`.
 FINDINGS_ARE_RECORDED: Final = False
 
 #: Whether an install holds a golden corpus score or an evaluation run to compare against. No.
@@ -124,14 +126,14 @@ EVALUATION_RUNS_ARE_RECORDED: Final = False
 
 # --------------------------------------------------------------------------- the runs
 class RunState(enum.StrEnum):
-    """How one attempt to run the canaries ended, in the attempt table's own terms.
+    """How one attempt to run the canaries ended.
 
-    Deliberately not passed and failed. See `A_FINISHED_RUN_IS_NOT_A_GREEN_ONE`.
+    See `A_RUN_RECORDED_OK_FOUND_NOTHING_AND_A_RED_RUN_IS_RECORDED_FAILED`.
     """
 
-    #: The run returned. What it found is not recorded.
-    FINISHED = "finished"
-    #: The run raised.
+    #: The run compared everything it asked and found nothing wrong.
+    PASSED = "passed"
+    #: The run found something, or could not finish.
     FAILED = "failed"
     #: The run was reached in report-only mode and did not act.
     DECLINED = "declined"
@@ -141,7 +143,7 @@ class RunState(enum.StrEnum):
 
 #: Each finished outcome `brain.tables.schedule.OUTCOMES` allows, and the state it is shown as.
 STATE_OF_OUTCOME: Final[Mapping[str, RunState]] = MappingProxyType(
-    {"ok": RunState.FINISHED, "failed": RunState.FAILED, "refused": RunState.DECLINED}
+    {"ok": RunState.PASSED, "failed": RunState.FAILED, "refused": RunState.DECLINED}
 )
 
 
@@ -192,6 +194,8 @@ class QualityScreen:
     """
 
     last_canary_run: CanaryRun | None
+    #: Whether a run is owed now, judged from the run this reader is shown and never another.
+    canaries_owed: bool
     #: Whether anything on an install starts the canary control.
     canaries_started: bool
     #: How often the canaries are due, from the canaries module's own figure.
@@ -217,13 +221,18 @@ def quality_for_reader(
     now: datetime,
     started: bool,
 ) -> QualityScreen:
-    """The quality screen for one reader (M27.7.19, the canary run half).
+    """The quality screen for one reader (M27.7.19).
 
     `last` is the newest recorded attempt, read before this is called whoever is asking, and
-    `started` is whether the scheduler has a runner for the canary control.
+    `started` is whether the scheduler has a runner for the canary control. Whether a run is owed
+    is `brain.ops.canaries.due` over the run shown, so a withheld run is owed as a run never made
+    is, which is `A_WITHHELD_RUN_AND_A_RUN_NEVER_MADE_ARE_ONE_OBJECT` kept for the one field
+    derived from the run.
     """
+    shown = last if may_read_canary_runs(entitlement, now=now) else None
     return QualityScreen(
-        last_canary_run=last if may_read_canary_runs(entitlement, now=now) else None,
+        last_canary_run=shown,
+        canaries_owed=due(last_run=None if shown is None else shown.started_at, now=now),
         canaries_started=started,
         canary_interval_seconds=CANARY_INTERVAL_SECONDS,
     )

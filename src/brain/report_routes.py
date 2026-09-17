@@ -76,6 +76,10 @@ alternative that was rejected outright is mounting these on `brain.api_routes`, 
 `routing_routes` rejects it: that module's rules are about entities and enumeration, and a report
 is neither.
 
+**Questions and gaps reads a database since 2026-09-17.** `ops.question_gap` records a question no
+connected source covered, and the route reads a window of it, whoever is asking, before
+`brain.console.questions_view` decides which lines this reader may see.
+
 **What has never run.** This repository has no PostgreSQL, so none of the SELECTs below has been
 executed. What is tested is the statements `live_departments` and `last_canary_run` compile to,
 the read modules' own decisions over rows built in memory, and the shape of every response. The
@@ -113,6 +117,7 @@ from brain.console.quality_view import (
 )
 from brain.console.questions_view import (
     UNANSWERED_QUESTIONS_ARE_RECORDED,
+    GapLine,
     QuestionsScreen,
     questions_for_reader,
 )
@@ -120,6 +125,7 @@ from brain.console.service_level_view import service_levels_for_reader
 from brain.console.spend_report_view import MaterialisedReport, spend_report_from_view
 from brain.console.usage_screen import AUTOMATION_IS_COUNTED, UsageScreen, usage_for_reader
 from brain.core.errors import Failed
+from brain.ops.question_gap_store import gaps_between
 from brain.ops.question_store import asked_between
 from brain.ops.schedule_runner import runner_for
 from brain.ops.service_levels import LaneReading, ServiceLevels
@@ -421,16 +427,34 @@ class UsageView(BaseModel):
     tokens: list[TokenBreakdownView]
 
 
+class GapLineView(BaseModel):
+    """One gap line. `brain.console.questions_view.GapLine`, field for field.
+
+    `source` is null when this reader may not be told the source's name, and the line is then
+    every such question in the department together.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    department: str
+    source: str | None
+    asked: int
+
+
 class QuestionsView(BaseModel):
     """The questions screen for one reader. `brain.console.questions_view.QuestionsScreen`.
 
     `nothing_connected` is false both on an install with a source connected and for a reader who
     may not be told, and there is no field saying which. The two sentences are the answer lane's
-    own, carried so the page quotes what askers receive rather than a copy of it.
+    own, carried so the page quotes what askers receive rather than a copy of it. `gaps` holds a
+    line only for a department this reader reaches, and no count of the rest.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    start: datetime
+    end: datetime
+    gaps: list[GapLineView]
     nothing_connected: bool
     answered_when_nothing_connected: str
     answered_when_nothing_found: str
@@ -440,8 +464,9 @@ class QuestionsView(BaseModel):
 class CanaryRunView(BaseModel):
     """One attempt to run the canaries. `brain.console.quality_view.CanaryRun`, field for field.
 
-    `state` is finished, failed, declined or unfinished, and never passed: see
-    `brain.console.quality_view.A_FINISHED_RUN_IS_NOT_A_GREEN_ONE`.
+    `state` is passed, failed, declined or unfinished, and failed covers a run that could not
+    finish as well as a red one: see
+    `brain.console.quality_view.A_RUN_RECORDED_OK_FOUND_NOTHING_AND_A_RED_RUN_IS_RECORDED_FAILED`.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -455,12 +480,13 @@ class QualityView(BaseModel):
     """The quality screen for one reader. `brain.console.quality_view.QualityScreen`.
 
     `last_canary_run` is null both when no run is recorded and when this reader may not see one,
-    and nothing else on the response differs between the two.
+    and nothing else on the response differs between the two: `canaries_owed` is true for both.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     last_canary_run: CanaryRunView | None
+    canaries_owed: bool
     canaries_started: bool
     canary_interval_seconds: int
     findings_are_recorded: bool
@@ -507,9 +533,17 @@ def usage_screen_view_of(screen: UsageScreen) -> UsageView:
     )
 
 
-def questions_view_of(screen: QuestionsScreen) -> QuestionsView:
-    """The questions screen, copied field by field."""
+def gap_line_view_of(line: GapLine) -> GapLineView:
+    """One gap line, copied field by field."""
+    return GapLineView(department=line.department, source=line.source, asked=line.asked)
+
+
+def questions_view_of(screen: QuestionsScreen, *, start: datetime, end: datetime) -> QuestionsView:
+    """The questions screen, copied field by field, with the window it covers."""
     return QuestionsView(
+        start=start,
+        end=end,
+        gaps=[gap_line_view_of(one) for one in screen.gaps],
         nothing_connected=screen.nothing_connected,
         answered_when_nothing_connected=screen.answered_when_nothing_connected,
         answered_when_nothing_found=screen.answered_when_nothing_found,
@@ -530,6 +564,7 @@ def quality_view_of(screen: QualityScreen) -> QualityView:
         last_canary_run=None
         if screen.last_canary_run is None
         else canary_run_view_of(screen.last_canary_run),
+        canaries_owed=screen.canaries_owed,
         canaries_started=screen.canaries_started,
         canary_interval_seconds=screen.canary_interval_seconds,
         findings_are_recorded=FINDINGS_ARE_RECORDED,
@@ -635,9 +670,10 @@ def last_canary_run() -> Select[tuple[datetime, datetime | None, str | None]]:
     """The newest attempt to run the canaries: when it started, when it ended, and how.
 
     Three columns and not the row. `ops.control_run.detail` is a sentence for an operator, and a
-    canary run's sentence is where a finding would be written the day a runner writes one; a
-    field name there is the content `brain.console.operate.findings_in_reach` exists to filter,
-    so it is never selected rather than selected and dropped.
+    failed run's sentence is an exception's text, which `brain.ops.canary_run` keeps free of a
+    subject for its own runs and cannot for a fault raised underneath it; a field name there is
+    the content `brain.console.operate.findings_in_reach` exists to filter, so it is never
+    selected rather than selected and dropped.
 
     Newest by start rather than by finish, so a run that started and never returned is the
     answer when it is the latest thing that happened, which is `unfinished` on the screen rather
@@ -830,24 +866,36 @@ async def usage(
 
 
 @router.get("/report/questions", response_model=QuestionsView, responses=COMMON_RESPONSES)
-async def questions(request: Request, asked: Asked) -> QuestionsView:
-    """Whether every question on this install is being answered with nothing connected.
+async def questions(
+    request: Request,
+    asked: Asked,
+    days: Annotated[int, Query(ge=1, le=MAX_USAGE_DAYS)] = DEFAULT_USAGE_DAYS,
+) -> QuestionsView:
+    """Whether nothing is connected, and the questions no connected source covered over `days`.
 
-    Read from the tool registry this process holds, through `brain.api_routes.row_readers`, the
-    function that builds what the answer lane is given. No database is read: nothing on one
-    records how a question ended, which `brain.console.questions_view` argues and the response
-    carries.
+    Whether nothing is connected is read from the tool registry this process holds, through
+    `brain.api_routes.row_readers`, the function that builds what the answer lane is given. The
+    gaps are `ops.question_gap` over the window, read whoever is asking, and
+    `brain.console.questions_view` decides which lines this reader may see. The window is bounded
+    as usage is, for `A_WINDOW_BOUND_IS_A_RESOURCE_LIMIT_AND_NEVER_A_PERMISSION`'s reason.
 
-    A process with no registry is a fault identical for every caller, answered as the answer
-    route answers it, and it is checked whoever is asking.
+    A process with no registry or no pool is a fault identical for every caller, and both are
+    checked whoever is asking.
     """
     registry = getattr(request.app.state, "tools", None)
     if not isinstance(registry, ToolRegistry):
         raise Failed("no tool registry on this process")
+    factory = _require_sessions(request)
+    start = asked.now - timedelta(days=days)
+    async with factory() as session:
+        found = await gaps_between(session, start=start, end=asked.now)
     screen = questions_for_reader(
-        connected=bool(row_readers(registry)), entitlement=asked.reach, now=asked.now
+        connected=bool(row_readers(registry)),
+        gaps=found,
+        entitlement=asked.reach,
+        now=asked.now,
     )
-    return questions_view_of(screen)
+    return questions_view_of(screen, start=start, end=asked.now)
 
 
 @router.get("/report/quality", response_model=QualityView, responses=COMMON_RESPONSES)

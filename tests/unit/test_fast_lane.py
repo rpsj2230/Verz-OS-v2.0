@@ -67,6 +67,7 @@ from brain.gate.fast_lane import (
     entities_served,
     match_rule,
     rules_from_rows,
+    unserved_match,
 )
 from brain.gate.fast_lane import (
     respond as _respond,
@@ -803,6 +804,49 @@ def test_a_matched_rule_the_lane_has_no_reader_for_is_a_wiring_error_and_says_so
     assert fast_lane.reader_for(wired, readers) is readers[("laravel", "client")]
     with pytest.raises(FastLaneError, match=r"client_hours_remaining names xero\.client"):
         fast_lane.reader_for(unwired, readers)
+
+
+def test_a_question_only_a_rule_for_an_unread_source_matches_names_that_rule() -> None:
+    """The gap the Questions and gaps screen names (M27.7.18): the shape matches a rule whose
+    source and entity no reader serves, and no served rule matches at all.
+
+    Delete this and `unserved_match` can return the unread rule, or nothing, whatever the
+    question was."""
+    readers = readers_for(RecordingSource(ACME))
+    unread = HOURS.model_copy(update={"rule_id": "client_hours_in_xero", "source": "xero"})
+
+    found = unserved_match("hours left on Acme", [unread], readers)
+
+    assert found == RuleMatch(rule=unread, value="Acme")
+    assert unserved_match("what is Acme", [unread], readers) is None
+
+
+def test_a_question_a_served_rule_matches_is_not_a_missing_source() -> None:
+    """Served beats unread, and two served rules matching is ambiguous configuration rather than
+    a gap: in both cases `unserved_match` answers nothing, and with no reader at all every rule
+    is unread.
+
+    Delete this and a question the lane can answer, or one it declines as ambiguous, is recorded
+    as needing a source nobody connected."""
+    readers = readers_for(RecordingSource(ACME))
+    unread = HOURS.model_copy(update={"rule_id": "client_hours_in_xero", "source": "xero"})
+    alias = HOURS.model_copy(update={"rule_id": "client_hours_alias", "match_field": "trading"})
+
+    assert unserved_match("hours left on Acme", [HOURS, unread], readers) is None
+    assert unserved_match("hours left on Acme", [HOURS, alias, unread], readers) is None
+    assert unserved_match("hours left on Acme", [HOURS], {}) == RuleMatch(rule=HOURS, value="Acme")
+
+
+def test_two_unread_rules_matching_one_question_name_neither() -> None:
+    """`match_rule`'s rule, kept for the unread half: a question two unread rules match does not
+    choose between their sources.
+
+    Delete this and whichever unread rule was inserted first owns the gap."""
+    readers = readers_for(RecordingSource(ACME))
+    xero = HOURS.model_copy(update={"rule_id": "client_hours_in_xero", "source": "xero"})
+    hubspot = HOURS.model_copy(update={"rule_id": "client_hours_in_hubspot", "source": "hubspot"})
+
+    assert unserved_match("hours left on Acme", [xero, hubspot], readers) is None
 
 
 # ------------------------------------------- the catalogue is empty (M6.1.4)

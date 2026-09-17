@@ -55,7 +55,9 @@ def _control(**changes: object) -> Control:
     """
     fields: dict[str, object] = {
         "name": "example",
-        "symbols": ("brain.ops.canaries:due",),
+        # A function nothing under `src` calls. `due` was this until 2026-09-17, when the Quality
+        # screen became its caller; `scan_stores` is the fixture suite's and stays uncalled here.
+        "symbols": ("brain.ops.canaries:scan_stores",),
         "guards": "an example guarantee",
         "lost_silently": "the example guarantee, with nothing saying so",
         "every": timedelta(hours=1),

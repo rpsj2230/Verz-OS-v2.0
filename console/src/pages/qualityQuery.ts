@@ -4,16 +4,17 @@
  * `brain.console.quality_view` decides the screen. This module reads what it sent and adds
  * nothing, and the split from the page is `skillsQuery.ts`'.
  *
- * **The design draws a green light and an install cannot support one.** `docs/screens.html`
- * draws the permission canaries as a card of synthetic users under test, assertions per run, the
- * last run "all green", and what happens on a red one, and the overview repeats "Permission
- * canaries green". An install records when a canary run started and how it ended, in the words of
- * the table that records every scheduled control: finished, failed, declined or unfinished. It
- * records nothing about what a run found. So a finished run is drawn as finished and the page says
- * that finished is not passed. See `A_FINISHED_RUN_IS_NEVER_DRAWN_AS_A_PASS`.
+ * **A pass is drawn only for a run the API calls passed.** `docs/screens.html` draws the permission
+ * canaries as a card of synthetic users under test, assertions per run, the last run "all green",
+ * and what happens on a red one. An install records when a canary run started and how it ended.
+ * The canary runner raises when a run finds anything, so a red run is recorded as failed and a run
+ * recorded as ok found nothing wrong in what it compared, which the API sends as passed. Failed
+ * also covers a run that could not finish, and the page says both. What a red run found is never
+ * sent: it goes to the operator's alert and is stored nowhere. See
+ * `A_PASS_IS_DRAWN_ONLY_FOR_A_RUN_THE_API_CALLS_PASSED`.
  *
- * **A reader who may not see a run is sent the body of an install with none**, and this module
- * reads both the same way. The sentence for no run is true of both.
+ * **A reader who may not see a run is sent the body of an install with none**, including that a
+ * run is owed, and this module reads both the same way. The sentence for no run is true of both.
  *
  * Task ids: M27.7.19
  */
@@ -26,12 +27,10 @@ export type QualityBody = components["schemas"]["QualityView"];
 export type CanaryRunBody = components["schemas"]["CanaryRunView"];
 
 /** Written down because green is the colour the design gives this card. */
-export const A_FINISHED_RUN_IS_NEVER_DRAWN_AS_A_PASS =
-  "The API sends how a canary run ended, and a run that finished is one that returned rather " +
-  "than raised. A run that found a leak and returned to report it finished. Nothing records what " +
-  "a run found, so the page draws the state in the API's word and says a finished run is not a " +
-  "passing one, rather than drawing green on the screen somebody reads before deciding not to " +
-  "worry.";
+export const A_PASS_IS_DRAWN_ONLY_FOR_A_RUN_THE_API_CALLS_PASSED =
+  "The API sends passed only for a run recorded as ok, and the canary runner raises on any " +
+  "finding, so a run that found a leak is recorded as failed rather than ok. The page draws the " +
+  "API's word and nothing it infers, and says that failed covers a run that could not finish.";
 
 /** Where the API keeps this screen. */
 export const QUALITY_API_PATH = "/report/quality";
@@ -39,10 +38,10 @@ export const QUALITY_API_PATH = "/report/quality";
 /** The console address, at the screen's own key in `brain.console.screens`. */
 export const QUALITY_PATH = "/quality";
 
-/** How each state the API sends is said. Never passed and never green. */
+/** How each state the API sends is said. */
 export const RUN_STATE_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  finished: "finished",
-  failed: "failed",
+  passed: "passed",
+  failed: "failed, because it found something or could not finish,",
   declined: "reached in report-only mode and did not act",
   unfinished: "started and has not finished",
 });
@@ -54,6 +53,7 @@ export function readQuality(payload: unknown): QualityBody | null {
   }
   const body = payload as {
     last_canary_run?: unknown;
+    canaries_owed?: unknown;
     canaries_started?: unknown;
     canary_interval_seconds?: unknown;
     findings_are_recorded?: unknown;
@@ -64,6 +64,7 @@ export function readQuality(payload: unknown): QualityBody | null {
     return null;
   }
   if (
+    typeof body.canaries_owed !== "boolean" ||
     typeof body.canaries_started !== "boolean" ||
     typeof body.canary_interval_seconds !== "number" ||
     typeof body.findings_are_recorded !== "boolean" ||

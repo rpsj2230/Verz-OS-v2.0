@@ -40,6 +40,7 @@ from brain.gate.abstain import (
     TakeoverSignal,
     abstain_if_uncited,
     abstention_for_search,
+    nothing_connected,
     nothing_retrieved,
     raise_escalation,
     refused,
@@ -315,6 +316,25 @@ def test_nothing_connected_is_reported_before_nothing_retrieved() -> None:
     )
     assert outcome is not None
     assert outcome.reason is AbstentionReason.NOTHING_CONNECTED
+
+
+@pytest.mark.parametrize(
+    "reason", [one for one in AbstentionReason if one is not AbstentionReason.NOTHING_CONNECTED]
+)
+def test_only_nothing_connected_may_name_the_source_that_would_have_answered(
+    reason: AbstentionReason,
+) -> None:
+    """A source beside nothing found, not entitled, not answering or refused is refused, and
+    nothing connected carries one and still renders the same notice (M27.7.18).
+
+    Delete this and a ledger could record a source beside a refusal, which tells a refusal from
+    an absence in the one field the Questions and gaps screen reads."""
+    with pytest.raises(ValueError, match="cannot name a missing source"):
+        Abstention(reason=reason, missing_source="xero")
+    named = nothing_connected(SearchScope(), missing_source="xero")
+    assert named.missing_source == "xero"
+    assert named.for_asker() == nothing_connected(SearchScope()).for_asker()
+    assert Abstention(reason=reason).missing_source == ""
 
 
 def test_a_search_that_answered_produces_no_abstention() -> None:

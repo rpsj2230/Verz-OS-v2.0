@@ -109,7 +109,7 @@ from brain.app import Settings, create_app
 from brain.core.entitlement import Capability, EntitlementSet, Grant
 from brain.core.principal import Employment, Principal, PrincipalKind
 from brain.core.scope import Scope
-from brain.gate.abstain import NOT_FOUND_TEXT
+from brain.gate.abstain import NOT_FOUND_TEXT, NOTHING_CONNECTED_TEXT
 from brain.gate.context import Channel
 from brain.gate.fast_lane import FastPathRule, rules_from_rows
 from brain.identity.bearer import TokenAuthority
@@ -628,17 +628,24 @@ def test_the_seed_writes_under_the_source_the_application_reads_rows_from(seeded
 
 
 def test_a_rule_filed_under_a_source_the_console_does_not_read_abstains_rather_than_failing(
-    seeded: Seeded, asking_under_another_source: TestClient, nothing_there: TestClient
+    seeded: Seeded, asking_under_another_source: TestClient
 ) -> None:
-    """**A rule for a pair nothing serves is told what an absence is told, and until 2026-09-14
-    it was a 500.** The Projects lead, who is answered when the seeded rule names the source the
-    console reads, asks the same question through the seeded rules refiled under a source it does
-    not read, and hears word for word what a question about a client that does not exist hears.
+    """**A rule for a pair nothing serves is told nothing is connected, whether or not the record
+    exists, and until 2026-09-14 it was a 500.** The Projects lead, who is answered when the seeded
+    rule names the source the console reads, asks the same question through the seeded rules
+    refiled under a source it does not read, about the seeded client and about one that does not
+    exist, and hears the same words for both.
 
     `fast_lane.entities_served` keyed on the entity alone, so the refiled rule matched because a
     client tool existed, `respond` found no reader for its pair and raised, and the route answered
     500. A server error for one question and an abstention for another is also a difference a
     person can read.
+
+    **The words changed on 2026-09-17, from "I could not find that" to nothing connected.** A rule
+    whose source nothing here reads is a fact about the install, decided before anything is read,
+    so it is the same sentence for every asker and every record, and it is what lets the Questions
+    and gaps screen name the source that would have answered (M27.7.18). What must not change is
+    that the existing record and the absent one are told the same thing.
 
     Delete this and the lane can go back to matching on the entity, and the first install whose
     rules and tools name different sources answers every such question with a server error."""
@@ -650,11 +657,11 @@ def test_a_rule_filed_under_a_source_the_console_does_not_read_abstains_rather_t
         SEES_THE_VALUE,
         question_about(seeded, str(record["fields"]["name"])),
     )
-    absent = ask(nothing_there, SEES_THE_VALUE, question_about(seeded, NOBODY))
+    absent = ask(asking_under_another_source, SEES_THE_VALUE, question_about(seeded, NOBODY))
 
     assert refiled.status_code == 200, refiled.text
     assert said(refiled) == said(absent)
-    assert any(NOT_FOUND_TEXT in text for text in said(refiled)), said(refiled)
+    assert any(NOTHING_CONNECTED_TEXT in text for text in said(refiled)), said(refiled)
 
 
 # ================================================================== the leaf

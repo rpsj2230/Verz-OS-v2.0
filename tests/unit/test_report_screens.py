@@ -41,6 +41,7 @@ from brain.identity.bearer import TokenAuthority
 from brain.ops.schedule_runner import Runner, runner_for
 from brain.report_routes import DEFAULT_USAGE_DAYS, MAX_USAGE_DAYS, last_canary_run
 from brain.tables.adoption import QuestionAskedRow
+from brain.tables.question_gap import QuestionGapRow
 from brain.tools.startup import build_registry
 from tests.fixtures.http_client import Response
 from tests.unit.test_api_routes import (
@@ -66,6 +67,7 @@ USAGE = "read:usage"
 QUESTION = "read:question"
 EVALUATION = "read:evaluation"
 AGENT = "read:agent"
+CONNECTOR = "read:connector"
 
 WHOLE = Scope.unrestricted()
 SUPPORT = Scope.department("support")
@@ -77,7 +79,7 @@ def _held(scope: Scope, *capabilities: str) -> tuple[Grant, ...]:
 
 #: What each of `test_api_routes`' people holds on these three screens.
 SCREEN_GRANTS: dict[str, tuple[Grant, ...]] = {
-    "u_wide": _held(WHOLE, USAGE, QUESTION, EVALUATION, AGENT),
+    "u_wide": _held(WHOLE, USAGE, QUESTION, EVALUATION, AGENT, CONNECTOR),
     "u_narrow": _held(SUPPORT, USAGE, QUESTION, EVALUATION),
     "u_prefix": _held(WHOLE, QUESTION),
     "u_none": (),
@@ -106,6 +108,7 @@ class Stored:
     def __init__(self) -> None:
         self.departments: tuple[str, ...] = ()
         self.questions: tuple[QuestionAskedRow, ...] = ()
+        self.gaps: tuple[QuestionGapRow, ...] = ()
         self.canary_runs: tuple[tuple[Any, ...], ...] = ()
         #: Ledger rows whose tokens were counted: trace, principal, model, agent, in, out.
         self.metered: tuple[tuple[Any, ...], ...] = ()
@@ -143,6 +146,8 @@ class StubSession(AsyncSession):
             return StubResult(_STORED.questions)
         if "obs.request_telemetry" in text:
             return StubResult(_STORED.metered)
+        if "ops.question_gap" in text:
+            return StubResult(_STORED.gaps)
         if "ops.control_run" in text:
             return StubResult(_STORED.canary_runs)
         msg = f"the stub session was asked something these routes do not read: {text}"
@@ -421,7 +426,8 @@ def test_any_holder_of_the_questions_grant_is_told_nothing_is_connected(
     """
     body = get(client, QUESTIONS_PATH, pid).json()
 
-    assert body == {
+    assert {key: value for key, value in body.items() if key not in ("start", "end")} == {
+        "gaps": [],
         "nothing_connected": True,
         "answered_when_nothing_connected": NOTHING_CONNECTED,
         "answered_when_nothing_found": NOTHING_FOUND,
@@ -439,39 +445,82 @@ def test_a_connected_install_names_no_gap(connected: TestClient) -> None:
 
 
 def test_a_reader_without_the_questions_grant_gets_the_body_a_connected_install_gives(
-    client: TestClient, connected: TestClient
+    client: TestClient, connected: TestClient, stored: Stored
 ) -> None:
     """DENIED and ABSENT, as two whole bodies.
 
     What breaks if this is deleted: a reader holding nothing reads off the response whether the
     install has anything connected.
     """
-    refused = get(client, QUESTIONS_PATH, "u_none")
-    nothing_to_say = get(connected, QUESTIONS_PATH, "u_wide")
+    seed_gaps(stored)
+    refused = get(client, QUESTIONS_PATH, "u_none").json()
+    stored.gaps = ()
+    nothing_to_say = get(connected, QUESTIONS_PATH, "u_wide").json()
 
-    assert refused.status_code == nothing_to_say.status_code == 200
-    assert refused.json() == nothing_to_say.json()
+    assert refused["gaps"] == nothing_to_say["gaps"] == []
+    for body in (refused, nothing_to_say):
+        del body["start"], body["end"]
+    assert refused == nothing_to_say
 
 
-def test_questions_reads_no_database(client: TestClient, stored: Stored) -> None:
-    """Nothing on a database records how a question ended, so nothing is read from one.
+def seed_gaps(stored: Stored) -> None:
+    at = datetime.now(UTC) - timedelta(hours=1)
+    stored.gaps = tuple(
+        QuestionGapRow(trace_id=trace, department=department, source=source, at=at)
+        for trace, department, source in (
+            ("t1", "support", "xero"),
+            ("t2", "support", "xero"),
+            ("t3", "web", "hubspot"),
+        )
+    )
+
+
+def test_the_gaps_a_reader_may_see_are_listed_by_department_and_named_where_they_may_be(
+    client: TestClient, stored: Stored
+) -> None:
+    """A company-wide reader of both screens reads every line with its source; a support reader
+    with no connectors grant reads support's line with no source, and nothing about web.
+
+    What breaks if this is deleted: the route drops the lines between the read module and the
+    wire, or a department admin reads another department's gaps and the systems it lacks.
+    """
+    seed_gaps(stored)
+
+    wide = get(client, QUESTIONS_PATH, "u_wide").json()["gaps"]
+    narrow = get(client, QUESTIONS_PATH, "u_narrow").json()["gaps"]
+
+    assert wide == [
+        {"department": "support", "source": "xero", "asked": 2},
+        {"department": "web", "source": "hubspot", "asked": 1},
+    ]
+    assert narrow == [{"department": "support", "source": None, "asked": 2}]
+
+
+def test_questions_reads_only_the_gap_ledger_and_reads_it_for_every_reader(
+    client: TestClient, stored: Stored
+) -> None:
+    """One statement, over `ops.question_gap`, whether or not the reader may see a line.
 
     What breaks if this is deleted: a query against the question ledger is added to count
-    something the screen argues must not be counted, and nothing notices.
+    something the screen argues must not be counted, or a refused reader skips the read and the
+    difference in latency says so.
     """
-    get(client, QUESTIONS_PATH, "u_wide")
-
-    assert stored.statements == []
+    for pid in ("u_wide", "u_none"):
+        stored.statements.clear()
+        get(client, QUESTIONS_PATH, pid)
+        assert len(stored.statements) == 1
+        assert "FROM ops.question_gap" in stored.statements[0]
+        assert "ops.question_asked" not in stored.statements[0]
 
 
 # --------------------------------------------------------------------------------- quality
 def test_a_whole_install_evaluation_reader_is_shown_the_last_canary_run(
     client: TestClient, stored: Stored
 ) -> None:
-    """The positive case, and the state is the attempt table's word and never passed.
+    """The positive case: a run recorded `ok` reaches the page as passed, and a 2019 run is owed.
 
     What breaks if this is deleted: every withholding test below is satisfied by a route that
-    shows nobody a run, and `ok` could reach the page as a pass.
+    shows nobody a run, and the owed flag could be dropped between the read module and the wire.
     """
     started = datetime(2019, 3, 5, 6, 0, tzinfo=UTC)
     stored.canary_runs = ((started, started + timedelta(minutes=2), "ok"),)
@@ -481,12 +530,12 @@ def test_a_whole_install_evaluation_reader_is_shown_the_last_canary_run(
     assert body["last_canary_run"] == {
         "started_at": "2019-03-05T06:00:00Z",
         "finished_at": "2019-03-05T06:02:00Z",
-        "state": "finished",
+        "state": "passed",
     }
+    assert body["canaries_owed"] is True
     assert body["canary_interval_seconds"] == 12 * 60 * 60
     assert body["findings_are_recorded"] is False
     assert body["evaluation_runs_are_recorded"] is False
-    assert "pass" not in str(body).lower()
 
 
 @pytest.mark.parametrize("pid", ["u_narrow", "u_none", "u_prefix"])
@@ -517,14 +566,13 @@ def test_the_quality_screen_says_whether_anything_starts_the_canaries(
     What breaks if this is deleted: the page says the canaries run on a cadence on an install
     where nothing starts them, or goes on saying nothing does after a runner is wired.
     """
-    assert get(client, QUALITY_PATH, "u_wide").json()["canaries_started"] is (
-        runner_for("canary_run").run is not None
-    )
+    assert runner_for("canary_run").run is not None
+    assert get(client, QUALITY_PATH, "u_wide").json()["canaries_started"] is True
 
-    wired = Runner(name="canary_run", run=lambda now, report_only, url: "ran")
-    monkeypatch.setattr(report_routes, "runner_for", lambda name: wired)
+    unwired = Runner(name="canary_run", needs="askers")
+    monkeypatch.setattr(report_routes, "runner_for", lambda name: unwired)
 
-    assert get(client, QUALITY_PATH, "u_none").json()["canaries_started"] is True
+    assert get(client, QUALITY_PATH, "u_none").json()["canaries_started"] is False
 
 
 def test_the_canary_run_statement_selects_no_detail_and_takes_the_newest_start() -> None:

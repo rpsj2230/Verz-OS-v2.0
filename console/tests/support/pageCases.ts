@@ -714,6 +714,9 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         items: [{ agent_id: "quote-helper", display_name: UNBROKEN, owner_id: UNBROKEN }],
       },
       "/api/v1/report/questions": {
+        start: "2019-02-26T09:00:00Z",
+        end: "2019-03-05T09:00:00Z",
+        gaps: [],
         nothing_connected: true,
         answered_when_nothing_connected: UNBROKEN,
         answered_when_nothing_found: UNBROKEN,
@@ -1460,15 +1463,19 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: MODELS_AND_HEALTH,
   },
-  // Questions and gaps. Nothing connected, so the one-row table is drawn. The sentence every asker
-  // receives arrives unbroken twice: inside the table, whose parent scrolls, and in the note that
-  // quotes the not-found sentence outside it, which has to be able to break.
+  // Questions and gaps. Nothing connected, so the one-row table is drawn, and one gap line, so the
+  // second is. The sentence every asker receives arrives unbroken twice: inside the table, whose
+  // parent scrolls, and in the note that quotes the not-found sentence outside it, which has to be
+  // able to break. The gap line's department and source are unbroken inside their own table.
   "/questions": {
     address: "/questions",
     signedIn: true,
     drawsValues: true,
     answers: {
       "/api/v1/report/questions": {
+        start: "2019-02-26T09:00:00Z",
+        end: "2019-03-05T09:00:00Z",
+        gaps: [{ department: UNBROKEN, source: UNBROKEN, asked: 3 }],
         nothing_connected: true,
         answered_when_nothing_connected: UNBROKEN,
         answered_when_nothing_found: UNBROKEN,
@@ -1518,6 +1525,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
           finished_at: "2019-03-05T06:02:00Z",
           state: UNBROKEN,
         },
+        canaries_owed: false,
         canaries_started: false,
         canary_interval_seconds: 43200,
         findings_are_recorded: false,

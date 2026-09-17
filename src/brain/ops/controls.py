@@ -444,15 +444,22 @@ CONTROLS: Final[tuple[Control, ...]] = (
     ),
     Control(
         name="canary_run",
+        # Four since 2026-09-17. `run_canaries_now` is what the worker's schedule starts, through
+        # `brain.ops.schedule_runner.start_control`; the two checks are what it asks, and `due` is
+        # what the Quality screen asks to say whether a run is owed. `scan_stores` was a symbol
+        # here and is not now: it needs a canary value planted in a record, which
+        # `brain.ops.canaries.PRODUCTION_NEVER_PLANTS_A_CANARY` refuses on an install, so it is
+        # the fixture suite's check and a production caller of it would scan for nothing.
         symbols=(
+            "brain.ops.canary_run:run_canaries_now",
             "brain.ops.canaries:compare_askers",
-            "brain.ops.canaries:scan_stores",
+            "brain.ops.canaries:projection_findings",
             "brain.ops.canaries:due",
         ),
         guards=(
-            "that the gate still refuses what it refused yesterday, that a value one asker "
-            "may not see never reaches a place a run leaves text behind, and that two "
-            "refusals still read identically to the person receiving them"
+            "that the gate still refuses what it refused yesterday: every reach the install "
+            "holds is offered exactly the tools its grants admit, and a refusal still reads "
+            "byte for byte as an absence to whoever receives it"
         ),
         lost_silently=(
             "The central invariant stops being measured. Every other check in this "
@@ -463,7 +470,9 @@ CONTROLS: Final[tuple[Control, ...]] = (
         every=timedelta(seconds=CANARY_INTERVAL_SECONDS),
         cadence_from="brain.ops.canaries:CANARY_INTERVAL_SECONDS",
         severity=Severity.WOKEN,
-        invoked_by=Invocation.NOTHING,
+        # Started by the worker's schedule since 2026-09-17. A red run raises, so it is recorded
+        # as failed, and what it found goes to the alert and never to the run's stored detail.
+        invoked_by=Invocation.IN_PROCESS,
     ),
     Control(
         name="restore_drill",

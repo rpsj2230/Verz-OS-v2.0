@@ -74,6 +74,7 @@ WIRED = [one.name for one in RUNNERS if one.run is not None]
 #: What each wired control is started with on a fresh install, in the order the tick starts them.
 STARTED = [
     ("retention_sweep", True),
+    ("canary_run", False),
     ("knowledge_reverification", False),
     ("outbox_dispatch", False),
     ("spend_report_refresh", False),
@@ -146,15 +147,16 @@ def starts(monkeypatch: pytest.MonkeyPatch) -> Starts:
 
 
 # ------------------------------------------------------------------- without a server
-def test_the_wired_runners_are_the_five_the_schedule_is_meant_to_start() -> None:
+def test_the_wired_runners_are_the_six_the_schedule_is_meant_to_start() -> None:
     """Asserted against the names, so a runner wired or unwired later moves this on purpose.
 
-    The webhook dispatch and the erasure queue joined on 2026-09-17.
+    The webhook dispatch, the erasure queue and the permission canaries joined on 2026-09-17.
 
-    Delete this and every assertion below that names the five could be satisfied by a table
+    Delete this and every assertion below that names the six could be satisfied by a table
     that had quietly lost one of them."""
     assert WIRED == [
         "retention_sweep",
+        "canary_run",
         "knowledge_reverification",
         "outbox_dispatch",
         "spend_report_refresh",
@@ -304,9 +306,9 @@ def test_the_schedule_runs_beside_the_shards_and_stops_when_they_do(
 # ------------------------------------------------------------------------ with a server
 def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -> None:
     """Every wired control is owed on a fresh install and each starts exactly once: the sweep in
-    report-only mode, recorded as refused, and the nag and the refresh recorded as ok, each with
-    the runner's sentence and the finish taken from the clock. Every other schedulable control is
-    reported as having nothing to run and leaves no row.
+    report-only mode, recorded as refused, and the canaries, the nag and the refresh recorded as
+    ok, each with the runner's sentence and the finish taken from the clock. Every other
+    schedulable control is reported as having nothing to run and leaves no row.
 
     Delete this and the loop could start a control twice in one tick, record it under the wrong
     outcome, or write rows for controls that cannot run."""
@@ -315,6 +317,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
 
         assert starts.calls == STARTED
         assert [(one.name, one.outcome, one.report_only, one.detail) for one in _rows(url)] == [
+            ("canary_run", "ok", False, "canary_run ran"),
             ("erasure_queue", "ok", False, "erasure_queue ran"),
             ("knowledge_reverification", "ok", False, "knowledge_reverification ran"),
             ("outbox_dispatch", "ok", False, "outbox_dispatch ran"),
@@ -325,6 +328,7 @@ def test_a_due_control_is_started_once_and_its_run_is_recorded(starts: Starts) -
         assert {row[5] for row in recorded(url)} == {FINISHED}
         by_name = {one.name: one.ticked for one in found}
         assert by_name["retention_sweep"] is Ticked.REFUSED
+        assert by_name["canary_run"] is Ticked.RAN
         assert by_name["knowledge_reverification"] is Ticked.RAN
         assert by_name["spend_report_refresh"] is Ticked.RAN
         assert by_name["outbox_dispatch"] is Ticked.RAN
@@ -380,12 +384,12 @@ def test_nothing_that_is_not_due_runs_and_it_runs_again_once_its_cadence_has_pas
         later = tick(url, at=NOW + timedelta(seconds=30))
 
         assert starts.calls == STARTED
-        assert len(recorded(url)) == 5
+        assert len(recorded(url)) == 6
         assert not any(one.name in WIRED for one in later)
 
         tick(url, at=NOW + timedelta(days=1, minutes=1))
-        assert len(starts.calls) == 10
-        assert len(recorded(url)) == 10
+        assert len(starts.calls) == 12
+        assert len(recorded(url)) == 12
 
 
 def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_are(
@@ -402,8 +406,9 @@ def test_a_control_whose_lock_another_replica_holds_is_not_started_and_the_rest_
             found = tick(url, at=NOW)
             other.rollback()
 
-        assert starts.calls == [*STARTED[:3], STARTED[4]]
+        assert starts.calls == [*STARTED[:4], STARTED[5]]
         assert [row[0] for row in recorded(url)] == [
+            "canary_run",
             "erasure_queue",
             "knowledge_reverification",
             "outbox_dispatch",
@@ -429,6 +434,7 @@ def test_a_runner_that_raises_is_recorded_as_failed_with_its_reason_and_the_next
 
         assert fake.calls == STARTED
         assert [(one.name, one.outcome, one.detail) for one in _rows(url)] == [
+            ("canary_run", "ok", "canary_run ran"),
             ("erasure_queue", "ok", "erasure_queue ran"),
             ("knowledge_reverification", "ok", "knowledge_reverification ran"),
             ("outbox_dispatch", "ok", "outbox_dispatch ran"),
@@ -490,6 +496,7 @@ def test_the_tick_records_the_re_verification_nag_through_the_real_runner(
     ]
     assert others.calls == [
         ("retention_sweep", True),
+        ("canary_run", False),
         ("outbox_dispatch", False),
         ("spend_report_refresh", False),
         ("erasure_queue", False),

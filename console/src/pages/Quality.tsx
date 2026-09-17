@@ -1,21 +1,21 @@
 /**
- * Quality and canaries: when the permission canaries last ran and how that run ended, and what an
- * install cannot say about quality.
+ * Quality and canaries: whether the permission canaries' last run passed, whether one is owed, and
+ * what an install cannot say about quality.
  *
  * `docs/screens.html` names this screen "Quality & canaries" under Report on the company overview,
  * draws the permission canaries as a card on the people screen, and repeats the canary line in the
  * overview's "Needs you". This page is that card, with the design's rows in the design's order,
  * followed by the two things the screen registry says the screen is for and an install does not
  * hold: how the golden corpus scored, and what regressed since the last release. Each row the API
- * cannot fill is a sentence where the design draws a figure. `qualityQuery.ts` says why a finished
- * run is never drawn as green.
+ * cannot fill as a figure is a sentence. `qualityQuery.ts` says why a pass is drawn only for a run
+ * the API calls passed.
  *
  * **Four states, four sentences.** Loading says so; an unreachable API and a failed request have
  * different headings; and no run to show is one sentence, true both on an install where the
  * canaries have never run and for a reader who may not see a run, because the API sends one body.
  *
- * **Nothing here decides who may see anything.** The request is identical for every caller, and
- * no canary content reaches this page: the API sends when and how a run ended, and nothing else.
+ * **Nothing here decides who may see anything.** The request is identical for every caller, and no
+ * canary finding reaches this page: the API sends when and how a run ended, and nothing else.
  *
  * Imported statically rather than split, for `Roles.tsx`' reason.
  *
@@ -43,10 +43,23 @@ export const WHAT_A_CANARY_IS =
 /** No run to show, whichever of the reasons there is none. */
 export const NO_RUN = "There is no canary run to show here.";
 
-/** Why a finished run is not a green one. */
-export const FINDINGS_ARE_NOT_RECORDED =
-  "Not recorded. A run that finished is not a run that passed: what a run found is not kept, so " +
-  "this screen cannot say whether it was green.";
+/** What the design's synthetic users row becomes. */
+export const WHO_A_RUN_ASKS_AS =
+  "No account is made for a canary. A run asks as every distinct reach the live accounts on this " +
+  "install hold, and as one reach that holds nothing.";
+
+/** What the design's assertions row becomes. */
+export const WHAT_A_RUN_CHECKS =
+  "Every reach is offered exactly the tools its grants admit, and every answer rule, asked about " +
+  "a value no record holds, is answered in the same words at every reach.";
+
+/** Why the findings are not on this page. */
+export const FINDINGS_GO_TO_THE_ALERT =
+  "Not kept here. What a failed run found is written to the alert whoever is on call reads, and " +
+  "is stored nowhere, so this page says only whether a run passed.";
+
+/** When a run is owed now. */
+export const A_RUN_IS_OWED = "A run is owed now.";
 
 /** When nothing starts the canaries, with the cadence they would keep. */
 export function notStarted(interval: number): string {
@@ -56,15 +69,13 @@ export function notStarted(interval: number): string {
   );
 }
 
-/** What the design's synthetic users and assertions rows become. */
-export const NOT_ON_AN_INSTALL =
-  "Not on this install. The synthetic users and the values the canaries look for belong to the " +
-  "product's own test suite, which is not shipped to an install.";
+/** What the design's "on a red canary" row becomes once something starts the canaries. */
+export const ON_A_RED_CANARY =
+  "The run is recorded as failed and the alert names what it found. Nothing is blocked.";
 
-/** What the design's "on a red canary" row becomes. */
+/** What the design's "on a red canary" row becomes while nothing starts them. */
 export const NOTHING_ACTS_ON_A_RESULT =
-  "Nothing on this install acts on a canary result, because no result is recorded for anything " +
-  "to act on.";
+  "Nothing on this install starts the canaries, so there is no result for anything to act on.";
 
 /** The golden corpus and the regression, in place of figures an install does not hold. */
 export const GOLDEN_HEADING = "Golden questions";
@@ -102,13 +113,13 @@ function QualityAnswerView() {
           <div className="fields__row">
             <dt>Synthetic users under test</dt>
             <dd>
-              <p className="note">{NOT_ON_AN_INSTALL}</p>
+              <p className="note">{WHO_A_RUN_ASKS_AS}</p>
             </dd>
           </div>
           <div className="fields__row">
             <dt>Assertions per run</dt>
             <dd>
-              <p className="note">{NOT_ON_AN_INSTALL}</p>
+              <p className="note">{WHAT_A_RUN_CHECKS}</p>
             </dd>
           </div>
           <div className="fields__row">
@@ -125,7 +136,7 @@ function QualityAnswerView() {
             <dt>What it found</dt>
             <dd>
               {body.findings_are_recorded ? null : (
-                <p className="note">{FINDINGS_ARE_NOT_RECORDED}</p>
+                <p className="note">{FINDINGS_GO_TO_THE_ALERT}</p>
               )}
             </dd>
           </div>
@@ -133,7 +144,10 @@ function QualityAnswerView() {
             <dt>Runs</dt>
             <dd>
               {body.canaries_started ? (
-                <span>{cadence(body.canary_interval_seconds)}</span>
+                <>
+                  <span>{cadence(body.canary_interval_seconds)}</span>
+                  {body.canaries_owed ? <p className="note">{A_RUN_IS_OWED}</p> : null}
+                </>
               ) : (
                 <p className="note">{notStarted(body.canary_interval_seconds)}</p>
               )}
@@ -142,9 +156,9 @@ function QualityAnswerView() {
           <div className="fields__row">
             <dt>On a red canary</dt>
             <dd>
-              {body.findings_are_recorded ? null : (
-                <p className="note">{NOTHING_ACTS_ON_A_RESULT}</p>
-              )}
+              <p className="note">
+                {body.canaries_started ? ON_A_RED_CANARY : NOTHING_ACTS_ON_A_RESULT}
+              </p>
             </dd>
           </div>
         </dl>

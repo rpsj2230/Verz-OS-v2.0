@@ -1,20 +1,23 @@
 /**
- * Questions and gaps: what the system cannot answer on this install, and why the rest of what the
- * design lists cannot be shown.
+ * Questions and gaps: what the system cannot answer on this install because nothing it reads
+ * covers the subject, and why the rest of what the design lists cannot be shown.
  *
  * `docs/screens.html` names this screen "Questions & gaps" under Report on the company overview
  * and draws its content on the department console as the card "Questions nobody could answer",
  * with a table of question shape, how often asked, why it failed and the fix, and an Export link.
- * This page is that card. Its one row is the design's "no source" row, drawn when the API says
- * every question is being answered with nothing connected, with the design's own words for why it
- * failed and a link to where the fix is made. `questionsQuery.ts` says why the shape and count
- * columns and the "no knowledge" and "field missing" rows are absent, and the page says it too.
+ * This page is that card. When nothing is connected at all it draws the design's "no source" row,
+ * with the design's own words for why it failed and a link to where the fix is made. Otherwise it
+ * draws a line per department and source for every question no connected source covered, with how
+ * often it was asked and the same fix. `questionsQuery.ts` says why the question shape column and
+ * the "no knowledge" and "field missing" rows are absent, and the page says it too.
  *
  * **Four states, four sentences.** Loading says so; an unreachable API and a failed request have
- * different headings; and a screen with no gap to show says so in a sentence that is true both for
- * a connected install and for a reader who may not be told, because the API sends one body.
+ * different headings; and a screen with no gap line says so in a sentence that is true both for an
+ * install with none and for a reader who may not see one, because the API sends one body.
  *
- * **Nothing here decides who may see anything.** The request is identical for every caller.
+ * **Nothing here decides who may see anything.** The request is identical for every caller, and a
+ * source the API sends as null is drawn as one the reader is not told, in the same words every
+ * time.
  *
  * Imported statically rather than split, for `Roles.tsx`' reason.
  *
@@ -36,25 +39,34 @@ export const QUESTIONS_LEDE =
 /** The design's card heading. */
 export const UNANSWERED_HEADING = "Questions nobody could answer";
 
-/** No gap to show, whichever of the reasons there is none. */
+/** A body the page cannot read. */
 export const NO_GAP = "There is no gap to show here.";
 
-/** The design's words for the one row an install can know. */
+/** No line to show, whichever of the reasons there is none: none recorded, or none this reader sees. */
+export const NO_MISSING_SOURCE =
+  "No question in this period matched a rule for a source this install does not read.";
+
+/** The design's words for the row an install can know about everybody. */
 export const NO_SOURCE = "no source";
 export const CONNECT_A_SOURCE = "Connect a source";
 
-/** Why the shape and count columns are absent. */
-export const UNANSWERED_ARE_NOT_RECORDED =
-  "Nothing on this install records a question that went unanswered, so the questions, how often " +
-  "each was asked and why each failed cannot be listed here.";
+/** What a line whose source this reader may not be told says in the source column. */
+export const SOURCE_NOT_NAMED = "a source you are not shown";
+
+/** Why only one kind of unanswered question is listed. */
+export const ONLY_MISSING_SOURCES_ARE_RECORDED =
+  "Only a question whose shape matches a rule for a source this install does not read is " +
+  "recorded, by the department it was asked in and the source that would have answered. Nothing " +
+  "else about an unanswered question is kept, so no other kind can be listed here.";
 
 /** Why the words people typed are not listed. */
 export const WORDS_ARE_NOT_KEPT =
-  "The words people typed are not kept for this screen. A list of them would be a record of what " +
-  "each person was trying to find out, readable by whoever opens this page.";
+  "The words people typed and who typed them are not kept for this screen. A list of them would " +
+  "be a record of what each person was trying to find out, readable by whoever opens this page.";
 
-/** The accessible name of the table. */
+/** The accessible names of the two tables. */
 export const GAPS_CAPTION = "Why questions could not be answered";
+export const MISSING_SOURCES_CAPTION = "Questions no connected source covered";
 
 /** Why the not-found answer is never counted, with the sentence askers receive. */
 export function notFoundIsNotAGap(sentence: string): string {
@@ -64,10 +76,14 @@ export function notFoundIsNotAGap(sentence: string): string {
   );
 }
 
+/** The window the lines cover, in the API's own instants. */
+export function since(start: string): string {
+  return `Since ${start}.`;
+}
+
 /** What is said in place of the design's Export link. */
 export const EXPORT_NOT_OFFERED =
-  "There is no Export control: nothing about unanswered questions is recorded that could be " +
-  "exported.";
+  "There is no Export control: everything recorded about unanswered questions is on this page.";
 
 function QuestionsAnswerView() {
   const answer = useResource<unknown>(QUESTIONS_API_PATH);
@@ -114,10 +130,39 @@ function QuestionsAnswerView() {
             </tbody>
           </table>
         </div>
-      ) : (
-        <p className="note">{NO_GAP}</p>
+      ) : null}
+      {body.gaps.length > 0 ? (
+        <div className="grid__scroll">
+          <table className="grid__table">
+            <caption className="grid__caption">{MISSING_SOURCES_CAPTION}</caption>
+            <thead>
+              <tr>
+                <th scope="col">Department</th>
+                <th scope="col">Source that would have answered</th>
+                <th scope="col">Asked</th>
+                <th scope="col">Fix</th>
+              </tr>
+            </thead>
+            <tbody>
+              {body.gaps.map((line) => (
+                <tr key={`${line.department}|${line.source ?? ""}`}>
+                  <th scope="row">{line.department}</th>
+                  <td>{line.source ?? SOURCE_NOT_NAMED}</td>
+                  <td>{String(line.asked)}</td>
+                  <td>
+                    <Link to={CONNECTORS_PATH}>{CONNECT_A_SOURCE}</Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {body.gaps.length === 0 ? <p className="note">{NO_MISSING_SOURCE}</p> : null}
+      <p className="note">{since(body.start)}</p>
+      {body.unanswered_are_recorded ? null : (
+        <p className="note">{ONLY_MISSING_SOURCES_ARE_RECORDED}</p>
       )}
-      {body.unanswered_are_recorded ? null : <p className="note">{UNANSWERED_ARE_NOT_RECORDED}</p>}
       <p className="note">{notFoundIsNotAGap(body.answered_when_nothing_found)}</p>
       <p className="note">{WORDS_ARE_NOT_KEPT}</p>
       <p className="note">
