@@ -141,9 +141,17 @@ def the_vault_steps(script: str) -> str:
 
 
 def a_shell() -> str:
-    shell = shutil.which("sh")
-    if shell is None:  # pragma: no cover - CI runs on Linux, where sh always exists
-        pytest.skip("no POSIX shell on this machine to run the vault steps with")
+    """Bash, because the installer is a bash script and is documented as `bash install.sh`.
+
+    Its header sets `pipefail`, which dash does not have. Measured on 2026-09-17: these tests
+    passed on Windows, where `sh` is Git's bash, and every one failed on the ubuntu runner,
+    where `sh` is dash, with `set: Illegal option -o pipefail` before a vault step ran. Running
+    them with `sh` tested a shell nobody is told to use; the update and rollback scripts are
+    different, being POSIX, and `test_deployment_release.py` rightly runs those with `sh`.
+    """
+    shell = shutil.which("bash")
+    if shell is None:  # pragma: no cover - CI runs on Linux, where bash is installed
+        pytest.skip("no bash on this machine to run the installer's vault steps with")
     return shell
 
 
