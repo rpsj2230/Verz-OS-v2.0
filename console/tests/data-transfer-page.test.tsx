@@ -21,7 +21,13 @@ import {
   NO_EXPORTS,
   READING_DATA_TRANSFER,
 } from "../src/pages/DataTransfer";
-import { windowOf, type DataTransferBody } from "../src/pages/dataTransferQuery";
+import {
+  CHAIN_BROKEN,
+  NOT_A_CHAIN,
+  READABLE_WINDOW,
+  windowOf,
+  type DataTransferBody,
+} from "../src/pages/dataTransferQuery";
 import { fakeIdentityProvider, loadConsole, signIn, type FakeIdp } from "./support/auth";
 import { declaredRequestBodySchema } from "./support/openapi";
 
@@ -49,6 +55,8 @@ function listing(overrides: Partial<DataTransferBody> = {}): DataTransferBody {
     ],
     reasons: ["legal_discovery", "regulatory_request"],
     exportable: true,
+    form: "chain",
+    form_told: "CHAIN-FORM-TOLD",
     exports: [],
     export_told: EXPORT_TOLD,
     document_told: DOCUMENT_TOLD,
@@ -140,6 +148,43 @@ describe("what the import and export screen shows", () => {
     expect(container.querySelector(`[aria-label="${EXPORT_LABEL}"]`)).toBeNull();
   });
 
+  test("a reader who takes the entries they may read is told so, and their exports name no window or verdict", async () => {
+    // What breaks if this is deleted: a readable export drawn with an empty window and a verdict of
+    // broken, which reads as a tampered ledger, or the screen promising a chain the reader will not
+    // receive.
+    const { container } = await mount((url) =>
+      url.pathname === LISTING
+        ? json(
+            listing({
+              form: "readable",
+              form_told: "READABLE-FORM-TOLD",
+              exports: [
+                {
+                  export_id: "22222222-2222-4222-8222-222222222222",
+                  data_set: "audit_trail",
+                  reason: "regulatory_request",
+                  reason_reference: "MATTER-2",
+                  produced_at: "2019-03-06T00:00:00Z",
+                  form: "readable",
+                  first_seq: null,
+                  last_seq: null,
+                  entries: 3,
+                  verified: null,
+                  document_digest: "b".repeat(64),
+                },
+              ],
+            }),
+          )
+        : null,
+    );
+    expect(container.textContent).toContain("READABLE-FORM-TOLD");
+    expect(container.textContent).not.toContain("CHAIN-FORM-TOLD");
+    const row = container.querySelector('[aria-label="Your exports"] tbody tr');
+    expect(row?.textContent).toContain(READABLE_WINDOW);
+    expect(row?.textContent).toContain(NOT_A_CHAIN);
+    expect(row?.textContent).not.toContain(CHAIN_BROKEN);
+  });
+
   test("a window of whole days includes the last day chosen", () => {
     // What breaks if this is deleted: the last day's entries are left out of every export.
     expect(windowOf("2019-03-04", "2019-03-05")).toEqual({
@@ -167,6 +212,7 @@ describe("what the import and export screen does", () => {
             reason: "regulatory_request",
             reason_reference: "MATTER-1",
             produced_at: "2019-03-06T00:00:00Z",
+            form: "chain",
             first_seq: 0,
             last_seq: 1,
             entries: 2,

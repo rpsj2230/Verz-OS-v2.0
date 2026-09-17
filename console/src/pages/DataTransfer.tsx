@@ -13,9 +13,10 @@
  * the answer arrives and is never drawn on the screen.
  *
  * **Nothing here decides who may export.** `exportable` only decides whether the form is drawn, and
- * the route decides again, asking before it reads anything.
+ * the route decides again, asking before it reads anything. `form_told` is the API's sentence for the
+ * form this reader's export takes, a chain or the entries they may read, and is drawn as sent.
  *
- * Task ids: M27.8.16
+ * Task ids: M27.8.16, M27.9.4
  */
 
 import { useCallback, useState, type FormEvent } from "react";
@@ -35,6 +36,7 @@ import {
   readDataTransfer,
   readTaken,
   reasonLabel,
+  chainSentence,
   saveDocument,
   windowOf,
   windowSentence,
@@ -52,8 +54,8 @@ export const DATA_TRANSFER_LEDE =
 export const READING_DATA_TRANSFER = "Reading what can be imported and exported.";
 export const THE_BRAIN_COULD_NOT_BE_REACHED = "The Brain could not be reached";
 export const NOT_EXPORTABLE =
-  "Taking an export needs the export grant and the grant to read the whole audit trail, both over " +
-  "the whole company. You do not hold both, so no export can be taken here.";
+  "Taking an export needs the export grant over the whole company and the grant to open the audit " +
+  "trail. You do not hold both, so no export can be taken here.";
 export const NO_EXPORTS = "You have not taken an export.";
 export const EXPORT_LABEL = "Export the audit trail";
 export const KEEP_LABEL = "Change nothing";
@@ -169,6 +171,7 @@ function TransferPage({
       <section className="card">
         <h2>{EXPORT_LABEL}</h2>
         <p>{page.export_told}</p>
+        {page.form_told ? <p>{page.form_told}</p> : null}
         <p className="note">{page.document_told}</p>
         {failure === null ? null : <FailureNotice failure={failure} fields={EXPORT_FIELDS} />}
         {!page.exportable ? (
@@ -288,7 +291,7 @@ function TransferPage({
                       <code>{row.reason_reference}</code>
                     </td>
                     <td>{windowSentence(row)}</td>
-                    <td>{row.verified ? "Verified" : "Broken; the document says where"}</td>
+                    <td>{chainSentence(row)}</td>
                     <td>
                       <code>{row.document_digest}</code>
                     </td>

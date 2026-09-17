@@ -56,6 +56,8 @@ import {
   RETENTION_API_PATH,
   WITHDRAWAL_API_PATH,
   erasureBody,
+  exportEntriesSentence,
+  exportVerdict,
   erasureProblems,
   erasureState,
   holdBody,
@@ -673,12 +675,8 @@ function ExportsTaken() {
               <td>
                 {one.reason}, <code>{one.reason_reference}</code>
               </td>
-              <td>
-                {one.first_seq === null
-                  ? "none"
-                  : `${String(one.entries)}, from ${String(one.first_seq)} to ${String(one.last_seq)}`}
-              </td>
-              <td>{one.verified ? "Yes" : "No"}</td>
+              <td>{exportEntriesSentence(one)}</td>
+              <td>{exportVerdict(one)}</td>
               <td>
                 <code>{one.document_digest}</code>
               </td>

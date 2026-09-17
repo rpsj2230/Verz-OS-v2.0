@@ -465,11 +465,26 @@ describe("what is kept, what left and what was asked to be erased", () => {
             reason: "regulatory_request",
             reason_reference: "MATTER-1",
             produced_at: "2019-03-04T09:00:00Z",
+            form: "chain",
             first_seq: 3,
             last_seq: 4,
             entries: 2,
             verified: true,
             document_digest: "d".repeat(64),
+          },
+          {
+            export_id: "e-2",
+            data_set: "audit_trail",
+            requested_by: "u_partial",
+            reason: "regulatory_request",
+            reason_reference: "MATTER-2",
+            produced_at: "2019-03-04T08:00:00Z",
+            form: "readable",
+            first_seq: null,
+            last_seq: null,
+            entries: 3,
+            verified: null,
+            document_digest: "e".repeat(64),
           },
         ],
       },
@@ -478,11 +493,16 @@ describe("what is kept, what left and what was asked to be erased", () => {
     await waitFor(() => {
       expect(container.querySelector("table[aria-label='Exports taken from this install']")).not.toBeNull();
     });
-    const row = container.querySelector("table[aria-label='Exports taken from this install'] tbody tr");
+    const [row, readable] = container.querySelectorAll("table[aria-label='Exports taken from this install'] tbody tr");
     expect(row?.textContent).toContain("u_exporter");
     expect(row?.textContent).toContain("MATTER-1");
     expect(row?.textContent).toContain("2, from 3 to 4");
     expect(row?.textContent).toContain("d".repeat(64));
+    // An export of the entries its exporter could read has no window and no verdict: it is drawn
+    // as such, never as an export of nothing or a chain that failed to verify.
+    expect(readable?.textContent).toContain("3, those its exporter could read");
+    expect(readable?.textContent).toContain("Not a chain");
+    expect(readable?.textContent).not.toContain("none");
   });
 });
 

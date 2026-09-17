@@ -15,6 +15,13 @@ window as sequence numbers, how many entries, whether the chain verified, and th
 exact bytes handed over. A recipient holding the file can prove it is this export; a reader of this
 table learns nothing the ledger itself would have refused to hold.
 
+**Two forms, and only the chain has a window of sequence numbers or a verdict.** An exporter who
+may read the whole ledger takes the chain; anybody else takes the entries they may read, which is
+not a chain (`brain.audit.readable_export`). That record carries no sequence range and no verdict,
+because a range beside a count is the number of entries withheld by subtraction, and this row is
+shown back to the exporter and on the Exports log. `0053`'s two window constraints describe the
+chain and now say so; see `A_READABLE_EXPORT_NAMES_NO_WINDOW`.
+
 **Recorded in the ledger as a publish, by the database.** An export is an artefact leaving the
 system, which is what `brain.audit.ledger.AuditAction.PUBLISH` records, so no member is added: the
 subject is `artifact:<export_id>`, the actor is `requested_by`, and the details name the data set
@@ -28,7 +35,7 @@ on the record of an export is where the name of the person being investigated en
 
 **Never edited and never retired.** SELECT and INSERT only, no `deleted_at`.
 
-Task ids: M27.8.16
+Task ids: M27.8.16, M27.9.4
 """
 
 from __future__ import annotations
@@ -38,7 +45,17 @@ import uuid
 from datetime import datetime
 from typing import Final
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, Integer, String, Uuid, func
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Integer,
+    String,
+    Uuid,
+    func,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from brain.db import Base
@@ -62,6 +79,18 @@ REFERENCE_PATTERN: Final = r"^[A-Za-z0-9][A-Za-z0-9_./#-]{0,63}$"
 #: A sha256 in lower-case hex.
 DIGEST_PATTERN: Final = r"^[0-9a-f]{64}$"
 
+#: How wide a form's name may be. `readable` is eight.
+FORM_CHARS: Final = 16
+
+#: Why a readable export's record has no sequence range and no verdict.
+A_READABLE_EXPORT_NAMES_NO_WINDOW: Final = (
+    "An export of the entries a reader may read is recorded with how many it carries and never "
+    "with the sequence numbers of its first and last, because the range and the count together "
+    "are the number of entries withheld from that reader, by subtraction, on a record shown back "
+    "to them. It has no verdict either: it is not a chain, so there is nothing to verify, and "
+    "false would read as a ledger somebody tampered with."
+)
+
 
 class ExportDataSet(enum.StrEnum):
     """Every data set an export can be taken of from the console. Closed, like `ExportReason`.
@@ -71,8 +100,21 @@ class ExportDataSet(enum.StrEnum):
     added here on the day its export runs, with the migration that widens the constraint.
     """
 
-    #: A contiguous window of the audit ledger, as `brain.audit.export` renders it.
+    #: A window of the audit ledger, as `brain.audit.export` or `brain.audit.readable_export`
+    #: renders it.
     AUDIT_TRAIL = "audit_trail"
+
+
+class ExportForm(enum.StrEnum):
+    """What shape an audit trail export took. Decided from the exporter's grants, never the window.
+
+    `brain.ops.data_transfer.form_for` is the decision; this is the vocabulary the record holds.
+    """
+
+    #: A contiguous run of the chain with the recipe to verify it, for a whole-ledger reader.
+    CHAIN = "chain"
+    #: The entries the exporter may read, as the audit view shows them, with no chain position.
+    READABLE = "readable"
 
 
 class DataExportRow(Base):
@@ -90,12 +132,18 @@ class DataExportRow(Base):
     produced_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    #: The window, as the first and last sequence numbers exported. Both None for an empty one.
+    #: Which form, `ExportForm`. A row written before `0082` is a chain, which is the default.
+    form: Mapped[str] = mapped_column(
+        String(FORM_CHARS), nullable=False, server_default=text(f"'{ExportForm.CHAIN.value}'")
+    )
+    #: A chain's window, as the first and last sequence numbers exported. Both None for an empty
+    #: chain and for every readable export; see `A_READABLE_EXPORT_NAMES_NO_WINDOW`.
     first_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     last_seq: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     entries: Mapped[int] = mapped_column(Integer, nullable=False)
-    #: Whether the window's chain verified when it was exported. The document carries the break.
-    verified: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    #: Whether a chain verified when it was exported, and None exactly for a readable export. The
+    #: document carries the break.
+    verified: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     #: sha256 over the exact document handed over.
     document_digest: Mapped[str] = mapped_column(String(64), nullable=False)
 
@@ -106,13 +154,24 @@ class DataExportRow(Base):
         CheckConstraint(f"reason_reference ~ '{REFERENCE_PATTERN}'", name="reference_is_a_token"),
         CheckConstraint(f"document_digest ~ '{DIGEST_PATTERN}'", name="digest_shape"),
         CheckConstraint("entries >= 0", name="entries_not_negative"),
+        CheckConstraint(one_of("form", ExportForm), name="form"),
         CheckConstraint(
-            "(first_seq IS NULL) = (last_seq IS NULL) AND (first_seq IS NULL) = (entries = 0)",
+            f"form <> '{ExportForm.CHAIN.value}' OR ((first_seq IS NULL) = (last_seq IS NULL) "
+            "AND (first_seq IS NULL) = (entries = 0))",
             name="a_window_names_both_ends_or_neither",
         ),
         CheckConstraint(
-            "first_seq IS NULL OR last_seq - first_seq + 1 = entries",
+            f"form <> '{ExportForm.CHAIN.value}' OR first_seq IS NULL "
+            "OR last_seq - first_seq + 1 = entries",
             name="the_window_is_contiguous",
+        ),
+        CheckConstraint(
+            f"form <> '{ExportForm.READABLE.value}' OR (first_seq IS NULL AND last_seq IS NULL)",
+            name="a_readable_export_names_no_window",
+        ),
+        CheckConstraint(
+            f"(form = '{ExportForm.CHAIN.value}') = (verified IS NOT NULL)",
+            name="only_a_chain_says_whether_it_verified",
         ),
         {"schema": "ops"},
     )
