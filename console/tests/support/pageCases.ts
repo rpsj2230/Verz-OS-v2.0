@@ -128,6 +128,27 @@ const AUTOMATION_GALLERY = {
   installing: UNBROKEN,
 };
 
+/** One installed automation whose every drawn value is an unbreakable token, with both controls. */
+const AGENT_AUTOMATIONS = {
+  items: [
+    {
+      automation_id: "auto_one",
+      name: `I ${UNBROKEN}`,
+      runs_as: UNBROKEN,
+      runs_as_name: UNBROKEN,
+      schedule: UNBROKEN,
+      next_run_at: null,
+      paused_because: UNBROKEN,
+      last_run: { finished_at: UNBROKEN, outcome: UNBROKEN, reason: null, result: [UNBROKEN] },
+      start_confirmation: "a".repeat(64),
+      start_becomes: UNBROKEN,
+      stop_confirmation: "b".repeat(64),
+      cannot_start: UNBROKEN,
+    },
+  ],
+  result_rule: UNBROKEN,
+};
+
 /** One page of people, whose subject key and capability are both unbreakable tokens. */
 const PEOPLE = {
   items: [{ subject: `principal:${UNBROKEN}`, capabilities: [UNBROKEN] }],
@@ -818,7 +839,8 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
     drawsValues: true,
     answers: { "/api/v1/agents/quote-helper/workspace": WORKSPACE },
   },
-  // The Automations tab, so the gallery it draws is held to a phone as well as the workspace.
+  // The Automations tab, so the gallery and the installed automations it draws are held to a phone
+  // as well as the workspace.
   "/agents/:agentId/:tab": {
     address: "/agents/quote-helper/automations",
     signedIn: true,
@@ -829,6 +851,7 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
         tabs: ["automations", "settings"].map((tab) => ({ tab, label: tab, purpose: UNBROKEN })),
       },
       "/api/v1/agents/quote-helper/automation-templates": AUTOMATION_GALLERY,
+      "/api/v1/agents/quote-helper/automations": AGENT_AUTOMATIONS,
     },
   },
   "/approvals": {

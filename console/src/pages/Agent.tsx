@@ -48,9 +48,11 @@ import { useParams } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { AgentCapabilities, AgentFiguresView } from "../components/AgentAssembly";
 import { AgentWorkspace } from "../components/AgentWorkspace";
+import { AgentAutomations } from "../components/AgentAutomations";
 import { AutomationGallery } from "../components/AutomationGallery";
 import { CompositionDiff } from "../components/CompositionDiff";
 import { agentWorkspaceApiPath, readAgentWorkspace } from "./agentQuery";
+import { agentAutomationsApiPath } from "./agentAutomationsQuery";
 import { AUTOMATIONS_TAB, automationGalleryApiPath } from "./automationGalleryQuery";
 import { FailureNotice } from "../ui/FailureNotice";
 
@@ -74,6 +76,12 @@ function WithAutomationGallery({
   const [shown, setShown] = useState(false);
   const [installs, setInstalls] = useState(0);
   const gallery = useResource<unknown>(shown ? automationGalleryApiPath(agentId) : null, installs);
+  // The installed automations are asked for with the gallery and again after an install, a start
+  // or a stop, so the list and the cards never disagree about what this reader has installed.
+  const automations = useResource<unknown>(
+    shown ? agentAutomationsApiPath(agentId) : null,
+    installs,
+  );
   const onShown = useCallback(() => {
     setShown(true);
   }, []);
@@ -83,12 +91,21 @@ function WithAutomationGallery({
   return (
     <>
       {children(
-        <AutomationGallery
-          agentId={agentId}
-          gallery={gallery}
-          onShown={onShown}
-          onInstalled={onInstalled}
-        />,
+        <>
+          {shown ? (
+            <AgentAutomations
+              agentId={agentId}
+              automations={automations}
+              onChanged={onInstalled}
+            />
+          ) : null}
+          <AutomationGallery
+            agentId={agentId}
+            gallery={gallery}
+            onShown={onShown}
+            onInstalled={onInstalled}
+          />
+        </>,
       )}
     </>
   );

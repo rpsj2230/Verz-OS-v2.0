@@ -57,6 +57,7 @@ from brain.audit_routes import router as audit_router
 from brain.automation_gallery_routes import router as automation_gallery_router
 from brain.automation_routes import AutomationWiring
 from brain.automation_routes import router as automation_router
+from brain.automation_schedule_routes import router as automation_schedule_router
 from brain.cache import (
     AsyncValkeyClient,
     NoEntitlementCache,
@@ -929,6 +930,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # router because the write is: an `admin:` authority asked before the agent is read, a
     # confirmation recomputed on the server, and a row whose trigger writes the ledger entry.
     app.include_router(automation_gallery_router)
+    # An agent's installed automations, their runs, and the confirmed start and stop. Its own
+    # router for the gallery's reason: an authority asked before anything is read, a confirmation
+    # recomputed on the server, and a row whose trigger writes the ledger entry.
+    app.include_router(automation_schedule_router)
     # Binding a Keycloak subject to a principal. A seventh router because it has two callers:
     # an administrator over everything under the prefix, through `asking`, and the setup
     # wizard's finishing screen at /setup/sign-in, which takes the setup code and a verified

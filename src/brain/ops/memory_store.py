@@ -35,7 +35,13 @@ names what it replaced, and the supersession. `review.Edit` refuses one without 
 does this: a replacement written without its supersession is a second memory recalled beside the one
 it corrects.
 
-Task ids: M27.7.21, M27.7.22
+**A memory formed from a turn is written with its learning record and nothing else.**
+`StoredFormations` reads the person's memories and every correction naming them under a lock on the
+person, asks `brain.memory.turn.propose_memories`, and writes each memory beside its `mem.learning`
+row, which is the revision record the Memory screen reads. No correction is written, because nothing
+was replaced.
+
+Task ids: M27.7.21, M27.7.22, M38.2.2.4
 """
 
 from __future__ import annotations
@@ -54,6 +60,7 @@ from brain.memory.digest import Learning, Undo, undo
 from brain.memory.formation import MemoryKind
 from brain.memory.review import Edit, edit
 from brain.memory.signals import Signal
+from brain.memory.turn import Held, NotFormed, Turn, propose_memories
 from brain.tables.audit import ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.learning import CorrectionRow, LearningRow
 from brain.tables.memory import AdaptiveMemoryRow, PersistentMemoryRow
@@ -336,3 +343,111 @@ class StoredMemoryRecords:
     async def _marks(session: AsyncSession, memory_id: str) -> Corrections:
         rows = (await session.execute(corrections_naming((memory_id,)))).scalars().all()
         return corrections_of(rows)
+
+
+# ------------------------------------------------------------------ forming from a turn
+#: The first key of the lock a turn's formation takes. Its own number beside `REVISION_LOCK_CLASS`;
+#: the second key is the person's id, so two turns by one person form one after the other and two
+#: people's turns never wait on each other.
+FORMATION_LOCK_CLASS: Final = 42652
+
+#: Why a formation is decided under a lock on the person.
+TWO_TURNS_BY_ONE_PERSON_FORM_ONE_AFTER_THE_OTHER: Final = (
+    "Whether a statement is already remembered is a read of the person's memories followed by a "
+    "write. Two turns saying the same thing, formed in two transactions at once, would both read "
+    "nothing and both write, and the person would have the same memory twice. So one transaction "
+    "takes a lock on the person, reads what they have and what corrected it, asks the domain and "
+    "writes, and the second turn waits and then finds the first one's memory standing."
+)
+
+
+def lock_on_person(principal_id: str) -> Any:
+    """The transaction lock a formation for this person takes. Two keys, never the ledger's one."""
+    return text("SELECT pg_advisory_xact_lock(:lock_class, hashtext(:principal_id))").bindparams(
+        lock_class=FORMATION_LOCK_CLASS, principal_id=principal_id
+    )
+
+
+def stated_by(principal_id: str) -> Select[tuple[str, str, str]]:
+    """Every memory this person stated, as id, kind and statement."""
+    return (
+        select(PersistentMemoryRow.id, PersistentMemoryRow.kind, PersistentMemoryRow.statement)
+        .where(PersistentMemoryRow.principal_id == principal_id)
+        .order_by(PersistentMemoryRow.id)
+    )
+
+
+def inferred_of(principal_id: str) -> Select[tuple[str, str, str]]:
+    """Every memory the system inferred about this person, as id, kind and statement."""
+    return (
+        select(AdaptiveMemoryRow.id, AdaptiveMemoryRow.kind, AdaptiveMemoryRow.statement)
+        .where(AdaptiveMemoryRow.principal_id == principal_id)
+        .order_by(AdaptiveMemoryRow.id)
+    )
+
+
+@dataclass(frozen=True)
+class Formed:
+    """What one turn wrote, by memory id, and why anything it proposed was not written."""
+
+    memory_ids: tuple[str, ...]
+    skipped: tuple[NotFormed, ...]
+
+
+class StoredFormations:
+    """The step after an answered turn: read what the person has, propose, write with the record.
+
+    See `brain.memory.turn` for the rules and where the answer lane calls this, and
+    `TWO_TURNS_BY_ONE_PERSON_FORM_ONE_AFTER_THE_OTHER` for the lock.
+    """
+
+    def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
+        self._sessions = sessions
+
+    async def form(self, turn: Turn) -> Formed:
+        """Write what this turn proposes, each memory with its learning record, in one transaction.
+
+        Raises what the database raises. `after_turn` is the call that must not.
+        """
+        if not turn.answered:
+            return Formed(memory_ids=(), skipped=(NotFormed.NOT_ANSWERED,))
+        async with self._sessions() as session, session.begin():
+            await session.execute(lock_on_person(turn.principal_id))
+            held = [
+                Held(memory_id=row[0], kind=MemoryKind(row[1]), statement=row[2])
+                for query in (stated_by(turn.principal_id), inferred_of(turn.principal_id))
+                for row in (await session.execute(query)).all()
+                if row[1] in {one.value for one in MemoryKind}
+            ]
+            rows = (
+                (await session.execute(corrections_naming([one.memory_id for one in held])))
+                .scalars()
+                .all()
+                if held
+                else []
+            )
+            found = corrections_of(rows)
+            proposed = propose_memories(
+                turn, held, supersessions=found.supersessions, demotions=found.demotions
+            )
+            for one in proposed.formed:
+                await session.execute(memory_row(one.learning, one.statement))
+                await session.execute(learning_row(one.learning))
+        return Formed(
+            memory_ids=tuple(one.learning.memory_id for one in proposed.formed),
+            skipped=proposed.skipped,
+        )
+
+    async def after_turn(self, turn: Turn) -> Formed | None:
+        """`form`, for the answer lane's caller, which must never fail an answer over a memory.
+
+        A failure is logged with the trace and the exception's type, never its text or the words,
+        and answered with None, for `brain.ops.question_store.
+        A_MEASUREMENT_THAT_CANNOT_BE_WRITTEN_DOES_NOT_TAKE_THE_ANSWER_WITH_IT`'s reason.
+        """
+        try:
+            return await self.form(turn)
+        except Exception as exc:
+            # Broad on purpose: whatever the store raised, the answer has already been given.
+            log.warning("memory formation failed", trace=turn.trace_id, error=type(exc).__name__)
+            return None

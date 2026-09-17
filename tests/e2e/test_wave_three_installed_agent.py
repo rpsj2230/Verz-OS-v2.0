@@ -49,10 +49,11 @@ stopped the leaf being true of the product as it ships, and each was pinned by a
 failed for exactly that reason. All three are fixed and nothing here is marked xfail, and the
 document tools now reach a department's and a person's own documents through the real row-level
 security policy, measured in `tests/unit/test_document_second_wall.py`. The leaf says live, and it
-is not yet: nothing in `src` calls `brain.agents.install.complete`, so no running installation can
-install an agent from a template; nothing in `src` forms a memory from a conversation; and on a
-default install only the knowledge-only templates start a run, while the analyst driven here
-installs incomplete.
+is not yet: `brain.agents.install_store.StoredAgentInstalls.finish` calls
+`brain.agents.install.complete` and writes the agent, and no route calls it, so no running
+installation can install an agent from a template; `brain.ops.memory_store.StoredFormations` forms a
+memory from an answered turn, and the answer lane does not call it yet; and on a default install
+only the knowledge-only templates start a run, while the analyst driven here installs incomplete.
 
 1. **No agent installed from the catalogue reaches the document plane.**
    `brain.knowledge.search.reach_for` requires `read:knowledge`, and none of the ten templates that

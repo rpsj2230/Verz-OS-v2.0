@@ -256,6 +256,11 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
     already installed on the agent, with a `NotInstalledView` naming which, so the confirmation
     dialog can say why nothing was installed rather than repeating a generic refusal.
 
+    **Starting and stopping an automation are the fifth and sixth, for their 409s.**
+    `brain.automation_schedule_routes` answers a confirmation that no longer matches, or a change
+    that lost a race with a run or another person, with a `NotChangedView` saying which, for the
+    gallery's reason.
+
     Delete this and 404 can be documented as any shape at all as long as it is documented."""
     from brain.credential_routes import CREDENTIALS_PATH
     from brain.sign_in_routes import SIGN_INS_PATH
@@ -274,6 +279,14 @@ def test_the_documented_error_shape_is_the_one_the_application_returns() -> None
             f"{API_PREFIX}/agents/{{agent_id}}/automations",
             "409",
         ): "#/components/schemas/NotInstalledView",
+        (
+            f"{API_PREFIX}/agents/{{agent_id}}/automations/{{automation_id}}/start",
+            "409",
+        ): "#/components/schemas/NotChangedView",
+        (
+            f"{API_PREFIX}/agents/{{agent_id}}/automations/{{automation_id}}/stop",
+            "409",
+        ): "#/components/schemas/NotChangedView",
     }
 
     checked = 0

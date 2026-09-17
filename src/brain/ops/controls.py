@@ -812,6 +812,34 @@ CONTROLS: Final[tuple[Control, ...]] = (
         severity=Severity.RAISED,
         invoked_by=Invocation.IN_PROCESS,
     ),
+    Control(
+        name="automation_run",
+        # Added on 2026-09-17 with `agent.automation_run`, and started by the worker's schedule
+        # from the day it was registered. The tick is what the schedule calls; the admission and
+        # what a run leaves the automation with are the two decisions every run makes.
+        symbols=(
+            "brain.ops.automation_run_store:run_automations_now",
+            "brain.ops.automation_run:admitted_run",
+            "brain.ops.automation_run:afterwards",
+        ),
+        guards=(
+            "that an automation somebody started runs at its cadence as the person it names, at "
+            "no more than that person may reach through the agent's ceiling, and that one whose "
+            "owner has gone, lost the reach or keeps failing stops and says why"
+        ),
+        lost_silently=(
+            "Started automations stay started and nothing they promise happens. The Automations "
+            "tab still shows each one's next run, which reads as a schedule being kept, and "
+            "nobody is told that a week of reports did not arrive because nothing arrives to say "
+            "so."
+        ),
+        # A minute, restated rather than imported: `brain.ops.automation_run_store` imports the
+        # tables, which import this registry for the control-run name constraint.
+        every=timedelta(minutes=1),
+        cadence_from="brain.ops.automation_run_store:RUN_EVERY",
+        severity=Severity.RAISED,
+        invoked_by=Invocation.IN_PROCESS,
+    ),
 )
 
 

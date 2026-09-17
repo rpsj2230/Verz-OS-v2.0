@@ -243,7 +243,10 @@ NOTICES: Final[tuple[Notice, ...]] = (
         title="An automation was paused for failing",
         told="The automation's owner.",
         about="Which automation stopped, and why.",
-        how="No channel is chosen for it yet, so nothing sends it.",
+        how=(
+            "Shown beside the automation on its agent's Automations tab, with the reason. No "
+            "channel sends it to the owner yet."
+        ),
         composed_by="brain.console.agent_automations:failure_pause",
         fixed_because=A_NOTICE_THAT_EXISTS_TO_CATCH_MISUSE_HAS_NO_SWITCH,
     ),

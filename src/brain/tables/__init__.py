@@ -53,6 +53,7 @@ from brain.tables.application_log import ApplicationLogRow
 from brain.tables.artifact import ArtifactRow
 from brain.tables.audit import AuditEntryRow
 from brain.tables.automation import AutomationOwnerRow
+from brain.tables.automation_run import AutomationRunRow, AutomationScheduleRow
 from brain.tables.browsing import BrowserEnvelopeRow
 from brain.tables.budget import BudgetVersionRow
 from brain.tables.chat import ConversationRow, MessageRole, MessageRow
@@ -273,6 +274,10 @@ TABLES_IN_DEPENDENCY_ORDER: tuple[str, ...] = (
     # 0064_question_gap. Points at nothing: a department and a source are values, so a question the
     # install was not wired to answer is still counted after either is renamed.
     "ops.question_gap",
+    # 0067_automation_run. Neither points at anything: the automation, its agent and the people
+    # are values, so what ran in a person's name and why it stopped outlive all of them.
+    "agent.automation_run",
+    "agent.automation_schedule",
 )
 
 __all__ = [
@@ -284,6 +289,8 @@ __all__ = [
     "ArtifactRow",
     "AuditEntryRow",
     "AutomationOwnerRow",
+    "AutomationRunRow",
+    "AutomationScheduleRow",
     "BrowserEnvelopeRow",
     "BudgetVersionRow",
     "CanonicalEntityRow",

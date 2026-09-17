@@ -7,12 +7,12 @@ What an administrator would need to manage, read out of the schema, the routes a
 ## What was measured
 
 - 23 areas, the bullets of `docs/admin-console.md` in its order.
-- 71 tables, from `brain.db.Base.metadata`.
+- 73 tables, from `brain.db.Base.metadata`.
 - 23 installation values, from `brain.install.INSTALLATION`.
-- 110 routes under `/api/v1` and `/setup`, from the API's internal document.
+- 113 routes under `/api/v1` and `/setup`, from the API's internal document.
 - 66 console addresses, from the route table in `console/src/App.tsx`.
-- 39 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 46 routes.
-- 35 gaps recorded, and 3 routes no screen calls.
+- 40 calls in the console that send a write, from `console/tests/support/writes.ts`, reaching 48 routes.
+- 36 gaps recorded, and 3 routes no screen calls.
 
 ## Area by area
 
@@ -144,16 +144,20 @@ What an administrator would need to manage, read out of the schema, the routes a
 ### Workflows and automations
 
 - **Screens:** `/agents/:agentId/:tab`
-- **Tables:** `agent.automation`, `gate.automation_owner`
+- **Tables:** `agent.automation`, `agent.automation_run`, `agent.automation_schedule`, `gate.automation_owner`
 - **Installation values:** none
 
 | Route | Called by |
 | --- | --- |
 | `GET /api/v1/agents/{agent_id}/automation-templates` | `/agents/:agentId/:tab` |
 | `GET /api/v1/agents/{agent_id}/automation-templates/{template_id}/preview` | `/agents/:agentId/:tab` |
+| `GET /api/v1/agents/{agent_id}/automations` | `/agents/:agentId/:tab` |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` |
+| `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` |
 
-- **Gap.** An installed automation cannot be paused, changed or removed. Recorded: brain.ops.agent_automation_store installs in the reader's own name and never edits or removes, which tests/unit/test_agent_automation_store.py holds; there is no route to call.
+- **Gap.** An installed automation cannot be changed or removed, only started and stopped. Recorded: brain.automation_schedule_routes starts and stops one and brain.console.agent_automations.remove decides a removal that no route performs; 0067 grants an update of the next run alone.
+- **Gap.** Three of the four automation templates cannot be started on any install. Recorded: brain.ops.automation_run.TASKS says what work_summary, source_freshness and approvals_waiting each still need, and the Automations tab shows that sentence instead of a Start control.
 
 ### Connectors and third-party integrations
 
@@ -405,12 +409,14 @@ No gap recorded.
 
 ## Every write the console sends, followed to the system
 
-Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 39 of 46 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
+Leaf `M27.8.17`: a write is followed to the row it writes, to the audit entry it leaves, and to the behaviour it changes. 41 of 48 write routes have all three proved or not applicable, 6 of those without a live database. Every other row below says what is missing and why. A test marked database runs against a scratch Postgres, which CI provides and this machine does not.
 
 | Write | Called by | Row | Audit entry | Behaviour |
 | --- | --- | --- | --- | --- |
 | `PATCH /api/v1/routing/rungs/{rung_id}` | `/routing`, `/routing/:rungId` | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_from_the_screen_leaves_its_row_and_an_entry_naming_what_moved` in `tests/unit/test_console_control_audit.py` (database, in CI) | `test_a_rung_saved_on_the_routing_screen_is_the_rung_the_next_call_walks` in `tests/unit/test_provider_routes.py` (database, in CI) |
 | `POST /api/v1/agents/{agent_id}/automations` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` | `test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither` in `tests/unit/test_agent_automation_store.py` (database, in CI) | `test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context` in `tests/unit/test_automation_gallery_routes.py` |
+| `POST /api/v1/agents/{agent_id}/automations/{automation_id}/start` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_a_confirmed_start_is_written_as_the_approver_and_a_stale_one_writes_nothing` in `tests/unit/test_automation_schedule_routes.py` |
+| `POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop` | `/agents/:agentId`, `/agents/:agentId/:tab` | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who` in `tests/unit/test_automation_run_store.py` (database, in CI) | `test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot` in `tests/unit/test_automation_schedule_routes.py` |
 | `POST /api/v1/answer` | `/ask` | Not applicable: Asking a question writes no row an administrator manages. | Not applicable: Asking a question is not a change to the system. | Not applicable: The answer is the behaviour, and tests/invariants hold it. |
 | `POST /api/v1/approvals/{suspension_id}/decision` | `/approvals`, `/approvals/:suspensionId` | `test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it` in `tests/unit/test_approval_decisions.py` | `test_an_approver_in_reach_approves_once_and_one_ledger_entry_records_it` in `tests/unit/test_approval_decisions.py` | **None.** In-process the decision leaves the queue (test_approval_decisions.py::test_a_decided_approval_leaves_the_queue_and_its_card_no_longer_opens), but on a running install brain.app.suspension_store_for builds no store, so the decision a person presses is refused and changes nothing. |
 | `POST /api/v1/classifications/{entity}/columns/{column}/review` | `/classification`, `/classification/:entity`, `/classification/:entity/:column` | Not applicable: A review is a dry run and writes nothing. | Not applicable: A review changes nothing, so there is nothing to record. | `test_nothing_mounted_here_can_change_a_classification` in `tests/unit/test_classification_routes.py` |

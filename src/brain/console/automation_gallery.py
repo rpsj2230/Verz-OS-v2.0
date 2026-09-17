@@ -90,13 +90,15 @@ three fields `agent_automations` scopes scheduled work by: the agent, the task a
 A grant can therefore be written for one department's agents, and a grant naming a field the row
 does not carry admits nothing.
 
-**What this does not do, and each is said on the screen.** Nothing on an install runs an
-installed automation yet: `brain.ops.worker` registers the control task alone, and none of the
-four tasks below is registered, so the row is written, listed in the registry and audited, and
-fires nothing. There is no store for an installation's own automation templates, because there is
-no surface that publishes one, and a table nothing writes is a control that reaches nothing. And
-nothing in the console resumes a paused automation, so the one this installs stays paused until
-that surface exists. See `NOTHING_RUNS_AN_INSTALLED_AUTOMATION_YET`.
+**What this does not do, and each is said on the screen.** Installing starts nothing: the
+automation stays paused until somebody it does not run as starts it from the Automations tab
+(`brain.console.automation_schedule`), and the worker's `automation_run` control then runs it
+(`brain.ops.automation_run`). Only the outcomes `brain.ops.automation_run.TASKS` can perform can be
+started, and the tab says what the others still need. There is no store for an installation's own
+automation templates, because there is no surface that publishes one, and a table nothing writes is
+a control that reaches nothing. The constant keeps its name from before anything ran one, because a
+rename would reach two routes' response shapes for no change in what they say; see
+`NOTHING_RUNS_AN_INSTALLED_AUTOMATION_YET`.
 
 Task ids: M39.6.1.3
 """
@@ -183,11 +185,12 @@ INSTALLING_TWICE_IS_ANSWERED_WITH_THE_FIRST: Final = (
     "write, and it names the person, so the conflict only ever concerns the caller's own."
 )
 
-#: What the screen says about running, because nothing does yet.
+#: What the screen says about running. Named before anything ran an installed automation; the
+#: sentence is what is true now.
 NOTHING_RUNS_AN_INSTALLED_AUTOMATION_YET: Final = (
     "Installing writes the automation under this agent, lists it in the scheduled job registry "
-    "and records it in the audit ledger. Nothing on this install runs an installed automation "
-    "yet, and nothing in the console starts a paused one, so it stays paused until both exist."
+    "and records it in the audit ledger. Nothing runs until somebody other than the person it "
+    "runs as starts it on this tab, and only the outcomes this install can perform can be started."
 )
 
 #: What the confirmation says about the paused start, in words for the person installing.

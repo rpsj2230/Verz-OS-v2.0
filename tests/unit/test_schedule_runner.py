@@ -420,6 +420,9 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     **And seventeen controls later still, with six orphans.** `vault_token_renewal` arrived already
     wired, the way `erasure_queue` did.
 
+    **And eighteen controls later that day, with six orphans still.** `automation_run` arrived
+    already wired, the way `erasure_queue` did.
+
     Delete this and the scheduler can start running mechanisms the handover pack still
     describes as unwired."""
     from brain.ops.controls import orphans
@@ -430,7 +433,7 @@ def test_the_registry_still_reports_every_orphan_this_runner_has_not_wired() -> 
     assert "knowledge_reverification" not in {one.name for one in orphans()}
     assert "directory_sync" not in {one.name for one in orphans()}
     assert "restore_drill" not in {one.name for one in orphans()}
-    assert len(CONTROLS) == 17
+    assert len(CONTROLS) == 18
 
 
 # --- the dispatch the worker's schedule starts controls through ---------------------------
@@ -460,6 +463,7 @@ def test_the_dispatch_names_exactly_the_runners_that_can_run() -> None:
         "erasure_queue",
         "canary_run",
         "vault_token_renewal",
+        "automation_run",
     }
 
 
@@ -566,3 +570,19 @@ def test_the_retention_runner_sweeps_the_database_it_is_given_and_reports_every_
     lines = said.splitlines()
     for store in Store:
         assert any(line.startswith(store.value) for line in lines), store
+
+
+def test_the_automation_runner_asked_for_a_report_runs_nothing_and_reaches_no_database() -> None:
+    """Report-only mode: the runner says so before it opens anything, which is why a URL that
+    points nowhere is enough here.
+
+    Delete this and the automation runner could ignore the mode it was handed, which is the
+    property a destructive control's safety rests on being true of every runner."""
+    said = start_control(
+        "automation_run",
+        now=NOW,
+        report_only=True,
+        database_url="postgresql://nobody@127.0.0.1:1/none",
+    )
+
+    assert said.startswith("report only: no automation was run.")

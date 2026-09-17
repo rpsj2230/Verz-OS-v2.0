@@ -194,6 +194,9 @@ SUBJECT_COLUMNS: Final[Mapping[str, str]] = MappingProxyType(
         # What an agent produced, for the person it was produced for. `0058` grants no way for a
         # row to leave, so an erasure keeps these and reports them kept.
         "agent.artifact": "caller_id",
+        # A run of an automation, for the person it ran as, with what it found at their reach.
+        # `0067` grants no way for a row to leave, so an erasure keeps these and reports them kept.
+        "agent.automation_run": "principal_id",
         "agent.browser_envelope": "asked_by",
         "auth.directory_role_grant": "principal_id",
         "auth.principal": "id",
@@ -241,6 +244,8 @@ THROUGH: Final[Mapping[str, Through]] = MappingProxyType(
 ABOUT_NOBODY: Final[frozenset[str]] = frozenset(
     {
         "agent.automation",
+        # Why an automation's schedule changed and who changed it: an actor, not an owner.
+        "agent.automation_schedule",
         "agent.skill",
         "agent.skill_assignment",
         "agent.skill_review",

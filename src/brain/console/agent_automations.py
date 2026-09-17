@@ -78,8 +78,10 @@ expressed as a value that cannot be half built: `SchedulerChange` carries the au
 its registry entry together and refuses one without the other.
 
 **Nothing here is a screen.** The agent workspace's Automations tab draws the gallery
-`brain.console.automation_gallery` serves, and no route lists, pauses or resumes the automations
-this module describes, exactly as `brain.console.screens` says of its own registry.
+`brain.console.automation_gallery` serves, and since 2026-09-17 the installed automations too:
+`brain.automation_schedule_routes` lists them through `automations_for` and `history`, and starts
+and stops them through `resume` and `pause`, with who may do which decided in
+`brain.console.automation_schedule`. Removing one still has no route.
 
 **The ninth leaf in this group, M39.6.1.3, is claimed elsewhere, and this paragraph used to
 decline it.** It said a set of common automations was a set of outcomes somebody at a particular

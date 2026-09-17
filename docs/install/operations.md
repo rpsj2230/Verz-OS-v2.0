@@ -330,12 +330,14 @@ canaries.
 | `spend_report_refresh` | that the spend report a reader is shown is rebuilt daily from what runs actually cost | `in_process` |
 | `erasure_queue` | that a request to erase somebody's data, once filed, is carried out and what it did is written down | `in_process` |
 | `vault_token_renewal` | that the application's and the worker's tokens on this install's own vault are renewed long before their period runs out | `in_process` |
+| `automation_run` | that an automation somebody started runs at its cadence as the person it names, at no more than that person may reach through the agent, and stops and says why when it cannot | `in_process` |
 
 Three words appear in that last column and they are not degrees of the same thing. `nothing`
 means no call site of any kind. `in_process` means another module calls it, and the word alone
 says nothing about whether *that* module is ever reached. For `retention_sweep`, `canary_run`,
-`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue` and
-`vault_token_renewal` it is: the general worker ticks the control schedule and starts all seven.
+`knowledge_reverification`, `outbox_dispatch`, `spend_report_refresh`, `erasure_queue`,
+`vault_token_renewal` and `automation_run` it is: the general worker ticks the control schedule
+and starts all eight.
 The token renewal renews the worker's own vault token twice a day once less than half its period
 is left, and the application renews its own from inside its own process on the same rule, because
 a vault token is renewed only by whoever holds it; a `lite` install has no worker and no worker

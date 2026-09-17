@@ -32,6 +32,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { ANSWER_API_PATH } from "../../src/pages/askQuery";
+import { automationStartApiPath, automationStopApiPath } from "../../src/pages/agentAutomationsQuery";
 import { automationInstallApiPath, automationPreviewApiPath } from "../../src/pages/automationGalleryQuery";
 import { approvalDecisionApiPath } from "../../src/pages/approvalsQuery";
 import { historyApiPath } from "../../src/pages/auditQuery";
@@ -310,13 +311,22 @@ export const AREAS: Readonly<Record<string, Area>> = {
   },
   "Workflows and automations": {
     screens: ["/agents/:agentId/:tab"],
-    routes: ["/api/v1/agents/{agent_id}/automation-templates*", "/api/v1/agents/{agent_id}/automations"],
-    tables: ["agent.automation", "gate.automation_owner"],
+    routes: [
+      "/api/v1/agents/{agent_id}/automation-templates*",
+      "/api/v1/agents/{agent_id}/automations",
+      "/api/v1/agents/{agent_id}/automations/{automation_id}/start",
+      "/api/v1/agents/{agent_id}/automations/{automation_id}/stop",
+    ],
+    tables: ["agent.automation", "agent.automation_run", "agent.automation_schedule", "gate.automation_owner"],
     installation: [],
     gaps: [
       {
-        what: "An installed automation cannot be paused, changed or removed.",
-        because: "brain.ops.agent_automation_store installs in the reader's own name and never edits or removes, which tests/unit/test_agent_automation_store.py holds; there is no route to call.",
+        what: "An installed automation cannot be changed or removed, only started and stopped.",
+        because: "brain.automation_schedule_routes starts and stops one and brain.console.agent_automations.remove decides a removal that no route performs; 0067 grants an update of the next run alone.",
+      },
+      {
+        what: "Three of the four automation templates cannot be started on any install.",
+        because: "brain.ops.automation_run.TASKS says what work_summary, source_freshness and approvals_waiting each still need, and the Automations tab shows that sentence instead of a Start control.",
       },
     ],
   },
@@ -684,6 +694,18 @@ export const WRITE_ROUTES: Readonly<Record<string, readonly WriteRoute[]>> = {
   "src/components/AutomationGallery.tsx automationInstallApiPath(agentId)": [
     at("POST /api/v1/agents/{agent_id}/automations", "automationInstallApiPath", automationInstallApiPath("quote-helper")),
   ],
+  "src/components/AgentAutomations.tsx path": [
+    at(
+      "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start",
+      "automationStartApiPath",
+      automationStartApiPath("quote-helper", "auto_one"),
+    ),
+    at(
+      "POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop",
+      "automationStopApiPath",
+      automationStopApiPath("quote-helper", "auto_one"),
+    ),
+  ],
 };
 
 /** A named Python test that asserts one of the three, or why there is none. */
@@ -991,6 +1013,16 @@ export const PROOFS: Readonly<Record<string, Proofs>> = {
     row: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
     audit: t("test_agent_automation_store", "test_an_install_writes_one_row_one_ledger_entry_and_a_second_install_writes_neither", true),
     behaviour: t("test_automation_gallery_routes", "test_one_confirmed_request_writes_the_automation_its_registry_entry_and_its_audit_context"),
+  },
+  "POST /api/v1/agents/{agent_id}/automations/{automation_id}/start": {
+    row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
+    audit: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
+    behaviour: t("test_automation_schedule_routes", "test_a_confirmed_start_is_written_as_the_approver_and_a_stale_one_writes_nothing"),
+  },
+  "POST /api/v1/agents/{agent_id}/automations/{automation_id}/stop": {
+    row: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
+    audit: t("test_automation_run_store", "test_the_console_starts_and_stops_as_the_application_role_and_the_ledger_says_who", true),
+    behaviour: t("test_automation_schedule_routes", "test_the_owner_stops_their_own_without_approval_and_a_bystander_cannot"),
   },
 };
 

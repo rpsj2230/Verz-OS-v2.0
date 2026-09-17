@@ -79,6 +79,9 @@ DIALECT = create_engine("postgresql+psycopg://", poolclass=NullPool).dialect
 
 MIGRATION = VERSIONS / "0055_agent_automation.py"
 
+#: The migration that widened what `0055` decided about reading and editing an automation.
+WIDENED_BY = VERSIONS / "0067_automation_run.py"
+
 #: Far from any plausible wall clock, for CLAUDE.md's reason about a fixture that is a clock.
 LONG_AGO = datetime(2019, 3, 4, 9, 0, tzinfo=UTC)
 
@@ -340,12 +343,19 @@ def through_0055(database: str) -> Iterator[str]:
     the ledger and its append function. `0049` and `0054` are run for real, as
     `tests/unit/test_credential_writes.py` runs them, because `0054` is the migration that leaves
     the ledger's action list in the database holding `compose_change`; `0050` to `0053` are
-    stamped, and `0055` is run for real."""
+    stamped, and `0055` is run for real.
+
+    With pgvector `retirable` builds the whole chain, and `0067` widens the select policy and grants
+    the update a start or a stop makes, so the chain is taken back to just before `0067`: this file
+    holds what `0055` decided, and `tests/unit/test_automation_run_store.py` holds what `0067`
+    changed."""
     with retirable(database) as url:
         if not has_pgvector(url):
             migrate(database, "upgrade", "0049")
             migrate(database, "stamp", "0053")
             migrate(database, "upgrade", "0055")
+        else:
+            migrate(database, "downgrade", migration_module(WIDENED_BY).down_revision)
         yield url
 
 

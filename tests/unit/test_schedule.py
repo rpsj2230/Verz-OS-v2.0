@@ -176,7 +176,7 @@ def test_a_control_another_module_calls_is_still_this_schedulers_to_start() -> N
     assert [one.name for one in schedulable([in_process])] == ["correction"]
 
 
-def test_the_real_registry_gives_this_scheduler_sixteen_of_the_seventeen_controls() -> None:
+def test_the_real_registry_gives_this_scheduler_seventeen_of_the_eighteen_controls() -> None:
     """The state of the estate today, asserted so that wiring a control to a timer outside the
     process shows up here rather than in nothing.
 
@@ -187,8 +187,8 @@ def test_the_real_registry_gives_this_scheduler_sixteen_of_the_seventeen_control
     inside the process."""
     mine = schedulable()
 
-    assert len(CONTROLS) == 17
-    assert len(mine) == 16
+    assert len(CONTROLS) == 18
+    assert len(mine) == 17
     assert "audit_anchor" not in {one.name for one in mine}
 
 

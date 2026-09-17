@@ -115,6 +115,9 @@ WIRED_BUT_NOT_SCHEDULED = frozenset({"spend_correction", "directory_sync", "rest
 #:
 #: `canary_run` joined on 2026-09-17 from `KNOWN_ORPHANS`. `brain.ops.canary_run` asks as every
 #: reach the install holds and raises on a finding, so a red run is recorded as failed.
+#:
+#: `automation_run` joined on 2026-09-17 the day it was registered, running each started
+#: automation as its owner through `brain.ops.automation_run_store`.
 SCHEDULED_BY_THE_WORKER = frozenset(
     {
         "retention_sweep",
@@ -124,6 +127,7 @@ SCHEDULED_BY_THE_WORKER = frozenset(
         "erasure_queue",
         "canary_run",
         "vault_token_renewal",
+        "automation_run",
     }
 )
 
