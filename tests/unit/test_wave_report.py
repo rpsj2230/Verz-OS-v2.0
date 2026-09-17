@@ -45,6 +45,10 @@ def repo(tmp_path: Path) -> Path:
     digits. An earlier version of this fixture used `MA` and `MB`, which match no task id
     at all, so every commit closed nothing and half these tests passed by agreeing that
     nothing had happened.
+
+    Each claim carries a proof trailer. These commits are made when the test runs, and from
+    `brain.status.PROOF_REQUIRED_FROM` a claim without proof counts for nothing, so without it
+    every test here would go red on that date with nothing about the code having changed.
     """
 
     def git(*args: str) -> None:
@@ -55,10 +59,15 @@ def repo(tmp_path: Path) -> Path:
     git("config", "user.name", "Test")
     (tmp_path / "a.txt").write_text("a", encoding="utf-8")
     git("add", "-A")
-    git("commit", "-q", "-m", "M90.1.1: the first thing")
+    git("commit", "-q", "-m", "M90.1.1: the first thing\n\nProved-in-ci: unit")
     (tmp_path / "b.txt").write_text("b", encoding="utf-8")
     git("add", "-A")
-    git("commit", "-q", "-m", "Something in the gate\n\nCloses: M91.1.1, M90.1.3")
+    git(
+        "commit",
+        "-q",
+        "-m",
+        "Something in the gate\n\nCloses: M91.1.1, M90.1.3\nProved-in-ci: unit",
+    )
     return tmp_path
 
 

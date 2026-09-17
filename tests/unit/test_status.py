@@ -16,6 +16,7 @@ import os
 import re
 import subprocess
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,34 @@ def git(cwd: Path, *args: str) -> None:
     subprocess.run(["git", *args], cwd=cwd, capture_output=True, check=True)
 
 
+#: The proof trailer a fixture commit carries when the test is about something other than proof.
+#:
+#: **Without it every fixture here is a clock.** These commits are made at the moment the test
+#: runs, and from `status.PROOF_REQUIRED_FROM` a claim without proof counts for nothing, so on
+#: that date every test built on a claim would go red with nothing about the code having changed.
+#: The tests about the proof rule itself pin their commit dates instead, either side of it.
+PROVED = "Proved-in-ci: unit"
+
+#: Either side of `status.PROOF_REQUIRED_FROM`, written out rather than derived from it, so a
+#: moved start fails the tests about the start instead of moving them with it.
+BEFORE_PROOF = "2026-09-17T23:59:59+00:00"
+AT_PROOF = "2026-09-18T00:00:00+00:00"
+
+
+def git_at(cwd: Path, when: str, *args: str) -> None:
+    """`git` with both of a commit's dates pinned, for a test about when a claim was made.
+
+    Both, because `%ct` is the committer date and `--date` sets only the author's.
+    """
+    subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        capture_output=True,
+        check=True,
+        env={**os.environ, "GIT_COMMITTER_DATE": when, "GIT_AUTHOR_DATE": when},
+    )
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     git(tmp_path, "init", "-b", "main")
@@ -47,10 +76,10 @@ def repo(tmp_path: Path) -> Path:
     git(tmp_path, "config", "user.name", "T")
     (tmp_path / "f.txt").write_text("1")
     git(tmp_path, "add", "-A")
-    git(tmp_path, "commit", "-m", "M0.1.1: first thing")
+    git(tmp_path, "commit", "-m", f"M0.1.1: first thing\n\n{PROVED}\n")
     (tmp_path / "f.txt").write_text("2")
     git(tmp_path, "add", "-A")
-    git(tmp_path, "commit", "-m", "second thing\n\nCloses: M0.1.2 M1.1.1\n")
+    git(tmp_path, "commit", "-m", f"second thing\n\nCloses: M0.1.2 M1.1.1\n{PROVED}\n")
     return tmp_path
 
 
@@ -314,7 +343,7 @@ def test_an_act_a_commit_names_is_ticked_and_still_left_out_of_the_percentage(
     counting it in `done` would put a leaf back in the figure that the denominator left out,
     so the percentage could pass 100. Delete this and either half can break unseen, because
     no commit in this repository has closed an act yet."""
-    git(repo, "commit", "--allow-empty", "-m", "announced\n\nCloses: M1.1.2")
+    git(repo, "commit", "--allow-empty", "-m", f"announced\n\nCloses: M1.1.2\n{PROVED}")
 
     s = status.build_status(repo, WBS_WITH_AN_ACT)
 
@@ -330,7 +359,7 @@ def test_a_parent_id_closes_nothing(repo: Path) -> None:
     for a large piece of work looks like - and exactly why it was dangerous. A commit
     saying M0.6 closed connector cassettes that were never written. Nothing warned.
     """
-    git(repo, "commit", "--allow-empty", "-m", "M0.2: the whole subtree")
+    git(repo, "commit", "--allow-empty", "-m", f"M0.2: the whole subtree\n\n{PROVED}")
     s = status.build_status(repo, WBS)
     assert "M0.2.1" not in s.done_task_ids
 
@@ -390,7 +419,7 @@ def test_next_up_names_unclosed_leaves_in_the_current_wave(repo: Path) -> None:
 def test_next_up_is_empty_when_the_current_wave_is_finished(repo: Path) -> None:
     """Otherwise the page suggests work in a wave that has none left, which reads as the
     plan being wrong rather than the page being wrong."""
-    git(repo, "commit", "--allow-empty", "-m", "rest of wave 0\n\nCloses: M0.2.1")
+    git(repo, "commit", "--allow-empty", "-m", f"rest of wave 0\n\nCloses: M0.2.1\n{PROVED}")
     s = status.build_status(repo, WBS)
     assert s.current_wave == 1
     assert all(leaf.startswith("M1") for leaf in s.next_up), s.next_up
@@ -405,7 +434,13 @@ def test_current_wave_is_none_when_everything_is_done(repo: Path) -> None:
 
     Note the ids: a bare `M0` is a module, not a task, and deliberately closes nothing.
     """
-    git(repo, "commit", "--allow-empty", "-m", "M0.1.1 M0.1.2 M0.2.1 M1.1.1 M1.1.2 everything")
+    git(
+        repo,
+        "commit",
+        "--allow-empty",
+        "-m",
+        f"M0.1.1 M0.1.2 M0.2.1 M1.1.1 M1.1.2 everything\n\n{PROVED}",
+    )
     s = status.build_status(repo, WBS)
     assert s.done == s.total
     assert s.current_wave is None
@@ -437,8 +472,13 @@ def test_a_one_line_commit_message_is_counted(repo: Path) -> None:
     unit separator. A commit with an empty body - every one-line message, and so most
     commits - then split into three fields instead of four and was dropped with no error
     anywhere. Progress simply read low.
+
+    Dated before `status.PROOF_REQUIRED_FROM`, and fixed there. A one-line message has no body,
+    so it can carry no proof, and from that instant its claim would count for nothing whether
+    or not the parse were right. Made at the moment the test runs, this would stop testing the
+    parse the day the rule started.
     """
-    git(repo, "commit", "--allow-empty", "-m", "M1.1.2: one line, no body")
+    git_at(repo, BEFORE_PROOF, "commit", "--allow-empty", "-m", "M1.1.2: one line, no body")
     found, recent = status.closed_task_ids(repo)
     assert "M1.1.2" in found
     assert recent[0]["subject"] == "M1.1.2: one line, no body"
@@ -446,7 +486,13 @@ def test_a_one_line_commit_message_is_counted(repo: Path) -> None:
 
 def test_a_body_containing_the_separator_does_not_split_the_record(repo: Path) -> None:
     """maxsplit=3 keeps the body whole, so pasted output cannot corrupt the parse."""
-    git(repo, "commit", "--allow-empty", "-m", "M0.2.1: x\n\nlog said a\x1fb\n\nCloses: M1.1.2\n")
+    git(
+        repo,
+        "commit",
+        "--allow-empty",
+        "-m",
+        f"M0.2.1: x\n\nlog said a\x1fb\n\nCloses: M1.1.2\n{PROVED}\n",
+    )
     found, _ = status.closed_task_ids(repo)
     assert {"M0.2.1", "M1.1.2"} <= found
 
@@ -638,14 +684,21 @@ def test_body_prose_does_not_claim_anything(repo: Path) -> None:
 
     The rule is now positional, not semantic.
     """
-    git(repo, "commit", "--allow-empty", "-m", "tidy up\n\nStill outstanding: M1.1.2 and M0.2.1.")
+    # Proved, so the only reason left for these ids not to count is that they are prose.
+    git(
+        repo,
+        "commit",
+        "--allow-empty",
+        "-m",
+        f"tidy up\n\nStill outstanding: M1.1.2 and M0.2.1.\n\n{PROVED}",
+    )
     found, _ = status.closed_task_ids(repo)
     assert "M1.1.2" not in found
     assert "M0.2.1" not in found
 
 
 def test_a_closes_trailer_claims(repo: Path) -> None:
-    git(repo, "commit", "--allow-empty", "-m", "some work\n\nCloses: M1.1.2, M0.2.1\n")
+    git(repo, "commit", "--allow-empty", "-m", f"some work\n\nCloses: M1.1.2, M0.2.1\n{PROVED}\n")
     found, _ = status.closed_task_ids(repo)
     assert {"M1.1.2", "M0.2.1"} <= found
 
@@ -653,7 +706,7 @@ def test_a_closes_trailer_claims(repo: Path) -> None:
 def test_the_subject_still_claims(repo: Path) -> None:
     """The common case stays as it was: one id, in the subject, where it is visible in
     every log listing."""
-    git(repo, "commit", "--allow-empty", "-m", "M1.1.2: a thing")
+    git(repo, "commit", "--allow-empty", "-m", f"M1.1.2: a thing\n\n{PROVED}")
     found, _ = status.closed_task_ids(repo)
     assert "M1.1.2" in found
 
@@ -880,7 +933,7 @@ def test_a_record_separator_inside_a_commit_message_does_not_break_the_reader() 
     (repo / "a.txt").write_text("x", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, timeout=30)
     (repo / "msg.txt").write_text(
-        "M0.1.1 done\n\nCloses: M0.1.1\n\nand then \x1e a separator\n", encoding="utf-8"
+        f"M0.1.1 done\n\nCloses: M0.1.1\n{PROVED}\n\nand then \x1e a separator\n", encoding="utf-8"
     )
     subprocess.run(["git", "commit", "-q", "-F", "msg.txt"], cwd=repo, check=True, timeout=30)
 
@@ -922,6 +975,8 @@ def test_a_message_holding_a_bare_number_between_two_separators_is_skipped() -> 
         "M0.1.1 done"
         + NEWLINE * 2
         + "Closes: M0.1.1"
+        + NEWLINE
+        + PROVED
         + NEWLINE * 2
         + SEPARATOR
         + "9999999999"
@@ -1029,7 +1084,7 @@ def test_a_commit_message_outside_the_machines_codepage_does_not_take_the_page_d
     (repo / "a.txt").write_text("x", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, timeout=30)
     # The phrase is the one that broke it, plus a curly quote, which is the likelier source.
-    message = "SLA \u6761\u6b3e and a \u201ccurly\u201d quote\n\nCloses: M0.1.1\n"
+    message = f"SLA \u6761\u6b3e and a \u201ccurly\u201d quote\n\nCloses: M0.1.1\n{PROVED}\n"
     (repo / "msg.txt").write_text(message, encoding="utf-8")
     subprocess.run(["git", "commit", "-q", "-F", "msg.txt"], cwd=repo, check=True, timeout=30)
 
@@ -1129,7 +1184,7 @@ def test_the_newest_statement_about_an_id_is_the_one_that_counts(tmp_path: Path)
     run("config", "user.name", "T")
     (repo / "a").write_text("1", encoding="utf-8")
     run("add", "-A")
-    run("commit", "-q", "-m", "M1.1.1: the original claim")
+    run("commit", "-q", "-m", _message("M1.1.1: the original claim", PROVED))
     (repo / "a").write_text("2", encoding="utf-8")
     run("add", "-A")
     run("commit", "-q", "-m", _message("Take it back", "Reopens: M1.1.1"))
@@ -1156,17 +1211,221 @@ def test_a_claim_after_a_reopen_closes_it_again(tmp_path: Path) -> None:
     run("config", "user.name", "T")
     (repo / "a").write_text("1", encoding="utf-8")
     run("add", "-A")
-    run("commit", "-q", "-m", "M1.1.1: the original claim")
+    run("commit", "-q", "-m", _message("M1.1.1: the original claim", PROVED))
     (repo / "a").write_text("2", encoding="utf-8")
     run("add", "-A")
     run("commit", "-q", "-m", _message("Take it back", "Reopens: M1.1.1"))
     (repo / "a").write_text("3", encoding="utf-8")
     run("add", "-A")
-    run("commit", "-q", "-m", _message("Actually build it", "Closes: M1.1.1"))
+    run("commit", "-q", "-m", _message("Actually build it", "Closes: M1.1.1" + chr(10) + PROVED))
 
     closed, _ = status.closed_task_ids(repo)
 
     assert "M1.1.1" in closed
+
+
+# ------------------------------------------------- a claim counts only with its proof
+#
+# On 2026-09-17 an audit reopened 1046 of the 1213 tasks this page counted as done, because the
+# owner's install did not show them working. From `status.PROOF_REQUIRED_FROM` a claim counts
+# only when its own commit carries a `Proved-on-install:` or `Proved-in-ci:` line. Every commit
+# below has its dates pinned either side of that instant, so none of these is a clock.
+
+
+def _history(tmp_path: Path, *commits: tuple[str, str]) -> Path:
+    """A repository holding each `(committed at, message)` in order, oldest first."""
+    repo = tmp_path / "history"
+    repo.mkdir(parents=True)
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "t@example.com")
+    git(repo, "config", "user.name", "T")
+    for when, message in commits:
+        git_at(repo, when, "commit", "-q", "--allow-empty", "-m", message)
+    return repo
+
+
+@pytest.mark.parametrize(
+    "message",
+    ["Build it\n\nCloses: M1.1.1\n", "M1.1.1: build it\n", "M1.1.1: build it\n\nSeen working.\n"],
+    ids=["on a Closes line", "in the subject", "in the subject with a body"],
+)
+def test_a_claim_from_the_start_of_the_proof_rule_without_proof_is_not_counted(
+    tmp_path: Path, message: str
+) -> None:
+    """**The rule, and the half that holds when the commit hook is skipped.** `git commit
+    --no-verify` walks past `brain.ops.conventions`, so this page has to refuse the claim on its
+    own, and at the first instant of the rule rather than a second later.
+
+    Delete this and an unproved claim counts again on the page the owner reads, which is how
+    1046 tasks came to show as done."""
+    repo = _history(tmp_path, (AT_PROOF, message))
+
+    closed, recent = status.closed_task_ids(repo)
+
+    assert "M1.1.1" not in closed
+    assert recent == [], "a claim that does not count was listed as a closure"
+
+
+@pytest.mark.parametrize(
+    "proof",
+    [
+        "Proved-on-install: signed in as a staff member and the answer named the invoice",
+        "Proved-in-ci: the unit job runs tests/unit/test_status.py",
+        "proved-in-ci: the unit job",
+    ],
+    ids=["on an install", "in CI", "lower case"],
+)
+def test_a_claim_from_the_start_of_the_proof_rule_with_proof_is_counted(
+    tmp_path: Path, proof: str
+) -> None:
+    """The positive sibling. Without it the rule above is satisfied by a page that counts
+    nothing after the start, which would read as a build that stopped the day the rule began.
+
+    Lower case counts because every other trailer this page reads is case-insensitive, and the
+    commit hook reads proof through the same function. Delete this and a proved claim can
+    silently stop counting."""
+    repo = _history(tmp_path, (AT_PROOF, f"Build it\n\nCloses: M1.1.1\n{proof}\n"))
+
+    closed, recent = status.closed_task_ids(repo)
+
+    assert "M1.1.1" in closed
+    assert recent[0]["closed"] == "M1.1.1"
+
+
+def test_a_claim_made_before_the_proof_rule_is_counted_as_it_always_was(tmp_path: Path) -> None:
+    """**Earlier commits are judged as they were.** The audit already read every claim made
+    before the rule and reopened what the install did not bear out, so a claim from the second
+    before still counts without a trailer that did not exist when it was written.
+
+    Delete this and the start can be moved back over the history, and the 167 tasks the audit
+    left standing drop off the page for want of a trailer."""
+    repo = _history(tmp_path, (BEFORE_PROOF, "M1.1.1: build it\n"))
+
+    closed, _ = status.closed_task_ids(repo)
+
+    assert "M1.1.1" in closed
+
+
+@pytest.mark.parametrize(
+    "trailer",
+    ["Proved-on-install:", "Proved-in-ci:   ", "Proved-on-install:\t"],
+    ids=["nothing after the colon", "spaces", "a tab"],
+)
+def test_an_empty_proof_trailer_does_not_count(tmp_path: Path, trailer: str) -> None:
+    """A colon with nothing after it is the cheapest way to satisfy the letter of the rule, and
+    it proves nothing.
+
+    Delete this and the trailer becomes a word to type rather than a sentence saying what was
+    seen, which is the unit test over fakes again, one line shorter."""
+    repo = _history(tmp_path, (AT_PROOF, f"Build it\n\nCloses: M1.1.1\n{trailer}\nMore prose.\n"))
+
+    closed, _ = status.closed_task_ids(repo)
+
+    assert "M1.1.1" not in closed
+
+
+def test_a_proof_written_as_the_subject_proves_nothing(tmp_path: Path) -> None:
+    """Proof is read from the body, where a trailer is. A subject that reads like a trailer is a
+    sentence, and git's `%s` would carry it with the claim beside it.
+
+    Delete this and proof can be read from the subject line, where the commit hook does not
+    look for it, so the two halves of the rule disagree about the same message."""
+    repo = _history(tmp_path, (AT_PROOF, "Proved-in-ci: the unit job, M1.1.1\n"))
+
+    closed, _ = status.closed_task_ids(repo)
+
+    assert "M1.1.1" not in closed
+
+
+def test_an_unproved_claim_neither_closes_a_task_nor_settles_one(tmp_path: Path) -> None:
+    """An unproved claim is as though it were not there. It does not undo an older reopen, and
+    it does not stand in front of an older claim either, because the newest statement about an
+    id is the one that counts and an unproved claim is not a statement.
+
+    Delete this and an unproved claim can be made to settle an id, which either closes a task
+    nobody proved or hides a proved claim behind one nobody did."""
+    reopened = _history(
+        tmp_path / "a",
+        ("2026-09-10T09:00:00+00:00", "M1.1.1: build it\n"),
+        ("2026-09-11T09:00:00+00:00", "Take it back\n\nReopens: M1.1.1\n"),
+        (AT_PROOF, "Build it again\n\nCloses: M1.1.1\n"),
+    )
+    claimed = _history(
+        tmp_path / "b",
+        ("2026-09-10T09:00:00+00:00", "M1.1.1: build it\n"),
+        (AT_PROOF, "Build it again\n\nCloses: M1.1.1\n"),
+    )
+
+    assert "M1.1.1" not in status.closed_task_ids(reopened)[0]
+    assert "M1.1.1" in status.closed_task_ids(claimed)[0]
+
+
+def test_a_reopen_from_the_start_of_the_proof_rule_needs_no_proof(tmp_path: Path) -> None:
+    """Taking a claim back only lowers the count, which is never the direction a mistake
+    flatters, so a `Reopens:` line counts with no proof beside it.
+
+    Delete this and the page can be written to skip a whole unproved commit, reopens and all,
+    and a correction after the start would silently stop correcting anything."""
+    repo = _history(
+        tmp_path,
+        (BEFORE_PROOF, "M1.1.1: build it\n"),
+        (AT_PROOF, "Take it back\n\nReopens: M1.1.1\n"),
+    )
+
+    closed, _ = status.closed_task_ids(repo)
+
+    assert "M1.1.1" not in closed
+
+
+def test_closed_today_applies_the_same_proof_rule(tmp_path: Path) -> None:
+    """`closed_since` walks the history a second time for the day's count, so it has to judge a
+    claim the way `closed_task_ids` does or it can name as closed today a leaf the page does not
+    count at all.
+
+    Delete this and the second reader can drift back to the bare claim with every other test
+    here green, because `build_status` intersects the two and hides the difference."""
+    repo = _history(
+        tmp_path,
+        (AT_PROOF, "Build one\n\nCloses: M1.1.1\n"),
+        (AT_PROOF, f"Build two\n\nCloses: M1.1.2\n{PROVED}\n"),
+    )
+
+    since = status.closed_since(repo, datetime(2026, 9, 18, tzinfo=UTC))
+
+    assert since == {"M1.1.2"}
+
+
+def test_a_record_typed_into_a_commit_message_is_skipped_rather_than_read(tmp_path: Path) -> None:
+    """**A commit message holding the separators can hold a whole record.** One whose timestamp
+    is not a number came to this reader as a commit, and once the proof rule reads the timestamp
+    of every record it would raise and take the page down. Before the rule it raised only when
+    the record claimed something, which is the case written here.
+
+    Delete this and the skip can go, and one strange commit message stops the status page being
+    generated at all."""
+    forged = (
+        "Real work"
+        + NEWLINE * 2
+        + "Pasted log:"
+        + SEPARATOR
+        + "not-a-hash"
+        + chr(31)
+        + "not-a-time"
+        + chr(31)
+        + "M1.1.2 forged"
+        + chr(31)
+        + "Proved-in-ci: nothing"
+        + NEWLINE
+    )
+    repo = _history(tmp_path, (BEFORE_PROOF, forged))
+
+    closed, recent = status.closed_task_ids(repo)
+    # The day's reader takes the same record with one field fewer, so its first field is text.
+    since = status.closed_since(repo, datetime(2019, 1, 1, tzinfo=UTC))
+
+    assert "M1.1.2" not in closed
+    assert recent == []
+    assert "M1.1.2" not in since
 
 
 # --- the sentence that specifies a leaf (M38.3.1.4) -------------------------------------------

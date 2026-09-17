@@ -18,13 +18,22 @@ from pathlib import Path
 
 import pytest
 
+from brain import status
+from brain.ops import independence
 from brain.ops.conventions import (
+    A_CLAIM_NEEDS_PROOF,
+    A_PROOF_NAMES_NO_ADDRESS,
+    CLOSES_LINE_RE,
+    IPV4_RE,
+    REOPENS_LINE_RE,
     SUBJECT_ID_RE,
     already_closed,
+    body_of,
     check_branch_name,
     check_commit_message,
     leaf_ids_in,
     main,
+    proofs_in,
     unmarked_install_finding,
 )
 from brain.status import TASK_ID_RE as STATUS_TASK_ID_RE
@@ -33,12 +42,16 @@ from brain.status import closed_task_ids
 
 REPO = Path(__file__).resolve().parents[2]
 
+#: The proof a claim needs, for the tests about something other than proof.
+PROVED = "Proved-in-ci: unit"
+
 
 # ------------------------------------------------- the commit message (M38.1.1.2)
 def test_a_message_closing_a_leaf_is_accepted() -> None:
     """The happy path. If this fails, every commit in the repository is refused and the
-    rule gets turned off within the hour."""
-    assert check_commit_message("Add the thing\n\nCloses: M12.1.1") is None
+    rule gets turned off within the hour. It carries its proof, which a claim needs; the
+    refusal without one is tested below."""
+    assert check_commit_message(f"Add the thing\n\nCloses: M12.1.1\n{PROVED}") is None
 
 
 def test_a_message_closing_nothing_is_accepted() -> None:
@@ -87,7 +100,7 @@ def test_a_subject_naming_a_leaf_or_only_a_module_is_accepted() -> None:
 
     Delete this and the subject rule can be widened into refusing `M27` mentioned in passing,
     which the status page has never counted."""
-    assert check_commit_message("Finish M12.1.1 properly") is None
+    assert check_commit_message(f"Finish M12.1.1 properly\n\n{PROVED}") is None
     assert check_commit_message("Rework the M27 console shell") is None
     assert status_claimed_ids("Rework the M27 console shell", "") == set()
 
@@ -170,6 +183,180 @@ def test_the_note_never_fires_outside_a_repository() -> None:
     """A hook that failed because it could not answer an advisory question would block a
     commit for no reason at all."""
     assert already_closed("x\n\nCloses: M0.1.1", Path("/nonexistent")) == ()
+
+
+# ---------------------------------------------------------- a claim carries its proof
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Add the thing\n\nCloses: M12.1.1\n",
+        "Finish M12.1.1 properly\n",
+        "Finish M12.1.1 properly\n\nIt works now, trust me.\n",
+        "Add the thing\n\ncloses: M12.1.1\n",
+    ],
+    ids=["on a Closes line", "in the subject", "in the subject with prose", "lower-case closes"],
+)
+def test_a_claim_with_no_proof_is_refused(message: str) -> None:
+    """**The rule.** On 2026-09-17 an audit reopened 1046 of 1213 tasks the tracker counted as
+    done, each claimed and none shown working on the owner's install. A claim now carries a
+    `Proved-on-install:` or `Proved-in-ci:` line, and the refusal says why and names the ids.
+
+    The lower-case line is here because the tracker reads `closes:` as a claim. Until this rule
+    the hook read only `Closes:`, so an unproved claim written in lower case would have passed
+    here and been silently ignored by the tracker.
+
+    Delete this and the hook accepts a claim with nothing behind it, which is the state of
+    affairs the audit took a day to undo."""
+    refusal = check_commit_message(message)
+
+    assert refusal is not None
+    assert A_CLAIM_NEEDS_PROOF in refusal.reason
+    assert refusal.reason.startswith("M12.1.1 claimed")
+    # The explanation names the two trailers, spelled so the reader of proof accepts them, so a
+    # person who follows the refusal word for word gets a commit that counts.
+    for trailer in ("Proved-on-install:", "Proved-in-ci:"):
+        assert A_CLAIM_NEEDS_PROOF.count(trailer) == 1, trailer
+        assert proofs_in(f"{trailer} what was seen\n") == ("what was seen",)
+
+
+@pytest.mark.parametrize(
+    "proof",
+    [
+        "Proved-on-install: signed in as a staff member and the answer named the invoice",
+        "Proved-in-ci: the unit job runs tests/unit/test_status.py",
+        "proved-on-install: the nightly dump ran and the file was 3.2 MB",
+    ],
+    ids=["on an install", "in CI", "lower case"],
+)
+def test_a_claim_with_proof_is_accepted(proof: str) -> None:
+    """The positive sibling, for both trailers and for a claim in the subject as well as on a
+    `Closes:` line. Without it the rule above is satisfied by refusing every claim, and the rule
+    gets switched off within the hour.
+
+    Delete this and a proved claim can be refused with every refusal test still green."""
+    assert check_commit_message(f"Add the thing\n\nCloses: M12.1.1\n{proof}\n") is None
+    assert check_commit_message(f"Finish M12.1.1 properly\n\n{proof}\n") is None
+
+
+@pytest.mark.parametrize(
+    "trailer",
+    ["Proved-on-install:", "Proved-in-ci:   ", "Proved-on-install:\t"],
+    ids=["nothing after the colon", "spaces", "a tab"],
+)
+def test_an_empty_proof_trailer_proves_nothing(trailer: str) -> None:
+    """A colon with nothing after it is the cheapest way to satisfy the letter of the rule.
+
+    Delete this and the trailer is a word to type rather than a sentence saying what was seen,
+    and the tracker, which reads proof through the same function, counts it too."""
+    refusal = check_commit_message(f"Add the thing\n\nCloses: M12.1.1\n{trailer}\n")
+
+    assert refusal is not None
+    assert A_CLAIM_NEEDS_PROOF in refusal.reason
+    assert proofs_in(f"{trailer}\n") == ()
+
+
+def test_a_proof_typed_straight_under_the_subject_is_not_in_the_body() -> None:
+    """Git's subject is the first paragraph, so a trailer with no blank line above it is part of
+    the subject and git's `%b`, which is all the tracker reads for proof, is empty.
+
+    Delete this and the hook can read proof from the first paragraph, accepting a claim the
+    tracker then declines to count, which looks proved to its author and open to everybody
+    else."""
+    message = f"Finish M12.1.1 properly\n{PROVED}\n"
+
+    assert body_of(message) == ""
+    assert check_commit_message(message) is not None
+    # The positive half: a line of nothing but spaces is a blank line to git as well.
+    assert body_of(f"Finish it\n  \n{PROVED}\n") == PROVED
+
+
+def test_an_id_the_same_commit_reopens_needs_no_proof() -> None:
+    """Taking a claim back only lowers the count, so it needs no proof, and a subject naming the
+    id it reopens is not a claim the tracker counts. The sibling half: a `Reopens:` written as
+    the subject is a claim to the tracker, which reads every id in a subject, so it needs proof.
+
+    Delete this and either correcting a false claim is refused for want of proof of something
+    that is not there, or a subject can claim with no proof by calling itself a reopen."""
+    subject, body = "Reopen M12.1.1, which never worked", "Reopens: M12.1.1"
+
+    assert check_commit_message(f"{subject}\n\n{body}\n") is None
+    assert status.claimed_ids(subject, body) - status.reopened_ids(body) == set()
+    assert check_commit_message("Reopens: M12.1.1\n") is not None
+
+
+@pytest.mark.parametrize(
+    "proof",
+    [
+        "Proved-on-install: opened https://brain.example/health/ready and it said ready",
+        "Proved-on-install: ssh to 203.0.113.7 and the worker was running",
+        "Proved-in-ci: http://ci.example/run/42",
+    ],
+    ids=["a URL", "an IPv4", "a URL on the CI trailer"],
+)
+def test_a_proof_that_names_an_address_is_refused(proof: str) -> None:
+    """A commit message is pushed and kept for ever, and the audit commit that prompted this
+    rule named the install by its address. So a proof says what was done and seen, never where,
+    and this refuses one that names a URL or an IPv4 even on a message claiming nothing.
+
+    Delete this and the trailer written most often on the day an install is checked is the one
+    most likely to carry that install's address into the history."""
+    for message in (f"Add the thing\n\nCloses: M12.1.1\n{proof}\n", f"Tidy\n\n{proof}\n"):
+        refusal = check_commit_message(message)
+        assert refusal is not None
+        assert A_PROOF_NAMES_NO_ADDRESS in refusal.reason
+
+
+def test_a_proof_naming_a_version_a_path_or_a_size_is_accepted() -> None:
+    """The positive sibling. A version number has dots, a path has slashes and a size has a
+    decimal point, and all three are what a proof honestly says, so none may read as an address.
+
+    Delete this and the address check can be widened into refusing an ordinary sentence, which
+    is how a rule gets bypassed with `--no-verify` and then forgotten."""
+    proof = "Proved-in-ci: tests/unit/test_status.py on Python 3.13.1, image 1.2.3 of 412.5 MB"
+
+    assert check_commit_message(f"Add the thing\n\nCloses: M12.1.1\n{proof}\n") is None
+
+
+def test_the_hook_refuses_an_unproved_claim_and_accepts_a_proved_one(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Through `main`, which is what `ops/hooks/commit-msg` runs, so the refusal is an exit code
+    git acts on and not only a return value.
+
+    Delete this and the rule can be computed and never enforced: printed as a note with exit 0,
+    or never called by the entry point at all."""
+    unproved = tmp_path / "UNPROVED"
+    unproved.write_text("Add the thing\n\nCloses: M99.9.9\n", encoding="utf-8")
+    proved = tmp_path / "PROVED"
+    proved.write_text(f"Add the thing\n\nCloses: M99.9.9\n{PROVED}\n", encoding="utf-8")
+
+    assert main([str(unproved)]) == 1
+    assert "Proved-on-install:" in capsys.readouterr().err
+    assert main([str(proved)]) == 0
+
+
+def test_the_hook_reads_claims_reopens_and_proof_exactly_as_the_tracker_does() -> None:
+    """The hook keeps copies of the tracker's patterns rather than importing `brain.status`,
+    which pulls in the work breakdown loader on every commit. A copy drifts, and a drift is a
+    message the hook accepts and the tracker reads differently. Proof is not copied: the tracker
+    imports `proofs_in` from here, and this asserts it is the same function.
+
+    The address pattern is copied from `brain.ops.independence` for the same reason, because
+    that module loads the settings on import.
+
+    Delete this and any of the four can part without a test noticing."""
+    assert (CLOSES_LINE_RE.pattern, CLOSES_LINE_RE.flags) == (
+        status.CLOSES_RE.pattern,
+        status.CLOSES_RE.flags,
+    )
+    assert (REOPENS_LINE_RE.pattern, REOPENS_LINE_RE.flags) == (
+        status.REOPENS_RE.pattern,
+        status.REOPENS_RE.flags,
+    )
+    # Through the module's namespace, because `brain.status` imports the function to use it
+    # rather than to export it, and the type checker says so about an attribute read.
+    assert vars(status)["proofs_in"] is proofs_in
+    assert (IPV4_RE.pattern, IPV4_RE.flags) == (independence.IPV4.pattern, independence.IPV4.flags)
 
 
 # -------------------------------------------------- the branch name (M38.1.1.1)

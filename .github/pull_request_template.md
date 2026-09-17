@@ -2,7 +2,9 @@
 
 <!-- Leaf ids only, e.g. M0.2.4 - a parent id closes nothing. The status page is
      generated from these, so a task with no id here does not show as done.
-     Mentioning an id anywhere else in this description claims nothing. -->
+     Mentioning an id anywhere else in this description claims nothing.
+     A claim counts only with its proof on the same commit: a Proved-on-install: line saying
+     what was done on an install and what was seen, or Proved-in-ci: naming the CI job. -->
 
 Closes: M
 

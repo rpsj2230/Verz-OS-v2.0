@@ -38,6 +38,10 @@ def repo(tmp_path: Path) -> Path:
 
     The remote is a bare clone rather than a stub, because `plan_release` asks git a real
     question about it and a fake would only prove the fake behaves.
+
+    The claim carries a proof trailer. The commit is made when the test runs, and from
+    `brain.status.PROOF_REQUIRED_FROM` a claim without proof counts for nothing, so without it
+    the counts below would go red on that date with nothing about the code having changed.
     """
     import json
 
@@ -50,7 +54,7 @@ def repo(tmp_path: Path) -> Path:
     (work / "docs").mkdir()
     (work / "docs" / "wbs.json").write_text(json.dumps(WBS), encoding="utf-8")
     _git(work, "add", "-A")
-    _git(work, "commit", "-q", "-m", "M90.1.1: the first thing")
+    _git(work, "commit", "-q", "-m", "M90.1.1: the first thing\n\nProved-in-ci: unit")
 
     bare = tmp_path / "remote.git"
     _git(work, "clone", "--bare", "-q", str(work), str(bare))
