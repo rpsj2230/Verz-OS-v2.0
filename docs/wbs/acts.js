@@ -959,6 +959,37 @@ const ACTS = {
     text: "Mobile layout treated as the primary case for approvals",
     why: "Merged into M35.3.1.1, which asks for the same outcome: Console usable on a phone for approvals at minimum. Owner approved merging duplicates on 2026-09-17.",
   },
+  // ------------------------------------------ acts found by the requirement trace, 2026-09-18
+  "M37.7.1": {
+    kind: "ACT",
+    gate: false,
+    text: "The company names its data steward on the people screen and the steward grants each pilot department's staff their starter reads, recorded in the audit trail",
+  },
+  "M37.7.2": {
+    kind: "ACT",
+    gate: false,
+    text: "The company switches on a second sign-in factor for every account on the identity provider's admin console and every other administrative console of the install, and records that each one asks for it",
+  },
+  "M30.6.3": {
+    kind: "ACT",
+    gate: false,
+    text: "The company sets its own time targets in seconds for first output and for a complete answer in each lane before go-live, and they are recorded as the targets the service levels screen measures against",
+  },
+  "M37.7.3": {
+    kind: "ACT",
+    gate: false,
+    text: "The company's administrator creates the ticket desk and chat workspace credentials with the scopes the integration guide lists and enters them on the connectors screen, never in a file or a message",
+  },
+  "M37.7.4": {
+    kind: "ACT",
+    gate: false,
+    text: "The company's workspace administrator installs the product's chat app with the scopes the channel guide lists, adds it to the pilot groups and creates the directory app the staff source signs in with",
+  },
+  "M37.7.7": {
+    kind: "ACT",
+    gate: false,
+    text: "Commission a penetration test of the owner's install before the first company data is connected, and record each finding with its fix or accepted risk",
+  },
 };
 
 //: Why the two conditional acceptance leaves do not gate the cutover, kept here because the

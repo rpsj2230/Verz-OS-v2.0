@@ -4,11 +4,17 @@
 
 Work in the plan that no commit can close. Every item here is done by a person, on the week of a migration, with a client. They are counted separately from the build for that reason: the percentage on the build page measures work that closes by being written, and these do not.
 
-39 items, 7 of which gate the cutover.
+45 items, 7 of which gate the cutover.
 
 **The items marked GATES CUTOVER are refused rather than listed.** `brain.migration.decommission` will not report a completed cutover while any of them is unrecorded, because their absence has a security consequence and a list nothing gates is a list nobody reads.
 
 **The items marked NOT CODE HERE could not be built by anybody in this repository.** They name one company's own things, and the first rule of this repository is that no company's details go into it. They are recorded rather than left looking undone, so nobody spends a day trying to make them fit.
+
+## M30 Hosting, delivery and recovery
+
+### M30.6 Found by tracing every requirement to a task
+
+- [ ] `M30.6.3` The company sets its own time targets in seconds for first output and for a complete answer in each lane before go-live, and they are recorded as the targets the service levels screen measures against
 
 ## M37 Migration, launch and handover
 
@@ -97,6 +103,14 @@ Work in the plan that no commit can close. Every item here is done by a person, 
   - the same shape as the OAuth grants two groups up: a credential left behind after it has served its purpose, on a service reachable from outside. It is worse than an unused password because nothing about an unused admin account looks different on the day it is used
 - [ ] `M37.6.1.4` Rotate the identity provider's bootstrap administrator password once the account it created has been deleted
   - conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off
+
+### M37.7 Found by tracing every requirement to a task
+
+- [ ] `M37.7.1` The company names its data steward on the people screen and the steward grants each pilot department's staff their starter reads, recorded in the audit trail
+- [ ] `M37.7.2` The company switches on a second sign-in factor for every account on the identity provider's admin console and every other administrative console of the install, and records that each one asks for it
+- [ ] `M37.7.3` The company's administrator creates the ticket desk and chat workspace credentials with the scopes the integration guide lists and enters them on the connectors screen, never in a file or a message
+- [ ] `M37.7.4` The company's workspace administrator installs the product's chat app with the scopes the channel guide lists, adds it to the pilot groups and creates the directory app the staff source signs in with
+- [ ] `M37.7.7` Commission a penetration test of the owner's install before the first company data is connected, and record each finding with its fix or accepted risk
 
 ## M38 Continuous delivery and live status
 

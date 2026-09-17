@@ -15,7 +15,8 @@ module.exports = [
  {n:"Configuration and secrets",s:[
    {n:"Settings",k:["Pydantic settings with per-environment overlays","Every variable documented in the example file","Fail-fast on a missing required variable at startup","Config as data in Postgres for anything an operator tunes"]},
    {n:"OpenBao",k:["Deployment and unseal procedure documented for the client","Policy per role: application, worker, browser runner","Dynamic lease issuance for connector credentials","Lease revocation on run end","Rotation without redeploy","Audit device enabled and shipped to the ledger"]}
- ]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["Readiness reports sign-in as its own part, true only when the configured identity provider issuer answers, and a wrong issuer leaves the site up with sign-in refused and named as not ready","The application connects with a login that is not a superuser and cannot bypass row-level security, only migrations run as the owner, and a test fails if a request transaction can run as the owner"]}
 ]},
 {id:"M32",name:"Component deployment and wiring",wave:2,tasks:[
  {n:"Langfuse",s:[
@@ -40,8 +41,9 @@ module.exports = [
  ]},
  {n:"Optional automation canvas",s:[
    {n:"Activepieces",k:["Deployment as an optional sandboxed container","Egress allowlist and no database credentials","Custom piece calling our tool API so the gate still runs","Enabled per client by configuration, not a fork"]},
-   {n:"Boundary",k:["Documented rule: deterministic automations only, never agent control flow","Test proving a flow cannot reach data outside the caller's entitlements"]}
- ]}
+   {n:"Boundary",k:["Documented rule: the optional automation canvas runs deterministic automations only, never agent control flow, and workflows with model and skill steps run in the one agent runtime instead","Test proving a flow cannot reach data outside the caller's entitlements"]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["The vault and the worker run on the owner's install, a real connector key is held in the vault, and a worker run leases it for one call with the lease revoked at run end and the read audited","The first install runs the worker and the vault, a connector key written in the console is stored in the vault, and the worker reads that source on schedule with it, shown healthy on the system health screen","Every service that connects to the application database declares a connection bound that a budget check holds against the database's ceiling, and a worker whose pool size is undeclared refuses to start"]}
 ]},
 {id:"M33",name:"Role-specific surfaces",wave:4,tasks:[
  {n:"Super Admin",s:[
@@ -66,7 +68,8 @@ module.exports = [
  ]},
  {n:"Installing partner",s:[
    {n:"Break-glass",k:["Zero standing entitlement","Time-boxed elevation with a stated reason","Separate immutable audit chain","Client notification on every elevation","Automatic expiry and revocation"]}
- ]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["An approval, in the console or on a chat card, is rendered at the approver's own reach, carries no value from the requester's data, shows locked any field the approver could not look up, and refuses a press from anyone other than the person it was rendered for","Installer access and secrets are proved on an install: the installing partner holds no reach, opens a break-glass session with a stated reason that expires on its own, lands on its own audit chain and is notified to the company, the vault opens only with three of five shares with its root token revoked, and an API key is shown once, rotated and revoked without ever being displayed again, with the checks recorded","Installing, enabling or removing a connector needs a capability of its own that a department admin cannot grant wider than their department, and the refusal names that capability"]}
 ]},
 {id:"M34",name:"Onboarding and adoption",wave:4,tasks:[
  {n:"Day-one experience",s:[
@@ -81,7 +84,8 @@ module.exports = [
    {n:"For staff",k:["What it can and cannot see, in plain language","The privacy posture stated openly","How to ask well, with examples from their own department"]},
    {n:"For admins",k:["Runbook per console screen","Grant and scope cookbook with worked examples","Incident playbook per failure mode"]},
    {n:"For the installing team",k:["Install checklist including the four hidden production links","Per-client variables reference","Upgrade and rollback procedure","Restore drill procedure"]}
- ]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["The runbooks for every console screen and every alert, and the incident playbook, are served from the install's own help pages, and a sweep fails when a screen or alert has none"]}
 ]},
 {id:"M35",name:"Localisation and accessibility",wave:4,tasks:[
  {n:"Language",s:[
@@ -95,6 +99,7 @@ module.exports = [
  {n:"Mobile",s:[
    {n:"Responsive console",k:["Console usable on a phone for approvals at minimum","Approval cards readable without horizontal scroll"]},
    {n:"Progressive web app",k:["Installable shell","Push for approvals, deferred with a stated trigger"]}
- ]}
+ ]},
+ {n:"Found by tracing every requirement to a task",s:["Each console module is proved in the browser operable by keyboard alone, with visible focus and every form error associated with its field, with the checks recorded","Language and assistive use are proved on an install: a Chinese query and a mixed-language document retrieve correctly, local names and identity numbers are recognised for redaction, the interface is used in Simplified Chinese with local dates, numbers and currency, and a streamed answer is announced on completion with a skip control under a screen reader, with the checks recorded","Choosing a right-to-left locale in the console or at setup is refused with a sentence naming the deferral, proved in the browser","Every localisation and accessibility requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves","The install measures how long each approval waited before a decision, and when the typical wait passes the stated hours the console reports that push notifications for approvals are due","At phone width every touch target is at least 44px and no element is wider than 320px, across every console page"]}
 ]}
 ];

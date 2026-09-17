@@ -55,7 +55,8 @@
     "M0.6.4",
     "M0.6.5",
     "M0.6.6",
-    "M0.6.7"
+    "M0.6.7",
+    "M0.7.1"
    ],
    "leaf_texts": [
     "Private GitHub repo, branch protection, CODEOWNERS on the three core files",
@@ -97,7 +98,8 @@
     "Golden questions: twenty questions across three personas with known answers",
     "Connector cassettes with recorded responses per source system",
     "Adversarial corpus: injection attempts in documents and tool results",
-    "Factory helpers for principals, scopes and grants"
+    "Factory helpers for principals, scopes and grants",
+    "The dependency policy is proved by a recorded CI run that refuses a deliberately added copyleft dependency and an archived one, accepts the permissive licences on the allowlist for every image, and finds no component needing a commercial key in production"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -149,7 +151,16 @@
     "M1.6.10",
     "M1.6.11",
     "M1.6.12",
-    "M1.7.1"
+    "M1.7.1",
+    "M1.8.1",
+    "M1.8.2",
+    "M1.8.3",
+    "M1.8.4",
+    "M1.8.5",
+    "M1.8.6",
+    "M1.8.7",
+    "M1.8.8",
+    "M1.8.9"
    ],
    "leaf_texts": [
     "Realm setup script and exported realm config in the repo",
@@ -192,7 +203,16 @@
     "Warn when two sources both assert roles, because neither can see the other rows",
     "Console page to choose, configure and test a staff source before it runs",
     "Scheduled sync with a dry run showing what would be added and removed",
-    "Every capability a served route or console screen requires is in the capability registry an install is furnished with and can be granted from the console, and a sweep fails the build when one is not"
+    "Every capability a served route or console screen requires is in the capability registry an install is furnished with and can be granted from the console, and a sweep fails the build when one is not",
+    "A person marked as external cannot be saved without an end date, and on that date every grant, session and channel binding they hold stops working",
+    "A service account or API key acts at its named owner's live reach narrowed by its own declared limit, holds no grant of its own, and stops working the moment its owner loses that reach or leaves",
+    "A department head is granted audit reads over the people placed in their department, the staff sync rewrites that set when someone joins or leaves, and no audit entry records a department",
+    "The approve permission alone decides who may approve, and the console flags anyone holding the Approver role without an approve permission, or an approve permission without the role, as a misconfiguration",
+    "Identity is proved on an install: a person signs in through the company identity provider and receives a product id, binds a chat identity only with a single-use code minted in the web session, an unbound chat identity gets nothing and is told how to bind, the same person has the same reach on web and chat, a session ends at its idle and absolute limits, a password-only sign-in is refused administration, an account bound to nobody is told once who can link it, a forgotten password is reset by email, and the chosen staff source asserts only that people exist and is re-read on its schedule, with the checks recorded",
+    "The staff source credential given at setup is kept in the vault for the scheduled sync and replaced from the console, and a sync whose credential is refused changes nobody and says so on the staff sources screen",
+    "Appointing one person as both Super Admin and Connector Admin shows a separation-of-duties warning that must be acknowledged with a reason, and the acknowledgement is recorded in the audit trail",
+    "Every permissions requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "When the staff sync marks a person as a leaver, every agent they own is listed for transfer on the console and keeps running at no wider reach than before until a new owner accepts it"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -217,7 +237,9 @@
     "M2.2.1",
     "M2.2.2",
     "M2.2.3",
-    "M2.2.4"
+    "M2.2.4",
+    "M2.3.1",
+    "M2.3.2"
    ],
    "leaf_texts": [
     "scope table: slug, predicate jsonb, department flag",
@@ -228,7 +250,9 @@
     "department table under company",
     "Department admin assignment with scope not null",
     "Department creation wizard with starter scopes",
-    "Cross-department behaviour: intersect, state the gap, offer request-access"
+    "Cross-department behaviour: intersect, state the gap, offer request-access",
+    "Department scoping is proved on an install: a department admin publishes an agent and adds a document at department reach, a member granted that department's knowledge is answered from its documents, a member of that department uses both on the web and in a chat channel, a member of another department can neither find nor reach either and is answered as if they did not exist, the department admin cannot grant, publish or widen beyond their department, a company-wide publication waits for a Super Admin, and the department halt stops only that department, with the checks recorded",
+    "Every departments requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -293,7 +317,11 @@
     "M3.9.1",
     "M3.9.2",
     "M3.9.3",
-    "M3.9.4"
+    "M3.9.4",
+    "M3.9.5",
+    "M3.9.6",
+    "M3.9.7",
+    "M3.9.8"
    ],
    "leaf_texts": [
     "GateContext carrying trace id, principal, entitlements, hash, lane, channel, traffic class",
@@ -317,7 +345,7 @@
     "Hit surfaced to the user with its age",
     "Never-cache list for volatile question shapes",
     "Lane classifier from features computable without a model",
-    "Agent selection: channel binding, then rules, then cheap classifier",
+    "Agent selection: a named agent the person may use when they address one, an agent they may not use answering as one that does not exist, otherwise channel binding, then rules, then cheap classifier",
     "Routing decision written to the row, never inferred afterwards",
     "Project tools as agent grants intersected with entitlements",
     "Static tool prefix with deferred loading so the provider cache is shared",
@@ -327,12 +355,16 @@
     "Leash lookup for agent, target and scope",
     "Shadow: simulate, record, return marked as simulated",
     "Assisted: render artefact, suspend, await approval, resume",
-    "Autonomous: proceed",
+    "Autonomous: proceed, except a tool that declares a sensitive effect, which always waits for a person's approval of the exact prepared action",
     "Three checks per call: capability, rung, mask",
     "Invoke the redaction walker",
     "Emit post-redaction payload to the trace sink only",
     "Compose the answer with citations and freshness",
-    "Attach the trace reference for explainability"
+    "Attach the trace reference for explainability",
+    "The entitlement resolver, the entitlement hash and the redactor take no agent as input, and a test fails if any of them is given one, so no agent setting can widen what a run returns",
+    "When more than one leash rule applies to an action the strictest rung wins, so a narrower rule can never loosen a broader one",
+    "A request passes identify, entitle, screen, cache, route and catalogue projection before any model is called, and a test fails if a model call happens earlier in the chain or a step runs out of order",
+    "A person can address by name any agent they are allowed to use, in the web application and by mention in a chat channel, and the request goes to that agent instead of the router's choice, while an agent they may not use answers as one that does not exist"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -417,7 +449,12 @@
     "M5.5.1",
     "M5.5.2",
     "M5.5.3",
-    "M5.5.4"
+    "M5.5.4",
+    "M5.6.1",
+    "M5.6.2",
+    "M5.6.3",
+    "M5.6.4",
+    "M5.6.5"
    ],
    "leaf_texts": [
     "LiteLLM SDK integration as a driver only, never as a proxy",
@@ -431,7 +468,7 @@
     "Role label derived by trigger rather than typed",
     "Console editor for the matrix",
     "One attempt row per try, so the executed chain reconstructs from a join",
-    "Closed trigger set for fallback",
+    "Closed trigger set for fallback (connection error, timeout, rate limit, server error, context exceeded), and a model's content refusal is recorded and answered once through abstention, never tried on another model",
     "Explicit rejection of quality-based fallback",
     "provider_health with live and probe ring buffers",
     "Open on three consecutive live failures, ratio above half, or two probe failures with no recent live evidence",
@@ -442,7 +479,12 @@
     "Residency constraint attached to scope",
     "Chain skips non-compliant rungs rather than degrading silently",
     "Provider residency registry with documented storage location",
-    "Refusal path when no compliant rung exists"
+    "Refusal path when no compliant rung exists",
+    "An install on the local-only profile answers a question end to end while outbound traffic to every external model provider is blocked, with the check recorded",
+    "A change to the routing matrix is run against the golden questions and permission canaries through the gate before it takes traffic, and a regression holds the change with the failing cases shown",
+    "Model routing is proved on an install: a provider is made to fail and the chain falls back on the closed set only while the breaker opens and recovers, a residency-restricted request skips non-compliant models or is refused, a content refusal is not tried on another model, an agent's tier and the company's own keys are used, and every attempt is visible in the trace, with the checks recorded",
+    "Each provider registered on the install carries its processing region, retention and training terms and a link to the signed agreement, the console lists what categories of data each has been sent with counts, and that record exports as one document the company can show",
+    "Every models requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -475,7 +517,9 @@
     "M6.4.1",
     "M6.4.2",
     "M6.4.3",
-    "M6.4.4"
+    "M6.4.4",
+    "M6.5.1",
+    "M6.5.2"
    ],
    "leaf_texts": [
     "Fast-path rules as data rows, not code",
@@ -499,7 +543,9 @@
     "Static tool prefix ordering for provider cache sharing",
     "Prompt caching structure with the stable prefix first",
     "Output-length instruction separate from effort setting",
-    "Per-lane effort pinning to avoid cache invalidation"
+    "Per-lane effort pinning to avoid cache invalidation",
+    "A department admin adds, tests and retires a fast-lane rule from the console for their own department, and the rule answers without a model call from the next request",
+    "Caching is proved on an install: two people with different reach ask the same question, a person moves department and a source changes, and no cached answer, plan or shared prompt prefix reaches anyone who may not see it or survives the source change, with the checks recorded"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -552,7 +598,18 @@
     "M7.5.3",
     "M7.6.1",
     "M7.6.2",
-    "M7.6.3"
+    "M7.6.3",
+    "M7.7.1",
+    "M7.7.2",
+    "M7.7.3",
+    "M7.7.4",
+    "M7.7.5",
+    "M7.7.6",
+    "M7.7.7",
+    "M7.7.8",
+    "M7.7.9",
+    "M7.7.10",
+    "M7.7.11"
    ],
    "leaf_texts": [
     "Upload endpoint with size and type limits",
@@ -581,9 +638,20 @@
     "Column classification for tabular knowledge such as price lists",
     "Sell price visible while cost and margin are restricted",
     "Classification editor in the console",
-    "Every knowledge item carries exactly one kind from a closed list (SOP, policy, FAQ, pricing note, service information, company rule, best practice, template, training material, approved solution), set when it is added, shown in the library and usable to narrow what an answer or an agent retrieves",
+    "Every knowledge item carries exactly one kind from a closed list (SOP, policy, FAQ, pricing note, service information, service package, brand guidelines, company rule, best practice, template, training material, approved solution), set when it is added, shown in the library and usable to narrow what an answer or an agent retrieves, and a pricing note never holds the price rows themselves",
     "A solution becomes company knowledge only after a named person approves it, and the item records what it solved, who approved it and when, and is retrieved like any other verified item",
-    "A plain text, Markdown, PDF or Word document can be added from the console and answered from on an install with no worker, object store or embedding server, and it is found by text search within the uploader's scope"
+    "A plain text, Markdown, PDF or Word document can be added from the console and answered from on an install with no worker, object store or embedding server, and it is found by text search within the uploader's scope",
+    "A retrieved passage carries the department, visibility and owner its item was stored with, so a knowledge grant over one department reads that department's passages and never another's",
+    "Every knowledge collection, connected source and agent names a steward, set and changed in the console, and the steward is the person notified when anyone grants themselves access to that object",
+    "A price list is held as classified table rows, and a price list uploaded as a document is offered for conversion to those rows rather than indexed as text",
+    "The embedding width is an install setting read by the migration, a width above what the vector index supports is refused when it is read, and changing the width is refused while any chunk holds a vector",
+    "Marking a knowledge item public is allowed to a super admin, or to a department admin for their own department's items only, and each marking writes a ledger entry naming the person",
+    "The knowledge lifecycle is proved on an install: an administrator uploads a document holding a table and adds a link, sets its kind, owner and review date, a question is answered citing the passage with its freshness and verification badge, a newer version supersedes the older, and a due review date opens a re-verification task, with the checks recorded",
+    "Every knowledge requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "Every stored vector records the model that produced it, changing the embedding model rebuilds every chunk in the background while answers keep using the previous vectors, and a search never compares vectors from two models",
+    "Every stored chunk records which parser produced it, and a citation to a passage recognised by OCR or read by the text fallback says so, including for the OCR pages of an otherwise layout-read document",
+    "An OCR confidence floor is applied per page, and a page under it is kept out of the index with a visible parse notice naming the page while the document's legible pages are indexed",
+    "The largest upload the install accepts is parsed by the layout service within its container limit, and the worker reports at start when the declared upload limit exceeds what the parse service can accept (needs the owner's choice of upload limit, container size or request format)"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -607,7 +675,8 @@
     "M8.3.2",
     "M8.3.3",
     "M8.3.4",
-    "M8.3.5"
+    "M8.3.5",
+    "M8.4.1"
    ],
    "leaf_texts": [
     "Row citations naming record and field with read time",
@@ -620,9 +689,10 @@
     "Refusal when no citation exists, configurable per agent",
     "Escalation as an authored step in a skill, not a model judgement",
     "Handoff payload: who asked, what, what was tried, what is needed",
-    "Delivery into the approver's own channel",
+    "Notice of a pending approval reaches the approver in their own channel, and the decision itself is taken only in the console or on a Lark card",
     "Timeout and expiry behaviour on every escalation",
-    "Takeover signal fed to the circuit breaker"
+    "Takeover signal fed to the circuit breaker",
+    "Escalation and sensitive topics are proved on an install: an escalated question reaches the named person in their own channel with who asked, what, what was tried and what is needed and times out as configured, and a question about HR, harassment, whistleblowing, salary, medical or legal matters is intercepted and routed before any agent answers without its content being recorded, with the checks recorded"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -702,7 +772,12 @@
     "M10.5.7",
     "M10.6.1",
     "M10.6.2",
-    "M10.6.3"
+    "M10.6.3",
+    "M10.7.1",
+    "M10.7.2",
+    "M10.7.3",
+    "M10.7.4",
+    "M10.7.5"
    ],
    "leaf_texts": [
     "Channel adapter interface with normalise, send, capabilities",
@@ -734,7 +809,12 @@
     "REST API with key management",
     "Every channel adapter delivers its planned message through the vendor's API using a credential held outside configuration, and a delivery the vendor refused is recorded as refused and never as sent",
     "A WhatsApp webhook is accepted only when its signature matches the app secret over the exact bytes received, and an unsigned or altered request is refused before it is read",
-    "Each channel is configured on the install as its own record holding its tenant identifiers, secret slot and on or off state, and switching one off stops both receiving and sending on it without touching any other channel"
+    "Each channel is configured on the install as its own record holding its tenant identifiers, secret slot and on or off state, and switching one off stops both receiving and sending on it without touching any other channel",
+    "An approval is decided only in the console or on a Lark card; a reply on WhatsApp, email or any other channel never decides one, and the approver is told where to decide it",
+    "An anonymous website widget visitor holds one grant over knowledge an administrator marked public and nothing else, a question about anything else is answered as nothing found, marking or unmarking an item public is audited with who did it, and a department admin can mark only their own department's knowledge public",
+    "Every shipped channel is proved on an install: on each chat channel, by email, through the REST API and in the web application a bound person asks and gets a permission-correct answer through that channel's own credential with progress streamed, a sender bound to nobody learns nothing about the company, a message whose signature does not verify is refused unread, a platform retry produces one answer, a waiting approval notice reaches the person it names, the conversation continues on a second channel, and an agent not enabled on a channel refuses there, with the checks recorded",
+    "Group chat and channel policy are proved on an install: in one group chat people with different reach see a shared message at the floor of everyone present and each receives their own body privately or as a link where the gate re-runs, a channel whose policy excludes a sensitivity class refuses to carry it, and an approval card is offered only where approvals are allowed, with the checks recorded",
+    "The website widget is proved on an install: an anonymous visitor on a website is answered only from knowledge marked public, a question about anything else returns nothing found, and repeated requests from one origin are capped and the session expires sooner than a signed-in one, with the checks recorded"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -792,7 +872,20 @@
     "M11.7.5",
     "M11.7.6",
     "M11.7.7",
-    "M11.7.8"
+    "M11.7.8",
+    "M11.8.1",
+    "M11.8.2",
+    "M11.8.3",
+    "M11.8.4",
+    "M11.8.5",
+    "M11.8.6",
+    "M11.8.7",
+    "M11.8.8",
+    "M11.8.9",
+    "M11.8.10",
+    "M11.8.11",
+    "M11.8.12",
+    "M11.8.13"
    ],
    "leaf_texts": [
     "Connector interface: capabilities, tools, health, credential binding",
@@ -826,7 +919,7 @@
     "Parallel fan-out across independent sources with one critical path",
     "Global and per-source call budgets",
     "Thundering-herd protection on cache miss",
-    "Graceful degradation naming what could not be fetched",
+    "An answer names a source that could not be fetched only to an asker who could already see that source, anyone else is told part of the answer is unavailable, and the full list goes to the operator log",
     "Laravel MySQL via read-only views",
     "Freshdesk",
     "Lark Base",
@@ -841,7 +934,20 @@
     "Slack is a connector that reads only the channels it was invited to, and a message from a channel the asker cannot see in Slack is never returned to them",
     "Google Workspace is a connector whose included services (mail, calendar, documents) are chosen at connect, and mail and calendar are read with the asking person's own authorisation rather than a company-wide key",
     "Every shipped connector can be connected, configured and switched off from the console, including the visibility rule and department it needs, so no source has to be connected at the server",
-    "An administrator adds a connector for a new API from the console by supplying its specification, field mapping and credential reference, and it becomes available to agents after review without a release"
+    "An administrator adds a connector for a new API from the console by supplying its specification, field mapping and credential reference, and it becomes available to agents after review without a release",
+    "Manifest review refuses a projected field that is not an id, join key, status value, timestamp, visibility predicate or a display label of at most 120 characters",
+    "A canary value placed in a federated field of a recorded source response is found in no table, memory row, projection row or log after the answer is delivered, apart from the payload store within its retention",
+    "Live reading is proved on an install: a question over a connected ticket source is answered live, a canary value from a ticket body is afterwards found in no table, memory, projection or log, deny-listed fields never appear in the projection, a question spanning many records is answered from projected headers, and document embeddings are computed with no outbound call, with the checks recorded",
+    "A change signal from a source advances that source's epoch, so a cached answer that read the source is never served after the source changed",
+    "A connector declares each write it can perform as a tool with a side-effect class, connecting it shows every such write switched off until an administrator turns one on with the change audited, and a write that is on runs only as a prepared action a person approved, at the requester's reach, reported done only after it is read back from the source",
+    "A connector that authorises by OAuth completes the consent flow from the console, keeps the refresh token by reference in the vault, and renews access before it expires without a person, and a refresh or consent the vendor refuses marks the source down on connector health in words",
+    "A scheduled check reads each connected source's schema every night, and a renamed or removed field a tool depends on is shown on connector health and makes that tool answer as degraded rather than silently return nothing",
+    "Live connector answers are proved on an install: each shipped connector is connected from the console with its key in the vault and scoped to the slice it was given, a question about a client's open tickets is answered from the live source citing the record, field and time read, and a call to a connector not bound to the agent is refused even though the asker could reach it, with the checks recorded",
+    "Connector safety is proved on an install: a key written in the console is never shown back in any screen, response or log, is leased for one run and revoked at its end, and is rotated without a redeploy; a source pushed past its rate ceiling is throttled and its circuit opens; and a changed tool manifest or renamed source field is shown on connector health rather than silently answered, with the checks recorded",
+    "A connector write is proved on an install: a write that was off is turned on by an administrator, the agent prepares a reply to a ticket, a person approves it, it runs once at the requester's reach and is reported done only after it is read back from the source, and a signed outbound event is delivered to a receiving system with a retry after a refused first attempt, with the checks recorded",
+    "A record the source has deleted is detected by the sync, withheld from answers from the next completed read and recorded with when it was noticed, and a record the source later returns is served again without reviving the retired row",
+    "The ticket desk connector can post a reply to a ticket as a prepared action, sent only after a person approves it and reported done only after it is read back from the ticket desk, as the first connector write of the first complete maintenance agent",
+    "Every connectors requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -876,7 +982,23 @@
     "M12.3.5",
     "M12.3.6",
     "M12.3.7",
-    "M12.3.8"
+    "M12.3.8",
+    "M12.4.1",
+    "M12.4.2",
+    "M12.4.3",
+    "M12.4.4",
+    "M12.4.5",
+    "M12.4.6",
+    "M12.4.7",
+    "M12.4.8",
+    "M12.4.9",
+    "M12.4.10",
+    "M12.4.11",
+    "M12.4.12",
+    "M12.4.13",
+    "M12.4.14",
+    "M12.4.15",
+    "M12.4.16"
    ],
    "leaf_texts": [
     "tool_definition table with the closed naming grammar",
@@ -902,7 +1024,23 @@
     "An agent produces a document, a slide deck or a spreadsheet from an approved company template through one registered generation tool, and the file is stored as an artifact holding only what the caller may see",
     "An agent reads a file a person attached to the conversation through a registered tool at that person's reach, and cannot read a file somebody else attached",
     "An external AI service other than a chat model, such as image generation or speech to text, is registered as a tool with a required capability and a side-effect class, and is refused to any agent whose ceiling does not name it",
-    "Every tool that sends a message to a client, issues a quotation, changes DNS or hosting, changes financial records, deletes information, publishes content or changes a production system declares that effect, and no leash entry or promotion lets such a call run before a person approves the exact prepared action"
+    "Every tool that sends a message to a client, issues a quotation, changes DNS or hosting, changes financial records, deletes information, publishes content or changes a production system declares that effect, and no leash entry or promotion lets such a call run before a person approves the exact prepared action",
+    "Each sensitive action the owner named (sending a client email, issuing a quotation, changing DNS, recording a financial change, deleting a record, publishing content, changing a production system) has a registered tool that performs it only after approval of the exact prepared action",
+    "Human approval of sensitive actions is proved on an install: for each named sensitive effect an agent prepares the action, the approver sees the real artefact at their own reach in the console and on a Lark card, the action runs once only after approval, an irreversible one needs two approvers neither of whom asked for it, a rejected one never runs, a reply by WhatsApp or email decides nothing, and no leash promotion lets such an action run unapproved, with the checks recorded",
+    "An administrator can switch off one tool from the console, after which every call to it from any agent, workflow or automation is refused naming the switch until it is switched back on, and a department admin can stop their own department the same way",
+    "An agent checks whether a website is working through a registered read-only HTTP tool that reports status, redirects, certificate expiry and response time for an address within its ceiling, and opens the read-only browser only when a rendered page must be inspected",
+    "An agent can run code in a sandbox with no network and no credentials over files and results the caller may see, the call is leashed and recorded, and its output is redacted like any other tool result",
+    "An administrator may approve a skill they imported themselves and the approval is recorded as a self-approval the audit view can list, while an import by anyone else needs a different reviewer",
+    "An install is furnished with a starter skill library holding an SEO audit, keyword research, website health check, ticket analysis, complaint analysis, monthly SEO report, proposal generation and website troubleshooting skill, each approved, assignable and rehearsed against its example tasks",
+    "The tool catalogue is proved on an install: one agent calls a typed API tool, a pinned third-party tool server, the sandboxed code tool, a document generation tool whose file is stored as an artifact with its provenance and retention class, and a file a person attached, each running as the requesting person, while a tool not attached to it, a tool switched off for the install and a tool whose manifest changed are each refused, with the checks recorded",
+    "The skill lifecycle is proved on an install: a skill is created in the console and another imported from a repository at a pinned commit, neither runs until reviewed against a diff, a self-approval of an own import is recorded as one, an edit becomes a new version that waits for review while agents keep their pinned version, approval waits for its example tasks to be rehearsed, and an exported skill lands unreviewed on a second install, with the checks recorded",
+    "Skill reuse is proved on an install: one approved skill is assigned to two agents and changes what both runs do, the agents load it by name first and in full only on demand, its script runs only through the sandboxed execution tool, an assignment whose knowledge or tool needs exceed the agent's scope is refused with what is missing, and removing it from one agent leaves it on the other with the detachment in history, with the checks recorded",
+    "A skill's approval digest covers the bytes of every script it carries, so a script changed after approval is refused before it runs",
+    "Skill frontmatter validation refuses a description that does not begin by saying when the skill should be used",
+    "A skill carries one or more categories an administrator sets, and the skills screen offers them as filter chips drawn only from skills the reader may see",
+    "A person creates a skill by describing it in conversation, the system drafts the skill with its instructions, needed knowledge, tools and example tasks, and the draft lands unreviewed and not executable, exactly like an import",
+    "Every tools requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A skill's digest covers the bytes of every script it carries, so a skill with scripts is admitted and changing one byte of a script requires a new review"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -984,7 +1122,26 @@
     "M13.7.6",
     "M13.7.7",
     "M13.7.8",
-    "M13.7.9"
+    "M13.7.9",
+    "M13.8.1",
+    "M13.8.2",
+    "M13.8.3",
+    "M13.8.4",
+    "M13.8.5",
+    "M13.8.6",
+    "M13.8.7",
+    "M13.8.8",
+    "M13.8.9",
+    "M13.8.10",
+    "M13.8.11",
+    "M13.8.12",
+    "M13.8.13",
+    "M13.8.14",
+    "M13.8.15",
+    "M13.8.16",
+    "M13.8.17",
+    "M13.8.18",
+    "M13.8.19"
    ],
    "leaf_texts": [
     "agent table: persona, scope, model tier, visibility level",
@@ -1028,7 +1185,7 @@
     "Project Status Reporter",
     "Capacity and Hours Analyst",
     "Quote and Proposal Drafter",
-    "AR and Renewal Chaser, Shadow-pinned thirty days",
+    "The receivables and renewal chaser is pinned to Shadow, the pin is reviewed at thirty days against measured confidence, and it never lapses because a date passed",
     "Accountant Agent, Shadow-pinned",
     "SEO Agent",
     "SEM Agent, Shadow-pinned, human commits budget changes",
@@ -1046,9 +1203,28 @@
     "An agent answers only on the channels an administrator enabled for it, and a message reaching it from any other channel is refused before the agent runs, in the same words as an agent that does not exist",
     "A question that reaches an agent through any channel is answered at the intersection of the asker's reach and that agent's ceiling, never at the wider of the two",
     "An approved action runs once without the requester returning, at the requester's reach re-resolved at that moment, and a rejected, amended or lapsed one never runs",
-    "A suspended action with an irreversible effect cannot be approved by the person who asked for it or by the principal it runs as, and the database refuses it as well as the route",
+    "A suspended action with an irreversible effect runs only after two different people have approved the same prepared action, neither of them the person who asked for it nor the principal it runs as, and the database refuses it as well as the route",
     "An agent run can call only the connectors bound to that agent, and a call to any other connector is refused by the gate even when the asking person could reach that source directly",
-    "A maintenance agent template ships in the catalogue declaring maintenance knowledge, a ticket desk and a maintenance records source, maintenance skills, a chat channel and the read-only browser tool, and it installs into an agent that answers"
+    "A maintenance agent template ships in the catalogue declaring maintenance knowledge, a ticket desk and a maintenance records source, maintenance skills, a chat channel, the HTTP website check tool and the read-only browser tool, and it installs into an agent that answers",
+    "An agent's connector list compiles into its ceiling as the tools those connectors provide, the gate resolves it through the one intersection used for every ceiling entry, and a test fails if connector access is decided anywhere else",
+    "A run that outlives a grant it started with is re-judged at its next tool call, so an automation or a streamed answer stops using a capability from the moment it lapses or is revoked",
+    "The harness is proved on an install: a question through each of the fast, answer and task lanes, a task killed mid-run and resumed, a halted agent, a switched-off tool, a run that hits its turn bound, a person addressing a named agent and an injected tool result are each exercised, and each trace shows the lane, the gate order, the projected catalogue, leased credentials never exposed and the refusal reason, with the checks recorded",
+    "Only a super admin can publish or retire an agent at company-wide visibility; a department admin or member who tries is refused, and a published company-wide agent appears for a person in every department",
+    "A department admin installs an agent from the catalogue on the install and it answers its golden set correctly, with the time from choosing the template to the first correct answer recorded",
+    "The maintenance agent template also declares a maintenance workflow, and installing it assigns that workflow so the installed agent runs it",
+    "The SEO agent template declares SEO knowledge, the analytics and search console connectors, SEO skills, the chat and web channels and the monthly SEO report workflow, and installs into an agent that answers",
+    "The catalogue has a sales, a finance, a support and a project management agent template, each declaring its knowledge, connectors, skills, channels and workflows and installing into an agent that answers",
+    "The agent lifecycle is proved on an install: a template with a missing connector installs pinned to Shadow with its badge, a custom agent is composed, rehearsed as a named person and published through the canaries and a second approver, an upgrade is offered and declined, a personal agent stays invisible to others, and an agent is saved as a private template, with the checks recorded",
+    "An install mints its template signing key once at setup into the vault, the application reads it and nothing can replace it while a signed template version exists, and the built-in templates are signed with it when the install is furnished",
+    "Accepting a new template version runs the same binding and completeness checks as installing it, so a tool the version declares is bound to a registered tool or reported missing, and a newly required connector or placeholder reopens the wizard before the version runs",
+    "Every agents requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A leash rung can carry an end date, the gate keeps the rung until that date and then reports it due for review rather than loosening it silently, and the Leash screen shows when each pinned rung ends",
+    "Every harness requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A template authored from an existing agent is stored as a draft that survives a restart, is shown for review with every value hoisted out of it, and becomes installable only after a person publishes it",
+    "An agent's audience can list named people and several departments, and adding one lets them find the agent without widening what any run reaches.",
+    "The manifest has a settable overview path, older signed templates still verify under their own schema version, and no model prompt includes the overview.",
+    "On an install with no vault the template catalogue says installing is unavailable and no signing key is stored anywhere else.",
+    "An agent's audience can name several departments and individual people beside its level, and each added person or department gains discovery only, never reach"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1159,7 +1335,12 @@
     "M14.6.5",
     "M14.7.1",
     "M14.7.2",
-    "M14.7.3"
+    "M14.7.3",
+    "M14.8.1",
+    "M14.8.2",
+    "M14.8.3",
+    "M14.8.4",
+    "M14.8.5"
    ],
    "leaf_texts": [
     "er.canonical: canonical entity with type and created provenance",
@@ -1200,7 +1381,12 @@
     "Unresolved behaviour: state the ambiguity, never guess, offer the review link",
     "The same cascade applied to people across HubSpot, Freshdesk and Lark",
     "The same cascade applied to projects",
-    "Privacy: hashed join keys only, never full contact records"
+    "Privacy: hashed join keys only, never full contact records",
+    "Entity resolution is proved on an install: one client held under different names in two connected sources resolves to one entity keeping both aliases, a hard identifier links on its own while a name-only match goes to review with its weighted evidence in plain words, a merge touching financial records waits for a person, an unmerge restores the prior state and an old citation still resolves, and an ambiguous question names both records with the review link and combines no figures, with the checks recorded",
+    "Every entity resolution requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "On the install the matcher's weights are fitted from a labelled sample of the company's own candidate pairs, the online scorer reads that export by name, and the weekly refit runs and shows its drift to a reviewer",
+    "Records of one person from the CRM, the helpdesk and the chat directory resolve under a person-specific identifier priority and caps, and every candidate project pair is queued for review showing the client both belong to",
+    "On the install a candidate pair in the review band appears on a Resolution review screen to a reviewer who reaches both records, with evidence in sentences, and the reviewer's merge or reject is stored and audited"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1226,7 +1412,10 @@
     "M15.3.1",
     "M15.3.2",
     "M15.3.3",
-    "M15.3.4"
+    "M15.3.4",
+    "M15.4.1",
+    "M15.4.2",
+    "M15.4.3"
    ],
    "leaf_texts": [
     "Typed tool per entity with a parameterised query",
@@ -1243,7 +1432,10 @@
     "Reranking evaluated and adopted only if it earns its latency",
     "Chunk-level and document-level result assembly",
     "Deduplication across planes",
-    "Retrieval logging for the learning signal"
+    "Retrieval logging for the learning signal",
+    "When a request exceeds the largest model's context, retrieval is trimmed and the request retried, the answer says it drew on fewer sources, and nothing is truncated silently",
+    "Each connected source's projected records are answerable through a row tool of their own, with field classification keyed by source and entity kind, so connecting a second source that projects the same kind never stops the first from answering",
+    "Knowledge reach is proved on an install: a narrow-scope member, a department admin and a super admin ask the same questions over personal, department and company knowledge and a classified price list, and each gets full results within their own scope, only the columns they may read and nothing from items they may not see, with the checks recorded"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1289,7 +1481,21 @@
     "M16.6.5",
     "M16.6.6",
     "M16.6.7",
-    "M16.6.8"
+    "M16.6.8",
+    "M16.7.1",
+    "M16.7.2",
+    "M16.7.3",
+    "M16.7.4",
+    "M16.7.5",
+    "M16.7.6",
+    "M16.7.7",
+    "M16.7.8",
+    "M16.7.9",
+    "M16.7.10",
+    "M16.7.11",
+    "M16.7.12",
+    "M16.7.13",
+    "M16.7.14"
    ],
    "leaf_texts": [
     "Session memory in Valkey with thread lifetime",
@@ -1306,9 +1512,9 @@
     "Approval rejected with a reason",
     "All signals logged from the first migration",
     "Tier zero: session, silent",
-    "Tier one automatic: preferences, retrieval boosts and demotions, corroborated entity links, all negative signals",
-    "Tier two shadow-then-promote: fast-path rules and procedural shortcuts",
-    "Tier two agreement threshold and promotion job",
+    "Tier one automatic for one person only: that person's preferences and entity links corroborated by a hard identifier, while a helpful or unhelpful mark and negative signals are counted and never demote or boost anything by themselves",
+    "Tier two shadow then review: fast-path rules and procedural shortcuts are computed in shadow beside the real answer and offered to a named reviewer with their evidence, never promoted by themselves",
+    "Tier two agreement threshold that makes a shadow rule eligible for review, with no job that puts a rule into effect without a person's approval",
     "Tier three gated: scope widening, company knowledge, leash increase, money-boundary merge, capability addition",
     "Blast-radius classifier deciding the tier automatically",
     "Time decay reducing confidence below the retrieval threshold",
@@ -1326,7 +1532,21 @@
     "A person correcting an answer may give the right answer in their own words, and it is held as a learning candidate under the permissions of the conversation, changing no knowledge, rule or memory until a person who owns the affected knowledge approves it",
     "A learning candidate a reviewer approves is applied exactly once as the knowledge item, rule, skill revision or grant it proposed, the ledger records who approved it, and a rejected candidate keeps its reason and is not proposed again from the same evidence",
     "An output a person approved without changes is recorded as a positive example for the agent and skill that produced it, and it influences later runs only through the tier its change would reach",
-    "An administrator can set how long inferred memories last and how many independent agreements promote a learned rule, within bounds the product fixes, and no setting can move a kind of change to a lower oversight tier"
+    "An administrator can set how long inferred memories last and how many independent agreements make a learned rule eligible for review, within bounds the product fixes, and no setting can move a kind of change to a lower oversight tier",
+    "Every change learning applies to an agent is marked machine-authored in that agent's per-field ownership, so a person can list and revert exactly what the agent taught itself apart from what an administrator set",
+    "A memory that is used and confirmed again regains its confidence, and one that is not falls below the retrieval threshold on the configured schedule while its audit record stays",
+    "A learned rule or shortcut that has agreed with real answers in shadow is offered to a named reviewer with its evidence and takes effect only after that person approves it, and the approval is recorded",
+    "A helpful or unhelpful mark is counted against its trace and reported, and by itself changes no retrieval ranking, memory, rule, knowledge or agent setting, and a test fails if a mark alone alters what a later answer retrieves",
+    "A memory is formed only from the kinds of observation the product lists (a preference, an entity link, a procedure, a correction held for review), and a value read from a connected source is never stored as a memory or learned rule, proved by a canary value read during a conversation that appears in no memory or rule row afterwards, and an agent whose memory switch is off forms none",
+    "Corrections that repeat the same fix across conversations are grouped into one learning candidate that carries every instance as evidence, rather than one candidate each",
+    "Memory and context are proved on an install: session memory ends with its thread, a preference applies only to its owner, project context reflects a source change on the next turn, a memory that contradicts the source is demoted, removing an entitlement stops replay, a person reads, edits and deletes memory about themselves and it leaves retrieval at once, and the trace names the context kinds used and left out, with the checks recorded",
+    "The learning loop is proved on an install: an unhelpful mark changes nothing, a correction carrying the right answer is held as a protected candidate, repeated corrections form one candidate, a reviewer approves it and it is applied once, the digest lists it with undo, and a failed workflow step and an evaluation each open a candidate while an unanswered question appears as a knowledge gap, with the checks recorded",
+    "Every learning requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A stated memory is recalled at the confidence it was formed with however old it is, only inferred and session memories decay, and every memory kind declares which it is",
+    "Every memory requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A person whose every grant is scoped to their department recalls the memories formed from their own conversations, in answers and on the Memory screen, proved with a reader holding no company-wide grant",
+    "Pausing learning on one agent stops memory formation and learning proposals from that agent's runs, and the pause can only narrow what is learned.",
+    "Promoting a tier-two rule and deciding a tier-three item from the console records who agreed and takes effect on the next run."
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1369,7 +1589,16 @@
     "M17.6.5",
     "M17.6.6",
     "M17.6.7",
-    "M17.6.8"
+    "M17.6.8",
+    "M17.7.1",
+    "M17.7.2",
+    "M17.7.3",
+    "M17.7.4",
+    "M17.7.5",
+    "M17.7.6",
+    "M17.7.7",
+    "M17.7.8",
+    "M17.7.9"
    ],
    "leaf_texts": [
     "Job table with state machine, attempts, and scheduling",
@@ -1388,7 +1617,7 @@
     "Connectors without read-back restricted to read-only, declared in the manifest",
     "Kill-after-side-effect test proving exactly-once",
     "Trigger types: schedule, connector event, webhook",
-    "Named outcome templates rather than a blank canvas",
+    "Automations start from named outcome templates, while workflows are authored in the console as stored, versioned step data rather than drawn on a blank canvas",
     "Automation principal resolving the owner's live entitlements at each run",
     "Suspension when the owner loses a required entitlement",
     "Timeout and expiry on every approval step",
@@ -1403,7 +1632,16 @@
     "Workflow steps declared parallel start together, and the step that combines them runs only after each has finished or been recorded as a gap",
     "Each workflow step carries its own retry limit and backoff, a side-effecting step is retried only through its idempotency key, and a step that exhausts its retries takes its declared failure path",
     "Every finished workflow or automation run emits a success or failure signal naming the workflow, the agent and the step that failed, and repeated failures of one step open a learning candidate instead of changing the workflow",
-    "A workflow that reads two connectors, calls two skills, waits for an approval and delivers a document runs end to end on the install and leaves one trace a person can follow"
+    "A workflow that reads two connectors, calls two skills, waits for an approval and delivers a document runs end to end on the install and leaves one trace a person can follow",
+    "The monthly search report workflow runs on the install for a named client: it resolves the client, reads the period's analytics and search console figures, finds the previous report, runs the search checks, writes recommendations into the report template, holds it for approval and delivers it, and no step but the approval is performed by a person, with the run recorded",
+    "A scheduler inside the application runs every registered scheduled control when it is due, holding a database lock so two application copies never run the same one, and a control with no run inside its window raises an alert",
+    "Automations are proved on an install: a scheduled, a connector-event and a webhook automation each run as their owner from a named template, one is suspended when its owner loses a required access and offered for adoption when the owner leaves, run history shows cost and outcome, and where the optional canvas is enabled it reaches the platform only over the internal network, with the checks recorded",
+    "Workflow control flow is proved on an install: a workflow with two parallel skill steps, a conditional step that is skipped, a step that fails, retries through its idempotency key and takes its failure path, and a combining step that records the gap shows every outcome in its one trace, with the checks recorded",
+    "The automation gallery ships a daily brief, capture of deals from group chats into the customer records held as drafts, and drafted email replies a person sends, each declaring its trigger, connectors and approval step",
+    "Every notice the product composes is delivered to the person it names through their bound channel or the configured email relay, and a notice that could not be delivered is shown as undelivered on the notifications screen",
+    "An agent runs only the workflows assigned to it, and a request that would start any other workflow through it is refused before the first step runs",
+    "Every human approval requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "On the install the denial digest runs on its window and tells the person's department lead or data steward that someone keeps being refused, naming no resource they could not reach"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1433,7 +1671,9 @@
     "M18.4.3",
     "M18.5.1",
     "M18.5.2",
-    "M18.5.3"
+    "M18.5.3",
+    "M18.6.1",
+    "M18.6.2"
    ],
    "leaf_texts": [
     "Planner proposing subtasks and data dependencies",
@@ -1454,7 +1694,9 @@
     "Partial-failure handling with a stated gap",
     "A coordinating agent can hand a subtask only to agents an administrator allowed it to call, and a call to any other agent is refused before the child starts",
     "A specialist agent handed a subtask reads through its own knowledge, skills and connectors within the asker's reach, and the coordinator receives only the specialist's schema-checked result",
-    "A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal checks before any child runs"
+    "A planner step asks a model for subtasks and their dependencies, and its proposal passes the existing proposal checks before any child runs",
+    "A request to analyse a client's website and prepare an improvement proposal runs on the install as a coordinating agent handing website, search data, competitor and services and pricing subtasks to specialist agents along administrator-set links, in parallel where independent, each at the asker's reach intersected with its own ceiling, and merging their checked results into one proposal whose single trace shows each child's reach, result, cost and the fan-out verdict, with the checks recorded",
+    "An agent spawns parallel subtasks or workers only when fan-out is enabled on it by its department admin, and a run of an agent without it runs as a single loop with the reason recorded"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1502,7 +1744,18 @@
     "M19.7.1",
     "M19.7.2",
     "M19.7.3",
-    "M19.8.1"
+    "M19.8.1",
+    "M19.9.1",
+    "M19.9.2",
+    "M19.9.3",
+    "M19.9.4",
+    "M19.9.5",
+    "M19.9.6",
+    "M19.9.7",
+    "M19.9.8",
+    "M19.9.9",
+    "M19.9.10",
+    "M19.9.11"
    ],
    "leaf_texts": [
     "Ephemeral gVisor container per run",
@@ -1541,7 +1794,18 @@
     "Read-only capability shipped first",
     "Write capability behind envelope approval",
     "Assisted ceiling on writes unless a per-surface exception is signed",
-    "An agent can operate an allowlisted desktop application inside an isolated virtual desktop, with every action recorded, every write held for a person's approval, and no route to any other application or network"
+    "An agent can operate an allowlisted desktop application inside an isolated virtual desktop, with every action recorded, every write held for a person's approval, and no route to any other application or network",
+    "A browser action outside its approved envelope suspends the run and sends a new approval naming the breach, and actions inside the envelope never ask again",
+    "Browser approval is proved on an install: a read-only website check runs without approval, a planned browser write is shown once as a readable diff of its envelope and approved, steps inside the envelope are not asked again, and a step outside it suspends the run and asks again, with the checks recorded",
+    "A browser run starts from an empty profile in its own container and cannot attach to or import a staff member's browser profile, cookies or session, asserted by a test",
+    "Website and portal reading is proved on an install: asked whether a live website is working, an agent checks it over HTTP, opens the rendered page in the read-only browser from an empty sandboxed profile with egress limited to that origin, and cites what it observed; and a read-only browser task logs in to a portal with no API using a vault credential the model never sees and returns the figure asked for; the session recording is kept under its retention class and the checks are recorded",
+    "A browser write is proved on an install: one multi-step form-filling task against a registered target runs at the Assisted rung only after its plan is approved, a step outside the approved plan is refused, and the task is reported done only after an independent read-back from the target system, with the checks recorded",
+    "The browser sandbox runs on an install, and an agent whose ceiling holds the browser tools opens a page in it.",
+    "An administrator grants a per-surface browser write exception or a browser-over-API exemption from the console with an approver and expiry, it is recorded in the audit ledger as a leash change, listed until it lapses, and a run compiled after expiry no longer has it",
+    "On the install a browser run's outcome is scored by a judge from its actions and admitted frames against the rubric fixed before the run, and a declared target's result is read back from its system of record before the run is reported done",
+    "On the install open browser sessions are counted as they start and end, and a session over the global, per-website or per-agent limit waits or is refused with a sentence naming the limit",
+    "On the install an agent's browser write to an allowlisted site is compiled into an envelope, approved by a person, signs in with a vaulted credential that never appears in the plan, trace or recording, and performs exactly the approved writes",
+    "Browser session recordings on the install are written to the object store at run end, and a scheduled job removes expired ones, keeps held ones and reports undated objects"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1576,10 +1840,13 @@
     "M20.4.3",
     "M20.4.4",
     "M20.4.5",
-    "M20.4.6"
+    "M20.4.6",
+    "M20.5.1",
+    "M20.5.2",
+    "M20.5.3"
    ],
    "leaf_texts": [
-    "Seven sections: identity, persona, knowledge, skills, tools, leash, tests",
+    "Composer sections: identity, persona, knowledge, skills, tools, connectors, channels, workflows, memory, leash, tests, each a reference to a separately created part",
     "Forms generated from the manifest JSON Schema via react-jsonschema-form",
     "AI co-author proposing accept or reject diffs",
     "Draft, save and version handling",
@@ -1597,7 +1864,10 @@
     "Grant-widening demotes to Shadow and requires a second approver",
     "Instruction edits publish without demotion",
     "Router collision check",
-    "Publish record with who, when and the diff"
+    "Publish record with who, when and the diff",
+    "An agent, skill or knowledge item published at department reach waits for that department's admin and one published company-wide waits for a Super Admin, and a department admin can neither approve a publication outside their department nor widen an item to the whole company alone",
+    "Publishing an agent whose median rehearsed run costs more than its department's per-run ceiling is held until the department admin approves it, and the publish record shows the measured cost",
+    "A person describes an agent in conversation and the system drafts its persona, knowledge, skills, connectors, channels and workflows as a saved draft within the person's ceiling, which then goes through rehearsal and publish like any other draft"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1650,7 +1920,12 @@
     "M21.3.3",
     "M21.3.4",
     "M21.3.5",
-    "M21.3.6"
+    "M21.3.6",
+    "M21.4.1",
+    "M21.4.2",
+    "M21.4.3",
+    "M21.4.4",
+    "M21.4.5"
    ],
    "leaf_texts": [
     "Company budget with hard ceiling and alert thresholds",
@@ -1659,17 +1934,22 @@
     "Per-agent per-run and per-day ceilings",
     "All levels as versioned, audited rows",
     "Pre-flight cost estimate from lane, tier, tool count and retrieval size",
-    "Refusal or degradation before tokens are spent",
+    "Refusal before tokens are spent",
     "Post-hoc accounting against principal, department, agent, model and lane",
     "Estimator correction from actuals",
-    "Degradation ladder: cheaper tier, no fan-out, queue, refuse",
+    "At a budget limit the request is refused with no silent degradation to a cheaper tier, and at a department ceiling the department admin is warned and further questions charged to it are refused until the next period",
     "Message naming which budget was hit and who can raise it",
     "Spend by department, user, agent, model and lane",
     "Machine traffic excluded and labelled",
     "Cost per answer with the distribution, not only the mean",
     "Most expensive agents and question shapes",
     "Budget consumption against pace",
-    "Every refusal and degradation with its cause"
+    "Every budget refusal with the budget that caused it",
+    "Metered spend for a billing period is reported per provider key in the provider's own units and reconciles with that provider's invoice within a stated tolerance, with any difference shown",
+    "Every spend row carries the trace id of the request it paid for, the trace records the request's tool count and fan-out, and the most expensive question shapes are ranked from that join",
+    "Budgets are proved on an install: company, department, person and agent limits are set in the console, a request whose estimate exceeds a remaining budget is refused before any token is spent, a department that reaches its budget is warned and refused until the next period, skill bodies load only when used, and the spend report by person, department, agent, model and lane matches the ledger, with the checks recorded",
+    "The agent usage chart offers an all-time range beside seven, thirty and ninety days and month to date, and marks the incomplete current day differently",
+    "Every cost requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1693,7 +1973,8 @@
     "M22.3.1",
     "M22.3.2",
     "M22.3.3",
-    "M22.3.4"
+    "M22.3.4",
+    "M22.4.1"
    ],
    "leaf_texts": [
     "Global budgets: concurrent model calls, source calls per connector, browser sessions, long-running tasks, document jobs, embedding jobs, tokens per minute",
@@ -1708,7 +1989,8 @@
     "Peak concurrency targets rather than daily volume",
     "Little's law sizing recorded per profile",
     "Load test at peak concurrency",
-    "Documented first bottleneck at ten and one hundred times"
+    "Documented first bottleneck at ten and one hundred times",
+    "Rate limits and concurrency budgets are changed from the console within bounds the product fixes, each change audited and in force without a release, and the rate limits screen lists the windows refusing requests now"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1727,7 +2009,8 @@
     "M23.1.5",
     "M23.2.1",
     "M23.2.2",
-    "M23.2.3"
+    "M23.2.3",
+    "M23.3.1"
    ],
    "leaf_texts": [
     "Per-principal sliding window in Valkey",
@@ -1737,7 +2020,8 @@
     "Backoff response with a retry hint",
     "Anomalous volume detection per principal",
     "Repeated permission-denied pattern alerting",
-    "Automated traffic identification and exclusion from metrics"
+    "Automated traffic identification and exclusion from metrics",
+    "On the install a retryable failed job is re-driven by the scheduled redrive, and a side effect interrupted by a killed worker is read back from the connected system and shown to a person before any retry"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1763,7 +2047,14 @@
     "M24.2.1",
     "M24.2.2",
     "M24.2.3",
-    "M24.2.4"
+    "M24.2.4",
+    "M24.3.1",
+    "M24.3.2",
+    "M24.3.3",
+    "M24.3.4",
+    "M24.3.5",
+    "M24.3.6",
+    "M24.3.7"
    ],
    "leaf_texts": [
     "Hash-chained append-only audit table",
@@ -1773,9 +2064,16 @@
     "Client-visible audit view with filters",
     "Export in a defensible format",
     "Legal hold flag suspending deletion",
-    "Sensitive-topic interception for HR, grievance and whistleblowing",
+    "A question touching HR, grievance, harassment, whistleblowing, salary, medical or legal matters is intercepted before any agent answers, routed to the named person for that topic, and recorded without its content",
     "Data processing record per connector",
-    "PDPA breach assessment workflow with the correct clock"
+    "PDPA breach assessment workflow with the correct clock",
+    "Every console write's ledger entry carries the writer's reach digest and the request's trace, and a sweep fails the build when a write route can leave either as a placeholder",
+    "Every read of a record type marked sensitive (personnel and salary records by default) writes one read event naming the reader, the agent and the record, and no other read is logged",
+    "The audit chain's head is published every day to a store the database administrator cannot write, and verification reports any entry missing after the last published head",
+    "Audit and tracing are proved on an install: a grant, a leash change, a merge, a publish, a sensitive read and a browser session each appear in the audit view with a recording where one applies, the chain verifies and a removed newest entry is detected, a run's trace graph and payload hold only masked content readable under the separate role, and the compliance export holds no deployment history, with the checks recorded",
+    "Every audit entry records the department of its subject at the moment it is written, so a department admin's audit grant reads that department's activity and never another's, and a later move of the subject does not rewrite past entries",
+    "Every observability requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "Writing a budget version or a pack assignment leaves a ledger entry, proved by an invariant over the tables."
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1798,7 +2096,12 @@
     "M25.2.4",
     "M25.3.1",
     "M25.3.2",
-    "M25.3.3"
+    "M25.3.3",
+    "M25.4.1",
+    "M25.4.2",
+    "M25.4.3",
+    "M25.4.4",
+    "M25.4.5"
    ],
    "leaf_texts": [
     "Retention policy per data class",
@@ -1812,7 +2115,12 @@
     "Deletion certificate with what was removed and when",
     "Conversation export per user",
     "Bulk export for eDiscovery with an audit row and a required reason",
-    "Knowledge export preserving scope metadata"
+    "Knowledge export preserving scope metadata",
+    "The retention sweep first runs as a dry run that reports what it would delete, and deletes nothing until a person releases it from the console, recorded in the ledger",
+    "Retention and erasure are proved on an install: the retention sweep reports a dry run and removes nothing until released, a subject access request for a seeded person returns their data from every store with the list of stores searched, erasing that person removes their rows, projections, memory, traces and recordings and issues a certificate whose horizon no backup copy outlives, a legal hold suspends deletion and holds in force are listed, a conversation owner exports their conversation, and a bulk export demands a reason and writes an audit row, with the checks recorded",
+    "A per-object sweep removes every stored artifact past its retention class's window, records each removal, and leaves an object under a legal hold in place",
+    "Every data and retention requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "A configured trace destination receives redacted traces from an install, proved end to end."
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -1839,7 +2147,8 @@
     "M26.3.2",
     "M26.3.3",
     "M26.3.4",
-    "M26.3.5"
+    "M26.3.5",
+    "M26.4.1"
    ],
    "leaf_texts": [
     "Provisioning from the identity provider",
@@ -1857,7 +2166,8 @@
     "Owned agents flagged for adoption",
     "Automations suspended",
     "Personal knowledge and memory disposition policy",
-    "Audit record retained regardless"
+    "Audit record retained regardless",
+    "Joiner, mover and leaver handling is proved on an install: a person moved between departments loses the old department's knowledge, agents, cached answers and memories on their next request and gains the new ones with no reindex, purge or restart, a delegation that now exceeds their reach is suspended, a leaver's agents pass to the department admin, an item they own but can no longer reach leaves their workspace, a run in progress stops using a revoked grant at its next step, and an external person and a service key stop working when their end date or owner lapses, with the checks recorded"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2023,7 +2333,90 @@
     "M27.14.5",
     "M27.14.6",
     "M27.14.7",
-    "M27.14.8"
+    "M27.14.8",
+    "M27.15.1",
+    "M27.15.2",
+    "M27.15.3",
+    "M27.15.4",
+    "M27.15.5",
+    "M27.15.6",
+    "M27.15.7",
+    "M27.15.8",
+    "M27.15.9",
+    "M27.15.10",
+    "M27.15.11",
+    "M27.15.12",
+    "M27.15.13",
+    "M27.15.14",
+    "M27.15.15",
+    "M27.15.16",
+    "M27.15.17",
+    "M27.15.18",
+    "M27.15.19",
+    "M27.15.20",
+    "M27.15.21",
+    "M27.15.22",
+    "M27.15.23",
+    "M27.15.24",
+    "M27.15.25",
+    "M27.15.26",
+    "M27.15.27",
+    "M27.15.28",
+    "M27.15.29",
+    "M27.15.30",
+    "M27.15.31",
+    "M27.15.32",
+    "M27.15.33",
+    "M27.15.34",
+    "M27.15.35",
+    "M27.15.36",
+    "M27.15.37",
+    "M27.15.38",
+    "M27.15.39",
+    "M27.15.40",
+    "M27.15.41",
+    "M27.15.42",
+    "M27.15.43",
+    "M27.15.44",
+    "M27.15.45",
+    "M27.15.46",
+    "M27.15.47",
+    "M27.15.48",
+    "M27.15.49",
+    "M27.15.50",
+    "M27.15.51",
+    "M27.15.52",
+    "M27.15.53",
+    "M27.15.54",
+    "M27.15.55",
+    "M27.15.56",
+    "M27.15.57",
+    "M27.15.58",
+    "M27.15.59",
+    "M27.15.60",
+    "M27.15.61",
+    "M27.15.62",
+    "M27.15.63",
+    "M27.15.64",
+    "M27.15.65",
+    "M27.15.66",
+    "M27.15.67",
+    "M27.15.68",
+    "M27.15.69",
+    "M27.15.70",
+    "M27.15.71",
+    "M27.15.72",
+    "M27.15.73",
+    "M27.15.74",
+    "M27.15.75",
+    "M27.15.76",
+    "M27.15.77",
+    "M27.15.78",
+    "M27.15.79",
+    "M27.15.80",
+    "M27.15.81",
+    "M27.15.82",
+    "M27.15.83"
    ],
    "leaf_texts": [
     "Trace id minted at ingress before identify",
@@ -2093,7 +2486,7 @@
     "Spend, budgets and what happens at the ceiling",
     "Service levels: what was promised, what was measured, and where the gap is",
     "Adoption: who is using this, for what, and who has stopped",
-    "Questions and gaps: the questions no connected source could answer, by department and the source that would have, never counting one answered with nothing found",
+    "Questions and gaps: the questions no connected source or knowledge could answer, including those answered with nothing found, by department and the source or knowledge that would have, shown only to people who administer that department",
     "Quality and the permission canaries",
     "Knowledge library across every department, with per-item visibility scope",
     "Learning review across every department, tiers separated and tier one undoable",
@@ -2175,7 +2568,90 @@
     "Operations proved in the browser by the same cases",
     "Governance proved in the browser by the same cases",
     "Reports proved in the browser by the same cases",
-    "Platform proved in the browser by the same cases, at company scope only"
+    "Platform proved in the browser by the same cases, at company scope only",
+    "Opening the content of another department's item is a capability separate from seeing it in the inventory, revocable from the console, and every opening writes an audit entry naming the item and the reader",
+    "A department admin halts every agent run, automation and delegated run in their own department from the console at once, the halt survives a restart, and nothing outside that department stops",
+    "Roles and administration are proved on an install: a Super Admin without a grant sees an item exists but no content, granting themselves a capability writes a loud audit entry and notifies the steward, revoking the last two Super Admins is refused, a deputy lapses on its date and cannot appoint another, the setup names a data steward who grants the first staff their reads, every console write leaves a ledger entry with the writer's real reach and trace, and the who-can-access view matches what each person actually reaches, with the checks recorded",
+    "A person signing in with an account bound to nobody is told once that an administrator must link their account and who can, and the console does not sign them in again in a loop",
+    "The people screen shows under each person the agents they steward, so a leaver's agents are visible before the account is disabled",
+    "Each answer records reasoning tokens separately from output tokens and the time spent in each gate stage, so the latency and cost split can be read from the ledger per lane",
+    "An administrator sees every registered tool with its required capability and side-effect class in the console and can switch a tool off for the install, which removes it from every agent's catalogue at once",
+    "An administrator tests a connector from the console, and the test makes one probe under the connector's throttle, records the result on its health and returns no business rows",
+    "The skills screen shows on each skill how many runs invoked it in the chosen period, counted from run traces the reader may see and never from the assignment list",
+    "Stopping takes one action with no confirmation, resuming requires a written reason and says when the person resuming is not the person who stopped it, and a halt has no expiry",
+    "A question answered with nothing found is shown to a knowledge owner only when the owner's own reach covers everything the asker's reach covers and the owner's search also finds nothing, so a gap in company knowledge is visible without telling anybody what an asker was refused",
+    "Every console requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "Two console tabs open on one session refresh it without signing either out, proved in the browser",
+    "The Stop control is in the header of every console page for a reader who holds the halt capability, and absent for everybody else.",
+    "Resuming a halt is refused without a stated reason, the resume names the halt it overrides, and a halt whose state cannot be read is treated as in force.",
+    "A halt on one department or one person refuses that department's or that person's new work, and each stop axis the admission path does not yet enforce is named on the Stop screen.",
+    "The dashboard lists each waiting queue the reader could open (approvals, access review, elevation, skill reviews, tier-three learning, publish approvals, unbound sign-ins, knowledge past review), filters by period and department, and withholds any figure whose screen the reader cannot open.",
+    "A person's page lists the agents and automations they own and the ledger entries about them, each entry shown only to a reader who may read it.",
+    "An administrator creates a person by hand from the console on an install with no staff source, and that person can then be linked to a sign-in, placed in a department and granted",
+    "Removing a single capability a person holds through a pack is refused with a sentence naming the pack.",
+    "The people list, the department and team structure and an access certification report each export from the console, carrying only rows the exporter may read and no count of the rest.",
+    "Retiring a department with live grants bounded by its scope is refused until they move, and a department created from the console is grantable in the same session.",
+    "A department page shows members, lead history, its scope as a sentence, agents addressed to it and knowledge coverage, and applying the staff source's organisation plan creates the departments and teams it names.",
+    "A pack is created, versioned, copied and retired from the console, each write confirmed and audited, and assigning a pack widens a person by exactly that pack.",
+    "Every session of one person ends in one confirmed act, and a sign-in unlinked by mistake is re-linked to the same person with both acts in the ledger.",
+    "A service account runs at its owner's live reach narrowed by its ceiling, holds at most two live keys, can never carry approve or admin, and its owner and expiry change from the console.",
+    "Every run records the agent it ran as, so the agents list shows runs and cost per agent and the agent Dashboard lists its recent runs.",
+    "An agent's effective manifest exports as a document without company values, and importing one runs the leak scan and lands as a draft.",
+    "Publish, enable, disable, archive, transfer and every leash move write a ledger entry, and the audit log filters by agent id.",
+    "Approval cards carry the agent that raised them and filter by agent, and an agent's Dashboard shows only the cards the reader could decide, absent rather than nought for a reader who could decide none.",
+    "A widened publish appears in the Approvals queue for a second person who is not its author, and approving it publishes the agent.",
+    "The agent Profile offers computer use only once an isolated desktop runner exists, and says in a sentence that it is not offered until then.",
+    "Every money figure the API returns carries the install currency, and a spend figure with no metering behind it is served as not recorded rather than zero.",
+    "The memory and artifact reads filter by agent, and the agent's tabs show only what the reader may see.",
+    "Withdrawing a template version and undoing it are insert-only and audited, installed agents stay pinned, and a template exports as a signed document another install imports.",
+    "A Tools tab lists every registered tool with its required capability, side effect and source.",
+    "An administrator adopts an ownerless automation, which then runs as the adopter, audited.",
+    "A rung is added, retired or moved from the console as a new position row, audited, and the routing configuration exports without keys.",
+    "A connection record exports with its declaration and history and no credential.",
+    "Verify, review date, supersede, archive and bulk re-verify are console writes on a knowledge item, each audited, and widening its visibility waits for a holder of the visibility approval.",
+    "A reviewed classification is applied by a person other than its proposer, fast-path rules are listed, and pending entity merges are approved or rejected from the console.",
+    "Every artifact download is checked against the requester's current reach and leaves an audit entry.",
+    "Each channel shows the verbs it may carry and its rooms at their floor, and switching it off refuses its inbound messages.",
+    "A webhook is switched back on as a recorded change, and an exhausted delivery is replayed from the console once, audited.",
+    "Acknowledging an alert records who and when and stops its repeat notice, and the incident screen is offered at company scope only.",
+    "Runs and queue lists live runs by state, and resolving an unknown side effect asks for confirmation naming the operation.",
+    "Each background job lists its past runs, says when nothing runs it, and keeps a pause across a restart.",
+    "Logs and each report export from their screens with only rows the exporter may read and no count of the rest.",
+    "A settings write needs the settings admin capability, an identity provider change updates its redirect addresses, and the embedding size cannot change once content is embedded.",
+    "Every vault slot is written from the credentials screen, which shows an outranking environment variable and the vault state without any value.",
+    "The release check is a console setting as well as an environment value.",
+    "Every destructive control names its act (retire, end, disconnect, switch off, withdraw, detach, supersede), and a table outside the designed hard deletes grants the application no delete.",
+    "A browser check finds no task id, route path or internal constant in any page's visible text, and every not-yet-available control is disabled with a plain-words reason.",
+    "Every console screen that reports a guarantee as held reads the state of the control that keeps it, and shows the guarantee as not held while that control is unreachable, never run or behind",
+    "Detaching, retiring and reinstating a skill each add a record and never change or remove one, and the current assignments are derived from the absence of a later detachment or replacement",
+    "Assigning a retired skill is refused, and retiring a skill lists every agent still holding it for detachment without detaching any of them",
+    "Until a skill can be imported from a repository, the import screen says why only upload and paste are offered",
+    "A connector's page lists the agents whose manifest names the source and the skills whose tools come from it, narrowed to what the reader may see",
+    "Test connection on a connector's page runs one throttled probe, records it, and shows success or failure without any business record",
+    "The Access tab shows a person which of their own actions need a stronger sign-in, and shows an administrator viewing another person only the assurance each console action needs",
+    "A person's Access tab previews, for a chosen agent, what a run through that agent would reach for that person, computed by the gate itself",
+    "The console offers who-can-reach questions only for a capability over a scope, and no screen or route answers who can see a named record",
+    "No console screen states why a record was withheld, and filter choices never include a department the reader cannot reach",
+    "The console frame shows no count badge on any menu entry; counts appear only on the Dashboard, each governed by its own permission",
+    "At phone width a visible Menu button precedes the page content, opens every group, reaches every entry and returns focus when closed",
+    "The console header shows the signed-in person's sign-in strength and offers signing in again with an authenticator when it is not strong",
+    "Each tab of a detail page has its own address that opens that tab directly and survives a reload",
+    "Template install and the first run of a new install are stepped wizards whose draft survives leaving the page",
+    "Every empty list says what would add a row and which role may add it",
+    "Every action the install cannot yet perform, or the reader cannot perform here, is explained by a sentence the server serves, rendered by one component",
+    "Buttons carry primary, quiet and danger variants, and the Dashboard shows KPI tiles, a Needs-you list and an activity feed in headed cards",
+    "Every class in the console's markup has a style rule and every page reports a failure through the shared failure component, checked in CI",
+    "The shared parts and every restyled page pass the boundary check, the destructive-confirmed, validated-before-write, long-lists and screen-states tests, each changed only in the same commit that states its replacement property",
+    "The initial console bundle excludes the data table, form libraries, command palette and toaster, proved by the bundle-split test",
+    "The console's fonts are served from the install itself, and loading any page makes no request to a font host",
+    "A colour class that names no token fails the boundary check, and Tailwind's default palette is absent from the build",
+    "Old console stylesheets sit in a legacy cascade layer that no new component is overridden by, and a page leaves it only with its module's package",
+    "The boundary check refuses any cookie write in the console, and a selection checkbox shows indeterminate when only some rows are selected",
+    "Every console dependency's licence is on an allowed list checked in CI",
+    "The commit that restyles the first page keeps the phone-width, status-primitive and theme guarantees by testing the compiled CSS or the browser",
+    "The console's content security policy for styles is stated and the toaster and dialogs work under it",
+    "Using any console page makes no request to any host other than the install itself",
+    "The reference screenshots are held in the docs and each console page they cover records what was adapted and what was refused"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2275,7 +2751,10 @@
     "M28.3.1",
     "M28.3.2",
     "M28.3.3",
-    "M28.4.1"
+    "M28.4.1",
+    "M28.5.1",
+    "M28.5.2",
+    "M28.5.3"
    ],
    "leaf_texts": [
     "promptfoo driven through our gate, never against a bare model",
@@ -2289,7 +2768,10 @@
     "Department lead flags a bad answer from the console",
     "One click converts it into a permanent regression test with mocked tools",
     "Two-tier quality: automated evaluation on every request, human annotation on a daily sample",
-    "A failed golden, canary or sampled evaluation case for an agent opens a learning candidate against that agent in the review queue and never changes the agent by itself"
+    "A failed golden, canary or sampled evaluation case for an agent opens a learning candidate against that agent in the review queue and never changes the agent by itself",
+    "Per-person reach is proved on an install: a junior member and a finance lead ask the same company-wide agent the same question on the web and in a chat channel, the junior's answer withholds the fields, records and counts the lead's shows, a tool the junior cannot use is absent from the run, a refused or unreachable source reads the same as one that does not exist, and a grant revoked mid-session stops a cached answer disclosing it, with the checks recorded",
+    "The evaluation gate is proved: a deliberately regressed change is blocked by the golden questions and permission canaries asked through the real gate as each persona, and the scheduled canary run on the install raises an alert when a canary fails, with the checks recorded",
+    "An install runs the product's golden questions against itself on a schedule at synthetic personas' reach, records each score with the release it ran on, and Quality shows a regression since the previous release"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2327,7 +2809,9 @@
     "M29.2.3",
     "M29.2.4",
     "M29.2.5",
-    "M29.2.6"
+    "M29.2.6",
+    "M29.3.1",
+    "M29.3.2"
    ],
    "leaf_texts": [
     "Channel adapter interface",
@@ -2351,7 +2835,9 @@
     "Install, enable, disable, upgrade, rollback",
     "Drain on upgrade so in-flight work finishes on the old version",
     "Isolation tier per point: in-process, sidecar, sandbox",
-    "Core contract test: a plugin cannot see an unredacted result it did not produce, and cannot widen entitlements"
+    "Core contract test: a plugin cannot see an unredacted result it did not produce, and cannot widen entitlements",
+    "Modularity is proved on an install: a connector for a new API and a new channel record are added and switched off from the console with no release and without touching any other connector, channel or agent, and a replaced vendor adapter or tuned setting takes effect without a deploy, with the checks recorded",
+    "Every modularity requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2440,7 +2926,17 @@
     "M30.5.1",
     "M30.5.2",
     "M30.5.3",
-    "M30.5.4"
+    "M30.5.4",
+    "M30.6.1",
+    "M30.6.2",
+    "M30.6.3",
+    "M30.6.4",
+    "M30.6.5",
+    "M30.6.6",
+    "M30.6.7",
+    "M30.6.8",
+    "M30.6.9",
+    "M30.6.10"
    ],
    "leaf_texts": [
     "Coolify deployment of the compose stack",
@@ -2479,10 +2975,26 @@
     "SLO definitions per lane and per stage",
     "Measurement wired to the ledger",
     "Dashboard against target",
-    "RPO and RTO per profile written into the client agreement"
+    "RPO and RTO per profile written into the client agreement",
+    "Backups are proved on an install: a copy lands off-host with its manifest every night for seven consecutive nights, a missed night raises an alert a person receives, the last verified restore reads never verified until a drill restores a copy and checks its schema, row-level security and permissions as well as its row counts, and no copy older than the erasure horizon remains, with the checks recorded",
+    "Operations are proved on an install: the service levels screen shows each lane's measured p50 and p95, permission and redaction latency and success rate beside its target, computed from the ledger and naming the connector timeout in force, and a scheduled control that misses its window and a backup older than its recovery point each raise an alert, and stopping the worker and failing a permission canary each deliver an alert to the named on-call person within its window, with the checks recorded",
+    "The company sets its own time targets in seconds for first output and for a complete answer in each lane before go-live, and they are recorded as the targets the service levels screen measures against",
+    "Enabling an edge proxy or tunnel on an install that declares a residency constraint states that encryption then ends at the provider's edge and requires an administrator to record acceptance first",
+    "An install on a profile with a recovery point under four hours replicates its object store off the host and has a standby database it fails over to in a recorded drill before that profile is offered",
+    "The service level statement is produced only after a restore drill verified a copy and the newest copy is inside the promised recovery point, and otherwise it is refused with the reason",
+    "Recovery and resilience are proved on an install: backups land off the host encrypted with the client's key, a restore drill is timed against the profile's recovery targets, a worker killed mid-task recovers without repeating its action, the chaos suite runs, and the capacity profile and scaling trigger measurements are read back from the running install, with the checks recorded",
+    "Every hosting and delivery requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "After a person asks a question on the install, the Service levels screen counts that request in its lane within the window, and a lane with traffic is never shown as unmeasured",
+    "On the install the backup exposure control runs on its cadence and alerts a named person when the newest verified copy is older than the recovery point, including when the last rehearsal did not verify"
    ],
    "leaf_waves": {},
-   "leaf_acts": {},
+   "leaf_acts": {
+    "M30.6.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    }
+   },
    "leaf_decided": {
     "M30.1.4": {
      "kind": "DECIDED",
@@ -2521,7 +3033,9 @@
      "why": "Merged into M17.3.5, which asks for the same outcome: Kill-after-side-effect test proving exactly-once. Owner approved merging duplicates on 2026-09-17."
     }
    },
-   "act_groups": {}
+   "act_groups": {
+    "M30.6": "Found by tracing every requirement to a task"
+   }
   },
   {
    "id": "M31",
@@ -2565,7 +3079,9 @@
     "M31.3.2.3",
     "M31.3.2.4",
     "M31.3.2.5",
-    "M31.3.2.6"
+    "M31.3.2.6",
+    "M31.4.1",
+    "M31.4.2"
    ],
    "leaf_texts": [
     "App factory with settings injection",
@@ -2605,7 +3121,9 @@
     "Dynamic lease issuance for connector credentials",
     "Lease revocation on run end",
     "Rotation without redeploy",
-    "Audit device enabled and shipped to the ledger"
+    "Audit device enabled and shipped to the ledger",
+    "Readiness reports sign-in as its own part, true only when the configured identity provider issuer answers, and a wrong issuer leaves the site up with sign-in refused and named as not ready",
+    "The application connects with a login that is not a superuser and cannot bypass row-level security, only migrations run as the owner, and a test fails if a request transaction can run as the owner"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2669,7 +3187,10 @@
     "M32.6.1.3",
     "M32.6.1.4",
     "M32.6.2.1",
-    "M32.6.2.2"
+    "M32.6.2.2",
+    "M32.7.1",
+    "M32.7.2",
+    "M32.7.3"
    ],
    "leaf_texts": [
     "Compose service set: web, worker, ClickHouse, Redis, S3-compatible store",
@@ -2714,8 +3235,11 @@
     "Egress allowlist and no database credentials",
     "Custom piece calling our tool API so the gate still runs",
     "Enabled per client by configuration, not a fork",
-    "Documented rule: deterministic automations only, never agent control flow",
-    "Test proving a flow cannot reach data outside the caller's entitlements"
+    "Documented rule: the optional automation canvas runs deterministic automations only, never agent control flow, and workflows with model and skill steps run in the one agent runtime instead",
+    "Test proving a flow cannot reach data outside the caller's entitlements",
+    "The vault and the worker run on the owner's install, a real connector key is held in the vault, and a worker run leases it for one call with the lease revoked at run end and the read audited",
+    "The first install runs the worker and the vault, a connector key written in the console is stored in the vault, and the worker reads that source on schedule with it, shown healthy on the system health screen",
+    "Every service that connects to the application database declares a connection bound that a budget check holds against the database's ceiling, and a worker whose pool size is undeclared refuses to start"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2779,7 +3303,10 @@
     "M33.7.1.2",
     "M33.7.1.3",
     "M33.7.1.4",
-    "M33.7.1.5"
+    "M33.7.1.5",
+    "M33.8.1",
+    "M33.8.2",
+    "M33.8.3"
    ],
    "leaf_texts": [
     "All agents, skills, knowledge and connectors, filterable by department and user",
@@ -2821,7 +3348,10 @@
     "Time-boxed elevation with a stated reason",
     "Separate immutable audit chain",
     "Client notification on every elevation",
-    "Automatic expiry and revocation"
+    "Automatic expiry and revocation",
+    "An approval, in the console or on a chat card, is rendered at the approver's own reach, carries no value from the requester's data, shows locked any field the approver could not look up, and refuses a press from anyone other than the person it was rendered for",
+    "Installer access and secrets are proved on an install: the installing partner holds no reach, opens a break-glass session with a stated reason that expires on its own, lands on its own audit chain and is notified to the company, the vault opens only with three of five shares with its root token revoked, and an API key is shown once, rotated and revoked without ever being displayed again, with the checks recorded",
+    "Installing, enabling or removing a connector needs a capability of its own that a department admin cannot grant wider than their department, and the refusal names that capability"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2871,7 +3401,8 @@
     "M34.3.3.1",
     "M34.3.3.2",
     "M34.3.3.3",
-    "M34.3.3.4"
+    "M34.3.3.4",
+    "M34.4.1"
    ],
    "leaf_texts": [
     "First connector chosen so a real question is answerable before any document is uploaded",
@@ -2895,7 +3426,8 @@
     "Install checklist including the four hidden production links",
     "Per-client variables reference",
     "Upgrade and rollback procedure",
-    "Restore drill procedure"
+    "Restore drill procedure",
+    "The runbooks for every console screen and every alert, and the incident playbook, are served from the install's own help pages, and a sweep fails when a screen or alert has none"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -2940,7 +3472,13 @@
     "M35.3.1.1",
     "M35.3.1.2",
     "M35.3.2.1",
-    "M35.3.2.2"
+    "M35.3.2.2",
+    "M35.4.1",
+    "M35.4.2",
+    "M35.4.3",
+    "M35.4.4",
+    "M35.4.5",
+    "M35.4.6"
    ],
    "leaf_texts": [
     "English and Simplified Chinese interface strings",
@@ -2959,7 +3497,13 @@
     "Console usable on a phone for approvals at minimum",
     "Approval cards readable without horizontal scroll",
     "Installable shell",
-    "Push for approvals, deferred with a stated trigger"
+    "Push for approvals, deferred with a stated trigger",
+    "Each console module is proved in the browser operable by keyboard alone, with visible focus and every form error associated with its field, with the checks recorded",
+    "Language and assistive use are proved on an install: a Chinese query and a mixed-language document retrieve correctly, local names and identity numbers are recognised for redaction, the interface is used in Simplified Chinese with local dates, numbers and currency, and a streamed answer is announced on completion with a skip control under a screen reader, with the checks recorded",
+    "Choosing a right-to-left locale in the console or at setup is refused with a sentence naming the deferral, proved in the browser",
+    "Every localisation and accessibility requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "The install measures how long each approval waited before a decision, and when the typical wait passes the stated hours the console reports that push notifications for approvals are due",
+    "At phone width every touch target is at least 44px and no element is wider than 320px, across every console page"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -3000,7 +3544,8 @@
     "M36.2.3.2",
     "M36.2.4.1",
     "M36.2.4.2",
-    "M36.2.4.3"
+    "M36.2.4.3",
+    "M36.3.1"
    ],
    "leaf_texts": [
     "Monthly partitions of the metadata ledger, created and detached by the worker in plain SQL",
@@ -3027,7 +3572,8 @@
     "Entitlement equality required before sharing, never similarity",
     "Peak concurrency test rather than daily volume",
     "Documented first bottleneck at ten and one hundred times",
-    "Results recorded against the SLO table"
+    "Results recorded against the SLO table",
+    "A load test at the company's declared peak concurrency runs against the owner's install on its own host, records latency per lane against the service level table and memory headroom under load, and a result outside either is a finding before go-live"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -3129,7 +3675,15 @@
     "M37.6.1.1",
     "M37.6.1.2",
     "M37.6.1.3",
-    "M37.6.1.4"
+    "M37.6.1.4",
+    "M37.7.1",
+    "M37.7.2",
+    "M37.7.3",
+    "M37.7.4",
+    "M37.7.5",
+    "M37.7.6",
+    "M37.7.7",
+    "M37.7.8"
    ],
    "leaf_texts": [
     "Catalogue what the current Company Brain holds: knowledge, prompts, tool definitions, conversation history",
@@ -3213,7 +3767,15 @@
     "Two-factor on the deployment control panel account, because its sign-in page answers from the internet and it holds every container, database and secret on the host",
     "Delete the temporary identity provider administrator created at bootstrap, so an internet-facing admin sign-in is one account to guess rather than two",
     "Decide whether the administrative consoles stay on public subdomains or move behind an SSH tunnel, and write down which and why",
-    "Rotate the identity provider's bootstrap administrator password once the account it created has been deleted"
+    "Rotate the identity provider's bootstrap administrator password once the account it created has been deleted",
+    "The company names its data steward on the people screen and the steward grants each pilot department's staff their starter reads, recorded in the audit trail",
+    "The company switches on a second sign-in factor for every account on the identity provider's admin console and every other administrative console of the install, and records that each one asks for it",
+    "The company's administrator creates the ticket desk and chat workspace credentials with the scopes the integration guide lists and enters them on the connectors screen, never in a file or a message",
+    "The company's workspace administrator installs the product's chat app with the scopes the channel guide lists, adds it to the pilot groups and creates the directory app the staff source signs in with",
+    "A migration cutover cannot be recorded complete while revoking the old system's authorisations, recording the date its access ended or the restore drill is unrecorded, and the refusal names which",
+    "A migration is rehearsed on a throwaway install: skills are imported and re-reviewed, agents are rebuilt from templates at Shadow with no learning carried, and the cutover is refused until every security act is recorded, with the checks recorded",
+    "Commission a penetration test of the owner's install before the first company data is connected, and record each finding with its fix or accepted risk",
+    "Every migration requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves"
    ],
    "leaf_waves": {},
    "leaf_acts": {
@@ -3396,6 +3958,31 @@
      "kind": "ACT",
      "gate": false,
      "why": "conditional on the deletion above and much smaller once it is done: with the account gone the value signs into nothing. Not gated, for the reason the two conditional acceptance leaves are not gated either, and a gate that fires when it should not is a gate somebody switches off"
+    },
+    "M37.7.1": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.7.2": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.7.3": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.7.4": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
+    },
+    "M37.7.7": {
+     "kind": "ACT",
+     "gate": false,
+     "why": ""
     }
    },
    "leaf_decided": {
@@ -3430,7 +4017,8 @@
     "M37.4.1": "Acceptance",
     "M37.4.2": "Contract artifacts",
     "M37.6": "Go-live hardening",
-    "M37.6.1": "Administrative consoles"
+    "M37.6.1": "Administrative consoles",
+    "M37.7": "Found by tracing every requirement to a task"
    }
   },
   {
@@ -3489,7 +4077,10 @@
     "M38.4.2.2",
     "M38.4.2.3",
     "M38.4.2.4",
-    "M38.4.2.5"
+    "M38.4.2.5",
+    "M38.5.1",
+    "M38.5.2",
+    "M38.5.3"
    ],
    "leaf_texts": [
     "Branch per track named for its module, so twelve concurrent tracks do not collide",
@@ -3506,12 +4097,12 @@
     "Migrations applied before the new image takes traffic",
     "Health gate: readiness must pass before the old container stops",
     "Automatic rollback if readiness fails within the window",
-    "Deployment record written to the ledger with the SHA and the task ids in that release",
+    "Deployment record written to the deployment history with the SHA and the task ids in that release, kept apart from the permission audit trail and out of the compliance export",
     "Local compose for development",
     "Staging on the same server, separate compose project and database",
     "Production, deployed on every push once staging has passed the same commit",
     "Seed data in staging, never production data",
-    "Tag a release at the end of each wave",
+    "Record the deployed commit at the end of each wave; release tags are cut only for client installs",
     "Run the full invariant suite against staging",
     "Deploy to production",
     "Smoke test: one real question answered end to end by a real person",
@@ -3543,7 +4134,10 @@
     "Replay the contract tests against the live API and diff against the cassette",
     "Rate-limit ceilings confirmed against the live account tier, not the documentation",
     "First sync run with the projection populated and verified",
-    "Cassettes refreshed from live so future development stays faithful"
+    "Cassettes refreshed from live so future development stays faithful",
+    "After each staging deploy the permission canaries and the row-level security sweep run against the staging database, and a failure stops the commit being promoted",
+    "CI scans the image and every locked dependency for known vulnerabilities on each build and fails on a critical finding without a recorded exception, and a written threat model of the install's exposed surfaces is kept beside the release",
+    "On the owner's install a Maintenance Agent assembled from the console answers a real maintenance question in Lark from uploaded maintenance knowledge and the ticket desk, runs one workflow that stops for one approval, and the run is signed off against acceptance criteria written before it"
    ],
    "leaf_waves": {
     "M38.2.1.4": 1,
@@ -3670,10 +4264,19 @@
     "M39.6.2.3",
     "M39.6.2.4",
     "M39.7.1",
-    "M39.7.2"
+    "M39.7.2",
+    "M39.8.1",
+    "M39.8.2",
+    "M39.8.3",
+    "M39.8.4",
+    "M39.8.5",
+    "M39.8.6",
+    "M39.8.7",
+    "M39.8.8",
+    "M39.8.9"
    ],
    "leaf_texts": [
-    "An agent record composes persona, knowledge scope, connectors, skills, channels, availability, leash, model policy, memory and automations",
+    "An agent record composes persona, knowledge scope, connectors, skills, tools, workflows, channels, availability, leash, model policy, memory and automations",
     "Every attachment stored as a reference with a pinned version, never an inline copy",
     "Attachment add and remove written to the ledger with who, when and why",
     "Divergence flag when an instance edits something its template supplies",
@@ -3746,7 +4349,16 @@
     "Failure after a threshold pauses the automation and notifies the owner",
     "Every automation appears in the scheduled job registry with what it guards",
     "An agent is configured with which kinds of memory it may read and write (the conversation, the task, the project, the person and its own), and a run cannot read a kind of memory its configuration leaves out",
-    "An agent is assembled on the install from console choices alone, picking knowledge, connectors, skills, channels, tools and workflows that were each created separately, and it answers through its assigned channel with no code change or release, proved on the install for a maintenance agent and an SEO agent"
+    "An agent is assembled on the install from console choices alone, picking knowledge, connectors, skills, channels, tools and workflows that were each created separately, and it answers through its assigned channel with no code change or release, proved on the install for a maintenance agent and an SEO agent",
+    "Changing an agent attachment is refused on the server unless the caller holds that attachment's editing role (owner for persona, knowledge, skills, memory and automations; department admin for connectors, channels, ceiling and leash; super admin for model policy), and the refusal names the role required",
+    "An agent's supervision pin is reviewed at thirty days against a confidence measured from its supervised runs, extends while that confidence is below 90 percent, ends only when a person confirms it at or above 90 percent, and never lapses because a date passed",
+    "The leash is proved on an install: the same agent action runs simulated and marked at Shadow, suspends at Assisted and proceeds at Autonomous only where no sensitive effect is declared, the strictest of overlapping rules wins, a department admin lowers a rung at once while raising one needs evidence and a named approver and two for a money boundary, a breaker demotes a rung showing the metric that tripped, and a supervision pin extends below its confidence bar, with the checks recorded",
+    "Artifacts are proved on an install: a report produced for one person holds only what that person may see, a re-download after their reach narrows is re-checked and refused, its retention follows its most sensitive input, and a new version supersedes rather than edits it, with the checks recorded",
+    "An artifact records the canonical client it was produced for, and an agent can retrieve the latest artifact of a given type for that client, re-checked against the asker's reach",
+    "The agent workspace lists the tools attached to an agent with add and remove, checks each against the agent's ceiling when it is attached, and a run's catalogue carries only attached tools",
+    "The maintenance agent runs end to end on the owner's install: a question in the chat channel is answered from uploaded maintenance knowledge and the ticket desk through its vault credential, its maintenance workflow runs on the worker, and one prepared action waits for and receives an approval on a chat card before it executes, with the checks recorded",
+    "Agent configuration is proved on an install: an agent is asked by a junior and a senior person, from an assigned and an unassigned channel, and is led toward an unassigned skill, tool, connector, workflow and memory kind and an action needing approval, and each is refused, narrowed or held for approval as its configuration says, with the checks recorded",
+    "The agent's Conversations section lists only threads the reader may see, filterable to threads the reader took part in, each showing participants, relative time, a preview and the run state including failed"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -3814,7 +4426,15 @@
     "M40.6.1.2",
     "M40.6.1.3",
     "M40.6.1.4",
-    "M40.6.1.5"
+    "M40.6.1.5",
+    "M40.7.1",
+    "M40.7.2",
+    "M40.7.3",
+    "M40.7.4",
+    "M40.7.5",
+    "M40.7.6",
+    "M40.7.7",
+    "M40.7.8"
    ],
    "leaf_texts": [
     "Single sign-on through Keycloak with the same identity the channels use",
@@ -3862,13 +4482,21 @@
     "Department-provided connections shown as inherited and not disconnectable here",
     "Which channels this person is reachable on and which is primary",
     "Per-channel notification preferences",
-    "Approval routing preference for envelope decisions",
+    "An approver's routing preference for envelope decisions chooses only between the console and a Lark card, never WhatsApp or email",
     "Quiet hours honoured by automations and digests",
     "Envelope approvals awaiting this person, with what will happen stated before the fact",
     "Approve, reject and amend, each written to the ledger",
     "Expiry on an unanswered approval with a stated default of doing nothing",
     "Same approval reachable from Lark and from the web without double action",
-    "Mobile layout treated as the primary case for approvals"
+    "Mobile layout treated as the primary case for approvals",
+    "The mail relay configured at setup or on the notifications screen is also given to the identity provider, so a password reset email reaches the person on the install, and with no relay a forgotten-password link is not offered",
+    "A person can try an approved skill from its card, which opens a conversation with that skill pinned, run through the one agent runtime at the person's reach and metered like any other run",
+    "The web composer accepts an attached file and dictated speech, and dictation is transcribed through the registered speech tool at the person's reach before the text is sent",
+    "The member application is proved in the browser for a member who administers nothing: their agents, knowledge, skills, artifacts, memory, data, connected accounts and approvals, each showing only what that person may reach, with the checks recorded",
+    "The member application offers two starting points, start a task and talk to an agent, and a task started without an agent is routed by the gate to an agent the person may call, running at the person's reach",
+    "The member's recent tasks and threads each show their state, running, waiting for approval, done or failed, read from the job and suspension records, and a failed one says which step failed",
+    "A person can create a personal project grouping their threads and uploaded files, and a run inside it reads those files as project context at the person's reach on every turn, never storing them as memory",
+    "Opening an agent shows three starter prompts drawn from that agent's skills and the knowledge the person may reach, and never offers one the person's run could not answer"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -3917,7 +4545,8 @@
     "M41.3.1",
     "M41.3.2",
     "M41.3.3",
-    "M41.3.4"
+    "M41.3.4",
+    "M41.4.1"
    ],
    "leaf_texts": [
     "Sweep refusing any client name, domain, work address, company id or storage path literal in src, migrations, console and compose",
@@ -3940,7 +4569,8 @@
     "The repository is the template and a client install is a release tag plus one environment file, so a fix reaches every client rather than one copy",
     "No duplicated repository anywhere, because a copy diverges the first time a bug is fixed in one and not the other and nothing says so",
     "Repository structure a reader can navigate: what is application, what is configured per client, what is never edited, where migrations, scripts and documentation live",
-    "Verz is one deployment: its values live in a per-install file and never in this repository"
+    "Verz is one deployment: its values live in a per-install file and never in this repository",
+    "On a scratch install a handover exports every store and the audit ledger in open formats with a manifest the company can check, then removes the identity realm, bucket, vault secrets, schedules, route, containers and configuration, revokes connector authorisations and the chat app, and issues a certificate naming the date the last backup expires"
    ],
    "leaf_waves": {},
    "leaf_acts": {},
@@ -4005,7 +4635,15 @@
     "M42.6.5",
     "M42.6.6",
     "M42.6.7",
-    "M42.6.8"
+    "M42.6.8",
+    "M42.7.1",
+    "M42.7.2",
+    "M42.7.3",
+    "M42.7.4",
+    "M42.7.5",
+    "M42.7.6",
+    "M42.7.7",
+    "M42.7.8"
    ],
    "leaf_texts": [
     "Per-client variables in a separate private repository, one file per install, documented field by field",
@@ -4061,7 +4699,15 @@
     "Console screens for connectors: connect one, hold its credential in the vault, and see what it is trusted to read",
     "A helper for a person who does not use a terminal: it asks for the server address and runs the one install command there",
     "The first real release is published and fetched back on a clean machine, so the image and the archive are known to exist rather than known to be built",
-    "The rule for what belongs to the product and what belongs to one company is written into the repository's own instructions, with worked examples, and a commit that came from a staging problem has to say why its fix is generic"
+    "The rule for what belongs to the product and what belongs to one company is written into the repository's own instructions, with worked examples, and a commit that came from a staging problem has to say why its fix is generic",
+    "The install health check reports whether the host exposes kernel virtualisation, and the browser isolation stated to the administrator is taken from that result rather than assumed",
+    "The release lifecycle is proved on an install: a CI-built, signed image that passed lint, types, tests, canaries and the licence check is pulled by digest with no inbound access, migrations run before traffic, in-flight work including a running workflow drains without loss, an unnamed image is refused, rollback to the previous release completes, and the copied-deployment check passes, with the checks recorded",
+    "The release image and archive carry the licence notice of every bundled third-party component and font, generated from the lockfiles, and a release missing one fails",
+    "The release archive carries the backup and restore scripts and the installer schedules the nightly backup, so an install made from a release backs itself up without a file copied from the repository",
+    "The owner's install runs the standard profile, and the System health screen shows the worker, the vault, the object store and the connection pooler each ready, with the provider key held in the vault and not in the environment file",
+    "The owner's install is pinned to a published release tag rather than the latest image, and the Version screen shows that tag and whether a newer release exists",
+    "Every other requirement in the requirements register is demonstrated on an install by a person, and each check is recorded against the requirement it proves",
+    "Probed from an address outside the allowlist, the install answers only on its public ports with valid TLS, every administrative console refuses sign-in, and a certificate within fourteen days of expiry alerts a named person"
    ],
    "leaf_waves": {
     "M42.4.1": 6,

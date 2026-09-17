@@ -21,6 +21,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from brain.install import installed_name
+from brain.requirements import summary_of_docs
 
 DOCS = Path(__file__).resolve().parents[2] / "docs"
 
@@ -75,10 +76,22 @@ def _read_status() -> dict[str, Any]:
     return data
 
 
+def _requirements(s: dict[str, Any]) -> dict[str, int] | None:
+    """The requirements register's total, covered and delivered, or None when none is published.
+
+    Computed from files baked into this image, the register, `wbs.json` and the status file's
+    `done_task_ids`, so it describes the running code for the same reason the status does, and
+    it adds nothing to `brain.status` and changes nothing about what counts as closed.
+    """
+    return summary_of_docs(DOCS, s.get("done_task_ids", []))
+
+
 @router.get("/api/status.json", response_class=JSONResponse)
 async def status_json() -> JSONResponse:
     """What the tracker page reads. Also the machine-readable progress feed."""
-    return JSONResponse(_read_status(), headers={"cache-control": "no-store"})
+    body = _read_status()
+    body["requirements"] = _requirements(body)
+    return JSONResponse(body, headers={"cache-control": "no-store"})
 
 
 def _doc(name: str) -> FileResponse | HTMLResponse:
@@ -153,6 +166,16 @@ async def build_status(request: Request) -> HTMLResponse:
     upcoming = "".join(f"<li><code>{leaf}</code></li>" for leaf in s.get("next_up", [])[:5])
     upcoming = upcoming or "<li>this wave is finished</li>"
 
+    # A missing register reads as missing, never as "0 requirements", which would say nothing
+    # was asked for.
+    req = _requirements(s)
+    requirements_line = (
+        f"{req['total']} requirements, {req['covered']} covered by a task and a proof, "
+        f"{req['delivered']} delivered"
+        if req is not None
+        else "no requirements register published"
+    )
+
     shipped = _shipped_at()
     return HTMLResponse(f"""<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -188,6 +211,7 @@ code{{font-family:{MONO};font-size:11.5px;color:var(--brand)}}
 <span class="c">{s.get("done", 0)} of {s.get("total", 0)} buildable tasks · {today_line}<br>
 {s.get("acts", 0)} client tasks on the week of a migration, not counted<br>
 {s.get("decided", 0)} decided, not needed as written<br>
+{requirements_line}<br>
 commit {s.get("commit", "?")}{shipped}</span></div>
 <div class="track"><span style="width:{pct}%"></span></div>
 <table><thead><tr><th>Wave</th><th>Name</th><th style="text-align:right">Done</th><th></th><th style="text-align:right">%</th></tr></thead>

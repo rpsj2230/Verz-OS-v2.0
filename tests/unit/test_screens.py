@@ -750,6 +750,10 @@ def test_there_is_one_screen_for_every_screen_the_work_breakdown_names() -> None
         "M27.12": 8,  # wave 3: make the controls take effect
         "M27.13": 7,  # wave 4: breadth
         "M27.14": 8,  # every module group proved end to end
+        # Appended 2026-09-18 when every requirement the owner and the design ever stated was traced
+        # to a task (docs/requirements/register.json): console work that had no task. Work on the
+        # console, not registry entries, like the groups above.
+        "M27.15": 83,  # found by tracing every requirement to a task
     }
 
     every_leaf = {leaf for one in every_module for leaf in one["leaf_ids"]}
