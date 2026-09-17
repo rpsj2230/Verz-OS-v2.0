@@ -539,9 +539,13 @@ def test_the_redirect_uri_is_derived_from_the_web_address_and_never_asked_for() 
         one.setting == "INSTALL_OIDC_REDIRECT_URIS" for step in WIZARD for one in step.questions
     )
     realm = json.loads((REPO / "ops" / "keycloak" / "realm-export.json").read_text("utf-8"))
+    # The console's client only. The realm also declares Keycloak's own account clients, whose
+    # redirect URI is a path on the identity provider and nothing this wizard derives.
+    console = BY_NAME["INSTALL_OIDC_CLIENT_ID"].default
     registered = [
         uri
         for client in realm["clients"]
+        if client["clientId"] == console
         for uri in client.get("redirectUris", ())
         if not uri.endswith(".invalid")
     ]
