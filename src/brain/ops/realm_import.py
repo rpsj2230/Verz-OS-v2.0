@@ -132,6 +132,11 @@ def strip_comments(node: Any, *, inside_free_form: bool = False) -> Any:
 #: still named somebody else's.
 ORIGIN_SETTING: Final = "INSTALL_OIDC_REDIRECT_URIS"
 
+#: The setting the realm's name comes from. Declared with the default the reviewed file carries,
+#: and read here so the realm Keycloak creates is the one the issuer names; until 2026-09-17
+#: nothing read it, and a client who set it got a realm called `brain` regardless.
+REALM_SETTING: Final = "INSTALL_OIDC_REALM"
+
 #: The address in the reviewed realm, which is not an address.
 #:
 #: A reserved documentation domain under RFC 2606, so it can never be registered and never
@@ -268,6 +273,7 @@ def importable_realm(source: Path, env: Mapping[str, str] | None = None) -> str:
     realm = substitute(
         strip_comments(json.loads(source.read_text(encoding="utf-8"))), origin=origin
     )
+    realm["realm"] = value_of(REALM_SETTING, env)
     remaining = unconfigured_addresses(realm)
     if remaining:
         msg = (

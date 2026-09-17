@@ -1131,6 +1131,58 @@ export const PAGES: Readonly<Record<string, PageCase>> = {
       },
     },
   },
+  // Installation settings and the leaving card. The branding value is drawn in a field, so the
+  // unbroken value is the non-editable one and the handover step's sentence.
+  "/settings": {
+    address: "/settings",
+    signedIn: true,
+    drawsValues: true,
+    answers: {
+      "/api/v1/install/settings": {
+        groups: [
+          {
+            group: "storage",
+            title: "Storage",
+            editable: false,
+            changed_elsewhere: UNBROKEN,
+            settings: [
+              {
+                name: "INSTALL_OBJECT_STORE_URL",
+                meaning: UNBROKEN,
+                value: UNBROKEN,
+                source: "environment",
+                default: "",
+                required: false,
+                editable: false,
+                applies: UNBROKEN,
+                read_by: ["brain.ops.object_store"],
+              },
+            ],
+          },
+        ],
+        findings: [],
+        profile: UNBROKEN,
+        starter: {
+          roles: ["member"],
+          packs: ["starter"],
+          scopes: ["company"],
+          furnished: true,
+          agent_templates: [],
+          agents_installed: false,
+          agents_told: UNBROKEN,
+        },
+        credentials: UNBROKEN,
+        editable_because: UNBROKEN,
+        leaving: {
+          told: UNBROKEN,
+          steps: [{ what: "audit", kind: "store", holds: UNBROKEN, by: "command", how: UNBROKEN }],
+          backup_retention_days: 35,
+          procedure: "docs/install/handover.md",
+          commands: ["python -m brain.ops.handover_run certify <dir>"],
+        },
+      },
+    },
+  },
   // Scheduled jobs. The control name, the sentence, the report and the person who paused are
   // drawn inside the scrolling table; the switched-off sentence is outside it.
   "/jobs": {

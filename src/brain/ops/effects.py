@@ -441,6 +441,16 @@ PORTS: Final[Mapping[str, Repeat]] = MappingProxyType(
         "brain.ops.retention:StoreSweeper.expire": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.secrets:Vault.issue": Repeat.EXPIRES_ON_ITS_OWN,
         "brain.ops.secrets:Vault.revoke": Repeat.SAME_RESULT_WHEN_REPEATED,
+        # A handover: reads of this install's own database and objects, and removals that leave
+        # the far end as the first call left it. A schema already dropped is checked, not dropped.
+        "brain.ops.handover_run:Database.tables": Repeat.READS,
+        "brain.ops.handover_run:Database.copy_csv": Repeat.READS,
+        "brain.ops.handover_run:Database.live_connectors": Repeat.READS,
+        "brain.ops.handover_run:Database.schema_exists": Repeat.READS,
+        "brain.ops.handover_run:Database.drop_schema": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.handover_run:Objects.get_object": Repeat.READS,
+        "brain.ops.handover_run:Objects.delete_object": Repeat.SAME_RESULT_WHEN_REPEATED,
+        "brain.ops.handover_run:Objects.list_objects": Repeat.READS,
         "brain.ops.storage:StorageBackend.put_object": Repeat.SAME_RESULT_WHEN_REPEATED,
         "brain.ops.storage:StorageBackend.get_object": Repeat.READS,
         "brain.ops.storage:StorageBackend.delete_object": Repeat.SAME_RESULT_WHEN_REPEATED,

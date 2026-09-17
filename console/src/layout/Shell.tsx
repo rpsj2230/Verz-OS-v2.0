@@ -50,7 +50,9 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useResource } from "../api/useResource";
 import { ThemeControl } from "../theme/ThemeControl";
 import { signOut } from "../auth/session";
+import { brandTitle, config } from "../config";
 import { INSTALL_SECTIONS } from "../pages/installQuery";
+import { SETTINGS_PATH } from "../pages/settingsQuery";
 import { Chip } from "../ui/Chip";
 import { NAVIGATION_API_PATH, menuFor, readNavigation, type NavGroup } from "./navigationQuery";
 import { SignInStrength } from "./SignInStrength";
@@ -175,7 +177,11 @@ const GROUPS: readonly NavGroup[] = [
   USE,
   {
     heading: "Install",
-    sections: [...INSTALL_SECTIONS, { to: "/storage", label: "Storage" }],
+    sections: [
+      ...INSTALL_SECTIONS,
+      { to: "/storage", label: "Storage" },
+      { to: SETTINGS_PATH, label: "Settings" },
+    ],
   },
 ];
 
@@ -198,7 +204,10 @@ export function Shell() {
 
       <header className="shell__header">
         <span className="shell__brand">
-          Company Brain
+          {config.brand.logoUrl ? (
+            <img className="shell__logo" src={config.brand.logoUrl} alt="" />
+          ) : null}
+          {brandTitle(config.brand)}
           {departments.length > 0 ? (
             <>
               {" "}

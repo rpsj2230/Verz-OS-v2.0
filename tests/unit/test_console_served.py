@@ -39,6 +39,7 @@ from brain.console_static import (
     file_in_bundle,
     runtime_config,
     served_accent,
+    served_brand,
 )
 from brain.docs_routes import COMING
 from brain.install import value_of
@@ -385,6 +386,7 @@ def test_the_served_document_carries_this_installs_values_and_no_others() -> Non
         "issuer": A_DEPLOYMENTS_ISSUER,
         "clientId": A_DEPLOYMENTS_CLIENT,
         "accent": served_accent(env),
+        "brand": served_brand(env),
     }
 
 
@@ -698,3 +700,32 @@ def test_an_api_address_nothing_serves_is_a_refusal_in_words_and_not_the_console
     assert missing.json()["trace_id"] == missing.headers["x-trace-id"]
     assert page.status_code == 200
     assert ENTRY_MARK in page.text
+
+
+def test_the_served_brand_is_the_names_and_logo_this_install_set() -> None:
+    """**Branding is configuration only if something draws it.** The console's header read
+    "Company Brain" as a literal until 2026-09-17, so a company name saved by the wizard reached
+    the API schema's title and no screen a person looks at.
+
+    Asserted against values a fictitious company set, and against the declared defaults when it
+    set none, so a function returning the defaults for every install fails.
+
+    Delete this and the header can go back to a literal while the setting still saves."""
+    from brain.install import BY_NAME
+
+    env = {
+        "INSTALL_COMPANY_NAME": "Northwind Trading",
+        "INSTALL_PRODUCT_NAME": "Knowledge Desk",
+        "INSTALL_LOGO_URL": "https://assets.northwind.example/logo.svg",
+    }
+
+    assert _parsed_config(runtime_config(env))["brand"] == {
+        "companyName": "Northwind Trading",
+        "productName": "Knowledge Desk",
+        "logoUrl": "https://assets.northwind.example/logo.svg",
+    }
+    assert served_brand({}) == {
+        "companyName": BY_NAME["INSTALL_COMPANY_NAME"].default,
+        "productName": BY_NAME["INSTALL_PRODUCT_NAME"].default,
+        "logoUrl": BY_NAME["INSTALL_LOGO_URL"].default,
+    }

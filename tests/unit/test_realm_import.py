@@ -264,6 +264,24 @@ def test_the_importable_realm_registers_this_installations_own_callback() -> Non
     assert unconfigured_addresses(console) == []
 
 
+def test_the_realm_is_named_by_the_installation_setting() -> None:
+    """The installer creates the realm the file names, and tokens are checked against an issuer
+    ending in that name, so the file has to carry `INSTALL_OIDC_REALM`. Unset, it is the declared
+    default, which is the name the reviewed file already carries.
+
+    Delete this and a client who names their realm gets one called `brain` anyway, and an issuer
+    naming theirs refuses every token."""
+    from brain.install import BY_NAME
+    from brain.ops.realm_import import REALM_SETTING
+
+    named = json.loads(importable_realm(REALM, {**CONFIGURED, REALM_SETTING: "acme"}))
+    unset = json.loads(importable_realm(REALM, CONFIGURED))
+    reviewed = json.loads(REALM.read_text(encoding="utf-8"))
+
+    assert named["realm"] == "acme"
+    assert unset["realm"] == BY_NAME[REALM_SETTING].default == reviewed["realm"]
+
+
 def test_the_four_addresses_are_one_value_and_cannot_drift_apart() -> None:
     """**The realm's own comment says these change together or sign-in breaks in a way that
     looks like Keycloak being wrong**, and a comment saying so is a comment somebody has to

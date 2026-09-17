@@ -182,7 +182,9 @@ function NotificationsPageBody({
   const [host, setHost] = useState(email.host ?? "");
   const [port, setPort] = useState(email.port === null ? "587" : String(email.port));
   const [security, setSecurity] = useState<string>(email.security ?? "starttls");
-  const [sender, setSender] = useState(email.sender ?? "");
+  // A relay nobody has saved starts from the install's branded sender, so the address configured
+  // as branding is the one mail goes out from unless somebody types another.
+  const [sender, setSender] = useState(email.sender ?? email.branded_sender);
   const [username, setUsername] = useState(email.username ?? "");
   const [password, setPassword] = useState("");
   const [to, setTo] = useState("");

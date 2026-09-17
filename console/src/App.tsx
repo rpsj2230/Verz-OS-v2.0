@@ -90,6 +90,7 @@ import { FirstRun } from "./pages/FirstRun";
 import { StaffListSignedIn } from "./pages/StaffListSignedIn";
 import { Overview } from "./pages/Overview";
 import { DataTransfer } from "./pages/DataTransfer";
+import { Settings } from "./pages/Settings";
 import { Storage } from "./pages/Storage";
 import { Webhooks } from "./pages/Webhooks";
 import { Notifications } from "./pages/Notifications";
@@ -297,6 +298,9 @@ export const routes: RouteObject[] = [
       // Storage, under Install: the buckets, each one's retention and why, and where the store
       // is. One path, no parameter, no control. Eager for the same reason.
       { path: "storage", element: <Storage /> },
+      // Settings, under Install: every installation value with where it came from, and branding
+      // saved. One path and no parameter. Eager for the same reason.
+      { path: "settings", element: <Settings /> },
       // Import and export, under Govern after Audit: what can move and the audit trail export,
       // taken as a confirmed write. One path and no parameter. Eager for the same reason.
       { path: "import-export", element: <DataTransfer /> },

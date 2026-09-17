@@ -39,6 +39,10 @@ import { CONTROL_DIRECTORIES, everyConfirmation, everyWrite } from "./support/wr
  * why each one is not destructive.
  */
 const NOT_DESTRUCTIVE: Readonly<Record<string, string>> = {
+  "src/pages/Settings.tsx savePath(row.name)":
+    "Saving a branding value replaces a name, a logo address or a colour that is shown on the same " +
+    "row before the press and can be typed back the same way. Nothing is ended or removed, and the " +
+    "change is attributed to the person in the ledger by 0059's trigger.",
   "src/pages/Approvals.tsx approvalDecisionApiPath(suspensionId)":
     "Deciding an approval is the answer to a question the card has already asked. The artefact and " +
     "its facts are drawn above the two buttons, which tests/approvals-page.test.tsx holds, so the " +

@@ -295,6 +295,7 @@ ADMINISTRATION: Final[tuple[str, ...]] = (
     "admin:export",
     "admin:field_classification",
     "admin:halt",
+    "admin:install_setting",
     "admin:learning",
     "admin:legal_hold",
     "admin:notification",

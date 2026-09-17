@@ -240,6 +240,7 @@ everything, written by first run and recorded in the ledger. They come in three 
 | `admin:feature` | running the system |
 | `admin:field_classification` | running the system |
 | `admin:halt` | running the system |
+| `admin:install_setting` | running the system |
 | `admin:learning` | running the system |
 | `admin:legal_hold` | running the system |
 | `admin:notification` | running the system |

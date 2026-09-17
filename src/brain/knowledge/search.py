@@ -290,6 +290,27 @@ INDEXABLE_DIMENSION_CEILING: Final = 2000
 #: else. See `THE_WIDTH_BELONGS_TO_THE_INSTALL_RATHER_THAN_TO_THIS_FILE`.
 WIDTH_SETTING: Final = "INSTALL_EMBEDDING_DIMENSIONS"
 
+#: The setting naming where embeddings live, and the stores this module can search. Only the
+#: pgvector column in the install's own database is built, so any other value names a store
+#: nothing writes to; `vector_store_refusal` says so rather than letting the value look chosen.
+VECTOR_STORE_SETTING: Final = "INSTALL_VECTOR_STORE"
+BUILT_VECTOR_STORES: Final[frozenset[str]] = frozenset({"postgres"})
+
+
+def vector_store_refusal(
+    env: Mapping[str, str] | None = None, saved: Mapping[str, str] | None = None
+) -> str:
+    """Why this install's vector store names a store this release cannot search, or empty."""
+    chosen = value_of(VECTOR_STORE_SETTING, env, saved).strip()
+    if chosen in BUILT_VECTOR_STORES:
+        return ""
+    return (
+        f"{VECTOR_STORE_SETTING} is {chosen!r}, and this release builds only "
+        f"{', '.join(sorted(BUILT_VECTOR_STORES))}. Embeddings are kept in PostgreSQL whatever "
+        "this says."
+    )
+
+
 #: Why the width is a declared setting and not the literal that stood here until 2026-09-10.
 #:
 #: This file said 1536 for a hosted model, item 31 then chose a local one that produces 1024,

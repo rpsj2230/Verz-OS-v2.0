@@ -52,6 +52,7 @@ from brain.console.govern import NOWHERE, _in_reach
 from brain.core.entitlement import Capability, EntitlementSet
 from brain.core.errors import Absent, Failed
 from brain.db import libpq_url
+from brain.install import value_of
 from brain.install_routes import settings_of
 from brain.ops.credential_write_store import credential_writes_for
 from brain.ops.credentials import TOLD as VAULT_TOLD
@@ -209,6 +210,9 @@ class RelayView(BaseModel):
     changed_by: str | None
     changed_at: datetime | None
     password: RelayPasswordView
+    #: The install's own sender, `INSTALL_SENDER_ADDRESS`, which the form offers when no relay is
+    #: saved. Branding says who mail comes from; the relay's saved sender is what it is sent as.
+    branded_sender: str
 
 
 class NotificationsPage(BaseModel):
@@ -304,6 +308,10 @@ class NotificationProblemsView(BaseModel):
 
 
 # ------------------------------------------------------------------------ the decisions
+#: The branding setting a relay's sender starts from. See `RelayView.branded_sender`.
+BRANDED_SENDER_SETTING: Final = "INSTALL_SENDER_ADDRESS"
+
+
 def may_manage_notifications(reach: EntitlementSet, now: datetime) -> bool:
     """Whether this reach may read the screen and change anything on it: the authority, over
     everything."""
@@ -345,6 +353,7 @@ def email_view(rows: dict[str, SettingState], password: RelayPasswordView) -> Re
         changed_by=None if last is None else last.updated_by,
         changed_at=None if last is None else last.updated_at,
         password=password,
+        branded_sender=value_of(BRANDED_SENDER_SETTING),
     )
 
 
