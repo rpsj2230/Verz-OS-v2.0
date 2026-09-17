@@ -47,25 +47,47 @@ would be wrong for whichever it was not written for. See
 test that is true when the step has nothing left to do. That is
 `A_MIGRATION_THAT_INSERTS_ROWS_TAKES_THEM_BACK_ON_THE_NEXT_UPGRADE`'s "once, at install"
 expressed as a first-class property rather than as a convention, and it is the difference
-between a starter set a client can delete from and one that grows back. Nothing applies the
-starter set today, which this module should say plainly rather than imply: what exists here is
-the declaration and the refusal, and `tests/unit/test_starter.py` holds the two properties that
-must stay true whoever writes the applying half.
+between a starter set a client can delete from and one that grows back.
+
+**Until 2026-09-17 nothing applied the starter set, and this paragraph said so.** A fresh install
+held no scope, no pack and no registered capability, so the grant route, which resolves a scope
+by name, refused every grant anybody tried to write, a first administrator's included.
+`brain.ops.starter_store` is the applying half now, and it is called at every start of the
+application, by the installer's `furnish the install` step, and by `python -m
+brain.ops.starter_store`. This module stays the declaration and never opens a connection.
+
+**Three things are declared here for it to write, and each is the product's rather than a
+company's.** `SCOPES` is one scope that restricts nothing, named for what it is, because a grant
+needs a named scope and a department's name is a company's own; see
+`A_GRANT_NEEDS_A_NAMED_SCOPE_AND_A_FRESH_INSTALL_HAD_NONE`. `PACKS` is the joiner's pack.
+`vocabulary` is every capability the product declares, each with the sentence its declaring
+module already wrote, read from those modules rather than listed a second time; see
+`THE_VOCABULARY_IS_READ_FROM_WHERE_EACH_CAPABILITY_IS_DECLARED`.
 
 Task ids: M41.2.7, M41.2.8
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Final
 
 from brain.agents.catalogue import CATALOGUE
+from brain.audit.ledger import SUBJECT_KINDS
+from brain.audit.view import AUDIT_NOUN
+from brain.console.reads import Plane, member_plane_capability, plane_capability
+from brain.console.screens import SCREENS
+from brain.core.department import ScopeRecord
+from brain.core.entitlement import Capability
+from brain.core.scope import Scope
 from brain.demo import DEMO_PREFIX
+from brain.identity.first_administrator import GRANTED_AT_APPOINTMENT
 from brain.identity.lifecycle import STARTER_PACK
 from brain.identity.packs import CapabilityPack
 from brain.identity.roles import Role
+from brain.member.shell import MEMBER_SCREENS
 
 #: Why the roles are a compiled constant rather than rows an install writes.
 THE_SIX_ROLES_ARE_THE_PRODUCT_AND_NOT_A_CLIENTS_CHOICE: Final = (
@@ -115,6 +137,28 @@ A_MIGRATION_THAT_INSERTS_ROWS_TAKES_THEM_BACK_ON_THE_NEXT_UPGRADE: Final = (
     "would also mean a client who deletes an agent they do not want finds it back after the "
     "next upgrade, with no honest way to tell that apart from a repair. It is applied once, "
     "at install, and after that it is theirs."
+)
+
+#: Why a furnished install holds exactly one scope, and why it is not a department.
+A_GRANT_NEEDS_A_NAMED_SCOPE_AND_A_FRESH_INSTALL_HAD_NONE: Final = (
+    "brain.govern_routes.grant resolves the scope a grant is written over by its slug against "
+    "gate.scope, and answers a slug nothing matches with the same refusal as a slug out of "
+    "reach. On an install holding no scope row that refusal was every answer, so nobody could "
+    "grant anything over anything, a first administrator holding approve:grant everywhere "
+    "included. One scope that restricts nothing is the product's: it is the unrestricted "
+    "predicate given the name the Scopes screen shows. A department is not furnished, because "
+    "its name is a company's own and is written when somebody creates it."
+)
+
+#: Why the registry's vocabulary is read out of other modules rather than listed here.
+THE_VOCABULARY_IS_READ_FROM_WHERE_EACH_CAPABILITY_IS_DECLARED: Final = (
+    "Every capability this product checks is already declared somewhere a test holds: the "
+    "console and member screens with a sentence each, the planes, the audit kinds, the grants "
+    "first run makes, and the packs. A list of them here would be a second copy, and "
+    "brain.identity.first_administrator.ADMINISTRATION is already held equal to a scan of the "
+    "source, so it would be the third. Each capability is described by the sentence its "
+    "declaring module wrote, and one no module describes is described from its grammar, which "
+    "says what the gate checks and nothing it does not."
 )
 
 
@@ -191,6 +235,65 @@ DEFAULTS: Final[tuple[Default, ...]] = (
 )
 
 
+#: The one scope a new install is furnished with. See
+#: `A_GRANT_NEEDS_A_NAMED_SCOPE_AND_A_FRESH_INSTALL_HAD_NONE`.
+COMPANY_SCOPE: Final = ScopeRecord(
+    slug="company",
+    scope=Scope.unrestricted(),
+    is_department=False,
+    label="The whole company",
+)
+
+#: The scopes a new install starts with, which is that one.
+SCOPES: Final[tuple[ScopeRecord, ...]] = (COMPANY_SCOPE,)
+
+
+@dataclass(frozen=True)
+class Declared:
+    """One capability the product declares, and the words its registry row carries.
+
+    `description` is required for the reason `gate.capability_registry` requires one: an
+    undescribed permission is one nobody can review, and the review is what the registry is for.
+    """
+
+    capability: Capability
+    description: str
+
+    def __post_init__(self) -> None:
+        if not self.description.strip():
+            msg = f"{self.capability.value} is declared with no description"
+            raise ValueError(msg)
+
+
+#: What a reader sees of a thing at each plane, in words. Keyed by the enum and held equal to it
+#: by a test, so a fourth plane cannot arrive with nothing to say what it shows.
+PLANE_MEANING: Final[Mapping[Plane, str]] = MappingProxyType(
+    {
+        Plane.EXISTENCE: (
+            "that a thing is there: a name in a list, and nothing of how it is set up or what is "
+            "inside it."
+        ),
+        Plane.CONFIGURATION: (
+            "how a thing is set up: a leash, a schedule, a ceiling or a binding, and not what is "
+            "inside it."
+        ),
+        Plane.CONTENT: "what is inside a thing: the records, documents and answers themselves.",
+    }
+)
+
+#: How each verb reads at the start of a description built from a capability's grammar. Held
+#: equal to `brain.core.entitlement.VERBS` by a test.
+VERB_WORDS: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "read": "Reads",
+        "write": "Changes",
+        "invoke": "Runs",
+        "approve": "Approves",
+        "admin": "Administers",
+    }
+)
+
+
 def roles() -> tuple[Role, ...]:
     """The six, in a fixed order. See `THE_SIX_ROLES_ARE_THE_PRODUCT_AND_NOT_A_CLIENTS_CHOICE`.
 
@@ -212,15 +315,97 @@ def agents() -> tuple[str, ...]:
     return tuple(sorted(manifest.identity.template_id for manifest in CATALOGUE))
 
 
+def _words(name: str) -> str:
+    return name.replace("_", " ")
+
+
+def described_by_grammar(capability: Capability) -> str:
+    """What a capability no module describes says, read off `verb:noun[.field]` and no further.
+
+    The floor rather than the aim: it says what the gate checks, which is true of every
+    capability, and nothing about what the holder may do with it, which only the module that
+    checks it could say. See `THE_VOCABULARY_IS_READ_FROM_WHERE_EACH_CAPABILITY_IS_DECLARED`.
+    """
+    noun, _, field = capability.value.partition(":")[2].partition(".")
+    verb = VERB_WORDS[capability.verb]
+    if field:
+        return f"{verb} the {_words(field)} field of {_words(noun)}."
+    return f"{verb} {_words(noun)}."
+
+
+def declared_sentences() -> tuple[tuple[Capability, str], ...]:
+    """Every capability a module declares together with a sentence of its own, in that order.
+
+    The console's screens and the member surface's, each by its title and purpose; the planes of
+    both surfaces, by what each plane shows; and one audit read per subject kind the ledger
+    records, by what it reads.
+    """
+    said: list[tuple[Capability, str]] = [
+        (one.read.requires, f"The {one.title} screen: {one.purpose}") for one in SCREENS
+    ]
+    said.extend(
+        (member.read.requires, f"The {member.title} screen: {member.purpose}")
+        for member in MEMBER_SCREENS
+    )
+    for plane in Plane:
+        said.append((plane_capability(plane), f"Shows in the console {PLANE_MEANING[plane]}"))
+        said.append(
+            (
+                member_plane_capability(plane),
+                f"Shows in a person's own workspace {PLANE_MEANING[plane]}",
+            )
+        )
+    said.extend(
+        (
+            Capability(value=f"read:{AUDIT_NOUN}.{kind}"),
+            f"Reads the audit entries about {_words(kind)} subjects.",
+        )
+        for kind in sorted(SUBJECT_KINDS)
+    )
+    return tuple(said)
+
+
+def vocabulary(
+    described: Iterable[tuple[Capability, str]] | None = None,
+    granted: Iterable[str] = GRANTED_AT_APPOINTMENT,
+    packs: Sequence[CapabilityPack] = PACKS,
+) -> tuple[Declared, ...]:
+    """Every capability the product declares, once each, in capability order, with its words.
+
+    `described` defaults to `declared_sentences`. A capability first run grants or a furnished
+    pack holds that nothing there describes is described by `described_by_grammar`; one that is
+    described keeps its own sentence alone, so a screen's read never carries its grammar beside
+    its purpose. A capability declared twice with two sentences carries both, in the order given.
+
+    Takes its inputs for the reason `starter_gaps` does: a vocabulary that could only be built
+    from the real tree could not be handed a capability declared twice or declared by nothing.
+    """
+    said: dict[str, list[str]] = {}
+    for capability, sentence in declared_sentences() if described is None else described:
+        sentences = said.setdefault(capability.value, [])
+        if sentence not in sentences:
+            sentences.append(sentence)
+    for value in (*granted, *(one.value for pack in packs for one in pack.capabilities)):
+        if value not in said:
+            said[value] = [described_by_grammar(Capability(value=value))]
+    return tuple(
+        Declared(capability=Capability(value=value), description=" ".join(said[value]))
+        for value in sorted(said)
+    )
+
+
 def starter_gaps(
     templates: Sequence[str] | None = None,
     packs: Sequence[CapabilityPack] = PACKS,
     defaults: Sequence[Default] = DEFAULTS,
+    scopes: Sequence[ScopeRecord] = SCOPES,
 ) -> tuple[str, ...]:
     """Everything about the starter set that would make it the wrong delivery.
 
-    Four checks. The first is M41.2.8 and the rest are the ways a furnished system stops
-    being a fact about the product.
+    Five checks. The first is M41.2.8 and the rest are the ways a furnished system stops
+    being a fact about the product. The fifth arrived with the furnished scope: a scope the
+    product writes may restrict nothing, because any clause it carried would name a department,
+    a person or a record of some company, and no install's parts are the product's to name.
 
     **Takes its inputs rather than reading the module, and a mutation is why.** The first
     version read the constants directly, so on today's data it had nothing to report, and
@@ -247,6 +432,14 @@ def starter_gaps(
             findings.append(f"pack {pack.slug!r} carries the demo's prefix")
         if not pack.capabilities:
             findings.append(f"pack {pack.slug!r} grants nothing, so assigning it does nothing")
+    for record in scopes:
+        if record.slug.startswith(DEMO_PREFIX):
+            findings.append(f"scope {record.slug!r} carries the demo's prefix")
+        if not record.scope.is_unrestricted():
+            findings.append(
+                f"scope {record.slug!r} restricts something, so the product would be naming a "
+                "part of a company it has never met"
+            )
 
     if not roles():
         findings.append(

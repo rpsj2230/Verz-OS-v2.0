@@ -255,6 +255,12 @@ TRACE_LEDGER_SERVICE: Final = "langfuse-web"
 #: that reports success and a stack that cannot start.
 TRACE_LEDGER_ROLE: Final = "langfuse"
 
+#: The setting whose row says an install has been furnished with the starter set, which is what
+#: the furnishing step's done test asks for. Held equal to `brain.ops.starter_store.FURNISHED_KEY`
+#: by a test and not imported from it, because that module brings the console's screen registry
+#: and the template catalogue with it and this one is imported by the install script.
+FURNISHED_SETTING: Final = "starter.furnished"
+
 #: The variable carrying the trace ledger's password. Named here because the step reads it
 #: twice, once to refuse an install that has not set one and once to build the statement
 #: that creates the login. A test holds it equal to what the compose files interpolate.
@@ -883,6 +889,34 @@ PLAN: Final[tuple[Step, ...]] = (
             "migrations are still running, which on a first install takes a minute"
         ),
         changes=False,
+    ),
+    Step(
+        # After readiness, because readiness is what says the migrations have run and the tables
+        # this writes exist, and before the setup code, so the person who claims the system
+        # finds a scope to grant over. The application furnishes itself at every start, so on a
+        # healthy install this finds the record and is skipped; it is here for the install whose
+        # start could not furnish, where a log line becomes a failed step with a sentence.
+        name="furnish the install",
+        run="docker compose $BRAIN_COMPOSE_FILES exec -T app python -m brain.ops.starter_store",
+        why=(
+            "a fresh install holds no scope, no pack and no registered capability, so the grant "
+            "route refuses every grant anybody writes, a first administrator's included. This "
+            "writes the product's own starter set once: one company-wide scope, the starter "
+            "pack and the capability registry, and never a person, a department or a value of "
+            "this company's. See brain.ops.starter_store"
+        ),
+        on_failure=(
+            "read `docker compose $BRAIN_COMPOSE_FILES logs app`, then run this again. The whole "
+            "furnishing is one transaction, so a failure leaves nothing half written, and a "
+            "second run writes nothing the first one wrote"
+        ),
+        changes=True,
+        # Keyed on the record of a furnishing rather than on a scope or a pack existing. The
+        # database's own login sees a retired row, so a scope an administrator retired still
+        # counts as furnished here, which is what the store itself decides from the ledger.
+        already_done=_in_the_database(
+            f"select 1 from ops.setting where key = '{FURNISHED_SETTING}'"  # noqa: S608
+        ),
     ),
     Step(
         # "once" is about the value and not about the step: `presents_once` is what exempts

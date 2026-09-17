@@ -18,16 +18,32 @@ from pathlib import Path
 import pytest
 
 from brain.agents.catalogue import CATALOGUE
+from brain.audit.ledger import SUBJECT_KINDS
+from brain.console.reads import Plane, member_plane_capability, plane_capability
+from brain.console.screens import SCREENS, screen
+from brain.core.department import ScopeRecord, check_slug_collisions, department_scope
+from brain.core.entitlement import VERBS, Capability
+from brain.core.scope import Scope
 from brain.demo import DEMO_PREFIX, principal_rows, record_rows
+from brain.identity.first_administrator import GRANTED_AT_APPOINTMENT
+from brain.identity.lifecycle import STARTER_PACK
 from brain.identity.roles import Role
+from brain.member.shell import MEMBER_SCREENS
 from brain.ops.starter import (
     APPLIED_BY,
+    COMPANY_SCOPE,
     DEFAULTS,
     PACKS,
+    PLANE_MEANING,
+    SCOPES,
+    VERB_WORDS,
+    Declared,
     Default,
     agents,
+    described_by_grammar,
     roles,
     starter_gaps,
+    vocabulary,
 )
 
 
@@ -319,3 +335,106 @@ def test_a_new_install_starts_by_asking_a_person_rather_than_trusting_itself() -
 
     assert by_name["approval_required_above"] == "0"
     assert by_name["knowledge_visibility"] == "department"
+
+
+# --- what furnishing writes: the scope and the vocabulary --------------------------------------
+
+
+def test_the_furnished_scope_is_the_whole_company_and_names_no_part_of_one() -> None:
+    """**A grant needs a named scope, and the only one the product may name is everything.** The
+    company-wide scope restricts nothing, is not a department, is called `company`, and shares its
+    name with no agent the catalogue ships, because scopes, agents and tool objects are one
+    namespace to a person typing a name.
+
+    The refusals are handed constructed scopes, for `starter_gaps`' own reason: on the real
+    declaration there is nothing to refuse. A scope carrying the demo's prefix, and a scope
+    restricted to a department, are both findings, and the real set is clean.
+
+    Delete this and the product can furnish a scope called `sales`, which is one company's
+    department in every company's database, or a company scope that quietly reaches one
+    department and leaves a first grant narrower than the person granting it believes."""
+    assert SCOPES == (COMPANY_SCOPE,)
+    assert COMPANY_SCOPE.slug == "company"
+    assert COMPANY_SCOPE.scope.is_unrestricted()
+    assert not COMPANY_SCOPE.is_department
+    assert COMPANY_SCOPE.predicate() == {}
+    assert check_slug_collisions([one.slug for one in SCOPES], agents()) == []
+
+    demo = ScopeRecord(slug=f"{DEMO_PREFIX}everything", scope=Scope.unrestricted())
+    narrowed = ScopeRecord(slug="everything", scope=department_scope("sales"))
+
+    assert any("demo's prefix" in one for one in starter_gaps(scopes=(demo,)))
+    assert any("restricts something" in one for one in starter_gaps(scopes=(narrowed,)))
+    assert starter_gaps(scopes=SCOPES) == ()
+
+
+def test_every_capability_the_product_declares_is_in_the_vocabulary_once_with_words() -> None:
+    """**The registry furnishing writes is every capability declared anywhere, and nothing twice.**
+    Every console and member screen's read, both surfaces' planes, an audit read per subject kind
+    the ledger records, everything first run grants and everything the furnished packs hold, each
+    once, in capability order, each described, none a wildcard and none carrying the demo's
+    prefix.
+
+    Asserted against the declaring modules rather than against a count, so a screen added
+    tomorrow is registered by the next furnishing without an edit here.
+
+    Delete this and the registry can miss the capabilities first run grants, which is the access
+    review reading a grant table full of capabilities nobody declared."""
+    declared = vocabulary()
+    values = [one.capability.value for one in declared]
+    expected = {
+        *(one.read.requires.value for one in SCREENS),
+        *(one.read.requires.value for one in MEMBER_SCREENS),
+        *(plane_capability(one).value for one in Plane),
+        *(member_plane_capability(one).value for one in Plane),
+        *(f"read:audit.{kind}" for kind in SUBJECT_KINDS),
+        *GRANTED_AT_APPOINTMENT,
+        *(one.value for one in STARTER_PACK.capabilities),
+    }
+
+    assert set(values) == expected
+    assert values == sorted(set(values))
+    assert all(one.description.strip() for one in declared)
+    assert not [one for one in values if one.endswith(".*") or DEMO_PREFIX in one]
+    assert set(PLANE_MEANING) == set(Plane)
+    assert set(VERB_WORDS) == set(VERBS)
+
+
+def test_a_capability_carries_the_words_of_the_module_declaring_it_or_else_its_grammar() -> None:
+    """**The words on a registry row come from where the capability is declared.** A screen's read
+    carries that screen's title and purpose and nothing else; a capability two screens read
+    carries both sentences; a plane and an audit read carry what they show; and a capability
+    nothing describes carries what its grammar says, a field being named as a field.
+
+    Then the two decisions, handed a constructed set: a capability both described and granted
+    keeps its own sentence alone, and a sentence given twice for one capability is carried once.
+
+    Delete this and a registry row can say `Reads grant.` beside the People screen's own
+    explanation of what that read shows, or repeat one sentence as often as it was declared."""
+    by_value = {one.capability.value: one.description for one in vocabulary()}
+    people = screen("people")
+    usage = [one for one in SCREENS if one.read.requires.value == "read:usage"]
+
+    assert by_value["read:grant"] == f"The {people.title} screen: {people.purpose}"
+    assert len(usage) == 2
+    assert by_value["read:usage"] == " ".join(
+        f"The {one.title} screen: {one.purpose}" for one in usage
+    )
+    assert by_value["read:console.content"].startswith("Shows in the console what is inside")
+    assert by_value["read:audit.legal_hold"] == "Reads the audit entries about legal hold subjects."
+    assert by_value["admin:legal_hold"] == "Administers legal hold."
+    assert by_value["read:knowledge.title"] == "Reads the title field of knowledge."
+    assert described_by_grammar(Capability(value="write:price_list")) == "Changes price list."
+
+    own = Capability(value="admin:storage")
+    handed = vocabulary(
+        described=[(own, "Its own words."), (own, "Its own words.")],
+        granted=[own.value, "read:overview"],
+        packs=(),
+    )
+    assert handed == (
+        Declared(capability=own, description="Its own words."),
+        Declared(capability=Capability(value="read:overview"), description="Reads overview."),
+    )
+    with pytest.raises(ValueError, match="no description"):
+        Declared(capability=own, description=" ")
