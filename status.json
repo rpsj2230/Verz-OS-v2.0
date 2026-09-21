@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T17:16:52.914886+00:00",
-  "commit": "8f6a553",
-  "commit_subject": "Every capability the product checks is in the furnished registry, and a sweep fails the build otherwise",
+  "generated_at": "2026-09-21T17:32:27.823598+00:00",
+  "commit": "ee259fe",
+  "commit_subject": "A staff source is chosen, tested and connected from the console, and a leaver's agents stop",
   "total": 1595,
-  "done": 307,
-  "percent": 19.2,
+  "done": 308,
+  "percent": 19.3,
   "acts": 47,
   "decided": 107,
   "current_wave": 0,
@@ -26,12 +26,12 @@
       "wave": 1,
       "name": "The gate",
       "total": 165,
-      "done": 126,
-      "percent": 76.4,
+      "done": 127,
+      "percent": 77.0,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 39,
+      "open": 38,
       "acts": 1,
       "decided": 7
     },
@@ -116,7 +116,7 @@
       "name": "Identity, users, roles, permissions",
       "wave": 1,
       "total": 50,
-      "done": 42,
+      "done": 43,
       "acts": 0,
       "decided": 1
     },
@@ -571,6 +571,7 @@
     "M1.8.4",
     "M1.8.6",
     "M1.8.7",
+    "M1.8.9",
     "M1.9.1",
     "M12.1.5",
     "M12.1.6",
@@ -825,7 +826,7 @@
     }
   },
   "wave_records": {},
-  "closed_today": 148,
+  "closed_today": 149,
   "next_up": [
     "M31.3.2.3",
     "M31.3.2.4",
@@ -834,6 +835,12 @@
     "M41.3.1"
   ],
   "recent": [
+    {
+      "sha": "ee259fe",
+      "at": "2026-09-21T17:18:55+00:00",
+      "subject": "A staff source is chosen, tested and connected from the console, and a leaver's agents stop",
+      "closed": "M1.8.9"
+    },
     {
       "sha": "8f6a553",
       "at": "2026-09-21T17:05:59+00:00",
@@ -947,12 +954,6 @@
       "at": "2026-09-21T09:29:14+00:00",
       "subject": "Packs are assigned from People, Roles flags Approver misconfigurations, and a record shows who sees it",
       "closed": "M1.4.2,M1.4.3,M1.4.5,M1.4.6,M1.4.8,M1.5.1,M1.5.2,M1.8.4,M1.9.1"
-    },
-    {
-      "sha": "a91b966",
-      "at": "2026-09-21T09:11:05+00:00",
-      "subject": "A sensitive tool always waits for approval, and the reach deciders are proved agent-blind",
-      "closed": "M3.7.1,M3.7.3,M3.7.4,M3.8.1,M3.8.2,M3.8.3,M3.8.4,M3.8.5,M3.8.6,M3.9.1,M3.9.2,M3.9.3,M3.9.4,M3.9.5,M3.9.6"
     }
   ]
 }
