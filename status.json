@@ -1,0 +1,810 @@
+{
+  "generated_at": "2026-09-21T04:30:50.845654+00:00",
+  "commit": "9fb9367",
+  "commit_subject": "Every connector replays documented-shape cassettes, and the console says what each was tested against",
+  "total": 1601,
+  "done": 159,
+  "percent": 9.9,
+  "acts": 45,
+  "decided": 101,
+  "current_wave": 0,
+  "waves": [
+    {
+      "wave": 0,
+      "name": "Foundation",
+      "total": 137,
+      "done": 79,
+      "percent": 57.7,
+      "in_progress": 0,
+      "ready_for_testing": 3,
+      "blocked": 0,
+      "open": 55,
+      "acts": 1,
+      "decided": 3
+    },
+    {
+      "wave": 1,
+      "name": "The gate",
+      "total": 166,
+      "done": 22,
+      "percent": 13.3,
+      "in_progress": 0,
+      "ready_for_testing": 0,
+      "blocked": 0,
+      "open": 144,
+      "acts": 1,
+      "decided": 5
+    },
+    {
+      "wave": 2,
+      "name": "Data, channels, retrieval",
+      "total": 297,
+      "done": 10,
+      "percent": 3.4,
+      "in_progress": 0,
+      "ready_for_testing": 0,
+      "blocked": 0,
+      "open": 287,
+      "acts": 0,
+      "decided": 8
+    },
+    {
+      "wave": 3,
+      "name": "Agents, knowledge, console",
+      "total": 550,
+      "done": 20,
+      "percent": 3.6,
+      "in_progress": 0,
+      "ready_for_testing": 0,
+      "blocked": 0,
+      "open": 530,
+      "acts": 1,
+      "decided": 49
+    },
+    {
+      "wave": 4,
+      "name": "Doing, lifecycle, extensions",
+      "total": 230,
+      "done": 4,
+      "percent": 1.7,
+      "in_progress": 0,
+      "ready_for_testing": 0,
+      "blocked": 0,
+      "open": 226,
+      "acts": 0,
+      "decided": 20
+    },
+    {
+      "wave": 5,
+      "name": "Hands, delivery, go-live",
+      "total": 215,
+      "done": 23,
+      "percent": 10.7,
+      "in_progress": 0,
+      "ready_for_testing": 0,
+      "blocked": 0,
+      "open": 192,
+      "acts": 42,
+      "decided": 16
+    },
+    {
+      "wave": 6,
+      "name": "Client template",
+      "total": 6,
+      "done": 1,
+      "percent": 16.7,
+      "in_progress": 0,
+      "ready_for_testing": 0,
+      "blocked": 0,
+      "open": 5,
+      "acts": 0,
+      "decided": 0
+    }
+  ],
+  "modules": [
+    {
+      "module": "M0",
+      "name": "Foundation and repository",
+      "wave": 0,
+      "total": 41,
+      "done": 26,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M1",
+      "name": "Identity, users, roles, permissions",
+      "wave": 1,
+      "total": 50,
+      "done": 9,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M2",
+      "name": "Departments and scopes",
+      "wave": 1,
+      "total": 7,
+      "done": 2,
+      "acts": 0,
+      "decided": 4
+    },
+    {
+      "module": "M3",
+      "name": "The gate",
+      "wave": 1,
+      "total": 41,
+      "done": 4,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M4",
+      "name": "Redaction and data protection",
+      "wave": 1,
+      "total": 19,
+      "done": 2,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M5",
+      "name": "Models, routing, fallback matrix",
+      "wave": 1,
+      "total": 31,
+      "done": 2,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M6",
+      "name": "Speed: fast lane, cache, streaming",
+      "wave": 3,
+      "total": 21,
+      "done": 2,
+      "acts": 0,
+      "decided": 3
+    },
+    {
+      "module": "M7",
+      "name": "Knowledge, assets, document parsing",
+      "wave": 2,
+      "total": 40,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M8",
+      "name": "Provenance, abstention, escalation",
+      "wave": 2,
+      "total": 13,
+      "done": 0,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M9",
+      "name": "Chat and conversation",
+      "wave": 2,
+      "total": 7,
+      "done": 0,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M10",
+      "name": "Channels",
+      "wave": 2,
+      "total": 35,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M11",
+      "name": "Connectors, federation, projection",
+      "wave": 2,
+      "total": 74,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M12",
+      "name": "Tools, skills, capability registry",
+      "wave": 2,
+      "total": 38,
+      "done": 1,
+      "acts": 0,
+      "decided": 2
+    },
+    {
+      "module": "M13",
+      "name": "Agents and templates",
+      "wave": 3,
+      "total": 70,
+      "done": 0,
+      "acts": 0,
+      "decided": 15
+    },
+    {
+      "module": "M14",
+      "name": "Entity resolution",
+      "wave": 3,
+      "total": 44,
+      "done": 1,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M15",
+      "name": "Knowledge retrieval and RAG",
+      "wave": 2,
+      "total": 18,
+      "done": 1,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M16",
+      "name": "Memory and learning",
+      "wave": 3,
+      "total": 49,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M17",
+      "name": "Automation and the task lane",
+      "wave": 4,
+      "total": 41,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M18",
+      "name": "Multi-agent execution",
+      "wave": 4,
+      "total": 22,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M19",
+      "name": "Browser and computer use",
+      "wave": 5,
+      "total": 47,
+      "done": 0,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M20",
+      "name": "Verz Studio, the builder",
+      "wave": 3,
+      "total": 16,
+      "done": 0,
+      "acts": 0,
+      "decided": 6
+    },
+    {
+      "module": "M21",
+      "name": "Cost, budgets and metering",
+      "wave": 4,
+      "total": 22,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M22",
+      "name": "Admission control and capacity",
+      "wave": 2,
+      "total": 14,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M23",
+      "name": "Rate limiting and abuse",
+      "wave": 2,
+      "total": 8,
+      "done": 0,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M24",
+      "name": "Audit, compliance, legal hold",
+      "wave": 1,
+      "total": 17,
+      "done": 3,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M25",
+      "name": "Retention, deletion, export, DSAR",
+      "wave": 4,
+      "total": 17,
+      "done": 0,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M26",
+      "name": "Joiner, mover, leaver",
+      "wave": 4,
+      "total": 16,
+      "done": 1,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M27",
+      "name": "Console, reports, observability",
+      "wave": 3,
+      "total": 214,
+      "done": 13,
+      "acts": 0,
+      "decided": 19
+    },
+    {
+      "module": "M28",
+      "name": "Evaluation, canaries, regression",
+      "wave": 3,
+      "total": 14,
+      "done": 2,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M29",
+      "name": "Extension points",
+      "wave": 4,
+      "total": 14,
+      "done": 0,
+      "acts": 0,
+      "decided": 10
+    },
+    {
+      "module": "M30",
+      "name": "Hosting, delivery and recovery",
+      "wave": 5,
+      "total": 37,
+      "done": 6,
+      "acts": 1,
+      "decided": 9
+    },
+    {
+      "module": "M31",
+      "name": "Application scaffold and runtime",
+      "wave": 0,
+      "total": 38,
+      "done": 21,
+      "acts": 0,
+      "decided": 2
+    },
+    {
+      "module": "M32",
+      "name": "Component deployment and wiring",
+      "wave": 2,
+      "total": 44,
+      "done": 8,
+      "acts": 0,
+      "decided": 3
+    },
+    {
+      "module": "M33",
+      "name": "Role-specific surfaces",
+      "wave": 3,
+      "total": 39,
+      "done": 2,
+      "acts": 0,
+      "decided": 4
+    },
+    {
+      "module": "M34",
+      "name": "Onboarding and adoption",
+      "wave": 4,
+      "total": 19,
+      "done": 2,
+      "acts": 0,
+      "decided": 4
+    },
+    {
+      "module": "M35",
+      "name": "Localisation and accessibility",
+      "wave": 4,
+      "total": 22,
+      "done": 1,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M36",
+      "name": "Scaling triggers and performance",
+      "wave": 5,
+      "total": 24,
+      "done": 1,
+      "acts": 0,
+      "decided": 2
+    },
+    {
+      "module": "M37",
+      "name": "Migration, launch and handover",
+      "wave": 5,
+      "total": 45,
+      "done": 5,
+      "acts": 41,
+      "decided": 4
+    },
+    {
+      "module": "M38",
+      "name": "Continuous delivery and live status",
+      "wave": 0,
+      "total": 51,
+      "done": 19,
+      "acts": 3,
+      "decided": 1
+    },
+    {
+      "module": "M39",
+      "name": "Agent workspace, the inside-an-agent surface",
+      "wave": 3,
+      "total": 82,
+      "done": 0,
+      "acts": 0,
+      "decided": 1
+    },
+    {
+      "module": "M40",
+      "name": "Member self-service application",
+      "wave": 4,
+      "total": 56,
+      "done": 0,
+      "acts": 0,
+      "decided": 4
+    },
+    {
+      "module": "M41",
+      "name": "Client independence, built in rather than stripped out",
+      "wave": 0,
+      "total": 22,
+      "done": 13,
+      "acts": 0,
+      "decided": 0
+    },
+    {
+      "module": "M42",
+      "name": "Client deployment template",
+      "wave": 5,
+      "total": 62,
+      "done": 12,
+      "acts": 0,
+      "decided": 0
+    }
+  ],
+  "done_task_ids": [
+    "M0.1.2",
+    "M0.1.4",
+    "M0.1.6",
+    "M0.2.1",
+    "M0.2.2",
+    "M0.2.3",
+    "M0.2.4",
+    "M0.2.6",
+    "M0.2.7",
+    "M0.3.1",
+    "M0.3.2",
+    "M0.3.3",
+    "M0.3.7",
+    "M0.4.3",
+    "M0.4.4",
+    "M0.5.1",
+    "M0.5.2",
+    "M0.5.4",
+    "M0.5.5",
+    "M0.5.6",
+    "M0.6.1",
+    "M0.6.2",
+    "M0.6.3",
+    "M0.6.4",
+    "M0.6.6",
+    "M0.6.7",
+    "M1.1.2",
+    "M1.1.3",
+    "M1.2.1",
+    "M1.2.2",
+    "M1.3.1",
+    "M1.3.5",
+    "M1.4.1",
+    "M1.4.4",
+    "M1.4.7",
+    "M12.1.5",
+    "M12.1.6",
+    "M14.4.5",
+    "M15.1.3",
+    "M2.1.1",
+    "M2.1.5",
+    "M24.1.1",
+    "M24.1.4",
+    "M24.1.5",
+    "M26.3.5",
+    "M27.1.1",
+    "M27.1.2",
+    "M27.10.4",
+    "M27.3.18",
+    "M27.3.4",
+    "M27.5.1",
+    "M27.5.4",
+    "M27.5.7",
+    "M27.7.6",
+    "M27.8.1",
+    "M27.8.2",
+    "M27.8.3",
+    "M27.9.6",
+    "M27.9.7",
+    "M28.1.1",
+    "M28.1.3",
+    "M3.1.4",
+    "M3.3.1",
+    "M3.3.2",
+    "M3.3.4",
+    "M30.1.1",
+    "M30.1.2",
+    "M30.2.1",
+    "M30.2.2",
+    "M30.2.3",
+    "M30.2.4",
+    "M30.2.6",
+    "M30.2.8",
+    "M30.4.1",
+    "M30.5.1",
+    "M31.1.1.1",
+    "M31.1.1.3",
+    "M31.1.1.4",
+    "M31.1.2.1",
+    "M31.1.2.3",
+    "M31.1.2.4",
+    "M31.1.3.1",
+    "M31.1.3.2",
+    "M31.1.3.3",
+    "M31.1.3.5",
+    "M31.1.4.2",
+    "M31.1.4.3",
+    "M31.2.1.1",
+    "M31.2.1.5",
+    "M31.2.2.1",
+    "M31.2.2.2",
+    "M31.2.2.4",
+    "M31.2.2.5",
+    "M31.3.1.1",
+    "M31.3.1.2",
+    "M31.3.1.3",
+    "M31.3.1.4",
+    "M32.1.1.4",
+    "M32.4.2.1",
+    "M32.4.2.2",
+    "M32.4.2.3",
+    "M32.5.1.1",
+    "M32.5.1.2",
+    "M32.5.1.3",
+    "M32.5.2.4",
+    "M33.4.1.4",
+    "M33.5.1.4",
+    "M34.3.2.2",
+    "M34.3.3.1",
+    "M34.3.3.2",
+    "M35.2.2.3",
+    "M36.2.2.1",
+    "M37.2.4.1",
+    "M37.4.1.2",
+    "M37.4.3.4",
+    "M37.5.1.1",
+    "M37.6.1.3",
+    "M38.1.1.2",
+    "M38.1.1.3",
+    "M38.1.1.4",
+    "M38.1.2.1",
+    "M38.1.2.3",
+    "M38.1.2.4",
+    "M38.1.2.5",
+    "M38.1.3.1",
+    "M38.1.3.2",
+    "M38.1.4.1",
+    "M38.2.2.1",
+    "M38.3.1.1",
+    "M38.3.1.3",
+    "M38.3.1.4",
+    "M38.3.2.1",
+    "M38.3.2.2",
+    "M38.3.2.3",
+    "M38.3.2.4",
+    "M38.3.2.5",
+    "M4.3.3",
+    "M4.4.3",
+    "M41.1.1",
+    "M41.1.2",
+    "M41.1.3",
+    "M41.1.8",
+    "M41.1.9",
+    "M41.2.1",
+    "M41.2.2",
+    "M41.2.3",
+    "M41.2.4",
+    "M41.2.5",
+    "M41.2.8",
+    "M41.3.3",
+    "M41.3.4",
+    "M42.2.1",
+    "M42.2.2",
+    "M42.2.4",
+    "M42.2.5",
+    "M42.2.6",
+    "M42.2.7",
+    "M42.2.9",
+    "M42.3.7",
+    "M42.4.1",
+    "M42.5.6",
+    "M42.6.1",
+    "M42.6.8",
+    "M5.2.3",
+    "M5.3.1",
+    "M6.1.5",
+    "M6.2.6"
+  ],
+  "leaf_status": {
+    "M38.2.1.1": {
+      "status": "READY FOR TESTING",
+      "why": "WAVE_RECORDS in docs/wbs/progress.js and the /build/waves page that lists it; no wave has closed yet, so the record is empty",
+      "updated": "2026-09-17"
+    },
+    "M38.2.1.6": {
+      "status": "READY FOR TESTING",
+      "why": "/build/waves: per wave closed, open, in progress, ready for testing and blocked with reasons, from the status baked into the image",
+      "updated": "2026-09-17"
+    },
+    "M38.3.1.2": {
+      "status": "READY FOR TESTING",
+      "why": "the Status file workflow commits status.json to the status branch after each green CI on main; it has not run yet, so the first merge after this lands is the test",
+      "updated": "2026-09-17"
+    }
+  },
+  "wave_records": {},
+  "closed_today": 0,
+  "next_up": [
+    "M0.1.1",
+    "M0.1.3",
+    "M0.1.5",
+    "M0.2.5",
+    "M0.3.4"
+  ],
+  "recent": [
+    {
+      "sha": "a884c6c",
+      "at": "2026-09-17T09:58:11+00:00",
+      "subject": "The console gains shadcn/ui's parts and the design of record's tokens, with the install's accent measured before it is served",
+      "closed": "M27.10.4"
+    },
+    {
+      "sha": "f32c385",
+      "at": "2026-09-17T09:34:36+00:00",
+      "subject": "The setup wizard names a data steward, so a connected source's data can be granted at last",
+      "closed": "M27.9.9"
+    },
+    {
+      "sha": "c6cbbcc",
+      "at": "2026-09-17T09:34:36+00:00",
+      "subject": "An approval decided on a running install is kept, and the database writes its one ledger entry in the transaction that decides it",
+      "closed": "M27.9.3"
+    },
+    {
+      "sha": "27a1407",
+      "at": "2026-09-17T09:34:36+00:00",
+      "subject": "An administrator who may read part of the audit trail can export the entries they may read, and the export carries no count of the rest",
+      "closed": "M27.9.4"
+    },
+    {
+      "sha": "9c1a11c",
+      "at": "2026-09-17T09:34:36+00:00",
+      "subject": "Every failing answer carries a sentence and a reference, the run record is granted to the screens that read it, and a sign-in without a second factor is told what it lacks",
+      "closed": "M27.9.2,M27.9.6,M27.9.7"
+    },
+    {
+      "sha": "e3e2ec9",
+      "at": "2026-09-17T07:06:34+00:00",
+      "subject": "Every long list in the console pages, searches, filters and sorts on the server over the rows its reader may see, and several sessions or access review decisions are acted on in one confirmed step",
+      "closed": "M27.8.6"
+    },
+    {
+      "sha": "0c4b5f8",
+      "at": "2026-09-17T04:20:41+00:00",
+      "subject": "A fresh install runs the secrets vault, opens it once and hands the application and the worker their own tokens, so the wizard keeps the provider key with no hand edit and the finishing screen asks for a restart only where another process serves",
+      "closed": "M42.6.2"
+    },
+    {
+      "sha": "d4bb838",
+      "at": "2026-09-17T03:40:48+00:00",
+      "subject": "The Admin Console build plan is in the work breakdown: five waves and an end-to-end proof per module group, appended as M27.9 to M27.14",
+      "closed": "M27.14,M27.9"
+    },
+    {
+      "sha": "5c1a5a6",
+      "at": "2026-09-17T01:37:53+00:00",
+      "subject": "The permission canaries run twice a day as every reach an install holds and Quality says whether they passed, and Questions and gaps lists the questions no connected source could answer",
+      "closed": "M27.7.18"
+    },
+    {
+      "sha": "fdfa47f",
+      "at": "2026-09-17T01:20:01+00:00",
+      "subject": "An administrator reads the application's warnings and errors from the console, with every value taken out on the way in and a storm held to a bounded number of rows",
+      "closed": "M27.8.14"
+    },
+    {
+      "sha": "1d25b7f",
+      "at": "2026-09-16T23:51:10+00:00",
+      "subject": "A model can be called now, every call is metered onto its request's ledger row, and providers are switched on and off and checked from the Models screen with health measured from real attempts",
+      "closed": "M27.7.14"
+    },
+    {
+      "sha": "dbac629",
+      "at": "2026-09-16T23:51:08+00:00",
+      "subject": "The worker delivers webhooks through issue_once and the Webhooks screen shows what it did; the Notifications screen says who is told what, switches a notice off and configures the email relay with a test message",
+      "closed": "M27.7.12,M27.8.11,M27.8.12"
+    },
+    {
+      "sha": "2b55e1f",
+      "at": "2026-09-16T23:51:06+00:00",
+      "subject": "An administrator places people in teams, appoints a department's lead, and decides elevation requests that grant one capability and lapse on their own",
+      "closed": "M27.7.4,M27.7.8"
+    },
+    {
+      "sha": "344b338",
+      "at": "2026-09-16T23:51:05+00:00",
+      "subject": "An administrator undoes a tier-one learning from the Learning screen, the undo is stored, audited and read by recall, and the Memory screen shows each revision's diff and what triggered it",
+      "closed": "M27.7.21,M27.7.22"
+    },
+    {
+      "sha": "c244150",
+      "at": "2026-09-16T23:51:02+00:00",
+      "subject": "An administrator files a request to erase somebody's data from the Retention screen and the worker carries it out store by store, the export log reads what left, a restore drill script checks a copy against its manifest, and the authentication guide says what the first administrator is granted",
+      "closed": "M27.7.24,M42.2.7"
+    },
+    {
+      "sha": "72f55c5",
+      "at": "2026-09-16T22:18:58+00:00",
+      "subject": "The application connects to the object store at start, the recovery screen reads last night's copy and the last verified restore out of the backup bucket, the Storage screen counts what each bucket holds, and an artifact is kept as bytes in the store and a row in agent.artifact",
+      "closed": "M27.7.23,M27.7.26"
+    },
+    {
+      "sha": "c0e5865",
+      "at": "2026-09-16T20:37:29+00:00",
+      "subject": "An administrator connects a source from the console with its key written once into the vault and recorded, disconnects one, and first run offers the sources named during setup",
+      "closed": "M42.5.9,M42.6.5"
+    },
+    {
+      "sha": "bec9a5e",
+      "at": "2026-09-16T19:49:58+00:00",
+      "subject": "A person who does not use a terminal installs by double-clicking a file on Windows, and the wizard's staff list screen chooses a source, signs in to it and reads the list before anything is written",
+      "closed": "M42.5.7,M42.6.6"
+    },
+    {
+      "sha": "bb78308",
+      "at": "2026-09-16T19:19:53+00:00",
+      "subject": "An administrator adds a skill from a pasted or uploaded SKILL.md, somebody else approves it, the screen says what it is trusted to reach, and it is assigned to an agent through attach_skill without widening anybody",
+      "closed": "M42.6.4"
+    },
+    {
+      "sha": "98a7656",
+      "at": "2026-09-16T18:34:21+00:00",
+      "subject": "Every screen tells loading, empty, unreachable and failed apart, a grant removal and a rung save ask first, a blank webhook registration is refused before it is confirmed, and the console audit is generated from the code and served at /build/console-audit",
+      "closed": "M27.8.1,M27.8.3,M27.8.4,M27.8.5"
+    }
+  ]
+}
