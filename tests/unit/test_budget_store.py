@@ -108,6 +108,10 @@ def test_a_stored_version_becomes_the_row_it_was_written_from() -> None:
     )
 
 
+#: The writer's reach digest and the request's trace `append` sets for the ledger entry (M24.3.1).
+WRITER: dict[str, str] = {"ent_hash": "a" * 32, "trace_id": "trace1"}
+
+
 class _Recording(AsyncSession):
     """A session whose every query answers with the same stored rows."""
 
@@ -159,12 +163,14 @@ def test_a_version_that_does_not_go_forwards_is_refused_before_anything_is_writt
     session = _Recording([_stored(first)])
 
     with pytest.raises(BudgetError):
-        run(lambda: append(session, a_row("web", version=2, effective_from=FIRST)))
+        run(lambda: append(session, a_row("web", version=2, effective_from=FIRST), **WRITER))
     assert session.added == []
 
     run(
         lambda: append(
-            session, first.superseded_by(ceiling_minor=1, author="u_rupash", effective_from=THIRD)
+            session,
+            first.superseded_by(ceiling_minor=1, author="u_rupash", effective_from=THIRD),
+            **WRITER,
         )
     )
     assert len(session.added) == 1
@@ -193,7 +199,7 @@ async def _append_all(url: str, rows: Sequence[BudgetRow]) -> None:
     try:
         async with async_sessionmaker(made)() as session, session.begin():
             for row in rows:
-                await append(session, row)
+                await append(session, row, **WRITER)
     finally:
         await made.dispose()
 
@@ -340,8 +346,8 @@ def test_two_writers_racing_for_the_same_next_version_cannot_both_land(server: s
             async with maker() as winner, maker() as loser:
                 await winner.begin()
                 await loser.begin()
-                await append(winner, one)
-                blocked = asyncio.create_task(append(loser, other))
+                await append(winner, one, **WRITER)
+                blocked = asyncio.create_task(append(loser, other, **WRITER))
                 await asyncio.sleep(0.5)
                 await winner.commit()
                 with pytest.raises(IntegrityError):

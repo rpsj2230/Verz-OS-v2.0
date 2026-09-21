@@ -44,6 +44,7 @@ from brain.ops.mail import (
 )
 from brain.ops.notices import NOTICES, NoticeKind
 from brain.ops.openbao import StaticVersion, VaultRefusedError, VaultUnreachableError
+from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from tests.fixtures.console_http import Stub, console_client, get, post
 from tests.fixtures.fake_relay import LOOPBACK, fake_relay
 from tests.fixtures.operation_ledger import MemoryLedger
@@ -247,6 +248,13 @@ def test_switching_a_notice_off_writes_its_row_with_the_writer_and_the_next_read
         }
     ]
     assert stub.commits == 1
+    # Who, at what reach, in which request, for the setting's ledger entry (M24.3.1).
+    assert [name for name, _ in stub.attributions] == [
+        ACTOR_SETTING,
+        ENT_HASH_SETTING,
+        TRACE_ID_SETTING,
+    ]
+    assert stub.attributions[0][1] == "u_admin"
     listed = get(client, "u_admin", PAGE).json()["notices"]
     assert {one["kind"]: one["on"] for one in listed}["reverification_request"] is False
 

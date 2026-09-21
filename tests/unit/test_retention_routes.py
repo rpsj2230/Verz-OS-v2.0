@@ -552,3 +552,18 @@ def test_a_hold_naming_nobody_or_placed_twice_is_refused_and_its_instant_is_neve
     assert twice.status_code == 404
     assert "not_placed" in twice.json()["message"]
     assert executed.committed == 0
+
+
+def test_every_write_sets_the_attribution_before_its_row(
+    client: TestClient, executed: Executed
+) -> None:
+    """**M24.3.1 on the Retention screen.** A hold placed and lifted, each preceded by the three
+    settings `brain.attribution.attribute` makes, so the ledger entries the triggers write carry
+    the administrator's reach and the request's trace rather than `0003`'s placeholders. Delete
+    this and the routes can go back to writing holds whose entries say nothing about the reach
+    they were placed at."""
+    assert post(client, HOLD_PATH, "u_admin", HOLD).status_code == 200
+    executed_before_write = executed.statements[
+        : next(i for i, one in enumerate(executed.statements) if one.startswith("INSERT"))
+    ]
+    assert sum("set_config" in one for one in executed_before_write) == 3

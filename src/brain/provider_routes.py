@@ -74,6 +74,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from brain.api import API_PREFIX, COMMON_RESPONSES
 from brain.api_routes import Asked
+from brain.attribution import attribute
 from brain.console.model_matrix import exhausted_tiers, matrix
 from brain.console.operate import figure_basis, panel
 from brain.console.workspace import Basis
@@ -573,6 +574,8 @@ async def switch(
     if factory is None:
         raise Failed("no database on this process")
     async with factory() as session:
+        # Who, at what reach, in which request, for the ledger entry the setting's trigger writes.
+        await attribute(session, asked)
         await switch_provider(
             session, provider, on=body.on, by=asked.caller.principal.id, known=known
         )

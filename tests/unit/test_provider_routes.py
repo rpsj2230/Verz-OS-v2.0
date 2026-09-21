@@ -24,7 +24,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import TextClause, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy.sql.dml import Insert
@@ -62,6 +62,7 @@ from brain.provider_routes import (
     may_switch,
 )
 from brain.routing_routes import MATRIX_WRITE
+from brain.tables.audit import ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING
 from brain.tables.config import SettingType
 from tests.fixtures.http_client import Response
 from tests.fixtures.scratch_postgres import engine, modelled, run, sql
@@ -171,6 +172,7 @@ class Estate:
     attempt_rows: list[tuple[str, str]] = field(default_factory=list)
     finished: list[Finished] = field(default_factory=list)
     questions: list[Finished] = field(default_factory=list)
+    attributed: list[str] = field(default_factory=list)
 
     async def current(self, now: datetime) -> LadderState:
         off = frozenset(
@@ -233,9 +235,13 @@ _ESTATE = Estate()
 
 
 class SettingSession(AsyncSession):
-    """Answers the two statements a switch makes: the upsert, and the namespace read."""
+    """Answers the statements a switch makes: the attribution, the upsert and the namespace read."""
 
     async def execute(self, statement: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(statement, TextClause) and str(statement).startswith("SELECT set_config"):
+            # The three settings `brain.attribution.attribute` makes before the write (M24.3.1).
+            _ESTATE.attributed.append(str(statement.compile().params["name"]))
+            return None
         if isinstance(statement, Insert):
             params = statement.compile(dialect=DIALECT).params
             _ESTATE.settings[str(params["key"])] = (params["value"], str(params["updated_by"]))
@@ -451,6 +457,8 @@ def test_switching_a_provider_off_takes_its_rungs_out_of_the_next_plan_at_once(
 
     assert switched.status_code == 200
     assert estate.settings == {"provider.moonshot": (False, "u_wide")}
+    # Who, at what reach, in which request, set before the write for the setting's ledger entry.
+    assert estate.attributed == [ACTOR_SETTING, ENT_HASH_SETTING, TRACE_ID_SETTING]
     view = switched.json()
     moonshot = next(one for one in view["providers"] if one["provider"] == "moonshot")
     assert moonshot["switched_on"] is False

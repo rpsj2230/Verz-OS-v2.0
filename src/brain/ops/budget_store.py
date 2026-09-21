@@ -27,7 +27,13 @@ and it is a second place the answer to "what was the ceiling" lives, which is th
 table exists to answer once. `brain.ops.spend` asks per request, and a ceiling changed by a transfer
 would be enforced at its old figure by every replica that had not noticed.
 
-Task ids: M21.1.5
+**Appending tells the transaction who is writing, at what reach, in which request (M24.3.1).**
+`0098` ledgers every version from a trigger that reads the attribution from the transaction, so
+`append` takes the writer's reach digest and the request's trace and sets them itself, with the
+row's author as the actor. A caller cannot forget them, which is how four routes elsewhere came
+to write `0003`'s placeholders (`brain.ops.write_attribution`).
+
+Task ids: M21.1.5, M24.3.1
 """
 
 from __future__ import annotations
@@ -38,6 +44,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from brain.ops.budgets import BudgetHistory, BudgetKey, BudgetLevel, BudgetPeriod, BudgetRow
+from brain.tables.audit import attributed_to
 from brain.tables.budget import BudgetVersionRow
 
 
@@ -78,14 +85,19 @@ async def in_force(session: AsyncSession, key: BudgetKey, at: datetime) -> Budge
     return None if history is None else history.in_force_at(at)
 
 
-async def append(session: AsyncSession, row: BudgetRow) -> BudgetHistory:
+async def append(
+    session: AsyncSession, row: BudgetRow, *, ent_hash: str, trace_id: str
+) -> BudgetHistory:
     """Append the next version of a ceiling, and answer with the history as it now stands.
 
     Does not commit. A transfer moves two ceilings and both versions have to land together, which
-    is only true if the caller commits once after appending both.
+    is only true if the caller commits once after appending both. `ent_hash` and `trace_id` are
+    the writer's reach and the request's, for the ledger entry `0098`'s trigger writes.
     """
     existing = await history_of(session, row.key)
     history = BudgetHistory(rows=(row,) if existing is None else (*existing.rows, row))
+    for statement in attributed_to(actor_id=row.author, ent_hash=ent_hash, trace_id=trace_id):
+        await session.execute(statement)
     session.add(
         BudgetVersionRow(
             level=row.level.value,
