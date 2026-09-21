@@ -29,9 +29,8 @@ declares, and the file declares only `brain-identity`. All three were silently d
 `test_every_client_scope_a_client_asks_for_is_defined_in_this_file` is that finding turned
 into a check.
 
-Still not claimed by anything: `ops/keycloak/setup.sh`. The import mounted this file and
-started the server with `--import-realm`; it never went through kcadm, so the script's own
-"has never been run" header is still accurate.
+`ops/keycloak/setup.sh` was first run on 2026-09-21, through kcadm against a throwaway
+Keycloak 26.0.8, and the realm it wrote read back equal to this file after the transform.
 
 What these tests catch day to day is drift between this file and `brain.identity`, which
 would otherwise be discovered as "random logouts" or as a token nobody should have accepted.

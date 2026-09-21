@@ -188,6 +188,15 @@ def test_the_script_does_not_carry_a_password() -> None:
         )
 
 
+def test_the_admin_password_never_reaches_a_command_line() -> None:
+    """The header promises the password never travels as an argument, because argv is
+    readable in `ps` by every user on the box. Until the first real run on 2026-09-21 the
+    login still passed it to kcadm as `--password`; delete this and that can return."""
+    code = [line for line in _setup().splitlines() if not line.strip().startswith("#")]
+    assert [line for line in code if "--password" in line] == []
+    assert [line for line in code if line.startswith('KC_CLI_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"')]
+
+
 # ------------------------------------------- how long somebody stays signed in
 #
 # The confirmed policy is ten hours absolute and thirty minutes idle. It is written twice:
