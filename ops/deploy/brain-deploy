@@ -143,6 +143,33 @@ publish_history() {
   fi
 }
 
+# The candidate must see exactly what the app sees, so it joins every network the app is on.
+# It is started on the app's own compose network, the one labelled with the app's compose
+# project, and never simply the first by name: once an install put the app on the vault's
+# network too (`brain-vault` sorts first), the candidate started there, never reached its
+# database and held back every image. Names are read one per line, never split on spaces.
+NETWORK=""
+NETWORKS=()
+choose_networks() {
+  local project net
+  mapfile -t NETWORKS < <(docker inspect "$APP" \
+    --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' \
+    | grep -v '^$' || true)
+  if [ "${#NETWORKS[@]}" -eq 0 ]; then
+    log "$APP is on no network, so a candidate beside it could reach nothing"
+    exit 1
+  fi
+  project="$(docker inspect "$APP" --format '{{index .Config.Labels "com.docker.compose.project"}}')"
+  NETWORK="${NETWORKS[0]}"
+  for net in "${NETWORKS[@]}"; do
+    if [ -n "$project" ] && [ "$(docker network inspect "$net" \
+         --format '{{index .Labels "com.docker.compose.project"}}' 2>/dev/null)" = "$project" ]; then
+      NETWORK="$net"
+      break
+    fi
+  done
+}
+
 fail_file() { printf '%s/%s\n' "$FAILDIR" "$(printf '%s' "$1" | tr -c 'A-Za-z0-9' '_')"; }
 fail_count() { local f; f="$(fail_file "$1")"; if [ -f "$f" ]; then cat "$f"; else echo 0; fi; }
 note_failure() {
@@ -176,14 +203,19 @@ if [ -n "$PREVIOUS" ]; then
     > "$ENV_FILE.image"
   grep -vxF -f "$ENV_FILE.image" "$ENV_FILE.all" | grep -v '^$' > "$ENV_FILE" || true
   rm -f "$ENV_FILE.all"
-  NETWORK="$(docker inspect "$APP" \
-    --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' | head -n 1)"
   MEMORY="$(docker inspect "$APP" --format '{{.HostConfig.Memory}}')"
+  choose_networks
 
-  log "health gate: starting $NEW beside $APP"
+  log "health gate: starting $NEW beside $APP on ${NETWORKS[*]}"
   docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true
   docker run -d --name "$CANDIDATE" --network "$NETWORK" --env-file "$ENV_FILE" \
     --memory "$MEMORY" "$IMAGE" >/dev/null
+  # Every other network the app is on, joined with no alias: the candidate must not answer to
+  # the app's service name, or the proxy or the worker could reach it before it has passed.
+  for extra in "${NETWORKS[@]}"; do
+    [ "$extra" = "$NETWORK" ] && continue
+    docker network connect "$extra" "$CANDIDATE"
+  done
   if wait_ready "$CANDIDATE"; then
     log "health gate passed after readiness; $APP is replaced next"
     docker rm -f "$CANDIDATE" >/dev/null 2>&1 || true

@@ -171,6 +171,52 @@ def test_a_malformed_line_refuses_the_whole_run_and_records_nothing(
     assert "Nothing was recorded" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    ("environment", "expected"),
+    [
+        (
+            {
+                "BRAIN_DATABASE_URL": "postgresql://brain_app:x@db/brain",
+                "BRAIN_MIGRATION_DATABASE_URL": "postgresql://owner:y@db/brain",
+            },
+            "postgresql+psycopg://owner:y@db/brain",
+        ),
+        (
+            {"DATABASE_URL": "postgresql://owner:y@db/brain"},
+            "postgresql+psycopg://owner:y@db/brain",
+        ),
+    ],
+)
+def test_the_store_writes_as_the_owner_and_not_as_the_application_login(
+    monkeypatch: pytest.MonkeyPatch, environment: dict[str, str], expected: str
+) -> None:
+    """The store runs inside the app container, whose database login is `brain_app` once an
+    install narrows it, and `brain_app` may only read `ops.deployment_record`. Found on an
+    install, where every deploy's history write was refused with "permission denied".
+
+    Delete this and the store can go back to `database_url`, and the Version screen stops growing
+    on every narrowed install with each deploy still reporting success."""
+    from brain.ops import deployment_store
+
+    for name in ("BRAIN_DATABASE_URL", "DATABASE_URL", "BRAIN_MIGRATION_DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environment.items():
+        monkeypatch.setenv(name, value)
+    seen: list[str] = []
+
+    class StopHereError(Exception):
+        pass
+
+    def fake_engine(url: str) -> object:
+        seen.append(url)
+        raise StopHereError
+
+    monkeypatch.setattr(deployment_store, "create_engine", fake_engine)
+    with pytest.raises(StopHereError):
+        main([], [a_line(a_deploy(1))])
+    assert [normalise_database_url(one) for one in seen] == [expected]
+
+
 def test_a_row_stores_the_links_digests_and_the_fingerprint_the_table_keeps_unique() -> None:
     """Delete this and the stored digest can be recomputed on read, which makes an edited row agree
     with itself."""

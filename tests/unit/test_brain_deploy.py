@@ -54,8 +54,15 @@ case "$1" in
     case "$*" in
       *'{{.Image}}'*) [ -s "$S/running" ] || exit 1; cat "$S/running" ;;
       *Env*) printf 'PATH=/usr/bin\nCOMMIT_SHA=old\nDATABASE_URL=postgresql://db/brain\n' ;;
-      *Networks*) echo "stub-network" ;;
+      *Networks*) cut -d' ' -f1 "$S/networks" ;;
+      *compose.project*) echo "stub-project" ;;
       *Memory*) echo 1073741824 ;;
+    esac
+    exit 0 ;;
+  network)
+    case "$2" in
+      inspect) awk -v n="$3" '$1 == n { print $2 }' "$S/networks" ;;
+      connect) echo "$3 $4" >> "$S/connected" ;;
     esac
     exit 0 ;;
   run)
@@ -94,8 +101,19 @@ class Ran:
     output: str
 
 
+#: The app's networks as `docker inspect` lists them, by name, each with the compose project
+#: its labels name ("-" for none). The default is one network, the app's own.
+ONE_NETWORK = (("stub-network", "stub-project"),)
+
+
 def deploy(
-    tmp_path: Path, *, running: str, good: set[str], failed_before: int = 0, stub: str = STUB
+    tmp_path: Path,
+    *,
+    running: str,
+    good: set[str],
+    failed_before: int = 0,
+    stub: str = STUB,
+    networks: tuple[tuple[str, str], ...] = ONE_NETWORK,
 ) -> Ran:
     """Run the real script once: the app runs `running`, the registry's tag is `NEW`."""
     state = tmp_path / "state"
@@ -112,6 +130,11 @@ def deploy(
     )
     (state / "good").write_text("".join(f"{one}\n" for one in good), encoding="utf-8", newline="\n")
     (state / "calls").write_text("", encoding="utf-8", newline="\n")
+    (state / "networks").write_text(
+        "".join(f"{name} {project}\n" for name, project in networks),
+        encoding="utf-8",
+        newline="\n",
+    )
     uuid_file = tmp_path / "uuid"
     uuid_file.write_text(UUID, encoding="utf-8", newline="\n")
     faildir = tmp_path / "failed"
@@ -192,6 +215,56 @@ def test_the_candidate_is_given_the_apps_settings_and_not_the_old_images_own(
     assert run.endswith("ghcr.io/rpsj2230/verz-brain-v2.0:latest")
     settings = (tmp_path / "state" / "envfile").read_text(encoding="utf-8").splitlines()
     assert settings == ["DATABASE_URL=postgresql://db/brain"]
+
+
+def test_the_candidate_starts_on_the_apps_own_network_and_joins_every_other_one_it_is_on(
+    tmp_path: Path,
+) -> None:
+    """The app is on its compose project's network, which holds the database, and on a network
+    that sorts first by name and holds no database (a vault's, say), plus one with no labels at
+    all. The candidate is started on the project's network and connected to the other two, so it
+    sees exactly what the app sees, and it is never connected to a network twice.
+
+    Delete this and the candidate can go back to the first network by name, which is how every
+    image on an install was held back once the app joined the vault's network: the candidate
+    never reached its database and never answered ready."""
+    networks = (
+        ("a-vault", "a-vault"),
+        ("stub-service", "-"),
+        ("stub-service_default", "stub-project"),
+    )
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, networks=networks)
+
+    assert ran.code == 0, ran.output
+    started = first(ran.calls, "run -d --name brain-candidate-")
+    assert "--network stub-service_default " in ran.calls[started]
+    joined = [call for call in ran.calls if call.startswith("network connect ")]
+    assert sorted(joined) == [
+        f"network connect a-vault brain-candidate-{UUID}",
+        f"network connect stub-service brain-candidate-{UUID}",
+    ]
+    assert (
+        started
+        < min(ran.calls.index(call) for call in joined)
+        < first(ran.calls, "exec brain-candidate-")
+    )
+
+
+def test_an_app_with_no_compose_label_still_gets_a_candidate_on_all_of_its_networks(
+    tmp_path: Path,
+) -> None:
+    """The positive case for an app started outside compose: no network carries its project, so
+    the first is used to start on and the rest are joined, and the deploy still goes through.
+
+    Delete this and the label lookup can refuse, or skip networks, whenever it finds nothing."""
+    networks = (("one", "-"), ("two", "-"))
+    ran = deploy(tmp_path, running=OLD, good={OLD, NEW}, networks=networks)
+
+    assert ran.code == 0, ran.output
+    assert "--network one " in ran.calls[first(ran.calls, "run -d --name brain-candidate-")]
+    assert [c for c in ran.calls if c.startswith("network connect ")] == [
+        f"network connect two brain-candidate-{UUID}"
+    ]
 
 
 def test_an_image_that_never_answers_ready_is_held_back_and_the_old_container_is_untouched(
