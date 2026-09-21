@@ -38,13 +38,20 @@ on purpose, so `asyncio.to_thread` is the hop the driver's docstring budgets for
 `RoutingRung.max_concurrency` becomes a semaphore per deployment in this process, which is what
 the rung's ceiling says: "a slow provider becomes queueing rather than unbounded memory".
 
+**Half-open admits one request per process, by claim and return.** A breaker replayed half-open
+admits whoever asks `admits`, so every request arriving after a cooldown would be sent to the
+provider that just failed. The walk therefore claims through `CircuitBreaker.try_admit` and then
+through this executor's own claim on the deployment, which a finished attempt returns. What stays
+unshared is the claim between processes, which `brain.models.evidence` states and costs.
+See `HALF_OPEN_ADMITS_ONE_REQUEST_PER_PROCESS`.
+
 **Not built, and said.** The probe loop `health.next_probes` describes has no scheduler, so an
 idle provider's health is whatever its last real attempts say. A lane's per-provider overrides
 (`driver.ProviderClient`) have nowhere to be edited, so every rung runs at its own numbers. The
 callers are the Models screen's provider check and `brain.gate.model_lane`, the answer lane's step
 for a question no fast-path rule answers.
 
-Task ids: M27.7.14, M27.8.8, M5.3.4
+Task ids: M27.7.14, M27.8.8, M5.3.4, M5.4.6
 """
 
 from __future__ import annotations
@@ -69,8 +76,10 @@ from brain.models.evidence import Attempt, outcome_of, replayed
 from brain.models.health import ProviderHealth
 from brain.models.metering import Meter
 from brain.models.routing import (
+    BREAKER_PROBE_CLAIM_TTL_SECONDS,
     TIER_LADDER,
     UNCONSTRAINED,
+    BreakerState,
     CircuitBreaker,
     FallbackTrigger,
     NoCompliantRoute,
@@ -89,6 +98,15 @@ A_MODEL_CALL_WITHOUT_A_METER_HAS_NO_DOOR: Final = (
     "belonging to the request making the call. A call that could be made unmetered is a call "
     "whose tokens appear on no ledger row, and a usage screen reading that ledger would report "
     "less than the invoice for as long as nobody noticed."
+)
+
+#: Why a half-open deployment is claimed by one walk at a time.
+HALF_OPEN_ADMITS_ONE_REQUEST_PER_PROCESS: Final = (
+    "A breaker that has cooled down is half open, and half open means one request finds out "
+    "whether the provider recovered. Every walk replays the same half-open breaker from the "
+    "attempts, so without a claim every request in the process would be that one request. A "
+    "walk claims the deployment before sending and the attempt's return releases it; a claim "
+    "nobody returns expires after the breaker's own claim lifetime."
 )
 
 #: The breaker outcomes a walk treats as the provider failing. See `brain.models.evidence`.
@@ -165,6 +183,8 @@ class ModelCalls:
         self._held = held
         self._clock = clock
         self._slots: dict[str, asyncio.Semaphore] = {}
+        #: Deployments a walk in this process has claimed while half open, and when.
+        self._claims: dict[str, datetime] = {}
 
     async def planned(self) -> Planned:
         """The ladder as it can be called now, and every deployment's health from its attempts.
@@ -225,6 +245,7 @@ class ModelCalls:
             clock=self._clock,
             attempts=self._attempts,
             slot=self._slot,
+            claims=self._claims,
         )
         current: Tier | None = tier
         while current is not None:
@@ -269,6 +290,7 @@ class _Walk:
         clock: Callable[[], datetime],
         attempts: AttemptLog,
         slot: Callable[[RoutingRung], asyncio.Semaphore],
+        claims: dict[str, datetime] | None = None,
     ) -> None:
         self.assembly = assembly
         self.breakers: dict[str, CircuitBreaker] = dict(breakers)
@@ -280,6 +302,7 @@ class _Walk:
         self.clock = clock
         self.attempts = attempts
         self.slot = slot
+        self.claims: dict[str, datetime] = {} if claims is None else claims
         self.sequence = 0
         self.last: DriverFailure | None = None
         self.last_deployment: str | None = None
@@ -289,17 +312,44 @@ class _Walk:
         """Try this tier's rungs in order. The answer, or None to go on, or a raise to stop."""
         for rung in rungs:
             for _ in range(rung.attempts):
-                breaker = self.breakers.get(rung.deployment.id)
-                if breaker is not None and not breaker.admits(self.clock()):
-                    # Opened by a failure earlier in this same walk. The rest of its attempts
-                    # would be sent to a provider this request has just watched fail.
+                claimed = self._admit(rung.deployment.id)
+                if claimed is None:
+                    # Open, or half open and claimed by another walk, or opened by a failure
+                    # earlier in this same walk: the provider is not asked again here.
                     break
-                answered = await self._attempt(tier, rung)
+                try:
+                    answered = await self._attempt(tier, rung)
+                finally:
+                    if claimed:
+                        self.claims.pop(rung.deployment.id, None)
                 if answered is not None:
                     return answered
                 if self.overflowed:
                     return None
         return None
+
+    def _admit(self, deployment_id: str) -> bool | None:
+        """None when this deployment may not be tried now; else whether a claim was taken.
+
+        Claim and return: `try_admit` is the breaker's claim, and a half-open admission is also
+        claimed in this process's map, so two walks replaying the same half-open breaker do not
+        both send. See `HALF_OPEN_ADMITS_ONE_REQUEST_PER_PROCESS`.
+        """
+        breaker = self.breakers.get(deployment_id)
+        if breaker is None:
+            return False
+        now = self.clock()
+        current, admitted = breaker.try_admit(now)
+        if not admitted:
+            return None
+        if current.state is not BreakerState.HALF_OPEN:
+            return False
+        held = self.claims.get(deployment_id)
+        if held is not None and (now - held).total_seconds() < BREAKER_PROBE_CLAIM_TTL_SECONDS:
+            return None
+        self.claims[deployment_id] = now
+        self.breakers[deployment_id] = current
+        return True
 
     async def _attempt(self, tier: Tier, rung: RoutingRung) -> DriverResponse | None:
         """One try: counted, recorded, sent, recorded again, and learned from."""
