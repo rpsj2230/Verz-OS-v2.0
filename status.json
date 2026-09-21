@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-09-21T10:30:36.544506+00:00",
-  "commit": "97acd0f",
-  "commit_subject": "Needs you: items 72, 73 and 74 are done, and item 77 asks one question about the old copies",
+  "generated_at": "2026-09-21T10:40:49.372598+00:00",
+  "commit": "86a0016",
+  "commit_subject": "The Maintenance agent moves to the end of Wave 3, and item 77 asks only for the unused v2 copy to be archived",
   "total": 1598,
-  "done": 251,
-  "percent": 15.7,
+  "done": 252,
+  "percent": 15.8,
   "acts": 47,
   "decided": 104,
   "current_wave": 0,
@@ -12,13 +12,13 @@
     {
       "wave": 0,
       "name": "Foundation",
-      "total": 130,
-      "done": 102,
-      "percent": 78.5,
+      "total": 129,
+      "done": 103,
+      "percent": 79.8,
       "in_progress": 0,
       "ready_for_testing": 2,
       "blocked": 3,
-      "open": 23,
+      "open": 21,
       "acts": 3,
       "decided": 6
     },
@@ -51,13 +51,13 @@
     {
       "wave": 3,
       "name": "Agents, knowledge, console",
-      "total": 551,
+      "total": 552,
       "done": 20,
       "percent": 3.6,
       "in_progress": 0,
       "ready_for_testing": 0,
       "blocked": 0,
-      "open": 531,
+      "open": 532,
       "acts": 1,
       "decided": 49
     },
@@ -386,7 +386,7 @@
       "name": "Application scaffold and runtime",
       "wave": 0,
       "total": 38,
-      "done": 26,
+      "done": 27,
       "acts": 0,
       "decided": 2
     },
@@ -658,6 +658,7 @@
     "M31.3.1.4",
     "M31.3.2.2",
     "M31.4.1",
+    "M31.4.2",
     "M32.1.1.4",
     "M32.4.2.1",
     "M32.4.2.2",
@@ -779,12 +780,12 @@
     },
     "M41.3.2": {
       "status": "BLOCKED",
-      "why": "owner question: is the v1 repository archived",
+      "why": "owner archives the unused verz-company-brain-v2 copy now (item 77) and the v1 repository at go-live",
       "updated": "2026-09-21"
     }
   },
   "wave_records": {},
-  "closed_today": 92,
+  "closed_today": 93,
   "next_up": [
     "M0.2.5",
     "M0.3.5",
@@ -793,6 +794,12 @@
     "M31.1.2.2"
   ],
   "recent": [
+    {
+      "sha": "f9febdd",
+      "at": "2026-09-21T10:32:19+00:00",
+      "subject": "The application answers as its own limited database login on the owner's install, and the guide warns about a dollar sign in its password",
+      "closed": "M31.4.2"
+    },
     {
       "sha": "cc7a087",
       "at": "2026-09-21T10:05:42+00:00",
@@ -906,12 +913,6 @@
       "at": "2026-09-17T09:34:36+00:00",
       "subject": "An administrator who may read part of the audit trail can export the entries they may read, and the export carries no count of the rest",
       "closed": "M27.9.4"
-    },
-    {
-      "sha": "9c1a11c",
-      "at": "2026-09-17T09:34:36+00:00",
-      "subject": "Every failing answer carries a sentence and a reference, the run record is granted to the screens that read it, and a sign-in without a second factor is told what it lacks",
-      "closed": "M27.9.2,M27.9.6,M27.9.7"
     }
   ]
 }
