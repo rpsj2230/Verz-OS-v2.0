@@ -21,6 +21,10 @@ not. This switch tells GitHub to wait for that check and show a red mark if it f
 
 ## 73. Let me change the stored settings in Coolify: create an API key for me
 
+**DONE 2026-09-21.** The key (with read:sensitive) is saved. PgBouncer and the database memory
+setting are live on staging: every application connection now comes through the pooler. The
+secrets vault (item 75) and the worker are next.
+
 **In plain terms:** Coolify is the control panel that runs the Brain on your server, and it keeps
 its own master copy of the settings. Three jobs need that master copy changed: a connection
 manager in front of the database (PgBouncer, which shares a few database connections between
